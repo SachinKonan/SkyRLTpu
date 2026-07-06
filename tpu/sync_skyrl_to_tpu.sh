@@ -47,11 +47,17 @@ remote_archive="/tmp/SkyRLTpu-${commit}.tar.gz"
 remote_extract_cmd="
 set -euo pipefail
 mkdir -p \"$(dirname "${REMOTE_SKYRL_DIR}")\"
-rm -rf '${REMOTE_SKYRL_DIR}'
+old_dir=\"${REMOTE_SKYRL_DIR}.old.\$(date +%s).\$\$\"
+if [ -e '${REMOTE_SKYRL_DIR}' ]; then
+  mv '${REMOTE_SKYRL_DIR}' \"\${old_dir}\"
+fi
 mkdir -p '${REMOTE_SKYRL_DIR}'
 tar -xzf '${remote_archive}' -C '${REMOTE_SKYRL_DIR}'
 printf '%s\n' '${commit}' > '${REMOTE_SKYRL_DIR}/.skyrltpu_commit'
 rm -f '${remote_archive}'
+if [ -n \"\${old_dir:-}\" ] && [ -e \"\${old_dir}\" ]; then
+  (rm -rf \"\${old_dir}\" >/tmp/skyrltpu-sync-rm.log 2>&1 || true) &
+fi
 "
 
 for ((worker = 0; worker < NUM_PROCESSES; worker++)); do
