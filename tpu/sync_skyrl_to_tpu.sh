@@ -14,9 +14,21 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 git_cmd=(git --git-dir="${repo_root}/.git" --work-tree="${repo_root}")
 
 commit="$("${git_cmd[@]}" rev-parse HEAD)"
+jobman_path="third_party/jobman"
+jobman_commit="$("${git_cmd[@]}" ls-tree HEAD "$jobman_path" | awk '{print $3}')"
 
 if ! "${git_cmd[@]}" diff --quiet || ! "${git_cmd[@]}" diff --cached --quiet; then
   echo "Refusing to sync a dirty SkyRLTpu checkout. Commit or stash changes first." >&2
+  exit 1
+fi
+
+if [[ -z "$jobman_commit" ]]; then
+  echo "Could not find $jobman_path in SkyRLTpu HEAD." >&2
+  exit 1
+fi
+
+if ! git -C "${repo_root}/${jobman_path}" cat-file -e "${jobman_commit}^{commit}" 2>/dev/null; then
+  echo "Missing $jobman_path commit $jobman_commit. Run: git submodule update --init $jobman_path" >&2
   exit 1
 fi
 
@@ -24,7 +36,12 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 archive="${tmpdir}/SkyRLTpu-${commit}.tar.gz"
-"${git_cmd[@]}" archive --format=tar HEAD | gzip -c > "$archive"
+archive_tar="${tmpdir}/SkyRLTpu-${commit}.tar"
+jobman_tar="${tmpdir}/jobman-${jobman_commit}.tar"
+"${git_cmd[@]}" archive --format=tar HEAD > "$archive_tar"
+git -C "${repo_root}/${jobman_path}" archive --format=tar --prefix="${jobman_path}/" "$jobman_commit" > "$jobman_tar"
+tar --concatenate --file "$archive_tar" "$jobman_tar"
+gzip -c "$archive_tar" > "$archive"
 
 remote_archive="/tmp/SkyRLTpu-${commit}.tar.gz"
 remote_extract_cmd="
@@ -47,4 +64,4 @@ for ((worker = 0; worker < NUM_PROCESSES; worker++)); do
     --command "$remote_extract_cmd"
 done
 
-echo "Synced SkyRLTpu ${commit} to ${NUM_PROCESSES} TPU workers."
+echo "Synced SkyRLTpu ${commit} with jobman ${jobman_commit} to ${NUM_PROCESSES} TPU workers."

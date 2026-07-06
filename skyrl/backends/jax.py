@@ -24,7 +24,8 @@ import json
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Callable, get_type_hints
+from pathlib import Path
+from typing import Any, Callable, Literal, get_type_hints
 
 import jax
 import jax.numpy as jnp
@@ -40,6 +41,7 @@ from transformers import AutoConfig, AutoTokenizer
 from skyrl.backends.backend import AbstractBackend
 from skyrl.backends.renderer import render_model_input
 from skyrl.backends.utils import pad, pad_batch, pad_to_fsdp
+from skyrl.backends.vllm_sampling import VllmSamplingClient
 from skyrl.tinker import types
 from skyrl.tinker.loss_fns import LOSS_FUNCTIONS, LossFnConfig
 from skyrl.tinker.types import LOSS_TYPES
@@ -67,6 +69,38 @@ _DEFAULT_PPO_CLIP_HIGH_THRESHOLD = 1.2
 class JaxBackendConfig(BaseModel, extra="forbid"):
     """Configuration specific to the JAX backend."""
 
+    inference_backend: Literal["jax", "vllm"] = Field(
+        default="jax",
+        description="Sampling backend to use. 'jax' uses the built-in JAX decoder; 'vllm' forwards sampling to a vLLM server.",
+    )
+    vllm_base_url: str | None = Field(
+        default=None,
+        description="Base URL for the vLLM server when inference_backend='vllm' (for example, http://localhost:8001).",
+    )
+    vllm_model_name: str | None = Field(
+        default=None,
+        description="Model name accepted by vLLM for base-model requests. Defaults to base_model.",
+    )
+    vllm_api_key: str = Field(
+        default="EMPTY",
+        description="Bearer token sent to the vLLM OpenAI-compatible API.",
+    )
+    vllm_lora_base_dir: Path = Field(
+        default=Path("/tmp/skyrl_jax_vllm_loras"),
+        description="Directory where JAX LoRA sampler checkpoints are extracted before loading them into vLLM.",
+    )
+    vllm_lora_load_endpoint: str = Field(
+        default="/v1/load_lora_adapter",
+        description="vLLM endpoint used to load LoRA adapters. Use /skyrl/v1/load_lora_adapter for the SkyRL custom vLLM server.",
+    )
+    vllm_request_timeout_sec: float = Field(
+        default=300.0,
+        description="Timeout in seconds for vLLM HTTP requests.",
+    )
+    vllm_max_concurrent_requests: int = Field(
+        default=64,
+        description="Maximum number of concurrent vLLM completion requests issued by the JAX backend.",
+    )
     max_lora_adapters: int = Field(default=32, description="Maximum number of LoRA adapters")
     max_lora_rank: int = Field(default=32, description="Maximum LoRA rank")
     tensor_parallel_size: int = Field(default=1, description="Tensor parallelism degree to use for the model")
@@ -216,6 +250,25 @@ class JaxBackendImpl(AbstractBackend):
         self.config = config
         self.process_id = process_id
         self.metrics = types.EngineMetrics()
+        self.vllm_client: VllmSamplingClient | None = None
+        if config.inference_backend == "vllm":
+            if not config.vllm_base_url:
+                raise ValueError("JaxBackendConfig.vllm_base_url is required when inference_backend='vllm'")
+            if process_id == 0:
+                self.vllm_client = VllmSamplingClient(
+                    base_url=config.vllm_base_url,
+                    model_name=config.vllm_model_name or base_model,
+                    api_key=config.vllm_api_key,
+                    lora_base_dir=config.vllm_lora_base_dir,
+                    lora_load_endpoint=config.vllm_lora_load_endpoint,
+                    request_timeout_sec=config.vllm_request_timeout_sec,
+                    max_concurrent_requests=config.vllm_max_concurrent_requests,
+                )
+                logger.info(
+                    "Configured JAX backend sampling through vLLM at %s with model=%s",
+                    config.vllm_base_url,
+                    self.vllm_client.model_name,
+                )
 
         # Initialize the shared base model with LoRA config
         checkpoint_path = resolve_model_path(base_model)
@@ -798,6 +851,53 @@ class JaxBackendImpl(AbstractBackend):
         """Run forward-only pass on a batch (no gradient computation)."""
         return self._model_pass(prepared_batch, self._forward)
 
+    def _sample_vllm(
+        self,
+        prepared_batch: types.PreparedSampleBatch,
+    ) -> dict[str, types.SampleOutput | types.ErrorResponse]:
+        """Generate samples through a vLLM server."""
+        if self.vllm_client is None:
+            raise RuntimeError("vLLM sampling is only available on coordinator process 0")
+
+        all_input_ids = [r.prompt_ids for r in render_model_input(prepared_batch.all_model_inputs)]
+        model_names: list[str] = []
+        for model_id, checkpoint_id, checkpoint_path in zip(
+            prepared_batch.all_model_ids,
+            prepared_batch.all_checkpoint_ids,
+            prepared_batch.all_checkpoint_paths,
+        ):
+            if model_id:
+                if not checkpoint_id or not checkpoint_path:
+                    raise ValueError(f"LoRA sample for model {model_id} is missing checkpoint information")
+                model_names.append(
+                    self.vllm_client.ensure_lora_loaded(
+                        model_id,
+                        AnyPath(checkpoint_path),
+                        checkpoint_id=checkpoint_id,
+                    )
+                )
+            else:
+                model_names.append(self.vllm_client.model_name)
+
+        all_sequences, all_prompt_logprobs = self.vllm_client.sample_many(
+            all_input_ids,
+            prepared_batch.all_sampling_params,
+            model_names,
+            prepared_batch.all_session_ids,
+            prompt_logprobs=prepared_batch.needs_prompt_logprobs,
+        )
+
+        results: dict[str, types.SampleOutput | types.ErrorResponse] = {}
+        for request_id, _, start_idx, end_idx, prompt_logprobs_requested in prepared_batch.request_batch_slices:
+            prompt_logprobs = None
+            if prompt_logprobs_requested and all_prompt_logprobs:
+                prompt_logprobs = all_prompt_logprobs[start_idx]
+            results[request_id] = types.SampleOutput(
+                sequences=[all_sequences[i] for i in range(start_idx, end_idx)],
+                prompt_logprobs=prompt_logprobs,
+            )
+        return results
+
     def optim_step(self, model_id: str, request_data: types.OptimStepInput) -> types.OptimStepOutput:
         """Apply an optimizer step using accumulated gradients."""
         adapter_index = self.models[model_id].adapter_index
@@ -843,6 +943,8 @@ class JaxBackendImpl(AbstractBackend):
         """
         if not prepared_batch.all_model_inputs:
             return {}
+        if self.config.inference_backend == "vllm":
+            return self._sample_vllm(prepared_batch)
 
         results = {}
 
@@ -987,6 +1089,8 @@ class JaxBackendImpl(AbstractBackend):
             self.process_id,
         )
         logger.info(f"Saved LoRA sampler checkpoint to {output_path}")
+        if self.vllm_client is not None and self.process_id == 0:
+            self.vllm_client.ensure_lora_loaded(model_id, output_path)
 
     def load_sampler_checkpoint(self, model_id: str, checkpoint_id: str, checkpoint_path: AnyPath) -> None:
         """Insert sampler weights from checkpoint file."""
@@ -1139,6 +1243,8 @@ class JaxBackend(JaxBackendImpl):
         return self._broadcast_and_call("optim_step", model_id=model_id, request_data=request_data)
 
     def sample(self, prepared_batch: types.PreparedSampleBatch):
+        if self.config.inference_backend == "vllm":
+            return JaxBackendImpl.sample(self, prepared_batch)
         return self._broadcast_and_call("sample", prepared_batch=prepared_batch)
 
     def save_checkpoint(self, output_path: AnyPath, model_id: str) -> None:
