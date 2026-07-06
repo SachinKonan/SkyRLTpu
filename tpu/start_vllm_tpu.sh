@@ -20,42 +20,63 @@ VLLM_VENV="${VLLM_VENV:-/home/${REMOTE_USER}/.venvs/vllm-tpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
 
-remote_cmd="
-set -euo pipefail
-export PATH=\"\$HOME/.local/bin:\$PATH\"
-export HF_HOME='${REMOTE_HF_HOME}'
-export TRANSFORMERS_CACHE=\"\$HF_HOME/hub\"
-mkdir -p '${REMOTE_HF_HOME}' '${REMOTE_LORA_BASE}' \"\$(dirname '${VLLM_VENV}')\" ~/skyrl-logs
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
 
-if [ ! -x '${VLLM_VENV}/bin/vllm' ]; then
-  uv venv --python 3.12 '${VLLM_VENV}'
-  uv pip install --python '${VLLM_VENV}/bin/python' vllm-tpu
+bootstrap_script="${tmpdir}/start_vllm_tpu_bootstrap.sh"
+runner_script="${tmpdir}/run_vllm_tpu_server.sh"
+
+cat > "$bootstrap_script" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="\$HOME/.local/bin:\$PATH"
+export HF_HOME="${REMOTE_HF_HOME}"
+export TRANSFORMERS_CACHE="\$HF_HOME/hub"
+mkdir -p "${REMOTE_HF_HOME}" "${REMOTE_LORA_BASE}" "$(dirname "${VLLM_VENV}")" "\$HOME/skyrl-logs"
+
+if [ ! -x "${VLLM_VENV}/bin/vllm" ]; then
+  uv venv --python 3.12 "${VLLM_VENV}"
+  uv pip install --python "${VLLM_VENV}/bin/python" vllm-tpu
 fi
 
 tmux kill-session -t vllm-tpu 2>/dev/null || true
-tmux new-session -d -s vllm-tpu '
-  source \"${VLLM_VENV}/bin/activate\"
-  export HF_HOME=\"${REMOTE_HF_HOME}\"
-  export TRANSFORMERS_CACHE=\"${REMOTE_HF_HOME}/hub\"
-  export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
-  vllm serve \"${MODEL_NAME}\" \
-    --served-model-name \"${SERVED_MODEL_NAME}\" \
-    --host 0.0.0.0 \
-    --port \"${VLLM_PORT}\" \
-    --tensor-parallel-size \"${VLLM_TP_SIZE}\" \
-    --max-model-len \"${VLLM_MAX_MODEL_LEN}\" \
-    --max-num-seqs \"${VLLM_MAX_NUM_SEQS}\" \
-    --enable-lora \
-    --max-loras \"${VLLM_MAX_LORAS}\" \
-    --max-lora-rank \"${VLLM_MAX_LORA_RANK}\" \
-    --download-dir \"${REMOTE_HF_HOME}/hub\" \
-    2>&1 | tee ~/skyrl-logs/vllm-tpu.log
-'
-"
+tmux new-session -d -s vllm-tpu "bash \$HOME/run_vllm_tpu_server.sh"
+EOF
+
+cat > "$runner_script" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+source "${VLLM_VENV}/bin/activate"
+export HF_HOME="${REMOTE_HF_HOME}"
+export TRANSFORMERS_CACHE="${REMOTE_HF_HOME}/hub"
+export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+
+exec vllm serve "${MODEL_NAME}" \\
+  --served-model-name "${SERVED_MODEL_NAME}" \\
+  --host 0.0.0.0 \\
+  --port "${VLLM_PORT}" \\
+  --tensor-parallel-size "${VLLM_TP_SIZE}" \\
+  --max-model-len "${VLLM_MAX_MODEL_LEN}" \\
+  --max-num-seqs "${VLLM_MAX_NUM_SEQS}" \\
+  --enable-lora \\
+  --max-loras "${VLLM_MAX_LORAS}" \\
+  --max-lora-rank "${VLLM_MAX_LORA_RANK}" \\
+  --download-dir "${REMOTE_HF_HOME}/hub" \\
+  --disable-log-requests \\
+  2>&1 | tee "\$HOME/skyrl-logs/vllm-tpu.log"
+EOF
+
+chmod +x "$bootstrap_script" "$runner_script"
+
+gcloud alpha compute tpus tpu-vm scp "$bootstrap_script" "${REMOTE_USER}@${TPU_NAME}:~/start_vllm_tpu_bootstrap.sh" \
+  --project="$PROJECT" --zone="$ZONE" --worker="$VLLM_WORKER" --ssh-key-file="$SSH_KEY_FILE" --quiet
+
+gcloud alpha compute tpus tpu-vm scp "$runner_script" "${REMOTE_USER}@${TPU_NAME}:~/run_vllm_tpu_server.sh" \
+  --project="$PROJECT" --zone="$ZONE" --worker="$VLLM_WORKER" --ssh-key-file="$SSH_KEY_FILE" --quiet
 
 gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
   --project="$PROJECT" --zone="$ZONE" --worker="$VLLM_WORKER" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-  --command "bash -lc $(printf '%q' "$remote_cmd")"
+  --command "bash ~/start_vllm_tpu_bootstrap.sh"
 
 echo "vLLM TPU start command submitted on worker ${VLLM_WORKER}."
 echo "Log: gcloud alpha compute tpus tpu-vm ssh ${REMOTE_USER}@${TPU_NAME} --project=${PROJECT} --zone=${ZONE} --worker=${VLLM_WORKER} --ssh-key-file=${SSH_KEY_FILE} --command 'tail -f ~/skyrl-logs/vllm-tpu.log'"
