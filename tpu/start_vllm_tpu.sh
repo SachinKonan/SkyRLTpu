@@ -12,6 +12,7 @@ MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-4B}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL_NAME}"
 VLLM_TPU_VERSION="${VLLM_TPU_VERSION:-0.23.0}"
 VLLM_MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE:-vllm}"
+VLLM_DISABLE_SHARDY="${VLLM_DISABLE_SHARDY:-auto}"
 VLLM_PORT="${VLLM_PORT:-8001}"
 VLLM_TP_SIZE="${VLLM_TP_SIZE:-1}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-2048}"
@@ -58,6 +59,9 @@ PATCH_FILE="\$HOME/tpu-inference-tpu-worker-lora-forwarders.patch" \\
   bash "\$HOME/apply_vllm_tpu_lora_patch.sh"
 
 tmux kill-session -t vllm-tpu 2>/dev/null || true
+pkill -TERM -u "\$USER" -f "[V]LLM::EngineCore|[v]llm serve|[a]pi_server" || true
+sleep 5
+pkill -KILL -u "\$USER" -f "[V]LLM::EngineCore|[v]llm serve|[a]pi_server" || true
 tmux new-session -d -s vllm-tpu "bash \$HOME/run_vllm_tpu_server.sh"
 EOF
 
@@ -69,6 +73,11 @@ export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="${REMOTE_HF_HOME}/hub"
 export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+if [[ "${VLLM_DISABLE_SHARDY}" == "1" || "${VLLM_DISABLE_SHARDY}" == "true" || \\
+      ( "${VLLM_DISABLE_SHARDY}" == "auto" && "${MODEL_NAME}" == *"Qwen3.5-4B"* ) ]]; then
+  export JAX_USE_SHARDY_PARTITIONER=false
+  export LIBTPU_INIT_ARGS="--xla_use_shardy=false --xla_tpu_scoped_vmem_limit_kib=131072 \${LIBTPU_INIT_ARGS:-}"
+fi
 
 exec vllm serve "${MODEL_NAME}" \\
   --served-model-name "${SERVED_MODEL_NAME}" \\
