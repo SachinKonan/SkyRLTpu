@@ -3,13 +3,15 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-vision-mix}"
 ZONE="${ZONE:-us-east5-a}"
-TPU_NAME="${TPU_NAME:-sk7524-tinker-v5p64-east5a_spot}"
+TPU_NAME="${TPU_NAME:-sk7524-vllm-qwen3-4b-v5p8-east5a_spot}"
 REMOTE_USER="${REMOTE_USER:-sk7524_princeton_edu}"
 SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
 VLLM_WORKER="${VLLM_WORKER:-0}"
 
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-4B}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL_NAME}"
+VLLM_TPU_VERSION="${VLLM_TPU_VERSION:-0.23.0}"
+VLLM_MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE:-vllm}"
 VLLM_PORT="${VLLM_PORT:-8001}"
 VLLM_TP_SIZE="${VLLM_TP_SIZE:-1}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-2048}"
@@ -19,6 +21,18 @@ VLLM_MAX_LORA_RANK="${VLLM_MAX_LORA_RANK:-32}"
 VLLM_VENV="${VLLM_VENV:-/home/${REMOTE_USER}/.venvs/vllm-tpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+apply_patch_script="${repo_root}/tpu/apply_vllm_tpu_lora_patch.sh"
+patch_file="${repo_root}/third_party/patches/tpu-inference-tpu-worker-lora-forwarders.patch"
+
+if [[ ! -f "${apply_patch_script}" || ! -f "${patch_file}" ]]; then
+  echo "Missing vLLM TPU patch assets. Expected:" >&2
+  echo "  ${apply_patch_script}" >&2
+  echo "  ${patch_file}" >&2
+  exit 1
+fi
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -36,8 +50,12 @@ mkdir -p "${REMOTE_HF_HOME}" "${REMOTE_LORA_BASE}" "$(dirname "${VLLM_VENV}")" "
 
 if [ ! -x "${VLLM_VENV}/bin/vllm" ]; then
   uv venv --python 3.12 "${VLLM_VENV}"
-  uv pip install --python "${VLLM_VENV}/bin/python" vllm-tpu
 fi
+
+uv pip install --python "${VLLM_VENV}/bin/python" "vllm-tpu==${VLLM_TPU_VERSION}"
+PATCH_FILE="\$HOME/tpu-inference-tpu-worker-lora-forwarders.patch" \\
+  PYTHON="${VLLM_VENV}/bin/python" \\
+  bash "\$HOME/apply_vllm_tpu_lora_patch.sh"
 
 tmux kill-session -t vllm-tpu 2>/dev/null || true
 tmux new-session -d -s vllm-tpu "bash \$HOME/run_vllm_tpu_server.sh"
@@ -49,6 +67,7 @@ set -euo pipefail
 source "${VLLM_VENV}/bin/activate"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="${REMOTE_HF_HOME}/hub"
+export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
 
 exec vllm serve "${MODEL_NAME}" \\
@@ -72,6 +91,12 @@ gcloud alpha compute tpus tpu-vm scp "$bootstrap_script" "${REMOTE_USER}@${TPU_N
   --project="$PROJECT" --zone="$ZONE" --worker="$VLLM_WORKER" --ssh-key-file="$SSH_KEY_FILE" --quiet
 
 gcloud alpha compute tpus tpu-vm scp "$runner_script" "${REMOTE_USER}@${TPU_NAME}:~/run_vllm_tpu_server.sh" \
+  --project="$PROJECT" --zone="$ZONE" --worker="$VLLM_WORKER" --ssh-key-file="$SSH_KEY_FILE" --quiet
+
+gcloud alpha compute tpus tpu-vm scp "$apply_patch_script" "${REMOTE_USER}@${TPU_NAME}:~/apply_vllm_tpu_lora_patch.sh" \
+  --project="$PROJECT" --zone="$ZONE" --worker="$VLLM_WORKER" --ssh-key-file="$SSH_KEY_FILE" --quiet
+
+gcloud alpha compute tpus tpu-vm scp "$patch_file" "${REMOTE_USER}@${TPU_NAME}:~/tpu-inference-tpu-worker-lora-forwarders.patch" \
   --project="$PROJECT" --zone="$ZONE" --worker="$VLLM_WORKER" --ssh-key-file="$SSH_KEY_FILE" --quiet
 
 gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \

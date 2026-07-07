@@ -1,3 +1,7 @@
 [submodule "third_party/jobman"]
 	path = third_party/jobman
 	url = ../jobman
+[submodule "third_party/tpu-inference"]
+	path = third_party/tpu-inference
+	url = https://github.com/vllm-project/tpu-inference.git
+	branch = releases/v0.23.0
