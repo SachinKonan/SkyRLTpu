@@ -81,6 +81,14 @@ def sample_vllm(
     )
 
 
+def extract_vllm_text_and_tokens(choice: dict[str, Any], tokenizer: AutoTokenizer) -> tuple[str, list[int] | None]:
+    """Return generated text and optional token IDs from a vLLM completion choice."""
+    tokens = choice.get("token_ids")
+    if tokens is not None:
+        return tokenizer.decode(tokens, skip_special_tokens=True), tokens
+    return choice.get("text", ""), None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="Qwen/Qwen3-4B")
@@ -118,7 +126,8 @@ def main() -> None:
     vllm_elapsed = time.perf_counter() - started
 
     classic_tokens = classic["sequences"][0]["tokens"]
-    vllm_tokens = vllm["choices"][0]["token_ids"]
+    vllm_choice = vllm["choices"][0]
+    vllm_text, vllm_tokens = extract_vllm_text_and_tokens(vllm_choice, tokenizer)
     result = {
         "model": args.model,
         "prompt": args.prompt,
@@ -132,10 +141,12 @@ def main() -> None:
         "vllm": {
             "elapsed_sec": round(vllm_elapsed, 3),
             "tokens": vllm_tokens,
-            "text": tokenizer.decode(vllm_tokens, skip_special_tokens=True),
-            "finish_reason": vllm["choices"][0].get("finish_reason"),
+            "text": vllm_text,
+            "finish_reason": vllm_choice.get("finish_reason"),
+            "raw_choice_keys": sorted(vllm_choice.keys()),
         },
-        "exact_token_match": classic_tokens == vllm_tokens,
+        "exact_token_match": classic_tokens == vllm_tokens if vllm_tokens is not None else None,
+        "exact_text_match": tokenizer.decode(classic_tokens, skip_special_tokens=True) == vllm_text,
     }
     print(json.dumps(result, indent=2))
 

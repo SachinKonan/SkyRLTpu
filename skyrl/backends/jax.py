@@ -147,6 +147,20 @@ class JaxBackendConfig(BaseModel, extra="forbid"):
         default=None,
         description="Total number of processes in the multi-node cluster",
     )
+    active_worker_ids: list[int] | None = Field(
+        default=None,
+        description=(
+            "TPU worker IDs that instantiate the JAX training backend. "
+            "When unset, every JAX process is active."
+        ),
+    )
+    mesh_worker_ids: list[int] | None = Field(
+        default=None,
+        description=(
+            "TPU worker IDs whose local devices form the backend mesh. "
+            "Defaults to active_worker_ids when set, otherwise all devices."
+        ),
+    )
     # RayJaxBackend configuration
     use_ray: bool = Field(
         default=False,
@@ -162,6 +176,99 @@ class JaxBackendConfig(BaseModel, extra="forbid"):
         default_factory=list,
         description="Bundles for the Ray placement group (e.g., [{'CPU': 1}] * num_processes)",
         json_schema_extra={"argparse_type": json.loads},
+    )
+
+
+_WORKER_PROCESS_INDEX_MAP: dict[int, int] | None = None
+
+
+def _configured_mesh_worker_ids(config: JaxBackendConfig) -> list[int] | None:
+    return config.mesh_worker_ids or config.active_worker_ids
+
+
+def _active_worker_ids(config: JaxBackendConfig) -> set[int] | None:
+    return set(config.active_worker_ids) if config.active_worker_ids is not None else None
+
+
+def _is_active_backend_worker(config: JaxBackendConfig, worker_id: int) -> bool:
+    active = _active_worker_ids(config)
+    return active is None or worker_id in active
+
+
+def _needs_worker_process_index_map(config: JaxBackendConfig) -> bool:
+    return _configured_mesh_worker_ids(config) is not None and jax.process_count() > 1
+
+
+def _get_worker_process_index_map(worker_id: int) -> dict[int, int]:
+    """Map TPU worker IDs from the launcher to JAX process indices.
+
+    On TPU pods, the JAX process index can differ from the gcloud worker ID.
+    Every process must call this helper in the same order because it uses a
+    multihost collective.
+    """
+    global _WORKER_PROCESS_INDEX_MAP
+    if _WORKER_PROCESS_INDEX_MAP is None:
+        pairs = np.array(
+            jax.device_get(
+                multihost_utils.process_allgather(
+                    np.array([worker_id, jax.process_index()], dtype=np.int32),
+                    tiled=False,
+                )
+            )
+        )
+        _WORKER_PROCESS_INDEX_MAP = {int(worker): int(process) for worker, process in pairs.tolist()}
+    return _WORKER_PROCESS_INDEX_MAP
+
+
+def _make_backend_mesh(config: JaxBackendConfig, worker_id: int) -> jax.sharding.Mesh:
+    axis_shape = (
+        config.fully_sharded_data_parallel_size,
+        config.expert_parallel_size,
+        config.tensor_parallel_size,
+    )
+    axis_names = ("fsdp", "ep", "tp")
+    axis_types = (jax.sharding.AxisType.Auto,) * 3
+    mesh_worker_ids = _configured_mesh_worker_ids(config)
+    if mesh_worker_ids is None:
+        return jax.make_mesh(axis_shape, axis_names, axis_types=axis_types)
+
+    worker_to_process = _get_worker_process_index_map(worker_id)
+    missing_workers = [worker for worker in mesh_worker_ids if worker not in worker_to_process]
+    if missing_workers:
+        raise ValueError(
+            f"mesh_worker_ids contains workers not present in the JAX world: {missing_workers}; "
+            f"known workers={sorted(worker_to_process)}"
+        )
+
+    devices_by_process: dict[int, list[jax.Device]] = {}
+    for device in jax.devices():
+        devices_by_process.setdefault(device.process_index, []).append(device)
+    for process_devices in devices_by_process.values():
+        process_devices.sort(key=lambda device: device.id)
+
+    selected_devices = []
+    for worker in mesh_worker_ids:
+        process_index = worker_to_process[worker]
+        selected_devices.extend(devices_by_process.get(process_index, []))
+
+    expected_device_count = int(np.prod(axis_shape))
+    if len(selected_devices) != expected_device_count:
+        raise ValueError(
+            f"Mesh over workers {mesh_worker_ids} selected {len(selected_devices)} devices, "
+            f"but mesh shape {axis_shape} requires {expected_device_count}. "
+            "Check tensor_parallel_size, expert_parallel_size, and fully_sharded_data_parallel_size."
+        )
+
+    logger.info(
+        "Building JAX backend mesh over TPU workers %s with worker_to_process=%s and shape=%s",
+        mesh_worker_ids,
+        worker_to_process,
+        axis_shape,
+    )
+    return jax.sharding.Mesh(
+        np.array(selected_devices, dtype=object).reshape(axis_shape),
+        axis_names,
+        axis_types=axis_types,
     )
 
 
@@ -287,15 +394,7 @@ class JaxBackendImpl(AbstractBackend):
         model_class = get_model_class(self.model_config)
 
         # Create model and load weights
-        self.mesh = jax.make_mesh(
-            (
-                config.fully_sharded_data_parallel_size,
-                config.expert_parallel_size,
-                config.tensor_parallel_size,
-            ),
-            ("fsdp", "ep", "tp"),
-            axis_types=(jax.sharding.AxisType.Auto,) * 3,
-        )
+        self.mesh = _make_backend_mesh(config, process_id)
         with jax.set_mesh(self.mesh), nnx.use_eager_sharding(True):
             self.model = model_class(
                 self.model_config,
@@ -1200,6 +1299,8 @@ class JaxBackend(JaxBackendImpl):
 
     def __init__(self, base_model: str, config: JaxBackendConfig):
         self.process_id = 0  # Coordinator is always process 0
+        self.base_model = base_model
+        self.config = config
         if config.coordinator_address is not None:
             jax.distributed.initialize(
                 coordinator_address=config.coordinator_address,
@@ -1211,7 +1312,30 @@ class JaxBackend(JaxBackendImpl):
                 f"local devices: {jax.local_device_count()}, total devices: {jax.device_count()}"
             )
 
-        self._broadcast_and_call("__init__", base_model=base_model, config=config, process_id=self.process_id)
+        if jax.process_count() > 1:
+            _broadcast_command(
+                RpcPayload(
+                    method="__init__",
+                    kwargs={
+                        "base_model": base_model,
+                        "config": TypeAdapter(JaxBackendConfig).dump_python(config, mode="json"),
+                        "process_id": self.process_id,
+                    },
+                ),
+                process_id=self.process_id,
+            )
+        if _needs_worker_process_index_map(config):
+            _get_worker_process_index_map(self.process_id)
+
+        if not _is_active_backend_worker(config, self.process_id):
+            logger.info(
+                "Coordinator worker %s is inactive for the JAX training backend; active_worker_ids=%s",
+                self.process_id,
+                config.active_worker_ids,
+            )
+            return
+
+        JaxBackendImpl.__init__(self, base_model=base_model, config=config, process_id=self.process_id)
 
     def _broadcast_and_call(self, method: str, **kwargs):
         """Broadcast method call to workers and execute locally via super()."""
@@ -1228,6 +1352,8 @@ class JaxBackend(JaxBackendImpl):
                 RpcPayload(method=method, kwargs={k: serialize(k, v) for k, v in kwargs.items()}),
                 process_id=self.process_id,
             )
+        if not _is_active_backend_worker(self.config, self.process_id):
+            raise RuntimeError("The coordinator must be an active backend worker to execute training RPCs")
         return getattr(super(), method)(**kwargs)
 
     def create_model(self, model_id: str, lora_config: types.LoraConfig, model_role: str = "policy") -> None:
@@ -1290,7 +1416,18 @@ def run_worker(coordinator_address: str, num_processes: int, process_id: int):
     config = JaxBackendConfig.model_validate(init_payload.kwargs["config"])
     logger.info(f"Worker received config: base_model={init_payload.kwargs['base_model']}, config={config}")
 
-    backend = JaxBackendImpl(init_payload.kwargs["base_model"], config, process_id)
+    if _needs_worker_process_index_map(config):
+        _get_worker_process_index_map(process_id)
+
+    backend = None
+    if _is_active_backend_worker(config, process_id):
+        backend = JaxBackendImpl(init_payload.kwargs["base_model"], config, process_id)
+    else:
+        logger.info(
+            "Worker process_id=%s is inactive for the JAX training backend; active_worker_ids=%s",
+            process_id,
+            config.active_worker_ids,
+        )
 
     logger.info(f"Worker process_id={process_id} entering command loop")
 
@@ -1298,6 +1435,9 @@ def run_worker(coordinator_address: str, num_processes: int, process_id: int):
         payload: RpcPayload = _broadcast_command(None, process_id=process_id)
 
         if not hasattr(backend, payload.method):
+            if backend is None:
+                logger.info("Inactive worker process_id=%s ignoring method %s", process_id, payload.method)
+                continue
             logger.error(f"Unknown method: {payload.method}")
             continue
 

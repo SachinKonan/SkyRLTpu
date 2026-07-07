@@ -27,6 +27,14 @@ def _normalize_vllm_urls(base_url: str) -> tuple[str, str]:
     return url, f"{url}/v1"
 
 
+def _normalize_vllm_url_list(base_url: str) -> tuple[tuple[str, str], ...]:
+    """Return normalized URL pairs for one or more comma-separated servers."""
+    urls = [url.strip() for url in base_url.split(",") if url.strip()]
+    if not urls:
+        raise ValueError("At least one vLLM base URL is required")
+    return tuple(_normalize_vllm_urls(url) for url in urls)
+
+
 def _checkpoint_id_from_path(path: AnyPath) -> str:
     name = path.name
     if name.endswith(".tar.gz"):
@@ -54,10 +62,14 @@ class VllmSamplingClient:
     lora_load_endpoint: str = "/v1/load_lora_adapter"
     request_timeout_sec: float = 300.0
     max_concurrent_requests: int = 64
-    _loaded_loras: dict[str, str] = field(default_factory=dict)
+    _loaded_loras: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        self.server_base_url, self.openai_base_url = _normalize_vllm_urls(self.base_url)
+        url_pairs = _normalize_vllm_url_list(self.base_url)
+        self.server_base_urls = tuple(pair[0] for pair in url_pairs)
+        self.openai_base_urls = tuple(pair[1] for pair in url_pairs)
+        self.server_base_url = self.server_base_urls[0]
+        self.openai_base_url = self.openai_base_urls[0]
         if not self.lora_load_endpoint.startswith("/"):
             self.lora_load_endpoint = f"/{self.lora_load_endpoint}"
         self.max_concurrent_requests = max(1, self.max_concurrent_requests)
@@ -113,13 +125,17 @@ class VllmSamplingClient:
         self._extract_lora_checkpoint(checkpoint_path, target_dir)
 
         target_path = str(target_dir)
-        if self._loaded_loras.get(lora_name) == target_path:
+        loaded_servers = self._loaded_loras.setdefault(lora_name, {})
+        if all(loaded_servers.get(server_url) == target_path for server_url in self.server_base_urls):
             return lora_name
 
         payload = {"lora_name": lora_name, "lora_path": target_path}
-        self._post_json(f"{self.server_base_url}{self.lora_load_endpoint}", payload)
-        self._loaded_loras[lora_name] = target_path
-        logger.info("Loaded LoRA adapter %s into vLLM from %s", lora_name, target_path)
+        for server_url in self.server_base_urls:
+            if loaded_servers.get(server_url) == target_path:
+                continue
+            self._post_json(f"{server_url}{self.lora_load_endpoint}", payload)
+            loaded_servers[server_url] = target_path
+            logger.info("Loaded LoRA adapter %s into vLLM server %s from %s", lora_name, server_url, target_path)
         return lora_name
 
     @staticmethod
@@ -171,6 +187,7 @@ class VllmSamplingClient:
         model_name: str,
         session_id: str | None = None,
         prompt_logprobs: bool = False,
+        openai_base_url: str | None = None,
     ) -> tuple[types.GeneratedSequence, list[float] | None]:
         payload: dict[str, Any] = {
             "model": model_name,
@@ -192,7 +209,7 @@ class VllmSamplingClient:
             payload["prompt_logprobs"] = 1
 
         headers = {"X-Session-ID": session_id} if session_id else None
-        result = self._post_json(f"{self.openai_base_url}/completions", payload, headers=headers)
+        result = self._post_json(f"{openai_base_url or self.openai_base_url}/completions", payload, headers=headers)
         choices = result.get("choices") or []
         if len(choices) != 1:
             raise RuntimeError(f"Expected one vLLM completion choice, got {len(choices)}")
@@ -219,6 +236,7 @@ class VllmSamplingClient:
                 model_name=model_names[i],
                 session_id=session_ids[i],
                 prompt_logprobs=prompt_logprobs,
+                openai_base_url=self.openai_base_urls[i % len(self.openai_base_urls)],
             )
 
         workers = min(self.max_concurrent_requests, len(prompt_ids))
