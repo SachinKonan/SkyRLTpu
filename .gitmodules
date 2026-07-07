@@ -8,3 +8,6 @@
 [submodule "third_party/tinker-cookbook"]
 	path = third_party/tinker-cookbook
 	url = https://github.com/thinking-machines-lab/tinker-cookbook.git
+[submodule "third_party/discover"]
+	path = third_party/discover
+	url = https://github.com/test-time-training/discover.git

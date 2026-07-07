@@ -1,0 +1,79 @@
+job:
+  name: sk7524-ttd-erdos-v5p64-east5a
+  env_type: null
+  loop: false
+  remote_user: sk7524_princeton_edu
+  worker_num: spot
+
+tpu:
+  allocation_mode: "queued-resources"
+  accelerator: v5p-64
+  name: sk7524-ttd-erdos-v5p64-east5a
+  zone: us-east5-a
+  version: v2-alpha-tpuv5
+  pricing: spot
+  flags:
+    - "--project=vision-mix"
+
+gcsfuse:
+  bucket_name: sk7524-tinker-tpu-us-east5
+  mount_path: /home/sk7524_princeton_edu/gcs
+
+ssh:
+  private_key: ~/.ssh/jobman_tpu_ed25519
+  identities:
+    - private_key: ~/.ssh/jobman_tpu_ed25519
+      public_key: ~/.ssh/jobman_tpu_ed25519.pub
+      config_entry: |
+        Host 10.* 34.* 35.* 104.* 136.*
+          IdentityFile ~/.ssh/jobman_tpu_ed25519
+          IdentitiesOnly yes
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+
+command:
+  cmd: |
+    set -euxo pipefail
+
+    sudo apt-get update -y
+    sudo apt-get install -y git curl tmux python3 python3-venv python3-pip
+
+    if ! command -v uv >/dev/null 2>&1; then
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+    export PATH="$HOME/.local/bin:$PATH"
+
+    mkdir -p \
+      /home/sk7524_princeton_edu/gcs/hf-cache \
+      /home/sk7524_princeton_edu/gcs/skyrl-logs \
+      /home/sk7524_princeton_edu/gcs/skyrl-checkpoints \
+      /home/sk7524_princeton_edu/gcs/skyrl-lora-models
+
+    REMOTE_SKYRL_DIR="$(printenv REMOTE_SKYRL_DIR || true)"
+    if [ -z "$REMOTE_SKYRL_DIR" ]; then
+      REMOTE_SKYRL_DIR="$HOME/SkyRLTpu"
+    fi
+    if [ -f "$REMOTE_SKYRL_DIR/uv.lock" ]; then
+      cd "$REMOTE_SKYRL_DIR"
+      python3 - <<'PY'
+    from pathlib import Path
+
+    lockfile = Path("uv.lock")
+    lockfile.write_text(
+        lockfile.read_text().replace(
+            "https://download-r2.pytorch.org",
+            "https://download.pytorch.org",
+        )
+    )
+    PY
+
+      uv run --extra tpu --extra tinker --extra jax python - <<'PY'
+    import importlib.util
+    print("skyrl importable:", importlib.util.find_spec("skyrl") is not None)
+    PY
+    else
+      echo "SkyRL checkout not present at $REMOTE_SKYRL_DIR; sync the SkyRLTpu repo before starting Tinker."
+    fi
+
+    echo "TPU base setup complete on $(hostname)."
+  workers: "all"
