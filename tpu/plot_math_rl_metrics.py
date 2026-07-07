@@ -37,7 +37,7 @@ def numeric_pairs(rows: list[dict[str, Any]], key: str) -> tuple[list[int], list
     ys: list[float] = []
     for row in rows:
         value = row.get(key)
-        if isinstance(value, int | float):
+        if isinstance(value, (int, float)):
             xs.append(int(row["step"]))
             ys.append(float(value))
     return xs, ys

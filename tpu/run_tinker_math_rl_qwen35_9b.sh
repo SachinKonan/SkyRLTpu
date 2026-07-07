@@ -12,6 +12,7 @@ SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
 
 LOCAL_PORT="${LOCAL_PORT:-18000}"
 REMOTE_PORT="${REMOTE_PORT:-8000}"
+TINKER_API_WORKER="${TINKER_API_WORKER:-0}"
 TUNNEL_SESSION="${TUNNEL_SESSION:-skyrl-tinker-tunnel}"
 CLIENT_SESSION="${CLIENT_SESSION:-skyrl-math-rl}"
 REPLACE_CLIENT="${REPLACE_CLIENT:-0}"
@@ -41,11 +42,11 @@ if [[ -z "$worker0_host" ]]; then
     gcloud alpha compute tpus tpu-vm describe "$TPU_NAME" \
       --project="$PROJECT" \
       --zone="$ZONE" \
-      --format='value(networkEndpoints[0].accessConfig.externalIp)'
+      --format="value(networkEndpoints[${TINKER_API_WORKER}].accessConfig.externalIp)"
   )"
 fi
 if [[ -z "$worker0_host" ]]; then
-  echo "Could not resolve worker0 external IP for ${TPU_NAME}" >&2
+  echo "Could not resolve API worker ${TINKER_API_WORKER} external IP for ${TPU_NAME}" >&2
   exit 1
 fi
 
