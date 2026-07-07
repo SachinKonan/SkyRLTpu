@@ -5,3 +5,6 @@
 	path = third_party/tpu-inference
 	url = https://github.com/vllm-project/tpu-inference.git
 	branch = releases/v0.23.0
+[submodule "third_party/tinker-cookbook"]
+	path = third_party/tinker-cookbook
+	url = https://github.com/thinking-machines-lab/tinker-cookbook.git

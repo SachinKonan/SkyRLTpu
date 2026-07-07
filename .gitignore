@@ -114,6 +114,7 @@ outputs/
 
 # Local artifacts
 tinker.db
+/runs/
 
 # Alembic - don't track pycache
 tx/tinker/alembic/__pycache__/
