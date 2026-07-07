@@ -81,7 +81,6 @@ exec vllm serve "${MODEL_NAME}" \\
   --max-loras "${VLLM_MAX_LORAS}" \\
   --max-lora-rank "${VLLM_MAX_LORA_RANK}" \\
   --download-dir "${REMOTE_HF_HOME}/hub" \\
-  --disable-log-requests \\
   2>&1 | tee "\$HOME/skyrl-logs/vllm-tpu.log"
 EOF
 
