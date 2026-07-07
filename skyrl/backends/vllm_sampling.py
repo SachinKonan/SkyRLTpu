@@ -176,7 +176,6 @@ class VllmSamplingClient:
             "model": model_name,
             "prompt": prompt_ids,
             "n": 1,
-            "seed": sampling_params.seed,
             "max_tokens": sampling_params.max_tokens,
             "temperature": sampling_params.temperature,
             "top_p": sampling_params.top_p,
