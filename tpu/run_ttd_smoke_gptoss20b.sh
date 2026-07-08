@@ -18,6 +18,9 @@ export TTD_SLURM_PARTITION="${TTD_SLURM_PARTITION:-cpu}"
 export TTD_SLURM_ACCOUNT="${TTD_SLURM_ACCOUNT:-zhuangl}"
 export TTD_SLURM_MEM="${TTD_SLURM_MEM:-4G}"
 export WANDB_MODE="${WANDB_MODE:-disabled}"
+# Plumbing check only: never persist LoRA weights (0 disables periodic AND the
+# final checkpoint). Requires the save_every==0 gate in rl/train.py.
+export SAVE_EVERY="${SAVE_EVERY:-0}"
 export UV_PROJECT_ENVIRONMENT="${discover_venv}"
 
 # The tmux/login environment may carry a stale TINKER_API_KEY (e.g. the local
