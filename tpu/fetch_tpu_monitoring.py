@@ -5,7 +5,9 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -27,6 +29,15 @@ def utc_now() -> datetime:
 
 def rfc3339(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def parse_rfc3339(value: str) -> datetime:
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def auth_token() -> str:
@@ -68,8 +79,15 @@ def fetch_time_series(
     out: list[dict[str, Any]] = []
 
     while True:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            data = json.load(response)
+        for attempt in range(6):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as response:
+                    data = json.load(response)
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code not in {429, 500, 502, 503, 504} or attempt == 5:
+                    raise
+                time.sleep(2**attempt)
         out.extend(data.get("timeSeries", []))
         token_page = data.get("nextPageToken")
         if not token_page:
@@ -84,12 +102,21 @@ def summarize_metric(metric: str, series: list[dict[str, Any]]) -> dict[str, Any
     values: list[float] = []
     latest_values: list[float] = []
     series_summaries: list[dict[str, Any]] = []
+    points_by_time: dict[str, list[float]] = {}
 
     for item in series:
         points = item.get("points", [])
         nums = [value for point in points if (value := point_value(point)) is not None]
         if not nums:
             continue
+        for point in points:
+            value = point_value(point)
+            end_time = point.get("interval", {}).get("endTime")
+            if value is None or not end_time:
+                continue
+            point_dt = parse_rfc3339(end_time)
+            minute_dt = point_dt.replace(second=0, microsecond=0)
+            points_by_time.setdefault(rfc3339(minute_dt), []).append(value)
         values.extend(nums)
         latest_values.append(nums[0])
         labels = {
@@ -122,6 +149,17 @@ def summarize_metric(metric: str, series: list[dict[str, Any]]) -> dict[str, Any
                 "overall_max": max(values),
             }
         )
+    if points_by_time:
+        summary["time_points"] = [
+            {
+                "end_time": end_time,
+                "count": len(point_values),
+                "min": min(point_values),
+                "mean": sum(point_values) / len(point_values),
+                "max": max(point_values),
+            }
+            for end_time, point_values in sorted(points_by_time.items())
+        ]
     return summary
 
 
@@ -130,6 +168,8 @@ def main() -> None:
     parser.add_argument("--project", default=None, help="GCP project. Defaults to gcloud config project.")
     parser.add_argument("--location", default="us-east5-a", help="TPU worker location/zone filter.")
     parser.add_argument("--minutes", type=int, default=120, help="Lookback window in minutes.")
+    parser.add_argument("--start", help="Explicit interval start time, RFC3339 UTC, e.g. 2026-07-08T03:20:00Z.")
+    parser.add_argument("--end", help="Explicit interval end time, RFC3339 UTC, e.g. 2026-07-08T18:15:00Z.")
     parser.add_argument("--metric", action="append", default=[], help="Metric type to fetch. Can be repeated.")
     parser.add_argument("--out", type=Path, help="Optional JSON output path.")
     args = parser.parse_args()
@@ -144,8 +184,16 @@ def main() -> None:
     if not project:
         raise SystemExit("No project set. Pass --project or configure gcloud.")
 
-    end_dt = utc_now()
-    start_dt = end_dt - timedelta(minutes=args.minutes)
+    if bool(args.start) != bool(args.end):
+        raise SystemExit("Pass both --start and --end, or neither.")
+    if args.start and args.end:
+        start_dt = parse_rfc3339(args.start)
+        end_dt = parse_rfc3339(args.end)
+    else:
+        end_dt = utc_now()
+        start_dt = end_dt - timedelta(minutes=args.minutes)
+    if start_dt >= end_dt:
+        raise SystemExit("--start must be before --end")
     start = rfc3339(start_dt)
     end = rfc3339(end_dt)
     token = auth_token()

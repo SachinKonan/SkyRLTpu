@@ -1,13 +1,112 @@
 {
   "first_step": 0,
   "last_step": 84,
+  "monitoring": {
+    "end": "2026-07-08T18:15:00Z",
+    "location": "us-east5-a",
+    "metrics": {
+      "tpu.googleapis.com/accelerator/duty_cycle": {
+        "latest_mean": 71.75162064357463,
+        "num_points": 20308,
+        "num_series": 156,
+        "overall_max": 100.0,
+        "overall_mean": 68.26590869287025
+      },
+      "tpu.googleapis.com/accelerator/memory_bandwidth_utilization": {
+        "latest_mean": 20.80025856011332,
+        "num_points": 24864,
+        "num_series": 208,
+        "overall_max": 63.90838146209717,
+        "overall_mean": 19.80835071289254
+      },
+      "tpu.googleapis.com/accelerator/memory_total": {
+        "latest_mean": 102803435572.51282,
+        "num_points": 20304,
+        "num_series": 156,
+        "overall_max": 102803437568.0,
+        "overall_mean": 102803435536.54216
+      },
+      "tpu.googleapis.com/accelerator/memory_used": {
+        "latest_mean": 30922581763.28205,
+        "num_points": 20304,
+        "num_series": 156,
+        "overall_max": 99823398912.0,
+        "overall_mean": 30655461155.479904
+      },
+      "tpu.googleapis.com/accelerator/tensorcore_utilization": {
+        "latest_mean": 15.630955919088068,
+        "num_points": 24864,
+        "num_series": 208,
+        "overall_max": 91.97881571451823,
+        "overall_mean": 15.336593066022896
+      }
+    },
+    "project": "vision-mix",
+    "start": "2026-07-08T03:10:00Z"
+  },
   "num_rows": 85,
   "series": {
+    "derived/batch_generated_tokens_per_sec": {
+      "last": 3485.1591682820626,
+      "last_step": 84,
+      "max": 4174.21803542741,
+      "max_step": 20,
+      "mean": 3619.138955176889,
+      "min": 2152.679688024071,
+      "num_points": 85
+    },
+    "derived/tpu_memory_utilization": {
+      "last": 37.41245752383115,
+      "last_step": 84,
+      "max": 67.10970987106847,
+      "max_step": 79,
+      "mean": 30.53190095175943,
+      "min": 18.617622070704368,
+      "num_points": 85
+    },
+    "derived/tpu_tensorcore_utilization": {
+      "last": 17.864851979124047,
+      "last_step": 84,
+      "max": 29.123131972566725,
+      "max_step": 82,
+      "mean": 15.338996667350921,
+      "min": 3.6587205122912816,
+      "num_points": 85
+    },
+    "derived/trajectory_generated_tokens_per_sec": {
+      "last": 5.6772735022362095,
+      "last_step": 84,
+      "max": 7.595440442679308,
+      "max_step": 20,
+      "mean": 5.8948852756972885,
+      "min": 3.269708924956919,
+      "num_points": 85
+    },
+    "env/all/ac_tokens_per_turn": {
+      "last": 811.6552734375,
+      "last_step": 84,
+      "max": 937.6689453125,
+      "max_step": 20,
+      "mean": 858.169784007353,
+      "min": 718.0,
+      "num_points": 85
+    },
     "env/all/correct": {
       "last": 0.4921875,
       "last_step": 84,
       "max": 0.5361328125,
       "max_step": 80,
+      "mean": 0.3392003676470588,
+      "min": 0.1259765625,
+      "num_points": 85
+    },
+    "env/all/ob_tokens_per_turn": {
+      "last": 201.84375,
+      "last_step": 84,
+      "max": 243.265625,
+      "max_step": 27,
+      "mean": 194.71433823529412,
+      "min": 170.625,
       "num_points": 85
     },
     "env/all/reward/total": {
@@ -15,6 +114,8 @@
       "last_step": 84,
       "max": 0.48144531250000006,
       "max_step": 80,
+      "mean": 0.26853170955882355,
+      "min": 0.0478515625,
       "num_points": 85
     },
     "test/env/all/correct": {
@@ -22,6 +123,8 @@
       "last_step": 80,
       "max": 0.408,
       "max_step": 80,
+      "mean": 0.3184,
+      "min": 0.14,
       "num_points": 5
     },
     "test/env/all/reward/total": {
@@ -29,7 +132,27 @@
       "last_step": 80,
       "max": 0.34840000000000004,
       "max_step": 80,
+      "mean": 0.24860000000000002,
+      "min": 0.054999999999999986,
       "num_points": 5
+    },
+    "time/sampling": {
+      "last": 238.4783477219753,
+      "last_step": 84,
+      "max": 413.3030124963261,
+      "max_step": 1,
+      "mean": 244.95898214803242,
+      "min": 229.66231490205973,
+      "num_points": 85
+    },
+    "time/train_step": {
+      "last": 369.98845532676205,
+      "last_step": 84,
+      "max": 795.6650568679906,
+      "max_step": 1,
+      "mean": 363.9291998529533,
+      "min": 291.5431925356388,
+      "num_points": 85
     }
   }
 }

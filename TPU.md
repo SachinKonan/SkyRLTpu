@@ -75,9 +75,17 @@ Plot a reward/correctness curve from a completed metrics file:
 ```bash
 uv run --with matplotlib \
   python tpu/plot_math_rl_metrics.py /path/to/metrics.jsonl \
+    --monitoring benchmark_artifacts/math_rl_qwen35_9b_tpu_monitoring.json \
+    --run-dir /path/to/run-dir \
     --out benchmark_artifacts/math_rl_qwen35_9b_reward_curve.png \
     --summary benchmark_artifacts/math_rl_qwen35_9b_summary.json
 ```
+
+The plot also includes derived generation diagnostics when the metrics file has
+the standard MathRL token and timing keys: generated tokens/sec for the full
+batch, generated tokens/sec per trajectory, average prompt/generated length, and
+step timing. Passing `--monitoring` and `--run-dir` adds step-aligned tensor core
+and HBM utilization from Cloud Monitoring.
 
 Fetch TPU utilization from Cloud Monitoring for the same run window:
 
@@ -85,7 +93,8 @@ Fetch TPU utilization from Cloud Monitoring for the same run window:
 python tpu/fetch_tpu_monitoring.py \
   --project vision-mix \
   --location us-east5-a \
-  --minutes 120 \
+  --start 2026-07-08T03:10:00Z \
+  --end 2026-07-08T18:15:00Z \
   --out benchmark_artifacts/math_rl_qwen35_9b_tpu_monitoring.json
 ```
 
