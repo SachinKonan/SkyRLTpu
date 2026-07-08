@@ -1,35 +1,35 @@
 {
   "first_step": 0,
-  "last_step": 74,
-  "num_rows": 75,
+  "last_step": 84,
+  "num_rows": 85,
   "series": {
     "env/all/correct": {
-      "last": 0.455078125,
-      "last_step": 74,
-      "max": 0.4931640625,
-      "max_step": 72,
-      "num_points": 75
+      "last": 0.4921875,
+      "last_step": 84,
+      "max": 0.5361328125,
+      "max_step": 80,
+      "num_points": 85
     },
     "env/all/reward/total": {
-      "last": 0.3936523437500001,
-      "last_step": 74,
-      "max": 0.43574218750000004,
-      "max_step": 72,
-      "num_points": 75
+      "last": 0.43427734375,
+      "last_step": 84,
+      "max": 0.48144531250000006,
+      "max_step": 80,
+      "num_points": 85
     },
     "test/env/all/correct": {
-      "last": 0.376,
-      "last_step": 60,
-      "max": 0.376,
-      "max_step": 60,
-      "num_points": 4
+      "last": 0.408,
+      "last_step": 80,
+      "max": 0.408,
+      "max_step": 80,
+      "num_points": 5
     },
     "test/env/all/reward/total": {
-      "last": 0.31060000000000004,
-      "last_step": 60,
-      "max": 0.31060000000000004,
-      "max_step": 60,
-      "num_points": 4
+      "last": 0.34840000000000004,
+      "last_step": 80,
+      "max": 0.34840000000000004,
+      "max_step": 80,
+      "num_points": 5
     }
   }
 }
