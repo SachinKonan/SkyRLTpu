@@ -20,6 +20,7 @@ Cost knobs (all overridable via env):
 from __future__ import annotations
 
 import os
+import ssl
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,12 @@ def _env_optional_int(name: str) -> int | None:
 
 
 def main() -> None:
+    # Force OpenSSL's one-time lazy init on the main thread: the tinker client
+    # builds its first ssl.SSLContext inside a worker thread under a running
+    # asyncio loop, which otherwise races OpenSSL init and dies with
+    # "ssl.SSLError: unknown error (_ssl.c:3108)".
+    ssl.create_default_context()
+
     repo_root = Path(__file__).resolve().parents[1]
     discover_root = repo_root / "third_party" / "discover"
     sys.path.insert(0, str(discover_root))

@@ -10,9 +10,21 @@ discover_venv="${TTD_DISCOVER_VENV:-${discover_root}/.venv-ttd-discover}"
 discover_python="${TTD_DISCOVER_PYTHON:-3.11}"
 
 export TTD_RUN_DIR="${TTD_RUN_DIR:-${repo_root}/runs/ttd_smoke_gptoss20b}"
-export TTD_EVAL_BACKEND="${TTD_EVAL_BACKEND:-local}"
+# Always grade via submitit (SLURM) -- this login node has no CPU for in-process
+# local grading. Dispatch eval jobs to the della cpu partition.
+export TTD_EVAL_BACKEND="${TTD_EVAL_BACKEND:-submitit}"
+export TTD_SAFE_GRADE_MAX_WORKERS="${TTD_SAFE_GRADE_MAX_WORKERS:-64}"
+export TTD_SLURM_PARTITION="${TTD_SLURM_PARTITION:-cpu}"
+export TTD_SLURM_ACCOUNT="${TTD_SLURM_ACCOUNT:-zhuangl}"
+export TTD_SLURM_MEM="${TTD_SLURM_MEM:-4G}"
 export WANDB_MODE="${WANDB_MODE:-disabled}"
 export UV_PROJECT_ENVIRONMENT="${discover_venv}"
+
+# The tmux/login environment may carry a stale TINKER_API_KEY (e.g. the local
+# 'tml-dummy' from the TPU work). discover's load_dotenv does NOT override an
+# already-set var, so that stale value would shadow third_party/discover/.env
+# and cause 401s against prod Tinker. Drop it so .env is authoritative.
+unset TINKER_API_KEY
 
 cd "$discover_root"
 if [[ "${TTD_DISCOVER_SYNC:-1}" != "0" ]]; then
