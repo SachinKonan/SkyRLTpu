@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import ssl
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,14 @@ def _env_optional_int(name: str) -> int | None:
 
 
 def main() -> None:
+    # Force OpenSSL's one-time lazy init to run on the main thread. The tinker
+    # client builds its first ssl.SSLContext inside a worker thread under a
+    # running asyncio loop; if that is OpenSSL's first SSL_CTX_new in the
+    # process it races the one-time provider/config init and dies with
+    # "ssl.SSLError: unknown error (_ssl.c:3108)". Creating one context here
+    # first makes the init deterministic.
+    ssl.create_default_context()
+
     repo_root = Path(__file__).resolve().parents[1]
     discover_root = repo_root / "third_party" / "discover"
     sys.path.insert(0, str(discover_root))
