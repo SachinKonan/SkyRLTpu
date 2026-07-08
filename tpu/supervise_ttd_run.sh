@@ -43,6 +43,10 @@ GROUP_SIZE="${GROUP_SIZE:-16}"
 GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-64}"
 TTD_EVAL_BACKEND="${TTD_EVAL_BACKEND:-submitit}"
 LORA_RANK="${LORA_RANK:-32}"
+# A STABLE experiment name is required for checkpoint resume across preemptions:
+# run_ttd_erdos_qwen35_9b.py otherwise appends a fresh timestamp each launch, so
+# the harness never finds its prior checkpoints. Keep this constant per run.
+EXPERIMENT_NAME="${EXPERIMENT_NAME:-erdos-min-overlap-qwen35-9b-32k-full}"
 
 POLL_SEC="${POLL_SEC:-60}"
 API_READY_TRIES="${API_READY_TRIES:-60}"     # * API_READY_SLEEP seconds
@@ -99,6 +103,7 @@ GROUP_SIZE='${GROUP_SIZE}' \
 GROUPS_PER_BATCH='${GROUPS_PER_BATCH}' \
 TTD_EVAL_BACKEND='${TTD_EVAL_BACKEND}' \
 LORA_RANK='${LORA_RANK}' \
+EXPERIMENT_NAME='${EXPERIMENT_NAME}' \
 bash tpu/run_ttd_erdos_client.sh 2>&1 | tee '${clog}'"
 }
 
