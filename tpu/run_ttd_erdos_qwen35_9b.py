@@ -27,7 +27,6 @@ def main() -> None:
 
     run_dir = Path(os.environ.get("TTD_RUN_DIR", repo_root / "runs" / "ttd_erdos")).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    os.chdir(run_dir)
 
     os.environ.setdefault("TINKER_API_KEY", "tml-dummy")
 
@@ -65,9 +64,11 @@ def main() -> None:
         context_window=_env_int("CONTEXT_WINDOW", 32768),
         completion_max_tokens=_env_optional_int("COMPLETION_MAX_TOKENS"),
         experiment_name=experiment_name,
+        log_root=str(run_dir / "tinker_log"),
         wandb_project=os.environ.get("WANDB_PROJECT") or None,
         tinker_base_url=os.environ.get("TINKER_BASE_URL", "http://127.0.0.1:18000"),
         num_cpus_per_task=_env_int("NUM_CPUS_PER_TASK", 1),
+        eval_backend=os.environ.get("TTD_EVAL_BACKEND", "submitit"),
         eval_timeout=_env_int("EVAL_TIMEOUT", 1100),
     )
     print(f"Running Erdos minimum overlap discover in {run_dir}")
