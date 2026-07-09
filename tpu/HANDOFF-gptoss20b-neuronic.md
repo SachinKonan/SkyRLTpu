@@ -51,7 +51,19 @@ So at full scale a step is basically `seconds (gen) + seconds (train) + grade(51
    WANDB_API_KEY=<wandb key>
    ```
    (The della `.env` is NOT in git and won't come with the clone.)
-2. **Venv**: `cd third_party/discover && uv sync --extra math --python 3.11` → `.venv-ttd-discover`.
+2. **Get the discover code WITH our fixes** — ⚠️ the submodule points at upstream
+   `github.com/test-time-training/discover` and our 5 fix commits are NOT pushed there, so a
+   plain `git submodule update` will fail to check out the pinned commit. Use the bundled patch
+   instead:
+   ```bash
+   cd third_party
+   rm -rf discover && git clone https://github.com/test-time-training/discover.git
+   cd discover
+   git checkout 6c40e82dab9d5de7416ac873ad5cd3106084aaed   # base our fixes are on top of
+   git apply --3way ../../tpu/discover-fixes.patch          # our fixes (SSL/KL/wandb/save-gate/eval-backends/qwen-completer)
+   ```
+   (`tpu/discover-fixes.patch` is committed in this repo; it is `diff origin/main..our-HEAD`.)
+   Then the venv: `uv sync --extra math --python 3.11` → creates `.venv-ttd-discover`.
 3. **Pick the grading backend** (the whole point of neuronic — figure out what runs widest):
    - **Preferred if neuronic *compute nodes reach the internet*** (test: from a compute node,
      `curl -sS -m8 https://<any external host>`): run the WHOLE client on one big compute node
