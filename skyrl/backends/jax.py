@@ -93,6 +93,20 @@ class JaxBackendConfig(BaseModel, extra="forbid"):
         default="/v1/load_lora_adapter",
         description="vLLM endpoint used to load LoRA adapters. Use /skyrl/v1/load_lora_adapter for the SkyRL custom vLLM server.",
     )
+    vllm_lora_unload_endpoint: str = Field(
+        default="/v1/unload_lora_adapter",
+        description="vLLM endpoint used to unload the previous LoRA adapter version for a model before loading a new checkpoint.",
+    )
+    vllm_lora_load_retries: int = Field(
+        default=3,
+        ge=1,
+        description="Number of attempts for each vLLM LoRA load request.",
+    )
+    vllm_lora_load_retry_sleep_sec: float = Field(
+        default=2.0,
+        ge=0.0,
+        description="Sleep interval between vLLM LoRA load retries.",
+    )
     vllm_request_timeout_sec: float = Field(
         default=300.0,
         description="Timeout in seconds for vLLM HTTP requests.",
@@ -368,6 +382,9 @@ class JaxBackendImpl(AbstractBackend):
                     api_key=config.vllm_api_key,
                     lora_base_dir=config.vllm_lora_base_dir,
                     lora_load_endpoint=config.vllm_lora_load_endpoint,
+                    lora_unload_endpoint=config.vllm_lora_unload_endpoint,
+                    lora_load_retries=config.vllm_lora_load_retries,
+                    lora_load_retry_sleep_sec=config.vllm_lora_load_retry_sleep_sec,
                     request_timeout_sec=config.vllm_request_timeout_sec,
                     max_concurrent_requests=config.vllm_max_concurrent_requests,
                 )

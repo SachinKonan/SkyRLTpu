@@ -16,6 +16,20 @@ class _VllmHandler(BaseHTTPRequestHandler):
         self.server.requests.append((self.path, payload, dict(self.headers)))
 
         if self.path == "/v1/load_lora_adapter":
+            if getattr(self.server, "fail_loads", 0) > 0:
+                self.server.fail_loads -= 1
+                self.send_response(503)
+                self.send_header("content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"try again")
+                return
+            self.send_response(200)
+            self.send_header("content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"ok")
+            return
+
+        if self.path == "/v1/unload_lora_adapter":
             self.send_response(200)
             self.send_header("content-type", "text/plain")
             self.end_headers()
@@ -54,6 +68,7 @@ class _VllmHandler(BaseHTTPRequestHandler):
 def _serve():
     server = ThreadingHTTPServer(("127.0.0.1", 0), _VllmHandler)
     server.requests = []
+    server.fail_loads = 0
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server
@@ -81,6 +96,67 @@ def test_vllm_sampling_client_loads_lora_checkpoint(tmp_path):
         assert (tmp_path / "loras" / "model_a_ckpt_1" / "adapter_config.json").exists()
         assert server.requests[0][0] == "/v1/load_lora_adapter"
         assert server.requests[0][1]["lora_name"] == "model_a_ckpt_1"
+    finally:
+        server.shutdown()
+
+
+def test_vllm_sampling_client_unloads_previous_lora_checkpoint(tmp_path):
+    server = _serve()
+    try:
+        for checkpoint_id in ("ckpt_1", "ckpt_2"):
+            checkpoint = tmp_path / f"{checkpoint_id}.tar.gz"
+            src_dir = tmp_path / checkpoint_id
+            src_dir.mkdir()
+            (src_dir / "adapter_config.json").write_text("{}")
+            (src_dir / "adapter_model.safetensors").write_bytes(checkpoint_id.encode())
+            with tarfile.open(checkpoint, "w:gz") as tar:
+                tar.add(src_dir, arcname="")
+
+        client = VllmSamplingClient(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            model_name="Qwen/Qwen3-4B",
+            lora_base_dir=tmp_path / "loras",
+        )
+        assert client.ensure_lora_loaded("model_a", AnyPath(tmp_path / "ckpt_1.tar.gz"), checkpoint_id="ckpt_1")
+        assert client.ensure_lora_loaded("model_a", AnyPath(tmp_path / "ckpt_2.tar.gz"), checkpoint_id="ckpt_2")
+
+        assert [request[0] for request in server.requests] == [
+            "/v1/load_lora_adapter",
+            "/v1/unload_lora_adapter",
+            "/v1/load_lora_adapter",
+        ]
+        assert server.requests[1][1]["lora_name"] == "model_a_ckpt_1"
+        assert server.requests[2][1]["lora_name"] == "model_a_ckpt_2"
+    finally:
+        server.shutdown()
+
+
+def test_vllm_sampling_client_retries_lora_load(tmp_path):
+    server = _serve()
+    server.fail_loads = 1
+    try:
+        checkpoint = tmp_path / "ckpt_retry.tar.gz"
+        src_dir = tmp_path / "src_retry"
+        src_dir.mkdir()
+        (src_dir / "adapter_config.json").write_text("{}")
+        (src_dir / "adapter_model.safetensors").write_bytes(b"weights")
+        with tarfile.open(checkpoint, "w:gz") as tar:
+            tar.add(src_dir, arcname="")
+
+        client = VllmSamplingClient(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            model_name="Qwen/Qwen3-4B",
+            lora_base_dir=tmp_path / "loras",
+            lora_load_retries=2,
+            lora_load_retry_sleep_sec=0,
+        )
+        model_name = client.ensure_lora_loaded("model_a", AnyPath(checkpoint), checkpoint_id="ckpt_retry")
+
+        assert model_name == "model_a_ckpt_retry"
+        assert [request[0] for request in server.requests] == [
+            "/v1/load_lora_adapter",
+            "/v1/load_lora_adapter",
+        ]
     finally:
         server.shutdown()
 

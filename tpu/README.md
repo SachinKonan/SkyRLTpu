@@ -5,11 +5,10 @@ This directory contains the TPU launch wrappers used for the SkyRLTpu checkout.
 ## vLLM TPU LoRA
 
 `start_vllm_tpu.sh` starts an external vLLM TPU server for sampling. It pins
-`vllm-tpu==0.23.0`, forces `MODEL_IMPL_TYPE=vllm`, and applies the local
-`TPUWorker` LoRA patch before launching the server. The forced model
-implementation is required for Qwen LoRA serving; the default TPU model
-implementation takes the JAX path, where runtime LoRA loading is not wired up
-for this workflow.
+`vllm-tpu==0.23.0`, forces `MODEL_IMPL_TYPE=vllm`, defaults
+`TPU_BACKEND_TYPE=torchax`, and applies the local `TPUWorker` LoRA patch before
+launching the server. The forced model implementation is required for Qwen LoRA
+serving; the TorchAX backend matches vLLM TPU's LoRA_Torch path.
 
 The source baseline is tracked as the `third_party/tpu-inference` submodule at
 the upstream `releases/v0.23.0` commit. Our local patch is stored in

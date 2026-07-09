@@ -23,14 +23,20 @@ if spec is None or not spec.submodule_search_locations:
 package_dir = Path(next(iter(spec.submodule_search_locations))).resolve()
 print(package_dir.parent)
 print(package_dir / "worker" / "tpu_worker.py")
+print(package_dir / "platforms" / "tpu_platform.py")
 PY
 )
 
 package_parent="${paths[0]}"
 worker_path="${paths[1]}"
+platform_path="${paths[2]}"
 
 if [[ ! -f "${worker_path}" ]]; then
   echo "TPU worker file not found: ${worker_path}" >&2
+  exit 1
+fi
+if [[ ! -f "${platform_path}" ]]; then
+  echo "TPU platform file not found: ${platform_path}" >&2
   exit 1
 fi
 
@@ -72,9 +78,29 @@ PY
   fi
 fi
 
+"${PYTHON}" - "${platform_path}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+if '"SKIP_JAX_PRECOMPILE",' not in text:
+    needle = '        "TPU_MULTIHOST_BACKEND",\n'
+    insert = needle + '        "SKIP_JAX_PRECOMPILE",\n'
+    if needle not in text:
+        raise SystemExit("Could not find TpuPlatform.additional_env_vars patch anchor")
+    text = text.replace(needle, insert, 1)
+    path.write_text(text)
+    print(f"vLLM TPU Ray env patch applied: {path}")
+else:
+    print(f"vLLM TPU Ray env patch already present: {path}")
+PY
+
 "${PYTHON}" -m py_compile "${worker_path}"
+"${PYTHON}" -m py_compile "${platform_path}"
 "${PYTHON}" - <<'PY'
 from tpu_inference.worker.tpu_worker import TPUWorker
+from tpu_inference.platforms.tpu_platform import TpuPlatform
 
 missing = [
     name
@@ -83,6 +109,9 @@ missing = [
 ]
 if missing:
     raise SystemExit(f"TPUWorker missing LoRA methods after patch: {missing}")
+if "SKIP_JAX_PRECOMPILE" not in TpuPlatform.additional_env_vars:
+    raise SystemExit("TpuPlatform.additional_env_vars missing SKIP_JAX_PRECOMPILE")
 PY
 
 echo "vLLM TPU LoRA worker patch verified: ${worker_path}"
+echo "vLLM TPU Ray env patch verified: ${platform_path}"

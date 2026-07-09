@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +18,14 @@ from cloudpathlib import AnyPath
 from skyrl.tinker import types
 from skyrl.utils.log import logger
 from skyrl.utils.storage import download_and_unpack
+
+
+class VllmRequestError(RuntimeError):
+    """HTTP/transport error returned by a vLLM server."""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def _normalize_vllm_urls(base_url: str) -> tuple[str, str]:
@@ -60,9 +69,13 @@ class VllmSamplingClient:
     api_key: str = "EMPTY"
     lora_base_dir: Path = Path("/tmp/skyrl_jax_vllm_loras")
     lora_load_endpoint: str = "/v1/load_lora_adapter"
+    lora_unload_endpoint: str = "/v1/unload_lora_adapter"
+    lora_load_retries: int = 3
+    lora_load_retry_sleep_sec: float = 2.0
     request_timeout_sec: float = 300.0
     max_concurrent_requests: int = 64
     _loaded_loras: dict[str, dict[str, str]] = field(default_factory=dict)
+    _latest_lora_by_model: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         url_pairs = _normalize_vllm_url_list(self.base_url)
@@ -72,6 +85,10 @@ class VllmSamplingClient:
         self.openai_base_url = self.openai_base_urls[0]
         if not self.lora_load_endpoint.startswith("/"):
             self.lora_load_endpoint = f"/{self.lora_load_endpoint}"
+        if self.lora_unload_endpoint and not self.lora_unload_endpoint.startswith("/"):
+            self.lora_unload_endpoint = f"/{self.lora_unload_endpoint}"
+        self.lora_load_retries = max(1, self.lora_load_retries)
+        self.lora_load_retry_sleep_sec = max(0.0, self.lora_load_retry_sleep_sec)
         self.max_concurrent_requests = max(1, self.max_concurrent_requests)
 
     def _headers(self) -> dict[str, str]:
@@ -89,11 +106,50 @@ class VllmSamplingClient:
                 content_type = resp.headers.get("content-type", "")
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"vLLM request failed: {e.code} {e.reason}: {body}") from e
+            raise VllmRequestError(f"vLLM request failed: {e.code} {e.reason}: {body}", e.code) from e
+        except urllib.error.URLError as e:
+            raise VllmRequestError(f"vLLM request failed: {e}") from e
 
         if "application/json" in content_type:
             return json.loads(body) if body else {}
         return body
+
+    def _post_json_with_retries(self, url: str, payload: dict[str, Any]) -> Any:
+        last_error: Exception | None = None
+        for attempt in range(1, self.lora_load_retries + 1):
+            try:
+                return self._post_json(url, payload)
+            except Exception as e:  # noqa: BLE001 - surface the final vLLM error after bounded retries.
+                last_error = e
+                if attempt == self.lora_load_retries:
+                    break
+                logger.warning(
+                    "vLLM LoRA load failed on attempt %s/%s for %s: %s; retrying in %.1fs",
+                    attempt,
+                    self.lora_load_retries,
+                    url,
+                    e,
+                    self.lora_load_retry_sleep_sec,
+                )
+                time.sleep(self.lora_load_retry_sleep_sec)
+        assert last_error is not None
+        raise last_error
+
+    def _unload_lora(self, lora_name: str) -> None:
+        if not self.lora_unload_endpoint:
+            return
+        payload = {"lora_name": lora_name}
+        for server_url in self.server_base_urls:
+            try:
+                self._post_json(f"{server_url}{self.lora_unload_endpoint}", payload)
+            except VllmRequestError as e:
+                if e.status_code in (400, 404):
+                    logger.info("LoRA adapter %s was not loaded on vLLM server %s", lora_name, server_url)
+                    continue
+                logger.warning("Failed to unload LoRA adapter %s from vLLM server %s: %s", lora_name, server_url, e)
+            except Exception as e:  # noqa: BLE001 - unload should not block loading the replacement adapter.
+                logger.warning("Failed to unload LoRA adapter %s from vLLM server %s: %s", lora_name, server_url, e)
+        self._loaded_loras.pop(lora_name, None)
 
     def _extract_lora_checkpoint(self, checkpoint_path: AnyPath, target_dir: Path) -> None:
         if target_dir.exists():
@@ -129,13 +185,18 @@ class VllmSamplingClient:
         if all(loaded_servers.get(server_url) == target_path for server_url in self.server_base_urls):
             return lora_name
 
+        previous_lora = self._latest_lora_by_model.get(model_id)
+        if previous_lora and previous_lora != lora_name:
+            self._unload_lora(previous_lora)
+
         payload = {"lora_name": lora_name, "lora_path": target_path}
         for server_url in self.server_base_urls:
             if loaded_servers.get(server_url) == target_path:
                 continue
-            self._post_json(f"{server_url}{self.lora_load_endpoint}", payload)
+            self._post_json_with_retries(f"{server_url}{self.lora_load_endpoint}", payload)
             loaded_servers[server_url] = target_path
             logger.info("Loaded LoRA adapter %s into vLLM server %s from %s", lora_name, server_url, target_path)
+        self._latest_lora_by_model[model_id] = lora_name
         return lora_name
 
     @staticmethod
