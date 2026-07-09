@@ -67,8 +67,10 @@ Expected outcome: the API process exits, Jobman's monitor sees `skyrl-tinker`
 die, the sync hook runs, the controller loop reacquires/restarts, and MathRL
 resumes from the latest `checkpoints.jsonl` batch.
 
-The live `000001` job used a one-off uploaded code bundle so the already-running
-TPU could pick up the fix without recreating the TPU.
+The live `000001` job used a one-off uploaded code bundle. That bundle object
+was overwritten at `2026-07-09T15:33:00Z` with parent commit `85aeada4`, so the
+already-running Jobman controller can keep the same snapshot config and its next
+retry will unpack code containing the simulated preemption endpoint.
 
 ## Live Run State
 
@@ -86,8 +88,8 @@ Confirmed behavior after restart:
 - JAX backend initialized as `process_id=0/1`, `num_processes=2`, `total devices=8`.
 - MathRL client initialized and began `180` batches.
 - Batch 0 completed.
-- Batch 1 completed.
-- Latest durable checkpoint observed: batch 2.
+- Batch 3 completed.
+- Latest durable checkpoint observed: batch 4.
 
 Fresh batch-0 metrics:
 
@@ -110,7 +112,7 @@ The first durable checkpoint exists:
 The latest observed durable checkpoint is:
 
 ```json
-{"name": "000002", "batch": 2, "state_path": "tinker://model_be40affe/weights/000002", "rolling": true}
+{"name": "000004", "batch": 4, "state_path": "tinker://model_be40affe/weights/000004", "rolling": true}
 ```
 
 `latest_good.json` also reports:
@@ -118,10 +120,10 @@ The latest observed durable checkpoint is:
 ```json
 {
   "latest_checkpoint": {
-    "batch": 2,
-    "name": "000002",
+    "batch": 4,
+    "name": "000004",
     "rolling": true,
-    "state_path": "tinker://model_be40affe/weights/000002"
+    "state_path": "tinker://model_be40affe/weights/000004"
   },
   "local_checkpoints": "/home/sk7524_princeton_edu/gcs/skyrl-checkpoints/math-qwen35-9b-180step-100605b06fb4df06",
   "gcs_checkpoints": "/home/sk7524_princeton_edu/gcs/skyrl-checkpoints/math-qwen35-9b-180step-100605b06fb4df06"
