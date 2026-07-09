@@ -6,6 +6,7 @@ import threading
 import time
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta, timezone
+from ipaddress import ip_address
 from typing import Annotated, Any, AsyncGenerator, ClassVar, Literal
 from uuid import uuid4
 
@@ -55,6 +56,49 @@ API_SERVER_STARTUP_ARGS = ["-m", "skyrl.tinker.api"]
 
 # Timeout for graceful shutdown when engine crashes
 SHUTDOWN_TIMEOUT_SECONDS = 10
+PREEMPT_CONFIRMATION = "preempt"
+PREEMPT_ENDPOINT_ENABLE_ENV = "SKYRL_ENABLE_PREEMPT_ENDPOINT"
+PREEMPT_ENDPOINT_ALLOW_REMOTE_ENV = "SKYRL_PREEMPT_ALLOW_REMOTE"
+PREEMPT_ENDPOINT_TRUTHY = {"1", "true", "t", "yes", "y", "on"}
+
+
+def _env_flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in PREEMPT_ENDPOINT_TRUTHY
+
+
+def _preempt_endpoint_enabled() -> bool:
+    return _env_flag_enabled(PREEMPT_ENDPOINT_ENABLE_ENV)
+
+
+def _preempt_remote_allowed() -> bool:
+    return _env_flag_enabled(PREEMPT_ENDPOINT_ALLOW_REMOTE_ENV)
+
+
+def _client_host_allowed(host: str | None) -> bool:
+    if _preempt_remote_allowed():
+        return True
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    if host is None:
+        return False
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _schedule_preempt_signal(signum: int, delay_seconds: float) -> None:
+    def send_signal():
+        logger.warning(
+            "Simulated preemption endpoint sending signal %s to API pid %s",
+            signum,
+            os.getpid(),
+        )
+        os.kill(os.getpid(), signum)
+
+    timer = threading.Timer(delay_seconds, send_signal)
+    timer.daemon = True
+    timer.start()
 
 
 def _get_parent_uv_run_args(parent_cmd: list[str]) -> list[str]:
@@ -644,6 +688,19 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
 
 
+class PreemptRequest(BaseModel):
+    confirm: Literal["preempt"]
+    delay_seconds: float = Field(default=0.25, ge=0.0, le=30.0)
+
+
+class PreemptResponse(BaseModel):
+    status: Literal["scheduled"] = "scheduled"
+    pid: int
+    signum: int
+    signal_name: str
+    delay_seconds: float
+
+
 class CreateSessionRequest(BaseModel):
     tags: list[str]
     user_metadata: dict[str, Any] | None = None
@@ -737,6 +794,28 @@ async def client_config():
 async def healthz():
     """Checks if the API server is ready."""
     return HealthResponse(status="ok")
+
+
+@app.post("/api/v1/preempt", response_model=PreemptResponse)
+@app.post("/preempt", response_model=PreemptResponse)
+async def preempt(request: Request, body: PreemptRequest):
+    """Test-only endpoint to simulate TPU preemption by terminating the API process."""
+    if not _preempt_endpoint_enabled():
+        raise HTTPException(status_code=404, detail="Preempt endpoint is disabled")
+    host = request.client.host if request.client else None
+    if not _client_host_allowed(host):
+        raise HTTPException(status_code=403, detail="Preempt endpoint only accepts local requests")
+    if body.confirm != PREEMPT_CONFIRMATION:
+        raise HTTPException(status_code=400, detail=f"confirm must be '{PREEMPT_CONFIRMATION}'")
+
+    signum = signal.SIGTERM
+    _schedule_preempt_signal(signum, body.delay_seconds)
+    return PreemptResponse(
+        pid=os.getpid(),
+        signum=signum,
+        signal_name=signal.Signals(signum).name,
+        delay_seconds=body.delay_seconds,
+    )
 
 
 @app.post("/api/v1/create_session", response_model=CreateSessionResponse)
