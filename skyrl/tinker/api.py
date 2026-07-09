@@ -87,7 +87,7 @@ def _client_host_allowed(host: str | None) -> bool:
         return False
 
 
-def _schedule_preempt_signal(signum: int, delay_seconds: float) -> None:
+def _schedule_preempt_signal(signum: int, delay_seconds: float, hard_exit_grace_seconds: float = 5.0) -> None:
     def send_signal():
         logger.warning(
             "Simulated preemption endpoint sending signal %s to API pid %s",
@@ -99,6 +99,18 @@ def _schedule_preempt_signal(signum: int, delay_seconds: float) -> None:
     timer = threading.Timer(delay_seconds, send_signal)
     timer.daemon = True
     timer.start()
+
+    def hard_exit():
+        logger.warning(
+            "Simulated preemption endpoint forcing API pid %s to exit after %.1fs grace",
+            os.getpid(),
+            hard_exit_grace_seconds,
+        )
+        os._exit(128 + signum)
+
+    hard_exit_timer = threading.Timer(delay_seconds + hard_exit_grace_seconds, hard_exit)
+    hard_exit_timer.daemon = True
+    hard_exit_timer.start()
 
 
 def _get_parent_uv_run_args(parent_cmd: list[str]) -> list[str]:

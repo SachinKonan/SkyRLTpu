@@ -58,14 +58,18 @@ def test_preempt_endpoint_rejects_remote_client_by_default(monkeypatch):
     assert scheduled == []
 
 
-def test_preempt_endpoint_schedules_sigterm_for_local_client(monkeypatch):
+def test_preempt_endpoint_schedules_sigterm_with_hard_exit_fallback_for_local_client(
+    monkeypatch,
+):
     scheduled = []
     monkeypatch.setenv("SKYRL_ENABLE_PREEMPT_ENDPOINT", "true")
     monkeypatch.delenv("SKYRL_PREEMPT_ALLOW_REMOTE", raising=False)
     monkeypatch.setattr(
         api,
         "_schedule_preempt_signal",
-        lambda signum, delay_seconds: scheduled.append((signum, delay_seconds)),
+        lambda signum, delay_seconds, hard_exit_grace_seconds=5.0: scheduled.append(
+            (signum, delay_seconds, hard_exit_grace_seconds)
+        ),
     )
 
     response = asyncio.run(
@@ -75,7 +79,7 @@ def test_preempt_endpoint_schedules_sigterm_for_local_client(monkeypatch):
         )
     )
 
-    assert scheduled == [(signal.SIGTERM, 0.01)]
+    assert scheduled == [(signal.SIGTERM, 0.01, 5.0)]
     assert response.status == "scheduled"
     assert response.signum == signal.SIGTERM
     assert response.signal_name == "SIGTERM"
