@@ -1,14 +1,14 @@
 {
   "first_step": 0,
-  "last_step": 55,
-  "num_rows": 57,
+  "last_step": 57,
+  "num_rows": 59,
   "series": {
     "env/all/reward/total": {
-      "last": 0.3608398437500001,
-      "last_step": 55,
+      "last": 0.35908203125000004,
+      "last_step": 57,
       "max": 0.4168945312500001,
       "max_step": 46,
-      "num_points": 57
+      "num_points": 59
     }
   }
 }
