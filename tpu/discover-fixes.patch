@@ -339,10 +339,10 @@ index dca6eea..dc49155 100644
 -
 diff --git a/ttt_discover/rl/context_distill.py b/ttt_discover/rl/context_distill.py
 new file mode 100644
-index 0000000..e6da4d0
+index 0000000..134d905
 --- /dev/null
 +++ b/ttt_discover/rl/context_distill.py
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,407 @@
 +"""Contrastive context distillation alongside the RL objective.
 +
 +Per training step: sample (suboptimal, betters) pairs from the PUCT pool, have the
@@ -421,6 +421,8 @@ index 0000000..e6da4d0
 +# identifiers and numeric literals used by the leakage filter
 +_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
 +_NUM_RE = re.compile(r"\d+\.\d{3,}")
++_COMMENT_RE = re.compile(r"#.*")
++_DOCSTRING_RE = re.compile(r"('''.*?'''|\"\"\".*?\"\"\")", re.S)
 +
 +
 +@dataclass
@@ -529,41 +531,95 @@ index 0000000..e6da4d0
 +    return pairs, metrics
 +
 +
++def _ws_norm(s: str) -> str:
++    return re.sub(r"\s+", " ", s).strip()
++
++
 +def _grounding_ok(final_text: str, worse_code: str) -> tuple[bool, int]:
-+    """>=1 well-formed <improve> block and every <cite> is verbatim in the worse code."""
++    """>=1 well-formed <improve> block and every <cite> appears in the worse code
++    (compared under whitespace normalization — rewrapped lines still count)."""
 +    blocks = _IMPROVE_RE.findall(final_text)
 +    if not blocks:
 +        return False, 0
++    code_norm = _ws_norm(worse_code)
 +    n_ok = 0
 +    for b in blocks:
 +        cites = _CITE_RE.findall(b)
 +        if not cites:
 +            return False, len(blocks)
 +        for c in cites:
-+            if c.strip() and c.strip() not in worse_code:
++            c_norm = _ws_norm(c)
++            if c_norm and c_norm not in code_norm:
 +                return False, len(blocks)
 +        n_ok += 1
 +    return n_ok >= 1, len(blocks)
 +
 +
++def _strip_prose(code: str) -> str:
++    """Remove comments and docstrings so English words in them don't count as identifiers."""
++    return _COMMENT_RE.sub("", _DOCSTRING_RE.sub("", code))
++
++
++_PY_BUILTINS = {
++    "Exception", "ValueError", "RuntimeError", "TypeError", "KeyError",
++    "IndexError", "ZeroDivisionError", "ArithmeticError", "OverflowError",
++    "StopIteration", "KeyboardInterrupt", "NotImplementedError", "float64",
++    "ndarray", "asarray", "linspace", "argmax", "argmin", "correlate",
++}
++
++
++def _distinctive_idents(code: str) -> set[str]:
++    """Code identifiers distinctive enough to mark leakage: snake_case or unusually
++    long tokens — not plain English words or common Python/numpy names."""
++    out = set()
++    for t in _IDENT_RE.findall(_strip_prose(code)):
++        if t in _PY_BUILTINS:
++            continue
++        if ("_" in t and len(t) >= 4) or len(t) >= 10:
++            out.add(t)
++    return out
++
++
 +def _leaks(teacher_text: str, worse_code: str, betters: list[State]) -> bool:
-+    """True if output contains identifiers/constants unique to the better programs."""
-+    worse_toks = set(_IDENT_RE.findall(worse_code)) | set(_NUM_RE.findall(worse_code))
-+    out_toks = set(_IDENT_RE.findall(teacher_text)) | set(_NUM_RE.findall(teacher_text))
-+    common_py = {"def", "return", "import", "numpy", "range", "float", "None", "True",
-+                 "False", "budget_s", "seed", "kwargs", "self", "np", "array", "initial_h_values"}
-+    for b in betters:
-+        b_toks = set(_IDENT_RE.findall(b.code)) | set(_NUM_RE.findall(b.code))
-+        unique = (b_toks - worse_toks) - common_py
-+        if unique & out_toks:
-+            return True
-+    return False
++    """True if the text contains distinctive identifiers/constants unique to the betters."""
++    return bool(_leak_offenders(teacher_text, worse_code, betters))
 +
 +
 +def _truncate_target(tokens: list[int], tokenizer, max_tokens: int) -> list[int]:
 +    if len(tokens) <= max_tokens:
 +        return tokens
 +    return tokens[:max_tokens]
++
++
++def _final_span_start(tokens: list[int], tokenizer) -> int | None:
++    """Index of the LAST occurrence of the final-channel marker in `tokens`.
++    The distill target starts at the marker so the trained response is
++    '<|channel|>final<|message|>...blocks...<|return|>' — the teacher's private
++    analysis (which legitimately references the better programs) is excluded
++    from both the leak check and the trained span."""
++    marker = tokenizer.encode(FINAL_SPLIT, add_special_tokens=False)
++    if len(marker) > len(tokens):
++        return None
++    for i in range(len(tokens) - len(marker), -1, -1):
++        if tokens[i:i + len(marker)] == marker:
++            return i
++    return None
++
++
++def _leak_offenders(teacher_text: str, worse_code: str, betters: list[State]) -> set[str]:
++    """Distinctive identifiers/constants unique to the betters found in the text."""
++    worse_marks = _distinctive_idents(worse_code) | set(_NUM_RE.findall(worse_code))
++    out_idents = set(_IDENT_RE.findall(teacher_text))
++    out_nums = set(_NUM_RE.findall(teacher_text))
++    common = {"budget_s", "initial_h_values", "n_points", "c5_bound", "h_values",
++              "evaluate_erdos_solution", "verify_c5_solution", "target_sum",
++              "np", "numpy", "scipy"}
++    offenders: set[str] = set()
++    for b in betters:
++        b_marks = _distinctive_idents(b.code) | set(_NUM_RE.findall(b.code))
++        unique = (b_marks - worse_marks) - common
++        offenders |= (unique & out_idents) | (unique & out_nums)
++    return offenders
 +
 +
 +async def build_distill_data(
@@ -620,11 +676,14 @@ index 0000000..e6da4d0
 +            m["distill/skipped_prompt_too_long"] += 1
 +            continue
 +        teacher_tokens = list(res.tokens)
-+        decoded = tokenizer.decode(teacher_tokens)
-+        if FINAL_SPLIT not in decoded:
++        span_start = _final_span_start(teacher_tokens, tokenizer)
++        if span_start is None:
 +            m["distill/skipped_unparseable"] += 1
 +            continue
-+        final_text = decoded.split(FINAL_SPLIT)[-1]
++        # Train (and gate) ONLY the final channel: the teacher's private analysis
++        # legitimately references the better programs and must not be distilled.
++        span_tokens = teacher_tokens[span_start:]
++        final_text = tokenizer.decode(span_tokens).split(FINAL_SPLIT)[-1]
 +        if grounding_filter:
 +            ok, n_blocks = _grounding_ok(final_text, pair.worse.code)
 +            if not ok:
@@ -632,11 +691,11 @@ index 0000000..e6da4d0
 +                continue
 +        else:
 +            n_blocks = len(_IMPROVE_RE.findall(final_text))
-+        if leak_filter and _leaks(decoded, pair.worse.code, pair.betters):
++        if leak_filter and _leaks(final_text, pair.worse.code, pair.betters):
 +            m["distill/leak_dropped"] += 1
 +            continue
 +
-+        target_tokens = _truncate_target(teacher_tokens, tokenizer, max_target_tokens)
++        target_tokens = _truncate_target(span_tokens, tokenizer, max_target_tokens)
 +        prompt_mi = pair.prompt_model_input
 +        if prompt_mi.length + len(target_tokens) + 8 > context_window:
 +            m["distill/skipped_too_long"] += 1
