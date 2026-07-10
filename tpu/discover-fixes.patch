@@ -20,7 +20,7 @@ index 8a961fb..7689d6a 100644
      "Programming Language :: Python :: 3.12",
      "Topic :: Scientific/Engineering :: Artificial Intelligence",
 diff --git a/ttt_discover/discovery.py b/ttt_discover/discovery.py
-index 53d0987..fce5f09 100644
+index 53d0987..51c8f87 100644
 --- a/ttt_discover/discovery.py
 +++ b/ttt_discover/discovery.py
 @@ -31,17 +31,34 @@ class DiscoverConfig:
@@ -48,7 +48,7 @@ index 53d0987..fce5f09 100644
 +    distill_enabled: bool = False
 +    distill_pairs_per_step: int = 16
 +    distill_num_betters: int = 3
-+    distill_weight: float = 0.25
++    distill_weight: float = 0.1
 +    distill_grounding_filter: bool = True
 +    distill_leak_filter: bool = True
 +    distill_teacher_phase1_tokens: int = 0  # 0 -> reuse phase1_max_tokens
@@ -751,7 +751,7 @@ index 0000000..134d905
 +    m["distill/improve_blocks_mean"] = (total_blocks / kept) if kept else 0.0
 +    return out
 diff --git a/ttt_discover/rl/train.py b/ttt_discover/rl/train.py
-index b9e414d..45b04a5 100644
+index b9e414d..d97efc4 100644
 --- a/ttt_discover/rl/train.py
 +++ b/ttt_discover/rl/train.py
 @@ -5,6 +5,7 @@ Implements RL on general MDPs
@@ -896,7 +896,7 @@ index b9e414d..45b04a5 100644
 +    distill_enabled: bool = False
 +    distill_pairs_per_step: int = 16
 +    distill_num_betters: int = 3
-+    distill_weight: float = 0.25  # CE contributes distill_weight * meanNLL
++    distill_weight: float = 0.1  # CE contributes distill_weight * meanNLL
 +    distill_grounding_filter: bool = True
 +    distill_leak_filter: bool = True
 +    distill_teacher_phase1_tokens: int = 0  # 0 -> reuse phase1_max_tokens

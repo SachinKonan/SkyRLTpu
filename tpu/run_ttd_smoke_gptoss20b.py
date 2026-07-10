@@ -113,7 +113,7 @@ def main() -> None:
         distill_enabled=os.environ.get("TTD_DISTILL_ENABLED", "0") == "1",
         distill_pairs_per_step=_env_int("TTD_DISTILL_PAIRS_PER_STEP", 16),
         distill_num_betters=_env_int("TTD_DISTILL_NUM_BETTERS", 3),
-        distill_weight=_env_float("TTD_DISTILL_WEIGHT", 0.25),
+        distill_weight=_env_float("TTD_DISTILL_WEIGHT", 0.1),
         distill_grounding_filter=os.environ.get("TTD_DISTILL_GROUNDING_FILTER", "1") == "1",
         distill_leak_filter=os.environ.get("TTD_DISTILL_LEAK_FILTER", "1") == "1",
         distill_teacher_phase1_tokens=_env_int("TTD_DISTILL_TEACHER_PHASE1_TOKENS", 0),
