@@ -56,6 +56,22 @@ def _sanitize_lora_name(model_id: str, checkpoint_id: str) -> str:
 
 
 @dataclass
+class GroupedCompletion:
+    """A single grouped vLLM completion request: ``n`` samples for one prompt.
+
+    Every sample in the group shares the same prompt, sampling params, model,
+    and routing session, so vLLM can serve all ``n`` completions from a single
+    request instead of ``n`` separate ones.
+    """
+
+    prompt_ids: list[int]
+    sampling_params: types.SamplingParams
+    model_name: str
+    n: int
+    session_id: str | None = None
+
+
+@dataclass
 class VllmSamplingClient:
     """Small synchronous client for vLLM's OpenAI-compatible server.
 
@@ -74,6 +90,7 @@ class VllmSamplingClient:
     lora_load_retry_sleep_sec: float = 2.0
     request_timeout_sec: float = 300.0
     max_concurrent_requests: int = 64
+    client_side_round_robin: bool = False
     _loaded_loras: dict[str, dict[str, str]] = field(default_factory=dict)
     _latest_lora_by_model: dict[str, str] = field(default_factory=dict)
 
@@ -90,6 +107,11 @@ class VllmSamplingClient:
         self.lora_load_retries = max(1, self.lora_load_retries)
         self.lora_load_retry_sleep_sec = max(0.0, self.lora_load_retry_sleep_sec)
         self.max_concurrent_requests = max(1, self.max_concurrent_requests)
+
+    def _completion_url_for_index(self, index: int) -> str:
+        if self.client_side_round_robin:
+            return self.openai_base_urls[index % len(self.openai_base_urls)]
+        return self.openai_base_url
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -240,24 +262,33 @@ class VllmSamplingClient:
         stop_reason = "stop" if finish_reason in ("stop", "stop_token") else "length"
         return types.GeneratedSequence(tokens=tokens, logprobs=logprobs, stop_reason=stop_reason)
 
-    def sample_one(
+    def _completion_request(
         self,
         prompt_ids: list[int],
         sampling_params: types.SamplingParams,
         *,
+        n: int,
         model_name: str,
         session_id: str | None = None,
         prompt_logprobs: bool = False,
         openai_base_url: str | None = None,
-    ) -> tuple[types.GeneratedSequence, list[float] | None]:
+    ) -> tuple[list[types.GeneratedSequence], list[float] | None]:
+        """Issue one vLLM completion request that returns ``n`` sequences.
+
+        With ``n > 1`` this asks vLLM for a whole group of completions sharing a
+        single prompt in one request (grouped sampling), which is much cheaper
+        than ``n`` separate ``n=1`` requests. The prompt is shared, so a single
+        prompt-logprobs list is returned for the group.
+        """
         payload: dict[str, Any] = {
             "model": model_name,
             "prompt": prompt_ids,
-            "n": 1,
+            "n": n,
             "max_tokens": sampling_params.max_tokens,
             "temperature": sampling_params.temperature,
             "top_p": sampling_params.top_p,
             "top_k": sampling_params.top_k,
+            "seed": sampling_params.seed,
             "logprobs": 1,
             "stream": False,
             "return_token_ids": True,
@@ -272,11 +303,34 @@ class VllmSamplingClient:
         headers = {"X-Session-ID": session_id} if session_id else None
         result = self._post_json(f"{openai_base_url or self.openai_base_url}/completions", payload, headers=headers)
         choices = result.get("choices") or []
-        if len(choices) != 1:
-            raise RuntimeError(f"Expected one vLLM completion choice, got {len(choices)}")
+        if len(choices) != n:
+            raise RuntimeError(f"Expected {n} vLLM completion choice(s), got {len(choices)}")
+        # vLLM returns one choice per requested sample; keep them in index order.
+        choices = sorted(choices, key=lambda choice: choice.get("index", 0))
 
         prompt_lps = self._prompt_logprobs_from_response(result, prompt_ids) if prompt_logprobs else None
-        return self._sequence_from_choice(choices[0]), prompt_lps
+        return [self._sequence_from_choice(choice) for choice in choices], prompt_lps
+
+    def sample_one(
+        self,
+        prompt_ids: list[int],
+        sampling_params: types.SamplingParams,
+        *,
+        model_name: str,
+        session_id: str | None = None,
+        prompt_logprobs: bool = False,
+        openai_base_url: str | None = None,
+    ) -> tuple[types.GeneratedSequence, list[float] | None]:
+        sequences, prompt_lps = self._completion_request(
+            prompt_ids,
+            sampling_params,
+            n=1,
+            model_name=model_name,
+            session_id=session_id,
+            prompt_logprobs=prompt_logprobs,
+            openai_base_url=openai_base_url,
+        )
+        return sequences[0], prompt_lps
 
     def sample_many(
         self,
@@ -289,6 +343,8 @@ class VllmSamplingClient:
     ) -> tuple[list[types.GeneratedSequence], list[list[float] | None]]:
         if not (len(prompt_ids) == len(sampling_params) == len(model_names) == len(session_ids)):
             raise ValueError("Mismatched vLLM sample batch input lengths")
+        if not prompt_ids:
+            return [], []
 
         def run_one(i: int) -> tuple[types.GeneratedSequence, list[float] | None]:
             return self.sample_one(
@@ -297,7 +353,7 @@ class VllmSamplingClient:
                 model_name=model_names[i],
                 session_id=session_ids[i],
                 prompt_logprobs=prompt_logprobs,
-                openai_base_url=self.openai_base_urls[i % len(self.openai_base_urls)],
+                openai_base_url=self._completion_url_for_index(i),
             )
 
         workers = min(self.max_concurrent_requests, len(prompt_ids))
@@ -306,3 +362,38 @@ class VllmSamplingClient:
 
         sequences, prompt_lps = zip(*outputs) if outputs else ([], [])
         return list(sequences), list(prompt_lps)
+
+    def sample_groups(
+        self,
+        groups: list[GroupedCompletion],
+        *,
+        prompt_logprobs: bool = False,
+    ) -> tuple[list[list[types.GeneratedSequence]], list[list[float] | None]]:
+        """Sample each group with one ``n=group.n`` vLLM completion request.
+
+        Returns one list of generated sequences per group (each of length
+        ``group.n``) plus one shared prompt-logprobs list per group, aligned to
+        the input ``groups`` order.
+        """
+        if not groups:
+            return [], []
+
+        def run_one(i: int) -> tuple[list[types.GeneratedSequence], list[float] | None]:
+            group = groups[i]
+            return self._completion_request(
+                group.prompt_ids,
+                group.sampling_params,
+                n=group.n,
+                model_name=group.model_name,
+                session_id=group.session_id,
+                prompt_logprobs=prompt_logprobs,
+                openai_base_url=self._completion_url_for_index(i),
+            )
+
+        workers = min(self.max_concurrent_requests, len(groups))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            outputs = list(executor.map(run_one, range(len(groups))))
+
+        sequences = [seqs for seqs, _ in outputs]
+        prompt_lps = [lps for _, lps in outputs]
+        return sequences, prompt_lps

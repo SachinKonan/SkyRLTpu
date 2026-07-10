@@ -22,6 +22,15 @@ VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-2048}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
 VLLM_MAX_LORAS="${VLLM_MAX_LORAS:-8}"
 VLLM_MAX_LORA_RANK="${VLLM_MAX_LORA_RANK:-32}"
+VLLM_DATA_PARALLEL_SIZE="${VLLM_DATA_PARALLEL_SIZE:-1}"
+VLLM_DATA_PARALLEL_BACKEND="${VLLM_DATA_PARALLEL_BACKEND:-}"
+VLLM_DATA_PARALLEL_SIZE_LOCAL="${VLLM_DATA_PARALLEL_SIZE_LOCAL:-}"
+VLLM_DATA_PARALLEL_START_RANK="${VLLM_DATA_PARALLEL_START_RANK:-}"
+VLLM_DATA_PARALLEL_ADDRESS="${VLLM_DATA_PARALLEL_ADDRESS:-}"
+VLLM_DATA_PARALLEL_RPC_PORT="${VLLM_DATA_PARALLEL_RPC_PORT:-}"
+VLLM_DATA_PARALLEL_HYBRID_LB="${VLLM_DATA_PARALLEL_HYBRID_LB:-0}"
+VLLM_API_SERVER_COUNT="${VLLM_API_SERVER_COUNT:-}"
+VLLM_HEADLESS="${VLLM_HEADLESS:-0}"
 VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
 VLLM_TPU_PROCESS_BOUNDS="${VLLM_TPU_PROCESS_BOUNDS:-}"
 VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS="${VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS:-}"
@@ -36,6 +45,9 @@ VLLM_RAY_DASHBOARD_PORT="${VLLM_RAY_DASHBOARD_PORT:-8265}"
 VLLM_VENV="${VLLM_VENV:-/home/${REMOTE_USER}/.venvs/vllm-tpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
+# Persist the JAX/XLA compile cache on the GCS mount so precompiled kernels
+# survive spot VM recreation (vLLM defaults to local ~/.cache/vllm/xla_cache).
+VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH:-/home/${REMOTE_USER}/gcs/vllm-xla-cache}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
@@ -192,6 +204,8 @@ export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE}"
 export SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+export VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH}"
+mkdir -p "${VLLM_XLA_CACHE_PATH}"
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
   export CLOUD_TPU_TASK_ID="\${VLLM_RELATIVE_WORKER_ID}"
 fi
@@ -200,6 +214,34 @@ if [[ "${VLLM_RAY_EXECUTOR}" == "1" ]]; then
   export TPU_MULTIHOST_BACKEND=ray
   export VLLM_USE_RAY_V2_EXECUTOR_BACKEND="${VLLM_USE_RAY_V2_EXECUTOR_BACKEND}"
   ray_args=(--distributed-executor-backend ray)
+fi
+dp_args=()
+if [[ -n "${VLLM_DATA_PARALLEL_SIZE}" && "${VLLM_DATA_PARALLEL_SIZE}" != "1" ]]; then
+  dp_args+=(--data-parallel-size "${VLLM_DATA_PARALLEL_SIZE}")
+fi
+if [[ -n "${VLLM_DATA_PARALLEL_BACKEND}" ]]; then
+  dp_args+=(--data-parallel-backend "${VLLM_DATA_PARALLEL_BACKEND}")
+fi
+if [[ -n "${VLLM_DATA_PARALLEL_SIZE_LOCAL}" ]]; then
+  dp_args+=(--data-parallel-size-local "${VLLM_DATA_PARALLEL_SIZE_LOCAL}")
+fi
+if [[ -n "${VLLM_DATA_PARALLEL_START_RANK}" ]]; then
+  dp_args+=(--data-parallel-start-rank "${VLLM_DATA_PARALLEL_START_RANK}")
+fi
+if [[ -n "${VLLM_DATA_PARALLEL_ADDRESS}" ]]; then
+  dp_args+=(--data-parallel-address "${VLLM_DATA_PARALLEL_ADDRESS}")
+fi
+if [[ -n "${VLLM_DATA_PARALLEL_RPC_PORT}" ]]; then
+  dp_args+=(--data-parallel-rpc-port "${VLLM_DATA_PARALLEL_RPC_PORT}")
+fi
+if [[ "${VLLM_DATA_PARALLEL_HYBRID_LB}" == "1" || "${VLLM_DATA_PARALLEL_HYBRID_LB}" == "true" ]]; then
+  dp_args+=(--data-parallel-hybrid-lb)
+fi
+if [[ -n "${VLLM_API_SERVER_COUNT}" ]]; then
+  dp_args+=(--api-server-count "${VLLM_API_SERVER_COUNT}")
+fi
+if [[ "${VLLM_HEADLESS}" == "1" || "${VLLM_HEADLESS}" == "true" ]]; then
+  dp_args+=(--headless)
 fi
 read -r -a extra_args <<< "${VLLM_EXTRA_ARGS}"
 if [[ -n "${VLLM_TPU_PROCESS_BOUNDS}" ]]; then
@@ -237,6 +279,7 @@ exec vllm serve "${MODEL_NAME}" \\
   --max-lora-rank "${VLLM_MAX_LORA_RANK}" \\
   --download-dir "${REMOTE_HF_HOME}/hub" \\
   "\${ray_args[@]}" \\
+  "\${dp_args[@]}" \\
   "\${extra_args[@]}" \\
   2>&1 | tee "\$HOME/skyrl-logs/vllm-tpu.log"
 EOF

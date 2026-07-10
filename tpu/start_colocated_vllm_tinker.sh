@@ -32,17 +32,20 @@ VLLM_MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE:-vllm}"
 VLLM_TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE:-torchax}"
 VLLM_DISABLE_SHARDY="${VLLM_DISABLE_SHARDY:-auto}"
 VLLM_SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE:-0}"
+VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH:-/home/${REMOTE_USER}/gcs/vllm-xla-cache}"
 VLLM_TP_SIZE="${VLLM_TP_SIZE:-auto}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-2048}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
 VLLM_MAX_LORAS="${VLLM_MAX_LORAS:-8}"
 VLLM_MAX_LORA_RANK="${VLLM_MAX_LORA_RANK:-32}"
+VLLM_DATA_PARALLEL_SIZE="${VLLM_DATA_PARALLEL_SIZE:-auto}"
+VLLM_DATA_PARALLEL_BACKEND="${VLLM_DATA_PARALLEL_BACKEND:-auto}"
 VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
 VLLM_TPU_PROCESS_BOUNDS="${VLLM_TPU_PROCESS_BOUNDS:-auto}"
 VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS="${VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS:-auto}"
 VLLM_TPU_PROCESS_PORT="${VLLM_TPU_PROCESS_PORT:-8476}"
 VLLM_TPU_VISIBLE_CHIPS="${VLLM_TPU_VISIBLE_CHIPS:-}"
-VLLM_RAY_EXECUTOR="${VLLM_RAY_EXECUTOR:-0}"
+VLLM_RAY_EXECUTOR="${VLLM_RAY_EXECUTOR:-auto}"
 VLLM_USE_RAY_V2_EXECUTOR_BACKEND="${VLLM_USE_RAY_V2_EXECUTOR_BACKEND:-1}"
 
 JAX_COORD_PORT="${JAX_COORD_PORT:-7777}"
@@ -63,6 +66,7 @@ VLLM_LORA_LOAD_RETRIES="${VLLM_LORA_LOAD_RETRIES:-3}"
 VLLM_LORA_LOAD_RETRY_SLEEP_SEC="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-2}"
 VLLM_REQUEST_TIMEOUT_SEC="${VLLM_REQUEST_TIMEOUT_SEC:-300}"
 VLLM_MAX_CONCURRENT_REQUESTS="${VLLM_MAX_CONCURRENT_REQUESTS:-256}"
+VLLM_CLIENT_SIDE_ROUND_ROBIN="${VLLM_CLIENT_SIDE_ROUND_ROBIN:-0}"
 
 READY_ATTEMPTS="${READY_ATTEMPTS:-720}"
 READY_SLEEP_SEC="${READY_SLEEP_SEC:-5}"
@@ -134,6 +138,14 @@ vllm_workers_csv="$(join_csv "${vllm_workers[@]}")"
 train_coord_worker="${train_workers[0]}"
 vllm_coord_worker="${vllm_workers[0]}"
 
+if [[ "$VLLM_RAY_EXECUTOR" == "auto" ]]; then
+  if (( vllm_worker_count > 1 )); then
+    VLLM_RAY_EXECUTOR="1"
+  else
+    VLLM_RAY_EXECUTOR="0"
+  fi
+fi
+
 for train_worker in "${train_workers[@]}"; do
   for vllm_worker in "${vllm_workers[@]}"; do
     if [[ "$train_worker" == "$vllm_worker" ]]; then
@@ -171,6 +183,29 @@ if [[ "$VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS" == "auto" ]]; then
     VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS="2,2,1"
   fi
 fi
+if [[ -n "$VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS" ]]; then
+  chips_per_vllm_worker="$(product_csv "$VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS")"
+else
+  chips_per_vllm_worker=1
+fi
+if [[ "$VLLM_DATA_PARALLEL_SIZE" == "auto" ]]; then
+  if [[ "$VLLM_RAY_EXECUTOR" != "0" && "$vllm_worker_count" -gt 1 ]]; then
+    VLLM_DATA_PARALLEL_SIZE="$vllm_worker_count"
+  else
+    VLLM_DATA_PARALLEL_SIZE="1"
+  fi
+fi
+if [[ "$VLLM_DATA_PARALLEL_BACKEND" == "auto" ]]; then
+  if [[ "$VLLM_DATA_PARALLEL_SIZE" != "1" && "$VLLM_RAY_EXECUTOR" != "0" ]]; then
+    VLLM_DATA_PARALLEL_BACKEND="ray"
+  else
+    VLLM_DATA_PARALLEL_BACKEND=""
+  fi
+fi
+if [[ "$VLLM_DATA_PARALLEL_SIZE" != "1" && "$VLLM_RAY_EXECUTOR" == "0" ]]; then
+  echo "VLLM_DATA_PARALLEL_SIZE=${VLLM_DATA_PARALLEL_SIZE} requires VLLM_RAY_EXECUTOR=1/auto in the colocated launcher." >&2
+  exit 1
+fi
 if [[ "$VLLM_RAY_EXECUTOR" == "0" && "$VLLM_EXTRA_ARGS" == *"--pipeline-parallel-size"* ]]; then
   echo "VLLM_RAY_EXECUTOR=0 launches duplicate per-worker vLLM engines; remove --pipeline-parallel-size from VLLM_EXTRA_ARGS." >&2
   exit 1
@@ -179,8 +214,7 @@ if [[ "$FSDP_SIZE" == "auto" ]]; then
   FSDP_SIZE="$train_worker_count"
 fi
 if [[ "$VLLM_TP_SIZE" == "auto" ]]; then
-  chips_per_vllm_worker="$(product_csv "$VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS")"
-  if [[ "$VLLM_RAY_EXECUTOR" == "0" ]]; then
+  if [[ "$VLLM_RAY_EXECUTOR" == "0" || "$VLLM_DATA_PARALLEL_SIZE" != "1" ]]; then
     VLLM_TP_SIZE="$chips_per_vllm_worker"
   else
     VLLM_TP_SIZE="$((vllm_worker_count * chips_per_vllm_worker))"
@@ -258,7 +292,11 @@ train_process_addresses="$(process_addresses_for_workers "$TRAIN_TPU_PROCESS_POR
 vllm_process_addresses="$(process_addresses_for_workers "$VLLM_TPU_PROCESS_PORT" "${vllm_workers[@]}")"
 if [[ "$VLLM_RAY_EXECUTOR" == "0" ]]; then
   vllm_start_process_addresses=""
-  vllm_base_url="$(base_urls_for_workers "$VLLM_PORT" "${vllm_workers[@]}")"
+  if [[ "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "1" || "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "true" ]]; then
+    vllm_base_url="$(base_urls_for_workers "$VLLM_PORT" "${vllm_workers[@]}")"
+  else
+    vllm_base_url="http://${vllm_internal_ip}:${VLLM_PORT}"
+  fi
 else
   vllm_start_process_addresses="$vllm_process_addresses"
   vllm_base_url="http://${vllm_internal_ip}:${VLLM_PORT}"
@@ -323,12 +361,15 @@ if [[ "$START_VLLM" == "1" ]]; then
     VLLM_TPU_BACKEND_TYPE="$VLLM_TPU_BACKEND_TYPE" \
     VLLM_DISABLE_SHARDY="$VLLM_DISABLE_SHARDY" \
     VLLM_SKIP_JAX_PRECOMPILE="$VLLM_SKIP_JAX_PRECOMPILE" \
+    VLLM_XLA_CACHE_PATH="$VLLM_XLA_CACHE_PATH" \
     VLLM_PORT="$VLLM_PORT" \
     VLLM_TP_SIZE="$VLLM_TP_SIZE" \
     VLLM_MAX_MODEL_LEN="$VLLM_MAX_MODEL_LEN" \
     VLLM_MAX_NUM_SEQS="$VLLM_MAX_NUM_SEQS" \
     VLLM_MAX_LORAS="$VLLM_MAX_LORAS" \
     VLLM_MAX_LORA_RANK="$VLLM_MAX_LORA_RANK" \
+    VLLM_DATA_PARALLEL_SIZE="$VLLM_DATA_PARALLEL_SIZE" \
+    VLLM_DATA_PARALLEL_BACKEND="$VLLM_DATA_PARALLEL_BACKEND" \
     VLLM_EXTRA_ARGS="$VLLM_EXTRA_ARGS" \
     VLLM_TPU_PROCESS_BOUNDS="$VLLM_TPU_PROCESS_BOUNDS" \
     VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS="$VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS" \
@@ -363,9 +404,11 @@ exit 1
     --command "$remote_cmd"
 }
 
-for vllm_worker in "${vllm_workers[@]}"; do
-  wait_from_worker "$train_coord_worker" "http://$(worker_internal_ip "$vllm_worker"):${VLLM_PORT}/v1/models" "vLLM worker ${vllm_worker}"
-done
+if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
+  for vllm_worker in "${vllm_workers[@]}"; do
+    wait_from_worker "$train_coord_worker" "http://$(worker_internal_ip "$vllm_worker"):${VLLM_PORT}/v1/models" "vLLM worker ${vllm_worker}"
+  done
+fi
 
 backend_config="$(
   python3 - <<PY
@@ -390,6 +433,7 @@ cfg = {
     "vllm_lora_load_retry_sleep_sec": float("${VLLM_LORA_LOAD_RETRY_SLEEP_SEC}"),
     "vllm_request_timeout_sec": float("${VLLM_REQUEST_TIMEOUT_SEC}"),
     "vllm_max_concurrent_requests": int("${VLLM_MAX_CONCURRENT_REQUESTS}"),
+    "vllm_client_side_round_robin": "${VLLM_CLIENT_SIDE_ROUND_ROBIN}".lower() in ("1", "true", "yes", "on"),
 }
 if train_worker_count > 1:
     cfg.update(
@@ -424,6 +468,10 @@ export TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS}"
 export TPU_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS}"
 export TPU_PROCESS_ADDRESSES="${train_process_addresses}"
 export TPU_PROCESS_PORT="${TRAIN_TPU_PROCESS_PORT}"
+# Task id must be the process index within the train group, not the VM
+# metadata worker number, or non-{0..n-1} TRAIN_WORKERS selections fail with
+# "Invalid task id specified by 'CLOUD_TPU_TASK_ID'".
+export CLOUD_TPU_TASK_ID=0
 if [[ -n "${TRAIN_TPU_VISIBLE_CHIPS}" ]]; then
   export TPU_VISIBLE_CHIPS="${TRAIN_TPU_VISIBLE_CHIPS}"
 else
@@ -472,6 +520,8 @@ export TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS}"
 export TPU_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS}"
 export TPU_PROCESS_ADDRESSES="${train_process_addresses}"
 export TPU_PROCESS_PORT="${TRAIN_TPU_PROCESS_PORT}"
+# See the api script: group-relative task id, not the VM worker number.
+export CLOUD_TPU_TASK_ID=${process_id}
 if [[ -n "${TRAIN_TPU_VISIBLE_CHIPS}" ]]; then
   export TPU_VISIBLE_CHIPS="${TRAIN_TPU_VISIBLE_CHIPS}"
 else
@@ -502,6 +552,8 @@ echo "Colocated vLLM/Tinker split is up."
 echo "Train workers: ${train_workers_csv}; Tinker API: http://127.0.0.1:${API_PORT} on worker ${train_coord_worker}"
 echo "Train TPU_PROCESS_BOUNDS=${TRAIN_TPU_PROCESS_BOUNDS}; TRAIN_TPU_PROCESS_ADDRESSES=${train_process_addresses}; mesh fsdp=${FSDP_SIZE}, tp=${TP_SIZE}"
 echo "vLLM workers: ${vllm_workers_csv}; vLLM URL from train workers: ${vllm_base_url}; vLLM tp=${VLLM_TP_SIZE}"
+echo "vLLM data parallel: size=${VLLM_DATA_PARALLEL_SIZE}; backend=${VLLM_DATA_PARALLEL_BACKEND:-none}"
+echo "vLLM client-side round-robin: ${VLLM_CLIENT_SIDE_ROUND_ROBIN}"
 echo "vLLM TPU_PROCESS_BOUNDS=${VLLM_TPU_PROCESS_BOUNDS}; VLLM_TPU_PROCESS_ADDRESSES=${vllm_start_process_addresses}"
 echo "Tinker log: gcloud alpha compute tpus tpu-vm ssh ${REMOTE_USER}@${TPU_NAME} --project=${PROJECT} --zone=${ZONE} --worker=${train_coord_worker} --ssh-key-file=${SSH_KEY_FILE} --command 'tail -f ~/skyrl-logs/tinker-api.log'"
 echo "vLLM log: gcloud alpha compute tpus tpu-vm ssh ${REMOTE_USER}@${TPU_NAME} --project=${PROJECT} --zone=${ZONE} --worker=${vllm_coord_worker} --ssh-key-file=${SSH_KEY_FILE} --command 'tail -f ~/skyrl-logs/vllm-tpu.log'"

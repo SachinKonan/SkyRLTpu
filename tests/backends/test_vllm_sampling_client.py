@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from cloudpathlib import AnyPath
 
-from skyrl.backends.vllm_sampling import VllmSamplingClient
+from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
 
 
@@ -37,13 +37,16 @@ class _VllmHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/v1/completions":
+            n = int(payload.get("n", 1))
             response = {
                 "choices": [
                     {
-                        "token_ids": [101, 102],
+                        "index": i,
+                        "token_ids": [101 + i, 102 + i],
                         "finish_reason": "length",
                         "logprobs": {"token_logprobs": [-0.1, -0.2]},
                     }
+                    for i in range(n)
                 ]
             }
             if payload.get("prompt_logprobs") is not None:
@@ -222,6 +225,124 @@ def test_vllm_sampling_client_maps_prompt_logprobs(tmp_path):
         )
 
         assert prompt_logprobs == [[0.0, -0.02, -0.03]]
+        assert server.requests[0][1]["prompt_logprobs"] == 1
+    finally:
+        server.shutdown()
+
+
+def test_vllm_sampling_client_does_not_round_robin_urls_by_default(tmp_path):
+    server_a = _serve()
+    server_b = _serve()
+    try:
+        client = VllmSamplingClient(
+            base_url=f"http://127.0.0.1:{server_a.server_port},http://127.0.0.1:{server_b.server_port}",
+            model_name="Qwen/Qwen3-4B",
+            lora_base_dir=tmp_path / "loras",
+        )
+        params = types.SamplingParams(temperature=1.0, max_tokens=2, seed=0, top_k=-1, top_p=1.0)
+
+        client.sample_many(
+            [[1], [2], [3], [4]],
+            [params] * 4,
+            ["Qwen/Qwen3-4B"] * 4,
+            [None] * 4,
+        )
+
+        assert len(server_a.requests) == 4
+        assert len(server_b.requests) == 0
+    finally:
+        server_a.shutdown()
+        server_b.shutdown()
+
+
+def test_vllm_sampling_client_round_robins_urls_when_enabled(tmp_path):
+    server_a = _serve()
+    server_b = _serve()
+    try:
+        client = VllmSamplingClient(
+            base_url=f"http://127.0.0.1:{server_a.server_port},http://127.0.0.1:{server_b.server_port}",
+            model_name="Qwen/Qwen3-4B",
+            lora_base_dir=tmp_path / "loras",
+            client_side_round_robin=True,
+        )
+        params = types.SamplingParams(temperature=1.0, max_tokens=2, seed=0, top_k=-1, top_p=1.0)
+
+        client.sample_many(
+            [[1], [2], [3], [4]],
+            [params] * 4,
+            ["Qwen/Qwen3-4B"] * 4,
+            [None] * 4,
+        )
+
+        assert len(server_a.requests) == 2
+        assert len(server_b.requests) == 2
+    finally:
+        server_a.shutdown()
+        server_b.shutdown()
+
+
+def test_vllm_sampling_client_sample_groups(tmp_path):
+    server = _serve()
+    try:
+        client = VllmSamplingClient(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            model_name="Qwen/Qwen3-4B",
+            lora_base_dir=tmp_path / "loras",
+        )
+        params = types.SamplingParams(temperature=1.0, max_tokens=2, seed=0, top_k=-1, top_p=1.0)
+
+        group_sequences, group_prompt_logprobs = client.sample_groups(
+            [
+                GroupedCompletion(
+                    prompt_ids=[1, 2, 3],
+                    sampling_params=params,
+                    model_name="Qwen/Qwen3-4B",
+                    n=3,
+                    session_id="session:0",
+                )
+            ],
+        )
+
+        # One grouped request that returns three distinct sequences in index order.
+        assert len(group_sequences) == 1
+        assert [seq.tokens for seq in group_sequences[0]] == [[101, 102], [102, 103], [103, 104]]
+        assert group_prompt_logprobs == [None]
+
+        path, payload, headers = server.requests[0]
+        assert path == "/v1/completions"
+        assert payload["n"] == 3
+        assert payload["prompt"] == [1, 2, 3]
+        assert payload["seed"] == 0
+        assert {k.lower(): v for k, v in headers.items()}["x-session-id"] == "session:0"
+    finally:
+        server.shutdown()
+
+
+def test_vllm_sampling_client_sample_groups_prompt_logprobs(tmp_path):
+    server = _serve()
+    try:
+        client = VllmSamplingClient(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            model_name="Qwen/Qwen3-4B",
+            lora_base_dir=tmp_path / "loras",
+        )
+        params = types.SamplingParams(temperature=1.0, max_tokens=2, seed=0, top_k=-1, top_p=1.0)
+
+        group_sequences, group_prompt_logprobs = client.sample_groups(
+            [
+                GroupedCompletion(
+                    prompt_ids=[1, 2, 3],
+                    sampling_params=params,
+                    model_name="Qwen/Qwen3-4B",
+                    n=2,
+                )
+            ],
+            prompt_logprobs=True,
+        )
+
+        # The prompt is shared across the group, so a single prompt-logprobs list is returned.
+        assert len(group_sequences[0]) == 2
+        assert group_prompt_logprobs == [[0.0, -0.02, -0.03]]
         assert server.requests[0][1]["prompt_logprobs"] == 1
     finally:
         server.shutdown()

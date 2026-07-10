@@ -84,12 +84,16 @@ import sys
 
 path = Path(sys.argv[1])
 text = path.read_text()
-if '"SKIP_JAX_PRECOMPILE",' not in text:
-    needle = '        "TPU_MULTIHOST_BACKEND",\n'
-    insert = needle + '        "SKIP_JAX_PRECOMPILE",\n'
+needle = '        "TPU_MULTIHOST_BACKEND",\n'
+changed = False
+for env_var in ("SKIP_JAX_PRECOMPILE", "VLLM_XLA_CACHE_PATH"):
+    if f'"{env_var}",' in text:
+        continue
     if needle not in text:
         raise SystemExit("Could not find TpuPlatform.additional_env_vars patch anchor")
-    text = text.replace(needle, insert, 1)
+    text = text.replace(needle, needle + f'        "{env_var}",\n', 1)
+    changed = True
+if changed:
     path.write_text(text)
     print(f"vLLM TPU Ray env patch applied: {path}")
 else:
@@ -109,8 +113,13 @@ missing = [
 ]
 if missing:
     raise SystemExit(f"TPUWorker missing LoRA methods after patch: {missing}")
-if "SKIP_JAX_PRECOMPILE" not in TpuPlatform.additional_env_vars:
-    raise SystemExit("TpuPlatform.additional_env_vars missing SKIP_JAX_PRECOMPILE")
+missing_env_vars = [
+    env_var
+    for env_var in ("SKIP_JAX_PRECOMPILE", "VLLM_XLA_CACHE_PATH")
+    if env_var not in TpuPlatform.additional_env_vars
+]
+if missing_env_vars:
+    raise SystemExit(f"TpuPlatform.additional_env_vars missing {missing_env_vars}")
 PY
 
 echo "vLLM TPU LoRA worker patch verified: ${worker_path}"

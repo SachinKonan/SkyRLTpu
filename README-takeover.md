@@ -1,6 +1,48 @@
 # SkyRLTpu Takeover Notes
 
-Last checked: 2026-07-09 17:00 ET.
+Last checked: 2026-07-09 ~18:00 ET (see "2026-07-09 evening update" below —
+the "Current TPU State" section further down describes the morning deployment
+and is stale).
+
+## 2026-07-09 evening update
+
+The v5p-32 spot TPU was preempted three times this afternoon. Each recreation
+reshuffles the worker-index -> physical-host mapping, which exposed two latent
+launcher bugs (both fixed, see below). An unattended pipeline is/was running to
+finish the grouped-completions benchmark:
+
+```text
+runs/math_rl/autopilot_grouped_benchmark.sh   # wait READY -> sync -> probe ->
+                                              # launch -> tunnel -> benchmark
+log: runs/math_rl/logs/autopilot-main-2026-07-09.log
+```
+
+Key facts learned today:
+
+- **v5p sub-slice adjacency**: a 2-host train mesh only forms between
+  physically z-adjacent hosts. After every recreation, run
+  `TPU_NAME=... tpu/probe_tpu_topology.sh` and pick a suggested
+  `TRAIN_WORKERS` pair; vLLM workers can be any hosts (single-host, no ICI).
+  Symptom of a wrong pair: `SLICE_FAILURE_INIT_ERROR / Mesh build was
+  incomplete`.
+- **CLOUD_TPU_TASK_ID**: the launcher now exports the group-relative task id
+  in the generated train scripts. Without it, any TRAIN_WORKERS other than
+  `0,1` fails with `Invalid task id specified by 'CLOUD_TPU_TASK_ID'`.
+- **XLA compile cache**: vLLM servers now write the JAX compile cache to
+  `~/gcs/vllm-xla-cache` (survives recreation; ~76 entries seeded). Saves the
+  ~18 min bucket-compile sweep on relaunch.
+- **Grouped completions require BOTH sides**: the server groups a request's
+  `num_samples` into one vLLM `n=k` call, but the cookbook client sends
+  `num_samples=1` per env sample. The client-side fix is
+  `GroupCoalescingTokenCompleter` (third_party/tinker-cookbook), enabled with
+  `TINKER_COOKBOOK_GROUP_COALESCE_SAMPLING=1`; the math recipe now auto-enables
+  it when `max_turns=1`. Without it, vLLM sees 1024 requests/step instead of 64.
+- **vLLM-owned routing**: the launchers now support vLLM internal data parallel
+  serving with `VLLM_DATA_PARALLEL_SIZE` and `VLLM_DATA_PARALLEL_BACKEND=ray`.
+  SkyRL-side comma-URL round-robin is disabled by default and retained only as
+  `VLLM_CLIENT_SIDE_ROUND_ROBIN=1` compatibility mode.
+- Partial result before preemption #2 (topology-fixed stack, grouping still
+  per-sample): batch-0 sampling 178 s vs the morning baseline's 263 s.
 
 This worktree is `/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-colocated-vllm` on branch
 `agent/colocated-vllm-one-host`. It is a SkyRLTpu fork checkout with:
@@ -212,22 +254,60 @@ Backend / sampler:
 TPU launchers:
 
 - `tpu/start_vllm_tpu.sh` now supports multiple vLLM workers, TorchAX by default,
-  optional Ray executor setup, TPU process address plumbing, `SKIP_JAX_PRECOMPILE`,
-  and duplicate per-worker vLLM engines when `VLLM_RAY_EXECUTOR=0`.
+  optional Ray executor setup, vLLM data-parallel flags, TPU process address
+  plumbing, `SKIP_JAX_PRECOMPILE`, and duplicate per-worker vLLM engines when
+  `VLLM_RAY_EXECUTOR=0`. It also persists the JAX/XLA compile cache to
+  `VLLM_XLA_CACHE_PATH` (default `~/gcs/vllm-xla-cache`) so compiles survive
+  spot VM recreation.
 - `tpu/apply_vllm_tpu_lora_patch.sh` patches the installed TPU vLLM package for
-  runtime LoRA support and ensures `SKIP_JAX_PRECOMPILE` is included in the TPU
-  platform env allowlist.
+  runtime LoRA support and ensures `SKIP_JAX_PRECOMPILE` and
+  `VLLM_XLA_CACHE_PATH` are included in the TPU platform env allowlist.
 - `tpu/start_colocated_vllm_tinker.sh` is the new one-command launcher for a
-  disjoint train/vLLM worker split on one TPU VM.
+  disjoint train/vLLM worker split on one TPU VM. It exports group-relative
+  `CLOUD_TPU_TASK_ID` in the generated train scripts (required for any
+  TRAIN_WORKERS other than `0,1`) and skips the vLLM readiness wait in
+  sync-only mode (`START_VLLM=0 START_TINKER=0`). With multiple vLLM workers,
+  `VLLM_RAY_EXECUTOR=auto` now defaults to vLLM-managed Ray/data-parallel
+  routing (`VLLM_DATA_PARALLEL_SIZE=<num vLLM workers>`) instead of
+  SkyRL-side URL round-robin.
+- `tpu/run_tinker_math_rl_qwen35_9b.sh` now declares `MAX_TURNS=1`, passes it
+  as `max_turns=1`, and auto-enables grouped client sampling for that case.
+- `tpu/probe_tpu_topology.sh` + `tpu/probe_topology.py` probe the physical
+  host order of the slice and print valid (ICI-adjacent) TRAIN_WORKERS pairs.
+  Run after every spot recreation.
 - `tpu/README.md` documents the vLLM TPU LoRA/TorchAX setup.
+
+Server-side grouped sampling:
+
+- `skyrl/backends/vllm_sampling.py` adds `GroupedCompletion` and
+  `sample_groups()`: one vLLM completion request with `n=k` per sample request.
+  Completion requests use one vLLM endpoint by default; comma-separated URL
+  round-robin is only enabled with `vllm_client_side_round_robin=true`.
+- `skyrl/backends/jax.py` adds `vllm_group_completions` (default true) and
+  `_sample_vllm_grouped`, collapsing each request's `num_samples` expansion
+  into a single grouped vLLM call. It also exposes
+  `vllm_client_side_round_robin` for the compatibility mode.
+
+Client-side grouped sampling (third_party/tinker-cookbook):
+
+- `tinker_cookbook/completers.py` adds `GroupCoalescingTokenCompleter`, which
+  coalesces concurrent identical-prompt policy calls into one
+  `sample_async(num_samples=k)` request (tests in
+  `completers_coalesce_test.py`).
+- `tinker_cookbook/rl/rollouts.py` selects it when
+  `TINKER_COOKBOOK_GROUP_COALESCE_SAMPLING=1`.
+- `tinker_cookbook/recipes/math_rl/train.py` exposes `max_turns=1` and turns on
+  group coalescing automatically when that value is used.
 
 Current limitation:
 
-- The active deployment uses SkyRL-side round-robin across two independent vLLM
-  servers. It does not yet use vLLM-native data parallel routing.
-- The client still sends one completion request per environment sample. The next
-  optimization target is to use grouped completions for `MAX_TURNS=1`, so one
-  prompt can request `group_size` completions through vLLM's `n` parameter.
+- The old r5 deployment used SkyRL-side round-robin across two independent vLLM
+  servers. The code now supports vLLM internal Ray/data-parallel routing, but a
+  clean live benchmark of that new path is still pending.
+- ~~The client still sends one completion request per environment sample.~~
+  Addressed 2026-07-09: grouped completions are implemented end to end
+  (client coalescing -> `num_samples=k` -> server `sample_groups` -> vLLM
+  `n=k`); benchmark validation pending TPU availability (see evening update).
 
 ## Current Results
 

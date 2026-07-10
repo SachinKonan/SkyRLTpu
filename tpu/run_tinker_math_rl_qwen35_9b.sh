@@ -28,6 +28,7 @@ GROUP_SIZE="${GROUP_SIZE:-16}"
 GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-64}"
 LEARNING_RATE="${LEARNING_RATE:-2e-5}"
 MAX_TOKENS="${MAX_TOKENS:-512}"
+MAX_TURNS="${MAX_TURNS:-1}"
 LORA_RANK="${LORA_RANK:-32}"
 MAX_STEPS="${MAX_STEPS:-180}"
 SAVE_EVERY="${SAVE_EVERY:-20}"
@@ -86,6 +87,9 @@ set -euo pipefail
 export TINKER_API_KEY='${TINKER_API_KEY}'
 export HF_HOME='${LOCAL_HF_HOME}'
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
+if [[ '${MAX_TURNS}' == '1' && -z "\${TINKER_COOKBOOK_GROUP_COALESCE_SAMPLING:-}" ]]; then
+  export TINKER_COOKBOOK_GROUP_COALESCE_SAMPLING=1
+fi
 
 cd '${repo_root}'
 exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
@@ -97,6 +101,7 @@ exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
     groups_per_batch='${GROUPS_PER_BATCH}' \\
     learning_rate='${LEARNING_RATE}' \\
     max_tokens='${MAX_TOKENS}' \\
+    max_turns='${MAX_TURNS}' \\
     lora_rank='${LORA_RANK}' \\
     max_steps='${MAX_STEPS}' \\
     save_every='${SAVE_EVERY}' \\
