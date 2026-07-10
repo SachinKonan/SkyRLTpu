@@ -34,12 +34,29 @@ export CONTEXT_WINDOW="${CONTEXT_WINDOW:-32768}"
 # --- no LoRA adapter saving (0 disables periodic + final checkpoints) ---
 export SAVE_EVERY="${SAVE_EVERY:-0}"
 
-# --- eval: always submitit (this login node has no CPU for local grading) ---
-export TTD_EVAL_BACKEND="${TTD_EVAL_BACKEND:-submitit}"
+# --- contrastive context distillation (off by default; rl/context_distill.py) ---
+export TTD_DISTILL_ENABLED="${TTD_DISTILL_ENABLED:-0}"
+export TTD_DISTILL_PAIRS_PER_STEP="${TTD_DISTILL_PAIRS_PER_STEP:-16}"
+export TTD_DISTILL_NUM_BETTERS="${TTD_DISTILL_NUM_BETTERS:-3}"
+export TTD_DISTILL_WEIGHT="${TTD_DISTILL_WEIGHT:-0.25}"
+export TTD_DISTILL_GROUNDING_FILTER="${TTD_DISTILL_GROUNDING_FILTER:-1}"
+export TTD_DISTILL_LEAK_FILTER="${TTD_DISTILL_LEAK_FILTER:-1}"
+export TTD_DISTILL_TEACHER_PHASE1_TOKENS="${TTD_DISTILL_TEACHER_PHASE1_TOKENS:-0}"
+export TTD_DISTILL_MAX_TARGET_TOKENS="${TTD_DISTILL_MAX_TARGET_TOKENS:-8192}"
+export TTD_DISTILL_MAX_CODE_CHARS="${TTD_DISTILL_MAX_CODE_CHARS:-10000}"
+
+# --- eval backend ---
+# On neuronic, compute nodes reach the internet, so the whole client runs on one
+# big node with TTD_EVAL_BACKEND=local (grading runs in-process across all cores).
+# Launch via tpu/run_ttd_gptoss20b_neuronic.sbatch. The TTD_SLURM_* vars below
+# only matter for the submitit backend (unused on neuronic).
+export TTD_EVAL_BACKEND="${TTD_EVAL_BACKEND:-local}"
 export TTD_SAFE_GRADE_MAX_WORKERS="${TTD_SAFE_GRADE_MAX_WORKERS:-64}"
-export TTD_SLURM_PARTITION="${TTD_SLURM_PARTITION:-cpu}"
-export TTD_SLURM_ACCOUNT="${TTD_SLURM_ACCOUNT:-zhuangl}"
+export TTD_SLURM_PARTITION="${TTD_SLURM_PARTITION:-all}"
+export TTD_SLURM_ACCOUNT="${TTD_SLURM_ACCOUNT:-seas}"
 export TTD_SLURM_MEM="${TTD_SLURM_MEM:-4G}"
+# Must cover the 1000s budget_s the prompt promises the generated programs
+# (300s killed ~40% of all rollouts as timeouts — the dominant failure mode).
 export EVAL_TIMEOUT="${EVAL_TIMEOUT:-1100}"
 
 # --- wandb (online; WANDB_API_KEY comes from third_party/discover/.env) ---

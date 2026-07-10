@@ -20,10 +20,10 @@ index 8a961fb..7689d6a 100644
      "Programming Language :: Python :: 3.12",
      "Topic :: Scientific/Engineering :: Artificial Intelligence",
 diff --git a/ttt_discover/discovery.py b/ttt_discover/discovery.py
-index 53d0987..10ad681 100644
+index 53d0987..fce5f09 100644
 --- a/ttt_discover/discovery.py
 +++ b/ttt_discover/discovery.py
-@@ -31,15 +31,20 @@ class DiscoverConfig:
+@@ -31,17 +31,34 @@ class DiscoverConfig:
      temperature: float = 1.0
      kl_penalty_coef: float = 0.1
      phase1_max_tokens: int = 26000  # Two-phase sampling: total prompt + thinking token budget
@@ -43,8 +43,22 @@ index 53d0987..10ad681 100644
 +    eval_backend: Literal["ray", "submitit", "local"] = "ray"
      eval_timeout: int = 1000
  
++    # Contrastive context distillation (rl/context_distill.py): auxiliary
++    # cross_entropy loss on teacher critiques, alongside the RL loss.
++    distill_enabled: bool = False
++    distill_pairs_per_step: int = 16
++    distill_num_betters: int = 3
++    distill_weight: float = 0.25
++    distill_grounding_filter: bool = True
++    distill_leak_filter: bool = True
++    distill_teacher_phase1_tokens: int = 0  # 0 -> reuse phase1_max_tokens
++    distill_max_target_tokens: int = 8192
++    distill_max_code_chars: int = 10000
++
  
-@@ -71,10 +76,8 @@ def init_ray(num_cpus_per_task: int, env_type: str):
+ def init_ray(num_cpus_per_task: int, env_type: str):
+     import ray
+@@ -71,10 +88,8 @@ def init_ray(num_cpus_per_task: int, env_type: str):
  async def discover_impl(config: DiscoverConfig):
      """Convert discover config to full config and run training."""
  
@@ -56,7 +70,7 @@ index 53d0987..10ad681 100644
          init_ray(config.num_cpus_per_task, config.env_type)
  
      logging.getLogger().handlers.clear()
-@@ -83,7 +86,7 @@ async def discover_impl(config: DiscoverConfig):
+@@ -83,7 +98,7 @@ async def discover_impl(config: DiscoverConfig):
      renderer_name = config.renderer_name
  
      # create log path if it doesn't exist
@@ -65,7 +79,7 @@ index 53d0987..10ad681 100644
      log_file = os.path.join(log_path, "train.log")
  
      # Resolve env_name -> env type and build dataset
-@@ -95,6 +98,7 @@ async def discover_impl(config: DiscoverConfig):
+@@ -95,6 +110,7 @@ async def discover_impl(config: DiscoverConfig):
          model_name_for_tokenizer=config.model_name,
          renderer_name=renderer_name,
          num_cpus_per_task=config.num_cpus_per_task,
@@ -73,7 +87,7 @@ index 53d0987..10ad681 100644
          eval_timeout=config.eval_timeout,
          log_path=log_path,
      )
-@@ -121,6 +125,9 @@ async def discover_impl(config: DiscoverConfig):
+@@ -121,7 +137,19 @@ async def discover_impl(config: DiscoverConfig):
          adv_estimator_beta=2.0, # Unused with entropic_adaptive_beta
          remove_constant_reward_groups=True,
          phase1_max_tokens=config.phase1_max_tokens,
@@ -81,8 +95,18 @@ index 53d0987..10ad681 100644
 +        completion_max_tokens=config.completion_max_tokens,
 +        tinker_base_url=config.tinker_base_url,
          local_model_path=None,
++        distill_enabled=config.distill_enabled,
++        distill_pairs_per_step=config.distill_pairs_per_step,
++        distill_num_betters=config.distill_num_betters,
++        distill_weight=config.distill_weight,
++        distill_grounding_filter=config.distill_grounding_filter,
++        distill_leak_filter=config.distill_leak_filter,
++        distill_teacher_phase1_tokens=config.distill_teacher_phase1_tokens,
++        distill_max_target_tokens=config.distill_max_target_tokens,
++        distill_max_code_chars=config.distill_max_code_chars,
      )
  
+     misc_utils.check_log_dir(log_path, behavior_if_exists="resume")
 diff --git a/ttt_discover/environments/sandbox_reward_evaluator.py b/ttt_discover/environments/sandbox_reward_evaluator.py
 index dca6eea..dc49155 100644
 --- a/ttt_discover/environments/sandbox_reward_evaluator.py
@@ -313,11 +337,373 @@ index dca6eea..dc49155 100644
  if __name__ == "__main__":
      pass
 -
+diff --git a/ttt_discover/rl/context_distill.py b/ttt_discover/rl/context_distill.py
+new file mode 100644
+index 0000000..e6da4d0
+--- /dev/null
++++ b/ttt_discover/rl/context_distill.py
+@@ -0,0 +1,348 @@
++"""Contrastive context distillation alongside the RL objective.
++
++Per training step: sample (suboptimal, betters) pairs from the PUCT pool, have the
++CURRENT policy (teacher) — with the better programs visible — write structured
++<improve>...</improve> critique blocks grounded in the suboptimal program, then
++distill: train cross-entropy on [ordinary hint-stripped generator prompt] ->
++[teacher generation], so the policy internalizes the privileged-critique skill
++without needing a better solution in context.
++
++Gates (no code target, so no execute-gate):
++  - citation grounding: every <cite> quote must be a verbatim substring of the
++    suboptimal program;
++  - leakage: identifiers/constants unique to the better programs must not appear
++    in the teacher output.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import random
++import re
++import time
++from dataclasses import dataclass, field
++from typing import Any, Sequence
++
++import tinker
++import torch
++from tinker import TensorData
++
++from ttt_discover.rl.data_processing import (
++    create_rightshifted_model_input_and_leftshifted_targets,
++)
++from ttt_discover.tinker_utils import renderers
++from ttt_discover.tinker_utils.completers import TwoPhaseTokenCompleter
++from ttt_discover.tinker_utils.misc_utils import get_tokenizer
++from ttt_discover.tinker_utils.state import State
++
++FINAL_SPLIT = "<|channel|>final<|message|>"
++
++TEACHER_TEMPLATE = """You are an expert reviewer inside a program-discovery system.
++
++Below is the problem, the CURRENT program (score included), and {n_betters} \
++stronger reference program(s) that achieved strictly better scores. Study what the \
++stronger programs do differently, but your written output must read as if you \
++derived every insight from the current program alone.
++
++<problem>
++{problem}
++</problem>
++
++<current_program score="{worse_score}">
++{worse_code}
++</current_program>
++
++{betters_section}
++
++Output requirements — follow exactly:
++- Output ONLY a sequence of <improve>...</improve> blocks (2 to 5 of them), nothing else.
++- Each block must contain:
++  <cite>a short verbatim snippet copied exactly from the CURRENT program that the \
++improvement applies to</cite>
++  <what>one concrete improvement direction</what>
++  <why>rationale for why this should improve the score, phrased as derivable from \
++the current program and the problem alone</why>
++- Never mention, quote, or allude to the reference programs or that you saw them.
++- Do not write full replacement code; directions only.
++"""
++
++BETTER_BLOCK = """<reference_program_{idx} score="{score}">
++{code}
++</reference_program_{idx}>
++"""
++
++_IMPROVE_RE = re.compile(r"<improve>(.*?)</improve>", re.S)
++_CITE_RE = re.compile(r"<cite>(.*?)</cite>", re.S)
++# identifiers and numeric literals used by the leakage filter
++_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
++_NUM_RE = re.compile(r"\d+\.\d{3,}")
++
++
++@dataclass
++class DistillPair:
++    worse: State
++    betters: list[State]
++    maximize: bool
++    prompt_model_input: tinker.ModelInput  # ordinary hint-stripped generator prompt
++    teacher_prompt: str
++
++
++@dataclass
++class DistillBatch:
++    datums: list[tinker.Datum] = field(default_factory=list)
++    weight_tensors: list[torch.Tensor] = field(default_factory=list)
++    metrics: dict[str, float] = field(default_factory=dict)
++
++
++def _raw(value: float, maximize: bool) -> float:
++    return value if maximize else -value
++
++
++def _thunk_parts(builder) -> tuple[Any, Any, Any, Any]:
++    """(env_type, renderer, sampler, config) out of a ProblemGroupBuilder env_thunk."""
++    thunk = builder.env_thunk
++    return (thunk.func, thunk.args[0], thunk.keywords["sampler"], thunk.keywords["config"])
++
++
++def _build_generator_prompt(builder, state: State) -> tinker.ModelInput:
++    """Byte-identical to the rollout prompt for `state` (ProblemEnv.initial_observation)."""
++    env_type, renderer, sampler, config = _thunk_parts(builder)
++    env = env_type(renderer, initial_state=state, sampler=sampler, config=config)
++    convo = env.convo_prefix + [{"role": "user", "content": env.get_question()}]
++    return renderer.build_generation_prompt(convo)
++
++
++def select_distill_pairs(
++    sampler,
++    env_group_builders_P: Sequence[Any],
++    max_pairs: int,
++    num_betters: int,
++    max_code_chars: int,
++    rng: random.Random,
++) -> tuple[list[DistillPair], dict[str, float]]:
++    """Pool-wide pair selection: suboptimal from the top half by value, betters =
++    2-3 distinct strictly-higher-value states, biased toward the best."""
++    metrics: dict[str, float] = {"distill/pairs_selected": 0.0}
++    if not env_group_builders_P:
++        return [], metrics
++    env_type, _, _, _ = _thunk_parts(env_group_builders_P[0])
++    maximize_env = env_type(*env_group_builders_P[0].env_thunk.args,
++                            **env_group_builders_P[0].env_thunk.keywords)
++    maximize = maximize_env.is_maximize()
++
++    with sampler._lock:
++        pool = [s for s in sampler._states
++                if s.code and s.code.strip() and s.value is not None]
++    if len(pool) < 2:
++        return [], metrics
++    pool.sort(key=lambda s: s.value, reverse=True)  # value: higher = better
++    top_half = pool[: max(2, len(pool) // 2)]
++
++    problem_env = env_type(
++        env_group_builders_P[0].env_thunk.args[0],
++        initial_state=env_type.state_type(timestep=-1, construction=None, code="", value=None),
++        sampler=sampler,
++        config=env_group_builders_P[0].env_thunk.keywords["config"],
++    )
++    problem_block = problem_env.get_question()
++
++    pairs: list[DistillPair] = []
++    candidates = [s for s in top_half if any(b.value > s.value for b in pool[:8])]
++    rng.shuffle(candidates)
++    for worse in candidates:
++        if len(pairs) >= max_pairs:
++            break
++        betters_all = [b for b in pool if b.value > worse.value and b.id != worse.id]
++        if not betters_all:
++            continue
++        # always include the best; fill the rest randomly from the top-8 betters
++        chosen = [betters_all[0]]
++        rest = betters_all[1:8]
++        rng.shuffle(rest)
++        chosen += rest[: max(0, num_betters - 1)]
++
++        betters_section = "\n".join(
++            BETTER_BLOCK.format(idx=i + 1, score=f"{_raw(b.value, maximize):.6f}",
++                                code=b.code[:max_code_chars])
++            for i, b in enumerate(chosen)
++        )
++        teacher_prompt = TEACHER_TEMPLATE.format(
++            n_betters=len(chosen),
++            problem=problem_block,
++            worse_score=f"{_raw(worse.value, maximize):.6f}",
++            worse_code=worse.code[:max_code_chars],
++            betters_section=betters_section,
++        )
++        try:
++            prompt_mi = _build_generator_prompt(env_group_builders_P[0], worse)
++        except Exception:
++            continue
++        pairs.append(DistillPair(worse=worse, betters=chosen, maximize=maximize,
++                                 prompt_model_input=prompt_mi,
++                                 teacher_prompt=teacher_prompt))
++    metrics["distill/pairs_selected"] = float(len(pairs))
++    return pairs, metrics
++
++
++def _grounding_ok(final_text: str, worse_code: str) -> tuple[bool, int]:
++    """>=1 well-formed <improve> block and every <cite> is verbatim in the worse code."""
++    blocks = _IMPROVE_RE.findall(final_text)
++    if not blocks:
++        return False, 0
++    n_ok = 0
++    for b in blocks:
++        cites = _CITE_RE.findall(b)
++        if not cites:
++            return False, len(blocks)
++        for c in cites:
++            if c.strip() and c.strip() not in worse_code:
++                return False, len(blocks)
++        n_ok += 1
++    return n_ok >= 1, len(blocks)
++
++
++def _leaks(teacher_text: str, worse_code: str, betters: list[State]) -> bool:
++    """True if output contains identifiers/constants unique to the better programs."""
++    worse_toks = set(_IDENT_RE.findall(worse_code)) | set(_NUM_RE.findall(worse_code))
++    out_toks = set(_IDENT_RE.findall(teacher_text)) | set(_NUM_RE.findall(teacher_text))
++    common_py = {"def", "return", "import", "numpy", "range", "float", "None", "True",
++                 "False", "budget_s", "seed", "kwargs", "self", "np", "array", "initial_h_values"}
++    for b in betters:
++        b_toks = set(_IDENT_RE.findall(b.code)) | set(_NUM_RE.findall(b.code))
++        unique = (b_toks - worse_toks) - common_py
++        if unique & out_toks:
++            return True
++    return False
++
++
++def _truncate_target(tokens: list[int], tokenizer, max_tokens: int) -> list[int]:
++    if len(tokens) <= max_tokens:
++        return tokens
++    return tokens[:max_tokens]
++
++
++async def build_distill_data(
++    pairs: list[DistillPair],
++    sampling_client: tinker.SamplingClient,
++    model_name: str,
++    renderer: renderers.Renderer,
++    distill_weight: float,
++    teacher_phase1_tokens: int,
++    context_window: int,
++    temperature: float,
++    max_target_tokens: int,
++    grounding_filter: bool = True,
++    leak_filter: bool = True,
++) -> DistillBatch:
++    out = DistillBatch()
++    m = out.metrics
++    for k in ("distill/num_datums", "distill/num_trained_tokens",
++              "distill/improve_blocks_mean", "distill/grounding_dropped",
++              "distill/leak_dropped", "distill/skipped_unparseable",
++              "distill/skipped_prompt_too_long", "distill/skipped_too_long"):
++        m[k] = 0.0
++    if not pairs:
++        return out
++
++    tokenizer = get_tokenizer(model_name)
++    completer = TwoPhaseTokenCompleter(
++        sampling_client=sampling_client,
++        tokenizer=tokenizer,
++        phase1_max_tokens=teacher_phase1_tokens,
++        temperature=temperature,
++        context_window=context_window,
++    )
++    stop = renderer.get_stop_sequences()
++
++    async def teach(pair: DistillPair):
++        mi = renderer.build_generation_prompt(
++            [{"role": "user", "content": pair.teacher_prompt}]
++        )
++        if mi.length >= teacher_phase1_tokens - 2048:
++            return "prompt_too_long"
++        return await completer(mi, stop)
++
++    t0 = time.time()
++    results = await asyncio.gather(*[teach(p) for p in pairs], return_exceptions=True)
++    m["distill/teacher_time_s"] = time.time() - t0
++
++    total_blocks, kept = 0, 0
++    for pair, res in zip(pairs, results):
++        if isinstance(res, Exception):
++            m["distill/skipped_unparseable"] += 1
++            continue
++        if res == "prompt_too_long":
++            m["distill/skipped_prompt_too_long"] += 1
++            continue
++        teacher_tokens = list(res.tokens)
++        decoded = tokenizer.decode(teacher_tokens)
++        if FINAL_SPLIT not in decoded:
++            m["distill/skipped_unparseable"] += 1
++            continue
++        final_text = decoded.split(FINAL_SPLIT)[-1]
++        if grounding_filter:
++            ok, n_blocks = _grounding_ok(final_text, pair.worse.code)
++            if not ok:
++                m["distill/grounding_dropped"] += 1
++                continue
++        else:
++            n_blocks = len(_IMPROVE_RE.findall(final_text))
++        if leak_filter and _leaks(decoded, pair.worse.code, pair.betters):
++            m["distill/leak_dropped"] += 1
++            continue
++
++        target_tokens = _truncate_target(teacher_tokens, tokenizer, max_target_tokens)
++        prompt_mi = pair.prompt_model_input
++        if prompt_mi.length + len(target_tokens) + 8 > context_window:
++            m["distill/skipped_too_long"] += 1
++            continue
++
++        full_chunks = list(prompt_mi.chunks) + [
++            tinker.types.EncodedTextChunk(tokens=target_tokens)
++        ]
++        model_input, targets = create_rightshifted_model_input_and_leftshifted_targets(
++            full_chunks
++        )
++        # weights: 0 on prompt tokens, 1 on target span; left-shift like advantages
++        w_full = [0.0] * prompt_mi.length + [1.0] * len(target_tokens)
++        weights = w_full[1:]
++        assert model_input.length == len(targets) == len(weights)
++        out.datums.append(
++            tinker.Datum(
++                model_input=model_input,
++                loss_fn_inputs={
++                    "target_tokens": TensorData.from_torch(
++                        torch.tensor(targets, dtype=torch.int64)
++                    ),
++                    "weights": TensorData.from_torch(
++                        torch.tensor(weights, dtype=torch.float32)
++                    ),
++                },
++            )
++        )
++        out.weight_tensors.append(torch.tensor(weights, dtype=torch.float32))
++        total_blocks += n_blocks
++        kept += 1
++
++    # normalize: CE contributes distill_weight * meanNLL over all trained tokens
++    total_trained = sum(float(w.sum().item()) for w in out.weight_tensors)
++    if total_trained > 0:
++        scale = distill_weight / total_trained
++        scaled = []
++        for d, w in zip(out.datums, out.weight_tensors):
++            w_scaled = w * scale
++            scaled.append(
++                tinker.Datum(
++                    model_input=d.model_input,
++                    loss_fn_inputs={
++                        "target_tokens": d.loss_fn_inputs["target_tokens"],
++                        "weights": TensorData.from_torch(w_scaled),
++                    },
++                )
++            )
++        out.datums = scaled
++
++    m["distill/num_datums"] = float(kept)
++    m["distill/num_trained_tokens"] = float(total_trained)
++    m["distill/improve_blocks_mean"] = (total_blocks / kept) if kept else 0.0
++    return out
 diff --git a/ttt_discover/rl/train.py b/ttt_discover/rl/train.py
-index b9e414d..07f1f6d 100644
+index b9e414d..45b04a5 100644
 --- a/ttt_discover/rl/train.py
 +++ b/ttt_discover/rl/train.py
-@@ -16,7 +16,7 @@ import tinker
+@@ -5,6 +5,7 @@ Implements RL on general MDPs
+ import asyncio
+ import logging
+ import os
++import random
+ import time
+ from typing import Any, Dict, List, Sequence, cast
+ 
+@@ -16,7 +17,7 @@ import tinker
  import torch
  from tinker.types import LossFnType
  from ttt_discover.tinker_utils.misc_utils import get_last_checkpoint, save_checkpoint_async
@@ -326,7 +712,7 @@ index b9e414d..07f1f6d 100644
  from ttt_discover.rl.data_processing import (
      assemble_training_data,
      remove_constant_reward_groups,
-@@ -63,8 +63,22 @@ async def incorporate_kl_penalty(
+@@ -63,8 +64,22 @@ async def incorporate_kl_penalty(
      # compute the logprob differences, zeroed out when the mask == 0
      sampled_logprobs_D = [datum.loss_fn_inputs["logprobs"].to_torch() for datum in data_D]
      float_masks = [datum.loss_fn_inputs["mask"].to_torch().float() for datum in data_D]
@@ -350,10 +736,89 @@ index b9e414d..07f1f6d 100644
          for base_logprobs, sampled_logprobs, mask in safezip(
              base_logprobs_D, sampled_logprobs_D, float_masks
          )
-@@ -301,6 +315,14 @@ class Config:
+@@ -224,47 +239,58 @@ async def train_step(
+     learning_rate: float,
+     num_substeps: int,
+     loss_fn: LossFnType,
+-) -> List[torch.Tensor]:
+-    """Train the model on collected trajectories."""
++    extra_batches: list[tuple[List[tinker.Datum], LossFnType]] | None = None,
++) -> tuple[List[torch.Tensor], list[List[torch.Tensor]]]:
++    """Train the model on collected trajectories.
++
++    extra_batches: additional (datums, loss_fn) batches (e.g. the context-distillation
++    cross_entropy batch) whose gradients accumulate into the LAST substep's optim step.
++    Requests execute in enqueue order, so the extra forward-backwards are enqueued
++    between the main forward-backward and its optim step.
++    """
+     batches_md = split_list(data_D, min(num_substeps, len(data_D)))
+     training_logprobs_D: list[torch.Tensor] = []
++    extra_logprobs: list[List[torch.Tensor]] = []
+ 
+     if len(batches_md) == 0:
+-        return training_logprobs_D
++        return training_logprobs_D, extra_logprobs
++
++    async def enqueue_substep(i: int):
++        fb = await enqueue_forward_backward(training_client, batches_md[i], loss_fn)
++        extra_fbs = []
++        if extra_batches and i == len(batches_md) - 1:
++            for extra_data, extra_loss_fn in extra_batches:
++                if extra_data:
++                    extra_fbs.append(
++                        await enqueue_forward_backward(training_client, extra_data, extra_loss_fn)
++                    )
++        opt = await enqueue_optim_step(training_client, learning_rate)
++        return fb, extra_fbs, opt
+ 
+-    enqueued_futures: (
+-        tuple[
+-            tinker.APIFuture[tinker.ForwardBackwardOutput],
+-            tinker.APIFuture[tinker.OptimStepResponse],
+-        ]
+-        | None
+-    ) = (
+-        await enqueue_forward_backward(training_client, batches_md[0], loss_fn),
+-        await enqueue_optim_step(training_client, learning_rate),
+-    )
++    enqueued_futures = await enqueue_substep(0)
+ 
+     for i in range(len(batches_md)):
+         assert enqueued_futures is not None
+ 
+-        fwd_bwd_future, optim_step_future = enqueued_futures
++        fwd_bwd_future, extra_fb_futures, optim_step_future = enqueued_futures
+         enqueued_futures = None
+ 
+         # Enqueue the next forward-backward pass and optimizer step before consuming the current result
+         if i != len(batches_md) - 1:
+             assert enqueued_futures is None
+-            enqueued_futures = (
+-                await enqueue_forward_backward(training_client, batches_md[i + 1], loss_fn),
+-                await enqueue_optim_step(training_client, learning_rate),
+-            )
++            enqueued_futures = await enqueue_substep(i + 1)
+ 
+         training_logprobs = await consume_forward_backward(fwd_bwd_future)
+         training_logprobs_D.extend(training_logprobs)
+ 
++        for extra_future in extra_fb_futures:
++            extra_logprobs.append(await consume_forward_backward(extra_future))
++
+         await consume_optim_step(optim_step_future)
+ 
+     assert enqueued_futures is None
+ 
+-    return training_logprobs_D
++    return training_logprobs_D, extra_logprobs
+ 
+ 
+ @chz.chz
+@@ -301,10 +327,31 @@ class Config:
  
      # Two-phase sampling: phase1_max_tokens for token completion
      phase1_max_tokens: int = 26000
+-    
 +
 +    # Context/generation limits used by non-GPT-OSS renderers. When
 +    # completion_max_tokens is None, generation uses the remaining context.
@@ -362,10 +827,27 @@ index b9e414d..07f1f6d 100644
 +
 +    # Optional local or tunneled Tinker API URL.
 +    tinker_base_url: str | None = None
-     
++
      # Local model path (avoids HuggingFace API rate limits)
      local_model_path: str | None = None
-@@ -332,17 +354,27 @@ async def do_group_rollout_and_filter_constant_reward(
+ 
++    # Contrastive context distillation (see rl/context_distill.py). Disabled by
++    # default; when enabled, a cross_entropy batch of teacher critiques accumulates
++    # into the same optim step as the RL loss.
++    distill_enabled: bool = False
++    distill_pairs_per_step: int = 16
++    distill_num_betters: int = 3
++    distill_weight: float = 0.25  # CE contributes distill_weight * meanNLL
++    distill_grounding_filter: bool = True
++    distill_leak_filter: bool = True
++    distill_teacher_phase1_tokens: int = 0  # 0 -> reuse phase1_max_tokens
++    distill_max_target_tokens: int = 8192
++    distill_max_code_chars: int = 10000
++
+ 
+ @chz.chz
+ class WrappedTrajectoryGroup:
+@@ -332,17 +379,27 @@ async def do_group_rollout_and_filter_constant_reward(
      step_idx=-1,
      model_name: str = "",
      phase1_max_tokens: int = 27000,
@@ -400,7 +882,60 @@ index b9e414d..07f1f6d 100644
  
      trajectory_group = await do_group_rollout(env_group_builder, policy, step_idx)
  
-@@ -542,6 +574,8 @@ async def do_sync_training(
+@@ -433,6 +490,7 @@ async def do_train_step_and_get_sampling_client(
+     tokenizer: Tokenizer,
+     env_group_builders_P: Sequence[EnvGroupBuilder],
+     trajectory_groups_P: list[TrajectoryGroup],
++    distill_task: "asyncio.Task | None" = None,
+ ) -> tuple[tinker.SamplingClient, dict[str, Any]]:
+     context = get_scope_context()
+     context.attributes["step"] = i_batch
+@@ -452,15 +510,43 @@ async def do_train_step_and_get_sampling_client(
+     )
+     metrics.update(prepare_minibatch_metrics)
+ 
++    # Contrastive context distillation: collect the teacher batch (sampled
++    # concurrently with prepare_minibatch) and accumulate it as a cross_entropy
++    # forward-backward into the same optim step as the RL loss.
++    distill_data: List[tinker.Datum] = []
++    distill_weights: list[torch.Tensor] = []
++    if distill_task is not None:
++        try:
++            distill_batch = await distill_task
++            metrics.update(distill_batch.metrics)
++            distill_data = distill_batch.datums
++            distill_weights = distill_batch.weight_tensors
++        except Exception:
++            logger.exception("context distillation failed; continuing with RL only")
++            metrics["distill/error"] = 1.0
++    extra_batches = [(distill_data, cast(LossFnType, "cross_entropy"))] if distill_data else None
++
+     with timed("train", metrics):
+-        training_logprobs_D = await train_step(
++        training_logprobs_D, extra_logprobs = await train_step(
+             data_D,
+             training_client,
+             cfg.learning_rate,
+             cfg.num_substeps,
+             cfg.loss_fn,
++            extra_batches=extra_batches,
+         )
+ 
++    if distill_data and extra_logprobs:
++        ce_logprobs = extra_logprobs[0]
++        nll_sum, tok_sum = 0.0, 0.0
++        for logp, w01 in safezip(ce_logprobs, distill_weights):
++            mask = (w01 > 0).float()
++            n = min(len(logp), len(mask))
++            nll_sum += float((-logp[:n] * mask[:n]).sum().item())
++            tok_sum += float(mask[:n].sum().item())
++        metrics["distill/ce_mean_nll"] = nll_sum / tok_sum if tok_sum else 0.0
++        metrics["distill/ce_sum"] = cfg.distill_weight * metrics["distill/ce_mean_nll"]
++
+     sampling_client, full_batch_metrics = await save_checkpoint_and_get_sampling_client(
+         training_client,
+         # NOTE: saving the checkpoint as the i + 1 step
+@@ -542,6 +628,8 @@ async def do_sync_training(
                              step_idx=i_batch,
                              model_name=cfg.local_model_path or cfg.model_name,
                              phase1_max_tokens=cfg.phase1_max_tokens,
@@ -409,7 +944,65 @@ index b9e414d..07f1f6d 100644
                          ),
                          name=f"sample_task_{i}",
                      )
-@@ -583,7 +617,7 @@ async def do_sync_training(
+@@ -549,6 +637,49 @@ async def do_sync_training(
+                 ],
+             )
+ 
++        # Contrastive context distillation: select (worse, betters) pairs from the
++        # pool and start the teacher pass now, so it overlaps flush/filtering and
++        # prepare_minibatch. Must run BEFORE dataset.flush (prunes sampler children)
++        # and BEFORE remove_constant_reward_groups (breaks builder<->group alignment).
++        distill_task = None
++        if cfg.distill_enabled and hasattr(dataset, "sampler"):
++            try:
++                from ttt_discover.rl.context_distill import (
++                    build_distill_data,
++                    select_distill_pairs,
++                )
++
++                distill_pairs, pair_metrics = select_distill_pairs(
++                    dataset.sampler,
++                    env_group_builders_P,
++                    max_pairs=cfg.distill_pairs_per_step,
++                    num_betters=cfg.distill_num_betters,
++                    max_code_chars=cfg.distill_max_code_chars,
++                    rng=random.Random(i_batch),
++                )
++                metrics.update(pair_metrics)
++                if distill_pairs:
++                    distill_task = asyncio.create_task(
++                        build_distill_data(
++                            distill_pairs,
++                            sampling_client,
++                            model_name=cfg.local_model_path or cfg.model_name,
++                            renderer=env_group_builders_P[0].env_thunk.args[0],
++                            distill_weight=cfg.distill_weight,
++                            teacher_phase1_tokens=(
++                                cfg.distill_teacher_phase1_tokens or cfg.phase1_max_tokens
++                            ),
++                            context_window=cfg.context_window,
++                            temperature=cfg.temperature,
++                            max_target_tokens=cfg.distill_max_target_tokens,
++                            grounding_filter=cfg.distill_grounding_filter,
++                            leak_filter=cfg.distill_leak_filter,
++                        )
++                    )
++            except Exception:
++                logger.exception("distill pair selection failed; continuing with RL only")
++                metrics["distill/error"] = 1.0
++
+         if hasattr(dataset, 'flush'):
+             dataset.flush(step=i_batch + 1)
+ 
+@@ -565,6 +696,7 @@ async def do_sync_training(
+             tokenizer,
+             env_group_builders_P,
+             trajectory_groups_P,
++            distill_task=distill_task,
+         )
+ 
+         if 'table' in train_step_metrics:
+@@ -583,7 +715,7 @@ async def do_sync_training(
                      )
              }
          
@@ -418,7 +1011,7 @@ index b9e414d..07f1f6d 100644
              if train_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
                  ml_logger.loggers[2].log_metrics(train_table, step=i_batch)
              if test_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
-@@ -624,7 +658,7 @@ async def main(
+@@ -624,7 +756,7 @@ async def main(
          start_batch = 0
  
      print("Create training client...")
@@ -427,7 +1020,7 @@ index b9e414d..07f1f6d 100644
      print("Training client created!")
      if resume_info:
          # Resuming interrupted training - load optimizer state for proper continuation
-@@ -684,8 +718,9 @@ async def main(
+@@ -684,8 +816,9 @@ async def main(
          tokenizer=tokenizer,
      )
  

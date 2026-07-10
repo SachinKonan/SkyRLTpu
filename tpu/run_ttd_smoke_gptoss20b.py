@@ -109,12 +109,24 @@ def main() -> None:
         num_cpus_per_task=_env_int("NUM_CPUS_PER_TASK", 1),
         eval_backend=os.environ.get("TTD_EVAL_BACKEND", "local"),
         eval_timeout=_env_int("EVAL_TIMEOUT", 120),
+        # Contrastive context distillation (off by default; see rl/context_distill.py)
+        distill_enabled=os.environ.get("TTD_DISTILL_ENABLED", "0") == "1",
+        distill_pairs_per_step=_env_int("TTD_DISTILL_PAIRS_PER_STEP", 16),
+        distill_num_betters=_env_int("TTD_DISTILL_NUM_BETTERS", 3),
+        distill_weight=_env_float("TTD_DISTILL_WEIGHT", 0.25),
+        distill_grounding_filter=os.environ.get("TTD_DISTILL_GROUNDING_FILTER", "1") == "1",
+        distill_leak_filter=os.environ.get("TTD_DISTILL_LEAK_FILTER", "1") == "1",
+        distill_teacher_phase1_tokens=_env_int("TTD_DISTILL_TEACHER_PHASE1_TOKENS", 0),
+        distill_max_target_tokens=_env_int("TTD_DISTILL_MAX_TARGET_TOKENS", 8192),
+        distill_max_code_chars=_env_int("TTD_DISTILL_MAX_CODE_CHARS", 10000),
     )
     print(f"[smoke] run_dir      : {run_dir}")
     print(f"[smoke] model        : {model_name}  (renderer={config.renderer_name})")
     print(f"[smoke] batch shape  : groups_per_batch={groups_per_batch}, group_size={group_size}")
     print(f"[smoke] tokens       : context={config.context_window}, phase1_max={config.phase1_max_tokens}")
     print(f"[smoke] eval_backend : {config.eval_backend}  (kl_coef={config.kl_penalty_coef})")
+    print(f"[smoke] distill      : enabled={config.distill_enabled} pairs={config.distill_pairs_per_step} "
+          f"betters={config.distill_num_betters} weight={config.distill_weight}")
     print(f"[smoke] tinker_url   : {tinker_base_url or 'SDK default (prod)'}")
     print(f"[smoke] experiment   : {experiment_name}")
     discover(config)
