@@ -178,6 +178,12 @@ def get_backend_classes(backend_name: str, use_ray: bool = False):
             from skyrl.backends.jax import JaxBackend, JaxBackendConfig
 
             return JaxBackend, JaxBackendConfig
+    elif backend_name == "easydel":
+        if use_ray:
+            raise ValueError("The EasyDeL backend owns its multi-host workers and does not support use_ray")
+        from skyrl.backends.easydel import EasyDeLBackend, EasyDeLBackendConfig
+
+        return EasyDeLBackend, EasyDeLBackendConfig
     elif backend_name == "fsdp":
         from skyrl.backends.skyrl_train_backend import (
             FSDPBackendOverrides,
@@ -194,8 +200,8 @@ def get_backend_classes(backend_name: str, use_ray: bool = False):
         return SkyRLTrainBackend, MegatronBackendOverrides
     else:
         raise ValueError(
-            f"Unknown backend: {backend_name}. Available backends: jax, fsdp, megatron. "
-            f"Make sure the backend's dependencies are installed (e.g., pip install skyrl[jax])"
+            f"Unknown backend: {backend_name}. Available backends: jax, easydel, fsdp, megatron. "
+            f"Make sure the backend's dependencies are installed (e.g., pip install skyrl[easydel])"
         )
 
 

@@ -89,3 +89,41 @@ LOSS_FUNCTION_MAP = {
 # Build list of functions indexed by LOSS_TYPES values (for jax.lax.switch)
 # Sort by index to ensure LOSS_FUNCTIONS[idx] corresponds to the correct function
 LOSS_FUNCTIONS = [LOSS_FUNCTION_MAP[name] for name, idx in sorted(LOSS_TYPES.items(), key=lambda x: x[1])]
+
+
+def compute_per_token_losses(
+    loss_fn_types: jax.Array,
+    target_logprobs: jax.Array,
+    loss_mask: jax.Array,
+    sampling_logprobs: jax.Array,
+    advantages: jax.Array,
+    loss_fn_config: LossFnConfig,
+) -> jax.Array:
+    """Apply SkyRL's configured objective independently to each sequence."""
+
+    def compute_loss_per_example(
+        loss_fn_type,
+        example_target_logprobs,
+        example_loss_mask,
+        example_sampling_logprobs,
+        example_advantages,
+        example_loss_fn_config,
+    ):
+        return jax.lax.switch(
+            loss_fn_type,
+            LOSS_FUNCTIONS,
+            example_target_logprobs,
+            example_loss_mask,
+            example_sampling_logprobs,
+            example_advantages,
+            example_loss_fn_config,
+        )
+
+    return jax.vmap(compute_loss_per_example)(
+        loss_fn_types,
+        target_logprobs,
+        loss_mask,
+        sampling_logprobs,
+        advantages,
+        loss_fn_config,
+    )

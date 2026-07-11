@@ -91,3 +91,9 @@ python tpu/fetch_tpu_monitoring.py \
 
 The sync script refuses to run from a dirty checkout. Commit the SkyRL changes
 you want to test, sync, then launch.
+
+## EasyDeL Alternative
+
+The optional EasyDeL learner uses a co-located eSurge sampling frontend while
+preserving the same Tinker API. See [docs/easydel_tinker.md](docs/easydel_tinker.md)
+for install, single-host, and v5p-16 multi-host commands.

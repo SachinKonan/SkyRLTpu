@@ -69,6 +69,11 @@ jax = [
     "optax>=0.2.5",
 ]
 
+easydel = [
+    "skyrl[jax]",
+    "easydel @ git+https://github.com/erfanzar/EasyDeL.git@090a03b2e0b3606bd38e0e3fcfdc640cd7e6e246",
+]
+
 skyrl-train = [
     "loguru",
     "tqdm",
@@ -204,7 +209,15 @@ conflicts = [
         { extra = "gpu" },
         { extra = "tpu" },
         { extra = "miniswe" },
-    ]
+    ],
+    [
+        { extra = "easydel" },
+        { extra = "skyrl-train" },
+        { extra = "megatron" },
+        { extra = "fsdp" },
+        { extra = "miniswe" },
+        { extra = "ray" },
+    ],
 ]
 # disable build isolation for megatron related dependencies
 no-build-isolation-package = [
@@ -369,4 +382,3 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["skyrl", "skyrl_gym"]
-

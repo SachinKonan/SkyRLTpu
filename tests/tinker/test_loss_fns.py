@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from skyrl.tinker.loss_fns import LossFnConfig, cispo_loss
+from skyrl.tinker.loss_fns import LossFnConfig, cispo_loss, compute_per_token_losses
 
 
 def test_cispo_loss_clipping_and_masking():
@@ -48,3 +48,28 @@ def test_cispo_stops_gradient_through_clipped_ratio():
     expected_grad = -(clipped_ratio * np.asarray(advantages))
 
     assert np.allclose(grad, expected_grad, rtol=1e-5, atol=1e-6)
+
+
+def test_compute_per_token_losses_dispatches_per_sequence():
+    target_logprobs = jnp.array([[-0.2, -0.4], [-0.1, -0.3]], dtype=jnp.float32)
+    mask = jnp.ones_like(target_logprobs)
+    sampling_logprobs = jnp.zeros_like(target_logprobs)
+    advantages = jnp.ones_like(target_logprobs)
+    config = LossFnConfig(
+        clip_low_threshold=jnp.array([0.8, 0.8], dtype=jnp.float32),
+        clip_high_threshold=jnp.array([1.2, 1.2], dtype=jnp.float32),
+    )
+
+    actual = compute_per_token_losses(
+        jnp.array([0, 2], dtype=jnp.int32),
+        target_logprobs,
+        mask,
+        sampling_logprobs,
+        advantages,
+        config,
+    )
+
+    expected_ce = -np.asarray(target_logprobs[0])
+    expected_ppo = -np.minimum(np.exp(np.asarray(target_logprobs[1])), 1.2)
+    np.testing.assert_allclose(np.asarray(actual[0]), expected_ce)
+    np.testing.assert_allclose(np.asarray(actual[1]), expected_ppo)

@@ -1,0 +1,241 @@
+job:
+  name: hk4638-__RUN_ID__
+  env_type: null
+  # Retry service preemptions; the outer wrapper deletes the job as soon as the
+  # lifecycle writes either a passed or failed marker.
+  loop: true
+  remote_user: hk4638
+  worker_num: auto
+  environment:
+    SOURCE_ARCHIVE_URI: __SOURCE_ARCHIVE_URI__
+    RESULT_PREFIX: __RESULT_PREFIX__
+    RUN_ID: __RUN_ID__
+
+command:
+  workers: all
+  cmd: |
+    set -euo pipefail
+    export SOURCE_ARCHIVE_URI="__SOURCE_ARCHIVE_URI__"
+    export RESULT_PREFIX="__RESULT_PREFIX__"
+    export RUN_ID="__RUN_ID__"
+    export RESUME_RESULT_PREFIX="__RESUME_RESULT_PREFIX__"
+    export LONG_CONTEXT_ONLY="__LONG_CONTEXT_ONLY__"
+    export ENABLE_DISTRIBUTED_INIT=0
+    # Leave backend selection at JAX's default until after distributed init.
+    # Both "tpu" and an explicit empty value initialize PJRT backends too soon.
+    unset JAX_PLATFORMS
+    export UV_CACHE_DIR=/home/hk4638/.cache/uv
+    export HF_HOME=/home/hk4638/huggingface
+    export TOKENIZERS_PARALLELISM=false
+    export MODEL_URI=gs://hk4638-autoresearch-tpu-us-east5/citation-v4-models/easydel/qwen35_9b/checkpoint.tar
+
+    detect_worker_id() {
+      if [ -n "${JOBMAN_WORKER_ID:-}" ]; then
+        printf '%s\n' "$JOBMAN_WORKER_ID"
+      elif [[ "$(hostname)" =~ -w-([0-9]+)$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+      else
+        curl -fsS -H 'Metadata-Flavor: Google' \
+          'http://metadata.google.internal/computeMetadata/v1/instance/attributes/worker-id'
+      fi
+    }
+
+    WORKER_ID="$(detect_worker_id)"
+    HOSTNAME_NOW="$(hostname)"
+    COORDINATOR_HOST="${HOSTNAME_NOW%-w-*}-w-0"
+    COORDINATOR_ADDRESS="${COORDINATOR_HOST}:7777"
+    ESURGE_SERVICE_NAME="esurge-${RUN_ID}"
+    WORKER_HOST_PREFIX="${HOSTNAME_NOW%-w-*}"
+    BOOT="/tmp/${RUN_ID}"
+    SOURCE_DIR="${BOOT}/source"
+    LOG="${BOOT}/worker-${WORKER_ID}.log"
+    STATUS_URI="${RESULT_PREFIX}/status.txt"
+    READY_URI="${RESULT_PREFIX}/worker-1-ready.txt"
+    mkdir -p "$SOURCE_DIR"
+    exec > >(tee -a "$LOG") 2>&1
+
+    # eSurge's lockstep mode discovers all hosts through one service name.
+    # Cloud TPU VMs expose per-worker names, so add an equivalent local record.
+    ESURGE_HOST_LINES=""
+    for WORKER_INDEX in 0 1; do
+      WORKER_HOST="${WORKER_HOST_PREFIX}-w-${WORKER_INDEX}"
+      WORKER_IP="$(getent ahostsv4 "$WORKER_HOST" | awk 'NR == 1 { print $1 }')"
+      test -n "$WORKER_IP"
+      ESURGE_HOST_LINES="${ESURGE_HOST_LINES}${WORKER_IP} ${ESURGE_SERVICE_NAME}\n"
+    done
+    printf '%b' "$ESURGE_HOST_LINES" | sudo tee -a /etc/hosts >/dev/null
+    getent ahostsv4 "$ESURGE_SERVICE_NAME"
+
+    on_exit() {
+      EXIT_CODE="$?"
+      gcloud storage cp "$LOG" "${RESULT_PREFIX}/worker-${WORKER_ID}.log" || true
+      if [ "$WORKER_ID" = "0" ] && [ -d "${BOOT}/output" ]; then
+        # Preserve staged long-context measurements even if a later length
+        # fails or the TPU is preempted before the final result is written.
+        gcloud storage cp --recursive "${BOOT}/output" "${RESULT_PREFIX}/" || true
+      fi
+      # Never replace a terminal coordinator result with a secondary worker's
+      # cleanup status. The backend exits normally as part of the shutdown RPC,
+      # shortly before process zero publishes the passed marker.
+      if [ "$EXIT_CODE" -ne 0 ] && ! gcloud storage ls "$STATUS_URI" >/dev/null 2>&1; then
+        printf 'failed\n' > "${BOOT}/status.txt"
+        gcloud storage cp "${BOOT}/status.txt" "$STATUS_URI" || true
+      fi
+    }
+    trap on_exit EXIT
+
+    echo "[smoke] worker=${WORKER_ID} host=${HOSTNAME_NOW} coordinator=${COORDINATOR_ADDRESS}"
+    gcloud storage cp "$SOURCE_ARCHIVE_URI" "${BOOT}/source.tar.gz"
+    tar -xzf "${BOOT}/source.tar.gz" -C "$SOURCE_DIR"
+    cd "$SOURCE_DIR"
+
+    export PATH="${HOME}/.local/bin:${PATH}"
+    if ! command -v uv >/dev/null 2>&1; then
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+    uv sync --extra tpu --extra tinker --extra easydel \
+      --no-install-package torch --no-install-package torchvision
+    uv pip install --python .venv/bin/python \
+      --index-url https://download.pytorch.org/whl/cpu 'torch==2.9.1'
+    .venv/bin/python - <<'PY'
+    from importlib.metadata import version
+    print({name: version(name) for name in ("easydel", "jax", "torch")})
+    PY
+
+    MODEL_DIR="${BOOT}/qwen35-9b"
+    mkdir -p "$MODEL_DIR"
+    gcloud storage cp "$MODEL_URI" "${BOOT}/model.tar"
+    tar -xf "${BOOT}/model.tar" -C "$MODEL_DIR"
+    test -f "${MODEL_DIR}/config.json"
+
+    # Checkpoint restoration is a lockstep command. Every backend process must
+    # see the archive at the same local path before the worker enters its RPC
+    # loop; staging only on process zero leaves remote hosts blocked in load.
+    RESUME_ARGS=()
+    if [ -n "$RESUME_RESULT_PREFIX" ]; then
+      mkdir -p "${BOOT}/resume"
+      gcloud storage cp "${RESUME_RESULT_PREFIX}/output/learner-checkpoint.pkl.gz" \
+        "${BOOT}/resume/learner-checkpoint.pkl.gz"
+      gcloud storage cp "${RESUME_RESULT_PREFIX}/output/sampler-smoke.tar.gz" \
+        "${BOOT}/resume/sampler-smoke.tar.gz"
+      RESUME_ARGS=(
+        --resume-learner-path "${BOOT}/resume/learner-checkpoint.pkl.gz"
+      )
+      if [ "$LONG_CONTEXT_ONLY" != "1" ]; then
+        RESUME_ARGS+=(--resume-sampler-path "${BOOT}/resume/sampler-smoke.tar.gz")
+      fi
+    fi
+
+    if [ "$WORKER_ID" = "1" ]; then
+      .venv/bin/python -m skyrl.backends.easydel \
+        --coordinator-address "$COORDINATOR_ADDRESS" \
+        --num-processes 2 \
+        --process-id 1 \
+        > "${BOOT}/backend-worker-1.log" 2>&1 &
+      BACKEND_PID="$!"
+      sleep 5
+      if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        cat "${BOOT}/backend-worker-1.log"
+        exit 1
+      fi
+      printf 'ready\n' > "${BOOT}/worker-1-ready.txt"
+      gcloud storage cp "${BOOT}/worker-1-ready.txt" "$READY_URI"
+      # Compilation at 32K/45K can legitimately run for hours. Keep the
+      # distributed worker alive until the coordinator reports completion.
+      for _ in $(seq 1 5760); do
+        if gcloud storage ls "$STATUS_URI" >/dev/null 2>&1; then
+          break
+        fi
+        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+          # A successful coordinator shuts down the worker command loop before
+          # it uploads status.txt. Give that normal ordering a bounded grace
+          # period; a genuine worker crash still fails once no status appears.
+          for _ in $(seq 1 12); do
+            if gcloud storage ls "$STATUS_URI" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 5
+          done
+          if ! gcloud storage ls "$STATUS_URI" >/dev/null 2>&1; then
+            cat "${BOOT}/backend-worker-1.log"
+            exit 1
+          fi
+          break
+        fi
+        sleep 5
+      done
+      kill "$BACKEND_PID" 2>/dev/null || true
+      wait "$BACKEND_PID" 2>/dev/null || true
+      gcloud storage cp "${BOOT}/backend-worker-1.log" \
+        "${RESULT_PREFIX}/backend-worker-1.log" || true
+      STATUS="$(gcloud storage cat "$STATUS_URI" 2>/dev/null || true)"
+      test "$STATUS" = "passed"
+      exit 0
+    fi
+
+    for _ in $(seq 1 180); do
+      if gcloud storage ls "$READY_URI" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 5
+    done
+    gcloud storage ls "$READY_URI" >/dev/null
+
+    OUTPUT_DIR="${BOOT}/output"
+    MODE_ARGS=()
+    if [ "$LONG_CONTEXT_ONLY" = "1" ]; then
+      MODE_ARGS+=(--long-context-only)
+    fi
+    .venv/bin/python tpu/easydel_tpu_smoke.py \
+      --base-model Qwen/Qwen3.5-9B \
+      --model-path "$MODEL_DIR" \
+      --tokenizer-path "$MODEL_DIR" \
+      --no-from-torch \
+      --use-scan-mlp \
+      --coordinator-address "$COORDINATOR_ADDRESS" \
+      --num-processes 2 \
+      --distributed-service-name "$ESURGE_SERVICE_NAME" \
+      --distributed-host "${WORKER_HOST_PREFIX}-w-0" \
+      --distributed-host "${WORKER_HOST_PREFIX}-w-1" \
+      --tp 4 \
+      --sp 2 \
+      --long-context-lengths "__LONG_CONTEXT_LENGTHS__" \
+      --progress-uri "${RESULT_PREFIX}/output/long-context-progress.json" \
+      "${MODE_ARGS[@]}" \
+      "${RESUME_ARGS[@]}" \
+      --output-dir "$OUTPUT_DIR"
+    gcloud storage cp --recursive "$OUTPUT_DIR" "${RESULT_PREFIX}/"
+    printf 'passed\n' > "${BOOT}/status.txt"
+    gcloud storage cp "${BOOT}/status.txt" "$STATUS_URI"
+
+tpu:
+  project: vision-mix
+  allocation_mode: queued-resources
+  accelerator: v5p-16
+  num_workers: 2
+  name: hk4638-__RUN_ID__
+  zone: us-east5-a
+  version: v2-alpha-tpuv5
+  pricing: __TPU_PRICING__
+  flags: __TPU_FLAGS__
+  tags: ["jobman", "skyrl", "easydel", "smoke"]
+  metadata:
+    owner: hk4638
+    purpose: easydel-tinker-backend-smoke
+
+gcsfuse: null
+
+ssh:
+  private_key: ~/.ssh/google_compute_engine
+  identities:
+    - private_key: ~/.ssh/google_compute_engine
+      public_key: ~/.ssh/google_compute_engine.pub
+      config_entry: |
+        Host 10.* 34.* 35.*
+          IdentityFile ~/.ssh/google_compute_engine
+          IdentitiesOnly yes
+
+venv:
+  name: easydel_tpu_smoke
+  requirements_file: /dev/null
+  python: python3.10

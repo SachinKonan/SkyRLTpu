@@ -4,8 +4,6 @@ import asyncio
 import base64
 from typing import TYPE_CHECKING, NamedTuple, Union
 
-import torch
-
 from skyrl.tinker.types import (
     EncodedTextChunk,
     ImageAssetPointerChunk,
@@ -17,6 +15,8 @@ from skyrl.tinker.types import (
 )
 
 if TYPE_CHECKING:
+    import torch
+
     from skyrl.backends.skyrl_train.inference_servers.remote_inference_client import (
         RemoteInferenceClient,
     )
@@ -45,6 +45,7 @@ def decode_mm_kwargs(mm_kwargs: dict[str, list[str]] | None) -> MultiModalKwargs
     if not mm_kwargs or "image" not in mm_kwargs:
         return MultiModalKwargs(pixel_values=None, image_grid_thw=None)
 
+    import torch
     from vllm.entrypoints.serve.disagg.mm_serde import (
         decode_mm_kwargs_item as _vllm_decode,
     )

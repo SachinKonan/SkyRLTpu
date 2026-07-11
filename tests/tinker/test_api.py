@@ -1,7 +1,9 @@
 """Tests for the Tinker API mock server using the real tinker client."""
 
 import asyncio
+import json
 import os
+import socket
 import subprocess
 import tempfile
 import urllib.request
@@ -20,10 +22,20 @@ from tests.tinker.conftest import api_server_is_up, wait_for_condition
 BASE_MODEL = "trl-internal-testing/tiny-Qwen3ForCausalLM"
 
 
-TEST_SERVER_PORT = 8000
+def _test_port(env_name: str) -> int:
+    configured = os.environ.get(env_name)
+    if configured is not None:
+        return int(configured)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+TEST_SERVER_PORT = _test_port("SKYRL_TEST_SERVER_PORT")
 
 # Configs for the fast cleanup test
-TEST_SERVER_PORT_FAST_CLEANUP = 8001
+TEST_SERVER_PORT_FAST_CLEANUP = _test_port("SKYRL_TEST_SERVER_PORT_FAST_CLEANUP")
+TEST_SERVER_PORT_EASYDEL = _test_port("SKYRL_TEST_SERVER_PORT_EASYDEL")
 FAST_CLEANUP_INTERVAL_SEC = 1  # How often to check for stale sessions
 FAST_CLEANUP_TIMEOUT_SEC = 3  # Seconds without heartbeat before session is stale
 
@@ -267,6 +279,63 @@ def test_training_workflow(service_client):
     assert training_run.corrupted is False
 
 
+@pytest.mark.skipif(
+    os.environ.get("SKYRL_RUN_EASYDEL_API_INTEGRATION") != "1",
+    reason="real-process EasyDeL API regression is opt-in",
+)
+def test_easydel_real_process_training_and_sampling_workflow():
+    """Exercise EasyDeL only through the unmodified public Tinker client."""
+    overrides = {
+        "port": str(TEST_SERVER_PORT_EASYDEL),
+        "backend": "easydel",
+        "backend-config": json.dumps(
+            {
+                "max_lora_adapters": 4,
+                "max_lora_rank": 32,
+                "train_micro_batch_size": 1,
+                "use_scan_mlp": False,
+                "sample_max_model_len": 64,
+                "sample_max_num_sequences": 2,
+                "sample_hbm_utilization": 0.1,
+            }
+        ),
+    }
+    with start_api_server(overrides=overrides, extras=("tinker", "easydel"), wait_for_up=True):
+        service = tinker.ServiceClient(
+            base_url=f"http://127.0.0.1:{TEST_SERVER_PORT_EASYDEL}",
+            api_key=TINKER_API_KEY,
+        )
+        training = service.create_lora_training_client(base_model=BASE_MODEL)
+        tokenizer = training.get_tokenizer()
+        examples = [make_datum(tokenizer, "Question: What is 2+2?\nAnswer:", " 4")]
+
+        initial_sampler = training.save_weights_and_get_sampling_client(name="initial")
+        prompt = types.ModelInput.from_ints(tokenizer.encode("Question: What is 2+2?\nAnswer:"))
+        initial = initial_sampler.sample(
+            prompt=prompt,
+            sampling_params=types.SamplingParams(temperature=0.0, max_tokens=2, seed=7),
+            num_samples=1,
+        ).result()
+        assert initial.sequences[0].tokens
+
+        forward = training.forward_backward(examples, "cross_entropy").result()
+        step = training.optim_step(types.AdamParams(learning_rate=1e-4)).result()
+        assert any(value != 0 for value in forward.loss_fn_outputs[0]["elementwise_loss"].data)
+        assert step.metrics["skyrl.ai/grad_norm"] > 0
+
+        state_path = training.save_state(name="updated").result().path
+        updated_sampler = training.save_weights_and_get_sampling_client(name="updated")
+        training.load_state(state_path)
+        restored = service.create_training_client_from_state(state_path)
+        assert restored.forward(examples, "cross_entropy").result() is not None
+        updated = updated_sampler.sample(
+            prompt=prompt,
+            sampling_params=types.SamplingParams(temperature=0.0, max_tokens=2, seed=11),
+            num_samples=1,
+        ).result()
+        assert updated.sequences[0].tokens
+
+
 @pytest.mark.parametrize("use_lora", [False, True], ids=["base_model", "lora_model"])
 def test_sample(service_client, use_lora):
     """Test the sample endpoint with base model or LoRA adapter."""
@@ -508,6 +577,25 @@ def test_stale_session_cleanup(api_server_fast_cleanup):
             EngineConfig(backend="jax", base_model="Qwen/Qwen3-0.6B"),
             ["uv", "run", "-m", "skyrl.tinker.api"],
             ["uv", "run", "--extra", "tinker", "--extra", "jax", "-m", "skyrl.tinker.engine"],
+        ),
+        # EasyDeL learner with its co-located eSurge frontend.
+        (
+            EngineConfig(backend="easydel", base_model="Qwen/Qwen3.5-9B"),
+            ["uv", "run", "--extra", "tinker", "--extra", "easydel", "-m", "skyrl.tinker.api"],
+            [
+                "uv",
+                "run",
+                "--extra",
+                "tinker",
+                "--extra",
+                "easydel",
+                "--extra",
+                "tinker",
+                "--extra",
+                "easydel",
+                "-m",
+                "skyrl.tinker.engine",
+            ],
         ),
         # skyrl-train backend, with args
         (
