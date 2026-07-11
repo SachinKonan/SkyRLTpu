@@ -18,6 +18,8 @@ command:
     export DATA_ARCHIVE_URI="__DATA_ARCHIVE_URI__"
     export RESULT_PREFIX="__RESULT_PREFIX__"
     export RESTORE_RESULT_PREFIX="__RESTORE_RESULT_PREFIX__"
+    export RESTORE_MODEL_ID="__RESTORE_MODEL_ID__"
+    export RESTORE_CHECKPOINT_IDS="__RESTORE_CHECKPOINT_IDS__"
     export RUN_ID="__RUN_ID__"
     export WORKLOAD_MODE="__WORKLOAD_MODE__"
     export ENABLE_DISTRIBUTED_INIT=0
@@ -152,6 +154,23 @@ command:
     gcloud storage cp "$DATA_ARCHIVE_URI" "${BOOT}/data/train.jsonl.gz"
     gzip -dc "${BOOT}/data/train.jsonl.gz" > "${BOOT}/data/train.jsonl"
 
+    # Eval servers restore only explicitly selected, completed checkpoints.
+    # This removes pending futures from a live training snapshot before the API
+    # starts, so an eval allocation cannot replay work from the source run.
+    if [ -n "${RESTORE_MODEL_ID}" ] && [ -n "${RESTORE_CHECKPOINT_IDS}" ]; then
+      CHECKPOINT_ARGS=()
+      IFS=',' read -ra CHECKPOINT_NAMES <<< "${RESTORE_CHECKPOINT_IDS}"
+      for CHECKPOINT_NAME in "${CHECKPOINT_NAMES[@]}"; do
+        CHECKPOINT_ARGS+=(--checkpoint-id "${CHECKPOINT_NAME}")
+      done
+      .venv/bin/python tpu/citation_v4/prepare_tinker_rl_seed.py \
+        --source "${BOOT}/tinker.db" \
+        --output "${BOOT}/tinker.eval.db" \
+        --model-id "${RESTORE_MODEL_ID}" \
+        "${CHECKPOINT_ARGS[@]}"
+      mv "${BOOT}/tinker.eval.db" "${BOOT}/tinker.db"
+    fi
+
     # TPU queued resources can be preempted without running EXIT traps. Mirror
     # checkpoint state while training so datapoint checkpoints remain durable.
     periodic_checkpoint_upload() {
@@ -200,7 +219,7 @@ command:
         'use_scan_mlp': True,
         'lmhead_token_chunk_size': 128,
         'lmhead_vocab_chunk_size': 32768,
-        'sample_max_model_len': 60000,
+        'sample_max_model_len': __SAMPLE_MAX_MODEL_LEN__,
         'sample_max_num_sequences': __SAMPLE_MAX_NUM_SEQUENCES__,
         'sample_hbm_utilization': __SAMPLE_HBM_UTILIZATION__,
     }))

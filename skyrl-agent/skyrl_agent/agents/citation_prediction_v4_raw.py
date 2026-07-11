@@ -31,6 +31,26 @@ class CitationPredictionV4RawAgent(ReActAgent):
         # Keep MessageEncoder on the same plain chat template used by SFT/GPU RL.
         self.tool_params = []
         self.citation_env: CitationPredictionV4Env | None = None
+        self.context_final_turn_forced = False
+
+    @staticmethod
+    def _context_final_turn_message() -> str:
+        return os.getenv(
+            "CITATION_FINAL_TURN_CONTEXT_MESSAGE",
+            "<information>\nMaximum context budget reached. No more searches are allowed. "
+            "Use only papers already observed in previous search results. Now emit final "
+            "<citation>arxiv_id</citation> tags followed by <done></done>.\n</information>",
+        )
+
+    def _projected_context_length(self, observations: list[dict[str, Any]]) -> int:
+        projected_messages = [*self.history.messages, *observations]
+        return len(
+            self.message_encoder.encode_messages(
+                projected_messages,
+                self.tool_params,
+                is_first_message=True,
+            )
+        )
 
     def _init_message(self, instruction: list[dict]) -> None:
         if not isinstance(instruction, list):
@@ -71,8 +91,11 @@ class CitationPredictionV4RawAgent(ReActAgent):
         result = None
         try:
             input_ids, sampling_params = self._prepare_llm_input()
-            if self.response_token_len >= self.max_prompt_length:
+            remaining_context = self.max_prompt_length - len(input_ids)
+            if remaining_context <= 0:
                 raise ContextWindowExceeded()
+            configured_max_tokens = int((self.sampling_params or {}).get("max_tokens", remaining_context))
+            sampling_params["max_tokens"] = min(configured_max_tokens, remaining_context)
 
             response_str, meta_info = await self._generate_with_recording(
                 input_ids=input_ids,
@@ -87,6 +110,14 @@ class CitationPredictionV4RawAgent(ReActAgent):
 
             if self.citation_env is None:
                 raise RuntimeError("citation environment was not initialized")
+            if self.context_final_turn_forced and "<search>" in response_str:
+                mark_citation_protocol_violation(
+                    self.instance_id,
+                    self.trajectory_id,
+                    "context_final_turn_searched",
+                )
+                result = StepResult.finished("FINISH", self._assistant_transcript())
+                return result.to_tuple()
             env_result = self.citation_env.step(response_str)
             if env_result.get("metadata", {}).get("limit_violation"):
                 reason = str(env_result["metadata"].get("limit_violation_reason", "protocol_violation"))
@@ -95,7 +126,18 @@ class CitationPredictionV4RawAgent(ReActAgent):
             if env_result["done"]:
                 result = StepResult.finished("FINISH", self._assistant_transcript())
             else:
-                for observation in env_result["observations"]:
+                observations = list(env_result["observations"])
+                force_final = os.getenv("CITATION_FORCE_FINAL_TURN_ON_MAX_INPUT_LENGTH", "0") == "1"
+                reserve = int(os.getenv("CITATION_FINAL_TURN_CONTEXT_RESERVE_TOKENS", "2048"))
+                if (
+                    force_final
+                    and not self.context_final_turn_forced
+                    and observations
+                    and self._projected_context_length(observations) > max(0, self.max_prompt_length - reserve)
+                ):
+                    observations = [{"role": "user", "content": self._context_final_turn_message()}]
+                    self.context_final_turn_forced = True
+                for observation in observations:
                     self.history.add_user_guidance(str(observation["content"]))
                 result = StepResult.continuing(response_str)
         except StepException as exc:

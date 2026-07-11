@@ -16,6 +16,7 @@ else
   SAMPLE_MAX_NUM_SEQUENCES="${SAMPLE_MAX_NUM_SEQUENCES:-2}"
   SAMPLE_HBM_UTILIZATION="${SAMPLE_HBM_UTILIZATION:-0.05}"
 fi
+SAMPLE_MAX_MODEL_LEN="${SAMPLE_MAX_MODEL_LEN:-60000}"
 case "$MODE" in
   canary)
     LOCAL_DATA="${LOCAL_DATA:-/scratch/gpfs/ZHUANGL/hk4638/data/citation_prediction_v4/tpu_stage/conservative_qwen35_ctx60k_canary.jsonl.gz}"
@@ -34,6 +35,8 @@ RUN_ID="${RUN_ID:-citation-sft-qwen35-9b-${MODE}-$(date -u +%Y%m%d-%H%M%S)}"
 BUCKET="${TPU_BUCKET:-hk4638-autoresearch-tpu-us-east5}"
 PREFIX="${RESULT_PREFIX_OVERRIDE:-gs://${BUCKET}/skyrl-tpu/citation-v4/sft/${RUN_ID}}"
 RESTORE_RESULT_PREFIX="${RESTORE_RESULT_PREFIX:-${PREFIX}/results}"
+RESTORE_MODEL_ID="${RESTORE_MODEL_ID:-}"
+RESTORE_CHECKPOINT_IDS="${RESTORE_CHECKPOINT_IDS:-}"
 DATA_URI="gs://${BUCKET}/citation-v4-data/$(basename "$LOCAL_DATA")"
 STAGE="${TMPDIR:-/tmp}/${RUN_ID}"
 ARCHIVE="${STAGE}/source.tar.gz"
@@ -64,10 +67,13 @@ sed \
   -e "s#__DATA_ARCHIVE_URI__#${DATA_URI}#g" \
   -e "s#__RESULT_PREFIX__#${PREFIX}/results#g" \
   -e "s#__RESTORE_RESULT_PREFIX__#${RESTORE_RESULT_PREFIX}#g" \
+  -e "s#__RESTORE_MODEL_ID__#${RESTORE_MODEL_ID}#g" \
+  -e "s#__RESTORE_CHECKPOINT_IDS__#${RESTORE_CHECKPOINT_IDS}#g" \
   -e "s#__RUN_ID__#${RUN_ID}#g" \
   -e "s#__WORKLOAD_MODE__#${WORKLOAD_MODE}#g" \
   -e "s#__SAMPLE_MAX_NUM_SEQUENCES__#${SAMPLE_MAX_NUM_SEQUENCES}#g" \
   -e "s#__SAMPLE_HBM_UTILIZATION__#${SAMPLE_HBM_UTILIZATION}#g" \
+  -e "s#__SAMPLE_MAX_MODEL_LEN__#${SAMPLE_MAX_MODEL_LEN}#g" \
   -e "s#__BATCH_SIZE__#${BATCH_SIZE}#g" \
   -e "s#__SAVE_EVERY_EXAMPLES__#${SAVE_EVERY_EXAMPLES}#g" \
   -e "s#__CHECKPOINT_UPLOAD_SECONDS__#${CHECKPOINT_UPLOAD_SECONDS}#g" \

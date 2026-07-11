@@ -18,7 +18,7 @@ class _Tokenizer:
         text = "".join(f"{item['role']}:{item['content']}\n" for item in messages)
         if add_generation_prompt:
             text += "assistant:"
-        return [ord(char) % 251 + 1 for char in text]
+        return [ord(char) % 251 + 1 for char in text] + [self.eos_token_id]
 
 
 class _Backend:
@@ -35,6 +35,36 @@ class _DoneEnv:
 
     def step(self, _response):
         return {"observations": [], "reward": 1.0, "done": True, "metadata": {}}
+
+
+class _SearchThenDoneBackend:
+    def __init__(self):
+        self.calls = 0
+
+    async def async_generate_ids(self, **_kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            response = "<question>topic</question><search>query</search>"
+        else:
+            response = "<citation>2401.00001</citation><done></done>"
+        return response, {"output_tokens": [11, 12, 13], "logprobs": [-0.1] * 3, "finish_reason": "stop"}
+
+
+class _LargeObservationEnv:
+    tool_group = None
+
+    def init(self, _instruction):
+        return None
+
+    def step(self, response):
+        if "<done>" in response:
+            return {"observations": [], "reward": 1.0, "done": True, "metadata": {}}
+        return {
+            "observations": [{"role": "user", "content": "x" * 1800}],
+            "reward": 0.0,
+            "done": False,
+            "metadata": {},
+        }
 
 
 def _instance():
@@ -93,3 +123,28 @@ def test_protocol_violation_forces_zero_reward():
         )
     )
     assert reward == 0.0
+
+
+def test_context_guard_replaces_large_observation_with_final_turn(monkeypatch):
+    config = TrajectoryConfig(
+        instance_id=0,
+        trajectory_id=0,
+        max_prompt_length=2048,
+        sampling_params={"temperature": 0.6, "top_p": 1.0, "top_k": 20, "max_tokens": 128},
+        qwen3_enable_thinking=False,
+        qwen3_acc_thinking=False,
+        max_iterations=3,
+        tools=[],
+    )
+    agent = CitationPredictionV4RawAgent(config, _SearchThenDoneBackend(), _Tokenizer())
+    monkeypatch.setattr(agent, "_make_env", lambda _row: _LargeObservationEnv())
+    monkeypatch.setenv("CITATION_FORCE_FINAL_TURN_ON_MAX_INPUT_LENGTH", "1")
+    monkeypatch.setenv("CITATION_FINAL_TURN_CONTEXT_RESERVE_TOKENS", "512")
+
+    reason, result = asyncio.run(agent.run(CitationPredictionV4RawTask.get_instruction(_instance()), _instance()))
+
+    assert reason == "FINISH"
+    assert result.endswith("<citation>2401.00001</citation><done></done>")
+    assert agent.context_final_turn_forced is True
+    assert "Maximum context budget reached" in agent.get_messages()[-2]["content"]
+    assert "x" * 1800 not in agent.get_messages()[-2]["content"]

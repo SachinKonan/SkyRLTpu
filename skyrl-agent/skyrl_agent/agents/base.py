@@ -622,6 +622,22 @@ class AgentRunner:
             "stop_reasons": [None] * len(prompt_input_ids),
             "rollout_logprobs": logprobs,
             "rollout_metrics": rollout_metrics,
+            # Keep a compact, JSON-serializable view for eval-only callers.
+            # Training ignores this field; omitting transitions avoids copying
+            # token/logprob payloads a second time.
+            "trajectory_results": [
+                {
+                    "instance_id": result.get("instance_id"),
+                    "trajectory_id": result.get("trajectory_id"),
+                    "reward": result.get("reward", 0.0),
+                    "finish_reason": result.get("finish_reason"),
+                    "eval_error": result.get("eval_error"),
+                    "result": result.get("results"),
+                    "messages": copy.deepcopy(result.get("messages", [])),
+                    "state": copy.deepcopy(result.get("state", {})),
+                }
+                for result in matched_results
+            ],
         }
 
         return output

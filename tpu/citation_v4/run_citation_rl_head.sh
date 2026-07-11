@@ -254,9 +254,10 @@ export CITATION_TOP_K="${CITATION_TOP_K:-5}"
 export CITATION_COUNT_PATH="${CITATION_COUNT_PATH:-/scratch/gpfs/ZHUANGL/hk4638/SemanticScholar/arxiv_impact_counts_s2.csv}"
 export CITATION_METRIC_BETA="${CITATION_METRIC_BETA:-0.5}"
 
+CLIENT_SCRIPT="${CITATION_HEAD_CLIENT_SCRIPT:-${ROOT_DIR}/skyrl-agent/examples/run_tinker/tinker_citation_prediction_v4.sh}"
 OUTPUT_DIR="${OUTPUT_DIR:-${RUN_DIR}}" \
 WANDB_NAME="${WANDB_NAME:-${RUN_NAME}}" \
-bash "${ROOT_DIR}/skyrl-agent/examples/run_tinker/tinker_citation_prediction_v4.sh" "$@"
+bash "${CLIENT_SCRIPT}" "$@"
 
 COMPLETE_TMP="${HEAD_COMPLETE_FILE}.tmp.$$"
 printf 'run_name=%s\ncompleted_at=%s\n' "${RUN_NAME}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${COMPLETE_TMP}"
