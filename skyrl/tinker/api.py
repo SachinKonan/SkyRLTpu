@@ -494,6 +494,11 @@ class Datum(BaseModel):
                 weights=weights,
                 advantages=inp["advantages"].to_types() if "advantages" in inp else types.TensorData(data=[]),
                 logprobs=inp["logprobs"].to_types() if "logprobs" in inp else types.TensorData(data=[]),
+                rollout_logprobs=(
+                    inp["rollout_logprobs"].to_types()
+                    if "rollout_logprobs" in inp
+                    else types.TensorData(data=[])
+                ),
                 values=inp["values"].to_types() if "values" in inp else types.TensorData(data=[]),
                 returns=inp["returns"].to_types() if "returns" in inp else types.TensorData(data=[]),
             ),
@@ -503,10 +508,23 @@ class Datum(BaseModel):
 
 class ForwardBackwardInput(BaseModel):
     _ALLOWED_KEYS_BY_LOSS_FN: ClassVar[dict[str, set[str]]] = {
-        "cross_entropy": set(),
-        "importance_sampling": set(),
-        "ppo": {"clip_low_threshold", "clip_high_threshold", "value_clip"},
-        "cispo": {"clip_low_threshold", "clip_high_threshold"},
+        "cross_entropy": {"token_mean"},
+        "importance_sampling": {"tis_imp_ratio_cap", "old_logprobs_from_target", "token_mean"},
+        "ppo": {
+            "clip_low_threshold",
+            "clip_high_threshold",
+            "value_clip",
+            "tis_imp_ratio_cap",
+            "old_logprobs_from_target",
+            "token_mean",
+        },
+        "cispo": {
+            "clip_low_threshold",
+            "clip_high_threshold",
+            "tis_imp_ratio_cap",
+            "old_logprobs_from_target",
+            "token_mean",
+        },
         "ppo_critic": {"value_clip"},
     }
 

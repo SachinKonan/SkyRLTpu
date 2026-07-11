@@ -149,6 +149,7 @@ class LossFnInputs(BaseModel):
     weights: TensorData
     advantages: TensorData
     logprobs: TensorData
+    rollout_logprobs: TensorData = Field(default_factory=lambda: TensorData(data=[]))
     values: TensorData = Field(default_factory=lambda: TensorData(data=[]))
     returns: TensorData = Field(default_factory=lambda: TensorData(data=[]))
 
@@ -292,6 +293,7 @@ class PreparedModelPassBatch(BaseModel):
     all_targets: list[list[int]]
     all_token_weights: list[list[float]]
     all_sampling_logprobs: list[list[float]]
+    all_rollout_logprobs: list[list[float]] = Field(default_factory=list)
     all_advantages: list[list[float]]
     all_values: list[list[float]]
     all_returns: list[list[float]]

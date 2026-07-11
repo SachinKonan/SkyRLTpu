@@ -2,6 +2,16 @@
 
 This directory contains the TPU launch wrappers used for the SkyRLTpu checkout.
 
+## Citation v4
+
+[`citation_v4/README.md`](citation_v4/README.md) covers the Qwen3.5-9B
+conservative SFT and citation-v4 GRPO/CISPO path on a two-host `v5p-16`.
+`citation_v4/submit_citation_sft.sh` stages the 60K-context dataset locally
+on each TPU VM and checkpoints every 2,000 examples plus the final example.
+`citation_v4/submit_citation_rl.sh` restores a sanitized SFT checkpoint,
+provisions the EasyDeL Tinker server, maintains the retriever sidecar, and
+performs durable teardown after RL.
+
 ## vLLM TPU LoRA
 
 `start_vllm_tpu.sh` starts an external vLLM TPU server for sampling. It pins

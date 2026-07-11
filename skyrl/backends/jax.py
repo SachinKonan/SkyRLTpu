@@ -43,7 +43,7 @@ from skyrl.backends.renderer import render_model_input
 from skyrl.backends.utils import pad, pad_batch, pad_to_fsdp
 from skyrl.backends.vllm_sampling import VllmSamplingClient
 from skyrl.tinker import types
-from skyrl.tinker.loss_fns import LOSS_FUNCTIONS, LossFnConfig
+from skyrl.tinker.loss_fns import LossFnConfig, compute_per_token_losses, reduce_per_sequence_losses
 from skyrl.tinker.types import LOSS_TYPES
 from skyrl.tx.layers.connectors import is_connector_path
 from skyrl.tx.layers.lora import clear_lora_adapter, init_lora_adapter
@@ -462,6 +462,13 @@ class JaxBackendImpl(AbstractBackend):
         return LossFnConfig(
             clip_low_threshold=clip_low_threshold,
             clip_high_threshold=clip_high_threshold,
+            tis_imp_ratio_cap=np.asarray(
+                [float(config.get("tis_imp_ratio_cap", -1.0)) for config in configs], dtype=np.float32
+            ),
+            old_logprobs_from_target=np.asarray(
+                [float(config.get("old_logprobs_from_target", 0.0)) for config in configs], dtype=np.float32
+            ),
+            token_mean=np.asarray([float(config.get("token_mean", 0.0)) for config in configs], dtype=np.float32),
         )
 
     @contextmanager
@@ -515,6 +522,7 @@ class JaxBackendImpl(AbstractBackend):
             loss_mask: jax.Array,
             loss_fn_types: jax.Array,
             sampling_logprobs: jax.Array,
+            rollout_logprobs: jax.Array,
             advantages: jax.Array,
             loss_fn_config: LossFnConfig,
         ) -> tuple[jax.Array, tuple[jax.Array, jax.Array]]:
@@ -528,34 +536,17 @@ class JaxBackendImpl(AbstractBackend):
                 target_ids,
             )
 
-            def compute_loss_per_example(
-                loss_fn_type,
-                target_logprobs,
-                loss_mask,
-                sampling_logprobs,
-                advantages,
-                loss_fn_config,
-            ):
-                return jax.lax.switch(
-                    loss_fn_type,
-                    LOSS_FUNCTIONS,
-                    target_logprobs,
-                    loss_mask,
-                    sampling_logprobs,
-                    advantages,
-                    loss_fn_config,
-                )
-
-            per_token_losses = jax.vmap(compute_loss_per_example)(
+            per_token_losses = compute_per_token_losses(
                 loss_fn_types,
                 target_logprobs,
                 loss_mask,
                 sampling_logprobs,
+                rollout_logprobs,
                 advantages,
                 loss_fn_config,
             )
 
-            per_seq_loss = per_token_losses.sum(axis=-1) / jnp.maximum(loss_mask.sum(axis=-1), 1e-9)
+            per_seq_loss = reduce_per_sequence_losses(per_token_losses, loss_mask, loss_fn_config)
             # Return sum of losses (we'll divide gradients by per-adapter batch size later)
             return per_seq_loss.sum(), (target_logprobs, per_token_losses)
 
@@ -573,6 +564,7 @@ class JaxBackendImpl(AbstractBackend):
             loss_mask: jax.Array,
             loss_fn_types: jax.Array,
             sampling_logprobs: jax.Array,
+            rollout_logprobs: jax.Array,
             advantages: jax.Array,
             loss_fn_config: LossFnConfig,
         ) -> tuple[AccumulatedGradients, jax.Array, jax.Array]:
@@ -586,6 +578,7 @@ class JaxBackendImpl(AbstractBackend):
                 loss_mask,
                 loss_fn_types,
                 sampling_logprobs,
+                rollout_logprobs,
                 advantages,
                 loss_fn_config,
             )
@@ -602,6 +595,7 @@ class JaxBackendImpl(AbstractBackend):
             loss_mask: jax.Array,
             loss_fn_types: jax.Array,
             sampling_logprobs: jax.Array,
+            rollout_logprobs: jax.Array,
             advantages: jax.Array,
             loss_fn_config: LossFnConfig,
         ) -> tuple[AccumulatedGradients, jax.Array, jax.Array]:
@@ -617,6 +611,7 @@ class JaxBackendImpl(AbstractBackend):
                 loss_mask,
                 loss_fn_types,
                 sampling_logprobs,
+                rollout_logprobs,
                 advantages,
                 loss_fn_config,
             )
@@ -654,6 +649,9 @@ class JaxBackendImpl(AbstractBackend):
             loss_fn_config_shardings = LossFnConfig(
                 clip_low_threshold=batch_sharded_1d,
                 clip_high_threshold=batch_sharded_1d,
+                tis_imp_ratio_cap=batch_sharded_1d,
+                old_logprobs_from_target=batch_sharded_1d,
+                token_mean=batch_sharded_1d,
             )
             input_shardings = (
                 batch_sharded_2d,  # input_ids
@@ -663,6 +661,7 @@ class JaxBackendImpl(AbstractBackend):
                 batch_sharded_2d,  # loss_mask
                 batch_sharded_1d,  # loss_fn_types (sharded, used in vmap over batch)
                 batch_sharded_2d,  # sampling_logprobs
+                batch_sharded_2d,  # rollout_logprobs
                 batch_sharded_2d,  # advantages
             )
             self._forward_backward_and_accumulate = jax.jit(
@@ -796,6 +795,7 @@ class JaxBackendImpl(AbstractBackend):
         all_targets = prepared_batch.all_targets
         all_token_weights = prepared_batch.all_token_weights
         all_sampling_logprobs = prepared_batch.all_sampling_logprobs
+        all_rollout_logprobs = prepared_batch.all_rollout_logprobs or [[] for _ in all_sampling_logprobs]
         all_advantages = prepared_batch.all_advantages
         all_loss_fn_types = [LOSS_TYPES[name] for name in prepared_batch.all_loss_fns]
         all_loss_fn_configs = prepared_batch.all_loss_fn_configs
@@ -817,6 +817,8 @@ class JaxBackendImpl(AbstractBackend):
         attention_mask = pad_batch([[1] * len(seq) for seq in all_input_ids], max_len, np.int32)
         loss_mask = pad_batch(all_token_weights, max_len, np.float32)
         sampling_logprobs = pad_batch(all_sampling_logprobs, max_len, np.float32)
+        rollout_rows = [values if values else old for values, old in zip(all_rollout_logprobs, all_sampling_logprobs)]
+        rollout_logprobs = pad_batch(rollout_rows, max_len, np.float32)
         advantages = pad_batch(all_advantages, max_len, np.float32)
 
         total_bs = int(input_ids.shape[0])
@@ -844,11 +846,15 @@ class JaxBackendImpl(AbstractBackend):
                     mb_target_ids,
                     mb_loss_mask,
                     mb_sampling_logprobs,
+                    mb_rollout_logprobs,
                     mb_advantages,
                     mb_adapter_indices,
                     mb_loss_fn_types,
                     mb_clip_low_threshold,
                     mb_clip_high_threshold,
+                    mb_tis_imp_ratio_cap,
+                    mb_old_logprobs_from_target,
+                    mb_token_mean,
                 ) = jax.device_put(
                     (
                         pad_to_fsdp(input_ids[mb_start:mb_end], fsdp_size),
@@ -856,17 +862,24 @@ class JaxBackendImpl(AbstractBackend):
                         pad_to_fsdp(target_ids[mb_start:mb_end], fsdp_size),
                         pad_to_fsdp(loss_mask[mb_start:mb_end], fsdp_size),
                         pad_to_fsdp(sampling_logprobs[mb_start:mb_end], fsdp_size),
+                        pad_to_fsdp(rollout_logprobs[mb_start:mb_end], fsdp_size),
                         pad_to_fsdp(advantages[mb_start:mb_end], fsdp_size),
                         pad_to_fsdp(adapter_indices[mb_start:mb_end], fsdp_size),
                         pad_to_fsdp(loss_fn_types[mb_start:mb_end], fsdp_size),
                         pad_to_fsdp(loss_fn_config.clip_low_threshold[mb_start:mb_end], fsdp_size),
                         pad_to_fsdp(loss_fn_config.clip_high_threshold[mb_start:mb_end], fsdp_size),
+                        pad_to_fsdp(loss_fn_config.tis_imp_ratio_cap[mb_start:mb_end], fsdp_size),
+                        pad_to_fsdp(loss_fn_config.old_logprobs_from_target[mb_start:mb_end], fsdp_size),
+                        pad_to_fsdp(loss_fn_config.token_mean[mb_start:mb_end], fsdp_size),
                     ),
-                    (sharding_2d,) * 6 + (sharding_1d,) * 4,
+                    (sharding_2d,) * 7 + (sharding_1d,) * 7,
                 )
                 mb_loss_fn_config = LossFnConfig(
                     clip_low_threshold=mb_clip_low_threshold,
                     clip_high_threshold=mb_clip_high_threshold,
+                    tis_imp_ratio_cap=mb_tis_imp_ratio_cap,
+                    old_logprobs_from_target=mb_old_logprobs_from_target,
+                    token_mean=mb_token_mean,
                 )
 
                 self.accumulated_grads, per_token_losses, target_logprobs = model_pass_fn(
@@ -880,6 +893,7 @@ class JaxBackendImpl(AbstractBackend):
                     mb_loss_mask,
                     mb_loss_fn_types,
                     mb_sampling_logprobs,
+                    mb_rollout_logprobs,
                     mb_advantages,
                     mb_loss_fn_config,
                 )

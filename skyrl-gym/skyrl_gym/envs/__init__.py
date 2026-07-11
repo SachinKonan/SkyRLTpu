@@ -37,6 +37,16 @@ register(
     entry_point="skyrl_gym.envs.searchcode.env:SearchCodeEnv",
 )
 
+register(
+    id="citation_prediction_v2",
+    entry_point="skyrl_gym.envs.citation_prediction_v2.env:CitationPredictionV2Env",
+)
+
+register(
+    id="citation_prediction_v4",
+    entry_point="skyrl_gym.envs.citation_prediction_v4.env:CitationPredictionV4Env",
+)
+
 __all__ = [
     "deregister",
     "register",

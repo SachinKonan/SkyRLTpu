@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from cloudpathlib import AnyPath
@@ -192,6 +193,45 @@ def scheduling_engine():
     enable_sqlite_wal(engine.db_engine)
     SQLModel.metadata.create_all(engine.db_engine)
     return engine
+
+
+@pytest.mark.parametrize("backend", ["jax", "easydel"])
+def test_find_batchable_sample_respects_backend_sequence_cap(scheduling_engine, backend):
+    """JAX-backed samplers dispatch rolling request chunks instead of one unbounded batch."""
+    engine = scheduling_engine
+    engine.config = SimpleNamespace(backend=backend)
+    engine.backend = SimpleNamespace(config=SimpleNamespace(sample_max_num_sequences=2))
+    prompt = types.ModelInput(chunks=[types.EncodedTextChunk(tokens=[1, 2, 3])])
+
+    with Session(engine.db_engine) as session:
+        for seed in range(3):
+            request = types.SampleInput(
+                base_model=BASE_MODEL,
+                prompt=prompt,
+                sampling_params=types.SamplingParams(
+                    temperature=0.7,
+                    max_tokens=4,
+                    seed=seed,
+                ),
+                num_samples=1,
+                checkpoint_id="",
+                prompt_logprobs=False,
+            )
+            session.add(
+                FutureDB(
+                    request_type=types.RequestType.SAMPLE,
+                    model_id="model_a",
+                    request_data=request.model_dump(),
+                    status=RequestStatus.PENDING,
+                )
+            )
+        session.commit()
+
+    with Session(engine.db_engine) as session:
+        batch = engine.find_batchable_sample(session)
+
+    assert list(batch) == ["1", "2"]
+    assert [request.sampling_params.seed for _, request in batch.values()] == [0, 1]
 
 
 def test_find_single_requests_respects_forward_backward_barriers(scheduling_engine):

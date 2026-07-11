@@ -27,6 +27,15 @@ def test_forward_backward_input_accepts_ppo_threshold_keys():
     assert req.loss_fn_config == {"clip_low_threshold": 0.9, "clip_high_threshold": 1.1}
 
 
+def test_forward_backward_input_accepts_cispo_tis_keys():
+    req = api.ForwardBackwardInput(
+        data=[_make_datum()],
+        loss_fn="cispo",
+        loss_fn_config={"tis_imp_ratio_cap": 2.0, "old_logprobs_from_target": 1.0},
+    )
+    assert req.loss_fn_config == {"tis_imp_ratio_cap": 2.0, "old_logprobs_from_target": 1.0}
+
+
 def test_forward_backward_input_accepts_ppo_value_clip():
     req = api.ForwardBackwardInput(
         data=[_make_datum()],
@@ -54,8 +63,8 @@ def test_forward_backward_input_rejects_invalid_ppo_loss_fn_config_keys():
         )
 
 
-def test_forward_backward_input_rejects_loss_fn_config_for_cross_entropy():
-    with pytest.raises(ValidationError, match="does not accept loss_fn_config keys"):
+def test_forward_backward_input_rejects_invalid_config_for_cross_entropy():
+    with pytest.raises(ValidationError, match="Invalid loss_fn_config keys"):
         api.ForwardBackwardInput(
             data=[_make_datum()],
             loss_fn="cross_entropy",
@@ -63,10 +72,32 @@ def test_forward_backward_input_rejects_loss_fn_config_for_cross_entropy():
         )
 
 
+def test_forward_backward_input_accepts_token_mean_for_cross_entropy():
+    req = api.ForwardBackwardInput(
+        data=[_make_datum()],
+        loss_fn="cross_entropy",
+        loss_fn_config={"token_mean": 1.0},
+    )
+    assert req.loss_fn_config == {"token_mean": 1.0}
+
+
 def test_datum_to_types_defaults_values_and_returns_to_empty():
     datum = _make_datum().to_types()
     assert datum.loss_fn_inputs.values.data == []
     assert datum.loss_fn_inputs.returns.data == []
+    assert datum.loss_fn_inputs.rollout_logprobs.data == []
+
+
+def test_datum_to_types_preserves_rollout_logprobs():
+    datum = api.Datum(
+        model_input=api.ModelInput(chunks=[api.EncodedTextChunk(tokens=[1, 2, 3])]),
+        loss_fn_inputs={
+            "target_tokens": api.TensorData(data=[2, 3, 4]),
+            "weights": api.TensorData(data=[1.0, 1.0, 1.0]),
+            "rollout_logprobs": api.TensorData(data=[-0.1, -0.2, -0.3]),
+        },
+    ).to_types()
+    assert datum.loss_fn_inputs.rollout_logprobs.data == [-0.1, -0.2, -0.3]
 
 
 def test_datum_to_types_preserves_values_and_returns():

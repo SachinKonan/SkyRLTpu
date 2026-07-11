@@ -1,0 +1,307 @@
+job:
+  name: hk4638-__RUN_ID__
+  env_type: null
+  loop: false
+  remote_user: hk4638
+  worker_num: auto
+  environment:
+    SOURCE_ARCHIVE_URI: __SOURCE_ARCHIVE_URI__
+    DATA_ARCHIVE_URI: __DATA_ARCHIVE_URI__
+    RESULT_PREFIX: __RESULT_PREFIX__
+    RUN_ID: __RUN_ID__
+
+command:
+  workers: all
+  cmd: |
+    set -euo pipefail
+    export SOURCE_ARCHIVE_URI="__SOURCE_ARCHIVE_URI__"
+    export DATA_ARCHIVE_URI="__DATA_ARCHIVE_URI__"
+    export RESULT_PREFIX="__RESULT_PREFIX__"
+    export RESTORE_RESULT_PREFIX="__RESTORE_RESULT_PREFIX__"
+    export RUN_ID="__RUN_ID__"
+    export WORKLOAD_MODE="__WORKLOAD_MODE__"
+    export ENABLE_DISTRIBUTED_INIT=0
+    unset JAX_PLATFORMS
+    export UV_CACHE_DIR=/home/hk4638/.cache/uv
+    export HF_HOME=/home/hk4638/huggingface
+    export TOKENIZERS_PARALLELISM=false
+    export MODEL_URI=gs://hk4638-autoresearch-tpu-us-east5/citation-v4-models/easydel/qwen35_9b/checkpoint.tar
+
+    detect_worker_id() {
+      if [ -n "${JOBMAN_WORKER_ID:-}" ]; then
+        printf '%s\n' "$JOBMAN_WORKER_ID"
+      elif [[ "$(hostname)" =~ -w-([0-9]+)$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+      else
+        curl -fsS -H 'Metadata-Flavor: Google' \
+          'http://metadata.google.internal/computeMetadata/v1/instance/attributes/worker-id'
+      fi
+    }
+
+    WORKER_ID="$(detect_worker_id)"
+    HOSTNAME_NOW="$(hostname)"
+    COORDINATOR_HOST="${HOSTNAME_NOW%-w-*}-w-0"
+    COORDINATOR_ADDRESS="${COORDINATOR_HOST}:7777"
+    ESURGE_SERVICE_NAME="esurge-${RUN_ID}"
+    WORKER_HOST_PREFIX="${HOSTNAME_NOW%-w-*}"
+    BOOT="/tmp/${RUN_ID}"
+    SOURCE_DIR="${BOOT}/source"
+    LOG="${BOOT}/worker-${WORKER_ID}.log"
+    STATUS_URI="${RESULT_PREFIX}/status.txt"
+    READY_URI="${RESULT_PREFIX}/worker-1-ready.txt"
+    mkdir -p "$SOURCE_DIR"
+    exec > >(tee -a "$LOG") 2>&1
+
+    ESURGE_HOST_LINES=""
+    for WORKER_INDEX in 0 1; do
+      WORKER_HOST="${WORKER_HOST_PREFIX}-w-${WORKER_INDEX}"
+      WORKER_IP="$(getent ahostsv4 "$WORKER_HOST" | awk 'NR == 1 { print $1 }')"
+      test -n "$WORKER_IP"
+      ESURGE_HOST_LINES="${ESURGE_HOST_LINES}${WORKER_IP} ${ESURGE_SERVICE_NAME}\n"
+    done
+    printf '%b' "$ESURGE_HOST_LINES" | sudo tee -a /etc/hosts >/dev/null
+
+    on_exit() {
+      EXIT_CODE="$?"
+      if [ -n "${CHECKPOINT_UPLOAD_PID:-}" ]; then
+        kill "$CHECKPOINT_UPLOAD_PID" 2>/dev/null || true
+        wait "$CHECKPOINT_UPLOAD_PID" 2>/dev/null || true
+      fi
+      gcloud storage cp "$LOG" "${RESULT_PREFIX}/worker-${WORKER_ID}.log" || true
+      if [ "$WORKER_ID" = "0" ]; then
+        [ ! -d "${BOOT}/client-output" ] || gcloud storage cp --recursive \
+          "${BOOT}/client-output" "${RESULT_PREFIX}/" || true
+        [ ! -d "${BOOT}/checkpoints" ] || gcloud storage cp --recursive \
+          "${BOOT}/checkpoints" "${RESULT_PREFIX}/" || true
+        [ ! -f "${BOOT}/api.log" ] || gcloud storage cp "${BOOT}/api.log" "${RESULT_PREFIX}/api.log" || true
+        [ ! -f "${BOOT}/tinker.db" ] || gcloud storage cp "${BOOT}/tinker.db" \
+          "${RESULT_PREFIX}/tinker.db" || true
+      fi
+      if [ "$EXIT_CODE" -ne 0 ] && ! gcloud storage ls "$STATUS_URI" >/dev/null 2>&1; then
+        printf 'failed\n' > "${BOOT}/status.txt"
+        gcloud storage cp "${BOOT}/status.txt" "$STATUS_URI" || true
+      fi
+    }
+    trap on_exit EXIT
+
+    gcloud storage cp "$SOURCE_ARCHIVE_URI" "${BOOT}/source.tar.gz"
+    tar -xzf "${BOOT}/source.tar.gz" -C "$SOURCE_DIR"
+    cd "$SOURCE_DIR"
+    export PATH="${HOME}/.local/bin:${PATH}"
+    if ! command -v uv >/dev/null 2>&1; then
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+    uv sync --extra tpu --extra tinker --extra easydel \
+      --no-install-package torch --no-install-package torchvision
+    uv pip install --python .venv/bin/python \
+      --index-url https://download.pytorch.org/whl/cpu 'torch==2.9.1'
+
+    MODEL_DIR="${BOOT}/qwen35-9b"
+    mkdir -p "$MODEL_DIR"
+    gcloud storage cp "$MODEL_URI" "${BOOT}/model.tar"
+    tar -xf "${BOOT}/model.tar" -C "$MODEL_DIR"
+    test -f "${MODEL_DIR}/config.json"
+
+    if [ "$WORKER_ID" = "1" ]; then
+      .venv/bin/python -m skyrl.backends.easydel \
+        --coordinator-address "$COORDINATOR_ADDRESS" \
+        --num-processes 2 \
+        --process-id 1 \
+        > "${BOOT}/backend-worker-1.log" 2>&1 &
+      BACKEND_PID="$!"
+      sleep 5
+      kill -0 "$BACKEND_PID"
+      printf 'ready\n' > "${BOOT}/worker-1-ready.txt"
+      gcloud storage cp "${BOOT}/worker-1-ready.txt" "$READY_URI"
+      for _ in $(seq 1 120960); do
+        if gcloud storage ls "$STATUS_URI" >/dev/null 2>&1; then
+          break
+        fi
+        if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+          for _ in $(seq 1 12); do
+            gcloud storage ls "$STATUS_URI" >/dev/null 2>&1 && break
+            sleep 5
+          done
+          gcloud storage ls "$STATUS_URI" >/dev/null 2>&1 || exit 1
+          break
+        fi
+        sleep 5
+      done
+      kill "$BACKEND_PID" 2>/dev/null || true
+      wait "$BACKEND_PID" 2>/dev/null || true
+      gcloud storage cp "${BOOT}/backend-worker-1.log" \
+        "${RESULT_PREFIX}/backend-worker-1.log" || true
+      test "$(gcloud storage cat "$STATUS_URI" 2>/dev/null || true)" = "passed"
+      exit 0
+    fi
+
+    for _ in $(seq 1 180); do
+      gcloud storage ls "$READY_URI" >/dev/null 2>&1 && break
+      sleep 5
+    done
+    gcloud storage ls "$READY_URI" >/dev/null
+
+    mkdir -p "${BOOT}/data" "${BOOT}/checkpoints" "${BOOT}/client-output"
+    # Reusing a run id after a TPU preemption restores API metadata, checkpoint
+    # archives, and client loop state before either SFT or RL reconnects.
+    gcloud storage cp "${RESTORE_RESULT_PREFIX}/tinker.db" "${BOOT}/tinker.db" 2>/dev/null || true
+    gcloud storage rsync --recursive "${RESTORE_RESULT_PREFIX}/checkpoints" \
+      "${BOOT}/checkpoints" 2>/dev/null || true
+    gcloud storage rsync --recursive "${RESTORE_RESULT_PREFIX}/client-output" \
+      "${BOOT}/client-output" 2>/dev/null || true
+    gcloud storage cp "$DATA_ARCHIVE_URI" "${BOOT}/data/train.jsonl.gz"
+    gzip -dc "${BOOT}/data/train.jsonl.gz" > "${BOOT}/data/train.jsonl"
+
+    # TPU queued resources can be preempted without running EXIT traps. Mirror
+    # checkpoint state while training so datapoint checkpoints remain durable.
+    periodic_checkpoint_upload() {
+      while true; do
+        gcloud storage rsync --recursive "${BOOT}/client-output" \
+          "${RESULT_PREFIX}/client-output" || true
+        gcloud storage rsync --recursive "${BOOT}/checkpoints" \
+          "${RESULT_PREFIX}/checkpoints" || true
+        if [ -f "${BOOT}/tinker.db" ]; then
+          "${SOURCE_DIR}/.venv/bin/python" - "${BOOT}/tinker.db" \
+            "${BOOT}/tinker.db.snapshot" <<'PY' || true
+    import sqlite3
+    import sys
+
+    source = sqlite3.connect(sys.argv[1])
+    target = sqlite3.connect(sys.argv[2])
+    with target:
+        source.backup(target)
+    target.close()
+    source.close()
+    PY
+          [ ! -f "${BOOT}/tinker.db.snapshot" ] || gcloud storage cp \
+            "${BOOT}/tinker.db.snapshot" "${RESULT_PREFIX}/tinker.db" || true
+        fi
+        sleep __CHECKPOINT_UPLOAD_SECONDS__
+      done
+    }
+    CHECKPOINT_UPLOAD_PID=""
+
+    BACKEND_CONFIG="$(${SOURCE_DIR}/.venv/bin/python - <<PY
+    import json
+    print(json.dumps({
+        'model_name_or_path': '${MODEL_DIR}',
+        'tokenizer_name_or_path': '${MODEL_DIR}',
+        'from_torch': False,
+        'coordinator_address': '${COORDINATOR_ADDRESS}',
+        'num_processes': 2,
+        'sample_distributed_service_name': '${ESURGE_SERVICE_NAME}',
+        'sample_distributed_hosts': [
+            '${WORKER_HOST_PREFIX}-w-0',
+            '${WORKER_HOST_PREFIX}-w-1',
+        ],
+        'tensor_parallel_size': 4,
+        'sequence_parallel_size': 2,
+        'train_micro_batch_size': 1,
+        'use_scan_mlp': True,
+        'lmhead_token_chunk_size': 128,
+        'lmhead_vocab_chunk_size': 32768,
+        'sample_max_model_len': 60000,
+        'sample_max_num_sequences': __SAMPLE_MAX_NUM_SEQUENCES__,
+        'sample_hbm_utilization': __SAMPLE_HBM_UTILIZATION__,
+    }))
+    PY
+    )"
+    export SKYRL_DATABASE_URL="sqlite:///${BOOT}/tinker.db"
+    uv run --offline --no-sync --extra tpu --extra tinker --extra easydel \
+      -m skyrl.tinker.api \
+      --base-model Qwen/Qwen3.5-9B \
+      --backend easydel \
+      --backend-config "$BACKEND_CONFIG" \
+      --checkpoints-base "${BOOT}/checkpoints" \
+      --host 127.0.0.1 \
+      --port 8000 \
+      > "${BOOT}/api.log" 2>&1 &
+    API_PID="$!"
+    for _ in $(seq 1 360); do
+      curl -fsS http://127.0.0.1:8000/api/v1/healthz >/dev/null 2>&1 && break
+      kill -0 "$API_PID"
+      sleep 5
+    done
+    curl -fsS http://127.0.0.1:8000/api/v1/healthz >/dev/null
+
+    periodic_checkpoint_upload > "${BOOT}/checkpoint-upload.log" 2>&1 &
+    CHECKPOINT_UPLOAD_PID="$!"
+
+    if [ "$WORKLOAD_MODE" = "server" ]; then
+      printf 'ready\n' > "${BOOT}/api-ready.txt"
+      gcloud storage cp "${BOOT}/api-ready.txt" "${RESULT_PREFIX}/api-ready.txt"
+      while ! gcloud storage ls "${RESULT_PREFIX}/stop.txt" >/dev/null 2>&1; do
+        kill -0 "$API_PID"
+        sleep 10
+      done
+      printf 'passed\n' > "${BOOT}/status.txt"
+      gcloud storage cp "${BOOT}/status.txt" "$STATUS_URI"
+      kill "$CHECKPOINT_UPLOAD_PID" 2>/dev/null || true
+      wait "$CHECKPOINT_UPLOAD_PID" 2>/dev/null || true
+      CHECKPOINT_UPLOAD_PID=""
+      kill "$API_PID" 2>/dev/null || true
+      wait "$API_PID" 2>/dev/null || true
+      exit 0
+    fi
+
+    .venv/bin/python skyrl-agent/skyrl_agent/integrations/tinker/tinker_sft_train.py \
+      model_name=Qwen/Qwen3.5-9B \
+      tinker_base_url=http://127.0.0.1:8000 \
+      tinker_api_key=tml-dummy \
+      dataset_file="${BOOT}/data/train.jsonl" \
+      output_dir="${BOOT}/client-output" \
+      run_name="$RUN_ID" \
+      batch_size=__BATCH_SIZE__ \
+      max_batch_tokens=120000 \
+      max_sequence_length=60000 \
+      max_steps=100000 \
+      learning_rate=5e-6 \
+      lora_rank=32 \
+      save_every=0 \
+      save_every_examples=__SAVE_EVERY_EXAMPLES__ \
+      checkpoint_kind=state \
+      final_checkpoint_kind=state \
+      log_every=1
+
+    kill "$CHECKPOINT_UPLOAD_PID" 2>/dev/null || true
+    wait "$CHECKPOINT_UPLOAD_PID" 2>/dev/null || true
+    CHECKPOINT_UPLOAD_PID=""
+    gcloud storage cp --recursive "${BOOT}/client-output" "${RESULT_PREFIX}/"
+    gcloud storage cp --recursive "${BOOT}/checkpoints" "${RESULT_PREFIX}/"
+    gcloud storage cp "${BOOT}/api.log" "${RESULT_PREFIX}/api.log"
+    printf 'passed\n' > "${BOOT}/status.txt"
+    gcloud storage cp "${BOOT}/status.txt" "$STATUS_URI"
+    kill "$API_PID" 2>/dev/null || true
+    wait "$API_PID" 2>/dev/null || true
+
+tpu:
+  project: vision-mix
+  allocation_mode: queued-resources
+  accelerator: v5p-16
+  num_workers: 2
+  name: hk4638-__RUN_ID__
+  zone: us-east5-a
+  version: v2-alpha-tpuv5
+  pricing: __TPU_PRICING__
+  flags: __TPU_FLAGS__
+  tags: ["jobman", "skyrl", "easydel", "citation-v4", "sft"]
+  metadata:
+    owner: hk4638
+    purpose: qwen35-9b-conservative-citation-sft
+
+gcsfuse: null
+
+ssh:
+  private_key: ~/.ssh/google_compute_engine
+  identities:
+    - private_key: ~/.ssh/google_compute_engine
+      public_key: ~/.ssh/google_compute_engine.pub
+      config_entry: |
+        Host 10.* 34.* 35.*
+          IdentityFile ~/.ssh/google_compute_engine
+          IdentitiesOnly yes
+
+venv:
+  name: easydel_citation_sft
+  requirements_file: /dev/null
+  python: python3.10

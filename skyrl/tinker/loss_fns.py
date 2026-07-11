@@ -15,6 +15,9 @@ class LossFnConfig:
 
     clip_low_threshold: jax.Array
     clip_high_threshold: jax.Array
+    tis_imp_ratio_cap: jax.Array
+    old_logprobs_from_target: jax.Array
+    token_mean: jax.Array
 
 
 def safe_loss_mask(loss_output: jax.Array, loss_mask: jax.Array) -> jax.Array:
@@ -96,6 +99,7 @@ def compute_per_token_losses(
     target_logprobs: jax.Array,
     loss_mask: jax.Array,
     sampling_logprobs: jax.Array,
+    rollout_logprobs: jax.Array,
     advantages: jax.Array,
     loss_fn_config: LossFnConfig,
 ) -> jax.Array:
@@ -119,11 +123,31 @@ def compute_per_token_losses(
             example_loss_fn_config,
         )
 
-    return jax.vmap(compute_loss_per_example)(
+    effective_old_logprobs = jnp.where(
+        loss_fn_config.old_logprobs_from_target[:, None] > 0.0,
+        jax.lax.stop_gradient(target_logprobs),
+        sampling_logprobs,
+    )
+    losses = jax.vmap(compute_loss_per_example)(
         loss_fn_types,
         target_logprobs,
         loss_mask,
-        sampling_logprobs,
+        effective_old_logprobs,
         advantages,
         loss_fn_config,
     )
+    tis_log_ratio = jnp.clip(effective_old_logprobs - rollout_logprobs, -20.0, 20.0)
+    tis_ratio = jax.lax.stop_gradient(jnp.exp(tis_log_ratio))
+    cap = loss_fn_config.tis_imp_ratio_cap[:, None]
+    tis_ratio = jnp.minimum(tis_ratio, jnp.maximum(cap, 0.0))
+    return jnp.where(cap > 0.0, losses * tis_ratio, losses)
+
+
+def reduce_per_sequence_losses(
+    per_token_losses: jax.Array,
+    loss_mask: jax.Array,
+    loss_fn_config: LossFnConfig,
+) -> jax.Array:
+    token_sums = per_token_losses.sum(axis=-1)
+    sequence_means = token_sums / jnp.maximum(loss_mask.sum(axis=-1), 1e-9)
+    return jnp.where(loss_fn_config.token_mean > 0.0, token_sums, sequence_means)

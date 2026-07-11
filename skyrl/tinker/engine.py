@@ -123,6 +123,7 @@ def prepare_model_pass_batch(
     all_token_weights = []
     all_model_ids = []
     all_sampling_logprobs = []
+    all_rollout_logprobs = []
     all_advantages = []
     all_values = []
     all_returns = []
@@ -142,6 +143,7 @@ def prepare_model_pass_batch(
             all_targets.append(loss_fn_inputs.target_tokens.data)
             all_token_weights.append(loss_fn_inputs.weights.data)
             all_sampling_logprobs.append(loss_fn_inputs.logprobs.data)
+            all_rollout_logprobs.append(loss_fn_inputs.rollout_logprobs.data)
             all_advantages.append(loss_fn_inputs.advantages.data)
             all_values.append(loss_fn_inputs.values.data)
             all_returns.append(loss_fn_inputs.returns.data)
@@ -156,6 +158,7 @@ def prepare_model_pass_batch(
         all_targets=all_targets,
         all_token_weights=all_token_weights,
         all_sampling_logprobs=all_sampling_logprobs,
+        all_rollout_logprobs=all_rollout_logprobs,
         all_advantages=all_advantages,
         all_values=all_values,
         all_returns=all_returns,
@@ -427,7 +430,7 @@ class TinkerEngine:
 
         # TODO: This leaks the abstraction by accessing backend-specific config.
         # We should find a better way to handle this going forward.
-        if self.config.backend == "jax" and self.backend.config.sample_max_num_sequences > 0:
+        if self.config.backend in {"jax", "easydel"} and self.backend.config.sample_max_num_sequences > 0:
             batchable = batchable[: self.backend.config.sample_max_num_sequences]
 
         return {str(f.request_id): (f.model_id, types.SampleInput.model_validate(f.request_data)) for f in batchable}

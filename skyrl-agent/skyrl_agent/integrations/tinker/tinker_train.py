@@ -15,12 +15,14 @@ import tinker
 import torch
 import wandb
 from tinker import types
-from tinker.types.tensor_data import TensorData
 from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers import PreTrainedTokenizerFast
 from datasets import load_dataset
 from torch.utils.data import DataLoader
+from omegaconf import OmegaConf
 
 from skyrl_agent import AutoAgentRunner
+from skyrl_agent.integrations.tinker.tinker_rl_utils import build_rl_training_datums, compute_advantages_grpo
 
 logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARN)
@@ -48,70 +50,6 @@ def timed(key: str, metrics: dict[str, Any]):
 safezip = cast(type[zip], lambda *args, **kwargs: zip(*args, **kwargs, strict=True))
 
 
-def normalize_advantages(advantages: List[float]) -> List[float]:
-    """Normalize advantages to have mean 0 and std 1 (standard normalization)."""
-    if not advantages or len(advantages) == 1:
-        return advantages
-    mean = np.mean(advantages)
-    std = np.std(advantages)
-    if std < 1e-8:
-        return [0.0] * len(advantages)
-    return [(a - mean) / (std + 1e-8) for a in advantages]
-
-
-def compute_advantages_grpo(
-    rewards: List[float],
-    group_size: int = None,
-    normalize: bool = True,
-) -> List[float]:
-    """
-    GRPO (Group Relative Policy Optimization) advantage estimation.
-
-    For each group of trajectories from the same prompt, compute advantages
-    as deviations from the group mean. This is particularly useful for
-    best-of-N sampling scenarios.
-
-    Reference: https://github.com/volcengine/verl/blob/main/verl/trainer/ppo/core_algos.py
-
-    Args:
-        rewards: List of rewards for all trajectories
-        group_size: Number of trajectories per prompt group.
-                   If None, treats all as one group.
-        normalize: Whether to apply additional global normalization
-
-    Returns:
-        List of advantages, same length as rewards
-    """
-    rewards = np.array(rewards)
-
-    if group_size is None:
-        # Treat all trajectories as one group (equivalent to simple baseline)
-        group_size = len(rewards)
-
-    n_groups = len(rewards) // group_size
-    advantages = []
-
-    for i in range(n_groups):
-        start_idx = i * group_size
-        end_idx = start_idx + group_size
-        group_rewards = rewards[start_idx:end_idx]
-
-        # GRPO: advantage = reward - mean(group_rewards)
-        group_mean = group_rewards.mean()
-        group_advantages = group_rewards - group_mean
-        advantages.extend(group_advantages.tolist())
-
-    # Handle remaining trajectories if not evenly divisible
-    remaining = len(rewards) % group_size
-    assert remaining == 0, f"Remaining trajectories: {remaining} is not divisible by group_size: {group_size}"
-
-    # Optional: Apply global normalization for extra stability
-    if normalize:
-        advantages = normalize_advantages(advantages)
-
-    return advantages
-
-
 def compute_kl_sample_train(data_D: List[tinker.Datum], training_logprobs_D: List[torch.Tensor]) -> Dict[str, float]:
     """Compute KL divergence metrics between sampling and training logprobs."""
     all_diffs: list[torch.Tensor] = []
@@ -120,7 +58,10 @@ def compute_kl_sample_train(data_D: List[tinker.Datum], training_logprobs_D: Lis
     for datum, training_logprobs in safezip(data_D, training_logprobs_D):
         # Get logprobs from sampling
         sampling_logprobs = datum.loss_fn_inputs["logprobs"].to_torch()
-        action_mask = datum.loss_fn_inputs["mask"].to_torch() > 0
+        mask_tensor = datum.loss_fn_inputs.get("weights") or datum.loss_fn_inputs.get("mask")
+        if mask_tensor is None:
+            raise ValueError("RL datum is missing both 'weights' and legacy 'mask'")
+        action_mask = mask_tensor.to_torch() > 0
         # Extract only action token logprobs
         sampling_logprobs_actions = sampling_logprobs[action_mask]
         training_logprobs_actions = training_logprobs[action_mask]
@@ -147,32 +88,83 @@ def compute_kl_sample_train(data_D: List[tinker.Datum], training_logprobs_D: Lis
 @chz.chz
 class Config:
     model_name: str = "Qwen/Qwen3-32B"
+    tokenizer_name_or_path: str | None = None
+    tinker_base_url: str | None = None
+    tinker_api_key: str | None = None
+    tinker_project_id: str | None = None
     batch_size: int = 64
     eval_batch_size: int = 1024
     learning_rate: float = 4e-5
     lora_rank: int = 16
+    lora_pass_module_flags: bool = False
+    lora_train_mlp: bool = True
+    lora_train_attn: bool = True
+    lora_train_unembed: bool = True
     seed: int = 0
     max_steps: int = 200
     save_every: int = 2
     eval_every: int = 10
     resume_exp_name: str = None
+    initial_state_path: str | None = None
 
     skyrl_agent_task_yaml: str = None
     dataset_file: str = None  # Path to the training dataset parquet file
     eval_dataset_file: str = None  # Path to the evaluation dataset parquet file
 
     # Loss function configuration
-    loss_fn: Literal["importance_sampling", "ppo", "custom_ppo"] = "ppo"
+    loss_fn: Literal["importance_sampling", "ppo", "cispo"] = "cispo"
     # Options:
     #   "ppo" or "importance_sampling": Use Tinker's built-in loss (forward_backward)
 
     # GRPO (Group Relative Policy Optimization) settings
     group_size: int = 8  # Trajectories per prompt group (None = auto-infer from task yaml)
-    normalize_advantages: bool = True  # Apply global normalization after group-relative computation
+    grpo_norm_by_std: bool = True
+    cispo_clip_low_threshold: float = 1.0
+    cispo_clip_high_threshold: float = 6.0
+    tis_imp_ratio_cap: float = 2.0
+    token_mean: bool = True
 
     wandb_project: str | None = None
     wandb_name: str | None = None
     log_dir: str | None = None
+    output_dir: str = "./tinker_output"
+    agent_max_parallel: int | None = None
+    agent_max_prompt_length: int | None = None
+
+
+def prepare_agent_task_yaml(config: Config, save_path: str) -> str:
+    """Write a runtime task YAML whose trajectory fanout matches this run."""
+    task_config = OmegaConf.load(config.skyrl_agent_task_yaml)
+
+    if config.group_size is not None:
+        task_config.generator.num_trajectories = int(config.group_size)
+
+    if config.agent_max_prompt_length is not None:
+        task_config.generator.max_prompt_length = int(config.agent_max_prompt_length)
+
+    if config.agent_max_parallel is not None:
+        max_parallel = int(config.agent_max_parallel)
+    else:
+        max_parallel = int(config.batch_size) * int(task_config.generator.num_trajectories)
+
+    # Keep smoke tests and small TPU runs from launching hidden concurrent samples.
+    task_config.dispatcher.max_parallel_agents = min(int(task_config.dispatcher.max_parallel_agents), max_parallel)
+    task_config.dispatcher.max_eval_parallel_agents = min(
+        int(task_config.dispatcher.max_eval_parallel_agents),
+        max_parallel,
+    )
+
+    runtime_task_yaml = os.path.join(save_path, "runtime_task.yaml")
+    OmegaConf.save(task_config, runtime_task_yaml)
+    print(
+        "[tinker-train] runtime task config: "
+        f"num_trajectories={task_config.generator.num_trajectories}, "
+        f"max_prompt_length={task_config.generator.max_prompt_length}, "
+        f"max_parallel_agents={task_config.dispatcher.max_parallel_agents}, "
+        f"path={runtime_task_yaml}",
+        flush=True,
+    )
+    return runtime_task_yaml
 
 
 async def save_checkpoint_async(
@@ -216,6 +208,7 @@ def collate_fn(batch):
 
 
 async def main(config: Config):
+    print("[tinker-train] main: starting", flush=True)
     # Set random seed for reproducibility
     set_seed(config.seed)
 
@@ -225,7 +218,7 @@ async def main(config: Config):
     else:
         wandb_name = config.wandb_name or config.model_name.split("/")[-1]
         wandb_name += "_" + datetime.now().strftime("%m%dT%H:%M:%S")
-    save_path = os.path.join("./tinker_output", wandb_name)
+    save_path = os.path.join(config.output_dir, wandb_name)
     os.makedirs(save_path, exist_ok=True)
 
     # read the most recent checkpoint
@@ -248,9 +241,12 @@ async def main(config: Config):
         dir=str(config.log_dir) if config.log_dir else None,
         name=wandb_name,
     )
+    print("[tinker-train] wandb initialized", flush=True)
 
     # dataset and dataloader
+    print(f"[tinker-train] loading train dataset: {config.dataset_file}", flush=True)
     train_dataset = load_dataset("parquet", data_files=config.dataset_file)["train"]
+    print(f"[tinker-train] loading eval dataset: {config.eval_dataset_file}", flush=True)
     eval_dataset = load_dataset("parquet", data_files=config.eval_dataset_file)["train"]
 
     # Calculate steps per epoch for tracking
@@ -282,22 +278,62 @@ async def main(config: Config):
             next(train_iterator)
 
     # Setup agent (tinker training client)
-    service_client = tinker.ServiceClient()
-    training_client = await service_client.create_lora_training_client_async(
-        base_model=config.model_name, rank=config.lora_rank
-    )
-    if load_state_path:
-        future = await training_client.load_state_async(load_state_path)
+    service_kwargs: dict[str, Any] = {}
+    if config.tinker_base_url:
+        service_kwargs["base_url"] = config.tinker_base_url
+    if config.tinker_api_key:
+        service_kwargs["api_key"] = config.tinker_api_key
+    if config.tinker_project_id:
+        service_kwargs["project_id"] = config.tinker_project_id
+    print(f"[tinker-train] creating Tinker service client: {service_kwargs}", flush=True)
+    service_client = tinker.ServiceClient(**service_kwargs)
+    lora_kwargs: dict[str, Any] = {"base_model": config.model_name, "rank": config.lora_rank}
+    if config.lora_pass_module_flags:
+        lora_kwargs.update(
+            train_mlp=config.lora_train_mlp,
+            train_attn=config.lora_train_attn,
+            train_unembed=config.lora_train_unembed,
+        )
+    print(f"[tinker-train] creating LoRA training client: {lora_kwargs}", flush=True)
+    training_client = await service_client.create_lora_training_client_async(**lora_kwargs)
+    print("[tinker-train] LoRA training client ready", flush=True)
+    state_to_load = load_state_path or config.initial_state_path
+    if state_to_load:
+        future = await training_client.load_state_async(state_to_load)
         _ = await future.result_async()
-        logger.info(f"Loaded state from {load_state_path}")
+        print(
+            f"[tinker-train] loaded {'resume' if load_state_path else 'initial'} state: {state_to_load}",
+            flush=True,
+        )
+        logger.info(
+            "Loaded %s state from %s",
+            "resume" if load_state_path else "initial",
+            state_to_load,
+        )
 
     adam_params = types.AdamParams(learning_rate=config.learning_rate, beta1=0.9, beta2=0.95, eps=1e-8)
-    skyrl_agent_task_yaml_path = config.skyrl_agent_task_yaml
-    tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+    skyrl_agent_task_yaml_path = prepare_agent_task_yaml(config, save_path)
+    tokenizer_local_only = os.environ.get("HF_HUB_OFFLINE") == "1" or os.environ.get("TRANSFORMERS_OFFLINE") == "1"
+    print(
+        f"[tinker-train] loading tokenizer: {config.model_name} local_files_only={tokenizer_local_only}",
+        flush=True,
+    )
+    tokenizer_source = config.tokenizer_name_or_path or config.model_name
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, local_files_only=tokenizer_local_only)
+    except ValueError as exc:
+        if "Tokenizer class TokenizersBackend" not in str(exc):
+            raise
+        logger.warning("Falling back to PreTrainedTokenizerFast for converted EasyDeL tokenizer: %s", exc)
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            tokenizer_source,
+            local_files_only=tokenizer_local_only,
+        )
+    print("[tinker-train] tokenizer ready", flush=True)
 
     # training loop
     for policy_iteration_step in range(resume_from_step, config.max_steps):
-        print("=" * 10 + f" Step {policy_iteration_step} " + "=" * 10)
+        print("=" * 10 + f" Step {policy_iteration_step} " + "=" * 10, flush=True)
         metrics = {
             "step": policy_iteration_step,
             "epoch": policy_iteration_step // steps_per_epoch,
@@ -314,14 +350,18 @@ async def main(config: Config):
                 loop_state={"policy_iteration_step": policy_iteration_step},
             )
 
+        print(f"[tinker-train] saving sampler weights for step {policy_iteration_step}", flush=True)
         sampling_path = training_client.save_weights_for_sampler(name=f"{policy_iteration_step:06d}").result().path
+        print(f"[tinker-train] sampler weights ready: {sampling_path}", flush=True)
         sampling_client = service_client.create_sampling_client(model_path=sampling_path)
 
+        print("[tinker-train] creating agent generator", flush=True)
         agent_generator = AutoAgentRunner.from_task(
             skyrl_agent_task_yaml_path, infer_engine=sampling_client, tokenizer=tokenizer
         )
+        print("[tinker-train] agent generator ready", flush=True)
 
-        if policy_iteration_step % config.eval_every == 0:
+        if config.eval_every > 0 and policy_iteration_step % config.eval_every == 0:
             eval_dataloader = DataLoader(
                 eval_dataset, batch_size=config.eval_batch_size, shuffle=False, collate_fn=collate_fn
             )
@@ -380,17 +420,14 @@ async def main(config: Config):
         # Determine group size for GRPO
         group_size = config.group_size
         if group_size is None:
-            # Try to infer from task config
-            from omegaconf import OmegaConf
-
             task_config = OmegaConf.load(skyrl_agent_task_yaml_path)
             group_size = task_config.generator.get("num_trajectories", 1)
             logger.info(f"Auto-inferred group_size={group_size} from task config")
 
         # Compute GRPO advantages
-        logger.info(f"Computing GRPO advantages: group_size={group_size}, normalize={config.normalize_advantages}")
+        logger.info(f"Computing GRPO advantages: group_size={group_size}, norm_by_std={config.grpo_norm_by_std}")
         all_advantages = compute_advantages_grpo(
-            all_returns, group_size=group_size, normalize=config.normalize_advantages
+            all_returns, group_size=group_size, normalize_by_std=config.grpo_norm_by_std
         )
         # broadcast advantages to num_steps per trajectory
         step_advantages = []
@@ -407,46 +444,32 @@ async def main(config: Config):
         # For each trajectory, we need to provide:
         # - model_input: the full sequence (prompt + response)
         # - loss_fn_inputs: target_tokens, advantages, logprobs (if available), mask
-        training_datums = []
-        for idx in range(actual_batch_size):
-            # Concatenate prompt and response to get full sequence
-            full_sequence = prompt_token_ids[idx] + response_ids[idx]
-            prompt_len = len(prompt_token_ids[idx])
-
-            # Target tokens are same as input (autoregressive training)
-            target_tokens = full_sequence[1:]
-            logprobs = ([0] * prompt_len + sampled_logprobs[idx])[1:]
-
-            # Base mask: 0 for prompt, loss_mask value for response
-            mask = [0] * prompt_len + loss_masks[idx]
-
-            # Advantages: broadcast the single advantage value across all response tokens
-            advantage_value = step_advantages[idx]
-            advantages = torch.zeros(len(full_sequence))
-            # Only apply advantage to response tokens that are not masked
-            assert len(mask) == len(full_sequence), f"Mask length mismatch: {len(mask)} vs {len(full_sequence)}"
-            for i in range(prompt_len, len(full_sequence)):
-                if mask[i] > 0:
-                    advantages[i] = advantage_value
-            advantages = advantages[1:]
-            mask = mask[1:]
-
-            datum = types.Datum(
-                model_input=types.ModelInput.from_ints(tokens=full_sequence[:-1]),
-                loss_fn_inputs={
-                    "target_tokens": TensorData.from_torch(torch.tensor(target_tokens)),
-                    "logprobs": TensorData.from_torch(torch.tensor(logprobs)),
-                    "advantages": TensorData.from_torch(advantages),
-                },
-            )
-            training_datums.append(datum)
+        training_datums, datum_stats = build_rl_training_datums(
+            prompt_token_ids,
+            response_ids,
+            loss_masks,
+            sampled_logprobs,
+            step_advantages,
+        )
+        metrics.update({f"train_batch/{key}": value for key, value in datum_stats.items()})
 
         # Training step
         print(f"🎈 Start training at step {policy_iteration_step}")
         st = time.time()
 
         # Use Tinker's built-in loss function ("ppo" or "importance_sampling")
-        fwd_bwd_future = training_client.forward_backward(training_datums, loss_fn=config.loss_fn)
+        loss_fn_config = {
+            "clip_low_threshold": config.cispo_clip_low_threshold,
+            "clip_high_threshold": config.cispo_clip_high_threshold,
+            "tis_imp_ratio_cap": config.tis_imp_ratio_cap,
+            "old_logprobs_from_target": 1.0,
+            "token_mean": float(config.token_mean),
+        }
+        fwd_bwd_future = training_client.forward_backward(
+            training_datums,
+            loss_fn=config.loss_fn,
+            loss_fn_config=loss_fn_config,
+        )
         # Optimize
         optim_step_future = training_client.optim_step(adam_params)
         fwd_bwd_result = fwd_bwd_future.result()
@@ -456,11 +479,13 @@ async def main(config: Config):
         for output in fwd_bwd_result.loss_fn_outputs:
             training_logprobs = output["logprobs"].to_torch()
             training_logprobs_D.append(training_logprobs)
-        # with timed("compute_kl_sample_train", metrics):
-        #     kl_sample_train_metrics = compute_kl_sample_train(training_datums, training_logprobs_D)
-        #     metrics.update(kl_sample_train_metrics)
+        with timed("compute_kl_sample_train", metrics):
+            kl_sample_train_metrics = compute_kl_sample_train(training_datums, training_logprobs_D)
+            metrics.update(kl_sample_train_metrics)
 
-        _ = optim_step_future.result()
+        optim_result = optim_step_future.result()
+        for key, value in (optim_result.metrics or {}).items():
+            metrics[f"optim/{key}"] = float(value)
         metrics["time/train"] = time.time() - st
 
         pprint.pprint(metrics)

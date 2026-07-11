@@ -429,6 +429,7 @@ def test_gradient_checkpointing():
             loss_mask,
             loss_fn_types,
             sampling_logprobs,
+            sampling_logprobs,
             advantages,
             loss_fn_config,
         )
@@ -703,9 +704,10 @@ def test_mixed_train_unembed_adapters():
             adapter_indices,
             target_ids,
             loss_mask,
-            loss_fn_types,
-            sampling_logprobs,
-            advantages,
+                loss_fn_types,
+                sampling_logprobs,
+                sampling_logprobs,
+                advantages,
             loss_fn_config,
         )
         return np.asarray(losses), np.asarray(logprobs)
