@@ -70,6 +70,9 @@ command:
         wait "$CHECKPOINT_UPLOAD_PID" 2>/dev/null || true
       fi
       gcloud storage cp "$LOG" "${RESULT_PREFIX}/worker-${WORKER_ID}.log" || true
+      [ ! -f "${BOOT}/backend-worker-${WORKER_ID}.log" ] || gcloud storage cp \
+        "${BOOT}/backend-worker-${WORKER_ID}.log" \
+        "${RESULT_PREFIX}/backend-worker-${WORKER_ID}.log" || true
       if [ "$WORKER_ID" = "0" ]; then
         [ ! -d "${BOOT}/client-output" ] || gcloud storage cp --recursive \
           "${BOOT}/client-output" "${RESULT_PREFIX}/" || true
