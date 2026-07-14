@@ -44,6 +44,11 @@ export TTD_DISTILL_LEAK_FILTER="${TTD_DISTILL_LEAK_FILTER:-1}"
 export TTD_DISTILL_TEACHER_PHASE1_TOKENS="${TTD_DISTILL_TEACHER_PHASE1_TOKENS:-0}"
 export TTD_DISTILL_MAX_TARGET_TOKENS="${TTD_DISTILL_MAX_TARGET_TOKENS:-8192}"
 export TTD_DISTILL_MAX_CODE_CHARS="${TTD_DISTILL_MAX_CODE_CHARS:-10000}"
+# Frozen stronger teacher for the critique pass (empty -> current policy).
+export TTD_DISTILL_TEACHER_MODEL="${TTD_DISTILL_TEACHER_MODEL:-}"
+# PUCT elitism: reserve N of 64 seeds/step for top-value states, at most one
+# per lineage (0 = off).
+export TTD_ELITE_SLOTS="${TTD_ELITE_SLOTS:-0}"
 
 # --- eval backend ---
 # On neuronic, compute nodes reach the internet, so the whole client runs on one

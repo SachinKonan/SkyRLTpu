@@ -20,10 +20,10 @@ index 8a961fb..7689d6a 100644
      "Programming Language :: Python :: 3.12",
      "Topic :: Scientific/Engineering :: Artificial Intelligence",
 diff --git a/ttt_discover/discovery.py b/ttt_discover/discovery.py
-index 53d0987..51c8f87 100644
+index 53d0987..fcd457a 100644
 --- a/ttt_discover/discovery.py
 +++ b/ttt_discover/discovery.py
-@@ -31,17 +31,34 @@ class DiscoverConfig:
+@@ -31,17 +31,35 @@ class DiscoverConfig:
      temperature: float = 1.0
      kl_penalty_coef: float = 0.1
      phase1_max_tokens: int = 26000  # Two-phase sampling: total prompt + thinking token budget
@@ -54,11 +54,12 @@ index 53d0987..51c8f87 100644
 +    distill_teacher_phase1_tokens: int = 0  # 0 -> reuse phase1_max_tokens
 +    distill_max_target_tokens: int = 8192
 +    distill_max_code_chars: int = 10000
++    distill_teacher_model: str | None = None  # None -> current policy
 +
  
  def init_ray(num_cpus_per_task: int, env_type: str):
      import ray
-@@ -71,10 +88,8 @@ def init_ray(num_cpus_per_task: int, env_type: str):
+@@ -71,10 +89,8 @@ def init_ray(num_cpus_per_task: int, env_type: str):
  async def discover_impl(config: DiscoverConfig):
      """Convert discover config to full config and run training."""
  
@@ -70,7 +71,7 @@ index 53d0987..51c8f87 100644
          init_ray(config.num_cpus_per_task, config.env_type)
  
      logging.getLogger().handlers.clear()
-@@ -83,7 +98,7 @@ async def discover_impl(config: DiscoverConfig):
+@@ -83,7 +99,7 @@ async def discover_impl(config: DiscoverConfig):
      renderer_name = config.renderer_name
  
      # create log path if it doesn't exist
@@ -79,7 +80,7 @@ index 53d0987..51c8f87 100644
      log_file = os.path.join(log_path, "train.log")
  
      # Resolve env_name -> env type and build dataset
-@@ -95,6 +110,7 @@ async def discover_impl(config: DiscoverConfig):
+@@ -95,6 +111,7 @@ async def discover_impl(config: DiscoverConfig):
          model_name_for_tokenizer=config.model_name,
          renderer_name=renderer_name,
          num_cpus_per_task=config.num_cpus_per_task,
@@ -87,7 +88,7 @@ index 53d0987..51c8f87 100644
          eval_timeout=config.eval_timeout,
          log_path=log_path,
      )
-@@ -121,7 +137,19 @@ async def discover_impl(config: DiscoverConfig):
+@@ -121,7 +138,20 @@ async def discover_impl(config: DiscoverConfig):
          adv_estimator_beta=2.0, # Unused with entropic_adaptive_beta
          remove_constant_reward_groups=True,
          phase1_max_tokens=config.phase1_max_tokens,
@@ -104,6 +105,7 @@ index 53d0987..51c8f87 100644
 +        distill_teacher_phase1_tokens=config.distill_teacher_phase1_tokens,
 +        distill_max_target_tokens=config.distill_max_target_tokens,
 +        distill_max_code_chars=config.distill_max_code_chars,
++        distill_teacher_model=config.distill_teacher_model,
      )
  
      misc_utils.check_log_dir(log_path, behavior_if_exists="resume")
@@ -339,10 +341,10 @@ index dca6eea..dc49155 100644
 -
 diff --git a/ttt_discover/rl/context_distill.py b/ttt_discover/rl/context_distill.py
 new file mode 100644
-index 0000000..134d905
+index 0000000..b03a20f
 --- /dev/null
 +++ b/ttt_discover/rl/context_distill.py
-@@ -0,0 +1,407 @@
+@@ -0,0 +1,436 @@
 +"""Contrastive context distillation alongside the RL objective.
 +
 +Per training step: sample (suboptimal, betters) pairs from the PUCT pool, have the
@@ -622,6 +624,27 @@ index 0000000..134d905
 +    return offenders
 +
 +
++async def probe_nll_async(
++    probe: list[tuple[tinker.ModelInput, torch.Tensor, torch.Tensor]],
++    sampling_client: tinker.SamplingClient,
++) -> float:
++    """Mean NLL of the CURRENT policy on a FROZEN set of teacher critiques.
++    Unlike distill/ce_mean_nll (a moving target), a downward trend here is
++    unambiguous internalization. probe items: (model_input, targets, mask01)."""
++    full_inputs = [mi.append_int(int(t[-1].item())) for mi, t, _ in probe]
++    lps = await asyncio.gather(
++        *[sampling_client.compute_logprobs_async(fi) for fi in full_inputs]
++    )
++    nll_sum = tok_sum = 0.0
++    for (mi, targets, mask), lp in zip(probe, lps):
++        lp = lp[1:] if len(lp) == len(targets) + 1 else lp
++        lp_t = torch.tensor([x if x is not None else 0.0 for x in lp])
++        n = min(len(lp_t), len(mask))
++        nll_sum += float((-lp_t[:n] * mask[:n]).sum().item())
++        tok_sum += float(mask[:n].sum().item())
++    return nll_sum / tok_sum if tok_sum else float("nan")
++
++
 +async def build_distill_data(
 +    pairs: list[DistillPair],
 +    sampling_client: tinker.SamplingClient,
@@ -634,6 +657,8 @@ index 0000000..134d905
 +    max_target_tokens: int,
 +    grounding_filter: bool = True,
 +    leak_filter: bool = True,
++    probe_holder: list | None = None,
++    probe_size: int = 8,
 +) -> DistillBatch:
 +    out = DistillBatch()
 +    m = out.metrics
@@ -749,9 +774,15 @@ index 0000000..134d905
 +    m["distill/num_datums"] = float(kept)
 +    m["distill/num_trained_tokens"] = float(total_trained)
 +    m["distill/improve_blocks_mean"] = (total_blocks / kept) if kept else 0.0
++
++    # Freeze the first surviving critiques as the internalization probe set.
++    if probe_holder is not None and not probe_holder and out.datums:
++        for d, w01 in list(zip(out.datums, out.weight_tensors))[:probe_size]:
++            targets = d.loss_fn_inputs["target_tokens"].to_torch()
++            probe_holder.append((d.model_input, targets, (w01 > 0).float()))
 +    return out
 diff --git a/ttt_discover/rl/train.py b/ttt_discover/rl/train.py
-index b9e414d..d97efc4 100644
+index b9e414d..c6f92c6 100644
 --- a/ttt_discover/rl/train.py
 +++ b/ttt_discover/rl/train.py
 @@ -5,6 +5,7 @@ Implements RL on general MDPs
@@ -873,7 +904,7 @@ index b9e414d..d97efc4 100644
  
  
  @chz.chz
-@@ -301,10 +327,31 @@ class Config:
+@@ -301,10 +327,35 @@ class Config:
  
      # Two-phase sampling: phase1_max_tokens for token completion
      phase1_max_tokens: int = 26000
@@ -902,11 +933,15 @@ index b9e414d..d97efc4 100644
 +    distill_teacher_phase1_tokens: int = 0  # 0 -> reuse phase1_max_tokens
 +    distill_max_target_tokens: int = 8192
 +    distill_max_code_chars: int = 10000
++    # Teacher weights for the critique pass. None/"" -> the CURRENT policy
++    # (self-distillation). Set e.g. "openai/gpt-oss-120b" for a frozen stronger
++    # teacher (gpt-oss models share the tokenizer, so datums stay valid).
++    distill_teacher_model: str | None = None
 +
  
  @chz.chz
  class WrappedTrajectoryGroup:
-@@ -332,17 +379,27 @@ async def do_group_rollout_and_filter_constant_reward(
+@@ -332,17 +383,27 @@ async def do_group_rollout_and_filter_constant_reward(
      step_idx=-1,
      model_name: str = "",
      phase1_max_tokens: int = 27000,
@@ -941,7 +976,7 @@ index b9e414d..d97efc4 100644
  
      trajectory_group = await do_group_rollout(env_group_builder, policy, step_idx)
  
-@@ -433,6 +490,7 @@ async def do_train_step_and_get_sampling_client(
+@@ -433,6 +494,7 @@ async def do_train_step_and_get_sampling_client(
      tokenizer: Tokenizer,
      env_group_builders_P: Sequence[EnvGroupBuilder],
      trajectory_groups_P: list[TrajectoryGroup],
@@ -949,7 +984,7 @@ index b9e414d..d97efc4 100644
  ) -> tuple[tinker.SamplingClient, dict[str, Any]]:
      context = get_scope_context()
      context.attributes["step"] = i_batch
-@@ -452,15 +510,43 @@ async def do_train_step_and_get_sampling_client(
+@@ -452,15 +514,43 @@ async def do_train_step_and_get_sampling_client(
      )
      metrics.update(prepare_minibatch_metrics)
  
@@ -994,7 +1029,19 @@ index b9e414d..d97efc4 100644
      sampling_client, full_batch_metrics = await save_checkpoint_and_get_sampling_client(
          training_client,
          # NOTE: saving the checkpoint as the i + 1 step
-@@ -542,6 +628,8 @@ async def do_sync_training(
+@@ -496,6 +586,11 @@ async def do_sync_training(
+         training_client, start_batch, cfg.log_path, cfg.save_every, start_batch
+     )
+ 
++    # Context-distillation cross-step state: frozen probe set (internalization
++    # metric) and the cached frozen-teacher sampling client (if configured).
++    distill_probe_holder: list = []
++    distill_teacher_holder: list = []
++
+     for i_batch in range(start_batch, end_batch):
+         train_table = None
+         test_table = None
+@@ -542,6 +637,8 @@ async def do_sync_training(
                              step_idx=i_batch,
                              model_name=cfg.local_model_path or cfg.model_name,
                              phase1_max_tokens=cfg.phase1_max_tokens,
@@ -1003,7 +1050,7 @@ index b9e414d..d97efc4 100644
                          ),
                          name=f"sample_task_{i}",
                      )
-@@ -549,6 +637,49 @@ async def do_sync_training(
+@@ -549,6 +646,71 @@ async def do_sync_training(
                  ],
              )
  
@@ -1012,12 +1059,22 @@ index b9e414d..d97efc4 100644
 +        # prepare_minibatch. Must run BEFORE dataset.flush (prunes sampler children)
 +        # and BEFORE remove_constant_reward_groups (breaks builder<->group alignment).
 +        distill_task = None
++        probe_task = None
 +        if cfg.distill_enabled and hasattr(dataset, "sampler"):
 +            try:
 +                from ttt_discover.rl.context_distill import (
 +                    build_distill_data,
++                    probe_nll_async,
 +                    select_distill_pairs,
 +                )
++
++                # Frozen-probe NLL: current policy scored on the fixed probe set
++                # (filled from the first surviving teacher batch). Runs against
++                # THIS step's policy snapshot, concurrent with everything else.
++                if distill_probe_holder:
++                    probe_task = asyncio.create_task(
++                        probe_nll_async(distill_probe_holder, sampling_client)
++                    )
 +
 +                distill_pairs, pair_metrics = select_distill_pairs(
 +                    dataset.sampler,
@@ -1029,10 +1086,21 @@ index b9e414d..d97efc4 100644
 +                )
 +                metrics.update(pair_metrics)
 +                if distill_pairs:
++                    # Teacher = frozen stronger model when configured, else the
++                    # current policy (self-distillation). Client cached across steps.
++                    teacher_client = sampling_client
++                    if cfg.distill_teacher_model:
++                        if distill_teacher_holder:
++                            teacher_client = distill_teacher_holder[0]
++                        else:
++                            teacher_client = service_client.create_sampling_client(
++                                base_model=cfg.distill_teacher_model
++                            )
++                            distill_teacher_holder.append(teacher_client)
 +                    distill_task = asyncio.create_task(
 +                        build_distill_data(
 +                            distill_pairs,
-+                            sampling_client,
++                            teacher_client,
 +                            model_name=cfg.local_model_path or cfg.model_name,
 +                            renderer=env_group_builders_P[0].env_thunk.args[0],
 +                            distill_weight=cfg.distill_weight,
@@ -1044,6 +1112,7 @@ index b9e414d..d97efc4 100644
 +                            max_target_tokens=cfg.distill_max_target_tokens,
 +                            grounding_filter=cfg.distill_grounding_filter,
 +                            leak_filter=cfg.distill_leak_filter,
++                            probe_holder=distill_probe_holder,
 +                        )
 +                    )
 +            except Exception:
@@ -1053,15 +1122,23 @@ index b9e414d..d97efc4 100644
          if hasattr(dataset, 'flush'):
              dataset.flush(step=i_batch + 1)
  
-@@ -565,6 +696,7 @@ async def do_sync_training(
+@@ -565,8 +727,15 @@ async def do_sync_training(
              tokenizer,
              env_group_builders_P,
              trajectory_groups_P,
 +            distill_task=distill_task,
          )
  
++        if probe_task is not None:
++            try:
++                metrics["distill/probe_nll"] = await probe_task
++            except Exception:
++                logger.exception("frozen-probe NLL computation failed")
++
          if 'table' in train_step_metrics:
-@@ -583,7 +715,7 @@ async def do_sync_training(
+             table_data = train_step_metrics.pop('table')
+             # Compute actual advantages using the configured estimator
+@@ -583,7 +752,7 @@ async def do_sync_training(
                      )
              }
          
@@ -1070,7 +1147,7 @@ index b9e414d..d97efc4 100644
              if train_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
                  ml_logger.loggers[2].log_metrics(train_table, step=i_batch)
              if test_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
-@@ -624,7 +756,7 @@ async def main(
+@@ -624,7 +793,7 @@ async def main(
          start_batch = 0
  
      print("Create training client...")
@@ -1079,7 +1156,7 @@ index b9e414d..d97efc4 100644
      print("Training client created!")
      if resume_info:
          # Resuming interrupted training - load optimizer state for proper continuation
-@@ -684,8 +816,9 @@ async def main(
+@@ -684,8 +853,9 @@ async def main(
          tokenizer=tokenizer,
      )
  
@@ -1203,6 +1280,56 @@ index aa700fc..5b03a1d 100644
 -        raise NotImplementedError("Reference answer not available for TTT environments.")
 \ No newline at end of file
 +        raise NotImplementedError("Reference answer not available for TTT environments.")
+diff --git a/ttt_discover/tinker_utils/sampler.py b/ttt_discover/tinker_utils/sampler.py
+index d6c8ec1..567db4c 100644
+--- a/ttt_discover/tinker_utils/sampler.py
++++ b/ttt_discover/tinker_utils/sampler.py
+@@ -101,6 +101,15 @@ class PUCTSampler(StateSampler):
+         self.batch_size = batch_size
+         self.topk_children = topk_children
+         self.puct_c = float(puct_c)
++        # Elitism: reserve this many of each batch's seeds for the top-value
++        # states, at most one per lineage (so the slots cover distinct top
++        # families rather than clones of one descent chain — value proximity is
++        # deliberately NOT used as a separator: genuinely different families
++        # crowd into a tiny value band as a run converges). 0 = disabled =
++        # original PUCT behavior. Motivated by two observed pathologies: a
++        # static champion diluted into the pool and never resampled, and
++        # clone-chains monopolizing greedy mass.
++        self.elite_slots = int(os.environ.get("TTD_ELITE_SLOTS", "0"))
+         
+         self._states: list[State] = []
+         self._initial_states: list[State] = []
+@@ -252,6 +261,29 @@ class PUCTSampler(StateSampler):
+         if num_states > 1:
+             children_map = self._build_children_map()
+             picked, top_scores, blocked_ids = [], [], set()
++
++            # Elite slots: guaranteed pure-value picks (highest value first),
++            # skipping initial/empty-code states, at most one elite per lineage
++            # so the slots cover distinct top families rather than k clones.
++            elite_k = min(self.elite_slots, num_states)
++            if elite_k > 0:
++                by_value = sorted(
++                    (e for e in scores
++                     if e[2].id not in initial_ids and (e[2].code or "").strip()),
++                    key=lambda e: e[1], reverse=True,
++                )
++                n_elite = 0
++                for entry in by_value:
++                    if n_elite >= elite_k:
++                        break
++                    s = entry[2]
++                    if s.id in blocked_ids:
++                        continue
++                    picked.append(s)
++                    top_scores.append(entry)
++                    n_elite += 1
++                    blocked_ids.update(self._get_full_lineage(s, children_map))
++
+             for entry in scores:
+                 s = entry[2]
+                 if s.id in blocked_ids:
 diff --git a/uv.lock b/uv.lock
 new file mode 100644
 index 0000000..a536536

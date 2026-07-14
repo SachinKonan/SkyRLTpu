@@ -119,6 +119,7 @@ def main() -> None:
         distill_teacher_phase1_tokens=_env_int("TTD_DISTILL_TEACHER_PHASE1_TOKENS", 0),
         distill_max_target_tokens=_env_int("TTD_DISTILL_MAX_TARGET_TOKENS", 8192),
         distill_max_code_chars=_env_int("TTD_DISTILL_MAX_CODE_CHARS", 10000),
+        distill_teacher_model=os.environ.get("TTD_DISTILL_TEACHER_MODEL") or None,
     )
     print(f"[smoke] run_dir      : {run_dir}")
     print(f"[smoke] model        : {model_name}  (renderer={config.renderer_name})")
