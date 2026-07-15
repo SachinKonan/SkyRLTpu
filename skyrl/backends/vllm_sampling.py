@@ -288,7 +288,8 @@ class VllmSamplingClient:
             "temperature": sampling_params.temperature,
             "top_p": sampling_params.top_p,
             "top_k": sampling_params.top_k,
-            "seed": sampling_params.seed,
+            # No per-request seed: the vLLM TPU (tpu-inference) backend rejects
+            # it with "JAX does not support per-request seed".
             "logprobs": 1,
             "stream": False,
             "return_token_ids": True,

@@ -312,7 +312,8 @@ def test_vllm_sampling_client_sample_groups(tmp_path):
         assert path == "/v1/completions"
         assert payload["n"] == 3
         assert payload["prompt"] == [1, 2, 3]
-        assert payload["seed"] == 0
+        # Seed must NOT be forwarded: the vLLM TPU backend rejects per-request seeds.
+        assert "seed" not in payload
         assert {k.lower(): v for k, v in headers.items()}["x-session-id"] == "session:0"
     finally:
         server.shutdown()
