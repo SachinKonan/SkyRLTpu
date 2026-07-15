@@ -192,6 +192,11 @@ class _MaxTextAdapterShim(nnx.Module):
         }
 
 
+# MaxText's attention kernels require q_seq_len to be a multiple of the query
+# block size once it exceeds one block (default sa_block_q=512): shorter
+# sequences run as a single block and may use the usual power-of-2 buckets.
+_MAXTEXT_SEQ_BLOCK = 512
+
 # qwix module_path regex for MaxText qwen-family decoders (pure-NNX). Matches
 # MaxText's own verified LoRA targets (configs/post_train/lora_module_path.yml).
 _MAXTEXT_ATTN_REGEX = r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?self_attention/(?:query|key|value|out)(?:/.*)?"
@@ -737,6 +742,12 @@ class TunixBackend(AbstractBackend):
         mb = self.config.train_micro_batch_size
         return total if mb <= 0 else max(1, min(mb, total))
 
+    @staticmethod
+    def _round_seq_len(seq_len: int, kind: str) -> int:
+        if kind == "maxtext" and seq_len > _MAXTEXT_SEQ_BLOCK:
+            return -(-seq_len // _MAXTEXT_SEQ_BLOCK) * _MAXTEXT_SEQ_BLOCK
+        return round_up_seq_len(seq_len)
+
     # ------------------------------------------------------------------ forward / forward_backward
 
     def _model_pass(
@@ -772,7 +783,7 @@ class TunixBackend(AbstractBackend):
             for mb_start in range(0, len(indices), micro_bs):
                 mb_idx = indices[mb_start : mb_start + micro_bs]
                 mb_inputs = [all_input_ids[i] for i in mb_idx]
-                max_len = round_up_seq_len(max(len(seq) for seq in mb_inputs))
+                max_len = self._round_seq_len(max(len(seq) for seq in mb_inputs), template.kind)
 
                 input_ids = pad_batch(mb_inputs, max_len, np.int32)
                 target_ids = pad_batch([prepared_batch.all_targets[i] for i in mb_idx], max_len, np.int32)
