@@ -37,6 +37,9 @@ ENV_REGISTRY = {
     "erdos": ("examples.erdos_min_overlap.env", "ErdosMinOverlapEnv", "", 1100),
     "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv", "26", 530),
     "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv", "ac2", 1100),
+    # Frontier-CS 2.0 planar unit-distance problem; problem_type = N points
+    # ("65536" real task, "10" mirrors their erdos_demo smoke variant).
+    "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv", "65536", 1100),
 }
 
 

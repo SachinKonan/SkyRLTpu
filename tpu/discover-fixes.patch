@@ -1,3 +1,201 @@
+diff --git a/examples/frontier_erdos_ud/__init__.py b/examples/frontier_erdos_ud/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/examples/frontier_erdos_ud/env.py b/examples/frontier_erdos_ud/env.py
+new file mode 100644
+index 0000000..aa597ef
+--- /dev/null
++++ b/examples/frontier_erdos_ud/env.py
+@@ -0,0 +1,189 @@
++"""Frontier-CS 2.0 "erdos_unit_distance" as a ttt-discover environment.
++
++Problem (FrontierCS/Frontier-CS, 2.0/problems/erdos_unit_distance): place
++exactly N distinct points in the plane maximizing the number of pairs at
++Euclidean distance exactly 1 (rel/abs tolerance 1e-10, min separation 1e-3).
++Baseline = N unit pairs (regular N-gon). problem_type selects N: "65536" is the
++real task, "10" mirrors their erdos_demo smoke variant.
++
++Scoring/validity logic below is vendored verbatim-in-spirit from the upstream
++evaluator.py so our raw counts match their judge. Our interface differs only in
++the entrypoint: programs define run_construction() -> list[(x, y)] (no args;
++N is fixed in the prompt). A best construction can be submitted upstream as a
++literal `POINTS = [...]` file, so leaderboard portability is preserved.
++
++reward / raw_score = unit_pairs / N (maximize; polygon baseline = 1.0, a
++triangular-lattice construction ~ 3.0). The upstream leaderboard score
++(100 * ((pairs - N) / pairs)^3) is included in the message for reference.
++"""
++
++from __future__ import annotations
++
++import math
++
++from ttt_discover import Environment, SandboxRewardEvaluator, State
++
++UNIT_DISTANCE = 1.0
++DISTANCE_REL_TOL = 1e-10
++DISTANCE_ABS_TOL = 1e-10
++MIN_SEPARATION = 1e-3
++SCORE_POWER = 3.0
++
++
++def _is_number(value) -> bool:
++    if isinstance(value, bool):
++        return False
++    try:
++        return math.isfinite(float(value))
++    except Exception:
++        return False
++
++
++def to_points(raw) -> list[tuple[float, float]]:
++    try:
++        values = raw.tolist()
++    except Exception:
++        values = list(raw)
++    points: list[tuple[float, float]] = []
++    for index, item in enumerate(values):
++        try:
++            pair = item.tolist()
++        except Exception:
++            pair = item
++        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
++            raise ValueError(f"point {index} is not a 2D coordinate pair")
++        x, y = pair
++        if not _is_number(x) or not _is_number(y):
++            raise ValueError(f"point {index} has a non-finite coordinate")
++        points.append((float(x), float(y)))
++    return points
++
++
++def validate_points(points: list[tuple[float, float]], n_points: int) -> None:
++    if len(points) != n_points:
++        raise ValueError(f"expected {n_points} points, got {len(points)}")
++    buckets: dict[tuple[int, int], list[tuple[float, float]]] = {}
++    min_sep2 = MIN_SEPARATION * MIN_SEPARATION
++    for index, (x, y) in enumerate(points):
++        if not math.isfinite(x) or not math.isfinite(y):
++            raise ValueError(f"point {index} has a non-finite coordinate")
++        key = (math.floor(x / MIN_SEPARATION), math.floor(y / MIN_SEPARATION))
++        for dx in (-1, 0, 1):
++            for dy in (-1, 0, 1):
++                for px, py in buckets.get((key[0] + dx, key[1] + dy), ()):
++                    sep2 = (x - px) * (x - px) + (y - py) * (y - py)
++                    if sep2 < min_sep2:
++                        raise ValueError(
++                            f"point {index} is closer than {MIN_SEPARATION:g} to another point"
++                        )
++        buckets.setdefault(key, []).append((x, y))
++
++
++def count_unit_distance_pairs(points: list[tuple[float, float]]) -> int:
++    buckets: dict[tuple[int, int], list[tuple[float, float]]] = {}
++    target2 = UNIT_DISTANCE * UNIT_DISTANCE
++    tol = max(DISTANCE_ABS_TOL, DISTANCE_REL_TOL * target2)
++    neighbor_radius = math.ceil((UNIT_DISTANCE + tol) / UNIT_DISTANCE) + 1
++    unit_pairs = 0
++    for x, y in points:
++        key = (math.floor(x / UNIT_DISTANCE), math.floor(y / UNIT_DISTANCE))
++        for dx in range(-neighbor_radius, neighbor_radius + 1):
++            for dy in range(-neighbor_radius, neighbor_radius + 1):
++                for px, py in buckets.get((key[0] + dx, key[1] + dy), ()):
++                    d2 = (x - px) * (x - px) + (y - py) * (y - py)
++                    if not math.isfinite(d2):
++                        raise ValueError("pairwise distance overflowed")
++                    if abs(d2 - target2) <= tol:
++                        unit_pairs += 1
++        buckets.setdefault(key, []).append((x, y))
++    return unit_pairs
++
++
++def upstream_score(unit_pairs: int, n_points: int) -> float:
++    if unit_pairs <= n_points:
++        return 0.0
++    raw = 100.0 * (unit_pairs - n_points) / unit_pairs
++    return 100.0 * (raw / 100.0) ** SCORE_POWER
++
++
++class FrontierErdosUDReward(SandboxRewardEvaluator):
++    def get_program_entrypoint(self) -> str:
++        return "run_construction"
++
++    def get_reward(self, code: str, state: State) -> float:
++        output, error_msg = self.execute_code(code, state)
++        if error_msg:
++            return self._get_failure_entry(error_msg)
++
++        n_points = int(self.problem_type)
++        try:
++            points = to_points(output)
++            validate_points(points, n_points)
++            unit_pairs = count_unit_distance_pairs(points)
++        except Exception as exc:
++            return self._get_failure_entry(f"Invalid construction: {exc}")
++
++        reward = unit_pairs / float(n_points)
++        return {
++            "reward": reward,
++            "correctness": 1.0,
++            "raw_score": reward,
++            "msg": (
++                f"unit_pairs={unit_pairs}; N={n_points}; pairs_per_point={reward:.6f}; "
++                f"upstream_score={upstream_score(unit_pairs, n_points):.6f}"
++            ),
++            "result_construction": [],  # 65k points are too heavy for the pool; evolve via code
++            "stdout": getattr(self, "_last_stdout", ""),
++        }
++
++
++class FrontierErdosUDEnv(Environment):
++    reward_function = FrontierErdosUDReward
++    state_type = State
++
++    def is_maximize(self) -> bool:
++        return True
++
++    def get_question(self) -> str:
++        n_points = int(self.problem_type)
++        budget_s = self.eval_timeout
++        state_ctx = self.initial_state.to_prompt(
++            4.0, metric_name="unit-distance pairs per point", maximize=True
++        )
++
++        return f'''You are an expert in combinatorial geometry, discrete mathematics, and numerical optimization.
++Your task is the planar unit-distance problem: place exactly N = {n_points} DISTINCT points in the
++Euclidean plane so that the number of unordered pairs of points at Euclidean distance exactly 1 is
++as large as possible.
++
++## Scoring
++- A pair counts if |d^2 - 1| <= 1e-10 (squared-distance tolerance). Make distances exact to full
++  float64 precision; do not rely on the tolerance.
++- Validity: exactly {n_points} points, all coordinates finite, and every two points at least 1e-3
++  apart. An invalid construction scores 0.
++- Your score is unit_pairs / N (the regular N-gon baseline scores 1.0; a triangular lattice patch
++  scores about 3.0; the goal is to go as far beyond that as possible).
++- If your construction naturally uses a different common distance, scale all coordinates so that
++  the repeated distance is exactly 1 before returning.
++
++## Rules
++- Define `run_construction()` (no arguments) that returns a list of {n_points} (x, y) tuples.
++- Your function has {budget_s} seconds to run; return the best construction found within budget.
++- You may use numpy, scipy, math. Make all helper functions top level, no closures or lambdas.
++- No filesystem or network IO.
++- **Print statements**: use print() to log progress; your output will be shown back to you.
++- Include a short docstring at the top summarizing your construction/algorithm.
++
++## Background
++Known strong constructions come from sections of scaled integer lattices (points with many
++representations of a radius as sums of two squares), triangular-lattice patches, and Minkowski
++sums / rotated unions of smaller unit-distance graphs (e.g. Moser spindles). The count of the
++best known constructions grows superlinearly, n^(1 + c/log log n).
++
++{state_ctx}
++
++Reason about how you could further improve this construction.
++Ideally, try to do something different than the above algorithm. Could be using different
++algorithmic ideas, adjusting your heuristics, adjusting / sweeping your hyperparameters, etc.
++Unless you make a meaningful improvement, you will not be rewarded.
++'''
 diff --git a/pyproject.toml b/pyproject.toml
 index 8a961fb..7689d6a 100644
 --- a/pyproject.toml
