@@ -83,4 +83,6 @@ fi
 export SSL_CERT_FILE="${SSL_CERT_FILE:-$("${discover_venv}/bin/python" -c 'import certifi; print(certifi.where())')}"
 export REQUESTS_CA_BUNDLE="${REQUESTS_CA_BUNDLE:-${SSL_CERT_FILE}}"
 
-exec "${discover_venv}/bin/python" "${repo_root}/tpu/run_ttd_smoke_gptoss20b.py"
+# Entrypoint: the erdos-specific smoke runner by default; set TTD_ENTRYPOINT to
+# tpu/run_ttd_env_gptoss.py (with TTD_ENV/TTD_PROBLEM_TYPE) for other tasks.
+exec "${discover_venv}/bin/python" "${TTD_ENTRYPOINT:-${repo_root}/tpu/run_ttd_smoke_gptoss20b.py}"
