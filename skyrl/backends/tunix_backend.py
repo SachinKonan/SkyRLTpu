@@ -39,7 +39,7 @@ from transformers import AutoConfig, AutoTokenizer
 
 from skyrl.backends.backend import AbstractBackend
 from skyrl.backends.renderer import render_model_input
-from skyrl.backends.utils import pad_batch
+from skyrl.backends.utils import pad_batch, pad_to_fsdp
 from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
 from skyrl.tinker.loss_fns import LOSS_FUNCTIONS, LossFnConfig
@@ -793,9 +793,46 @@ class TunixBackend(AbstractBackend):
                 )
                 advantages = pad_batch([prepared_batch.all_advantages[i] for i in mb_idx], max_len, np.float32)
                 positions, attn_mask = self._positions_and_masks(mb_inputs, max_len)
+                mb_loss_fn_types = loss_fn_types[mb_idx]
+                mb_clip_low = loss_fn_config.clip_low_threshold[mb_idx]
+                mb_clip_high = loss_fn_config.clip_high_threshold[mb_idx]
+
+                if template.kind == "maxtext":
+                    # MaxText shards the batch dim over the data/fsdp mesh axes:
+                    # pad rows to a device-count multiple. Padded rows have
+                    # all-zero loss weights and are excluded from outputs and
+                    # the gradient-accumulation count.
+                    shard = jax.device_count()
+                    (
+                        input_ids,
+                        target_ids,
+                        loss_mask,
+                        sampling_logprobs,
+                        advantages,
+                        positions,
+                        attn_mask,
+                        mb_loss_fn_types,
+                        mb_clip_low,
+                        mb_clip_high,
+                    ) = (
+                        pad_to_fsdp(arr, shard)
+                        for arr in (
+                            input_ids,
+                            target_ids,
+                            loss_mask,
+                            sampling_logprobs,
+                            advantages,
+                            positions,
+                            attn_mask,
+                            mb_loss_fn_types,
+                            mb_clip_low,
+                            mb_clip_high,
+                        )
+                    )
+
                 mb_config = LossFnConfig(
-                    clip_low_threshold=loss_fn_config.clip_low_threshold[mb_idx],
-                    clip_high_threshold=loss_fn_config.clip_high_threshold[mb_idx],
+                    clip_low_threshold=mb_clip_low,
+                    clip_high_threshold=mb_clip_high,
                 )
 
                 common_args = (
@@ -804,7 +841,7 @@ class TunixBackend(AbstractBackend):
                     attn_mask,
                     target_ids,
                     loss_mask,
-                    loss_fn_types[mb_idx],
+                    mb_loss_fn_types,
                     sampling_logprobs,
                     advantages,
                     mb_config,
