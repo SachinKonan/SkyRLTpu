@@ -34,6 +34,8 @@ MAX_STEPS="${MAX_STEPS:-180}"
 SAVE_EVERY="${SAVE_EVERY:-20}"
 EVAL_EVERY="${EVAL_EVERY:-20}"
 LOSS_FN="${LOSS_FN:-importance_sampling}"
+# >0 enables on-policy pipelined training (stream minibatches).
+STREAM_NUM_MINIBATCHES="${STREAM_NUM_MINIBATCHES:-0}"
 SEED="${SEED:-0}"
 BEHAVIOR_IF_LOG_DIR_EXISTS="${BEHAVIOR_IF_LOG_DIR_EXISTS:-delete}"
 
@@ -57,6 +59,10 @@ log_path="${LOG_PATH:-${LOG_ROOT}/math-Qwen-Qwen3.5-9B-32rank-2e-05lr-16group-64
 client_log="${CLIENT_LOG:-${LOG_ROOT}/math-rl-qwen35-9b-${date_stamp}.log}"
 run_script="${LOG_ROOT}/run-client-qwen35-9b-${date_stamp}.sh"
 base_url="http://127.0.0.1:${LOCAL_PORT}"
+stream_arg=""
+if [[ "${STREAM_NUM_MINIBATCHES}" -gt 0 ]]; then
+  stream_arg="stream_minibatch_config.num_minibatches='${STREAM_NUM_MINIBATCHES}'"
+fi
 cookbook_spec="tinker-cookbook[math-rl] @ file://${repo_root}/third_party/tinker-cookbook"
 
 if ! tmux has-session -t "$TUNNEL_SESSION" 2>/dev/null; then
@@ -107,7 +113,7 @@ exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
     save_every='${SAVE_EVERY}' \\
     eval_every='${EVAL_EVERY}' \\
     loss_fn='${LOSS_FN}' \\
-    seed='${SEED}' \\
+    ${stream_arg} seed='${SEED}' \\
     log_path='${log_path}' \\
     behavior_if_log_dir_exists='${BEHAVIOR_IF_LOG_DIR_EXISTS}'
 EOF

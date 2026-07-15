@@ -114,7 +114,8 @@ class ExternalInferenceClient:
             "model": model_name,
             "prompt": prompt_tokens,
             "n": request.num_samples,
-            "seed": request.sampling_params.seed,
+            # No per-request seed: the vLLM TPU (tpu-inference) backend rejects
+            # it with "JAX does not support per-request seed".
             "max_tokens": request.sampling_params.max_tokens,
             "temperature": request.sampling_params.temperature,
             "top_p": request.sampling_params.top_p,

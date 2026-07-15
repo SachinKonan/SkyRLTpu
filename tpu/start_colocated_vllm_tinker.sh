@@ -85,6 +85,13 @@ if [[ "$TINKER_BACKEND" == "tunix" ]]; then
 else
   TINKER_ENGINE_EXTRA="jax"
 fi
+# Sampling around the engine: the engine loop is single-threaded, so
+# concurrent train+sample (pipelined RL) requires the API-side external
+# inference path. Default on for tunix.
+EXTERNAL_SAMPLING="${EXTERNAL_SAMPLING:-auto}"
+if [[ "$EXTERNAL_SAMPLING" == "auto" ]]; then
+  if [[ "$TINKER_BACKEND" == "tunix" ]]; then EXTERNAL_SAMPLING=1; else EXTERNAL_SAMPLING=0; fi
+fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
@@ -485,6 +492,11 @@ print(json.dumps(cfg))
 PY
 )"
 
+external_inference_flag=""
+if [[ "$EXTERNAL_SAMPLING" == "1" ]]; then
+  external_inference_flag="--external-inference-url http://$(worker_internal_ip "${vllm_workers[0]}"):${VLLM_PORT}"
+fi
+
 if [[ "$START_TINKER" == "1" ]]; then
   cleanup_cmd='mkdir -p ~/skyrl-logs; tmux kill-session -t skyrl-tinker 2>/dev/null || true; tmux list-sessions -F "#{session_name}" 2>/dev/null | awk "/^skyrl-tinker-worker-/ {print}" | xargs -r -n1 tmux kill-session -t; pkill -TERM -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.jax" || true; sleep 5; pkill -KILL -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.jax" || true'
   for worker in "${train_workers[@]}"; do
@@ -548,6 +560,7 @@ exec uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}" -m skyrl
   --checkpoints-base "${REMOTE_CHECKPOINTS}" \\
   --external-inference-lora-base "${REMOTE_LORA_BASE}" \\
   --backend "${TINKER_BACKEND}" \\
+  ${external_inference_flag} \\
   --backend-config '${backend_config}'
 EOF
   chmod +x "$api_script"

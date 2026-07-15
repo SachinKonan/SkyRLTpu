@@ -209,6 +209,10 @@ export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE}"
 export SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+# Resolve unknown adapter names from the shared lora dir (external
+# inference path references adapters by name without an explicit load).
+export VLLM_PLUGINS="\${VLLM_PLUGINS:-lora_filesystem_resolver}"
+export VLLM_LORA_RESOLVER_CACHE_DIR="${REMOTE_LORA_BASE}"
 export VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH}"
 mkdir -p "${VLLM_XLA_CACHE_PATH}"
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
