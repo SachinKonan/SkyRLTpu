@@ -48,18 +48,14 @@ REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models
 # Persist the JAX/XLA compile cache on the GCS mount so precompiled kernels
 # survive spot VM recreation (vLLM defaults to local ~/.cache/vllm/xla_cache).
 VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH:-/home/${REMOTE_USER}/gcs/vllm-xla-cache}"
+# Forked tpu-inference with the runtime-LoRA forwarders committed (tracked as
+# the third_party/tpu-inference submodule). Overlaid on the vllm-tpu wheel
+# install; replaces the old deploy-time apply_vllm_tpu_lora_patch.sh flow.
+TPU_INFERENCE_FORK_URL="${TPU_INFERENCE_FORK_URL:-https://github.com/SachinKonan/tpu-inference.git}"
+TPU_INFERENCE_FORK_REF="${TPU_INFERENCE_FORK_REF:-skyrl/v0.23.0-lora}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
-apply_patch_script="${repo_root}/tpu/apply_vllm_tpu_lora_patch.sh"
-patch_file="${repo_root}/third_party/patches/tpu-inference-tpu-worker-lora-forwarders.patch"
-
-if [[ ! -f "${apply_patch_script}" || ! -f "${patch_file}" ]]; then
-  echo "Missing vLLM TPU patch assets. Expected:" >&2
-  echo "  ${apply_patch_script}" >&2
-  echo "  ${patch_file}" >&2
-  exit 1
-fi
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
@@ -160,9 +156,18 @@ if [ ! -x "${VLLM_VENV}/bin/vllm" ]; then
 fi
 
 uv pip install --python "${VLLM_VENV}/bin/python" "vllm-tpu==${VLLM_TPU_VERSION}"
-PATCH_FILE="\$HOME/tpu-inference-tpu-worker-lora-forwarders.patch" \\
-  PYTHON="${VLLM_VENV}/bin/python" \\
-  bash "\$HOME/apply_vllm_tpu_lora_patch.sh"
+# Overlay the forked tpu-inference (runtime LoRA forwarders + Ray env
+# allowlist). vllm-tpu is a meta-package depending on tpu-inference, so a
+# --no-deps force-reinstall cleanly swaps in the fork at the pinned ref.
+uv pip install --python "${VLLM_VENV}/bin/python" --no-deps --force-reinstall \\
+  "tpu-inference @ git+${TPU_INFERENCE_FORK_URL}@${TPU_INFERENCE_FORK_REF}"
+"${VLLM_VENV}/bin/python" - <<'PY'
+from tpu_inference.worker.tpu_worker import TPUWorker
+
+missing = [n for n in ("add_lora", "remove_lora", "list_loras", "pin_lora") if not hasattr(TPUWorker, n)]
+assert not missing, f"forked tpu-inference missing LoRA forwarders: {missing}"
+print("tpu-inference fork overlay verified (runtime LoRA forwarders present)")
+PY
 
 if [[ "\${VLLM_CLEANUP:-1}" == "1" ]]; then
   tmux kill-session -t vllm-tpu 2>/dev/null || true
@@ -291,12 +296,6 @@ for worker in "${vllm_workers[@]}"; do
     --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
 
   gcloud alpha compute tpus tpu-vm scp "$runner_script" "${REMOTE_USER}@${TPU_NAME}:~/run_vllm_tpu_server.sh" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
-
-  gcloud alpha compute tpus tpu-vm scp "$apply_patch_script" "${REMOTE_USER}@${TPU_NAME}:~/apply_vllm_tpu_lora_patch.sh" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
-
-  gcloud alpha compute tpus tpu-vm scp "$patch_file" "${REMOTE_USER}@${TPU_NAME}:~/tpu-inference-tpu-worker-lora-forwarders.patch" \
     --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
 done
 
