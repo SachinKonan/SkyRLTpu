@@ -61,7 +61,7 @@ run_script="${LOG_ROOT}/run-client-qwen35-9b-${date_stamp}.sh"
 base_url="http://127.0.0.1:${LOCAL_PORT}"
 stream_arg=""
 if [[ "${STREAM_NUM_MINIBATCHES}" -gt 0 ]]; then
-  stream_arg="stream_minibatch_config.num_minibatches='${STREAM_NUM_MINIBATCHES}'"
+  stream_arg="stream_minibatch_config.num_minibatches='${STREAM_NUM_MINIBATCHES}' stream_minibatch_config.groups_per_batch='${GROUPS_PER_BATCH}'"
 fi
 cookbook_spec="tinker-cookbook[math-rl] @ file://${repo_root}/third_party/tinker-cookbook"
 
