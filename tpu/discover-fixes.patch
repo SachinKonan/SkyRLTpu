@@ -979,6 +979,391 @@ index 0000000..b03a20f
 +            targets = d.loss_fn_inputs["target_tokens"].to_torch()
 +            probe_holder.append((d.model_input, targets, (w01 > 0).float()))
 +    return out
+diff --git a/ttt_discover/rl/ensemble.py b/ttt_discover/rl/ensemble.py
+new file mode 100644
+index 0000000..523908a
+--- /dev/null
++++ b/ttt_discover/rl/ensemble.py
+@@ -0,0 +1,379 @@
++"""Two-model ensemble discovery: independent LoRA/GRPO/KL per member, ONE shared PUCT pool.
++
++Each member (e.g. openai/gpt-oss-20b and nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16)
++has its own Tinker training client, its own GRPO objective over its own rollout
++groups, and its own KL-to-own-base penalty. The ONLY coupling is the shared
++PUCTSampler: both members draw seed states from it (back-to-back get_batch calls
++before any rollout -> identical pool snapshot) and both push discovered states
++into it during rollouts. State.origin records which member produced each state,
++making cross-pollination measurable.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import logging
++import os
++import time
++from dataclasses import dataclass, field
++from typing import Any
++
++import tinker
++import wandb
++
++from ttt_discover.rl.data_processing import remove_constant_reward_groups
++from ttt_discover.rl.train import (
++    Config,
++    compute_advantages,
++    do_group_rollout_and_filter_constant_reward,
++    do_train_step_and_get_sampling_client,
++    save_checkpoint_and_get_sampling_client,
++)
++from ttt_discover.tinker_utils import ml_log, renderers
++from ttt_discover.tinker_utils.best_sequence_utils import clear_step_entry, get_best_bound_path
++from ttt_discover.tinker_utils.dataset_builder import (
++    DatasetConfig,
++    SingleProblemDataset,
++    get_single_problem_dataset_builder,
++)
++from ttt_discover.tinker_utils.misc_utils import (
++    check_log_dir,
++    get_last_checkpoint,
++    get_tokenizer,
++    save_checkpoint_async,
++    timed,
++)
++from ttt_discover.tinker_utils.ml_log import WandbLogger
++from ttt_discover.tinker_utils.sampler import get_or_create_sampler_with_default
++
++logger = logging.getLogger(__name__)
++
++TRAIN_TABLE_COLUMNS = [
++    "Prompt", "Gen Sequence", "Reward", "Correctness",
++    "Gen Sequence PostProc", "Message", "Initial Raw Score", "Advantage",
++]
++
++
++@dataclass
++class EnsembleMemberConfig:
++    model_name: str
++    renderer_name: str
++    metric_prefix: str                      # short tag: "gptoss", "nemotron"
++    lora_rank: int = 32
++    phase1_max_tokens: int = 26000          # gpt-oss two-phase path only
++    completion_max_tokens: int | None = None  # non-gpt-oss (LongContext) path only
++    convo_prefix: Any = None                # Nemotron: [{"role":"system","content":""}]
++    groups_per_batch: int = 32
++    learning_rate: float = 4e-5
++    kl_penalty_coef: float = 0.1
++
++
++@dataclass
++class EnsembleConfig:
++    members: list[EnsembleMemberConfig]
++    env_type: type
++    log_path: str
++    problem_type: str = ""
++    group_size: int = 8
++    num_epochs: int = 15
++    temperature: float = 1.0
++    context_window: int = 32768
++    save_every: int = 0
++    num_substeps: int = 1
++    loss_fn: str = "importance_sampling"
++    adv_estimator: str = "entropic_adaptive_beta"
++    adv_estimator_beta: float = 2.0
++    remove_constant_reward_groups: bool = True
++    wandb_project: str | None = None
++    wandb_name: str | None = None
++    tinker_base_url: str | None = None
++    num_cpus_per_task: int = 1
++    eval_backend: str = "local"
++    eval_timeout: int = 1100
++
++
++@dataclass
++class MemberRuntime:
++    tag: str
++    member_cfg: EnsembleMemberConfig
++    train_cfg: Config
++    training_client: tinker.TrainingClient
++    tokenizer: Any
++    dataset: SingleProblemDataset
++    sampling_client: tinker.SamplingClient | None = None
++
++
++def _seed_origin_metrics(tag: str, seeds: list) -> dict[str, float]:
++    from_self = from_other = from_seed = 0
++    for s in seeds:
++        o = getattr(s, "origin", None)
++        if o is None:
++            from_seed += 1
++        elif o == tag:
++            from_self += 1
++        else:
++            from_other += 1
++    n = max(1, len(seeds))
++    return {
++        f"{tag}/seeds/from_self": float(from_self),
++        f"{tag}/seeds/from_other": float(from_other),
++        f"{tag}/seeds/from_seed": float(from_seed),
++        f"{tag}/seeds/cross_frac": from_other / n,
++    }
++
++
++def _log_wandb_table(ml_logger, key: str, columns: list[str], rows: list, step: int) -> None:
++    for lg in getattr(ml_logger, "loggers", []):
++        if isinstance(lg, WandbLogger):
++            lg.log_metrics({key: wandb.Table(columns=columns, data=rows)}, step=step)
++
++
++async def _refresh_or_keep(m: MemberRuntime, i_batch: int, save_every: int):
++    """Per-step sampler-weights export; on failure keep the last good client."""
++    try:
++        client, _ = await save_checkpoint_and_get_sampling_client(
++            m.training_client, i_batch + 1, m.train_cfg.log_path, save_every
++        )
++        return client
++    except Exception:
++        logger.exception("member %s: sampler-weights export failed; keeping old client", m.tag)
++        return m.sampling_client
++
++
++async def do_ensemble_training(
++    start_batch: int,
++    cfg: EnsembleConfig,
++    members: list[MemberRuntime],
++    service_client: tinker.ServiceClient,
++    ml_logger,
++    shared_sampler,
++) -> None:
++    # Initial sampling clients
++    for m in members:
++        m.sampling_client, _ = await save_checkpoint_and_get_sampling_client(
++            m.training_client, start_batch, m.train_cfg.log_path, cfg.save_every, start_batch
++        )
++
++    for i_batch in range(start_batch, cfg.num_epochs):
++        metrics: dict[str, Any] = {
++            "progress/batch": i_batch,
++            "progress/done_frac": (i_batch + 1) / cfg.num_epochs,
++        }
++        t_start = time.time()
++        clear_step_entry(get_best_bound_path(cfg.log_path), i_batch)
++
++        # ---- 1. seed draw: both members BEFORE any rollout (same pool snapshot);
++        #         snapshot the sampler's single-slot stats right after each draw.
++        plans: list[dict] = []
++        for m in members:
++            builders = m.dataset.get_batch(0)
++            stats = shared_sampler.get_sample_stats()
++            table_cols, table_rows = shared_sampler.get_sample_table()
++            seeds = [b.env_thunk.keywords["initial_state"] for b in builders]
++            metrics.update({f"{m.tag}/{k}": v for k, v in stats.items()})
++            metrics.update(_seed_origin_metrics(m.tag, seeds))
++            plans.append(dict(member=m, builders=builders,
++                              table=(table_cols, table_rows)))
++
++        # ---- 2. rollouts: ONE gather across both members' groups (heterogeneous
++        #         completers chosen per call by model_name).
++        tasks, owners = [], []
++        for pi, p in enumerate(plans):
++            m = p["member"]
++            for j, builder in enumerate(p["builders"]):
++                tasks.append(asyncio.create_task(
++                    do_group_rollout_and_filter_constant_reward(
++                        m.sampling_client,
++                        builder,
++                        temperature=cfg.temperature,
++                        do_remove_constant_reward_groups=False,
++                        step_idx=i_batch,
++                        model_name=m.train_cfg.model_name,
++                        phase1_max_tokens=m.train_cfg.phase1_max_tokens,
++                        context_window=cfg.context_window,
++                        completion_max_tokens=m.train_cfg.completion_max_tokens,
++                    ),
++                    name=f"{m.tag}_sample_{j}",
++                ))
++                owners.append((pi, builder))
++        plan_desc = " + ".join(
++            "{}:{}g".format(p["member"].tag, len(p["builders"])) for p in plans
++        )
++        print(f"[ensemble] step {i_batch}: sampling {plan_desc} ...", flush=True)
++        with timed("sampling", metrics):
++            results = await asyncio.gather(*tasks, return_exceptions=True)
++
++        for p in plans:
++            p["groups"], p["kept_builders"], p["n_failed"] = [], [], 0
++        for (pi, builder), res in zip(owners, results):
++            p = plans[pi]
++            if isinstance(res, BaseException):
++                p["n_failed"] += 1
++                logger.error("member %s rollout group failed: %r", p["member"].tag, res)
++            else:
++                p["groups"].append(res)
++                p["kept_builders"].append(builder)
++        for p in plans:
++            metrics[f"{p['member'].tag}/rollout_groups_failed"] = float(p["n_failed"])
++
++        # ---- 3. pool flush (once) + shared pool metrics
++        shared_sampler.flush(step=i_batch + 1)
++        if hasattr(shared_sampler, "get_origin_stats"):
++            metrics.update(shared_sampler.get_origin_stats())
++
++        # ---- 4. per-member train (sequential; each guarded)
++        for p in plans:
++            m = p["member"]
++            if not p["groups"]:
++                metrics[f"{m.tag}/train_skipped"] = 1.0
++                m.sampling_client = await _refresh_or_keep(m, i_batch, cfg.save_every)
++                continue
++            try:
++                groups = p["groups"]
++                if cfg.remove_constant_reward_groups:
++                    groups = remove_constant_reward_groups(groups)
++                print(f"[ensemble] step {i_batch}: training {m.tag} "
++                      f"({len(groups)} groups)...", flush=True)
++                m.sampling_client, tm = await do_train_step_and_get_sampling_client(
++                    m.train_cfg, i_batch, m.training_client, service_client,
++                    m.tokenizer, p["kept_builders"], groups, distill_task=None,
++                )
++                table_data = tm.pop("table", None)
++                metrics.update({f"{m.tag}/{k}": v for k, v in tm.items()})
++                if table_data is not None:
++                    adv_P = compute_advantages(groups, cfg.adv_estimator, cfg.adv_estimator_beta)
++                    flat = [a.item() for aG in adv_P for a in aG]
++                    rows = [(*row, flat[k]) for k, row in enumerate(table_data)]
++                    _log_wandb_table(ml_logger, f"{m.tag}/gen&score_train_{i_batch}",
++                                     TRAIN_TABLE_COLUMNS, rows, i_batch)
++            except Exception:
++                logger.exception("member %s train step failed; continuing", m.tag)
++                metrics[f"{m.tag}/train_error"] = 1.0
++                m.sampling_client = await _refresh_or_keep(m, i_batch, cfg.save_every)
++            cols, rows = p["table"]
++            if rows:
++                _log_wandb_table(ml_logger, f"{m.tag}/sampler_states_{i_batch}",
++                                 cols, rows, i_batch)
++
++        metrics["time/total"] = time.time() - t_start
++        ml_logger.log_metrics(metrics, step=i_batch)
++
++
++async def ensemble_main(cfg: EnsembleConfig) -> None:
++    ml_logger = ml_log.setup_logging(
++        log_dir=cfg.log_path,
++        wandb_project=cfg.wandb_project,
++        wandb_name=cfg.wandb_name,
++        config=cfg,
++    )
++    service_client = tinker.ServiceClient(base_url=cfg.tinker_base_url)
++
++    # ONE shared pool at the shared log root. batch_size here only sizes the
++    # initial seed population (enough distinct lineages for both members).
++    shared_sampler = get_or_create_sampler_with_default(
++        log_path=cfg.log_path,
++        env_type=cfg.env_type,
++        problem_type=cfg.problem_type,
++        batch_size=sum(m.groups_per_batch for m in cfg.members),
++    )
++
++    members: list[MemberRuntime] = []
++    start_batches: list[int] = []
++    for mc in cfg.members:
++        member_log = os.path.join(cfg.log_path, f"member_{mc.metric_prefix}")
++        os.makedirs(member_log, exist_ok=True)
++
++        dataset_cfg = DatasetConfig(
++            problem_type=cfg.problem_type,
++            env_type=cfg.env_type,
++            batch_size=mc.groups_per_batch,
++            model_name_for_tokenizer=mc.model_name,
++            renderer_name=mc.renderer_name,
++            group_size=cfg.group_size,
++            num_cpus_per_task=cfg.num_cpus_per_task,
++            eval_backend=cfg.eval_backend,
++            eval_timeout=cfg.eval_timeout,
++            log_path=cfg.log_path,          # shared root: grading tmp + best_sequences
++            convo_prefix=mc.convo_prefix,
++            member_tag=mc.metric_prefix,
++        )
++        tokenizer = get_tokenizer(mc.model_name)
++        renderer = renderers.get_renderer(mc.renderer_name, tokenizer=tokenizer)
++        dataset = SingleProblemDataset(config=dataset_cfg, renderer=renderer,
++                                       sampler=shared_sampler)
++
++        resume = get_last_checkpoint(member_log)
++        if resume is not None and "state_path" in resume:
++            training_client = await service_client.create_training_client_from_state_with_optimizer_async(
++                resume["state_path"]
++            )
++            start_batches.append(int(resume.get("loop_state", {}).get("batch", 0)))
++            logger.info("member %s resumed from %s", mc.metric_prefix, resume["state_path"])
++        else:
++            training_client = await service_client.create_lora_training_client_async(
++                mc.model_name, rank=mc.lora_rank
++            )
++            start_batches.append(0)
++
++        train_cfg = Config(
++            env_type=cfg.env_type,
++            problem_type=cfg.problem_type,
++            learning_rate=mc.learning_rate,
++            dataset_builder=get_single_problem_dataset_builder(dataset_cfg),  # required field; never awaited
++            model_name=mc.model_name,
++            lora_rank=mc.lora_rank,
++            temperature=cfg.temperature,
++            kl_penalty_coef=mc.kl_penalty_coef,
++            log_path=member_log,
++            save_every=cfg.save_every,
++            num_epochs=cfg.num_epochs,
++            num_substeps=cfg.num_substeps,
++            loss_fn=cfg.loss_fn,
++            adv_estimator=cfg.adv_estimator,
++            adv_estimator_beta=cfg.adv_estimator_beta,
++            remove_constant_reward_groups=cfg.remove_constant_reward_groups,
++            phase1_max_tokens=mc.phase1_max_tokens,
++            context_window=cfg.context_window,
++            completion_max_tokens=mc.completion_max_tokens,
++            tinker_base_url=cfg.tinker_base_url,
++        )
++        members.append(MemberRuntime(
++            tag=mc.metric_prefix, member_cfg=mc, train_cfg=train_cfg,
++            training_client=training_client, tokenizer=tokenizer, dataset=dataset,
++        ))
++
++    start_batch = min(start_batches)
++    if len(set(start_batches)) > 1:
++        logger.warning("members at different start batches %s; using %d (one member replays)",
++                       start_batches, start_batch)
++    if start_batch > 0 and hasattr(shared_sampler, "reload_from_step"):
++        shared_sampler.reload_from_step(start_batch)
++
++    print(f"[ensemble] members: {[m.tag for m in members]}  "
++          f"steps={cfg.num_epochs} group_size={cfg.group_size} "
++          f"groups/member={[m.member_cfg.groups_per_batch for m in members]}", flush=True)
++
++    await do_ensemble_training(start_batch, cfg, members, service_client,
++                               ml_logger, shared_sampler)
++
++    if cfg.save_every > 0:
++        for m in members:
++            await save_checkpoint_async(
++                m.training_client, name="final", log_path=m.train_cfg.log_path,
++                loop_state={"batch": cfg.num_epochs}, kind="both",
++            )
++    ml_logger.close()
++
++
++def ensemble_discover(cfg: EnsembleConfig) -> None:
++    """Entry: mirrors discovery.discover_impl's log setup, then runs the ensemble loop."""
++    check_log_dir(cfg.log_path, behavior_if_exists="resume")
++    os.makedirs(cfg.log_path, exist_ok=True)
++    logging.basicConfig(
++        level=logging.INFO,
++        filename=os.path.join(cfg.log_path, "train.log"),
++        filemode="a",
++        force=True,
++    )
++    logger.info("ensemble logging to %s", cfg.log_path)
++    asyncio.run(ensemble_main(cfg))
 diff --git a/ttt_discover/rl/train.py b/ttt_discover/rl/train.py
 index b9e414d..c6f92c6 100644
 --- a/ttt_discover/rl/train.py
@@ -1479,7 +1864,7 @@ index aa700fc..5b03a1d 100644
 \ No newline at end of file
 +        raise NotImplementedError("Reference answer not available for TTT environments.")
 diff --git a/ttt_discover/tinker_utils/sampler.py b/ttt_discover/tinker_utils/sampler.py
-index d6c8ec1..567db4c 100644
+index d6c8ec1..e06a2eb 100644
 --- a/ttt_discover/tinker_utils/sampler.py
 +++ b/ttt_discover/tinker_utils/sampler.py
 @@ -101,6 +101,15 @@ class PUCTSampler(StateSampler):
@@ -1528,6 +1913,97 @@ index d6c8ec1..567db4c 100644
              for entry in scores:
                  s = entry[2]
                  if s.id in blocked_ids:
+@@ -418,7 +450,7 @@ class PUCTSampler(StateSampler):
+         return stats
+ 
+     def get_sample_table(self) -> tuple[list[str], list[tuple]]:
+-        columns = ["buffer_idx", "timestep", "value", "terminal_value", "parent_value", "construction_len", "observation_len", "n", "Q", "P", "bonus", "score"]
++        columns = ["buffer_idx", "timestep", "value", "terminal_value", "parent_value", "construction_len", "observation_len", "n", "Q", "P", "bonus", "score", "origin"]
+         rows = []
+         if not self._last_sampled_states:
+             return columns, rows
+@@ -429,9 +461,33 @@ class PUCTSampler(StateSampler):
+             constr = getattr(state, 'construction', None)
+             constr_len = len(constr) if constr is not None else 0
+             obs_len = len(state.observation) if state.observation else 0
+-            rows.append((idx, state.timestep, state.value, 0, parent_val, constr_len, obs_len, n, Q, P, bonus, score))
++            origin = getattr(state, "origin", None) or "seed"
++            rows.append((idx, state.timestep, state.value, 0, parent_val, constr_len, obs_len, n, Q, P, bonus, score, origin))
+         return columns, rows
+ 
++    def get_origin_stats(self) -> dict:
++        """Pool composition by State.origin ('seed' = origin None / pre-ensemble states)."""
++        with self._lock:
++            states = list(self._states)
++        counts: dict[str, int] = {}
++        best: dict[str, float] = {}
++        for s in states:
++            o = getattr(s, "origin", None) or "seed"
++            counts[o] = counts.get(o, 0) + 1
++            if s.value is not None:
++                best[o] = max(best.get(o, float("-inf")), float(s.value))
++        total = max(1, len(states))
++        out: dict[str, float] = {"pool/size": float(len(states))}
++        vals = [s.value for s in states if s.value is not None]
++        if vals:
++            out["pool/best_value"] = float(max(vals))
++        for o, c in counts.items():
++            out[f"pool/origin/{o}/count"] = float(c)
++            out[f"pool/origin/{o}/frac"] = c / total
++            if o in best:
++                out[f"pool/origin/{o}/best_value"] = best[o]
++        return out
++
+ 
+ def create_sampler(
+     log_path: str,
+diff --git a/ttt_discover/tinker_utils/state.py b/ttt_discover/tinker_utils/state.py
+index 356f56c..755c036 100644
+--- a/ttt_discover/tinker_utils/state.py
++++ b/ttt_discover/tinker_utils/state.py
+@@ -30,6 +30,7 @@ class State(ABC):
+     parent_values: list[float]  # list of ancestor values (most recent first) for terminal value estimation
+     parents: list[dict]  # list of parent refs [{"id": ..., "timestep": ...}, ...] (most recent first)
+     observation: str  # stdout/logs from the code that created this state
++    origin: str | None  # which generator produced this state (ensemble member tag); None = initial seed
+ 
+     def __init__(
+         self,
+@@ -41,6 +42,7 @@ class State(ABC):
+         parents: list[dict] = None,
+         id: str = None,
+         observation: str = "",
++        origin: str = None,
+     ):
+         self.id = id if id is not None else str(uuid.uuid4())
+         self.timestep = timestep
+@@ -50,6 +52,7 @@ class State(ABC):
+         self.parent_values = parent_values if parent_values is not None else []
+         self.parents = parents if parents is not None else []
+         self.observation = observation
++        self.origin = origin
+ 
+     def to_dict(self) -> dict:
+         return {
+@@ -62,8 +65,9 @@ class State(ABC):
+             "observation": self.observation,
+             "construction": to_json_serializable(self.construction),
+             "code": self.code,
++            "origin": self.origin,
+         }
+-    
++
+     @classmethod
+     def from_dict(cls, d: dict) -> State:
+         return cls(
+@@ -75,6 +79,7 @@ class State(ABC):
+             parents=d.get("parents", []),
+             id=d.get("id"),
+             observation=d.get("observation", ""),
++            origin=d.get("origin"),
+         )
+ 
+     def to_prompt(self, target, metric_name: str = "value", maximize: bool = True, language: str = ""):
 diff --git a/uv.lock b/uv.lock
 new file mode 100644
 index 0000000..a536536
