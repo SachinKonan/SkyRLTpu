@@ -539,10 +539,10 @@ index dca6eea..dc49155 100644
 -
 diff --git a/ttt_discover/rl/context_distill.py b/ttt_discover/rl/context_distill.py
 new file mode 100644
-index 0000000..b03a20f
+index 0000000..e630827
 --- /dev/null
 +++ b/ttt_discover/rl/context_distill.py
-@@ -0,0 +1,436 @@
+@@ -0,0 +1,518 @@
 +"""Contrastive context distillation alongside the RL objective.
 +
 +Per training step: sample (suboptimal, betters) pairs from the PUCT pool, have the
@@ -733,6 +733,88 @@ index 0000000..b03a20f
 +
 +def _ws_norm(s: str) -> str:
 +    return re.sub(r"\s+", " ", s).strip()
++
++
++def select_cross_distill_pairs(
++    sampler,
++    env_group_builders_P: Sequence[Any],
++    self_tag: str,
++    max_pairs: int,
++    num_betters: int,
++    max_code_chars: int,
++    rng: random.Random,
++) -> tuple[list[DistillPair], dict[str, float]]:
++    """Ensemble variant: worse = THIS member's own states (top half of them),
++    betters = strictly-higher-value states produced by OTHER members. The
++    critique is later written by this member's own policy, so the advice text
++    stays near its distribution while the knowledge comes from across the
++    ensemble. Zero pairs until cross-model betters exist (early steps)."""
++    metrics: dict[str, float] = {"distill/pairs_selected": 0.0,
++                                 "distill/pairs_cross": 0.0}
++    if not env_group_builders_P:
++        return [], metrics
++    env_type, _, _, _ = _thunk_parts(env_group_builders_P[0])
++    probe_env = env_type(*env_group_builders_P[0].env_thunk.args,
++                         **env_group_builders_P[0].env_thunk.keywords)
++    maximize = probe_env.is_maximize()
++
++    with sampler._lock:
++        pool = [s for s in sampler._states
++                if s.code and s.code.strip() and s.value is not None]
++    own = sorted((s for s in pool if getattr(s, "origin", None) == self_tag),
++                 key=lambda s: s.value, reverse=True)
++    others = sorted((s for s in pool
++                     if getattr(s, "origin", None) not in (None, self_tag)),
++                    key=lambda s: s.value, reverse=True)
++    if not own or not others:
++        return [], metrics
++    own_top = own[: max(1, len(own) // 2)]
++
++    problem_env = env_type(
++        env_group_builders_P[0].env_thunk.args[0],
++        initial_state=env_type.state_type(timestep=-1, construction=None,
++                                          code="", value=None),
++        sampler=sampler,
++        config=env_group_builders_P[0].env_thunk.keywords["config"],
++    )
++    problem_block = problem_env.get_question()
++
++    candidates = [s for s in own_top if others[0].value > s.value]
++    rng.shuffle(candidates)
++    pairs: list[DistillPair] = []
++    for worse in candidates:
++        if len(pairs) >= max_pairs:
++            break
++        betters_all = [b for b in others if b.value > worse.value]
++        if not betters_all:
++            continue
++        chosen = [betters_all[0]]
++        rest = betters_all[1:8]
++        rng.shuffle(rest)
++        chosen += rest[: max(0, num_betters - 1)]
++
++        betters_section = "\n".join(
++            BETTER_BLOCK.format(idx=i + 1, score=f"{_raw(b.value, maximize):.6f}",
++                                code=b.code[:max_code_chars])
++            for i, b in enumerate(chosen)
++        )
++        teacher_prompt = TEACHER_TEMPLATE.format(
++            n_betters=len(chosen),
++            problem=problem_block,
++            worse_score=f"{_raw(worse.value, maximize):.6f}",
++            worse_code=worse.code[:max_code_chars],
++            betters_section=betters_section,
++        )
++        try:
++            prompt_mi = _build_generator_prompt(env_group_builders_P[0], worse)
++        except Exception:
++            continue
++        pairs.append(DistillPair(worse=worse, betters=chosen, maximize=maximize,
++                                 prompt_model_input=prompt_mi,
++                                 teacher_prompt=teacher_prompt))
++    metrics["distill/pairs_selected"] = float(len(pairs))
++    metrics["distill/pairs_cross"] = float(len(pairs))
++    return pairs, metrics
 +
 +
 +def _grounding_ok(final_text: str, worse_code: str) -> tuple[bool, int]:
@@ -981,10 +1063,10 @@ index 0000000..b03a20f
 +    return out
 diff --git a/ttt_discover/rl/ensemble.py b/ttt_discover/rl/ensemble.py
 new file mode 100644
-index 0000000..523908a
+index 0000000..28bb3ff
 --- /dev/null
 +++ b/ttt_discover/rl/ensemble.py
-@@ -0,0 +1,379 @@
+@@ -0,0 +1,461 @@
 +"""Two-model ensemble discovery: independent LoRA/GRPO/KL per member, ONE shared PUCT pool.
 +
 +Each member (e.g. openai/gpt-oss-20b and nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16)
@@ -1001,6 +1083,7 @@ index 0000000..523908a
 +import asyncio
 +import logging
 +import os
++import random
 +import time
 +from dataclasses import dataclass, field
 +from typing import Any
@@ -1077,6 +1160,19 @@ index 0000000..523908a
 +    num_cpus_per_task: int = 1
 +    eval_backend: str = "local"
 +    eval_timeout: int = 1100
++    # Cross-model contrastive context distillation (symmetric): each member's
++    # pairs use ITS OWN states as "worse" and OTHER members' strictly-better
++    # states as the betters; each member's own policy writes the critique
++    # (advice stays near its own distribution). See rl/context_distill.py.
++    distill_enabled: bool = False
++    distill_pairs_per_step: int = 16
++    distill_num_betters: int = 3
++    distill_weight: float = 0.1
++    distill_grounding_filter: bool = True
++    distill_leak_filter: bool = True
++    distill_teacher_phase1_tokens: int = 0  # 0 -> member's phase1_max_tokens
++    distill_max_target_tokens: int = 8192
++    distill_max_code_chars: int = 10000
 +
 +
 +@dataclass
@@ -1141,6 +1237,9 @@ index 0000000..523908a
 +            m.training_client, start_batch, m.train_cfg.log_path, cfg.save_every, start_batch
 +        )
 +
++    # Per-member frozen probe sets for the distill internalization metric.
++    distill_probe_holders: dict[str, list] = {}
++
 +    for i_batch in range(start_batch, cfg.num_epochs):
 +        metrics: dict[str, Any] = {
 +            "progress/batch": i_batch,
@@ -1203,6 +1302,63 @@ index 0000000..523908a
 +        for p in plans:
 +            metrics[f"{p['member'].tag}/rollout_groups_failed"] = float(p["n_failed"])
 +
++        # ---- 2.5 cross-model contrastive distillation: select pairs and start
++        #      each member's teacher pass (its OWN policy critiques its own
++        #      states against OTHER members' betters). Must run BEFORE the pool
++        #      flush (which prunes children). Probe tasks score each member's
++        #      current policy on its frozen probe set.
++        distill_tasks: dict[str, asyncio.Task] = {}
++        probe_tasks: dict[str, asyncio.Task] = {}
++        if cfg.distill_enabled:
++            try:
++                from ttt_discover.rl.context_distill import (
++                    build_distill_data,
++                    probe_nll_async,
++                    select_cross_distill_pairs,
++                )
++
++                for p in plans:
++                    m = p["member"]
++                    holder = distill_probe_holders.setdefault(m.tag, [])
++                    if holder:
++                        probe_tasks[m.tag] = asyncio.create_task(
++                            probe_nll_async(holder, m.sampling_client)
++                        )
++                    builders = p["kept_builders"] or p["builders"]
++                    pairs, pm = select_cross_distill_pairs(
++                        shared_sampler,
++                        builders,
++                        self_tag=m.tag,
++                        max_pairs=cfg.distill_pairs_per_step,
++                        num_betters=cfg.distill_num_betters,
++                        max_code_chars=cfg.distill_max_code_chars,
++                        rng=random.Random(i_batch * 31 + hash(m.tag) % 1000),
++                    )
++                    metrics.update({f"{m.tag}/{k}": v for k, v in pm.items()})
++                    if pairs:
++                        distill_tasks[m.tag] = asyncio.create_task(
++                            build_distill_data(
++                                pairs,
++                                m.sampling_client,
++                                model_name=m.train_cfg.model_name,
++                                renderer=builders[0].env_thunk.args[0],
++                                distill_weight=cfg.distill_weight,
++                                teacher_phase1_tokens=(
++                                    cfg.distill_teacher_phase1_tokens
++                                    or m.member_cfg.phase1_max_tokens
++                                ),
++                                context_window=cfg.context_window,
++                                temperature=cfg.temperature,
++                                max_target_tokens=cfg.distill_max_target_tokens,
++                                grounding_filter=cfg.distill_grounding_filter,
++                                leak_filter=cfg.distill_leak_filter,
++                                probe_holder=holder,
++                            )
++                        )
++            except Exception:
++                logger.exception("ensemble distill pair selection failed; RL-only step")
++                metrics["distill/error"] = 1.0
++
 +        # ---- 3. pool flush (once) + shared pool metrics
 +        shared_sampler.flush(step=i_batch + 1)
 +        if hasattr(shared_sampler, "get_origin_stats"):
@@ -1223,7 +1379,8 @@ index 0000000..523908a
 +                      f"({len(groups)} groups)...", flush=True)
 +                m.sampling_client, tm = await do_train_step_and_get_sampling_client(
 +                    m.train_cfg, i_batch, m.training_client, service_client,
-+                    m.tokenizer, p["kept_builders"], groups, distill_task=None,
++                    m.tokenizer, p["kept_builders"], groups,
++                    distill_task=distill_tasks.get(m.tag),
 +                )
 +                table_data = tm.pop("table", None)
 +                metrics.update({f"{m.tag}/{k}": v for k, v in tm.items()})
@@ -1241,6 +1398,12 @@ index 0000000..523908a
 +            if rows:
 +                _log_wandb_table(ml_logger, f"{m.tag}/sampler_states_{i_batch}",
 +                                 cols, rows, i_batch)
++
++        for tag, ptask in probe_tasks.items():
++            try:
++                metrics[f"{tag}/distill/probe_nll"] = await ptask
++            except Exception:
++                logger.exception("member %s probe NLL failed", tag)
 +
 +        metrics["time/total"] = time.time() - t_start
 +        ml_logger.log_metrics(metrics, step=i_batch)
@@ -1323,6 +1486,7 @@ index 0000000..523908a
 +            context_window=cfg.context_window,
 +            completion_max_tokens=mc.completion_max_tokens,
 +            tinker_base_url=cfg.tinker_base_url,
++            distill_weight=cfg.distill_weight,  # for the ce_sum metric in train step
 +        )
 +        members.append(MemberRuntime(
 +            tag=mc.metric_prefix, member_cfg=mc, train_cfg=train_cfg,

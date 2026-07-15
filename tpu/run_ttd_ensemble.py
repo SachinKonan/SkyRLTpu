@@ -122,6 +122,16 @@ def main() -> None:
         num_cpus_per_task=_env_int("NUM_CPUS_PER_TASK", 1),
         eval_backend=os.environ.get("TTD_EVAL_BACKEND", "local"),
         eval_timeout=_env_int("EVAL_TIMEOUT", 1100),
+        # Cross-model contrastive distillation (symmetric; off by default)
+        distill_enabled=os.environ.get("TTD_DISTILL_ENABLED", "0") == "1",
+        distill_pairs_per_step=_env_int("TTD_DISTILL_PAIRS_PER_STEP", 16),
+        distill_num_betters=_env_int("TTD_DISTILL_NUM_BETTERS", 3),
+        distill_weight=_env_float("TTD_DISTILL_WEIGHT", 0.1),
+        distill_grounding_filter=os.environ.get("TTD_DISTILL_GROUNDING_FILTER", "1") == "1",
+        distill_leak_filter=os.environ.get("TTD_DISTILL_LEAK_FILTER", "1") == "1",
+        distill_teacher_phase1_tokens=_env_int("TTD_DISTILL_TEACHER_PHASE1_TOKENS", 0),
+        distill_max_target_tokens=_env_int("TTD_DISTILL_MAX_TARGET_TOKENS", 8192),
+        distill_max_code_chars=_env_int("TTD_DISTILL_MAX_CODE_CHARS", 10000),
     )
 
     print(f"[ensemble] run_dir    : {run_dir}")
@@ -133,6 +143,9 @@ def main() -> None:
     print(f"[ensemble] shared     : group_size={cfg.group_size} steps={cfg.num_epochs} "
           f"ctx={cfg.context_window} eval={cfg.eval_backend}@{cfg.eval_timeout}s "
           f"save_every={cfg.save_every}")
+    print(f"[ensemble] distill    : enabled={cfg.distill_enabled} weight={cfg.distill_weight} "
+          f"pairs={cfg.distill_pairs_per_step} betters={cfg.distill_num_betters} "
+          f"elite_slots={os.environ.get('TTD_ELITE_SLOTS', '0')}")
     print(f"[ensemble] experiment : {experiment_name}")
     ensemble_discover(cfg)
     print("[ensemble] done — loop returned without raising.")
