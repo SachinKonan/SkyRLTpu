@@ -71,6 +71,21 @@ VLLM_CLIENT_SIDE_ROUND_ROBIN="${VLLM_CLIENT_SIDE_ROUND_ROBIN:-0}"
 READY_ATTEMPTS="${READY_ATTEMPTS:-720}"
 READY_SLEEP_SEC="${READY_SLEEP_SEC:-5}"
 
+# Training backend for the Tinker engine: "jax" (skyrl/tx) or "tunix"
+# (tunix backend; single train host only in v1).
+TINKER_BACKEND="${TINKER_BACKEND:-jax}"
+TUNIX_MODEL_SOURCE="${TUNIX_MODEL_SOURCE:-maxtext}"
+TUNIX_MAX_TARGET_LENGTH="${TUNIX_MAX_TARGET_LENGTH:-4096}"
+TUNIX_MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-}"
+# Converted HF->orbax MaxText checkpoints live on the GCS mount so they
+# survive spot recreation.
+TUNIX_MAXTEXT_CKPT_CACHE="${TUNIX_MAXTEXT_CKPT_CACHE:-/home/${REMOTE_USER}/gcs/skyrl-maxtext-ckpts}"
+if [[ "$TINKER_BACKEND" == "tunix" ]]; then
+  TINKER_ENGINE_EXTRA="tunix"
+else
+  TINKER_ENGINE_EXTRA="jax"
+fi
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 tmpdir="$(mktemp -d)"
@@ -414,15 +429,11 @@ backend_config="$(
   python3 - <<PY
 import json
 
+backend = "${TINKER_BACKEND}"
 train_worker_count = int("${train_worker_count}")
 logical_worker_ids = list(range(train_worker_count))
-cfg = {
-    "train_micro_batch_size": int("${TRAIN_MICRO_BATCH_SIZE}"),
-    "sample_max_num_sequences": int("${SAMPLE_MAX_NUM_SEQUENCES}"),
-    "tensor_parallel_size": int("${TP_SIZE}"),
-    "fully_sharded_data_parallel_size": int("${FSDP_SIZE}"),
-    "max_lora_adapters": int("${MAX_LORA_ADAPTERS}"),
-    "max_lora_rank": int("${MAX_LORA_RANK}"),
+
+vllm_cfg = {
     "inference_backend": "vllm",
     "vllm_base_url": "${vllm_base_url}",
     "vllm_model_name": "${SERVED_MODEL_NAME}",
@@ -435,15 +446,41 @@ cfg = {
     "vllm_max_concurrent_requests": int("${VLLM_MAX_CONCURRENT_REQUESTS}"),
     "vllm_client_side_round_robin": "${VLLM_CLIENT_SIDE_ROUND_ROBIN}".lower() in ("1", "true", "yes", "on"),
 }
-if train_worker_count > 1:
-    cfg.update(
-        {
-            "coordinator_address": "${train_internal_ip}:${JAX_COORD_PORT}",
-            "num_processes": train_worker_count,
-            "active_worker_ids": logical_worker_ids,
-            "mesh_worker_ids": logical_worker_ids,
-        }
-    )
+
+if backend == "tunix":
+    if train_worker_count > 1:
+        raise SystemExit("TINKER_BACKEND=tunix supports a single train host (set TRAIN_WORKERS to one worker)")
+    cfg = {
+        "model_source": "${TUNIX_MODEL_SOURCE}",
+        "max_lora_rank": int("${MAX_LORA_RANK}"),
+        "train_micro_batch_size": int("${TRAIN_MICRO_BATCH_SIZE}"),
+        "sample_max_num_sequences": int("${SAMPLE_MAX_NUM_SEQUENCES}"),
+        "param_dtype": "bfloat16",
+        "maxtext_max_target_length": int("${TUNIX_MAX_TARGET_LENGTH}"),
+        "maxtext_ckpt_cache_dir": "${TUNIX_MAXTEXT_CKPT_CACHE}",
+        **vllm_cfg,
+    }
+    if "${TUNIX_MAXTEXT_MODEL_NAME}":
+        cfg["maxtext_model_name"] = "${TUNIX_MAXTEXT_MODEL_NAME}"
+else:
+    cfg = {
+        "train_micro_batch_size": int("${TRAIN_MICRO_BATCH_SIZE}"),
+        "sample_max_num_sequences": int("${SAMPLE_MAX_NUM_SEQUENCES}"),
+        "tensor_parallel_size": int("${TP_SIZE}"),
+        "fully_sharded_data_parallel_size": int("${FSDP_SIZE}"),
+        "max_lora_adapters": int("${MAX_LORA_ADAPTERS}"),
+        "max_lora_rank": int("${MAX_LORA_RANK}"),
+        **vllm_cfg,
+    }
+    if train_worker_count > 1:
+        cfg.update(
+            {
+                "coordinator_address": "${train_internal_ip}:${JAX_COORD_PORT}",
+                "num_processes": train_worker_count,
+                "active_worker_ids": logical_worker_ids,
+                "mesh_worker_ids": logical_worker_ids,
+            }
+        )
 print(json.dumps(cfg))
 PY
 )"
@@ -493,13 +530,24 @@ lockfile.write_text(
 PY
 fi
 
-exec uv run --extra tpu --extra tinker --extra jax -m skyrl.tinker.api \\
+if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
+  # The tunix backend needs the tunix extra plus MaxText, which is not in the
+  # lock (heavy, TPU-only). Sync once, then install MaxText into the project
+  # venv from \$HOME — running uv pip inside the repo trips its
+  # extra-build-dependencies config.
+  uv sync --extra tpu --extra tinker --extra tunix
+  (cd "\$HOME" && uv pip install --python "${REMOTE_SKYRL_DIR}/.venv/bin/python" \\
+      maxtext aqtp pathwaysutils tokamax tiktoken)
+fi
+
+exec uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}" -m skyrl.tinker.api \\
   --base-model "${MODEL_NAME}" \\
   --host 0.0.0.0 \\
   --port "${API_PORT}" \\
   --session-timeout-sec "${SESSION_TIMEOUT_SEC}" \\
   --checkpoints-base "${REMOTE_CHECKPOINTS}" \\
   --external-inference-lora-base "${REMOTE_LORA_BASE}" \\
+  --backend "${TINKER_BACKEND}" \\
   --backend-config '${backend_config}'
 EOF
   chmod +x "$api_script"
