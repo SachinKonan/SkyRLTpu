@@ -1417,6 +1417,24 @@ class TunixBackend(AbstractBackend):
         import os
 
         os.replace(staging, target)
+        self._prune_published_adapters(model_id, keep=8)
+
+    def _prune_published_adapters(self, model_id: str, keep: int) -> None:
+        """Delete old published adapter dirs beyond the newest ``keep`` for a model.
+
+        Matches vLLM's --max-loras LRU window: anything older is already
+        evicted server-side and only wastes bucket storage.
+        """
+        import shutil
+        from skyrl.backends.vllm_sampling import _sanitize_lora_name
+
+        base = Path(self.config.vllm_lora_base_dir)
+        prefix = _sanitize_lora_name(model_id, "")
+        dirs = [p for p in base.glob(f"{prefix}*") if p.is_dir() and not p.name.endswith(".staging")]
+        dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale in dirs[keep:]:
+            shutil.rmtree(stale, ignore_errors=True)
+            logger.info(f"Pruned stale published adapter {stale.name}")
 
     # ------------------------------------------------------------------ HF-PEFT export
 
