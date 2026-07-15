@@ -1378,13 +1378,19 @@ class TunixBackend(AbstractBackend):
         slot.sampler_lora_states[checkpoint_id] = slot.lora_state
         slot.loaded_sampler_checkpoint_id = checkpoint_id
 
-        if persist or self.vllm_client is not None:
+        if self.vllm_client is not None:
+            # Write the PEFT dir straight into the client's lora_base_dir under
+            # the exact adapter name ensure_lora_loaded derives; its extractor
+            # early-returns on existing dirs, so the tar/extract round-trip
+            # through shared storage is skipped entirely.
+            self._publish_peft_adapter(slot, model_id, checkpoint_id)
+
+        if persist:
             with pack_and_upload(output_path) as tmp:
                 self._write_npz(tmp / "lora_weights.npz", self._flat_numpy(slot.lora_state))
                 (tmp / _CHECKPOINT_META_FILE).write_text(
                     json.dumps({"lora_config": slot.lora_config.model_dump(), "format": "tunix_backend_v1"})
                 )
-                self._export_peft_adapter(slot, tmp)
         else:
             with pack_and_upload(output_path) as tmp:
                 (tmp / _EPHEMERAL_MARKER_FILE).write_text(
@@ -1394,6 +1400,23 @@ class TunixBackend(AbstractBackend):
 
         if self.vllm_client is not None:
             self.vllm_client.ensure_lora_loaded(model_id, output_path, checkpoint_id=checkpoint_id)
+
+    def _publish_peft_adapter(self, slot: ModelSlot, model_id: str, checkpoint_id: str) -> None:
+        """Atomically place the exported PEFT dir at <lora_base_dir>/<adapter-name>."""
+        import shutil
+        from skyrl.backends.vllm_sampling import _sanitize_lora_name
+
+        target = Path(self.config.vllm_lora_base_dir) / _sanitize_lora_name(model_id, checkpoint_id)
+        if target.exists():
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        staging = target.with_name(target.name + ".staging")
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        self._export_peft_adapter(slot, staging)
+        import os
+
+        os.replace(staging, target)
 
     # ------------------------------------------------------------------ HF-PEFT export
 
