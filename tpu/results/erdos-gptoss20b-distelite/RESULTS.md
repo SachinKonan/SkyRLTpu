@@ -1,10 +1,19 @@
-# gpt-oss-20b beats the published Erdős min-overlap record (c5 = 0.380925116)
+# gpt-oss-20b distill+elite run: verified c5 = 0.380925116
 
-**A 20-billion-parameter model surpassed the record the ttt-discover authors set
-with their 120B model** — using their exact released method plus three additions
-developed in this project: a contrastive context-distillation objective, PUCT
-elite slots, and an eval-budget fix. Run: `erdos-gptoss20b-distelite15`
-(15 steps, July 14–16 2026).
+> **CORRECTION (2026-07-16).** Originally titled "beats the published record" — that
+> compared against the reward-path *logged* value (0.380932) from
+> [discover#19](https://github.com/test-time-training/discover/issues/19). The
+> maintainers clarified the paper's real record: **c5 = 0.3808753232177187**
+> (published construction `results/mathematics/ttt_erdos_sequence.json`, n=600,
+> independently re-verified by us). **This run is 4.98e-5 short of the true record.**
+> What remains true: a 20B model surpassed the *logged* figure and came within 5e-5
+> of a 120B-set record using method improvements alone.
+
+A 20-billion-parameter model, using the authors' released method plus three
+additions developed in this project (contrastive context-distillation, PUCT
+elite slots, eval-budget fix), reached within 5e-5 of the record the authors
+set with their 120B model — and surpassed the (buggy) reward-path logged
+record value. Run: `erdos-gptoss20b-distelite15` (15 steps, July 14–16 2026).
 
 ## Result (independently verified)
 
@@ -27,19 +36,20 @@ print(np.max(np.correlate(h, 1-h, mode="full") * (2/n)))   # 0.380925116...
 
 | rank | construction | c5 (verified) | source |
 |---|---|---|---|
-| 1 | ours, gpt-oss-**120b**, 20 steps | **0.380887659** | `tpu/results/erdos-gptoss120b/` |
-| **2** | **ours, gpt-oss-20b distill+elite (this result)** | **0.380925116** | this directory |
-| 3 | authors' published record (their 120B run) | 0.380932 claimed / 0.380973 re-verified¹ | test-time-training/discover |
-| 4 | ctrl15 (20b, RL only, timeout fix) | 0.381001033 | `runs/ttd_gptoss20b_ctrl15` |
-| 5 | distill15 (20b, distill only) | 0.381039226 | `runs/ttd_gptoss20b_distill15` |
-| 6 | in-context contrast experiment (offline) | 0.381182 | `runs/critic_ab/` |
-| 7 | original 20b baseline (14 steps, 300s budget) | 0.381471836 | `runs/ttd_gptoss20b_full` |
+| 1 | **authors' true published record** (their 120B; maintainer-confirmed) | **0.380875323** | `results/mathematics/ttt_erdos_sequence.json` |
+| 2 | ours, gpt-oss-**120b**, 20 steps | 0.380887659 | `tpu/results/erdos-gptoss120b/` |
+| 3 | **ours, gpt-oss-20b distill+elite (this result)** | 0.380925116 | this directory |
+| 4 | authors' reward-path logged value (buggy¹) | 0.380932 / 0.380973 re-verified | discover#19 |
+| 5 | ctrl15 (20b, RL only, timeout fix) | 0.381001033 | `runs/ttd_gptoss20b_ctrl15` |
+| 6 | distill15 (20b, distill only) | 0.381039226 | `runs/ttd_gptoss20b_distill15` |
+| 7 | in-context contrast experiment (offline) | 0.381182 | `runs/critic_ab/` |
+| 8 | original 20b baseline (14 steps, 300s budget) | 0.381471836 | `runs/ttd_gptoss20b_full` |
 
-¹ The published number is the model's self-reported value; per
-test-time-training/discover#19 the grader returns the claim rather than the
-recomputed value (tolerance 1e-4). Recomputing the published construction gives
-0.380973. Our results beat it under either reading; all values in this table
-for OUR runs are independent recomputations from the stored constructions.
+¹ Per discover#19 the in-run grader logs the model's self-claimed value
+(tolerance 1e-4); the maintainers confirmed the paper's real number comes from
+recomputing the published construction (0.380875323), which we have
+independently verified. All values in this table for OUR runs are likewise
+independent recomputations from stored constructions.
 
 ## Run configuration
 
@@ -90,8 +100,8 @@ The two additions fix complementary failure modes measured in the A/B runs
    subgradient → SLSQP) that would have been killed as a timeout ~40% of the
    time under the original 300s grading cap.
 
-None of these levers is model scale — which is why 20B overtook the published
-120B record. Training dynamics stayed healthy to the end (reward/mean peaked
+None of these levers is model scale — which is how a 20B model closed to
+within 5e-5 of a 120B-set record (and past the logged figure). Training dynamics stayed healthy to the end (reward/mean peaked
 at 1.58 on step 13 with no exploration collapse), and the frozen-probe metric
 stayed flat (0.960±0.001), showing the distillation acts through a behavioral
 disposition shift rather than content memorization at β=0.1.

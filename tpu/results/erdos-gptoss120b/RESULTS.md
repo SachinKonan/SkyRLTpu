@@ -1,4 +1,13 @@
-# Erdős minimum-overlap: gpt-oss-120b beats the published ttt-discover record
+# Erdős minimum-overlap: gpt-oss-120b run (verified c5 = 0.380887659)
+
+> **CORRECTION (2026-07-16).** This document originally claimed the run beat the
+> published record. That compared against the *reward-path logged* value (0.380932)
+> discussed in [discover#19](https://github.com/test-time-training/discover/issues/19).
+> The maintainers responded: the paper's real record is **c5 = 0.3808753232177187**,
+> recomputed from the published construction at `results/mathematics/ttt_erdos_sequence.json`
+> (n=600), which we have independently re-verified (0.3808753232177188). **Our best
+> (0.380887659) is 1.23e-5 SHORT of the true record.** It beats only the buggy-logged
+> figure. Claims below are retained for the record with this correction applied.
 
 **Run**: [`erdos-gptoss120b-full` on wandb](https://wandb.ai/sk7524-princeton-university/ttt-discover-gptoss20b/runs/74zeiufa)
 (project `ttt-discover-gptoss20b`, entity `sk7524-princeton-university`, run id `74zeiufa`)
@@ -9,14 +18,13 @@
 
 | | C₅ (lower = better) |
 |---|---|
-| ttt-discover authors' published claim | 0.380932 |
-| Authors' construction as it *actually verifies* ([discover#19](https://github.com/test-time-training/discover/issues/19)) | 0.380972753 |
-| **This run, best construction (verified)** | **0.380887659** |
+| **Authors' TRUE published record** (construction in `results/mathematics`, maintainer-confirmed + independently re-verified) | **0.380875323** |
+| This run, best construction (verified) | 0.380887659 |
+| Authors' reward-path logged value (buggy; see discover#19) | 0.380932 / verifies to 0.380973 |
 
-The best construction beats the published claim by **4.4×10⁻⁵** and the honestly-verified
-published construction by **8.5×10⁻⁵**. Unlike the published number — which issue #19 shows
-was the model's *self-reported* value (the grader returns the claim, checked only to
-`atol=1e-4`) — our value is **recomputed from the raw h-values** with zero self-report gap.
+This run's best is **1.23×10⁻⁵ short of the true record** (see correction above); it
+surpasses only the reward-path logged figure. Our value is recomputed from the raw
+h-values with zero self-report gap, as is the true-record figure we compare against.
 
 ## The problem and the score
 
@@ -70,7 +78,7 @@ print(np.max(np.correlate(h, 1-h, "full") * (2/n)))   # -> 0.380887659...
 ## Trajectory (best C₅ per step, cumulative record in bold)
 
 ```
-step  1  0.381103      step  8  0.380988      step 15  0.380908  <- beats 0.380932
+step  1  0.381103      step  8  0.380988      step 15  0.380908  <- beats the buggy-logged 0.380932 (not the true record)
 step  2  0.380973      step  9  0.380984      step 16  0.380908
 step  3  0.380958      step 10  0.380973      step 17  0.380908
 step  4  0.380966      step 11  0.380964      step 18  0.380888  <- final record
