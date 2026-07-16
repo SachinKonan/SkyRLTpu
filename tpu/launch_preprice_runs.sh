@@ -19,21 +19,27 @@ sbatch --parsable -t 2-00:00:00 \
   tpu/run_ttd_gptoss20b_neuronic.sbatch
 
 # ---- 2. ensemble 20b + 20b peers: symmetric cross-model distill, shared pool
+# NOTE: TTD_ENSEMBLE_MODELS must be exported into the SHELL, never passed inside
+# --export=ALL,... — sbatch splits that list on commas, so a comma-separated
+# model spec silently loses every member after the first (observed: an ensemble
+# ran as a solo run with members=['alpha']). --export=ALL inherits the shell var.
+export TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:alpha,openai/gpt-oss-20b:gpt_oss_high_reasoning:beta"
 mkdir -p runs/ttd_ens_20b20b
 sbatch --parsable -t 2-00:00:00 \
   -o "$REPO/runs/ttd_ens_20b20b/slurm_%j.out" \
   -e "$REPO/runs/ttd_ens_20b20b/slurm_%j.out" \
   -J ttd-ens-20-20 \
-  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b20b,GROUPS_PER_BATCH=64,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b20b",TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:alpha,openai/gpt-oss-20b:gpt_oss_high_reasoning:beta",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
+  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b20b,GROUPS_PER_BATCH=64,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b20b",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
   tpu/run_ttd_ensemble_neuronic.sbatch
 
 # ---- 3. ensemble A=20b, B=120b: symmetric cross-model distill, shared pool
+export TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:g20,openai/gpt-oss-120b:gpt_oss_high_reasoning:g120"
 mkdir -p runs/ttd_ens_20b120b
 sbatch --parsable -t 2-00:00:00 \
   -o "$REPO/runs/ttd_ens_20b120b/slurm_%j.out" \
   -e "$REPO/runs/ttd_ens_20b120b/slurm_%j.out" \
   -J ttd-ens-20-120 \
-  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b120b,GROUPS_PER_BATCH=64,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b120b",TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:g20,openai/gpt-oss-120b:gpt_oss_high_reasoning:g120",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
+  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b120b,GROUPS_PER_BATCH=64,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b120b",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
   tpu/run_ttd_ensemble_neuronic.sbatch
 
 squeue -u "$USER" -o "%.10i %.2t %.6C %.16j %R" | grep -E "ttd|JOBID"

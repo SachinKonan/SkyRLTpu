@@ -101,6 +101,14 @@ def main() -> None:
                                        _env_float("KL_PENALTY_COEF", 0.1)),
         ))
 
+    if len(members) < 2:
+        raise SystemExit(
+            f"TTD_ENSEMBLE_MODELS parsed to {len(members)} member(s): "
+            f"{[m.model_name for m in members]}. An ensemble needs >=2. NOTE: if you "
+            "passed this var inside 'sbatch --export=ALL,...', sbatch split it on "
+            "commas — export it into the shell instead and rely on --export=ALL."
+        )
+
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
     experiment_name = os.environ.get(
         "EXPERIMENT_NAME", f"erdos-ensemble-{'-'.join(m.metric_prefix for m in members)}-{date}"
