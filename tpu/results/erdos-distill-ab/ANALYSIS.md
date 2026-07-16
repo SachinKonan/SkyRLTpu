@@ -21,6 +21,29 @@ wandb (project `sk7524-princeton-university/ttt-discover-gptoss20b`):
 - original 14-step baseline: https://wandb.ai/sk7524-princeton-university/ttt-discover-gptoss20b/runs/e5vkjxyc
 - gpt-oss-120b record run: https://wandb.ai/sk7524-princeton-university/ttt-discover-gptoss20b/runs/74zeiufa
 
+## 0. The picture
+
+![search dynamics](search_dynamics.png)
+
+*(regenerate: `uv run --isolated --with matplotlib --with numpy python
+tpu/results/erdos-distill-ab/make_search_dynamics.py`)*
+
+Left: every valid construction a ctrl15 rollout produced, as distance above the
+known record — a cloud spanning four orders of magnitude at step 0 concentrates
+onto a single sliver at ~1e-4 by step 14, and the in-run frontier stops moving
+after step 4. Middle: the improve-rate collapse (94%→0%), with distelite15
+overlaid — distillation delays it ~2 steps but does not change the asymptote.
+Right/bottom: every improvement the base method ever made. **The mean gain,
+among rollouts that improve at all, decays monotonically 8,000×** — 6.3e-2 at
+step 0 to 7.6e-6 at step 14 — and no improvement exceeds 1e-2 after step 3.
+Late "optimization" is polish, not discovery.
+
+Mean improvement per step (ctrl15, improving rollouts only):
+
+| step | 0 | 1 | 2 | 3 | 4 | 6 | 8 | 10 | 12 | 14 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| mean gain | 6.3e-2 | 5.9e-3 | 7.3e-4 | 3.9e-4 | 1.2e-4 | 4.3e-5 | 3.5e-5 | 1.7e-5 | 1.5e-5 | 7.6e-6 |
+
 ## 1. Headline
 
 | arm | best c5 (verified) | family | found at |
