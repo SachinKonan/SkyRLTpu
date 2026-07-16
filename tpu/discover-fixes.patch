@@ -1529,7 +1529,7 @@ index 0000000..28bb3ff
 +    logger.info("ensemble logging to %s", cfg.log_path)
 +    asyncio.run(ensemble_main(cfg))
 diff --git a/ttt_discover/rl/train.py b/ttt_discover/rl/train.py
-index b9e414d..c6f92c6 100644
+index b9e414d..0cfdc7c 100644
 --- a/ttt_discover/rl/train.py
 +++ b/ttt_discover/rl/train.py
 @@ -5,6 +5,7 @@ Implements RL on general MDPs
@@ -1723,7 +1723,40 @@ index b9e414d..c6f92c6 100644
  
      trajectory_group = await do_group_rollout(env_group_builder, policy, step_idx)
  
-@@ -433,6 +494,7 @@ async def do_train_step_and_get_sampling_client(
+@@ -410,16 +471,23 @@ async def prepare_minibatch(
+             )
+         data_D, _metadata_D = assemble_training_data(trajectory_groups_P, advantages_P)
+ 
+-    # Incorporate KL penalty if configured
++    # Incorporate KL penalty if configured. Guarded: a transient Tinker infra
++    # error in the base-logprob pass (seen live: RequestFailedError "unknown
++    # infra error" surviving the SDK's retries) must degrade to a KL-free step,
++    # not kill a multi-day run.
+     if kl_penalty_coef > 0:
+-        with timed("kl_vs_base", metrics):
+-            kl_penalty_metrics = await incorporate_kl_penalty(
+-                data_D,
+-                service_client.create_sampling_client(base_model=model_name),
+-                # ^^^ TODO: replace with the model we load, if relevant
+-                kl_penalty_coef,
+-            )
+-        metrics.update(kl_penalty_metrics)
++        try:
++            with timed("kl_vs_base", metrics):
++                kl_penalty_metrics = await incorporate_kl_penalty(
++                    data_D,
++                    service_client.create_sampling_client(base_model=model_name),
++                    # ^^^ TODO: replace with the model we load, if relevant
++                    kl_penalty_coef,
++                )
++            metrics.update(kl_penalty_metrics)
++        except Exception:
++            logger.exception("KL-vs-base pass failed; training this step WITHOUT the KL penalty")
++            metrics["kl_error"] = 1.0
+ 
+     return data_D, metrics
+ 
+@@ -433,6 +501,7 @@ async def do_train_step_and_get_sampling_client(
      tokenizer: Tokenizer,
      env_group_builders_P: Sequence[EnvGroupBuilder],
      trajectory_groups_P: list[TrajectoryGroup],
@@ -1731,7 +1764,7 @@ index b9e414d..c6f92c6 100644
  ) -> tuple[tinker.SamplingClient, dict[str, Any]]:
      context = get_scope_context()
      context.attributes["step"] = i_batch
-@@ -452,15 +514,43 @@ async def do_train_step_and_get_sampling_client(
+@@ -452,15 +521,43 @@ async def do_train_step_and_get_sampling_client(
      )
      metrics.update(prepare_minibatch_metrics)
  
@@ -1776,7 +1809,7 @@ index b9e414d..c6f92c6 100644
      sampling_client, full_batch_metrics = await save_checkpoint_and_get_sampling_client(
          training_client,
          # NOTE: saving the checkpoint as the i + 1 step
-@@ -496,6 +586,11 @@ async def do_sync_training(
+@@ -496,6 +593,11 @@ async def do_sync_training(
          training_client, start_batch, cfg.log_path, cfg.save_every, start_batch
      )
  
@@ -1788,7 +1821,7 @@ index b9e414d..c6f92c6 100644
      for i_batch in range(start_batch, end_batch):
          train_table = None
          test_table = None
-@@ -542,6 +637,8 @@ async def do_sync_training(
+@@ -542,6 +644,8 @@ async def do_sync_training(
                              step_idx=i_batch,
                              model_name=cfg.local_model_path or cfg.model_name,
                              phase1_max_tokens=cfg.phase1_max_tokens,
@@ -1797,7 +1830,7 @@ index b9e414d..c6f92c6 100644
                          ),
                          name=f"sample_task_{i}",
                      )
-@@ -549,6 +646,71 @@ async def do_sync_training(
+@@ -549,6 +653,71 @@ async def do_sync_training(
                  ],
              )
  
@@ -1869,7 +1902,7 @@ index b9e414d..c6f92c6 100644
          if hasattr(dataset, 'flush'):
              dataset.flush(step=i_batch + 1)
  
-@@ -565,8 +727,15 @@ async def do_sync_training(
+@@ -565,8 +734,15 @@ async def do_sync_training(
              tokenizer,
              env_group_builders_P,
              trajectory_groups_P,
@@ -1885,7 +1918,7 @@ index b9e414d..c6f92c6 100644
          if 'table' in train_step_metrics:
              table_data = train_step_metrics.pop('table')
              # Compute actual advantages using the configured estimator
-@@ -583,7 +752,7 @@ async def do_sync_training(
+@@ -583,7 +759,7 @@ async def do_sync_training(
                      )
              }
          
@@ -1894,7 +1927,7 @@ index b9e414d..c6f92c6 100644
              if train_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
                  ml_logger.loggers[2].log_metrics(train_table, step=i_batch)
              if test_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
-@@ -624,7 +793,7 @@ async def main(
+@@ -624,7 +800,7 @@ async def main(
          start_batch = 0
  
      print("Create training client...")
@@ -1903,7 +1936,7 @@ index b9e414d..c6f92c6 100644
      print("Training client created!")
      if resume_info:
          # Resuming interrupted training - load optimizer state for proper continuation
-@@ -684,8 +853,9 @@ async def main(
+@@ -684,8 +860,9 @@ async def main(
          tokenizer=tokenizer,
      )
  
