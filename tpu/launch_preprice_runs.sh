@@ -24,7 +24,7 @@ sbatch --parsable -t 2-00:00:00 \
   -o "$REPO/runs/ttd_ens_20b20b/slurm_%j.out" \
   -e "$REPO/runs/ttd_ens_20b20b/slurm_%j.out" \
   -J ttd-ens-20-20 \
-  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b20b,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b20b",TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:alpha,openai/gpt-oss-20b:gpt_oss_high_reasoning:beta",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
+  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b20b,GROUPS_PER_BATCH=64,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b20b",TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:alpha,openai/gpt-oss-20b:gpt_oss_high_reasoning:beta",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
   tpu/run_ttd_ensemble_neuronic.sbatch
 
 # ---- 3. ensemble A=20b, B=120b: symmetric cross-model distill, shared pool
@@ -33,7 +33,7 @@ sbatch --parsable -t 2-00:00:00 \
   -o "$REPO/runs/ttd_ens_20b120b/slurm_%j.out" \
   -e "$REPO/runs/ttd_ens_20b120b/slurm_%j.out" \
   -J ttd-ens-20-120 \
-  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b120b,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b120b",TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:g20,openai/gpt-oss-120b:gpt_oss_high_reasoning:g120",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
+  --export=ALL,NUM_EPOCHS=15,SAVE_EVERY=10,EXPERIMENT_NAME=erdos-ens-20b120b,GROUPS_PER_BATCH=64,TTD_RUN_DIR="$REPO/runs/ttd_ens_20b120b",TTD_ENSEMBLE_MODELS="openai/gpt-oss-20b:gpt_oss_high_reasoning:g20,openai/gpt-oss-120b:gpt_oss_high_reasoning:g120",TTD_DISTILL_ENABLED=1,TTD_DISTILL_WEIGHT="$BETA",TTD_ELITE_SLOTS=8 \
   tpu/run_ttd_ensemble_neuronic.sbatch
 
 squeue -u "$USER" -o "%.10i %.2t %.6C %.16j %R" | grep -E "ttd|JOBID"
