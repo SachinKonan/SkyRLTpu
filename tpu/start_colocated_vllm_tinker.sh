@@ -62,6 +62,8 @@ MAX_LORA_ADAPTERS="${MAX_LORA_ADAPTERS:-8}"
 MAX_LORA_RANK="${MAX_LORA_RANK:-32}"
 VLLM_LORA_LOAD_ENDPOINT="${VLLM_LORA_LOAD_ENDPOINT:-/v1/load_lora_adapter}"
 VLLM_LORA_UNLOAD_ENDPOINT="${VLLM_LORA_UNLOAD_ENDPOINT:-/v1/unload_lora_adapter}"
+# Empty disables HTTP adapter push (falls back to shared-storage publish).
+VLLM_LORA_UPLOAD_ENDPOINT="${VLLM_LORA_UPLOAD_ENDPOINT:-/skyrl/v1/upload_lora_adapter}"
 VLLM_LORA_LOAD_RETRIES="${VLLM_LORA_LOAD_RETRIES:-3}"
 VLLM_LORA_LOAD_RETRY_SLEEP_SEC="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-2}"
 VLLM_REQUEST_TIMEOUT_SEC="${VLLM_REQUEST_TIMEOUT_SEC:-300}"
@@ -458,6 +460,7 @@ if backend == "tunix":
     if train_worker_count > 1:
         raise SystemExit("TINKER_BACKEND=tunix supports a single train host (set TRAIN_WORKERS to one worker)")
     cfg = {
+        "vllm_lora_upload_endpoint": "${VLLM_LORA_UPLOAD_ENDPOINT}",
         "model_source": "${TUNIX_MODEL_SOURCE}",
         "max_lora_rank": int("${MAX_LORA_RANK}"),
         "train_micro_batch_size": int("${TRAIN_MICRO_BATCH_SIZE}"),

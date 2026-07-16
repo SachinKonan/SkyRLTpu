@@ -1,0 +1,128 @@
+"""vLLM TPU server with the SkyRL adapter-upload endpoint.
+
+Drop-in replacement for ``vllm serve`` on TPU workers. Adds
+``POST /skyrl/v1/upload_lora_adapter?lora_name=...[&previous_lora_name=...]``:
+the request body is an uncompressed tar of an HF-PEFT adapter dir, streamed to
+local disk (``--skyrl-lora-dir``), extracted, and hot-loaded — the previous
+adapter version is unloaded first. This replaces the shared-filesystem
+(GCS FUSE) round-trip for ephemeral RL weight syncs: the trainer POSTs the
+adapter over the VPC instead of writing it to a bucket.
+
+Self-contained on purpose: it is scp'd to the vLLM worker and run inside the
+vllm-tpu venv, which does not have the skyrl package installed.
+
+Compatible with vllm==0.23 (mirrors skyrl's GPU vllm_server_actor pattern).
+"""
+
+import argparse
+import asyncio
+import shutil
+import tarfile
+import tempfile
+from pathlib import Path
+
+import uvicorn
+import vllm.envs as envs
+from fastapi import HTTPException, Request
+from vllm.engine.arg_utils import AsyncEngineArgs
+from vllm.engine.async_llm_engine import AsyncLLMEngine
+from vllm.entrypoints.openai.api_server import build_app, init_app_state
+from vllm.entrypoints.openai.cli_args import make_arg_parser
+from vllm.entrypoints.openai.protocol import (
+    LoadLoRAAdapterRequest,
+    UnloadLoRAAdapterRequest,
+)
+from vllm.usage.usage_lib import UsageContext
+from vllm.utils import FlexibleArgumentParser
+from vllm.utils.system_utils import set_ulimit
+
+
+def _add_upload_endpoint(app, lora_dir: Path) -> None:
+    lora_dir.mkdir(parents=True, exist_ok=True)
+
+    @app.post("/skyrl/v1/upload_lora_adapter")
+    async def _upload_lora_adapter(request: Request):
+        lora_name = request.query_params.get("lora_name")
+        previous = request.query_params.get("previous_lora_name")
+        if not lora_name or "/" in lora_name or lora_name.startswith("."):
+            raise HTTPException(status_code=400, detail="valid 'lora_name' query param required")
+
+        target = lora_dir / lora_name
+        if not target.exists():
+            # Stream the tar body to disk (payloads are up to ~GBs of f32
+            # LoRA factors; never buffer fully in RAM).
+            with tempfile.NamedTemporaryFile(dir=lora_dir, suffix=".tar", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+                async for chunk in request.stream():
+                    tmp.write(chunk)
+            staging = lora_dir / f".{lora_name}.staging"
+            shutil.rmtree(staging, ignore_errors=True)
+            staging.mkdir(parents=True)
+            try:
+                with tarfile.open(tmp_path, "r:") as tar:
+                    tar.extractall(staging, filter="data")
+            finally:
+                tmp_path.unlink(missing_ok=True)
+            if not (staging / "adapter_config.json").exists():
+                shutil.rmtree(staging, ignore_errors=True)
+                raise HTTPException(status_code=400, detail="tar does not contain adapter_config.json at its root")
+            staging.replace(target)
+
+        models = request.app.state.openai_serving_models
+
+        if previous and previous != lora_name:
+            resp = await models.unload_lora_adapter(UnloadLoRAAdapterRequest(lora_name=previous))
+            # Not-loaded is fine (server restart, first sync); surface other errors.
+            shutil.rmtree(lora_dir / previous, ignore_errors=True)
+
+        resp = await models.load_lora_adapter(
+            LoadLoRAAdapterRequest(lora_name=lora_name, lora_path=str(target))
+        )
+        if not isinstance(resp, str):  # vllm returns ErrorResponse objects on failure
+            detail = getattr(resp, "message", None) or str(resp)
+            if "already been loaded" not in detail:
+                raise HTTPException(status_code=400, detail=f"load_lora_adapter failed: {detail}")
+
+        return {"status": "ok", "lora_name": lora_name}
+
+
+async def _serve(args) -> None:
+    set_ulimit()
+    app = build_app(args)
+
+    engine = AsyncLLMEngine.from_engine_args(
+        engine_args=AsyncEngineArgs.from_cli_args(args),
+        usage_context=UsageContext.OPENAI_API_SERVER,
+    )
+
+    _add_upload_endpoint(app, Path(args.skyrl_lora_dir))
+    await init_app_state(engine, app.state, args)
+
+    config = uvicorn.Config(
+        app,
+        host=args.host or "0.0.0.0",
+        port=args.port,
+        log_level=args.uvicorn_log_level,
+        timeout_keep_alive=envs.VLLM_HTTP_TIMEOUT_KEEP_ALIVE,
+    )
+    await uvicorn.Server(config).serve()
+
+
+def main() -> None:
+    parser = FlexibleArgumentParser(description="vLLM TPU server with SkyRL adapter upload")
+    parser.add_argument("model_tag", type=str, help="model name or path (positional, like `vllm serve`)")
+    parser.add_argument(
+        "--skyrl-lora-dir",
+        type=str,
+        default=str(Path.home() / "skyrl-local-loras"),
+        help="Local directory where uploaded adapters are extracted.",
+    )
+    parser = make_arg_parser(parser)
+    args = parser.parse_args()
+    args.model = args.model_tag
+
+    asyncio.run(_serve(args))
+
+
+if __name__ == "__main__":
+    main()

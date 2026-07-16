@@ -86,6 +86,9 @@ class VllmSamplingClient:
     lora_base_dir: Path = Path("/tmp/skyrl_jax_vllm_loras")
     lora_load_endpoint: str = "/v1/load_lora_adapter"
     lora_unload_endpoint: str = "/v1/unload_lora_adapter"
+    # When set, ephemeral adapters are pushed over HTTP to this endpoint
+    # (tpu/vllm_tpu_server.py) instead of round-tripping shared storage.
+    lora_upload_endpoint: str = ""
     lora_load_retries: int = 3
     lora_load_retry_sleep_sec: float = 2.0
     request_timeout_sec: float = 300.0
@@ -363,6 +366,46 @@ class VllmSamplingClient:
 
         sequences, prompt_lps = zip(*outputs) if outputs else ([], [])
         return list(sequences), list(prompt_lps)
+
+    def push_adapter(self, model_id: str, checkpoint_id: str, tar_bytes: bytes) -> str:
+        """Push an adapter tarball directly to the server's upload endpoint.
+
+        Returns the served adapter name. The server extracts to its local disk,
+        unloads the previous version for this model, and hot-loads the new one —
+        no shared filesystem involved.
+        """
+        if not self.lora_upload_endpoint:
+            raise RuntimeError("push_adapter requires lora_upload_endpoint to be configured")
+        lora_name = _sanitize_lora_name(model_id, checkpoint_id)
+        previous = self._latest_lora_by_model.get(model_id)
+        query = f"lora_name={lora_name}"
+        if previous and previous != lora_name:
+            query += f"&previous_lora_name={previous}"
+
+        last_error: Exception | None = None
+        for server_url in self.server_base_urls:
+            url = f"{server_url}{self.lora_upload_endpoint}?{query}"
+            for attempt in range(1, self.lora_load_retries + 1):
+                req = urllib.request.Request(
+                    url,
+                    data=tar_bytes,
+                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/x-tar"},
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=self.request_timeout_sec) as resp:
+                        resp.read()
+                    last_error = None
+                    break
+                except Exception as e:  # noqa: BLE001
+                    last_error = e
+                    if attempt < self.lora_load_retries:
+                        time.sleep(self.lora_load_retry_sleep_sec)
+            if last_error is not None:
+                raise VllmRequestError(f"adapter upload to {url} failed: {last_error}")
+
+        self._latest_lora_by_model[model_id] = lora_name
+        return lora_name
 
     def sample_groups(
         self,

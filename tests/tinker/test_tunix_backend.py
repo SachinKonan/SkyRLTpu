@@ -302,3 +302,29 @@ def test_parity_with_jax_backend(backend, model_pair):
             out_tunix["elementwise_loss"]["data"], out_jax["elementwise_loss"]["data"], rtol=5e-3, atol=2e-2,
             err_msg=f"loss mismatch for {loss_fn}",
         )
+
+
+def test_sampler_checkpoint_http_push_path(backend, model_pair):
+    """With an upload endpoint configured, ephemeral saves push an in-memory
+    PEFT tar and skip both the shared-storage publish and ensure_lora_loaded."""
+    import io
+    import tarfile
+    from unittest.mock import MagicMock
+
+    a, _ = model_pair
+    original_endpoint = backend.config.vllm_lora_upload_endpoint
+    original_client = backend.vllm_client
+    try:
+        backend.config.vllm_lora_upload_endpoint = "/skyrl/v1/upload_lora_adapter"
+        backend.vllm_client = MagicMock()
+        with tempfile.TemporaryDirectory() as tmp:
+            backend.save_sampler_checkpoint(Path(tmp) / "hp1.tar.gz", a, persist=False)
+            (model_id, ckpt_id, tar_bytes), _kw = backend.vllm_client.push_adapter.call_args
+            assert (model_id, ckpt_id) == (a, "hp1")
+            with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:") as tar:
+                assert sorted(tar.getnames()) == ["adapter_config.json", "adapter_model.safetensors"]
+            backend.vllm_client.ensure_lora_loaded.assert_not_called()
+            assert (Path(tmp) / "hp1.tar.gz").exists()
+    finally:
+        backend.config.vllm_lora_upload_endpoint = original_endpoint
+        backend.vllm_client = original_client

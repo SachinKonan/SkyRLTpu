@@ -125,6 +125,11 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
     )
     vllm_lora_load_endpoint: str = Field(default="/v1/load_lora_adapter")
     vllm_lora_unload_endpoint: str = Field(default="/v1/unload_lora_adapter")
+    vllm_lora_upload_endpoint: str = Field(
+        default="",
+        description="When set (e.g. /skyrl/v1/upload_lora_adapter), ephemeral adapters are pushed "
+        "over HTTP to the vLLM server's local disk instead of via shared storage.",
+    )
     vllm_lora_load_retries: int = Field(default=3, ge=1)
     vllm_lora_load_retry_sleep_sec: float = Field(default=2.0, ge=0.0)
     vllm_request_timeout_sec: float = Field(default=300.0)
@@ -323,6 +328,7 @@ class TunixBackend(AbstractBackend):
                 lora_base_dir=config.vllm_lora_base_dir,
                 lora_load_endpoint=config.vllm_lora_load_endpoint,
                 lora_unload_endpoint=config.vllm_lora_unload_endpoint,
+                lora_upload_endpoint=config.vllm_lora_upload_endpoint,
                 lora_load_retries=config.vllm_lora_load_retries,
                 lora_load_retry_sleep_sec=config.vllm_lora_load_retry_sleep_sec,
                 request_timeout_sec=config.vllm_request_timeout_sec,
@@ -1379,11 +1385,16 @@ class TunixBackend(AbstractBackend):
         slot.loaded_sampler_checkpoint_id = checkpoint_id
 
         if self.vllm_client is not None:
-            # Write the PEFT dir straight into the client's lora_base_dir under
-            # the exact adapter name ensure_lora_loaded derives; its extractor
-            # early-returns on existing dirs, so the tar/extract round-trip
-            # through shared storage is skipped entirely.
-            self._publish_peft_adapter(slot, model_id, checkpoint_id)
+            if self.config.vllm_lora_upload_endpoint:
+                # Push the adapter over HTTP straight to the vLLM server's
+                # local disk — no shared filesystem in the hot path.
+                self.vllm_client.push_adapter(model_id, checkpoint_id, self._peft_adapter_tar_bytes(slot))
+            else:
+                # Fallback: write the PEFT dir into the shared lora_base_dir
+                # under the exact adapter name ensure_lora_loaded derives; its
+                # extractor early-returns on existing dirs, skipping the
+                # tar/extract round-trip through shared storage.
+                self._publish_peft_adapter(slot, model_id, checkpoint_id)
 
         if persist:
             with pack_and_upload(output_path) as tmp:
@@ -1398,8 +1409,23 @@ class TunixBackend(AbstractBackend):
                 )
         logger.info(f"Saved sampler checkpoint for model {model_id} to {output_path} (persist={persist})")
 
-        if self.vllm_client is not None:
+        if self.vllm_client is not None and not self.config.vllm_lora_upload_endpoint:
+            # push_adapter already loaded the adapter on the push path.
             self.vllm_client.ensure_lora_loaded(model_id, output_path, checkpoint_id=checkpoint_id)
+
+    def _peft_adapter_tar_bytes(self, slot: ModelSlot) -> bytes:
+        """Serialize the HF-PEFT adapter export as an uncompressed in-memory tar."""
+        import io
+        import tarfile
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self._export_peft_adapter(slot, Path(tmp))
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:") as tar:
+                for f in sorted(Path(tmp).iterdir()):
+                    tar.add(f, arcname=f.name)
+            return buf.getvalue()
 
     def _publish_peft_adapter(self, slot: ModelSlot, model_id: str, checkpoint_id: str) -> None:
         """Atomically place the exported PEFT dir at <lora_base_dir>/<adapter-name>."""

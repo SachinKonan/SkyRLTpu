@@ -53,6 +53,10 @@ VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH:-/home/${REMOTE_USER}/gcs/vllm-xla-ca
 # install; replaces the old deploy-time apply_vllm_tpu_lora_patch.sh flow.
 TPU_INFERENCE_FORK_URL="${TPU_INFERENCE_FORK_URL:-https://github.com/SachinKonan/tpu-inference.git}"
 TPU_INFERENCE_FORK_REF="${TPU_INFERENCE_FORK_REF:-skyrl/v0.23.0-lora}"
+# 1 = run tpu/vllm_tpu_server.py (adds /skyrl/v1/upload_lora_adapter; adapters
+# land on local disk over HTTP). 0 = plain `vllm serve`.
+VLLM_UPLOAD_SERVER="${VLLM_UPLOAD_SERVER:-1}"
+VLLM_LOCAL_LORA_DIR="${VLLM_LOCAL_LORA_DIR:-/home/${REMOTE_USER}/skyrl-local-loras}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
@@ -212,7 +216,11 @@ export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
 # Resolve unknown adapter names from the shared lora dir (external
 # inference path references adapters by name without an explicit load).
 export VLLM_PLUGINS="\${VLLM_PLUGINS:-lora_filesystem_resolver}"
-export VLLM_LORA_RESOLVER_CACHE_DIR="${REMOTE_LORA_BASE}"
+if [[ "${VLLM_UPLOAD_SERVER}" == "1" ]]; then
+  export VLLM_LORA_RESOLVER_CACHE_DIR="${VLLM_LOCAL_LORA_DIR}"
+else
+  export VLLM_LORA_RESOLVER_CACHE_DIR="${REMOTE_LORA_BASE}"
+fi
 export VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH}"
 mkdir -p "${VLLM_XLA_CACHE_PATH}"
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
@@ -276,7 +284,12 @@ if [[ "${VLLM_DISABLE_SHARDY}" == "1" || "${VLLM_DISABLE_SHARDY}" == "true" || \
   export LIBTPU_INIT_ARGS="--xla_use_shardy=false --xla_tpu_scoped_vmem_limit_kib=131072 \${LIBTPU_INIT_ARGS:-}"
 fi
 
-exec vllm serve "${MODEL_NAME}" \\
+if [[ "${VLLM_UPLOAD_SERVER}" == "1" ]]; then
+  server_cmd=(python "\$HOME/vllm_tpu_server.py" "${MODEL_NAME}" --skyrl-lora-dir "${VLLM_LOCAL_LORA_DIR}")
+else
+  server_cmd=(vllm serve "${MODEL_NAME}")
+fi
+exec "\${server_cmd[@]}" \\
   --served-model-name "${SERVED_MODEL_NAME}" \\
   --host 0.0.0.0 \\
   --port "${VLLM_PORT}" \\
@@ -300,6 +313,9 @@ for worker in "${vllm_workers[@]}"; do
     --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
 
   gcloud alpha compute tpus tpu-vm scp "$runner_script" "${REMOTE_USER}@${TPU_NAME}:~/run_vllm_tpu_server.sh" \
+    --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
+
+  gcloud alpha compute tpus tpu-vm scp "${repo_root}/tpu/vllm_tpu_server.py" "${REMOTE_USER}@${TPU_NAME}:~/vllm_tpu_server.py" \
     --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
 done
 

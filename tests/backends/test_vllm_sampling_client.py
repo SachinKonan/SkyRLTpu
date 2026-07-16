@@ -12,7 +12,15 @@ from skyrl.tinker import types
 class _VllmHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("content-length", "0"))
-        payload = json.loads(self.rfile.read(length))
+        body = self.rfile.read(length)
+        if self.path.startswith("/skyrl/v1/upload_lora_adapter"):
+            self.server.requests.append((self.path, body, dict(self.headers)))
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status": "ok"}')
+            return
+        payload = json.loads(body)
         self.server.requests.append((self.path, payload, dict(self.headers)))
 
         if self.path == "/v1/load_lora_adapter":
@@ -345,5 +353,29 @@ def test_vllm_sampling_client_sample_groups_prompt_logprobs(tmp_path):
         assert len(group_sequences[0]) == 2
         assert group_prompt_logprobs == [[0.0, -0.02, -0.03]]
         assert server.requests[0][1]["prompt_logprobs"] == 1
+    finally:
+        server.shutdown()
+
+
+def test_vllm_sampling_client_push_adapter_versions_and_unloads():
+    """push_adapter posts the tar to the upload endpoint with versioned names and
+    passes the previous adapter name for server-side unload."""
+    server = _serve()
+    try:
+        client = VllmSamplingClient(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            model_name="base",
+            lora_upload_endpoint="/skyrl/v1/upload_lora_adapter",
+            lora_load_retries=1,
+        )
+        name1 = client.push_adapter("model_a", "ckpt_1", b"TARBYTES1")
+        name2 = client.push_adapter("model_a", "ckpt_2", b"TARBYTES2")
+        assert name1 == "model_a_ckpt_1" and name2 == "model_a_ckpt_2"
+
+        uploads = [(path, payload) for path, payload, _ in server.requests]
+        assert len(uploads) == 2
+        assert "lora_name=model_a_ckpt_1" in uploads[0][0] and "previous_lora_name" not in uploads[0][0]
+        assert "lora_name=model_a_ckpt_2" in uploads[1][0] and "previous_lora_name=model_a_ckpt_1" in uploads[1][0]
+        assert uploads[0][1] == b"TARBYTES1"
     finally:
         server.shutdown()
