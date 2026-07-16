@@ -1,0 +1,110 @@
+---
+title: Tunix Backend
+description: Training backend powered by tunix (MaxText models, qwix LoRA) with colocated vLLM inflight-LoRA sampling
+---
+
+# Tunix Backend
+
+`--backend tunix` trains qwix-LoRA adapters on [tunix](https://github.com/google/tunix)
+models behind the existing Tinker server — native flax-NNX model implementations
+(qwen3 family) or **MaxText** models via `model_source="maxtext"` (fast,
+Google-verified implementations, loaded through tunix's MaxText adapter with
+automatic HF→orbax checkpoint conversion cached on GCS).
+
+Sampling runs either through an in-process JAX generation loop (CPU tests) or a
+**colocated vLLM server with inflight LoRA updates**: each
+`save_weights_for_sampler` publishes an HF-PEFT adapter directory to the shared
+GCS mount and hot-swaps it into vLLM under a versioned name
+(unload-previous + retried load), so the sampler always serves the latest
+optimizer state without restarts.
+
+## Quickstart (colocated, v5p-16)
+
+```bash
+# Server: trainer on worker 0, vLLM on worker 1
+TPU_NAME=<v5p-16-node> TINKER_BACKEND=tunix MODEL_NAME=Qwen/Qwen3-8B \
+  TRAIN_WORKERS=0 VLLM_WORKERS=1 TRAIN_MICRO_BATCH_SIZE=32 \
+  ./tpu/start_colocated_vllm_tinker.sh
+
+# Client: on-policy pipelined math-RL (stream minibatches)
+TPU_NAME=<v5p-16-node> MODEL_NAME=Qwen/Qwen3-8B STREAM_NUM_MINIBATCHES=8 \
+  ./tpu/run_tinker_math_rl_qwen35_9b.sh
+```
+
+Key pieces this enables:
+
+- **External sampling path** (`EXTERNAL_SAMPLING=1`, default for tunix): sample
+  requests bypass the single-threaded engine loop so sampling and training run
+  concurrently on their respective hosts.
+- **Forked tpu-inference submodule** (`third_party/tpu-inference` →
+  `skyrl/v0.23.0-lora`): runtime-LoRA forwarders are committed and
+  source-installed over the `vllm-tpu` wheel — no deploy-time patching.
+- **CPU CI**: the full `tests/tinker/` suite runs against `--backend tunix`
+  (native tiny-qwen3), including cross-backend logprob parity with the JAX
+  backend and MaxText-vs-native parity.
+
+## Performance
+
+Measured on a v5p-16 (2 hosts × 4 chips) running the tinker-cookbook math-RL
+recipe with Qwen/Qwen3-8B, LoRA rank 32, 64 groups × 16 samples × 512 max
+tokens per step (1024 rollouts/step).
+
+### Optimization arc — step wall time per change
+
+| Change | s/step | Speedup |
+|---|---|---|
+| Initial (sync loop, `train_micro_batch_size=1→8`) | ~330 | — |
+| `train_micro_batch_size=32` + direct-publish adapter sync (tar round-trips through GCS removed) | ~290 | 1.14× |
+| **On-policy pipelined RL** (external sampling path + stream minibatches) | **~210 (3.5 min)** | **1.57×** |
+
+The pipelined mode is mathematically identical to the sync loop: all rollouts
+of a step come from the same policy version, gradients accumulate across
+streamed `forward_backward` calls, and a single `optim_step` fires per batch.
+KL(sampler‖trainer) stayed flat at 0.03–0.08 for the entire 75-step
+validation run — the inflight-adapter serving tracks the trainer faithfully.
+
+### Time per stage (average step = 3.5 min)
+
+| Stage | Time | Share | Notes |
+|---|---|---|---|
+| `forward_backward` waves | ~130s | 62% | paces the step; **sampling (~95s) runs concurrently inside this window** |
+| Adapter sync (PEFT export → GCS → vLLM load) | ~45s | 21% | serialized, pure I/O |
+| Scheduling slack / stream tails | ~25–35s | ~15% | engine poll cadence + last-minibatch tail |
+| `optim_step` | ~0.1s | ~0% | applies pre-accumulated LoRA gradients |
+| Eval + checkpoint steps (every 20) | +50s | — | held-out eval + persistent save |
+
+### Utilization per host (steady state, per chip of 95.7 GB HBM)
+
+| | TensorCore | Mem bandwidth | HBM used | Duty cycle |
+|---|---|---|---|---|
+| Trainer (worker 0, fb waves) | 15–21% mean, ~28% peak | 13% / 30% peak | 60–61 GB (63%) | 52–75% |
+| vLLM (worker 1, decode) | 1.7% mean, 5.6% peak | 5.5% / 13.5% peak | 96.7 GB (KV prealloc) | 83% while sampling |
+
+Nothing is FLOP-bound: trainer time is dominated by the request/result
+pipeline, decode by its intrinsic memory-boundedness. Known levers beyond
+3.5 min/step: `max_steps_off_policy=1` async (~150s/step, bounded 1-step
+staleness under the existing importance-sampling loss) and in-place adapter
+reload in the tpu-inference fork (sync 45s → ~10s).
+
+### Validation (math-RL, Qwen3-8B cold start)
+
+| Held-out eval | step 0 | step 20 | step 40 | step 60 |
+|---|---|---|---|---|
+| test reward | −0.088 | −0.057 | +0.132 | **+0.444** |
+| test correct | 1.2% | 4.2% | 22.8% | **52.6%** |
+
+Train reward reached +0.61 by step 72 — surpassing the Qwen3.5-9B reference
+run's final value (+0.394 at step 74) at equal step count despite the weaker
+base model, with flat sampler/trainer KL throughout.
+
+## Limitations
+
+- Single train host (multi-host trainer is future work; the colocated v5p-16
+  split — 1 train host + 1 vLLM host — needs none).
+- One LoRA rank per template is exact; multi-tenant fused batching
+  (tx-style stacked adapters) is not implemented — tenants execute grouped.
+- MaxText requires `pure_nnx=true` decoders; sequence lengths round to the
+  512-token attention block and batches pad to the device count (handled
+  internally).
+- vLLM TPU rejects per-request seeds and greedy sampling with `n>1`
+  (handled by the sampling client).
