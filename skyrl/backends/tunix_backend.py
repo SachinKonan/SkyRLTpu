@@ -410,9 +410,16 @@ class TunixBackend(AbstractBackend):
     def _maxtext_model_name(self) -> str:
         if self.config.maxtext_model_name:
             return self.config.maxtext_model_name
-        from tunix.models import naming
+        try:
+            from tunix.models import naming
 
-        return naming.ModelNaming(model_id=self.base_model).model_name
+            return naming.ModelNaming(model_id=self.base_model).model_name
+        except Exception as e:
+            raise ValueError(
+                f"Cannot derive a MaxText model_name for {self.base_model!r} "
+                "(family unknown to tunix naming). Set maxtext_model_name in the "
+                "backend config to the MaxText config name, e.g. 'gpt-oss-20b'."
+            ) from e
 
     def _ensure_maxtext_orbax_checkpoint(self) -> str:
         """Convert the HF checkpoint to MaxText's orbax format (cached).
@@ -464,16 +471,27 @@ class TunixBackend(AbstractBackend):
         return str(items_dir)
 
     def _load_maxtext_model(self) -> nnx.Module:
-        try:
-            from tunix.models.automodel import AutoModel, ModelSource
-        except ImportError as e:  # pragma: no cover
-            raise ImportError("model_source='maxtext' requires tunix with MaxText installed") from e
+        """Load a MaxText model via pyconfig directly.
 
+        Deliberately bypasses tunix's AutoModel: its naming layer only resolves
+        a fixed set of families (no gpt-oss, no qwen3.5) and it ignores
+        model_path for the MAXTEXT source. Any model with a MaxText config
+        (configs/models/<name>.yml) works here via maxtext_model_name.
+        """
+        try:
+            import maxtext.configs.pyconfig as pyconfig
+            from maxtext.utils import model_creation_utils
+        except ImportError as e:  # pragma: no cover
+            raise ImportError("model_source='maxtext' requires MaxText installed") from e
+
+        mt_name = self._maxtext_model_name()
         # model_path override wins (e.g. a pre-converted orbax dir); otherwise
         # convert-and-cache from HF.
         orbax_path = self.config.model_path or self._ensure_maxtext_orbax_checkpoint()
 
-        kwargs: dict[str, Any] = {
+        overrides: dict[str, Any] = {
+            "model_name": mt_name,
+            "load_parameters_path": orbax_path,
             "per_device_batch_size": 1,
             "max_target_length": self.config.maxtext_max_target_length,
             # Required True when load_parameters_path is set (pyconfig validation).
@@ -486,25 +504,21 @@ class TunixBackend(AbstractBackend):
             # otherwise changes the nnx.scan carry dtype mid-scan.
             "dtype": self.config.param_dtype,
             "weight_dtype": self.config.param_dtype,
+            "skip_jax_distributed_system": True,
         }
-        if self.config.maxtext_model_name:
-            kwargs["model_name"] = self.config.maxtext_model_name
-        # AutoModel ignores model_path for MAXTEXT; load_parameters_path is a
-        # MaxTextConfig field, so it passes through the kwargs filter instead.
-        kwargs["load_parameters_path"] = orbax_path
-        kwargs.update(self.config.maxtext_kwargs)
+        overrides.update(self.config.maxtext_kwargs)
+        argv = ["", "base.yml"] + [
+            f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in overrides.items()
+        ]
 
         with _maxtext_config_cwd():
-            ret, _resolved_path = AutoModel.from_pretrained(
-                self.base_model,
-                mesh=None,
-                model_source=ModelSource.MAXTEXT,
-                **kwargs,
+            maxtext_config = pyconfig.initialize(argv)
+            model = model_creation_utils.from_pretrained(
+                maxtext_config, mesh=None, wrap_with_tunix_adapter=True
             )
-        model = ret
         if isinstance(model, tuple):  # maxtext returns (model, mesh) when mesh=None
             model, _mesh = model
-        logger.info(f"Loaded MaxText model for {self.base_model} (pure-NNX)")
+        logger.info(f"Loaded MaxText model {mt_name} for {self.base_model} (pure-NNX)")
         return _MaxTextAdapterShim(model)
 
     # ------------------------------------------------------------------ templates
