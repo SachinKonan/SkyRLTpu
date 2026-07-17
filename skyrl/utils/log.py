@@ -19,7 +19,11 @@ RICH_HANDLER_KWARGS = {
     "show_level": False,
     "show_path": False,
     "markup": False,
-    "rich_tracebacks": True,
+    # Plain-text tracebacks: rich's syntax-highlighted panels take seconds of
+    # CPU each and render synchronously on the event loop — an exception
+    # burst (e.g. hundreds of failing sample forwards) starves the server
+    # into heartbeat timeouts, which raise more exceptions to render.
+    "rich_tracebacks": False,
 }
 
 
