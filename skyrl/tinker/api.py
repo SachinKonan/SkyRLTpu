@@ -108,7 +108,13 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown."""
 
     db_url = get_async_database_url(app.state.engine_config.database_url)
-    app.state.db_engine = create_async_engine(db_url, echo=False)
+    # External-inference result stores arrive in bursts of several hundred
+    # concurrent tasks (eval sampling is not group-coalesced); the default
+    # pool (5+10, 30s timeout) turns one slow burst into cascading
+    # TimeoutErrors that take down heartbeats with it.
+    app.state.db_engine = create_async_engine(
+        db_url, echo=False, pool_size=20, max_overflow=60, pool_timeout=120
+    )
     enable_sqlite_wal(app.state.db_engine.sync_engine)
 
     async with app.state.db_engine.begin() as conn:
