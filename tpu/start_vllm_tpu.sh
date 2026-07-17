@@ -221,6 +221,9 @@ if [[ "${VLLM_UPLOAD_SERVER}" == "1" ]]; then
 else
   export VLLM_LORA_RESOLVER_CACHE_DIR="${REMOTE_LORA_BASE}"
 fi
+# The resolver plugin refuses to register unless the dir already exists
+# (checked at CLI-arg parse time, before the upload server's own mkdir).
+mkdir -p "\${VLLM_LORA_RESOLVER_CACHE_DIR}"
 export VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH}"
 mkdir -p "${VLLM_XLA_CACHE_PATH}"
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
