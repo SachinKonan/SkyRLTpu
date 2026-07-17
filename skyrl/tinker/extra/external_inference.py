@@ -34,7 +34,7 @@ def _extract_checkpoint_sync(checkpoint_path: AnyPath, target_dir: Path) -> None
     # The unpack tempdir usually lives on a different filesystem than the
     # lora dir (e.g. /tmp vs a GCS FUSE mount), so a direct rename raises
     # EXDEV. Copy into a same-directory staging path, then rename in place.
-    staging = target_dir.parent / f".{target_dir.name}.staging-{os.getpid()}"
+    staging = target_dir.parent / f".{target_dir.name}.staging-{os.getpid()}-{os.urandom(4).hex()}"
     shutil.rmtree(staging, ignore_errors=True)
     try:
         with download_and_unpack(checkpoint_path) as extracted_path:
@@ -60,8 +60,10 @@ class ExternalInferenceClient:
         self.db_engine = db_engine
         # Adapter names already extracted this process — a sampling burst is
         # hundreds of concurrent requests for the same checkpoint, and each
-        # gcsfuse stat/unpack is expensive.
+        # gcsfuse stat/unpack is expensive. The per-name lock makes extraction
+        # single-flight: exactly one request unpacks, the rest wait on it.
         self._extracted_adapters: set[str] = set()
+        self._extract_locks: dict[str, asyncio.Lock] = {}
 
     async def call_and_store_result(
         self,
@@ -125,8 +127,10 @@ class ExternalInferenceClient:
             target_dir = self.lora_base_dir / model_name
 
             if model_name not in self._extracted_adapters:
-                await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
-                self._extracted_adapters.add(model_name)
+                async with self._extract_locks.setdefault(model_name, asyncio.Lock()):
+                    if model_name not in self._extracted_adapters:
+                        await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
+                        self._extracted_adapters.add(model_name)
 
         payload = {
             "model": model_name,
