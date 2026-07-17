@@ -1318,7 +1318,17 @@ class TunixBackend(AbstractBackend):
 
     @staticmethod
     def _flat_numpy(state) -> dict[str, np.ndarray]:
-        return {k: np.asarray(jax.device_get(v)) for k, v in _keystr_map(state).items()}
+        out = {}
+        for k, v in _keystr_map(state).items():
+            arr = np.asarray(jax.device_get(v))
+            if arr.dtype.kind == "V":
+                # npz cannot represent extension dtypes: bfloat16 saves as raw
+                # void bytes that np.load returns untyped. Store float32
+                # instead (exact for bf16); the load side casts back to the
+                # target leaf dtype.
+                arr = arr.astype(np.float32)
+            out[k] = arr
+        return out
 
     @staticmethod
     def _state_from_flat(target_state, flat: dict[str, np.ndarray]):
@@ -1329,7 +1339,17 @@ class TunixBackend(AbstractBackend):
         if missing or extra:
             raise ValueError(f"Checkpoint state mismatch: missing={sorted(missing)[:5]}, extra={sorted(extra)[:5]}")
         leaves, treedef = jax.tree.flatten_with_path(target_state)
-        return jax.tree.unflatten(treedef, [jnp.asarray(flat[jax.tree_util.keystr(p)]) for p, _ in leaves])
+
+        def restore(path, leaf):
+            arr = flat[jax.tree_util.keystr(path)]
+            dtype = np.dtype(leaf.dtype)
+            if arr.dtype.kind == "V" and arr.dtype.itemsize == dtype.itemsize:
+                # Legacy checkpoint written before the float32 conversion in
+                # _flat_numpy: the void bytes are the target dtype verbatim.
+                arr = arr.view(dtype)
+            return jnp.asarray(arr, dtype=dtype)
+
+        return jax.tree.unflatten(treedef, [restore(p, leaf) for p, leaf in leaves])
 
     @staticmethod
     def _write_npz(path: Path, flat: dict[str, np.ndarray]) -> None:
