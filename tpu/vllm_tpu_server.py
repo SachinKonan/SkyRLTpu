@@ -110,7 +110,6 @@ async def _serve(args) -> None:
 
 def main() -> None:
     parser = FlexibleArgumentParser(description="vLLM TPU server with SkyRL adapter upload")
-    parser.add_argument("model_tag", type=str, help="model name or path (positional, like `vllm serve`)")
     parser.add_argument(
         "--skyrl-lora-dir",
         type=str,
@@ -118,8 +117,14 @@ def main() -> None:
         help="Local directory where uploaded adapters are extracted.",
     )
     parser = make_arg_parser(parser)
+    # Newer vllm defines the `model_tag` positional itself; adding a second
+    # positional with the same dest makes the optional one overwrite the
+    # parsed value with None.
+    if not any(a.dest == "model_tag" for a in parser._actions if not a.option_strings):
+        parser.add_argument("model_tag", type=str, help="model name or path (positional, like `vllm serve`)")
     args = parser.parse_args()
-    args.model = args.model_tag
+    if getattr(args, "model_tag", None):
+        args.model = args.model_tag
 
     asyncio.run(_serve(args))
 
