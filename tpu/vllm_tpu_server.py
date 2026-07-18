@@ -16,6 +16,8 @@ Compatible with vllm==0.23 (mirrors skyrl's GPU vllm_server_actor pattern).
 
 import argparse
 import asyncio
+import inspect
+import logging
 import shutil
 import tarfile
 import tempfile
@@ -36,8 +38,10 @@ from vllm.usage.usage_lib import UsageContext
 from vllm.utils.argparse_utils import FlexibleArgumentParser
 from vllm.utils.system_utils import set_ulimit
 
+logger = logging.getLogger(__name__)
 
-def _add_upload_endpoint(app, lora_dir: Path) -> None:
+
+def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
     lora_dir.mkdir(parents=True, exist_ok=True)
 
     @app.post("/skyrl/v1/upload_lora_adapter")
@@ -68,6 +72,42 @@ def _add_upload_endpoint(app, lora_dir: Path) -> None:
                 raise HTTPException(status_code=400, detail="tar does not contain adapter_config.json at its root")
             staging.replace(target)
 
+        # MoE LoRA sidecar (gpt-oss): merge expert/router deltas into the
+        # base weights via a worker RPC. This must run on EVERY upload call —
+        # even when the tar extract above was skipped because the adapter dir
+        # already existed — since the worker-side merge is incremental and
+        # keyed off its own previously applied factors, not the filesystem.
+        moe_path = target / "moe_lora.safetensors"
+        if moe_path.exists():
+            import json as _json
+
+            from safetensors.numpy import load_file as _st_load
+
+            factors = _st_load(str(moe_path))
+            meta = _json.loads((target / "moe_lora.json").read_text())
+            try:
+                # vllm 0.23: AsyncLLMEngine is v1 AsyncLLM
+                # (vllm/engine/async_llm_engine.py aliases it), whose
+                # `collective_rpc(method, timeout=None, args=(), kwargs=None)`
+                # is an async method fanning out to the TPU workers
+                # (verified against vllm 0.19 source; TODO-verify on the
+                # worker's vllm 0.23 install — the isawaitable branch below
+                # also covers a sync variant).
+                result = engine.collective_rpc(
+                    "apply_moe_lora_deltas", args=(dict(factors), meta)
+                )
+                if inspect.isawaitable(result):
+                    result = await result
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"apply_moe_lora_deltas RPC failed: {exc!r}",
+                ) from exc
+            logger.info(
+                "MoE LoRA merge-on-load for %s: %d tensors -> %s",
+                lora_name, len(factors), result,
+            )
+
         models = request.app.state.openai_serving_models
 
         if previous and previous != lora_name:
@@ -95,7 +135,7 @@ async def _serve(args) -> None:
         usage_context=UsageContext.OPENAI_API_SERVER,
     )
 
-    _add_upload_endpoint(app, Path(args.skyrl_lora_dir))
+    _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine)
     await init_app_state(engine, app.state, args)
 
     config = uvicorn.Config(
