@@ -105,6 +105,7 @@ fi
 
 cd '${repo_root}'
 exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
+  --reinstall-package tinker-cookbook \\
   python -m tinker_cookbook.recipes.math_rl.train \\
     base_url='${base_url}' \\
     env='${ENV_NAME}' \\
