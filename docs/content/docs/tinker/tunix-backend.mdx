@@ -86,16 +86,20 @@ pipeline, decode by its intrinsic memory-boundedness. Known levers beyond
 staleness under the existing importance-sampling loss) and in-place adapter
 reload in the tpu-inference fork (sync 45s → ~10s).
 
-### Validation (math-RL, Qwen3-8B cold start)
+### Validation (math-RL, Qwen3-8B cold start, 180 steps)
 
-| Held-out eval | step 0 | step 20 | step 40 | step 60 |
-|---|---|---|---|---|
-| test reward | −0.088 | −0.057 | +0.132 | **+0.444** |
-| test correct | 1.2% | 4.2% | 22.8% | **52.6%** |
+| Held-out eval | step 0 | step 20 | step 40 | step 60 | step 80 | step 100 | step 140 | step 179 |
+|---|---|---|---|---|---|---|---|---|
+| test reward | −0.088 | −0.057 | +0.132 | +0.444 | +0.585 | +0.712 | +0.747 | **+0.758** |
+| test correct | 1.2% | 4.2% | 22.8% | 52.6% | 64.8% | 75.0% | 76.4% | **77.4%** |
 
-Train reward reached +0.61 by step 72 — surpassing the Qwen3.5-9B reference
-run's final value (+0.394 at step 74) at equal step count despite the weaker
-base model, with flat sampler/trainer KL throughout.
+Train reward reached +0.78 (best, step 130) with flat sampler/trainer KL
+throughout — surpassing the Qwen3.5-9B reference run's final value (+0.394 at
+step 74) before step 80 despite the weaker base model. The run survived a spot
+preemption: it resumed from the step-60 GCS checkpoint on a freshly created
+machine and continued to completion (adapter export, HTTP push, and optimizer
+state all restored bit-exact; the bf16 npz round-trip and adapter-extraction
+fixes this required are part of this branch).
 
 ## Limitations
 
