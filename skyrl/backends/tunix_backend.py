@@ -202,10 +202,21 @@ class _MaxTextAdapterShim(nnx.Module):
 # sequences run as a single block and may use the usual power-of-2 buckets.
 _MAXTEXT_SEQ_BLOCK = 512
 
-# qwix module_path regex for MaxText qwen-family decoders (pure-NNX). Matches
-# MaxText's own verified LoRA targets (configs/post_train/lora_module_path.yml).
-_MAXTEXT_ATTN_REGEX = r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?self_attention/(?:query|key|value|out)(?:/.*)?"
-_MAXTEXT_MLP_REGEX = r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
+# qwix module_path regex for MaxText decoders (pure-NNX). The qwen-family arm
+# matches MaxText's own verified LoRA targets
+# (configs/post_train/lora_module_path.yml); the GptOss arm covers gpt-oss,
+# whose blocks are named GptOssAttention/{query,key,value,out} and GptOssMlp
+# (experts held as raw stacked params — scoping the whole module lets qwix
+# intercept the expert einsums; the router `gate` is deliberately included,
+# its delta merges into the gate kernel like any other).
+_MAXTEXT_ATTN_REGEX = (
+    r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?self_attention/(?:query|key|value|out)(?:/.*)?"
+    r"|(?:.*/)?GptOssAttention/(?:query|key|value|out)(?:/.*)?"
+)
+_MAXTEXT_MLP_REGEX = (
+    r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
+    r"|(?:.*/)?GptOssMlp(?:/.*)?"
+)
 
 # MaxText projection name -> HF (block, module) for PEFT export.
 _MAXTEXT_PROJ_TO_HF = {
@@ -506,6 +517,12 @@ class TunixBackend(AbstractBackend):
             "weight_dtype": self.config.param_dtype,
             "skip_jax_distributed_system": True,
         }
+        if "gpt-oss" in mt_name:
+            # qwix cannot inject LoRA into the megablox Pallas gmm kernel;
+            # expert adapters require the dense einsum MoE path (costs
+            # E/top_k more MoE FLOPs — acceptable at current utilization).
+            overrides["sparse_matmul"] = False
+            overrides["megablox"] = False
         overrides.update(self.config.maxtext_kwargs)
         argv = ["", "base.yml"] + [
             f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in overrides.items()
