@@ -63,6 +63,12 @@ stream_arg=""
 if [[ "${STREAM_NUM_MINIBATCHES}" -gt 0 ]]; then
   stream_arg="stream_minibatch_config.num_minibatches='${STREAM_NUM_MINIBATCHES}' stream_minibatch_config.groups_per_batch='${GROUPS_PER_BATCH}'"
 fi
+# A single failed rollout group otherwise hangs the stream-minibatch loop
+# (queue consumer waits forever for the dead group's slot).
+tolerance_arg=""
+if [[ "${ROLLOUT_ERROR_TOLERANCE:-0}" == "1" ]]; then
+  tolerance_arg="rollout_error_tolerance='True'"
+fi
 cookbook_spec="tinker-cookbook[math-rl] @ file://${repo_root}/third_party/tinker-cookbook"
 
 if ! tmux has-session -t "$TUNNEL_SESSION" 2>/dev/null; then
@@ -113,7 +119,7 @@ exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
     save_every='${SAVE_EVERY}' \\
     eval_every='${EVAL_EVERY}' \\
     loss_fn='${LOSS_FN}' \\
-    ${stream_arg} seed='${SEED}' \\
+    ${stream_arg} ${tolerance_arg} seed='${SEED}' \\
     log_path='${log_path}' \\
     behavior_if_log_dir_exists='${BEHAVIOR_IF_LOG_DIR_EXISTS}'
 EOF
