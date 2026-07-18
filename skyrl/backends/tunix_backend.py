@@ -347,7 +347,10 @@ class TunixBackend(AbstractBackend):
                 client_side_round_robin=config.vllm_client_side_round_robin,
             )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(config.model_path or base_model)
+        # For maxtext, model_path is an orbax weights dir with no tokenizer
+        # files — the tokenizer always comes from the HF id.
+        tokenizer_src = base_model if config.model_source == "maxtext" else (config.model_path or base_model)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_src)
 
         base = self._load_base_model()
         self.base_graphdef, self.base_state = nnx.split(base)

@@ -77,6 +77,8 @@ tunix = [
     "qwix>=0.1.6",
     "transformers",
     "sentencepiece",
+    # gpt-oss tokenizers are tiktoken-based (o200k)
+    "tiktoken",
     "huggingface_hub",
     "safetensors",
 ]

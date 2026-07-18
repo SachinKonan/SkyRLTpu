@@ -8862,6 +8862,7 @@ tunix = [
     { name = "qwix" },
     { name = "safetensors" },
     { name = "sentencepiece" },
+    { name = "tiktoken" },
     { name = "transformers", marker = "sys_platform == 'linux' or (extra == 'extra-5-skyrl-fsdp' and extra == 'extra-5-skyrl-jax') or (extra == 'extra-5-skyrl-fsdp' and extra == 'extra-5-skyrl-megatron') or (extra == 'extra-5-skyrl-gpu' and extra == 'extra-5-skyrl-megatron') or (extra == 'extra-5-skyrl-gpu' and extra == 'extra-5-skyrl-miniswe') or (extra == 'extra-5-skyrl-gpu' and extra == 'extra-5-skyrl-tpu') or (extra == 'extra-5-skyrl-jax' and extra == 'extra-5-skyrl-megatron') or (extra == 'extra-5-skyrl-megatron' and extra == 'extra-5-skyrl-miniswe') or (extra == 'extra-5-skyrl-megatron' and extra == 'extra-5-skyrl-tpu') or (extra == 'extra-5-skyrl-miniswe' and extra == 'extra-5-skyrl-tpu')" },
 ]
 
@@ -8959,6 +8960,7 @@ requires-dist = [
     { name = "sqlmodel", marker = "extra == 'tinker'" },
     { name = "tensorboard", marker = "extra == 'skyrl-train'" },
     { name = "tensordict", marker = "extra == 'skyrl-train'" },
+    { name = "tiktoken", marker = "extra == 'tunix'" },
     { name = "tinker", marker = "extra == 'tinker'", specifier = ">=0.3.0" },
     { name = "tokenizers", specifier = ">=0.21.2" },
     { name = "torch", marker = "sys_platform == 'darwin' and extra == 'dev'", index = "https://download.pytorch.org/whl/cpu" },
