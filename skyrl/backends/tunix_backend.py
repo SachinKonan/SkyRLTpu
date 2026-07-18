@@ -1519,11 +1519,22 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ HF-PEFT export
 
     def _export_peft_adapter(self, slot: ModelSlot, out_dir: Path) -> None:
-        """Write adapter_model.safetensors + adapter_config.json (HF-PEFT layout)."""
+        """Write adapter_model.safetensors + adapter_config.json (HF-PEFT layout).
+
+        gpt-oss additionally writes moe_lora.safetensors + moe_lora.json: the
+        raw expert/router LoRA factors, which standard PEFT cannot express —
+        the vLLM server's merge-on-load path consumes them.
+        """
         import safetensors.numpy as st_numpy
 
         if self.config.model_source == "maxtext":
-            tensors = self._peft_tensors_maxtext(slot)
+            if self._is_gptoss_lora(slot):
+                tensors, moe_tensors, moe_meta = self._peft_tensors_gptoss(slot)
+                if moe_tensors:
+                    st_numpy.save_file(moe_tensors, str(out_dir / "moe_lora.safetensors"))
+                    (out_dir / "moe_lora.json").write_text(json.dumps(moe_meta, indent=2))
+            else:
+                tensors = self._peft_tensors_maxtext(slot)
         else:
             tensors = self._peft_tensors_native(slot)
 
@@ -1559,6 +1570,99 @@ class TunixBackend(AbstractBackend):
                 out_matrix = arr.reshape(arr.shape[0], -1)
                 tensors[f"base_model.model.{hf_module}.lora_B.weight"] = np.ascontiguousarray(out_matrix.T)
         return tensors
+
+    @staticmethod
+    def _is_gptoss_lora(slot: ModelSlot) -> bool:
+        return any(
+            "GptOssMlp" in jax.tree_util.keystr(p) or "GptOssAttention" in jax.tree_util.keystr(p)
+            for p, _ in jax.tree.flatten_with_path(slot.lora_state)[0]
+        )
+
+    def _peft_tensors_gptoss(
+        self, slot: ModelSlot
+    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict]:
+        """Split gpt-oss LoRA state into (attention PEFT tensors, MoE factors, meta).
+
+        gpt-oss decoders scan layers in ``layer_cycle_interval`` groups
+        (``layers_{g}``: sliding/full attention alternation), stacked over
+        axis 1; global HF layer index = stack_idx * n_groups + g (matches
+        MaxText's convert_gpt_oss_ckpt: ``divmod(layer_idx, interval)``).
+
+        MoE factor shapes (rank r, E experts, d model dim, f ff dim):
+          wi_0/wi_1: lora_a (d, L, r) shared over experts; lora_b (r, L, E, f)
+          wo:        lora_a (E, L, f, r) per-expert;       lora_b (r, L, d)
+          router:    lora_a (d, L, r);                     lora_b (r, L, E)
+        Per-expert delta = scale * A @ B_e (see meta["contraction"]).
+        """
+        import re
+
+        attn: dict[str, np.ndarray] = {}
+        moe: dict[str, np.ndarray] = {}
+        entries = []
+        groups: set[int] = set()
+        for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
+            keystr = jax.tree_util.keystr(path)
+            names = [a or b for a, b in re.findall(r"\['([A-Za-z_0-9]+)'\]|\[(\d+)\]", keystr)]
+            group_name = next((n for n in names if re.fullmatch(r"layers_[0-9]+", n)), None)
+            if group_name is None:
+                logger.warning("Skipping gpt-oss LoRA param without layer group: %s", keystr)
+                continue
+            group = int(group_name.split("_")[1])
+            groups.add(group)
+            arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
+            entries.append((group, names, arr, keystr))
+        n_groups = max(groups) + 1 if groups else 1
+
+        for group, names, arr, keystr in entries:
+            if "GptOssAttention" in names:
+                proj = names[names.index("GptOssAttention") + 1]
+                hf = {"query": "q_proj", "key": "k_proj", "value": "v_proj", "out": "o_proj"}.get(proj)
+                leafname = names[-1]
+                if hf is None or arr.ndim != 3 or "lora" not in leafname:
+                    logger.warning("Skipping unmapped gpt-oss attention LoRA param %s", keystr)
+                    continue
+                is_a = leafname.endswith("lora_a")
+                for j in range(arr.shape[1]):
+                    gl = j * n_groups + group
+                    per = arr[:, j, :]  # lora_a: (in, r); lora_b: (r, out)
+                    name = f"base_model.model.model.layers.{gl}.self_attn.{hf}"
+                    suffix = "lora_A.weight" if is_a else "lora_B.weight"
+                    attn[f"{name}.{suffix}"] = np.ascontiguousarray(per.T)
+            elif "GptOssMlp" in names:
+                after = names[names.index("GptOssMlp") + 1 :]
+                if after[0] == "gate":
+                    comp, leafname = "router", after[-1]
+                else:
+                    m = re.fullmatch(r"(wi_0|wi_1|wo)_(lora_[ab])", after[0])
+                    if m is None:
+                        logger.warning("Skipping unmapped gpt-oss MoE LoRA param %s", keystr)
+                        continue
+                    comp, leafname = m.group(1), m.group(2)
+                if "lora" not in leafname:
+                    logger.warning("Skipping non-LoRA gpt-oss MoE param %s", keystr)
+                    continue
+                is_a = leafname.endswith("a")
+                for j in range(arr.shape[1]):  # stack axis is 1 for every factor
+                    gl = j * n_groups + group
+                    per = np.ascontiguousarray(np.take(arr, j, axis=1))
+                    moe[f"layers.{gl}.{comp}.{'lora_a' if is_a else 'lora_b'}"] = per
+            else:
+                logger.warning("Skipping unrecognized gpt-oss LoRA param %s", keystr)
+
+        meta = {
+            "format": "gptoss-moe-lora/v1",
+            "rank": slot.lora_config.rank,
+            "alpha": slot.lora_config.alpha,
+            "scale": slot.lora_config.alpha / slot.lora_config.rank,
+            "num_layer_groups": n_groups,
+            "contraction": {
+                "wi_0": "delta[e,d,f] = scale * sum_r A[d,r] * B[r,e,f]  (gate half)",
+                "wi_1": "delta[e,d,f] = scale * sum_r A[d,r] * B[r,e,f]  (up half)",
+                "wo": "delta[e,f,d] = scale * sum_r A[e,f,r] * B[r,d]",
+                "router": "delta[d,e] = scale * sum_r A[d,r] * B[r,e]",
+            },
+        }
+        return attn, moe, meta
 
     def _peft_tensors_maxtext(self, slot: ModelSlot) -> dict[str, np.ndarray]:
         """MaxText LoRA params are stacked over the scanned layer axis (axis 1)."""
