@@ -152,6 +152,13 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
 
 
 async def _serve(args) -> None:
+    # This module logs under "__main__"; without an explicit level its INFO
+    # records (notably the "MoE LoRA merge-on-load ... -> {...}" success
+    # line, the observable proof that an adapter push merged) are dropped at
+    # the root logger's default WARNING threshold.
+    logger.setLevel(logging.INFO)
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.INFO)
     set_ulimit()
     app = build_app(args)
 
