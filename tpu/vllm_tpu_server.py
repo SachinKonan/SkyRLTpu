@@ -85,6 +85,25 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
 
             factors = _st_load(str(moe_path))
             meta = _json.loads((target / "moe_lora.json").read_text())
+            # The frontend->EngineCore collective_rpc hop serializes args
+            # with vllm's MsgpackEncoder, whose enc_hook turns every ndarray
+            # into a (dtype_str, shape, inline-bytes-or-aux-buffer-index)
+            # triple. Only TYPED RPC targets get ndarrays reconstructed
+            # (MsgpackDecoder.dec_hook fires off the parameter annotation);
+            # apply_moe_lora_deltas(factors, meta) is untyped, so the worker
+            # received raw 3-element lists and np.asarray() in
+            # _compute_moe_lora_delta failed with "inhomogeneous shape ...
+            # (3,)". Large factors are worse still: the triple's payload is
+            # an index into aux buffers the untyped path can never access.
+            # Nested Python lists survive the msgpack hop unchanged, and the
+            # worker-side np.asarray() rebuilds them exactly (f32 values are
+            # exactly representable as Python floats). ~845MB of f32 factors
+            # becomes a ~2GB msgpack message; acceptable at the
+            # once-per-train-step upload cadence. TODO: bump the
+            # tpu-inference fork to accept the (already local)
+            # moe_lora.safetensors PATH instead of inline factors, then drop
+            # this conversion.
+            wire_factors = {k: v.tolist() for k, v in factors.items()}
             try:
                 # vllm 0.23: AsyncLLMEngine is v1 AsyncLLM
                 # (vllm/engine/async_llm_engine.py aliases it), whose
@@ -94,7 +113,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 # worker's vllm 0.23 install — the isawaitable branch below
                 # also covers a sync variant).
                 result = engine.collective_rpc(
-                    "apply_moe_lora_deltas", args=(dict(factors), meta)
+                    "apply_moe_lora_deltas", args=(wire_factors, meta)
                 )
                 if inspect.isawaitable(result):
                     result = await result
