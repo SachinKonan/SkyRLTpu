@@ -784,8 +784,14 @@ class TunixBackend(AbstractBackend):
 
     @staticmethod
     def _round_seq_len(seq_len: int, kind: str) -> int:
-        if kind == "maxtext" and seq_len > _MAXTEXT_SEQ_BLOCK:
-            return -(-seq_len // _MAXTEXT_SEQ_BLOCK) * _MAXTEXT_SEQ_BLOCK
+        if kind == "maxtext":
+            if seq_len > _MAXTEXT_SEQ_BLOCK:
+                return -(-seq_len // _MAXTEXT_SEQ_BLOCK) * _MAXTEXT_SEQ_BLOCK
+            # Splash attention requires kv block sizes (min(block, seq_len)) to
+            # be a multiple of 128 (NUM_LANES); power-of-2 buckets like 192
+            # crash with "bkv_compute=192 must be a multiple of 128". Round
+            # short batches to 128-multiples instead ({128, 256, 384, 512}).
+            return max(128, -(-seq_len // 128) * 128)
         return round_up_seq_len(seq_len)
 
     # ------------------------------------------------------------------ forward / forward_backward
