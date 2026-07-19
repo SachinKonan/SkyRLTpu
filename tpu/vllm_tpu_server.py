@@ -81,42 +81,48 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
         if moe_path.exists():
             import json as _json
 
-            from safetensors.numpy import load_file as _st_load
+            from safetensors import safe_open as _safe_open
 
-            factors = _st_load(str(moe_path))
             meta = _json.loads((target / "moe_lora.json").read_text())
-            # The frontend->EngineCore collective_rpc hop serializes args
-            # with vllm's MsgpackEncoder, whose enc_hook turns every ndarray
-            # into a (dtype_str, shape, inline-bytes-or-aux-buffer-index)
-            # triple. Only TYPED RPC targets get ndarrays reconstructed
-            # (MsgpackDecoder.dec_hook fires off the parameter annotation);
-            # apply_moe_lora_deltas(factors, meta) is untyped, so the worker
-            # received raw 3-element lists and np.asarray() in
-            # _compute_moe_lora_delta failed with "inhomogeneous shape ...
-            # (3,)". Large factors are worse still: the triple's payload is
-            # an index into aux buffers the untyped path can never access.
-            # Nested Python lists survive the msgpack hop unchanged, and the
-            # worker-side np.asarray() rebuilds them exactly (f32 values are
-            # exactly representable as Python floats). ~845MB of f32 factors
-            # becomes a ~2GB msgpack message; acceptable at the
-            # once-per-train-step upload cadence. TODO: bump the
-            # tpu-inference fork to accept the (already local)
-            # moe_lora.safetensors PATH instead of inline factors, then drop
-            # this conversion.
-            wire_factors = {k: v.tolist() for k, v in factors.items()}
-            try:
+            with _safe_open(str(moe_path), framework="numpy") as _f:
+                n_tensors = len(list(_f.keys()))
+
+            async def _rpc(rpc_factors):
                 # vllm 0.23: AsyncLLMEngine is v1 AsyncLLM
                 # (vllm/engine/async_llm_engine.py aliases it), whose
                 # `collective_rpc(method, timeout=None, args=(), kwargs=None)`
-                # is an async method fanning out to the TPU workers
-                # (verified against vllm 0.19 source; TODO-verify on the
-                # worker's vllm 0.23 install — the isawaitable branch below
-                # also covers a sync variant).
-                result = engine.collective_rpc(
-                    "apply_moe_lora_deltas", args=(wire_factors, meta)
+                # is an async method fanning out to the TPU workers (the
+                # isawaitable branch also covers a sync variant).
+                res = engine.collective_rpc(
+                    "apply_moe_lora_deltas", args=(rpc_factors, meta)
                 )
-                if inspect.isawaitable(result):
-                    result = await result
+                if inspect.isawaitable(res):
+                    res = await res
+                return res
+
+            # Wire format: the frontend->EngineCore collective_rpc hop
+            # serializes args with vllm's MsgpackEncoder, whose enc_hook
+            # turns every ndarray into a (dtype_str, shape,
+            # inline-bytes-or-aux-buffer-index) triple that untyped RPC
+            # targets can never reconstruct (big arrays are an index into
+            # aux buffers the untyped path cannot access). So do NOT send
+            # ndarrays: send the safetensors PATH (frontend and EngineCore
+            # share this host) and let the worker load it locally. If a
+            # deployment ever splits the processes across hosts, fall back
+            # to nested Python lists, which survive msgpack exactly
+            # (~845MB f32 -> ~2GB message for a rank-32 20B push).
+            try:
+                try:
+                    result = await _rpc(str(moe_path))
+                except Exception:
+                    logger.exception(
+                        "MoE LoRA merge: path-based RPC for %s failed; "
+                        "retrying with inline nested-list factors", lora_name,
+                    )
+                    from safetensors.numpy import load_file as _st_load
+                    result = await _rpc({
+                        k: v.tolist() for k, v in _st_load(str(moe_path)).items()
+                    })
             except Exception as exc:
                 raise HTTPException(
                     status_code=500,
@@ -124,7 +130,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 ) from exc
             logger.info(
                 "MoE LoRA merge-on-load for %s: %d tensors -> %s",
-                lora_name, len(factors), result,
+                lora_name, n_tensors, result,
             )
 
         models = request.app.state.openai_serving_models
