@@ -837,6 +837,10 @@ class TunixBackend(AbstractBackend):
                 sampling_logprobs = pad_batch(
                     [prepared_batch.all_sampling_logprobs[i] for i in mb_idx], max_len, np.float32
                 )
+                # vLLM clamps NaN logprobs to -1e4; those tokens have unknown true
+                # probability — exclude them from the loss (for every loss type) to
+                # avoid inf importance ratios exp(train_lp - (-1e4)).
+                loss_mask = np.where(sampling_logprobs <= -9.0e3, 0.0, loss_mask).astype(np.float32)
                 advantages = pad_batch([prepared_batch.all_advantages[i] for i in mb_idx], max_len, np.float32)
                 positions, attn_mask = self._positions_and_masks(mb_inputs, max_len)
                 mb_loss_fn_types = loss_fn_types[mb_idx]
@@ -919,8 +923,10 @@ class TunixBackend(AbstractBackend):
         for request_id, _, start_idx, end_idx in prepared_batch.request_batch_slices:
             loss_fn_outputs = []
             for i in range(start_idx, end_idx):
-                token_losses = token_losses_out[i]
-                token_logprobs = logprobs_out[i]
+                # Belt-and-braces: never let a non-finite value reach the JSON
+                # response (json serialization rejects inf/nan).
+                token_losses = np.nan_to_num(token_losses_out[i], nan=0.0, posinf=0.0, neginf=0.0)
+                token_logprobs = np.nan_to_num(logprobs_out[i], nan=0.0, posinf=0.0, neginf=0.0)
                 loss_fn_outputs.append(
                     {
                         "elementwise_loss": {
