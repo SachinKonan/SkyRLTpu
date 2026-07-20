@@ -1725,8 +1725,10 @@ class TunixBackend(AbstractBackend):
             the HF layer index is ``stack_pos * pattern_len + k`` — matching
             MaxText's own converter (hf_indices = range(k, n, pattern_len)).
         """
-        entries: list[tuple[str, str, bool, int | None, np.ndarray]] = []
+        entries: list[tuple[str, str, str, bool, int | None, np.ndarray]] = []
         inner_ids: set[int] = set()
+        import re as _re
+
         for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
             keystr = jax.tree_util.keystr(path)
             parsed = self._maxtext_path_to_hf(keystr)
@@ -1740,15 +1742,26 @@ class TunixBackend(AbstractBackend):
                 continue
             if inner is not None:
                 inner_ids.add(inner)
-            entries.append((hf_block, hf_proj, is_a, inner, arr))
+            # qwen3.5's HF checkpoints are ConditionalGeneration wrappers: the
+            # decoder lives at model.language_model.layers, and vLLM's LoRA
+            # loader applies the model's hf_to_vllm_mapper
+            # ("model.language_model." -> "language_model.model."), so the
+            # adapter must use the composite-model HF names. The layer_<k>
+            # path component is the qwen3.5 signature (gemma4 uses layers_<k>).
+            hf_base = (
+                "model.language_model.layers"
+                if _re.search(r"\['layer_[0-9]+'\]", keystr)
+                else "model.layers"
+            )
+            entries.append((hf_base, hf_block, hf_proj, is_a, inner, arr))
         pattern_len = max(inner_ids) + 1 if inner_ids else 1
 
         tensors: dict[str, np.ndarray] = {}
-        for hf_block, hf_proj, is_a, inner, arr in entries:
+        for hf_base, hf_block, hf_proj, is_a, inner, arr in entries:
             for j in range(arr.shape[1]):
                 layer = j if inner is None else j * pattern_len + inner
                 per_layer = arr[:, j, :]  # lora_a: (in, r); lora_b: (r, out)
-                name = f"base_model.model.model.layers.{layer}.{hf_block}.{hf_proj}"
+                name = f"base_model.model.{hf_base}.{layer}.{hf_block}.{hf_proj}"
                 suffix = "lora_A.weight" if is_a else "lora_B.weight"
                 tensors[f"{name}.{suffix}"] = np.ascontiguousarray(per_layer.T)
         return tensors
