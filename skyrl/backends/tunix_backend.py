@@ -1729,6 +1729,13 @@ class TunixBackend(AbstractBackend):
         inner_ids: set[int] = set()
         import re as _re
 
+        # gemma4 HF checkpoints are ConditionalGeneration composites too: the
+        # decoder lives at model.language_model.layers and vLLM's gemma4_mm
+        # hf_to_vllm_mapper maps "model.language_model." ->
+        # "language_model.model." exactly like qwen3.5, so gemma4 adapters
+        # must also carry the composite-model HF names.
+        composite_model = self._maxtext_model_name().startswith("gemma4")
+
         for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
             keystr = jax.tree_util.keystr(path)
             parsed = self._maxtext_path_to_hf(keystr)
@@ -1750,7 +1757,7 @@ class TunixBackend(AbstractBackend):
             # path component is the qwen3.5 signature (gemma4 uses layers_<k>).
             hf_base = (
                 "model.language_model.layers"
-                if _re.search(r"\['layer_[0-9]+'\]", keystr)
+                if composite_model or _re.search(r"\['layer_[0-9]+'\]", keystr)
                 else "model.layers"
             )
             entries.append((hf_base, hf_block, hf_proj, is_a, inner, arr))
