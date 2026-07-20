@@ -840,7 +840,12 @@ class TunixBackend(AbstractBackend):
                 # vLLM clamps NaN logprobs to -1e4; those tokens have unknown true
                 # probability — exclude them from the loss (for every loss type) to
                 # avoid inf importance ratios exp(train_lp - (-1e4)).
-                loss_mask = np.where(sampling_logprobs <= -9.0e3, 0.0, loss_mask).astype(np.float32)
+                sentinel = sampling_logprobs <= -9.0e3
+                loss_mask = np.where(sentinel, 0.0, loss_mask).astype(np.float32)
+                # Also neutralize the sentinel value itself: even with zero weight,
+                # exp(train_lp - (-1e4)) = inf inside the jitted loss and
+                # inf * 0 = nan, which poisons the loss and the gradients.
+                sampling_logprobs = np.where(sentinel, 0.0, sampling_logprobs).astype(np.float32)
                 advantages = pad_batch([prepared_batch.all_advantages[i] for i in mb_idx], max_len, np.float32)
                 positions, attn_mask = self._positions_and_masks(mb_inputs, max_len)
                 mb_loss_fn_types = loss_fn_types[mb_idx]
@@ -979,7 +984,24 @@ class TunixBackend(AbstractBackend):
         hp["eps"][...] = adam.eps
         hp["weight_decay"][...] = adam.weight_decay
 
-        grad_norm = optax.global_norm(mean_grads)
+        grad_norm = float(jax.device_get(optax.global_norm(mean_grads)))
+
+        if not np.isfinite(grad_norm):
+            # Belt-and-braces: never apply non-finite gradients (they would
+            # permanently poison the LoRA weights) and never return a
+            # non-finite metric (json serialization rejects inf/nan).
+            logger.warning(
+                f"Non-finite grad norm ({grad_norm}) for model {model_id}; skipping optimizer update"
+            )
+            slot.accum_grads = None
+            slot.accum_count = 0
+            return types.OptimStepOutput(
+                metrics={
+                    "skyrl.ai/grad_norm": 0.0,
+                    "skyrl.ai/learning_rate": adam.learning_rate,
+                    "skyrl.ai/skipped_nonfinite_update": 1.0,
+                }
+            )
 
         # Swap this model's LoRA values into the shared template, apply the
         # update in place, then snapshot the new state back into the slot.
@@ -991,7 +1013,7 @@ class TunixBackend(AbstractBackend):
         slot.accum_count = 0
 
         metrics = {
-            "skyrl.ai/grad_norm": float(jax.device_get(grad_norm)),
+            "skyrl.ai/grad_norm": grad_norm,
             "skyrl.ai/learning_rate": adam.learning_rate,
         }
         logger.info(f"Applied optimizer step for model {model_id}, metrics={metrics}")
