@@ -188,7 +188,12 @@ class _MaxTextAdapterShim(nnx.Module):
         return x.astype(jnp.float32)
 
     def get_model_input(self):
-        batch, seq_len = 2, 4
+        # Batch must be divisible by every mesh axis the decoder shards it
+        # over. qwen3.5's GatedDeltaNet uses a shard_map kernel with batch
+        # sharded over 'fsdp' (= device count on a single-host trainer), so a
+        # fixed batch of 2 fails on 4-chip meshes. device_count is a multiple
+        # of any batch-sharding axis in the meshes we build (single-axis fsdp).
+        batch, seq_len = max(2, jax.device_count()), 4
         return {
             "input_tokens": jnp.ones((batch, seq_len), dtype=jnp.int32),
             "positions": jnp.broadcast_to(jnp.arange(seq_len, dtype=jnp.int32), (batch, seq_len)),
