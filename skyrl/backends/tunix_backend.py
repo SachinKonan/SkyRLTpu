@@ -204,17 +204,23 @@ _MAXTEXT_SEQ_BLOCK = 512
 
 # qwix module_path regex for MaxText decoders (pure-NNX). The qwen-family arm
 # matches MaxText's own verified LoRA targets
-# (configs/post_train/lora_module_path.yml); the GptOss arm covers gpt-oss,
+# (configs/post_train/lora_module_path.yml); the layers_N arm covers decoders
+# whose layers are attributes named layers_<i> — gemma4's grouped scan
+# (decoder/scanned_blocks/layers_{0..5}, stacked over scan steps) and any
+# unscanned decoder (decoder/layers_<i>) — with the standard
+# self_attention/mlp submodule names; the GptOss arm covers gpt-oss,
 # whose blocks are named GptOssAttention/{query,key,value,out} and GptOssMlp
 # (experts held as raw stacked params — scoping the whole module lets qwix
 # intercept the expert einsums; the router `gate` is deliberately included,
 # its delta merges into the gate kernel like any other).
 _MAXTEXT_ATTN_REGEX = (
     r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?self_attention/(?:query|key|value|out)(?:/.*)?"
+    r"|(?:.*/)?layers_[0-9]+/self_attention/(?:query|key|value|out)(?:/.*)?"
     r"|(?:.*/)?GptOssAttention/(?:query|key|value|out)(?:/.*)?"
 )
 _MAXTEXT_MLP_REGEX = (
     r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
+    r"|(?:.*/)?layers_[0-9]+/mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
     r"|(?:.*/)?GptOssMlp(?:/.*)?"
 )
 
@@ -1699,41 +1705,70 @@ class TunixBackend(AbstractBackend):
         return attn, moe, meta
 
     def _peft_tensors_maxtext(self, slot: ModelSlot) -> dict[str, np.ndarray]:
-        """MaxText LoRA params are stacked over the scanned layer axis (axis 1)."""
-        tensors: dict[str, np.ndarray] = {}
+        """MaxText LoRA params are stacked over the scanned layer axis (axis 1).
+
+        Two layer layouts are handled, distinguished per-path by
+        ``_maxtext_path_to_hf``:
+          - homogeneous scan (qwen-style): path component ``layers``; the HF
+            layer index is the stack position directly.
+          - grouped scan (gemma4-style): component ``layers_<k>`` inside the
+            scanned block (k = position in the repeating attention pattern);
+            the HF layer index is ``stack_pos * pattern_len + k`` — matching
+            MaxText's own converter (hf_indices = range(k, n, pattern_len)).
+        """
+        entries: list[tuple[str, str, bool, int | None, np.ndarray]] = []
+        inner_ids: set[int] = set()
         for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
             keystr = jax.tree_util.keystr(path)
             parsed = self._maxtext_path_to_hf(keystr)
             if parsed is None:
                 logger.warning("Skipping unmapped MaxText LoRA param %s in PEFT export", keystr)
                 continue
-            hf_block, hf_proj, is_a = parsed
+            hf_block, hf_proj, is_a, inner = parsed
             arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
             if arr.ndim != 3:
                 logger.warning("Unexpected MaxText LoRA shape %s for %s; skipping", arr.shape, keystr)
                 continue
-            num_layers = arr.shape[1]
-            for layer in range(num_layers):
-                per_layer = arr[:, layer, :]  # lora_a: (in, r); lora_b: (r, out)
+            if inner is not None:
+                inner_ids.add(inner)
+            entries.append((hf_block, hf_proj, is_a, inner, arr))
+        pattern_len = max(inner_ids) + 1 if inner_ids else 1
+
+        tensors: dict[str, np.ndarray] = {}
+        for hf_block, hf_proj, is_a, inner, arr in entries:
+            for j in range(arr.shape[1]):
+                layer = j if inner is None else j * pattern_len + inner
+                per_layer = arr[:, j, :]  # lora_a: (in, r); lora_b: (r, out)
                 name = f"base_model.model.model.layers.{layer}.{hf_block}.{hf_proj}"
                 suffix = "lora_A.weight" if is_a else "lora_B.weight"
                 tensors[f"{name}.{suffix}"] = np.ascontiguousarray(per_layer.T)
         return tensors
 
     @staticmethod
-    def _maxtext_path_to_hf(keystr: str) -> tuple[str, str, bool] | None:
-        """Parse a MaxText qwix LoRA path into (hf_block, hf_proj, is_lora_a).
+    def _maxtext_path_to_hf(keystr: str) -> tuple[str, str, bool, int | None] | None:
+        """Parse a MaxText qwix LoRA path into (hf_block, hf_proj, is_lora_a, inner_idx).
 
         e.g. "['adapter']['base']['decoder']['layers']['self_attention']['query']['kernel_lora_a'].value"
-          -> ("self_attn", "q_proj", True)
+          -> ("self_attn", "q_proj", True, None)
+        e.g. "...['decoder']['scanned_blocks']['layers_5']['self_attention']['query']['kernel_lora_a'].value"
+          -> ("self_attn", "q_proj", True, 5)  # gemma4 grouped scan
+
+        ``inner_idx`` is None for homogeneous scans (``layers``); for grouped
+        scans it is the position inside the repeating block (``layers_<k>``).
         """
         import re
 
         names = [a or b for a, b in re.findall(r"\['([a-zA-Z_0-9]+)'\]|\[(\d+)\]", keystr)]
-        if "layers" not in names:
+        grouped = next((n for n in names if re.fullmatch(r"layers_[0-9]+", n)), None)
+        if grouped is not None:
+            layers_pos = names.index(grouped)
+            inner: int | None = int(grouped.rsplit("_", 1)[1])
+        elif "layers" in names:
+            layers_pos = names.index("layers")
+            inner = None
+        else:
             return None
         try:
-            layers_pos = names.index("layers")
             block, proj = names[layers_pos + 1], names[layers_pos + 2]
             leaf = names[layers_pos + 3]
         except (IndexError, ValueError):
@@ -1741,7 +1776,7 @@ class TunixBackend(AbstractBackend):
         mapped = _MAXTEXT_PROJ_TO_HF.get((block, proj))
         if mapped is None or "lora" not in leaf:
             return None
-        return mapped[0], mapped[1], leaf.endswith("lora_a")
+        return mapped[0], mapped[1], leaf.endswith("lora_a"), inner
 
     @staticmethod
     def _qwix_path_to_hf_module(keystr: str) -> str | None:
