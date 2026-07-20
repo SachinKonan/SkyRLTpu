@@ -126,6 +126,7 @@ def main() -> None:
     print(f"[smoke] batch shape  : groups_per_batch={groups_per_batch}, group_size={group_size}")
     print(f"[smoke] tokens       : context={config.context_window}, phase1_max={config.phase1_max_tokens}")
     print(f"[smoke] eval_backend : {config.eval_backend}  (kl_coef={config.kl_penalty_coef})")
+    print(f"[smoke] objective   : loss={os.environ.get('TTD_LOSS_FN','importance_sampling')} adv={os.environ.get('TTD_ADV_ESTIMATOR','entropic_adaptive_beta')} elite={os.environ.get('TTD_ELITE_SLOTS','0')}")
     print(f"[smoke] distill      : enabled={config.distill_enabled} pairs={config.distill_pairs_per_step} "
           f"betters={config.distill_num_betters} weight={config.distill_weight}")
     print(f"[smoke] tinker_url   : {tinker_base_url or 'SDK default (prod)'}")

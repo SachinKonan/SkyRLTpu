@@ -218,7 +218,7 @@ index 8a961fb..7689d6a 100644
      "Programming Language :: Python :: 3.12",
      "Topic :: Scientific/Engineering :: Artificial Intelligence",
 diff --git a/ttt_discover/discovery.py b/ttt_discover/discovery.py
-index 53d0987..fcd457a 100644
+index 53d0987..7b42d53 100644
 --- a/ttt_discover/discovery.py
 +++ b/ttt_discover/discovery.py
 @@ -31,17 +31,35 @@ class DiscoverConfig:
@@ -286,8 +286,19 @@ index 53d0987..fcd457a 100644
          eval_timeout=config.eval_timeout,
          log_path=log_path,
      )
-@@ -121,7 +138,20 @@ async def discover_impl(config: DiscoverConfig):
-         adv_estimator_beta=2.0, # Unused with entropic_adaptive_beta
+@@ -116,12 +133,28 @@ async def discover_impl(config: DiscoverConfig):
+         num_substeps=1,
+         save_every=config.save_every,
+         num_epochs=config.num_epochs,
+-        loss_fn="importance_sampling",
+-        adv_estimator="entropic_adaptive_beta",
+-        adv_estimator_beta=2.0, # Unused with entropic_adaptive_beta
++        # Objective knobs (env-overridable): default = authors' ttt-discover
++        # (importance_sampling + entropic_adaptive_beta). Set
++        # TTD_ADV_ESTIMATOR=mean_baseline for vanilla-GRPO advantages.
++        loss_fn=os.environ.get("TTD_LOSS_FN", "importance_sampling"),
++        adv_estimator=os.environ.get("TTD_ADV_ESTIMATOR", "entropic_adaptive_beta"),
++        adv_estimator_beta=float(os.environ.get("TTD_ADV_ESTIMATOR_BETA", "2.0")),
          remove_constant_reward_groups=True,
          phase1_max_tokens=config.phase1_max_tokens,
 +        context_window=config.context_window,
