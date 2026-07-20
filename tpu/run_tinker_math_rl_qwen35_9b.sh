@@ -69,6 +69,11 @@ tolerance_arg=""
 if [[ "${ROLLOUT_ERROR_TOLERANCE:-0}" == "1" ]]; then
   tolerance_arg="rollout_error_tolerance='True'"
 fi
+# Explicit renderer override for models the cookbook cannot auto-resolve.
+renderer_arg=""
+if [[ -n "${RENDERER_NAME:-}" ]]; then
+  renderer_arg="renderer_name='${RENDERER_NAME}'"
+fi
 cookbook_spec="tinker-cookbook[math-rl] @ file://${repo_root}/third_party/tinker-cookbook"
 
 if ! tmux has-session -t "$TUNNEL_SESSION" 2>/dev/null; then
@@ -120,7 +125,7 @@ exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
     save_every='${SAVE_EVERY}' \\
     eval_every='${EVAL_EVERY}' \\
     loss_fn='${LOSS_FN}' \\
-    ${stream_arg} ${tolerance_arg} seed='${SEED}' \\
+    ${stream_arg} ${tolerance_arg} ${renderer_arg} seed='${SEED}' \\
     log_path='${log_path}' \\
     behavior_if_log_dir_exists='${BEHAVIOR_IF_LOG_DIR_EXISTS}'
 EOF
