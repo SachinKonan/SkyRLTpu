@@ -64,6 +64,9 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
+# shellcheck source=tpu/tpu_ssh_lib.sh
+source "${script_dir}/tpu_ssh_lib.sh"
+
 parse_worker_list() {
   python3 - "$1" <<'PY'
 import sys
@@ -312,14 +315,9 @@ EOF
 chmod +x "$bootstrap_script" "$runner_script"
 
 for worker in "${vllm_workers[@]}"; do
-  gcloud alpha compute tpus tpu-vm scp "$bootstrap_script" "${REMOTE_USER}@${TPU_NAME}:~/start_vllm_tpu_bootstrap.sh" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
-
-  gcloud alpha compute tpus tpu-vm scp "$runner_script" "${REMOTE_USER}@${TPU_NAME}:~/run_vllm_tpu_server.sh" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
-
-  gcloud alpha compute tpus tpu-vm scp "${repo_root}/tpu/vllm_tpu_server.py" "${REMOTE_USER}@${TPU_NAME}:~/vllm_tpu_server.py" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
+  tpu_vm_scp "$worker" "$bootstrap_script" "~/start_vllm_tpu_bootstrap.sh"
+  tpu_vm_scp "$worker" "$runner_script" "~/run_vllm_tpu_server.sh"
+  tpu_vm_scp "$worker" "${repo_root}/tpu/vllm_tpu_server.py" "~/vllm_tpu_server.py"
 done
 
 if [[ "$VLLM_PARALLEL_PREINSTALL" == "1" && "$vllm_worker_count" -gt 1 ]]; then
@@ -328,9 +326,7 @@ if [[ "$VLLM_PARALLEL_PREINSTALL" == "1" && "$vllm_worker_count" -gt 1 ]]; then
   for i in "${!vllm_workers[@]}"; do
     worker="${vllm_workers[$i]}"
     (
-      gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-        --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-        --command "VLLM_RELATIVE_WORKER_ID=${i} VLLM_USE_RAY_EXECUTOR=0 VLLM_START_SERVER=0 VLLM_CLEANUP=1 bash ~/start_vllm_tpu_bootstrap.sh"
+      tpu_vm_ssh "$worker" "VLLM_RELATIVE_WORKER_ID=${i} VLLM_USE_RAY_EXECUTOR=0 VLLM_START_SERVER=0 VLLM_CLEANUP=1 bash ~/start_vllm_tpu_bootstrap.sh"
     ) &
     preinstall_pids+=("$!")
   done
@@ -353,20 +349,14 @@ if [[ "$VLLM_RAY_EXECUTOR" == "1" ]]; then
     else
       role="worker"
     fi
-    gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-      --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-      --command "VLLM_RELATIVE_WORKER_ID=${i} VLLM_USE_RAY_EXECUTOR=1 VLLM_RAY_ROLE=${role} VLLM_RAY_NODE_IP=${node_ip} VLLM_RAY_HEAD_ADDRESS=${ray_head_address} VLLM_START_SERVER=0 VLLM_CLEANUP=1 bash ~/start_vllm_tpu_bootstrap.sh"
+    tpu_vm_ssh "$worker" "VLLM_RELATIVE_WORKER_ID=${i} VLLM_USE_RAY_EXECUTOR=1 VLLM_RAY_ROLE=${role} VLLM_RAY_NODE_IP=${node_ip} VLLM_RAY_HEAD_ADDRESS=${ray_head_address} VLLM_START_SERVER=0 VLLM_CLEANUP=1 bash ~/start_vllm_tpu_bootstrap.sh"
   done
 
-  gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$primary_vllm_worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-    --command "VLLM_RELATIVE_WORKER_ID=0 VLLM_USE_RAY_EXECUTOR=1 VLLM_START_SERVER=1 VLLM_CLEANUP=0 bash ~/start_vllm_tpu_bootstrap.sh"
+  tpu_vm_ssh "$primary_vllm_worker" "VLLM_RELATIVE_WORKER_ID=0 VLLM_USE_RAY_EXECUTOR=1 VLLM_START_SERVER=1 VLLM_CLEANUP=0 bash ~/start_vllm_tpu_bootstrap.sh"
 else
   for i in "${!vllm_workers[@]}"; do
     worker="${vllm_workers[$i]}"
-    gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-      --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-      --command "VLLM_RELATIVE_WORKER_ID=0 VLLM_USE_RAY_EXECUTOR=0 bash ~/start_vllm_tpu_bootstrap.sh"
+    tpu_vm_ssh "$worker" "VLLM_RELATIVE_WORKER_ID=0 VLLM_USE_RAY_EXECUTOR=0 bash ~/start_vllm_tpu_bootstrap.sh"
   done
 fi
 

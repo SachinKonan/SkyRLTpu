@@ -100,6 +100,9 @@ repo_root="$(cd "${script_dir}/.." && pwd)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
+# shellcheck source=tpu/tpu_ssh_lib.sh
+source "${script_dir}/tpu_ssh_lib.sh"
+
 parse_worker_list() {
   python3 - "$1" <<'PY'
 import sys
@@ -253,12 +256,7 @@ if (( mesh_devices != expected_train_devices )); then
   exit 1
 fi
 
-endpoint_ips="$(
-  gcloud alpha compute tpus tpu-vm describe "$TPU_NAME" \
-    --project="$PROJECT" \
-    --zone="$ZONE" \
-    --format='value(networkEndpoints.ipAddress)'
-)"
+endpoint_ips="$(tpu_vm_internal_ips)"
 
 worker_internal_ip() {
   local worker="$1"
@@ -274,11 +272,7 @@ PY
 }
 
 worker_external_ip() {
-  local worker="$1"
-  gcloud alpha compute tpus tpu-vm describe "$TPU_NAME" \
-    --project="$PROJECT" \
-    --zone="$ZONE" \
-    --format="value(networkEndpoints[${worker}].accessConfig.externalIp)"
+  tpu_vm_external_ip "$1"
 }
 
 process_addresses_for_workers() {
@@ -359,11 +353,8 @@ fi
 "
     for worker in "${all_workers[@]}"; do
       echo "Syncing SkyRLTpu worktree to worker ${worker}:${REMOTE_SKYRL_DIR}"
-      gcloud alpha compute tpus tpu-vm scp "$archive" "${REMOTE_USER}@${TPU_NAME}:${remote_archive}" \
-        --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
-      gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-        --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-        --command "$remote_extract_cmd"
+      tpu_vm_scp "$worker" "$archive" "$remote_archive"
+      tpu_vm_ssh "$worker" "$remote_extract_cmd"
     done
   else
     echo "Unsupported SYNC_MODE=${SYNC_MODE}; expected 'worktree' or 'git'." >&2
@@ -423,9 +414,7 @@ done
 echo '${label} did not become ready at ${url}' >&2
 exit 1
 "
-  gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-    --command "$remote_cmd"
+  tpu_vm_ssh "$worker" "$remote_cmd"
 }
 
 if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
@@ -503,9 +492,7 @@ fi
 if [[ "$START_TINKER" == "1" ]]; then
   cleanup_cmd='mkdir -p ~/skyrl-logs; tmux kill-session -t skyrl-tinker 2>/dev/null || true; tmux list-sessions -F "#{session_name}" 2>/dev/null | awk "/^skyrl-tinker-worker-/ {print}" | xargs -r -n1 tmux kill-session -t; pkill -TERM -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.jax" || true; sleep 5; pkill -KILL -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.jax" || true'
   for worker in "${train_workers[@]}"; do
-    gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-      --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-      --command "$cleanup_cmd"
+    tpu_vm_ssh "$worker" "$cleanup_cmd"
   done
 
   api_script="$tmpdir/start_colocated_skyrl_api.sh"
@@ -568,8 +555,7 @@ exec uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}" -m skyrl
 EOF
   chmod +x "$api_script"
 
-  gcloud alpha compute tpus tpu-vm scp "$api_script" "${REMOTE_USER}@${TPU_NAME}:~/start_colocated_skyrl_api.sh" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$train_coord_worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
+  tpu_vm_scp "$train_coord_worker" "$api_script" "~/start_colocated_skyrl_api.sh"
 
   for ((process_id = 1; process_id < train_worker_count; process_id++)); do
     worker="${train_workers[$process_id]}"
@@ -598,16 +584,11 @@ exec uv run --extra tpu --extra tinker --extra jax -m skyrl.backends.jax \\
   --process-id "${process_id}"
 EOF
     chmod +x "$worker_script"
-    gcloud alpha compute tpus tpu-vm scp "$worker_script" "${REMOTE_USER}@${TPU_NAME}:~/start_colocated_skyrl_worker_${process_id}.sh" \
-      --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet
-    gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-      --project="$PROJECT" --zone="$ZONE" --worker="$worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-      --command "mkdir -p ~/skyrl-logs; tmux new-session -d -c \"\$HOME\" -s skyrl-tinker-worker-${process_id} \"bash ~/start_colocated_skyrl_worker_${process_id}.sh 2>&1 | tee ~/skyrl-logs/tinker-worker-${process_id}.log\""
+    tpu_vm_scp "$worker" "$worker_script" "~/start_colocated_skyrl_worker_${process_id}.sh"
+    tpu_vm_ssh "$worker" "mkdir -p ~/skyrl-logs; tmux new-session -d -c \"\$HOME\" -s skyrl-tinker-worker-${process_id} \"bash ~/start_colocated_skyrl_worker_${process_id}.sh 2>&1 | tee ~/skyrl-logs/tinker-worker-${process_id}.log\""
   done
 
-  gcloud alpha compute tpus tpu-vm ssh "${REMOTE_USER}@${TPU_NAME}" \
-    --project="$PROJECT" --zone="$ZONE" --worker="$train_coord_worker" --ssh-key-file="$SSH_KEY_FILE" --quiet \
-    --command 'mkdir -p ~/skyrl-logs; tmux new-session -d -c "$HOME" -s skyrl-tinker "bash ~/start_colocated_skyrl_api.sh 2>&1 | tee ~/skyrl-logs/tinker-api.log"'
+  tpu_vm_ssh "$train_coord_worker" 'mkdir -p ~/skyrl-logs; tmux new-session -d -c "$HOME" -s skyrl-tinker "bash ~/start_colocated_skyrl_api.sh 2>&1 | tee ~/skyrl-logs/tinker-api.log"'
 
   wait_from_worker "$train_coord_worker" "http://127.0.0.1:${API_PORT}/api/v1/get_server_capabilities" "Tinker API"
 fi
