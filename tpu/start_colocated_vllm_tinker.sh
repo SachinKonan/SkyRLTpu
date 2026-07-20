@@ -82,6 +82,11 @@ TUNIX_MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-}"
 # Converted HF->orbax MaxText checkpoints live on the GCS mount so they
 # survive spot recreation.
 TUNIX_MAXTEXT_CKPT_CACHE="${TUNIX_MAXTEXT_CKPT_CACHE:-/home/${REMOTE_USER}/gcs/skyrl-maxtext-ckpts}"
+# Pip spec for MaxText in the train venv. Override with a fork/commit spec
+# (e.g. "maxtext @ git+https://github.com/<user>/maxtext.git@<sha>") when the
+# model needs unreleased MaxText support; the api script reinstalls it after
+# every `uv sync` (exact sync removes packages not in the lock).
+TUNIX_MAXTEXT_PIP_SPEC="${TUNIX_MAXTEXT_PIP_SPEC:-maxtext}"
 if [[ "$TINKER_BACKEND" == "tunix" ]]; then
   TINKER_ENGINE_EXTRA="tunix"
 else
@@ -539,7 +544,7 @@ if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
   # extra-build-dependencies config.
   uv sync --extra tpu --extra tinker --extra tunix
   (cd "\$HOME" && uv pip install --python "${REMOTE_SKYRL_DIR}/.venv/bin/python" \\
-      maxtext aqtp pathwaysutils tokamax tiktoken)
+      "${TUNIX_MAXTEXT_PIP_SPEC}" aqtp pathwaysutils tokamax tiktoken)
 fi
 
 exec uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}" -m skyrl.tinker.api \\

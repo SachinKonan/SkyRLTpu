@@ -102,6 +102,7 @@ cat > "$run_script" <<EOF
 set -euo pipefail
 
 export TINKER_API_KEY='${TINKER_API_KEY}'
+export UV_CACHE_DIR='${CLIENT_UV_CACHE_DIR:-/home/sk7524/.cache/uv-skyrl}'
 export HF_HOME='${LOCAL_HF_HOME}'
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
 if [[ '${MAX_TURNS}' == '1' && -z "\${TINKER_COOKBOOK_GROUP_COALESCE_SAMPLING:-}" ]]; then
