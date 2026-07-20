@@ -212,15 +212,24 @@ _MAXTEXT_SEQ_BLOCK = 512
 # whose blocks are named GptOssAttention/{query,key,value,out} and GptOssMlp
 # (experts held as raw stacked params — scoping the whole module lets qwix
 # intercept the expert einsums; the router `gate` is deliberately included,
-# its delta merges into the gate kernel like any other).
+# its delta merges into the gate kernel like any other). The layer_N arm
+# covers qwen3.5's inhomogeneous scan (decoder/layers/layer_{0..3}, stacked
+# over scan steps): full-attention layers nest as
+# layer_N/attention/attention/{query,key,value,out} (DecoderLayer.attention =
+# Qwen3_5FullAttention wrapping attentions.Attention; query kernel fuses
+# query+output-gate), dense MLP as layer_N/mlp/{wi_0,wi_1,wo}. GDN layers
+# (layer_N/attention/{in_proj_qkvz,in_proj_ba,conv1d,out_proj,...}) are
+# deliberately EXCLUDED for v1 — neither arm matches their module names.
 _MAXTEXT_ATTN_REGEX = (
     r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?self_attention/(?:query|key|value|out)(?:/.*)?"
     r"|(?:.*/)?layers_[0-9]+/self_attention/(?:query|key|value|out)(?:/.*)?"
+    r"|(?:.*/)?layer_[0-9]+/attention/attention/(?:query|key|value|out)(?:/.*)?"
     r"|(?:.*/)?GptOssAttention/(?:query|key|value|out)(?:/.*)?"
 )
 _MAXTEXT_MLP_REGEX = (
     r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
     r"|(?:.*/)?layers_[0-9]+/mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
+    r"|(?:.*/)?layer_[0-9]+/mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
     r"|(?:.*/)?GptOssMlp(?:/.*)?"
 )
 
@@ -1752,14 +1761,17 @@ class TunixBackend(AbstractBackend):
           -> ("self_attn", "q_proj", True, None)
         e.g. "...['decoder']['scanned_blocks']['layers_5']['self_attention']['query']['kernel_lora_a'].value"
           -> ("self_attn", "q_proj", True, 5)  # gemma4 grouped scan
+        e.g. "...['decoder']['layers']['layer_3']['attention']['attention']['query']['kernel_lora_a'].value"
+          -> ("self_attn", "q_proj", True, 3)  # qwen3.5 inhomogeneous scan
 
         ``inner_idx`` is None for homogeneous scans (``layers``); for grouped
-        scans it is the position inside the repeating block (``layers_<k>``).
+        scans it is the position inside the repeating block (``layers_<k>``
+        gemma4-style, ``layer_<k>`` qwen3.5-style).
         """
         import re
 
         names = [a or b for a, b in re.findall(r"\['([a-zA-Z_0-9]+)'\]|\[(\d+)\]", keystr)]
-        grouped = next((n for n in names if re.fullmatch(r"layers_[0-9]+", n)), None)
+        grouped = next((n for n in names if re.fullmatch(r"layers?_[0-9]+", n)), None)
         if grouped is not None:
             layers_pos = names.index(grouped)
             inner: int | None = int(grouped.rsplit("_", 1)[1])
@@ -1773,6 +1785,18 @@ class TunixBackend(AbstractBackend):
             leaf = names[layers_pos + 3]
         except (IndexError, ValueError):
             return None
+        if (block, proj) == ("attention", "attention"):
+            # qwen3.5 hybrid full-attention: DecoderLayer.attention
+            # (Qwen3_5FullAttention) wraps attentions.Attention, so the
+            # projection sits one level deeper. GDN layers never reach here:
+            # their submodules (in_proj_qkvz/in_proj_ba/conv1d/out_proj/...)
+            # don't produce an ("attention", "attention") pair.
+            try:
+                proj = names[layers_pos + 3]
+                leaf = names[layers_pos + 4]
+            except IndexError:
+                return None
+            block = "self_attention"
         mapped = _MAXTEXT_PROJ_TO_HF.get((block, proj))
         if mapped is None or "lora" not in leaf:
             return None
