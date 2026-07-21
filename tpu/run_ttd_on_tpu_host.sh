@@ -43,6 +43,9 @@ export PHASE1_MAX_TOKENS="${PHASE1_MAX_TOKENS:-26000}"
 # s1-style budget forcing: intercept early </think> and inject a masked
 # continuation until at least this many thinking tokens are generated.
 export TTD_MIN_THINK_TOKENS="${TTD_MIN_THINK_TOKENS:-16384}"
+# Dispositional half of long thinking (the qwen analogue of gpt-oss's
+# "Reasoning: high"): a system turn asking for exhaustive deliberation.
+export TTD_SYSTEM_PROMPT="${TTD_SYSTEM_PROMPT:-You are an expert mathematical researcher. Before giving any final answer, think extremely long and hard inside your thinking block: deliberately explore multiple distinct construction ideas, analyze the weaknesses of the current best program in detail, work through the mathematics carefully, and verify your plan step by step before committing to it. Prefer deep, exhaustive reasoning over quick answers — use your full thinking budget.}"
 # Sequences beyond the trainer fb ceiling are dropped from the gradient
 # only (still graded + pooled); see probe_train_len.py.
 export TTD_TRAIN_MAX_SEQ="${TTD_TRAIN_MAX_SEQ:-24576}"
