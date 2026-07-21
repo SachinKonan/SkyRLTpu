@@ -1,10 +1,10 @@
 [submodule "third_party/jobman"]
 	path = third_party/jobman
-	url = ../jobman
+	url = https://github.com/SachinKonan/jobman.git
 [submodule "third_party/tpu-inference"]
 	path = third_party/tpu-inference
 	url = https://github.com/SachinKonan/tpu-inference.git
 	branch = skyrl/v0.23.0-lora
 [submodule "third_party/tinker-cookbook"]
 	path = third_party/tinker-cookbook
-	url = https://github.com/thinking-machines-lab/tinker-cookbook.git
+	url = https://github.com/SachinKonan/tinker-cookbook.git
