@@ -838,6 +838,16 @@ class TunixBackend(AbstractBackend):
         if "ppo_critic" in prepared_batch.all_loss_fns:
             raise ValueError("ppo_critic is only supported by the SkyRL-Train backend")
 
+        # Packed training loads large-arena programs (up to ~57G for the
+        # longest bucket). Arena reservation needs CONTIGUOUS memory at the
+        # bottom of HBM, and programs loaded earlier in the step (KL scoring
+        # shapes, sampler stubs) fragment it — reactive eviction-on-OOM then
+        # retries into the same fragmented layout and still fails. Evict
+        # everything up front so the fb programs load largest-first into clean
+        # memory; the recompile cost is a few minutes per step.
+        if with_grads and self.config.train_token_budget > 0:
+            jax.clear_caches()
+
         all_input_ids = [r.prompt_ids for r in render_model_input(prepared_batch.all_model_inputs)]
         n_examples = len(all_input_ids)
         seq_lens = [len(seq) for seq in all_input_ids]
