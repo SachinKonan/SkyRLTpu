@@ -38,6 +38,13 @@ LOCAL_PORT="${LOCAL_PORT:-18040}"
 GCLOUD="${GCLOUD:-/n/fs/vision-mix/sk7524/google-cloud-sdk/bin/gcloud}"
 
 resolve_tpu_ip() {
+  # TPU_IP pins the address when gcloud auth is unavailable (expired token on
+  # the cluster). Note: a spot preemption+recreate changes the IP, so a pinned
+  # IP job cannot self-heal across recreation — restore gcloud auth for that.
+  if [[ -n "${TPU_IP:-}" ]]; then
+    echo "$TPU_IP"
+    return 0
+  fi
   "$GCLOUD" alpha compute tpus tpu-vm describe "$TPU_NAME" \
     --project="$PROJECT" --zone="$ZONE" \
     --format="value(networkEndpoints[0].accessConfig.externalIp)" 2>/dev/null
@@ -96,11 +103,14 @@ export TTD_ELITE_SLOTS="${TTD_ELITE_SLOTS:-2}"
 export SAVE_EVERY="${SAVE_EVERY:-10}"
 export CONTEXT_WINDOW="${CONTEXT_WINDOW:-32768}"
 # Qwen path ignores PHASE1_MAX_TOKENS (no two-phase). Generation is capped so
-# prompt+completion stays under the trainer's verified ceiling: the MaxText
-# 27B fb graph on one v5p-8 host trains 24576-token sequences and OOMs at
-# 28672 (probe_train_len.py). Max observed prompt ~5k -> 16384 cap keeps the
-# worst case ~21-24.5k. Median qwen generation is ~3.6k; only the tail clips.
-export COMPLETION_MAX_TOKENS="${COMPLETION_MAX_TOKENS:-16384}"
+# prompt+completion stays under the trainer's REAL ceiling: the MaxText 27B fb
+# graph on one v5p-8 host trains 24576-token sequences fresh off boot
+# (probe_train_len.py), but same-boot churn (loaded program arenas) eats ~28G
+# of HBM, after which the ~24k-bucket arena (55.3G) no longer fits (54G free
+# observed at the first real train step). 12288 keeps the worst-case bucket
+# (~17.5k, arena ~40G) inside the churned budget. Median qwen generation is
+# ~3.6k; only the tail clips.
+export COMPLETION_MAX_TOKENS="${COMPLETION_MAX_TOKENS:-12288}"
 # KL-to-base is OFF: SamplingClient.compute_logprobs needs vLLM prompt_logprobs,
 # which the TPU backend does not implement (it crashed the EngineCore before
 # being gated off server-side). Identical for both arms, so the objective A/B
