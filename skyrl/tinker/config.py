@@ -52,6 +52,20 @@ class EngineConfig(BaseModel):
         ),
         json_schema_extra={"argparse_type": float},
     )
+    external_inference_prompt_logprobs: bool = Field(
+        default=False,
+        description=(
+            "Forward prompt_logprobs requests (SamplingClient.compute_logprobs) "
+            "to the external vLLM engine. Default off: the vLLM TPU backend "
+            "(tpu-inference torchax, v0.23) does not implement prompt_logprobs "
+            "and the request KILLS the EngineCore (AttributeError: 'State' "
+            "object has no attribute 'server' -> EngineDeadError for all "
+            "subsequent requests). Enable only on backends verified to support "
+            "it; when off, such requests return empty prompt_logprobs and "
+            "clients must treat compute_logprobs as unavailable."
+        ),
+        json_schema_extra={"argparse_type": bool},
+    )
     forwarding_inference_max_connections: int | None = Field(
         default=None,
         description=(

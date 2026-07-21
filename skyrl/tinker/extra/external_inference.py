@@ -56,6 +56,7 @@ class ExternalInferenceClient:
         self.base_url = f"{engine_config.external_inference_url}/v1"
         self.api_key = engine_config.external_inference_api_key
         self.request_timeout_sec = engine_config.external_inference_timeout_sec
+        self.allow_prompt_logprobs = engine_config.external_inference_prompt_logprobs
         self.checkpoints_base = engine_config.checkpoints_base
         self.lora_base_dir = engine_config.external_inference_lora_base
         self.db_engine = db_engine
@@ -147,7 +148,10 @@ class ExternalInferenceClient:
             "stream": False,
             "return_token_ids": True,
         }
-        if request.prompt_logprobs:
+        # See EngineConfig.external_inference_prompt_logprobs: the vLLM TPU
+        # backend dies on this parameter, so it is opt-in.
+        want_prompt_logprobs = bool(request.prompt_logprobs) and self.allow_prompt_logprobs
+        if want_prompt_logprobs:
             payload["prompt_logprobs"] = 1
 
         # Pass X-Session-ID for deterministic routing
@@ -172,7 +176,7 @@ class ExternalInferenceClient:
             )
 
         prompt_lps: list[float] | None = None
-        if request.prompt_logprobs:
+        if want_prompt_logprobs:
             from skyrl.backends.vllm_sampling import VllmSamplingClient
 
             prompt_lps = VllmSamplingClient._prompt_logprobs_from_response(result, prompt_tokens)
