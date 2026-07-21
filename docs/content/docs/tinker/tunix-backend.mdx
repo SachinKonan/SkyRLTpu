@@ -149,7 +149,7 @@ machine and continued to completion (adapter export, HTTP push, and optimizer
 state all restored bit-exact; the bf16 npz round-trip and adapter-extraction
 fixes this required are part of this branch).
 
-### Validation (math-RL, Qwen3.5-27B dense via forked MaxText, run in progress)
+### Validation (math-RL, Qwen3.5-27B dense via forked MaxText, 180 steps)
 
 Qwen3.5 dense support (hybrid gated-DeltaNet + full attention) is added by our
 MaxText fork (`SachinKonan/maxtext@skyrl/qwen35-dense`): dense-MLP branch in
@@ -158,11 +158,14 @@ the qwen3_5 decoder, a `qwen3.5-27b.yml` config, and converter mapping. LoRA
 excluded. Adapters ship as standard HF-PEFT through vLLM's native LoRA path —
 no merge machinery needed for dense models.
 
-| Held-out eval | step 0 | step 20 | step 40 | step 60 | step 80 | step 120 | step 140 |
-|---|---|---|---|---|---|---|---|
-| test correct | 37.2% | 73.4% | 84.8% | 85.6% | 86.4% | 86.0% | **87.0%** |
+| Held-out eval | step 0 | step 20 | step 40 | step 60 | step 80 | step 100 | step 120 | step 140 | step 160 | step 179 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| test correct | 37.2% | 73.4% | 84.8% | 85.6% | 86.4% | 83.2% | 86.0% | **87.0%** | 86.2% | 86.4% |
 
-Step-0 sampler/trainer KL = 0.00017 — the cleanest parity of any run — after
+The strongest run of the project: peak 87.0% at step 140, finishing at 86.4%
+with train-batch correctness still climbing (89.1% at step 179) and no
+collapse — sampler/trainer KL stayed in [1e-4, 5.3e-4] for all 180 steps
+(mean 2.6e-4). Step-0 sampler/trainer KL = 0.00017 — the cleanest parity of any run — after
 three fork fixes found by a three-way logprob parity probe and per-layer
 bisection against HF `output_hidden_states`. Headline fix: the pure-NNX
 decoder's final norm used plain RMSNorm where Qwen3.5 requires the
