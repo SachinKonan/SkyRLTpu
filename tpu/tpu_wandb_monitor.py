@@ -3,11 +3,17 @@
 
 Samples per-chip HBM usage and TensorCore duty cycle every INTERVAL seconds
 via the tpu_info library (the same libtpu SDK-monitoring gRPC service the
-tpu-info CLI reads) and logs them to a dedicated wandb run per host, in the
-same project as the training runs so the charts sit side by side.
+tpu-info CLI reads) and logs them INTO the training runs themselves: wandb
+"shared mode" lets this process attach as a secondary writer to runs owned
+by the training clients (which init with mode="shared" via TTD_WANDB_SHARED=1),
+so tpu/* charts sit next to env/* on the same run page. One sidecar per TPU
+host; metric keys carry the host tag (tpu/w0/..., tpu/w1/...).
 
-Env: WANDB_API_KEY (required), TPUMON_RUN_NAME (e.g. qwen35-tpu-w0-trainer),
-     TPUMON_PROJECT (default ttt-discover-gptoss20b), TPUMON_INTERVAL (30s).
+Env: WANDB_API_KEY (required)
+     TPUMON_ATTACH_IDS  comma-separated wandb run ids to write into (required)
+     TPUMON_HOST_TAG    e.g. w0-trainer / w1-vllm (required)
+     TPUMON_PROJECT     default tpu-tinker-exps
+     TPUMON_INTERVAL    default 30 (seconds)
 Run:  ~/tpumon/bin/python tpu_wandb_monitor.py
 """
 from __future__ import annotations
@@ -47,15 +53,29 @@ def main() -> None:
     import wandb
 
     interval = float(os.environ.get("TPUMON_INTERVAL", "30"))
-    run = wandb.init(
-        project=os.environ.get("TPUMON_PROJECT", "ttt-discover-gptoss20b"),
-        name=os.environ.get("TPUMON_RUN_NAME", f"tpumon-{os.uname().nodename}"),
-        config={"host": os.uname().nodename, "interval_s": interval},
-        settings=wandb.Settings(console="off"),
-    )
-    print(f"[tpumon] logging to {run.url}", flush=True)
+    project = os.environ.get("TPUMON_PROJECT", "tpu-tinker-exps")
+    tag = os.environ["TPUMON_HOST_TAG"]
+    attach_ids = [x for x in os.environ["TPUMON_ATTACH_IDS"].split(",") if x]
+
+    runs = []
+    for rid in attach_ids:
+        run = wandb.init(
+            project=project,
+            id=rid,
+            reinit="create_new",
+            settings=wandb.Settings(
+                mode="shared", x_primary=False, x_update_finish_state=False, console="off"
+            ),
+        )
+        # tpu/* series get their own x-axis (sample index), independent of the
+        # primary writer's RL-step axis.
+        run.define_metric(f"tpu/{tag}/sample")
+        run.define_metric(f"tpu/{tag}/*", step_metric=f"tpu/{tag}/sample")
+        runs.append(run)
+        print(f"[tpumon:{tag}] attached to {run.url}", flush=True)
 
     failures = 0
+    sample_idx = 0
     while True:
         try:
             try:
@@ -63,19 +83,21 @@ def main() -> None:
             except Exception:
                 chips = sample_via_cli()
             if chips:
-                log = {}
+                log = {f"tpu/{tag}/sample": sample_idx}
                 for i, (used, total, duty) in enumerate(chips):
-                    log[f"tpu/chip{i}/hbm_used_gib"] = used
-                    log[f"tpu/chip{i}/hbm_pct"] = 100.0 * used / max(total, 1e-9)
-                    log[f"tpu/chip{i}/duty_cycle_pct"] = duty
-                log["tpu/hbm_used_gib_max"] = max(u for u, _, _ in chips)
-                log["tpu/hbm_pct_max"] = max(100.0 * u / max(t, 1e-9) for u, t, _ in chips)
-                log["tpu/duty_cycle_pct_mean"] = sum(d for _, _, d in chips) / len(chips)
-                run.log(log)
+                    log[f"tpu/{tag}/chip{i}/hbm_used_gib"] = used
+                    log[f"tpu/{tag}/chip{i}/hbm_pct"] = 100.0 * used / max(total, 1e-9)
+                    log[f"tpu/{tag}/chip{i}/duty_cycle_pct"] = duty
+                log[f"tpu/{tag}/hbm_used_gib_max"] = max(u for u, _, _ in chips)
+                log[f"tpu/{tag}/hbm_pct_max"] = max(100.0 * u / max(t, 1e-9) for u, t, _ in chips)
+                log[f"tpu/{tag}/duty_cycle_pct_mean"] = sum(d for _, _, d in chips) / len(chips)
+                for run in runs:
+                    run.log(log)
+                sample_idx += 1
                 failures = 0
         except Exception as e:  # keep the sidecar alive through blips
             failures += 1
-            print(f"[tpumon] sample failed ({failures}): {e}", flush=True)
+            print(f"[tpumon:{tag}] sample failed ({failures}): {e}", flush=True)
             if failures > 60:
                 raise
         time.sleep(interval)

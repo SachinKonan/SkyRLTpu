@@ -118,6 +118,12 @@ export COMPLETION_MAX_TOKENS="${COMPLETION_MAX_TOKENS:-12288}"
 export KL_PENALTY_COEF="${KL_PENALTY_COEF:-0.1}"
 export TTD_ADV_ESTIMATOR="${TTD_ADV_ESTIMATOR:-entropic_adaptive_beta}"
 
+# Dedicated project for the self-hosted TPU experiments; shared-mode wandb
+# runs so the TPU-host utilization sidecars (tpu/tpu_wandb_monitor.py) write
+# tpu/* series into the SAME run pages as the env metrics.
+export WANDB_PROJECT="${WANDB_PROJECT:-tpu-tinker-exps}"
+export TTD_WANDB_SHARED="${TTD_WANDB_SHARED:-1}"
+
 export TTD_EVAL_BACKEND=local
 export TTD_SAFE_GRADE_MAX_WORKERS="${TTD_SAFE_GRADE_MAX_WORKERS:-${CORES}}"
 export NUM_CPUS_PER_TASK="${NUM_CPUS_PER_TASK:-1}"
