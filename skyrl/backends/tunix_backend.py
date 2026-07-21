@@ -1347,15 +1347,21 @@ class TunixBackend(AbstractBackend):
         )
 
     def _prompt_logprobs(
-        self, logps_fn: Callable, prompts: list[list[int]], sub_batch: int = 2
+        self, logps_fn: Callable, prompts: list[list[int]], sub_batch: int | None = None
     ) -> list[list[float]]:
         """Per-token logprobs of the prompt tokens themselves (first token gets 0.0).
 
-        The full [B, L, V] log-softmax at long context is tens of GB, so it is
-        gathered down to [B, L] on device before transfer, and prompts are
+        The full [B, L, V] log-softmax at long context is tens of GB, so
+        logps_fn gathers it down to [B, L] in-program, and prompts are
         processed in small sub-batches to bound the transient logits tensor
-        (KL-scoring batches arrive hundreds of sequences at a time).
+        (KL-scoring batches arrive hundreds of sequences at a time). Rows are
+        padded to a device-count multiple exactly like _model_pass: MaxText
+        shard_maps the batch dim over the fsdp mesh axis and rejects
+        non-divisible batches.
         """
+        shard = max(1, jax.device_count())
+        if sub_batch is None:
+            sub_batch = shard
         out: list[list[float]] = []
         for start in range(0, len(prompts), sub_batch):
             chunk = prompts[start : start + sub_batch]
@@ -1363,10 +1369,12 @@ class TunixBackend(AbstractBackend):
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
-            # targets[t] = input_ids[t+1]: logps_fn gathers logps[t, targets[t]]
-            # inside its jitted program, so only [B, L] ever reaches the host.
-            # The wrapped final column is never read (loop stops at len-1).
+            # targets[t] = input_ids[t+1]: the wrapped final column is never
+            # read (loop stops at len-1). Padded rows are dropped on output.
             targets = np.roll(input_ids, -1, axis=1)
+            input_ids, positions, attn_mask, targets = (
+                pad_to_fsdp(arr, shard) for arr in (input_ids, positions, attn_mask, targets)
+            )
             gathered = jax.device_get(logps_fn(input_ids, positions, attn_mask, targets))
             for row, prompt in enumerate(chunk):
                 row_out = [0.0]
