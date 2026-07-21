@@ -1,0 +1,105 @@
+{
+  "best_reward": {
+    "hours": 39.36666666666667,
+    "reward": 0.4168945312500001,
+    "sampling_min": 10.949278150100023,
+    "step": 46,
+    "train_min": 11.110055911416627
+  },
+  "first_iteration_start_utc": "2026-07-08T19:59:52+00:00",
+  "first_step": 0,
+  "last_iteration_finish_utc": "2026-07-10T16:07:40+00:00",
+  "last_step": 57,
+  "latest": {
+    "hours": 44.13,
+    "reward": 0.35908203125000004,
+    "sampling_min": 5.646440377216655,
+    "step": 57,
+    "train_min": 7.069091056483315
+  },
+  "num_points": 58,
+  "preemption_resume_markers": [
+    {
+      "checkpoint": "000010",
+      "from_model": "model_be40affe",
+      "hours": 20.239444444444445,
+      "reward": 0.08876953124999999,
+      "step": 9,
+      "to_model": "model_62777753"
+    },
+    {
+      "checkpoint": "000019",
+      "from_model": "model_62777753",
+      "hours": 23.43027777777778,
+      "reward": 0.07646484375000001,
+      "step": 18,
+      "to_model": "model_299d38ab"
+    },
+    {
+      "checkpoint": "000024",
+      "from_model": "model_299d38ab",
+      "hours": 29.959444444444443,
+      "reward": 0.15888671875,
+      "step": 23,
+      "to_model": "model_9e182ac3"
+    },
+    {
+      "checkpoint": "000031",
+      "from_model": "model_9e182ac3",
+      "hours": 33.88583333333333,
+      "reward": 0.265625,
+      "step": 30,
+      "to_model": "model_3641f199"
+    },
+    {
+      "checkpoint": "000040",
+      "from_model": "model_3641f199",
+      "hours": 36.24138888888889,
+      "reward": 0.2349609375,
+      "step": 39,
+      "to_model": "model_cf6a7089"
+    },
+    {
+      "checkpoint": "000043",
+      "from_model": "model_cf6a7089",
+      "hours": 37.43638888888889,
+      "reward": 0.28193359375000004,
+      "step": 42,
+      "to_model": "model_5c67e1c9"
+    },
+    {
+      "checkpoint": "000047",
+      "from_model": "model_5c67e1c9",
+      "hours": 38.84638888888889,
+      "reward": 0.4168945312500001,
+      "step": 46,
+      "to_model": "model_1f9f043e"
+    },
+    {
+      "checkpoint": "000049",
+      "from_model": "model_1f9f043e",
+      "hours": 39.76861111111111,
+      "reward": 0.30253906250000007,
+      "step": 48,
+      "to_model": "model_12eebf57"
+    },
+    {
+      "checkpoint": "000052",
+      "from_model": "model_12eebf57",
+      "hours": 41.60138888888889,
+      "reward": 0.30205078125000007,
+      "step": 51,
+      "to_model": "model_7c359a09"
+    },
+    {
+      "checkpoint": "000057",
+      "from_model": "model_7c359a09",
+      "hours": 43.25083333333333,
+      "reward": 0.24169921875000003,
+      "step": 56,
+      "to_model": "model_f8bbb4ff"
+    }
+  ],
+  "source_note": "Wall-clock hours use GCS iteration object timestamps. Preemption/resume markers are inferred from checkpoint model-id changes.",
+  "wall_clock_hours": 44.13
+}

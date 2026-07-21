@@ -14,7 +14,7 @@ pull an untracked SkyRL branch on the TPU.
 
 - `.`: pinned SkyRL source.
 - `third_party/jobman`: Jobman submodule with the v5p-64 spot configs and Tinker launch scripts.
-- `tinker-cookbook`: planned future submodule. For now, the math-RL runner still installs the cookbook from its nightly git spec through `uv`.
+- `third_party/tinker-cookbook`: pinned Tinker cookbook submodule used by the math-RL client recipe.
 
 ## Setup
 
@@ -53,6 +53,40 @@ MODEL_NAME=Qwen/Qwen3.5-4B RENDERER_NAME=qwen3_5 \
   GROUPS_PER_BATCH=64 MAX_STEPS=5 \
   LOG_PATH=/home/sk7524_princeton_edu/gcs/skyrl-logs/math-rl-qwen35-4b-lora-tp4 \
   ./tpu/run_tinker_math_rl.sh
+```
+
+Run the cookbook Qwen3.5-9B MATH target against worker 0's Tinker API:
+
+```bash
+./tpu/run_tinker_math_rl_qwen35_9b.sh
+```
+
+That starts a local `skyrl-tinker-tunnel` tmux session forwarding
+`127.0.0.1:18000` to the TPU worker 0 API server, then starts a local
+`skyrl-math-rl` tmux session with:
+
+```text
+env=math model_name=Qwen/Qwen3.5-9B group_size=16 groups_per_batch=64
+learning_rate=2e-5 max_tokens=512 lora_rank=32 max_steps=180
+```
+
+Plot a reward/correctness curve from a completed metrics file:
+
+```bash
+uv run --with matplotlib \
+  python tpu/plot_math_rl_metrics.py /path/to/metrics.jsonl \
+    --out benchmark_artifacts/math_rl_qwen35_9b_reward_curve.png \
+    --summary benchmark_artifacts/math_rl_qwen35_9b_summary.json
+```
+
+Fetch TPU utilization from Cloud Monitoring for the same run window:
+
+```bash
+python tpu/fetch_tpu_monitoring.py \
+  --project vision-mix \
+  --location us-east5-a \
+  --minutes 120 \
+  --out benchmark_artifacts/math_rl_qwen35_9b_tpu_monitoring.json
 ```
 
 The sync script refuses to run from a dirty checkout. Commit the SkyRL changes
