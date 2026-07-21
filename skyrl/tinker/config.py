@@ -43,6 +43,15 @@ class EngineConfig(BaseModel):
         default=Path("/tmp/lora_models"),
         description="Directory where LoRA models will be extracted for external inference engines",
     )
+    external_inference_timeout_sec: float = Field(
+        default=7200.0,
+        description=(
+            "Per-request read timeout for external inference calls. Long-form RL "
+            "sampling (tens of thousands of generated tokens per request, queued "
+            "behind a full batch) routinely exceeds the old hardcoded 300s."
+        ),
+        json_schema_extra={"argparse_type": float},
+    )
     forwarding_inference_max_connections: int | None = Field(
         default=None,
         description=(
