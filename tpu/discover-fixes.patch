@@ -218,7 +218,7 @@ index 8a961fb..7689d6a 100644
      "Programming Language :: Python :: 3.12",
      "Topic :: Scientific/Engineering :: Artificial Intelligence",
 diff --git a/ttt_discover/discovery.py b/ttt_discover/discovery.py
-index 53d0987..7b42d53 100644
+index 53d0987..a2f8ecc 100644
 --- a/ttt_discover/discovery.py
 +++ b/ttt_discover/discovery.py
 @@ -31,17 +31,35 @@ class DiscoverConfig:
@@ -278,15 +278,25 @@ index 53d0987..7b42d53 100644
      log_file = os.path.join(log_path, "train.log")
  
      # Resolve env_name -> env type and build dataset
-@@ -95,6 +111,7 @@ async def discover_impl(config: DiscoverConfig):
+@@ -95,8 +111,17 @@ async def discover_impl(config: DiscoverConfig):
          model_name_for_tokenizer=config.model_name,
          renderer_name=renderer_name,
          num_cpus_per_task=config.num_cpus_per_task,
 +        eval_backend=config.eval_backend,
          eval_timeout=config.eval_timeout,
          log_path=log_path,
++        # Reasoning-effort system prompt (the qwen analogue of gpt-oss's
++        # "Reasoning: high" renderer flag). Rendered as a system turn ahead of
++        # the task prompt for every rollout.
++        convo_prefix=(
++            [{"role": "system", "content": os.environ["TTD_SYSTEM_PROMPT"]}]
++            if os.environ.get("TTD_SYSTEM_PROMPT")
++            else None
++        ),
      )
-@@ -116,12 +133,28 @@ async def discover_impl(config: DiscoverConfig):
+     dataset_builder = get_single_problem_dataset_builder(dataset_config)
+ 
+@@ -116,12 +141,28 @@ async def discover_impl(config: DiscoverConfig):
          num_substeps=1,
          save_every=config.save_every,
          num_epochs=config.num_epochs,
@@ -1539,8 +1549,78 @@ index 0000000..28bb3ff
 +    )
 +    logger.info("ensemble logging to %s", cfg.log_path)
 +    asyncio.run(ensemble_main(cfg))
+diff --git a/ttt_discover/rl/rollouts.py b/ttt_discover/rl/rollouts.py
+index e379cbb..0798381 100644
+--- a/ttt_discover/rl/rollouts.py
++++ b/ttt_discover/rl/rollouts.py
+@@ -16,13 +16,26 @@ from ttt_discover.tinker_utils import logtree
+ 
+ 
+ @logtree.scope_header_decorator
+-async def do_single_rollout(policy: TokenCompleter, env: Env, step_idx: int) -> Trajectory:
++async def do_single_rollout(
++    policy: TokenCompleter,
++    env: Env,
++    step_idx: int,
++    first_ob=None,
++    first_stop=None,
++    first_ac=None,
++) -> Trajectory:
+     transitions = []
+     # TODO: Probably have initial observation return a tree node of the state, pass into env.step
+-    ob, stop_condition = await env.initial_observation()
++    if first_ob is not None:
++        ob, stop_condition = first_ob, first_stop
++    else:
++        ob, stop_condition = await env.initial_observation()
+     while True:
+         t_policy_start = time.time()
+-        ac_with_logprobs = await policy(ob, stop_condition)
++        if first_ac is not None:
++            ac_with_logprobs, first_ac = first_ac, None
++        else:
++            ac_with_logprobs = await policy(ob, stop_condition)
+         t_policy = time.time() - t_policy_start
+ 
+         t_env_start = time.time()
+@@ -52,7 +65,34 @@ async def do_group_rollout(
+     env_group_builder: EnvGroupBuilder, policy: TokenCompleter, step_idx: int
+ ) -> TrajectoryGroup:
+     envs_G: Sequence[Env] = await env_group_builder.make_envs()
+-    trajectories_G = await asyncio.gather(*[do_single_rollout(policy, env, step_idx) for env in envs_G])
++    # Coalesced path: every env in a group shares the SAME prompt, so one
++    # num_samples=G request (policy.sample_group) prefills the prompt once
++    # instead of G times. Falls back to per-rollout sampling when prompts
++    # differ or the completer has no group support.
++    obs_G = await asyncio.gather(*[env.initial_observation() for env in envs_G])
++    same_prompt = (
++        len(obs_G) > 1
++        and hasattr(policy, "sample_group")
++        and all(o[0].to_ints() == obs_G[0][0].to_ints() for o in obs_G[1:])
++        and all(o[1] == obs_G[0][1] for o in obs_G[1:])
++    )
++    if same_prompt:
++        acs_G = await policy.sample_group(obs_G[0][0], obs_G[0][1], len(envs_G))
++        trajectories_G = await asyncio.gather(
++            *[
++                do_single_rollout(
++                    policy, env, step_idx, first_ob=ob, first_stop=stop, first_ac=ac
++                )
++                for env, (ob, stop), ac in zip(envs_G, obs_G, acs_G, strict=True)
++            ]
++        )
++    else:
++        trajectories_G = await asyncio.gather(
++            *[
++                do_single_rollout(policy, env, step_idx, first_ob=ob, first_stop=stop)
++                for env, (ob, stop) in zip(envs_G, obs_G, strict=True)
++            ]
++        )
+ 
+     t_reward_start = time.time()
+     rewards_and_metrics_G = await env_group_builder.compute_group_rewards(trajectories_G, envs_G)
 diff --git a/ttt_discover/rl/train.py b/ttt_discover/rl/train.py
-index b9e414d..0cfdc7c 100644
+index b9e414d..58c3374 100644
 --- a/ttt_discover/rl/train.py
 +++ b/ttt_discover/rl/train.py
 @@ -5,6 +5,7 @@ Implements RL on general MDPs
@@ -1551,16 +1631,51 @@ index b9e414d..0cfdc7c 100644
  import time
  from typing import Any, Dict, List, Sequence, cast
  
-@@ -16,7 +17,7 @@ import tinker
+@@ -16,7 +17,11 @@ import tinker
  import torch
  from tinker.types import LossFnType
  from ttt_discover.tinker_utils.misc_utils import get_last_checkpoint, save_checkpoint_async
 -from ttt_discover.tinker_utils.completers import TwoPhaseTokenCompleter
-+from ttt_discover.tinker_utils.completers import LongContextTokenCompleter, TwoPhaseTokenCompleter
++from ttt_discover.tinker_utils.completers import (
++    LongContextTokenCompleter,
++    QwenTwoPhaseTokenCompleter,
++    TwoPhaseTokenCompleter,
++)
  from ttt_discover.rl.data_processing import (
      assemble_training_data,
      remove_constant_reward_groups,
-@@ -63,8 +64,22 @@ async def incorporate_kl_penalty(
+@@ -44,6 +49,7 @@ async def incorporate_kl_penalty(
+     data_D: List[tinker.Datum],
+     base_sampling_client: tinker.SamplingClient,
+     kl_penalty_coef: float,
++    precomputed: dict | None = None,
+ ) -> Dict[str, float]:
+     """
+     Compute KL against base model. Adjust advantages in-place by logp_base - logp_current - avg_kl,
+@@ -54,17 +60,41 @@ async def incorporate_kl_penalty(
+         datum.model_input.append_int(cast(int, datum.loss_fn_inputs["target_tokens"].data[-1]))
+         for datum in data_D
+     ]
++    async def _base_lp(sequence_input):
++        # Streamed KL: scoring tasks fired as each rollout group finished
++        # (overlapping the sampling phase). Fall back to a fresh fetch when a
++        # task is missing or failed.
++        if precomputed is not None:
++            task = precomputed.get(tuple(sequence_input.to_ints()))
++            if task is not None:
++                try:
++                    return await task
++                except Exception:
++                    pass
++        return await base_sampling_client.compute_logprobs_async(sequence_input)
++
+     base_logprobs_D = await asyncio.gather(
+-        *[
+-            base_sampling_client.compute_logprobs_async(sequence_input)
+-            for sequence_input in full_sequence_inputs_D
+-        ]
++        *[_base_lp(sequence_input) for sequence_input in full_sequence_inputs_D]
+     )
      # compute the logprob differences, zeroed out when the mask == 0
      sampled_logprobs_D = [datum.loss_fn_inputs["logprobs"].to_torch() for datum in data_D]
      float_masks = [datum.loss_fn_inputs["mask"].to_torch().float() for datum in data_D]
@@ -1584,7 +1699,7 @@ index b9e414d..0cfdc7c 100644
          for base_logprobs, sampled_logprobs, mask in safezip(
              base_logprobs_D, sampled_logprobs_D, float_masks
          )
-@@ -224,47 +239,58 @@ async def train_step(
+@@ -224,47 +254,58 @@ async def train_step(
      learning_rate: float,
      num_substeps: int,
      loss_fn: LossFnType,
@@ -1605,6 +1720,17 @@ index b9e414d..0cfdc7c 100644
  
      if len(batches_md) == 0:
 -        return training_logprobs_D
+-
+-    enqueued_futures: (
+-        tuple[
+-            tinker.APIFuture[tinker.ForwardBackwardOutput],
+-            tinker.APIFuture[tinker.OptimStepResponse],
+-        ]
+-        | None
+-    ) = (
+-        await enqueue_forward_backward(training_client, batches_md[0], loss_fn),
+-        await enqueue_optim_step(training_client, learning_rate),
+-    )
 +        return training_logprobs_D, extra_logprobs
 +
 +    async def enqueue_substep(i: int):
@@ -1618,17 +1744,7 @@ index b9e414d..0cfdc7c 100644
 +                    )
 +        opt = await enqueue_optim_step(training_client, learning_rate)
 +        return fb, extra_fbs, opt
- 
--    enqueued_futures: (
--        tuple[
--            tinker.APIFuture[tinker.ForwardBackwardOutput],
--            tinker.APIFuture[tinker.OptimStepResponse],
--        ]
--        | None
--    ) = (
--        await enqueue_forward_backward(training_client, batches_md[0], loss_fn),
--        await enqueue_optim_step(training_client, learning_rate),
--    )
++
 +    enqueued_futures = await enqueue_substep(0)
  
      for i in range(len(batches_md)):
@@ -1662,7 +1778,7 @@ index b9e414d..0cfdc7c 100644
  
  
  @chz.chz
-@@ -301,10 +327,35 @@ class Config:
+@@ -301,10 +342,35 @@ class Config:
  
      # Two-phase sampling: phase1_max_tokens for token completion
      phase1_max_tokens: int = 26000
@@ -1699,7 +1815,7 @@ index b9e414d..0cfdc7c 100644
  
  @chz.chz
  class WrappedTrajectoryGroup:
-@@ -332,17 +383,27 @@ async def do_group_rollout_and_filter_constant_reward(
+@@ -332,17 +398,39 @@ async def do_group_rollout_and_filter_constant_reward(
      step_idx=-1,
      model_name: str = "",
      phase1_max_tokens: int = 27000,
@@ -1724,6 +1840,18 @@ index b9e414d..0cfdc7c 100644
 +            temperature=temperature,
 +            context_window=context_window,
 +        )
++    elif os.environ.get("TTD_QWEN_TWO_PHASE", "0") == "1":
++        # <think>-style models with the gpt-oss thinking-budget structure
++        # (phase1_max_tokens covers prompt+thinking; forced </think> on budget
++        # exhaustion; final answer from the remaining context).
++        policy = QwenTwoPhaseTokenCompleter(
++            sampling_client=sampling_client,
++            tokenizer=tokenizer,
++            phase1_max_tokens=phase1_max_tokens,
++            temperature=temperature,
++            context_window=context_window,
++            min_think_tokens=int(os.environ.get("TTD_MIN_THINK_TOKENS", "0")),
++        )
 +    else:
 +        policy = LongContextTokenCompleter(
 +            sampling_client=sampling_client,
@@ -1734,11 +1862,71 @@ index b9e414d..0cfdc7c 100644
  
      trajectory_group = await do_group_rollout(env_group_builder, policy, step_idx)
  
-@@ -410,16 +471,23 @@ async def prepare_minibatch(
+@@ -377,6 +465,25 @@ async def save_checkpoint_and_get_sampling_client(
+ 
+ 
+ @scope
++def _max_train_token_id(model_name: str) -> int:
++    """Highest token id the trainer accepts, 0 = no filtering. Overridable via
++    TTD_MAX_TRAIN_TOKEN_ID; defaults to gpt-oss's trainable-vocab ceiling for
++    gpt-oss models (o200k_harmony reserved specials above it can be sampled
++    but not trained)."""
++    env = os.environ.get("TTD_MAX_TRAIN_TOKEN_ID")
++    if env is not None:
++        return int(env)
++    return 200018 if "gpt-oss" in model_name else 0
++
++
++def _datum_max_token_id(datum: tinker.Datum) -> int:
++    ids = list(datum.model_input.to_ints())
++    target = datum.loss_fn_inputs.get("target_tokens")
++    if target is not None:
++        ids.extend(int(t) for t in target.data)
++    return max(ids) if ids else 0
++
++
+ async def prepare_minibatch(
+     env_group_builders_P: Sequence[EnvGroupBuilder],
+     trajectory_groups_P: list[TrajectoryGroup],
+@@ -388,6 +495,7 @@ async def prepare_minibatch(
+     train_step: int | None = None,
+     adv_estimator: str="mean_baseline",
+     adv_estimator_beta: float = 2.0,
++    kl_precomputed: dict | None = None,
+ ) -> tuple[list[tinker.Datum], dict[str, Any]]:
+     """Converts the trajectories into a minibatch, and provides metrics about the minibatch"""
+ 
+@@ -410,16 +518,50 @@ async def prepare_minibatch(
              )
          data_D, _metadata_D = assemble_training_data(trajectory_groups_P, advantages_P)
  
 -    # Incorporate KL penalty if configured
++        # Trainer sequence ceiling (self-hosted MaxText backends): datums whose
++        # full sequence exceeds TTD_TRAIN_MAX_SEQ cannot fit the fb graph.
++        # They still counted for search (grading + pool); only the gradient
++        # skips them.
++        _max_seq = int(os.environ.get("TTD_TRAIN_MAX_SEQ", "0"))
++        if _max_seq > 0:
++            _before = len(data_D)
++            data_D = [d for d in data_D if d.model_input.length + 1 <= _max_seq]
++            metrics["train/dropped_too_long"] = _before - len(data_D)
++
++        # Tinker rejects datums containing token ids above the model's trainable
++        # vocab and POISONS the TrainingClient (fatal for the whole run, seen
++        # live: sampled reserved-harmony id 200479 vs max 200018 at step 13).
++        # Sampling can rarely emit such reserved ids, so drop those sequences
++        # from the gradient; they still counted for search (grading + pool).
++        _max_tok = _max_train_token_id(model_name)
++        if _max_tok > 0:
++            _before = len(data_D)
++            data_D = [d for d in data_D if _datum_max_token_id(d) <= _max_tok]
++            if _before - len(data_D):
++                logger.warning(
++                    "Dropped %d datum(s) with token ids above %d (would poison the TrainingClient)",
++                    _before - len(data_D), _max_tok,
++                )
++            metrics["train/dropped_oov"] = _before - len(data_D)
++
 +    # Incorporate KL penalty if configured. Guarded: a transient Tinker infra
 +    # error in the base-logprob pass (seen live: RequestFailedError "unknown
 +    # infra error" surviving the SDK's retries) must degrade to a KL-free step,
@@ -1759,6 +1947,7 @@ index b9e414d..0cfdc7c 100644
 +                    service_client.create_sampling_client(base_model=model_name),
 +                    # ^^^ TODO: replace with the model we load, if relevant
 +                    kl_penalty_coef,
++                    precomputed=kl_precomputed,
 +                )
 +            metrics.update(kl_penalty_metrics)
 +        except Exception:
@@ -1767,15 +1956,20 @@ index b9e414d..0cfdc7c 100644
  
      return data_D, metrics
  
-@@ -433,6 +501,7 @@ async def do_train_step_and_get_sampling_client(
+@@ -433,6 +575,8 @@ async def do_train_step_and_get_sampling_client(
      tokenizer: Tokenizer,
      env_group_builders_P: Sequence[EnvGroupBuilder],
      trajectory_groups_P: list[TrajectoryGroup],
 +    distill_task: "asyncio.Task | None" = None,
++    kl_precomputed: dict | None = None,
  ) -> tuple[tinker.SamplingClient, dict[str, Any]]:
      context = get_scope_context()
      context.attributes["step"] = i_batch
-@@ -452,15 +521,43 @@ async def do_train_step_and_get_sampling_client(
+@@ -449,18 +593,59 @@ async def do_train_step_and_get_sampling_client(
+         train_step=i_batch,
+         adv_estimator=cfg.adv_estimator,
+         adv_estimator_beta=cfg.adv_estimator_beta,
++        kl_precomputed=kl_precomputed,
      )
      metrics.update(prepare_minibatch_metrics)
  
@@ -1793,6 +1987,18 @@ index b9e414d..0cfdc7c 100644
 +        except Exception:
 +            logger.exception("context distillation failed; continuing with RL only")
 +            metrics["distill/error"] = 1.0
++    if distill_data:
++        _max_tok = _max_train_token_id(cfg.model_name)
++        if _max_tok > 0:
++            kept = [
++                (d, w)
++                for d, w in safezip(distill_data, distill_weights)
++                if _datum_max_token_id(d) <= _max_tok
++            ]
++            if len(kept) != len(distill_data):
++                metrics["distill/dropped_oov"] = len(distill_data) - len(kept)
++            distill_data = [d for d, _ in kept]
++            distill_weights = [w for _, w in kept]
 +    extra_batches = [(distill_data, cast(LossFnType, "cross_entropy"))] if distill_data else None
 +
      with timed("train", metrics):
@@ -1820,7 +2026,7 @@ index b9e414d..0cfdc7c 100644
      sampling_client, full_batch_metrics = await save_checkpoint_and_get_sampling_client(
          training_client,
          # NOTE: saving the checkpoint as the i + 1 step
-@@ -496,6 +593,11 @@ async def do_sync_training(
+@@ -496,6 +681,11 @@ async def do_sync_training(
          training_client, start_batch, cfg.log_path, cfg.save_every, start_batch
      )
  
@@ -1832,16 +2038,66 @@ index b9e414d..0cfdc7c 100644
      for i_batch in range(start_batch, end_batch):
          train_table = None
          test_table = None
-@@ -542,6 +644,8 @@ async def do_sync_training(
-                             step_idx=i_batch,
-                             model_name=cfg.local_model_path or cfg.model_name,
-                             phase1_max_tokens=cfg.phase1_max_tokens,
-+                            context_window=cfg.context_window,
-+                            completion_max_tokens=cfg.completion_max_tokens,
-                         ),
+@@ -528,27 +718,121 @@ async def do_sync_training(
+ 
+ 
+         print("Sampling...")
++        # Streamed KL scoring: as each group's rollouts finish, immediately
++        # fire base-model logprob requests for its sequences so scoring
++        # overlaps the (much longer) sampling phase. incorporate_kl_penalty
++        # consumes the cache and only fetches misses.
++        kl_cache: dict | None = None
++        kl_base_client = None
++        if cfg.kl_penalty_coef > 0:
++            kl_cache = {}
++            kl_base_client = service_client.create_sampling_client(
++                base_model=cfg.local_model_path or cfg.model_name
++            )
++
++        async def _rollout_then_score(builder, i):
++            group = await do_group_rollout_and_filter_constant_reward(
++                sampling_client,
++                builder,
++                temperature=cfg.temperature,
++                do_remove_constant_reward_groups=False,
++                step_idx=i_batch,
++                model_name=cfg.local_model_path or cfg.model_name,
++                phase1_max_tokens=cfg.phase1_max_tokens,
++                context_window=cfg.context_window,
++                completion_max_tokens=cfg.completion_max_tokens,
++            )
++            if group is not None and kl_cache is not None:
++                for traj in group.trajectories_G:
++                    for tr in traj.transitions:
++                        full = list(tr.ob.to_ints()) + list(tr.ac.tokens)
++                        key = tuple(full)
++                        if key not in kl_cache:
++                            kl_cache[key] = asyncio.create_task(
++                                kl_base_client.compute_logprobs_async(
++                                    tinker.ModelInput.from_ints(full)
++                                )
++                            )
++            return group
++
+         with timed("sampling", metrics):
+             # Note: do_remove_constant_reward_groups=False here because we remove
+             # constant reward groups after all rollouts are collected (below)
+             trajectory_groups_P = await asyncio.gather(
+                 *[
+                     asyncio.create_task(
+-                        do_group_rollout_and_filter_constant_reward(
+-                            sampling_client,
+-                            builder,
+-                            temperature=cfg.temperature,
+-                            do_remove_constant_reward_groups=False,
+-                            step_idx=i_batch,
+-                            model_name=cfg.local_model_path or cfg.model_name,
+-                            phase1_max_tokens=cfg.phase1_max_tokens,
+-                        ),
++                        _rollout_then_score(builder, i),
                          name=f"sample_task_{i}",
                      )
-@@ -549,6 +653,71 @@ async def do_sync_training(
+                     for i, builder in enumerate(env_group_builders_P)
                  ],
              )
  
@@ -1913,11 +2169,12 @@ index b9e414d..0cfdc7c 100644
          if hasattr(dataset, 'flush'):
              dataset.flush(step=i_batch + 1)
  
-@@ -565,8 +734,15 @@ async def do_sync_training(
+@@ -565,8 +849,16 @@ async def do_sync_training(
              tokenizer,
              env_group_builders_P,
              trajectory_groups_P,
 +            distill_task=distill_task,
++            kl_precomputed=kl_cache,
          )
  
 +        if probe_task is not None:
@@ -1929,7 +2186,7 @@ index b9e414d..0cfdc7c 100644
          if 'table' in train_step_metrics:
              table_data = train_step_metrics.pop('table')
              # Compute actual advantages using the configured estimator
-@@ -583,7 +759,7 @@ async def do_sync_training(
+@@ -583,7 +875,7 @@ async def do_sync_training(
                      )
              }
          
@@ -1938,7 +2195,7 @@ index b9e414d..0cfdc7c 100644
              if train_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
                  ml_logger.loggers[2].log_metrics(train_table, step=i_batch)
              if test_table is not None and isinstance(ml_logger.loggers[2], WandbLogger):
-@@ -624,7 +800,7 @@ async def main(
+@@ -624,7 +916,7 @@ async def main(
          start_batch = 0
  
      print("Create training client...")
@@ -1947,7 +2204,7 @@ index b9e414d..0cfdc7c 100644
      print("Training client created!")
      if resume_info:
          # Resuming interrupted training - load optimizer state for proper continuation
-@@ -684,8 +860,9 @@ async def main(
+@@ -684,8 +976,9 @@ async def main(
          tokenizer=tokenizer,
      )
  
@@ -1960,13 +2217,188 @@ index b9e414d..0cfdc7c 100644
              training_client=training_client,
              name="final",
 diff --git a/ttt_discover/tinker_utils/completers.py b/ttt_discover/tinker_utils/completers.py
-index e83b7eb..118af9d 100644
+index e83b7eb..095fc4a 100644
 --- a/ttt_discover/tinker_utils/completers.py
 +++ b/ttt_discover/tinker_utils/completers.py
-@@ -166,3 +166,48 @@ class TwoPhaseTokenCompleter(TokenCompleter):
+@@ -166,3 +166,223 @@ class TwoPhaseTokenCompleter(TokenCompleter):
              maybe_mask=[1.0] * len(phase1_tokens) + [0.0] * len(prefill_tokens) + [1.0] * len(phase2_tokens),
          )
  
++
++@dataclass
++class QwenTwoPhaseTokenCompleter(TokenCompleter):
++    """
++    Thinking-budget completer for <think>-style chat models (Qwen3/3.5),
++    mirroring the gpt-oss TwoPhaseTokenCompleter budget structure (phase 1 =
++    prompt + thinking capped at phase1_max_tokens; the final answer gets the
++    remaining context), plus s1-style BUDGET FORCING: the thinking phase is
++    sampled with "</think>" as a stop sequence, and every time the model tries
++    to close before min_think_tokens a masked continuation ("Wait, ...") is
++    injected and sampling resumes. All injected tokens carry logprob 0.0 and
++    mask 0.0 (never trained), like the gpt-oss PHASE2_PREFILL.
++    """
++
++    sampling_client: tinker.SamplingClient
++    tokenizer: Tokenizer
++    phase1_max_tokens: int
++    temperature: float = 1.0
++    context_window: int = 32768
++    context_buffer: int = 50
++    min_think_tokens: int = 0  # 0 = no forcing: first </think> is accepted
++    max_think_continuations: int = 8
++
++    THINK_CLOSE = "\n</think>\n\n"
++    CONTINUE_THINK = "\nWait, let me reconsider this more carefully."
++
++    async def _sample(self, chunks, stop, max_tokens):
++        result = await self.sampling_client.sample_async(
++            prompt=tinker.ModelInput(chunks=chunks),
++            num_samples=1,
++            sampling_params=tinker.SamplingParams(
++                stop=stop, max_tokens=max_tokens, temperature=self.temperature
++            ),
++        )
++        seq = result.sequences[0]
++        assert seq.logprobs is not None
++        return list(seq.tokens), list(seq.logprobs)
++
++    async def __call__(self, model_input: tinker.ModelInput, stop: StopCondition) -> TokensWithLogprobs:
++        prompt_length = model_input.length
++        think_budget = self.phase1_max_tokens - prompt_length
++        if think_budget <= 0:
++            raise ValueError(
++                f"Prompt length {prompt_length} exceeds phase1_max_tokens {self.phase1_max_tokens}."
++            )
++
++        # Forcing disabled: single-pass sampling (no </think> interception, no
++        # extra round trips). Only intervene if the thinking budget is
++        # exhausted mid-think, mirroring gpt-oss phase-2 semantics.
++        if self.min_think_tokens <= 0:
++            t, lp = await self._sample(list(model_input.chunks), stop, think_budget)
++            if len(t) < think_budget:
++                return TokensWithLogprobs(tokens=t, maybe_logprobs=lp)
++            text = self.tokenizer.decode(t)
++            prefill = (
++                [] if "</think>" in text
++                else self.tokenizer.encode(self.THINK_CLOSE, add_special_tokens=False)
++            )
++            answer_max = (
++                self.context_window - prompt_length - len(t) - len(prefill) - self.context_buffer
++            )
++            if answer_max <= 0:
++                return TokensWithLogprobs(
++                    tokens=t + prefill,
++                    maybe_logprobs=lp + [0.0] * len(prefill),
++                    maybe_mask=[1.0] * len(t) + [0.0] * len(prefill),
++                )
++            chunks = list(model_input.chunks) + [tinker.types.EncodedTextChunk(tokens=t + prefill)]
++            t2, lp2 = await self._sample(chunks, stop, answer_max)
++            return TokensWithLogprobs(
++                tokens=t + prefill + t2,
++                maybe_logprobs=lp + [0.0] * len(prefill) + lp2,
++                maybe_mask=[1.0] * len(t) + [0.0] * len(prefill) + [1.0] * len(t2),
++            )
++
++        tokens: list[int] = []
++        lps: list[float] = []
++        mask: list[float] = []
++        continuations = 0
++
++        # --- thinking phase: stop at "</think>" so early closes are intercepted.
++        # The stop string itself is excluded from vLLM output; the close is
++        # re-appended (masked) below. If the model somehow stops for any other
++        # reason (e.g. emits its EOS inside think), the injected continuation
++        # simply resumes thinking — the flow self-heals either way.
++        while True:
++            remaining = think_budget - len(tokens)
++            if remaining <= 0:
++                break
++            chunks = list(model_input.chunks)
++            if tokens:
++                chunks.append(tinker.types.EncodedTextChunk(tokens=tokens))
++            t, lp = await self._sample(chunks, ["</think>"], remaining)
++            tokens += t
++            lps += lp
++            mask += [1.0] * len(t)
++            if len(t) >= remaining:
++                break  # budget exhausted mid-think
++            if len(tokens) >= self.min_think_tokens or continuations >= self.max_think_continuations:
++                break  # allowed to close
++            cont = self.tokenizer.encode(self.CONTINUE_THINK, add_special_tokens=False)
++            tokens += cont
++            lps += [0.0] * len(cont)
++            mask += [0.0] * len(cont)
++            continuations += 1
++
++        # --- forced/masked close, then the final answer from remaining context
++        close = self.tokenizer.encode(self.THINK_CLOSE, add_special_tokens=False)
++        tokens += close
++        lps += [0.0] * len(close)
++        mask += [0.0] * len(close)
++
++        answer_max = self.context_window - prompt_length - len(tokens) - self.context_buffer
++        if answer_max > 0:
++            chunks = list(model_input.chunks) + [tinker.types.EncodedTextChunk(tokens=tokens)]
++            t2, lp2 = await self._sample(chunks, stop, answer_max)
++            tokens += t2
++            lps += lp2
++            mask += [1.0] * len(t2)
++
++        return TokensWithLogprobs(tokens=tokens, maybe_logprobs=lps, maybe_mask=mask)
++
++
++    async def sample_group(
++        self, model_input: tinker.ModelInput, stop: StopCondition, n: int
++    ) -> list[TokensWithLogprobs]:
++        """Coalesced sampling for n rollouts sharing ONE identical prompt: a
++        single num_samples=n request lets vLLM prefill the prompt once instead
++        of n times (and collapses n requests into 1). Sequences that exhaust
++        the thinking budget get their per-sequence phase-2 continuation
++        individually (rare)."""
++        prompt_length = model_input.length
++        think_budget = self.phase1_max_tokens - prompt_length
++        if think_budget <= 0:
++            raise ValueError(
++                f"Prompt length {prompt_length} exceeds phase1_max_tokens {self.phase1_max_tokens}."
++            )
++        result = await self.sampling_client.sample_async(
++            prompt=model_input,
++            num_samples=n,
++            sampling_params=tinker.SamplingParams(
++                stop=stop, max_tokens=think_budget, temperature=self.temperature
++            ),
++        )
++
++        async def finish(seq) -> TokensWithLogprobs:
++            t, lp = list(seq.tokens), list(seq.logprobs)
++            assert lp is not None
++            if len(t) < think_budget:
++                return TokensWithLogprobs(tokens=t, maybe_logprobs=lp)
++            text = self.tokenizer.decode(t)
++            prefill = (
++                [] if "</think>" in text
++                else self.tokenizer.encode(self.THINK_CLOSE, add_special_tokens=False)
++            )
++            answer_max = (
++                self.context_window - prompt_length - len(t) - len(prefill) - self.context_buffer
++            )
++            if answer_max <= 0:
++                return TokensWithLogprobs(
++                    tokens=t + prefill,
++                    maybe_logprobs=lp + [0.0] * len(prefill),
++                    maybe_mask=[1.0] * len(t) + [0.0] * len(prefill),
++                )
++            chunks = list(model_input.chunks) + [tinker.types.EncodedTextChunk(tokens=t + prefill)]
++            t2, lp2 = await self._sample(chunks, stop, answer_max)
++            return TokensWithLogprobs(
++                tokens=t + prefill + t2,
++                maybe_logprobs=lp + [0.0] * len(prefill) + lp2,
++                maybe_mask=[1.0] * len(t) + [0.0] * len(prefill) + [1.0] * len(t2),
++            )
++
++        import asyncio as _asyncio
++        return list(await _asyncio.gather(*[finish(seq) for seq in result.sequences]))
++
 +
 +@dataclass
 +class LongContextTokenCompleter(TokenCompleter):
@@ -2084,6 +2516,33 @@ index aa700fc..ac8e5c6 100644
 -        raise NotImplementedError("Reference answer not available for TTT environments.")
 \ No newline at end of file
 +        raise NotImplementedError("Reference answer not available for TTT environments.")
+diff --git a/ttt_discover/tinker_utils/ml_log.py b/ttt_discover/tinker_utils/ml_log.py
+index ad9700b..4ebcd7d 100644
+--- a/ttt_discover/tinker_utils/ml_log.py
++++ b/ttt_discover/tinker_utils/ml_log.py
+@@ -352,13 +352,21 @@ class WandbLogger(Logger):
+         # Initialize wandb run
+         assert wandb is not None  # For type checker
+         resume_mode = "allow" if run_id is not None else "never"
++        # TTD_WANDB_SHARED=1: open the run in wandb "shared mode" as the
++        # primary writer, so sidecar processes on other hosts (e.g. the TPU
++        # utilization monitor) can attach to the SAME run and their tpu/*
++        # series land next to the env/* metrics on one run page.
++        extra: dict = {}
++        if os.environ.get("TTD_WANDB_SHARED", "0") == "1":
++            extra["settings"] = wandb.Settings(mode="shared", x_primary=True)
+         self.run = wandb.init(
+             project=project,
+             config=dump_config(config) if config else None,
+             dir=str(log_dir) if log_dir else None,
+             name=wandb_name,
+             id=run_id,
+-            resume=resume_mode
++            resume=resume_mode,
++            **extra,
+         )
+ 
+     def log_hparams(self, config: Any) -> None:
 diff --git a/ttt_discover/tinker_utils/sampler.py b/ttt_discover/tinker_utils/sampler.py
 index d6c8ec1..e06a2eb 100644
 --- a/ttt_discover/tinker_utils/sampler.py
