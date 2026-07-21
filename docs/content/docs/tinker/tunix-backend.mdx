@@ -101,6 +101,31 @@ machine and continued to completion (adapter export, HTTP push, and optimizer
 state all restored bit-exact; the bf16 npz round-trip and adapter-extraction
 fixes this required are part of this branch).
 
+### Validation (math-RL, Qwen3.5-27B dense via forked MaxText, run in progress)
+
+Qwen3.5 dense support (hybrid gated-DeltaNet + full attention) is added by our
+MaxText fork (`SachinKonan/maxtext@skyrl/qwen35-dense`): dense-MLP branch in
+the qwen3_5 decoder, a `qwen3.5-27b.yml` config, and converter mapping. LoRA
+(rank 32) targets the full-attention q/k/v/o and dense MLP; GDN internals are
+excluded. Adapters ship as standard HF-PEFT through vLLM's native LoRA path —
+no merge machinery needed for dense models.
+
+| Held-out eval | step 0 | step 20 | step 40 | step 60 | step 80 | step 120 | step 140 |
+|---|---|---|---|---|---|---|---|
+| test correct | 37.2% | 73.4% | 84.8% | 85.6% | 86.4% | 86.0% | **87.0%** |
+
+Step-0 sampler/trainer KL = 0.00017 — the cleanest parity of any run — after
+three fork fixes found by a three-way logprob parity probe and per-layer
+bisection against HF `output_hidden_states`. Headline fix: the pure-NNX
+decoder's final norm used plain RMSNorm where Qwen3.5 requires the
+zero-centered form ((1+w)·x̂), a flat ~2 nats/token trainer-vs-sampler
+divergence that per-layer comparison could not see (HF's last hidden state is
+post-norm). Also fixed: mRoPE must be disabled for text-only (MaxText's mrope
+rotates the full head dim, ignoring `partial_rotary_factor`), and the qwix
+trace batch must divide the fsdp mesh for GDN's `shard_map`. The default
+thinking renderer burns the whole 512-token budget inside `<think>`; use
+`qwen3_5_disable_thinking` for short-form RL.
+
 ## Limitations
 
 - Single train host (multi-host trainer is future work; the colocated v5p-16
