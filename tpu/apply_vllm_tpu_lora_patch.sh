@@ -23,14 +23,20 @@ if spec is None or not spec.submodule_search_locations:
 package_dir = Path(next(iter(spec.submodule_search_locations))).resolve()
 print(package_dir.parent)
 print(package_dir / "worker" / "tpu_worker.py")
+print(package_dir / "platforms" / "tpu_platform.py")
 PY
 )
 
 package_parent="${paths[0]}"
 worker_path="${paths[1]}"
+platform_path="${paths[2]}"
 
 if [[ ! -f "${worker_path}" ]]; then
   echo "TPU worker file not found: ${worker_path}" >&2
+  exit 1
+fi
+if [[ ! -f "${platform_path}" ]]; then
+  echo "TPU platform file not found: ${platform_path}" >&2
   exit 1
 fi
 
@@ -72,9 +78,33 @@ PY
   fi
 fi
 
+"${PYTHON}" - "${platform_path}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+needle = '        "TPU_MULTIHOST_BACKEND",\n'
+changed = False
+for env_var in ("SKIP_JAX_PRECOMPILE", "VLLM_XLA_CACHE_PATH"):
+    if f'"{env_var}",' in text:
+        continue
+    if needle not in text:
+        raise SystemExit("Could not find TpuPlatform.additional_env_vars patch anchor")
+    text = text.replace(needle, needle + f'        "{env_var}",\n', 1)
+    changed = True
+if changed:
+    path.write_text(text)
+    print(f"vLLM TPU Ray env patch applied: {path}")
+else:
+    print(f"vLLM TPU Ray env patch already present: {path}")
+PY
+
 "${PYTHON}" -m py_compile "${worker_path}"
+"${PYTHON}" -m py_compile "${platform_path}"
 "${PYTHON}" - <<'PY'
 from tpu_inference.worker.tpu_worker import TPUWorker
+from tpu_inference.platforms.tpu_platform import TpuPlatform
 
 missing = [
     name
@@ -83,6 +113,14 @@ missing = [
 ]
 if missing:
     raise SystemExit(f"TPUWorker missing LoRA methods after patch: {missing}")
+missing_env_vars = [
+    env_var
+    for env_var in ("SKIP_JAX_PRECOMPILE", "VLLM_XLA_CACHE_PATH")
+    if env_var not in TpuPlatform.additional_env_vars
+]
+if missing_env_vars:
+    raise SystemExit(f"TpuPlatform.additional_env_vars missing {missing_env_vars}")
 PY
 
 echo "vLLM TPU LoRA worker patch verified: ${worker_path}"
+echo "vLLM TPU Ray env patch verified: ${platform_path}"
