@@ -40,6 +40,9 @@ export CONTEXT_WINDOW="${CONTEXT_WINDOW:-32768}"
 # answer gets the remaining context (QwenTwoPhaseTokenCompleter).
 export TTD_QWEN_TWO_PHASE="${TTD_QWEN_TWO_PHASE:-1}"
 export PHASE1_MAX_TOKENS="${PHASE1_MAX_TOKENS:-26000}"
+# s1-style budget forcing: intercept early </think> and inject a masked
+# continuation until at least this many thinking tokens are generated.
+export TTD_MIN_THINK_TOKENS="${TTD_MIN_THINK_TOKENS:-16384}"
 # Sequences beyond the trainer fb ceiling are dropped from the gradient
 # only (still graded + pooled); see probe_train_len.py.
 export TTD_TRAIN_MAX_SEQ="${TTD_TRAIN_MAX_SEQ:-24576}"

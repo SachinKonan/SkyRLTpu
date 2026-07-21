@@ -148,6 +148,14 @@ class ExternalInferenceClient:
             "stream": False,
             "return_token_ids": True,
         }
+        # Forward stop conditions (previously dropped: clients only stopped on
+        # the model's EOS). Ints are token ids, strings are text stops.
+        if request.sampling_params.stop:
+            stops = list(request.sampling_params.stop)
+            if all(isinstance(s, int) for s in stops):
+                payload["stop_token_ids"] = stops
+            else:
+                payload["stop"] = stops
         # See EngineConfig.external_inference_prompt_logprobs: the vLLM TPU
         # backend dies on this parameter, so it is opt-in.
         want_prompt_logprobs = bool(request.prompt_logprobs) and self.allow_prompt_logprobs
