@@ -43,6 +43,38 @@ Key pieces this enables:
   (native tiny-qwen3), including cross-backend logprob parity with the JAX
   backend and MaxText-vs-native parity.
 
+## Fire-and-forget runs
+
+Spot slices get preempted; `tpu/autoresume_run.sh` owns the whole lifecycle
+so one command survives it all — queued-resource recreation (via jobman),
+colocated bring-up, client launch, and resume-on-anything:
+
+```bash
+./tpu/autoresume_run.sh tpu/runs/qwen35-27b.env
+```
+
+This detaches a supervisor into a local tmux session (`autoresume-$RUN_NAME`,
+log at `/home/sk7524/skyrl-runs/autoresume-$RUN_NAME.log`) that loops:
+delete SUSPENDED/FAILED queued-resources and `jobman create` a new one, wait
+for READY + ssh, run `start_colocated_vllm_tinker.sh`, then launch the RL
+client. The very first launch uses `BEHAVIOR_IF_LOG_DIR_EXISTS=delete`; every
+launch after that (including after a watcher restart) resumes the same
+`LOG_PATH` from the latest checkpoint. A health loop kills and relaunches the
+client if the node disappears, the client dies early, or `metrics.jsonl`
+stops moving; when metrics reach `MAX_STEPS-1` the supervisor exits cleanly.
+
+Each run is described by an env file under `tpu/runs/` (`qwen35-27b.env`,
+`gemma4-31b.env`, `gptoss-20b.env`, `gptoss-20b-attnonly.env`) that sets:
+
+| Knob | Meaning |
+|---|---|
+| `RUN_NAME`, `TPU_NAME`, `JOBMAN_YAML` | identity; yaml copies live in `tpu/runs/yamls/` |
+| `MODEL_NAME`, `TUNIX_MAXTEXT_MODEL_NAME`, `TUNIX_MAXTEXT_PIP_SPEC`, `TRAIN_MICRO_BATCH_SIZE`, `VLLM_EXTRA_ARGS` | server bring-up (forwarded to the colocated launcher) |
+| `RENDERER_NAME`, `GROUP_SIZE`, `GROUPS_PER_BATCH`, `MAX_TOKENS`, `LORA_RANK`, `MAX_STEPS`, `SAVE_EVERY`, `EVAL_EVERY`, `LEARNING_RATE`, `STREAM_NUM_MINIBATCHES`, `ROLLOUT_ERROR_TOLERANCE` | client hyperparameters |
+| `CLIENT_SESSION`, `LOCAL_PORT`, `LOG_PATH` | client session / tunnel port / resumable metrics dir |
+| `BRINGUP_MANUAL=1` | gpt-oss only: server bring-up is not yet automated (bf16 local-disk vLLM copy + hand-edited api script); the supervisor waits for a manually started API instead |
+| `POLL_SEC`, `SETUP_GRACE_SEC`, `HEALTH_SEC`, `STALL_SEC`, `FIRST_BEHAVIOR` | supervisor cadence (defaults 120/180/180/2400/delete) |
+
 ## Performance
 
 Measured on a v5p-16 (2 hosts × 4 chips) running the tinker-cookbook math-RL
