@@ -963,10 +963,13 @@ class TunixBackend(AbstractBackend):
                         # Swap this model's LoRA values into the shared template
                         # and run the module-passing (nnx-lifted) fns.
                         nnx.update(template.model, slot.lora_state)
-                        per_token_losses, target_logprobs, lora_grads = pass_fn(template.model, *common_args)
+                        per_token_losses, target_logprobs, lora_grads = self._with_oom_recovery(
+                            lambda: pass_fn(template.model, *common_args), "model_pass"
+                        )
                     else:
-                        per_token_losses, target_logprobs, lora_grads = pass_fn(
-                            slot.lora_state, template.rest_state, *common_args
+                        per_token_losses, target_logprobs, lora_grads = self._with_oom_recovery(
+                            lambda: pass_fn(slot.lora_state, template.rest_state, *common_args),
+                            "model_pass",
                         )
 
                 if with_grads and lora_grads is not None:
@@ -1383,6 +1386,18 @@ class TunixBackend(AbstractBackend):
             model, input_ids, positions, attn_mask, target_ids
         )
 
+    def _with_oom_recovery(self, fn, desc: str):
+        """Run fn; on RESOURCE_EXHAUSTED, evict all loaded XLA programs (their
+        resident arenas are the main same-boot HBM churn) and retry once."""
+        try:
+            return fn()
+        except Exception as e:
+            if "RESOURCE_EXHAUSTED" not in str(e):
+                raise
+            logger.warning(f"{desc}: RESOURCE_EXHAUSTED — jax.clear_caches() and retrying once")
+            jax.clear_caches()
+            return fn()
+
     def _prompt_logprobs(
         self, logps_fn: Callable, prompts: list[list[int]], sub_batch: int | None = None
     ) -> list[list[float]]:
@@ -1402,7 +1417,11 @@ class TunixBackend(AbstractBackend):
         out: list[list[float]] = []
         for start in range(0, len(prompts), sub_batch):
             chunk = prompts[start : start + sub_batch]
-            max_len = round_up_seq_len(max(len(p) for p in chunk))
+            # Coarse buckets (8192-multiples): each distinct (rows, len) shape
+            # loads a program with a resident arena; scoring hundreds of
+            # sequences across fine-grained buckets exhausts HBM.
+            raw_len = max(len(p) for p in chunk)
+            max_len = max(8192, -(-raw_len // 8192) * 8192)
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
@@ -1412,7 +1431,10 @@ class TunixBackend(AbstractBackend):
             input_ids, positions, attn_mask, targets = (
                 pad_to_fsdp(arr, shard) for arr in (input_ids, positions, attn_mask, targets)
             )
-            gathered = jax.device_get(logps_fn(input_ids, positions, attn_mask, targets))
+            gathered = self._with_oom_recovery(
+                lambda: jax.device_get(logps_fn(input_ids, positions, attn_mask, targets)),
+                "prompt_logprobs",
+            )
             for row, prompt in enumerate(chunk):
                 row_out = [0.0]
                 for t in range(1, len(prompt)):
