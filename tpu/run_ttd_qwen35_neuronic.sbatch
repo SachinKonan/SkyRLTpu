@@ -95,8 +95,17 @@ export NUM_EPOCHS="${NUM_EPOCHS:-30}"
 export TTD_ELITE_SLOTS="${TTD_ELITE_SLOTS:-2}"
 export SAVE_EVERY="${SAVE_EVERY:-10}"
 export CONTEXT_WINDOW="${CONTEXT_WINDOW:-32768}"
-# Qwen path ignores PHASE1_MAX_TOKENS (no two-phase); generation runs to the
-# renderer stop token or the remaining context.
+# Qwen path ignores PHASE1_MAX_TOKENS (no two-phase). Generation is capped so
+# prompt+completion stays under the trainer's verified ceiling: the MaxText
+# 27B fb graph on one v5p-8 host trains 24576-token sequences and OOMs at
+# 28672 (probe_train_len.py). Max observed prompt ~5k -> 16384 cap keeps the
+# worst case ~21-24.5k. Median qwen generation is ~3.6k; only the tail clips.
+export COMPLETION_MAX_TOKENS="${COMPLETION_MAX_TOKENS:-16384}"
+# KL-to-base is OFF: SamplingClient.compute_logprobs needs vLLM prompt_logprobs,
+# which the TPU backend does not implement (it crashed the EngineCore before
+# being gated off server-side). Identical for both arms, so the objective A/B
+# stays internally valid.
+export KL_PENALTY_COEF="${KL_PENALTY_COEF:-0}"
 export TTD_ADV_ESTIMATOR="${TTD_ADV_ESTIMATOR:-entropic_adaptive_beta}"
 
 export TTD_EVAL_BACKEND=local
