@@ -71,6 +71,9 @@ def start_api_server(
                 "base-model": BASE_MODEL,
                 "backend-config": '{"max_lora_adapters": 4}',
                 "database-url": f"sqlite:///{resolved_db_path}",
+                # Isolate checkpoints per server: the default /tmp/skyrl_checkpoints
+                # collides across users on shared machines.
+                "checkpoints-base": os.path.join(tmp_dir, "checkpoints"),
             }
             if overrides:
                 defaults.update(overrides)
@@ -102,9 +105,18 @@ def start_api_server(
                     process.kill()
 
 
-@pytest.fixture(scope="function")
-def api_server():
-    """Start a fresh FastAPI server for each test.
+BACKEND_SERVER_CONFIGS = {
+    "jax": {"overrides": {}, "extras": ("tinker",)},
+    "tunix": {
+        "overrides": {"backend": "tunix", "backend-config": "{}"},
+        "extras": ("tinker", "tunix"),
+    },
+}
+
+
+@pytest.fixture(scope="function", params=sorted(BACKEND_SERVER_CONFIGS), ids=sorted(BACKEND_SERVER_CONFIGS))
+def api_server(request):
+    """Start a fresh FastAPI server for each test, parametrized over backends.
 
     Function-scoped rather than module-scoped: the backend only reclaims a
     model's LoRA-adapter slot on explicit unload or stale-session cleanup
@@ -116,7 +128,13 @@ def api_server():
     the longer teardown timeout lets the lifespan shutdown reap the engine
     subprocess so it isn't orphaned across restarts.
     """
-    with start_api_server(wait_for_up=True, teardown_timeout=20.0) as server:
+    backend_config = BACKEND_SERVER_CONFIGS[request.param]
+    with start_api_server(
+        wait_for_up=True,
+        teardown_timeout=20.0,
+        overrides=backend_config["overrides"],
+        extras=backend_config["extras"],
+    ) as server:
         yield server
 
 

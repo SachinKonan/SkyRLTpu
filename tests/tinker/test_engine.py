@@ -16,12 +16,19 @@ from skyrl.tinker.engine import (
 BASE_MODEL = "trl-internal-testing/tiny-Qwen3ForCausalLM"
 
 
-def test_process_unload_model():
+BACKEND_ENGINE_CONFIGS = {
+    "jax": {"backend": "jax", "backend_config": {"max_lora_adapters": 4, "max_lora_rank": 32}},
+    "tunix": {"backend": "tunix", "backend_config": {"max_lora_rank": 32}},
+}
+
+
+@pytest.mark.parametrize("backend_params", sorted(BACKEND_ENGINE_CONFIGS), ids=sorted(BACKEND_ENGINE_CONFIGS))
+def test_process_unload_model(backend_params):
     """Test that process_unload_model removes model from backend."""
     config = EngineConfig(
         base_model=BASE_MODEL,
         checkpoints_base=AnyPath(""),
-        backend_config={"max_lora_adapters": 4, "max_lora_rank": 32},
+        **BACKEND_ENGINE_CONFIGS[backend_params],
     )
     engine = TinkerEngine(config)
     SQLModel.metadata.create_all(engine.db_engine)
