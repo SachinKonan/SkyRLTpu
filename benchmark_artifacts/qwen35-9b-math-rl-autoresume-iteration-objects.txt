@@ -1,0 +1,363 @@
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/:
+         0  2026-07-08T19:59:52Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/
+     42586  2026-07-09T14:26:44Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/eval_test.html
+    162780  2026-07-09T14:26:45Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/eval_test_logtree.json
+    190949  2026-07-09T14:26:44Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/eval_test_rollout_summaries.jsonl
+    556547  2026-07-09T14:34:54Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/train.html
+   2503589  2026-07-09T14:34:54Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/train_logtree.json
+    386607  2026-07-09T14:34:54Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000000/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000001/:
+         0  2026-07-09T02:33:56Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000001/
+    570197  2026-07-09T14:50:41Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000001/train.html
+   2514887  2026-07-09T14:50:41Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000001/train_logtree.json
+    386521  2026-07-09T14:50:41Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000001/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000002/:
+         0  2026-07-09T15:01:42Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000002/
+    571735  2026-07-09T15:05:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000002/train.html
+   2520308  2026-07-09T15:05:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000002/train_logtree.json
+    386597  2026-07-09T15:05:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000002/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000003/:
+         0  2026-07-09T15:15:03Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000003/
+    554546  2026-07-09T15:18:57Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000003/train.html
+   2499992  2026-07-09T15:18:57Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000003/train_logtree.json
+    386468  2026-07-09T15:18:57Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000003/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000004/:
+         0  2026-07-09T15:23:58Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000004/
+    545749  2026-07-09T15:27:48Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000004/train.html
+   2493593  2026-07-09T15:27:49Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000004/train_logtree.json
+    386466  2026-07-09T15:27:49Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000004/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000005/:
+         0  2026-07-09T15:34:06Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000005/
+    535351  2026-07-09T15:38:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000005/train.html
+   2482820  2026-07-09T15:38:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000005/train_logtree.json
+    386388  2026-07-09T15:38:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000005/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000006/:
+         0  2026-07-09T15:46:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000006/
+    548333  2026-07-09T15:50:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000006/train.html
+   2496615  2026-07-09T15:50:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000006/train_logtree.json
+    386598  2026-07-09T15:50:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000006/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000007/:
+         0  2026-07-09T15:55:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000007/
+    552671  2026-07-09T15:59:00Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000007/train.html
+   2501189  2026-07-09T15:59:00Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000007/train_logtree.json
+    386467  2026-07-09T15:59:00Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000007/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000008/:
+         0  2026-07-09T16:04:02Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000008/
+    565624  2026-07-09T16:07:56Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000008/train.html
+   2509712  2026-07-09T16:07:57Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000008/train_logtree.json
+    386567  2026-07-09T16:07:57Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000008/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000009/:
+         0  2026-07-09T16:14:14Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000009/
+    548686  2026-07-09T17:42:23Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000009/train.html
+   2496468  2026-07-09T17:42:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000009/train_logtree.json
+    386583  2026-07-09T17:42:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000009/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000010/:
+         0  2026-07-09T17:52:33Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000010/
+    584947  2026-07-09T17:59:30Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000010/train.html
+   2528763  2026-07-09T17:59:30Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000010/train_logtree.json
+    388535  2026-07-09T17:59:30Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000010/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000011/:
+         0  2026-07-09T18:10:35Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000011/
+    543958  2026-07-09T18:14:31Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000011/train.html
+   2491136  2026-07-09T18:14:32Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000011/train_logtree.json
+    388465  2026-07-09T18:14:32Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000011/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000012/:
+         0  2026-07-09T18:20:46Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000012/
+    527363  2026-07-09T18:25:49Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000012/train.html
+   2478776  2026-07-09T18:25:49Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000012/train_logtree.json
+    388318  2026-07-09T18:25:50Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000012/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000013/:
+         0  2026-07-09T18:35:28Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000013/
+    578357  2026-07-09T18:39:10Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000013/train.html
+   2524601  2026-07-09T18:39:10Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000013/train_logtree.json
+    388614  2026-07-09T18:39:10Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000013/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000014/:
+         0  2026-07-09T18:44:14Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000014/
+    574842  2026-07-09T18:48:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000014/train.html
+   2522123  2026-07-09T18:48:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000014/train_logtree.json
+    388486  2026-07-09T18:48:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000014/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000015/:
+         0  2026-07-09T18:56:41Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000015/
+    571129  2026-07-09T19:00:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000015/train.html
+   2518422  2026-07-09T19:00:26Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000015/train_logtree.json
+    388631  2026-07-09T19:00:26Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000015/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000016/:
+         0  2026-07-09T19:05:28Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000016/
+    557044  2026-07-09T19:09:16Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000016/train.html
+   2504418  2026-07-09T19:09:17Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000016/train_logtree.json
+    388515  2026-07-09T19:09:17Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000016/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000017/:
+         0  2026-07-09T19:15:35Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000017/
+    541705  2026-07-09T19:19:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000017/train.html
+   2493416  2026-07-09T19:19:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000017/train_logtree.json
+    388376  2026-07-09T19:19:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000017/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000018/:
+         0  2026-07-09T19:25:41Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000018/
+    532621  2026-07-10T00:48:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000018/train.html
+   2476775  2026-07-10T00:48:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000018/train_logtree.json
+    388400  2026-07-10T00:48:05Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000018/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000019/:
+         0  2026-07-10T01:04:00Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000019/
+    533507  2026-07-10T01:12:09Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000019/train.html
+   2488678  2026-07-10T01:12:09Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000019/train_logtree.json
+    388232  2026-07-10T01:12:09Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000019/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/:
+         0  2026-07-10T01:20:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/
+     40955  2026-07-10T01:24:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/eval_test.html
+    161382  2026-07-10T01:24:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/eval_test_logtree.json
+    191860  2026-07-10T01:24:20Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/eval_test_rollout_summaries.jsonl
+    554088  2026-07-10T01:28:14Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/train.html
+   2501040  2026-07-10T01:28:14Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/train_logtree.json
+    388640  2026-07-10T01:28:15Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000020/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000021/:
+         0  2026-07-10T01:33:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000021/
+    542410  2026-07-10T01:37:23Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000021/train.html
+   2492213  2026-07-10T01:37:23Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000021/train_logtree.json
+    388248  2026-07-10T01:37:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000021/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000022/:
+         0  2026-07-10T01:45:58Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000022/
+    554739  2026-07-10T01:49:54Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000022/train.html
+   2505892  2026-07-10T01:49:54Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000022/train_logtree.json
+    388488  2026-07-10T01:49:54Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000022/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000023/:
+         0  2026-07-10T01:57:26Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000023/
+    595877  2026-07-10T04:12:29Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000023/train.html
+   2535237  2026-07-10T04:12:29Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000023/train_logtree.json
+    388495  2026-07-10T04:12:30Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000023/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000024/:
+         0  2026-07-10T04:30:55Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000024/
+    551289  2026-07-10T04:34:49Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000024/train.html
+   2503645  2026-07-10T04:34:50Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000024/train_logtree.json
+    388412  2026-07-10T04:34:50Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000024/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000025/:
+         0  2026-07-10T04:42:14Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000025/
+    543549  2026-07-10T04:49:07Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000025/train.html
+   2494325  2026-07-10T04:49:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000025/train_logtree.json
+    388554  2026-07-10T04:49:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000025/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000026/:
+         0  2026-07-10T05:00:28Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000026/
+    571972  2026-07-10T05:06:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000026/train.html
+   2521029  2026-07-10T05:06:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000026/train_logtree.json
+    388385  2026-07-10T05:06:09Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000026/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000027/:
+         0  2026-07-10T05:12:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000027/
+    545801  2026-07-10T05:16:49Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000027/train.html
+   2498729  2026-07-10T05:16:50Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000027/train_logtree.json
+    388286  2026-07-10T05:16:50Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000027/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000028/:
+         0  2026-07-10T05:27:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000028/
+    559485  2026-07-10T05:31:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000028/train.html
+   2508999  2026-07-10T05:31:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000028/train_logtree.json
+    388326  2026-07-10T05:31:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000028/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000029/:
+         0  2026-07-10T05:40:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000029/
+    526394  2026-07-10T05:44:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000029/train.html
+   2478950  2026-07-10T05:44:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000029/train_logtree.json
+    388259  2026-07-10T05:44:25Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000029/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000030/:
+         0  2026-07-10T05:53:01Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000030/
+    542737  2026-07-10T06:31:18Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000030/train.html
+   2497321  2026-07-10T06:31:19Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000030/train_logtree.json
+    388391  2026-07-10T06:31:20Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000030/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000031/:
+         0  2026-07-10T06:38:51Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000031/
+    501489  2026-07-10T06:44:30Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000031/train.html
+   2461367  2026-07-10T06:44:30Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000031/train_logtree.json
+    388217  2026-07-10T06:44:30Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000031/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000032/:
+         0  2026-07-10T06:54:09Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000032/
+    553944  2026-07-10T06:58:02Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000032/train.html
+   2505761  2026-07-10T06:58:02Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000032/train_logtree.json
+    388421  2026-07-10T06:58:02Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000032/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000033/:
+         0  2026-07-10T07:03:01Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000033/
+    556276  2026-07-10T07:08:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000033/train.html
+   2505979  2026-07-10T07:08:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000033/train_logtree.json
+    388551  2026-07-10T07:08:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000033/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000034/:
+         0  2026-07-10T07:22:02Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000034/
+    549765  2026-07-10T07:25:55Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000034/train.html
+   2501461  2026-07-10T07:25:56Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000034/train_logtree.json
+    388394  2026-07-10T07:25:56Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000034/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000035/:
+         0  2026-07-10T07:30:58Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000035/
+    570718  2026-07-10T07:34:55Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000035/train.html
+   2521580  2026-07-10T07:34:55Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000035/train_logtree.json
+    388388  2026-07-10T07:34:55Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000035/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000036/:
+         0  2026-07-10T07:39:56Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000036/
+    540333  2026-07-10T07:44:01Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000036/train.html
+   2488189  2026-07-10T07:44:01Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000036/train_logtree.json
+    388269  2026-07-10T07:44:01Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000036/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000037/:
+         0  2026-07-10T07:52:50Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000037/
+    557378  2026-07-10T07:56:51Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000037/train.html
+   2508080  2026-07-10T07:56:51Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000037/train_logtree.json
+    388182  2026-07-10T07:56:51Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000037/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000038/:
+         0  2026-07-10T08:05:24Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000038/
+    520406  2026-07-10T08:09:20Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000038/train.html
+   2475530  2026-07-10T08:09:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000038/train_logtree.json
+    388473  2026-07-10T08:09:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000038/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000039/:
+         0  2026-07-10T08:14:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000039/
+    527453  2026-07-10T08:44:07Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000039/train.html
+   2481839  2026-07-10T08:44:07Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000039/train_logtree.json
+    388299  2026-07-10T08:44:08Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000039/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/:
+         0  2026-07-10T08:55:46Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/
+     39563  2026-07-10T08:58:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/eval_test.html
+    160496  2026-07-10T08:58:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/eval_test_logtree.json
+    191854  2026-07-10T08:58:03Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/eval_test_rollout_summaries.jsonl
+    573752  2026-07-10T09:03:42Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/train.html
+   2519990  2026-07-10T09:03:43Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/train_logtree.json
+    388382  2026-07-10T09:03:43Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000040/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000041/:
+         0  2026-07-10T09:11:11Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000041/
+    556446  2026-07-10T09:15:12Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000041/train.html
+   2507524  2026-07-10T09:15:12Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000041/train_logtree.json
+    388283  2026-07-10T09:15:12Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000041/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000042/:
+         0  2026-07-10T09:26:03Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000042/
+    530200  2026-07-10T09:53:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000042/train.html
+   2483126  2026-07-10T09:53:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000042/train_logtree.json
+    388323  2026-07-10T09:53:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000042/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000043/:
+         0  2026-07-10T10:03:12Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000043/
+    552767  2026-07-10T10:10:05Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000043/train.html
+   2502015  2026-07-10T10:10:06Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000043/train_logtree.json
+    388281  2026-07-10T10:10:06Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000043/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000044/:
+         0  2026-07-10T10:23:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000044/
+    559751  2026-07-10T10:27:42Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000044/train.html
+   2512954  2026-07-10T10:27:43Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000044/train_logtree.json
+    388109  2026-07-10T10:27:43Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000044/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000045/:
+         0  2026-07-10T10:34:01Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000045/
+    555432  2026-07-10T10:39:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000045/train.html
+   2507904  2026-07-10T10:39:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000045/train_logtree.json
+    388249  2026-07-10T10:39:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000045/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000046/:
+         0  2026-07-10T10:50:39Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000046/
+    533926  2026-07-10T11:21:51Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000046/train.html
+   2487943  2026-07-10T11:21:51Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000046/train_logtree.json
+    387920  2026-07-10T11:21:52Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000046/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000047/:
+         0  2026-07-10T11:33:19Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000047/
+    555893  2026-07-10T11:37:17Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000047/train.html
+   2505655  2026-07-10T11:37:17Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000047/train_logtree.json
+    388412  2026-07-10T11:37:18Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000047/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000048/:
+         0  2026-07-10T11:45:59Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000048/
+    528517  2026-07-10T12:55:31Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000048/train.html
+   2476265  2026-07-10T12:55:32Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000048/train_logtree.json
+    388064  2026-07-10T12:55:32Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000048/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000049/:
+         0  2026-07-10T13:06:53Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000049/
+    528819  2026-07-10T13:13:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000049/train.html
+   2482315  2026-07-10T13:13:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000049/train_logtree.json
+    388249  2026-07-10T13:13:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000049/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000050/:
+         0  2026-07-10T13:24:44Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000050/
+    564206  2026-07-10T13:28:37Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000050/train.html
+   2514738  2026-07-10T13:28:37Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000050/train_logtree.json
+    388186  2026-07-10T13:28:37Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000050/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000051/:
+         0  2026-07-10T13:35:57Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000051/
+    549396  2026-07-10T14:09:28Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000051/train.html
+   2503394  2026-07-10T14:09:28Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000051/train_logtree.json
+    388141  2026-07-10T14:09:28Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000051/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000052/:
+         0  2026-07-10T14:20:50Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000052/
+    537342  2026-07-10T14:28:45Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000052/train.html
+   2487956  2026-07-10T14:28:45Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000052/train_logtree.json
+    388116  2026-07-10T14:28:46Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000052/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000053/:
+         0  2026-07-10T14:39:41Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000053/
+    570788  2026-07-10T14:43:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000053/train.html
+   2516982  2026-07-10T14:43:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000053/train_logtree.json
+    387999  2026-07-10T14:43:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000053/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000054/:
+         0  2026-07-10T14:52:06Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000054/
+    533832  2026-07-10T14:56:03Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000054/train.html
+   2485743  2026-07-10T14:56:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000054/train_logtree.json
+    388202  2026-07-10T14:56:04Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000054/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000055/:
+         0  2026-07-10T15:02:20Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000055/
+    553503  2026-07-10T15:06:21Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000055/train.html
+   2501583  2026-07-10T15:06:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000055/train_logtree.json
+    388070  2026-07-10T15:06:22Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000055/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000056/:
+         0  2026-07-10T15:14:55Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000056/
+    553198  2026-07-10T15:45:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000056/train.html
+   2501591  2026-07-10T15:45:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000056/train_logtree.json
+    388329  2026-07-10T15:45:47Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000056/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000057/:
+         0  2026-07-10T16:02:01Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000057/
+    560484  2026-07-10T16:07:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000057/train.html
+   2508098  2026-07-10T16:07:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000057/train_logtree.json
+    388104  2026-07-10T16:07:40Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000057/train_rollout_summaries.jsonl
+
+gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000058/:
+         0  2026-07-10T16:15:00Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000058/
+    585473  2026-07-10T16:20:39Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000058/train.html
+   2533529  2026-07-10T16:20:39Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000058/train_logtree.json
+    388201  2026-07-10T16:20:39Z  gs://sk7524-tinker-tpu-us-east5/jobman-runs/math-qwen35-9b-180step-100605b06fb4df06/math_rl/iteration_000058/train_rollout_summaries.jsonl
+TOTAL: 245 objects, 204193049 bytes (194.73 MiB)

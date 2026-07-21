@@ -12,6 +12,7 @@ SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
 
 LOCAL_PORT="${LOCAL_PORT:-18000}"
 REMOTE_PORT="${REMOTE_PORT:-8000}"
+TINKER_API_WORKER="${TINKER_API_WORKER:-0}"
 TUNNEL_SESSION="${TUNNEL_SESSION:-skyrl-tinker-tunnel}"
 CLIENT_SESSION="${CLIENT_SESSION:-skyrl-math-rl}"
 REPLACE_CLIENT="${REPLACE_CLIENT:-0}"
@@ -27,11 +28,14 @@ GROUP_SIZE="${GROUP_SIZE:-16}"
 GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-64}"
 LEARNING_RATE="${LEARNING_RATE:-2e-5}"
 MAX_TOKENS="${MAX_TOKENS:-512}"
+MAX_TURNS="${MAX_TURNS:-1}"
 LORA_RANK="${LORA_RANK:-32}"
 MAX_STEPS="${MAX_STEPS:-180}"
 SAVE_EVERY="${SAVE_EVERY:-20}"
 EVAL_EVERY="${EVAL_EVERY:-20}"
 LOSS_FN="${LOSS_FN:-importance_sampling}"
+# >0 enables on-policy pipelined training (stream minibatches).
+STREAM_NUM_MINIBATCHES="${STREAM_NUM_MINIBATCHES:-0}"
 SEED="${SEED:-0}"
 BEHAVIOR_IF_LOG_DIR_EXISTS="${BEHAVIOR_IF_LOG_DIR_EXISTS:-delete}"
 
@@ -41,11 +45,11 @@ if [[ -z "$worker0_host" ]]; then
     gcloud alpha compute tpus tpu-vm describe "$TPU_NAME" \
       --project="$PROJECT" \
       --zone="$ZONE" \
-      --format='value(networkEndpoints[0].accessConfig.externalIp)'
+      --format="value(networkEndpoints[${TINKER_API_WORKER}].accessConfig.externalIp)"
   )"
 fi
 if [[ -z "$worker0_host" ]]; then
-  echo "Could not resolve worker0 external IP for ${TPU_NAME}" >&2
+  echo "Could not resolve API worker ${TINKER_API_WORKER} external IP for ${TPU_NAME}" >&2
   exit 1
 fi
 
@@ -55,6 +59,21 @@ log_path="${LOG_PATH:-${LOG_ROOT}/math-Qwen-Qwen3.5-9B-32rank-2e-05lr-16group-64
 client_log="${CLIENT_LOG:-${LOG_ROOT}/math-rl-qwen35-9b-${date_stamp}.log}"
 run_script="${LOG_ROOT}/run-client-qwen35-9b-${date_stamp}.sh"
 base_url="http://127.0.0.1:${LOCAL_PORT}"
+stream_arg=""
+if [[ "${STREAM_NUM_MINIBATCHES}" -gt 0 ]]; then
+  stream_arg="stream_minibatch_config.num_minibatches='${STREAM_NUM_MINIBATCHES}' stream_minibatch_config.groups_per_batch='${GROUPS_PER_BATCH}'"
+fi
+# A single failed rollout group otherwise hangs the stream-minibatch loop
+# (queue consumer waits forever for the dead group's slot).
+tolerance_arg=""
+if [[ "${ROLLOUT_ERROR_TOLERANCE:-0}" == "1" ]]; then
+  tolerance_arg="rollout_error_tolerance='True'"
+fi
+# Explicit renderer override for models the cookbook cannot auto-resolve.
+renderer_arg=""
+if [[ -n "${RENDERER_NAME:-}" ]]; then
+  renderer_arg="renderer_name='${RENDERER_NAME}'"
+fi
 cookbook_spec="tinker-cookbook[math-rl] @ file://${repo_root}/third_party/tinker-cookbook"
 
 if ! tmux has-session -t "$TUNNEL_SESSION" 2>/dev/null; then
@@ -83,11 +102,16 @@ cat > "$run_script" <<EOF
 set -euo pipefail
 
 export TINKER_API_KEY='${TINKER_API_KEY}'
+export UV_CACHE_DIR='${CLIENT_UV_CACHE_DIR:-/home/sk7524/.cache/uv-skyrl}'
 export HF_HOME='${LOCAL_HF_HOME}'
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
+if [[ '${MAX_TURNS}' == '1' && -z "\${TINKER_COOKBOOK_GROUP_COALESCE_SAMPLING:-}" ]]; then
+  export TINKER_COOKBOOK_GROUP_COALESCE_SAMPLING=1
+fi
 
 cd '${repo_root}'
 exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
+  --reinstall-package tinker-cookbook \\
   python -m tinker_cookbook.recipes.math_rl.train \\
     base_url='${base_url}' \\
     env='${ENV_NAME}' \\
@@ -96,12 +120,13 @@ exec uv run --python '${LOCAL_PYTHON}' --no-project --with '${cookbook_spec}' \\
     groups_per_batch='${GROUPS_PER_BATCH}' \\
     learning_rate='${LEARNING_RATE}' \\
     max_tokens='${MAX_TOKENS}' \\
+    max_turns='${MAX_TURNS}' \\
     lora_rank='${LORA_RANK}' \\
     max_steps='${MAX_STEPS}' \\
     save_every='${SAVE_EVERY}' \\
     eval_every='${EVAL_EVERY}' \\
     loss_fn='${LOSS_FN}' \\
-    seed='${SEED}' \\
+    ${stream_arg} ${tolerance_arg} ${renderer_arg} seed='${SEED}' \\
     log_path='${log_path}' \\
     behavior_if_log_dir_exists='${BEHAVIOR_IF_LOG_DIR_EXISTS}'
 EOF

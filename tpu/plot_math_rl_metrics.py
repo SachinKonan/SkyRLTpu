@@ -37,7 +37,7 @@ def numeric_pairs(rows: list[dict[str, Any]], key: str) -> tuple[list[int], list
     ys: list[float] = []
     for row in rows:
         value = row.get(key)
-        if isinstance(value, int | float):
+        if isinstance(value, (int, float)):
             xs.append(int(row["step"]))
             ys.append(float(value))
     return xs, ys
@@ -82,7 +82,7 @@ def main() -> None:
     keys = args.series or list(DEFAULT_SERIES)
     plotted_keys = [key for key in keys if numeric_pairs(rows, key)[1]]
     if not plotted_keys:
-        available = sorted(k for row in rows for k, v in row.items() if isinstance(v, int | float))
+        available = sorted(k for row in rows for k, v in row.items() if isinstance(v, (int, float)))
         raise SystemExit(f"No requested series found. Available numeric keys include: {available[:80]}")
 
     import matplotlib

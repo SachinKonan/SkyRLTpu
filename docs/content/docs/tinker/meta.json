@@ -7,6 +7,7 @@
     "multi_tenancy",
     "session_based_routing",
     "cookbook",
+    "tunix-backend",
     "configuration",
     "limitations"
   ]

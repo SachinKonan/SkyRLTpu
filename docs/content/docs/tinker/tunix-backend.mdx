@@ -1,0 +1,190 @@
+---
+title: Tunix Backend
+description: Training backend powered by tunix (MaxText models, qwix LoRA) with colocated vLLM inflight-LoRA sampling
+---
+
+# Tunix Backend
+
+`--backend tunix` trains qwix-LoRA adapters on [tunix](https://github.com/google/tunix)
+models behind the existing Tinker server — native flax-NNX model implementations
+(qwen3 family) or **MaxText** models via `model_source="maxtext"` (fast,
+Google-verified implementations, loaded through tunix's MaxText adapter with
+automatic HF→orbax checkpoint conversion cached on GCS).
+
+Sampling runs either through an in-process JAX generation loop (CPU tests) or a
+**colocated vLLM server with inflight LoRA updates**: each
+`save_weights_for_sampler` publishes an HF-PEFT adapter directory to the shared
+GCS mount and hot-swaps it into vLLM under a versioned name
+(unload-previous + retried load), so the sampler always serves the latest
+optimizer state without restarts.
+
+## Quickstart (colocated, v5p-16)
+
+```bash
+# Server: trainer on worker 0, vLLM on worker 1
+TPU_NAME=<v5p-16-node> TINKER_BACKEND=tunix MODEL_NAME=Qwen/Qwen3-8B \
+  TRAIN_WORKERS=0 VLLM_WORKERS=1 TRAIN_MICRO_BATCH_SIZE=32 \
+  ./tpu/start_colocated_vllm_tinker.sh
+
+# Client: on-policy pipelined math-RL (stream minibatches)
+TPU_NAME=<v5p-16-node> MODEL_NAME=Qwen/Qwen3-8B STREAM_NUM_MINIBATCHES=8 \
+  ./tpu/run_tinker_math_rl_qwen35_9b.sh
+```
+
+Key pieces this enables:
+
+- **External sampling path** (`EXTERNAL_SAMPLING=1`, default for tunix): sample
+  requests bypass the single-threaded engine loop so sampling and training run
+  concurrently on their respective hosts.
+- **Forked tpu-inference submodule** (`third_party/tpu-inference` →
+  `skyrl/v0.23.0-lora`): runtime-LoRA forwarders are committed and
+  source-installed over the `vllm-tpu` wheel — no deploy-time patching.
+- **CPU CI**: the full `tests/tinker/` suite runs against `--backend tunix`
+  (native tiny-qwen3), including cross-backend logprob parity with the JAX
+  backend and MaxText-vs-native parity.
+
+## Fire-and-forget runs
+
+Spot slices get preempted; `tpu/autoresume_run.sh` owns the whole lifecycle
+so one command survives it all — queued-resource recreation (via jobman),
+colocated bring-up, client launch, and resume-on-anything:
+
+```bash
+./tpu/autoresume_run.sh tpu/runs/qwen35-27b.env
+```
+
+This detaches a supervisor into a local tmux session (`autoresume-$RUN_NAME`,
+log at `/home/sk7524/skyrl-runs/autoresume-$RUN_NAME.log`) that loops:
+delete SUSPENDED/FAILED queued-resources and `jobman create` a new one, wait
+for READY + ssh, run `start_colocated_vllm_tinker.sh`, then launch the RL
+client. The very first launch uses `BEHAVIOR_IF_LOG_DIR_EXISTS=delete`; every
+launch after that (including after a watcher restart) resumes the same
+`LOG_PATH` from the latest checkpoint. A health loop kills and relaunches the
+client if the node disappears, the client dies early, or `metrics.jsonl`
+stops moving; when metrics reach `MAX_STEPS-1` the supervisor exits cleanly.
+
+Each run is described by an env file under `tpu/runs/` (`qwen35-27b.env`,
+`gemma4-31b.env`, `gptoss-20b.env`, `gptoss-20b-attnonly.env`) that sets:
+
+| Knob | Meaning |
+|---|---|
+| `RUN_NAME`, `TPU_NAME`, `JOBMAN_YAML` | identity; yaml copies live in `tpu/runs/yamls/` |
+| `MODEL_NAME`, `TUNIX_MAXTEXT_MODEL_NAME`, `TUNIX_MAXTEXT_PIP_SPEC`, `TRAIN_MICRO_BATCH_SIZE`, `VLLM_EXTRA_ARGS` | server bring-up (forwarded to the colocated launcher) |
+| `RENDERER_NAME`, `GROUP_SIZE`, `GROUPS_PER_BATCH`, `MAX_TOKENS`, `LORA_RANK`, `MAX_STEPS`, `SAVE_EVERY`, `EVAL_EVERY`, `LEARNING_RATE`, `STREAM_NUM_MINIBATCHES`, `ROLLOUT_ERROR_TOLERANCE` | client hyperparameters |
+| `CLIENT_SESSION`, `LOCAL_PORT`, `LOG_PATH` | client session / tunnel port / resumable metrics dir |
+| `BRINGUP_MANUAL=1` | gpt-oss only: server bring-up is not yet automated (bf16 local-disk vLLM copy + hand-edited api script); the supervisor waits for a manually started API instead |
+| `POLL_SEC`, `SETUP_GRACE_SEC`, `HEALTH_SEC`, `STALL_SEC`, `FIRST_BEHAVIOR` | supervisor cadence (defaults 120/180/180/2400/delete) |
+
+### Two supervision options
+
+The repo carries two complementary autoresume flows — pick per deployment:
+
+- **Per-machine resumable autostart** (from the preemption-safe resumable
+  runs work): `runs/math_rl/autostart_math_rl_qwen35_9b_v5p32_r3.sh` is
+  installed on the TPU VM itself and re-launched by jobman on every
+  (re)creation; it rebuilds the environment from a pinned bundle and resumes
+  from blocking rolling checkpoints. A simulated-preemption endpoint
+  (`SKYRL_ENABLE_PREEMPT_ENDPOINT`) lets you exercise the resume path in
+  tests (`tests/tinker/test_preempt_endpoint.py`).
+- **Per-run fire-and-forget supervisor**: `tpu/autoresume_run.sh` (above)
+  runs off-TPU, owns queued-resource recreation via jobman, colocated
+  bring-up, and client relaunch. It composes with jobman rather than
+  replacing it, and is what the current multi-model runs use.
+
+## Performance
+
+Measured on a v5p-16 (2 hosts × 4 chips) running the tinker-cookbook math-RL
+recipe with Qwen/Qwen3-8B, LoRA rank 32, 64 groups × 16 samples × 512 max
+tokens per step (1024 rollouts/step).
+
+### Optimization arc — step wall time per change
+
+| Change | s/step | Speedup |
+|---|---|---|
+| Initial (sync loop, `train_micro_batch_size=1→8`) | ~330 | — |
+| `train_micro_batch_size=32` + direct-publish adapter sync (tar round-trips through GCS removed) | ~290 | 1.14× |
+| **On-policy pipelined RL** (external sampling path + stream minibatches) | **~210 (3.5 min)** | **1.57×** |
+
+The pipelined mode is mathematically identical to the sync loop: all rollouts
+of a step come from the same policy version, gradients accumulate across
+streamed `forward_backward` calls, and a single `optim_step` fires per batch.
+KL(sampler‖trainer) stayed flat at 0.03–0.08 for the entire 75-step
+validation run — the inflight-adapter serving tracks the trainer faithfully.
+
+### Time per stage (average step = 3.5 min)
+
+| Stage | Time | Share | Notes |
+|---|---|---|---|
+| `forward_backward` waves | ~130s | 62% | paces the step; **sampling (~95s) runs concurrently inside this window** |
+| Adapter sync (PEFT export → GCS → vLLM load) | ~45s | 21% | serialized, pure I/O |
+| Scheduling slack / stream tails | ~25–35s | ~15% | engine poll cadence + last-minibatch tail |
+| `optim_step` | ~0.1s | ~0% | applies pre-accumulated LoRA gradients |
+| Eval + checkpoint steps (every 20) | +50s | — | held-out eval + persistent save |
+
+### Utilization per host (steady state, per chip of 95.7 GB HBM)
+
+| | TensorCore | Mem bandwidth | HBM used | Duty cycle |
+|---|---|---|---|---|
+| Trainer (worker 0, fb waves) | 15–21% mean, ~28% peak | 13% / 30% peak | 60–61 GB (63%) | 52–75% |
+| vLLM (worker 1, decode) | 1.7% mean, 5.6% peak | 5.5% / 13.5% peak | 96.7 GB (KV prealloc) | 83% while sampling |
+
+Nothing is FLOP-bound: trainer time is dominated by the request/result
+pipeline, decode by its intrinsic memory-boundedness. Known levers beyond
+3.5 min/step: `max_steps_off_policy=1` async (~150s/step, bounded 1-step
+staleness under the existing importance-sampling loss) and in-place adapter
+reload in the tpu-inference fork (sync 45s → ~10s).
+
+### Validation (math-RL, Qwen3-8B cold start, 180 steps)
+
+| Held-out eval | step 0 | step 20 | step 40 | step 60 | step 80 | step 100 | step 140 | step 179 |
+|---|---|---|---|---|---|---|---|---|
+| test reward | −0.088 | −0.057 | +0.132 | +0.444 | +0.585 | +0.712 | +0.747 | **+0.758** |
+| test correct | 1.2% | 4.2% | 22.8% | 52.6% | 64.8% | 75.0% | 76.4% | **77.4%** |
+
+Train reward reached +0.78 (best, step 130) with flat sampler/trainer KL
+throughout — surpassing the Qwen3.5-9B reference run's final value (+0.394 at
+step 74) before step 80 despite the weaker base model. The run survived a spot
+preemption: it resumed from the step-60 GCS checkpoint on a freshly created
+machine and continued to completion (adapter export, HTTP push, and optimizer
+state all restored bit-exact; the bf16 npz round-trip and adapter-extraction
+fixes this required are part of this branch).
+
+### Validation (math-RL, Qwen3.5-27B dense via forked MaxText, 180 steps)
+
+Qwen3.5 dense support (hybrid gated-DeltaNet + full attention) is added by our
+MaxText fork (`SachinKonan/maxtext@skyrl/qwen35-dense`): dense-MLP branch in
+the qwen3_5 decoder, a `qwen3.5-27b.yml` config, and converter mapping. LoRA
+(rank 32) targets the full-attention q/k/v/o and dense MLP; GDN internals are
+excluded. Adapters ship as standard HF-PEFT through vLLM's native LoRA path —
+no merge machinery needed for dense models.
+
+| Held-out eval | step 0 | step 20 | step 40 | step 60 | step 80 | step 100 | step 120 | step 140 | step 160 | step 179 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| test correct | 37.2% | 73.4% | 84.8% | 85.6% | 86.4% | 83.2% | 86.0% | **87.0%** | 86.2% | 86.4% |
+
+The strongest run of the project: peak 87.0% at step 140, finishing at 86.4%
+with train-batch correctness still climbing (89.1% at step 179) and no
+collapse — sampler/trainer KL stayed in [1e-4, 5.3e-4] for all 180 steps
+(mean 2.6e-4). Step-0 sampler/trainer KL = 0.00017 — the cleanest parity of any run — after
+three fork fixes found by a three-way logprob parity probe and per-layer
+bisection against HF `output_hidden_states`. Headline fix: the pure-NNX
+decoder's final norm used plain RMSNorm where Qwen3.5 requires the
+zero-centered form ((1+w)·x̂), a flat ~2 nats/token trainer-vs-sampler
+divergence that per-layer comparison could not see (HF's last hidden state is
+post-norm). Also fixed: mRoPE must be disabled for text-only (MaxText's mrope
+rotates the full head dim, ignoring `partial_rotary_factor`), and the qwix
+trace batch must divide the fsdp mesh for GDN's `shard_map`. The default
+thinking renderer burns the whole 512-token budget inside `<think>`; use
+`qwen3_5_disable_thinking` for short-form RL.
+
+## Limitations
+
+- Single train host (multi-host trainer is future work; the colocated v5p-16
+  split — 1 train host + 1 vLLM host — needs none).
+- One LoRA rank per template is exact; multi-tenant fused batching
+  (tx-style stacked adapters) is not implemented — tenants execute grouped.
+- MaxText requires `pure_nnx=true` decoders; sequence lengths round to the
+  512-token attention block and batches pad to the device count (handled
+  internally).
+- vLLM TPU rejects per-request seeds and greedy sampling with `n>1`
+  (handled by the sampling client).

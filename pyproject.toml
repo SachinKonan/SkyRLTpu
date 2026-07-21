@@ -69,6 +69,20 @@ jax = [
     "optax>=0.2.5",
 ]
 
+# Dependencies for --backend="tunix" (Google's JAX post-training library).
+# MaxText (model_source="maxtext") and vllm-tpu are manual installs on TPU.
+tunix = [
+    "skyrl[jax]",
+    "google-tunix>=0.1.7",
+    "qwix>=0.1.6",
+    "transformers",
+    "sentencepiece",
+    # gpt-oss tokenizers are tiktoken-based (o200k)
+    "tiktoken",
+    "huggingface_hub",
+    "safetensors",
+]
+
 skyrl-train = [
     "loguru",
     "tqdm",
