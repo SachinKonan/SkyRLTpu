@@ -1306,27 +1306,45 @@ class TunixBackend(AbstractBackend):
         return tokens[:end], logprobs[:end], stop_reason
 
     def _pure_logps_fn(self, graphdef, lora_state, rest_state) -> Callable:
-        """log-softmax forward for native templates (jitted pure fn)."""
+        """Target-gathered log-softmax forward for native templates (jitted).
 
-        def fwd(lora_state, rest_state, input_ids, positions, attn_mask):
+        Returns fn(input_ids, positions, attn_mask, target_ids) -> [B, L]
+        logprobs of target_ids; the gather lives inside the jit so the full
+        [B, L, V] log-softmax never escapes the program.
+        """
+
+        def fwd(lora_state, rest_state, input_ids, positions, attn_mask, target_ids):
             model = nnx.merge(graphdef, lora_state, rest_state)
             hidden, _ = model(input_ids, positions, None, attn_mask, skip_lm_head=True)
             logits = model.compute_final_logits(hidden)
-            return jax.nn.log_softmax(logits, axis=-1)
+            logps = jax.nn.log_softmax(logits, axis=-1)
+            return jnp.take_along_axis(logps, target_ids[..., None], axis=-1)[..., 0]
 
         jitted = fwd if self.config.enforce_eager else jax.jit(fwd)
-        return lambda input_ids, positions, attn_mask: jitted(lora_state, rest_state, input_ids, positions, attn_mask)
+        return lambda input_ids, positions, attn_mask, target_ids: jitted(
+            lora_state, rest_state, input_ids, positions, attn_mask, target_ids
+        )
 
-    @staticmethod
-    def _module_logps_fn(model: nnx.Module) -> Callable:
-        """log-softmax forward for module-passing (MaxText) templates, eager."""
+    def _module_logps_fn(self, model: nnx.Module) -> Callable:
+        """Target-gathered log-softmax forward for MaxText templates.
 
-        def fwd(input_ids, positions, attn_mask):
-            hidden, _ = model(input_ids, positions, None, attn_mask, skip_lm_head=True)
+        Must be nnx.jit-lifted, not eager: the qwen3.5 delta-rule attention
+        shard_maps the batch axis over the fsdp mesh, and only the jitted path
+        handles batch sizes that don't divide the mesh (the eager call fails
+        with 'axis sizes not evenly divisible'). Same [B, L] contract as
+        _pure_logps_fn.
+        """
+
+        def fwd(model, input_ids, positions, attention_mask, target_ids):
+            hidden, _ = model(input_ids, positions, None, attention_mask, skip_lm_head=True)
             logits = model.compute_final_logits(hidden)
-            return jax.nn.log_softmax(logits, axis=-1)
+            logps = jax.nn.log_softmax(logits, axis=-1)
+            return jnp.take_along_axis(logps, target_ids[..., None], axis=-1)[..., 0]
 
-        return fwd
+        jitted = fwd if self.config.enforce_eager else nnx.jit(fwd)
+        return lambda input_ids, positions, attn_mask, target_ids: jitted(
+            model, input_ids, positions, attn_mask, target_ids
+        )
 
     def _prompt_logprobs(
         self, logps_fn: Callable, prompts: list[list[int]], sub_batch: int = 2
@@ -1345,17 +1363,11 @@ class TunixBackend(AbstractBackend):
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
-            # targets[t] = input_ids[t+1]: gather logps[t, targets[t]] on
-            # device so only [B, L] is ever materialized on the host. The
-            # wrapped final column is never read (loop stops at len(prompt)-1).
+            # targets[t] = input_ids[t+1]: logps_fn gathers logps[t, targets[t]]
+            # inside its jitted program, so only [B, L] ever reaches the host.
+            # The wrapped final column is never read (loop stops at len-1).
             targets = np.roll(input_ids, -1, axis=1)
-            gathered = jax.device_get(
-                jnp.take_along_axis(
-                    logps_fn(input_ids, positions, attn_mask),
-                    jnp.asarray(targets)[..., None],
-                    axis=-1,
-                )[..., 0]
-            )
+            gathered = jax.device_get(logps_fn(input_ids, positions, attn_mask, targets))
             for row, prompt in enumerate(chunk):
                 row_out = [0.0]
                 for t in range(1, len(prompt)):
