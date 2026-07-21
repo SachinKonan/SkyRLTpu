@@ -75,6 +75,22 @@ Each run is described by an env file under `tpu/runs/` (`qwen35-27b.env`,
 | `BRINGUP_MANUAL=1` | gpt-oss only: server bring-up is not yet automated (bf16 local-disk vLLM copy + hand-edited api script); the supervisor waits for a manually started API instead |
 | `POLL_SEC`, `SETUP_GRACE_SEC`, `HEALTH_SEC`, `STALL_SEC`, `FIRST_BEHAVIOR` | supervisor cadence (defaults 120/180/180/2400/delete) |
 
+### Two supervision options
+
+The repo carries two complementary autoresume flows — pick per deployment:
+
+- **Per-machine resumable autostart** (from the preemption-safe resumable
+  runs work): `runs/math_rl/autostart_math_rl_qwen35_9b_v5p32_r3.sh` is
+  installed on the TPU VM itself and re-launched by jobman on every
+  (re)creation; it rebuilds the environment from a pinned bundle and resumes
+  from blocking rolling checkpoints. A simulated-preemption endpoint
+  (`SKYRL_ENABLE_PREEMPT_ENDPOINT`) lets you exercise the resume path in
+  tests (`tests/tinker/test_preempt_endpoint.py`).
+- **Per-run fire-and-forget supervisor**: `tpu/autoresume_run.sh` (above)
+  runs off-TPU, owns queued-resource recreation via jobman, colocated
+  bring-up, and client relaunch. It composes with jobman rather than
+  replacing it, and is what the current multi-model runs use.
+
 ## Performance
 
 Measured on a v5p-16 (2 hosts × 4 chips) running the tinker-cookbook math-RL
