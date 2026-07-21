@@ -146,6 +146,8 @@ class ExternalInferenceClient:
             "stream": False,
             "return_token_ids": True,
         }
+        if request.prompt_logprobs:
+            payload["prompt_logprobs"] = 1
 
         # Pass X-Session-ID for deterministic routing
         headers = {}
@@ -168,4 +170,9 @@ class ExternalInferenceClient:
                 )
             )
 
-        return types.SampleOutput(sequences=sequences, prompt_logprobs=[])
+        prompt_lps: list[float] | None = None
+        if request.prompt_logprobs:
+            from skyrl.backends.vllm_sampling import VllmSamplingClient
+
+            prompt_lps = VllmSamplingClient._prompt_logprobs_from_response(result, prompt_tokens)
+        return types.SampleOutput(sequences=sequences, prompt_logprobs=prompt_lps if prompt_lps is not None else [])
