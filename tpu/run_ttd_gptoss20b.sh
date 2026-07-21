@@ -71,8 +71,12 @@ export WANDB_PROJECT="${WANDB_PROJECT:-ttt-discover-gptoss20b}"
 export UV_PROJECT_ENVIRONMENT="${discover_venv}"
 
 # Drop any stale TINKER_API_KEY from the login/tmux env so .env is authoritative
-# (discover's load_dotenv does not override an already-set var).
-unset TINKER_API_KEY
+# (discover's load_dotenv does not override an already-set var). EXCEPTION: when
+# TINKER_BASE_URL points at a self-hosted SkyRL tinker server, the exported
+# dummy key must survive — the real prod key in .env is wrong for it.
+if [[ -z "${TINKER_BASE_URL:-}" ]]; then
+  unset TINKER_API_KEY
+fi
 
 cd "$discover_root"
 if [[ "${TTD_DISCOVER_SYNC:-1}" != "0" ]]; then
