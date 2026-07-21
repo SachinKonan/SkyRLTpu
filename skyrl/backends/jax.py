@@ -41,7 +41,7 @@ from transformers import AutoConfig, AutoTokenizer
 from skyrl.backends.backend import AbstractBackend
 from skyrl.backends.renderer import render_model_input
 from skyrl.backends.utils import pad, pad_batch, pad_to_fsdp
-from skyrl.backends.vllm_sampling import VllmSamplingClient
+from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
 from skyrl.tinker.loss_fns import LOSS_FUNCTIONS, LossFnConfig
 from skyrl.tinker.types import LOSS_TYPES
@@ -93,6 +93,20 @@ class JaxBackendConfig(BaseModel, extra="forbid"):
         default="/v1/load_lora_adapter",
         description="vLLM endpoint used to load LoRA adapters. Use /skyrl/v1/load_lora_adapter for the SkyRL custom vLLM server.",
     )
+    vllm_lora_unload_endpoint: str = Field(
+        default="/v1/unload_lora_adapter",
+        description="vLLM endpoint used to unload the previous LoRA adapter version for a model before loading a new checkpoint.",
+    )
+    vllm_lora_load_retries: int = Field(
+        default=3,
+        ge=1,
+        description="Number of attempts for each vLLM LoRA load request.",
+    )
+    vllm_lora_load_retry_sleep_sec: float = Field(
+        default=2.0,
+        ge=0.0,
+        description="Sleep interval between vLLM LoRA load retries.",
+    )
     vllm_request_timeout_sec: float = Field(
         default=300.0,
         description="Timeout in seconds for vLLM HTTP requests.",
@@ -100,6 +114,21 @@ class JaxBackendConfig(BaseModel, extra="forbid"):
     vllm_max_concurrent_requests: int = Field(
         default=64,
         description="Maximum number of concurrent vLLM completion requests issued by the JAX backend.",
+    )
+    vllm_client_side_round_robin: bool = Field(
+        default=False,
+        description=(
+            "Round-robin completion requests across comma-separated vLLM URLs in the SkyRL client. "
+            "Leave disabled when vLLM is running a data-parallel/Ray endpoint that owns request routing."
+        ),
+    )
+    vllm_group_completions: bool = Field(
+        default=True,
+        description=(
+            "Issue one grouped vLLM completion request (n=num_samples) per sample request "
+            "instead of one request per sample. All samples of a request share a prompt, so "
+            "this lets vLLM batch a group behind a single shared prefill."
+        ),
     )
     max_lora_adapters: int = Field(default=32, description="Maximum number of LoRA adapters")
     max_lora_rank: int = Field(default=32, description="Maximum LoRA rank")
@@ -368,8 +397,12 @@ class JaxBackendImpl(AbstractBackend):
                     api_key=config.vllm_api_key,
                     lora_base_dir=config.vllm_lora_base_dir,
                     lora_load_endpoint=config.vllm_lora_load_endpoint,
+                    lora_unload_endpoint=config.vllm_lora_unload_endpoint,
+                    lora_load_retries=config.vllm_lora_load_retries,
+                    lora_load_retry_sleep_sec=config.vllm_lora_load_retry_sleep_sec,
                     request_timeout_sec=config.vllm_request_timeout_sec,
                     max_concurrent_requests=config.vllm_max_concurrent_requests,
+                    client_side_round_robin=config.vllm_client_side_round_robin,
                 )
                 logger.info(
                     "Configured JAX backend sampling through vLLM at %s with model=%s",
@@ -978,6 +1011,9 @@ class JaxBackendImpl(AbstractBackend):
             else:
                 model_names.append(self.vllm_client.model_name)
 
+        if self.config.vllm_group_completions:
+            return self._sample_vllm_grouped(prepared_batch, all_input_ids, model_names)
+
         all_sequences, all_prompt_logprobs = self.vllm_client.sample_many(
             all_input_ids,
             prepared_batch.all_sampling_params,
@@ -994,6 +1030,48 @@ class JaxBackendImpl(AbstractBackend):
             results[request_id] = types.SampleOutput(
                 sequences=[all_sequences[i] for i in range(start_idx, end_idx)],
                 prompt_logprobs=prompt_logprobs,
+            )
+        return results
+
+    def _sample_vllm_grouped(
+        self,
+        prepared_batch: types.PreparedSampleBatch,
+        all_input_ids: list[list[int]],
+        model_names: list[str],
+    ) -> dict[str, types.SampleOutput | types.ErrorResponse]:
+        """Sample via one grouped ``n=num_samples`` vLLM request per sample request.
+
+        Each entry in a request's slice is a copy of the same prompt, sampling
+        params, model, and routing session (they differ only by a per-sample
+        seed that the vLLM path does not forward), so the whole slice collapses
+        into a single vLLM completion request returning ``num_samples`` sequences.
+        """
+        groups: list[GroupedCompletion] = []
+        group_meta: list[tuple[str, bool]] = []
+        for request_id, _, start_idx, end_idx, prompt_logprobs_requested in prepared_batch.request_batch_slices:
+            groups.append(
+                GroupedCompletion(
+                    prompt_ids=all_input_ids[start_idx],
+                    sampling_params=prepared_batch.all_sampling_params[start_idx],
+                    model_name=model_names[start_idx],
+                    n=end_idx - start_idx,
+                    session_id=prepared_batch.all_session_ids[start_idx],
+                )
+            )
+            group_meta.append((request_id, prompt_logprobs_requested))
+
+        group_sequences, group_prompt_logprobs = self.vllm_client.sample_groups(
+            groups,
+            prompt_logprobs=prepared_batch.needs_prompt_logprobs,
+        )
+
+        results: dict[str, types.SampleOutput | types.ErrorResponse] = {}
+        for (request_id, prompt_logprobs_requested), sequences, prompt_lps in zip(
+            group_meta, group_sequences, group_prompt_logprobs
+        ):
+            results[request_id] = types.SampleOutput(
+                sequences=sequences,
+                prompt_logprobs=prompt_lps if prompt_logprobs_requested else None,
             )
         return results
 

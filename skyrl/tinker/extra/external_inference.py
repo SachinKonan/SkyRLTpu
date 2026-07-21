@@ -1,4 +1,6 @@
 import asyncio
+import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -26,15 +28,25 @@ def _extract_checkpoint_sync(checkpoint_path: AnyPath, target_dir: Path) -> None
     """
     target_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    # Extract the checkpoint if it doesn't already exist
-    if not target_dir.exists():
+    if target_dir.exists():
+        return
+
+    # The unpack tempdir usually lives on a different filesystem than the
+    # lora dir (e.g. /tmp vs a GCS FUSE mount), so a direct rename raises
+    # EXDEV. Copy into a same-directory staging path, then rename in place.
+    staging = target_dir.parent / f".{target_dir.name}.staging-{os.getpid()}-{os.urandom(4).hex()}"
+    shutil.rmtree(staging, ignore_errors=True)
+    try:
+        with download_and_unpack(checkpoint_path) as extracted_path:
+            shutil.copytree(extracted_path, staging)
         try:
-            with download_and_unpack(checkpoint_path) as extracted_path:
-                extracted_path.rename(target_dir)
-        except FileExistsError:
-            # This could happen if two processes try to download the file.
-            # In that case the other process won the race and created target_dir.
-            pass
+            staging.rename(target_dir)
+        except (FileExistsError, OSError):
+            # Another process won the race and created target_dir.
+            if not target_dir.exists():
+                raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 class ExternalInferenceClient:
@@ -46,6 +58,12 @@ class ExternalInferenceClient:
         self.checkpoints_base = engine_config.checkpoints_base
         self.lora_base_dir = engine_config.external_inference_lora_base
         self.db_engine = db_engine
+        # Adapter names already extracted this process — a sampling burst is
+        # hundreds of concurrent requests for the same checkpoint, and each
+        # gcsfuse stat/unpack is expensive. The per-name lock makes extraction
+        # single-flight: exactly one request unpacks, the rest wait on it.
+        self._extracted_adapters: set[str] = set()
+        self._extract_locks: dict[str, asyncio.Lock] = {}
 
     async def call_and_store_result(
         self,
@@ -108,13 +126,18 @@ class ExternalInferenceClient:
             checkpoint_path = self.checkpoints_base / model_id / "sampler_weights" / f"{checkpoint_id}.tar.gz"
             target_dir = self.lora_base_dir / model_name
 
-            await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
+            if model_name not in self._extracted_adapters:
+                async with self._extract_locks.setdefault(model_name, asyncio.Lock()):
+                    if model_name not in self._extracted_adapters:
+                        await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
+                        self._extracted_adapters.add(model_name)
 
         payload = {
             "model": model_name,
             "prompt": prompt_tokens,
             "n": request.num_samples,
-            "seed": request.sampling_params.seed,
+            # No per-request seed: the vLLM TPU (tpu-inference) backend rejects
+            # it with "JAX does not support per-request seed".
             "max_tokens": request.sampling_params.max_tokens,
             "temperature": request.sampling_params.temperature,
             "top_p": request.sampling_params.top_p,
