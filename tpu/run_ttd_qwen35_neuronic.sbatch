@@ -111,11 +111,11 @@ export CONTEXT_WINDOW="${CONTEXT_WINDOW:-32768}"
 # (~17.5k, arena ~40G) inside the churned budget. Median qwen generation is
 # ~3.6k; only the tail clips.
 export COMPLETION_MAX_TOKENS="${COMPLETION_MAX_TOKENS:-12288}"
-# KL-to-base is OFF: SamplingClient.compute_logprobs needs vLLM prompt_logprobs,
-# which the TPU backend does not implement (it crashed the EngineCore before
-# being gated off server-side). Identical for both arms, so the objective A/B
-# stays internally valid.
-export KL_PENALTY_COEF="${KL_PENALTY_COEF:-0}"
+# KL-to-base at the canonical 0.1: compute_logprobs is served natively on the
+# TRAINER chips (api routes prompt_logprobs sample requests to the engine;
+# tunix backend scores them with an on-device gather). The vLLM path never
+# sees prompt_logprobs (it kills that backend's EngineCore).
+export KL_PENALTY_COEF="${KL_PENALTY_COEF:-0.1}"
 export TTD_ADV_ESTIMATOR="${TTD_ADV_ESTIMATOR:-entropic_adaptive_beta}"
 
 export TTD_EVAL_BACKEND=local

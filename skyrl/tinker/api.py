@@ -1205,11 +1205,16 @@ async def asample(request: SampleRequest, req: Request, session: AsyncSession = 
         # Validate that the checkpoint exists and is ready
         await validate_checkpoint(req, model_id, checkpoint_id, types.CheckpointType.SAMPLER, session)
 
+    # prompt_logprobs (SamplingClient.compute_logprobs) stays on the engine's
+    # native path: the trainer chips have a real scoring forward, while the
+    # external vLLM TPU backend cannot serve prompt_logprobs (v0.23 torchax
+    # kills its EngineCore on the parameter).
+    route_external = (
+        req.app.state.external_inference_client is not None and not request.prompt_logprobs
+    )
     request_id = await create_future(
         session=session,
-        request_type=(
-            types.RequestType.EXTERNAL if req.app.state.external_inference_client else types.RequestType.SAMPLE
-        ),
+        request_type=(types.RequestType.EXTERNAL if route_external else types.RequestType.SAMPLE),
         model_id=model_id,
         request_data=types.SampleInput(
             base_model=base_model,
@@ -1225,7 +1230,7 @@ async def asample(request: SampleRequest, req: Request, session: AsyncSession = 
 
     await session.commit()
 
-    if req.app.state.external_inference_client:
+    if route_external:
         asyncio.create_task(
             req.app.state.external_inference_client.call_and_store_result(
                 request_id, request, model_id, checkpoint_id, base_model=base_model

@@ -1046,7 +1046,12 @@ class TunixBackend(AbstractBackend):
     ) -> dict[str, types.SampleOutput | types.ErrorResponse]:
         if not prepared_batch.all_model_inputs:
             return {}
-        if self.config.inference_backend == "vllm":
+        # prompt_logprobs batches (compute_logprobs) always run natively on the
+        # trainer chips: the vLLM TPU backend cannot serve prompt_logprobs, and
+        # the API only routes such requests to the engine. Mixed batches cannot
+        # occur in that deployment (plain sampling never reaches the engine
+        # when an external client is configured).
+        if self.config.inference_backend == "vllm" and not prepared_batch.needs_prompt_logprobs:
             return self._sample_vllm(prepared_batch)
         return self._sample_native(prepared_batch)
 
@@ -1103,17 +1108,30 @@ class TunixBackend(AbstractBackend):
                 prompts = [all_input_ids[i] for i in chunk]
                 params = [prepared_batch.all_sampling_params[i] for i in chunk]
                 needs_plp = prepared_batch.needs_prompt_logprobs
+                # compute_logprobs requests (prompt_logprobs with max_tokens<=1)
+                # only consume the prompt scores; skip the decode entirely
+                # rather than running a padded full-batch generation for tokens
+                # the client throws away.
+                plp_only = needs_plp and all(p.max_tokens is not None and p.max_tokens <= 1 for p in params)
 
                 if template.kind == "maxtext":
                     nnx.update(template.model, lora_state)
-                    gen = self._generate_eager(template.model, prompts, params)
+                    gen = (
+                        self._plp_dummy_sequences(len(chunk))
+                        if plp_only
+                        else self._generate_eager(template.model, prompts, params)
+                    )
                     plps = (
                         self._prompt_logprobs(self._module_logps_fn(template.model), prompts)
                         if needs_plp
                         else [None] * len(chunk)
                     )
                 else:
-                    gen = self._generate(template.graphdef, lora_state, template.rest_state, prompts, params)
+                    gen = (
+                        self._plp_dummy_sequences(len(chunk))
+                        if plp_only
+                        else self._generate(template.graphdef, lora_state, template.rest_state, prompts, params)
+                    )
                     plps = (
                         self._prompt_logprobs(
                             self._pure_logps_fn(template.graphdef, lora_state, template.rest_state), prompts
@@ -1310,20 +1328,47 @@ class TunixBackend(AbstractBackend):
 
         return fwd
 
-    def _prompt_logprobs(self, logps_fn: Callable, prompts: list[list[int]]) -> list[list[float]]:
-        """Per-token logprobs of the prompt tokens themselves (first token gets 0.0)."""
-        max_len = round_up_seq_len(max(len(p) for p in prompts))
-        input_ids = pad_batch(prompts, max_len, np.int32)
-        positions, attn_mask = self._positions_and_masks(prompts, max_len)
+    def _prompt_logprobs(
+        self, logps_fn: Callable, prompts: list[list[int]], sub_batch: int = 2
+    ) -> list[list[float]]:
+        """Per-token logprobs of the prompt tokens themselves (first token gets 0.0).
 
-        logps = jax.device_get(logps_fn(input_ids, positions, attn_mask))
-        out = []
-        for row, prompt in enumerate(prompts):
-            row_out = [0.0]
-            for t in range(1, len(prompt)):
-                row_out.append(float(logps[row, t - 1, prompt[t]]))
-            out.append(row_out)
+        The full [B, L, V] log-softmax at long context is tens of GB, so it is
+        gathered down to [B, L] on device before transfer, and prompts are
+        processed in small sub-batches to bound the transient logits tensor
+        (KL-scoring batches arrive hundreds of sequences at a time).
+        """
+        out: list[list[float]] = []
+        for start in range(0, len(prompts), sub_batch):
+            chunk = prompts[start : start + sub_batch]
+            max_len = round_up_seq_len(max(len(p) for p in chunk))
+            input_ids = pad_batch(chunk, max_len, np.int32)
+            positions, attn_mask = self._positions_and_masks(chunk, max_len)
+
+            # targets[t] = input_ids[t+1]: gather logps[t, targets[t]] on
+            # device so only [B, L] is ever materialized on the host. The
+            # wrapped final column is never read (loop stops at len(prompt)-1).
+            targets = np.roll(input_ids, -1, axis=1)
+            gathered = jax.device_get(
+                jnp.take_along_axis(
+                    logps_fn(input_ids, positions, attn_mask),
+                    jnp.asarray(targets)[..., None],
+                    axis=-1,
+                )[..., 0]
+            )
+            for row, prompt in enumerate(chunk):
+                row_out = [0.0]
+                for t in range(1, len(prompt)):
+                    row_out.append(float(gathered[row, t - 1]))
+                out.append(row_out)
         return out
+
+    @staticmethod
+    def _plp_dummy_sequences(n: int) -> list["types.GeneratedSequence"]:
+        """Empty sequences for compute_logprobs-style requests (no decode ran)."""
+        return [
+            types.GeneratedSequence(tokens=[], logprobs=[], stop_reason="length") for _ in range(n)
+        ]
 
     # ----- vLLM sampling (mirrors JaxBackend; the client is backend-agnostic) -----
 
