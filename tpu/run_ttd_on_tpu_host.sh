@@ -35,8 +35,14 @@ export NUM_EPOCHS="${NUM_EPOCHS:-30}"
 export TTD_ELITE_SLOTS="${TTD_ELITE_SLOTS:-2}"
 export SAVE_EVERY="${SAVE_EVERY:-5}"
 export CONTEXT_WINDOW="${CONTEXT_WINDOW:-32768}"
-# Trainer HBM ceiling (see probe_train_len.py + churn note in the sbatch).
-export COMPLETION_MAX_TOKENS="${COMPLETION_MAX_TOKENS:-12288}"
+# Thinking budget, exact gpt-oss structure: phase 1 = prompt+thinking capped
+# at PHASE1_MAX_TOKENS; on budget exhaustion </think> is forced and the
+# answer gets the remaining context (QwenTwoPhaseTokenCompleter).
+export TTD_QWEN_TWO_PHASE="${TTD_QWEN_TWO_PHASE:-1}"
+export PHASE1_MAX_TOKENS="${PHASE1_MAX_TOKENS:-26000}"
+# Sequences beyond the trainer fb ceiling are dropped from the gradient
+# only (still graded + pooled); see probe_train_len.py.
+export TTD_TRAIN_MAX_SEQ="${TTD_TRAIN_MAX_SEQ:-24576}"
 export KL_PENALTY_COEF="${KL_PENALTY_COEF:-0.1}"
 export TTD_ADV_ESTIMATOR="${TTD_ADV_ESTIMATOR:-entropic_adaptive_beta}"
 

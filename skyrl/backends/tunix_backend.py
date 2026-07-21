@@ -108,6 +108,18 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
         default=0,
         description="Micro-batch size (sequences) for gradient accumulation; 0 means full batch.",
     )
+    train_token_budget: int = Field(
+        default=0,
+        description=(
+            "When >0, ignore train_micro_batch_size and pack variable-size "
+            "micro-batches: sort examples by length and fill each micro-batch "
+            "while padded_rows * padded_seq_len <= budget. Memory-safe iff a "
+            "single sequence of `budget` tokens fits the fb graph (activations "
+            "and logits scale with total padded tokens; attention only shrinks "
+            "when the same tokens are split across shorter rows). Turns "
+            "hundreds of singleton fb calls per RL batch into a few dozen."
+        ),
+    )
     sample_max_num_sequences: int = Field(
         default=0,
         description="Maximum concurrent sequences per native generation call; 0 means full batch.",
@@ -845,9 +857,34 @@ class TunixBackend(AbstractBackend):
             template = self.templates[slot.template_key]
             pass_fn = template.forward_backward_fn if with_grads else template.forward_fn
 
-            micro_bs = self._micro_batch_size(len(indices))
-            for mb_start in range(0, len(indices), micro_bs):
-                mb_idx = indices[mb_start : mb_start + micro_bs]
+            budget = self.config.train_token_budget
+            if budget > 0:
+                # Token-budget packing: longest-first, greedy fill while the
+                # padded (rows x seq_len) area stays under the budget. The
+                # longest sequences run as singletons; short buckets pack
+                # many-up. Row count is quantized to the fsdp multiple that
+                # pad_to_fsdp will impose so the budget check matches reality.
+                shard = jax.device_count() if template.kind == "maxtext" else 1
+                order = sorted(indices, key=lambda i: len(all_input_ids[i]), reverse=True)
+                mb_groups: list[list[int]] = []
+                cur: list[int] = []
+                cur_len = 0
+                for i in order:
+                    cand_len = cur_len if cur else self._round_seq_len(len(all_input_ids[i]), template.kind)
+                    cand_rows = -(-(len(cur) + 1) // shard) * shard
+                    if cur and cand_rows * cand_len > budget:
+                        mb_groups.append(cur)
+                        cur = [i]
+                        cur_len = self._round_seq_len(len(all_input_ids[i]), template.kind)
+                    else:
+                        cur.append(i)
+                        cur_len = cand_len
+                if cur:
+                    mb_groups.append(cur)
+            else:
+                micro_bs = self._micro_batch_size(len(indices))
+                mb_groups = [indices[s : s + micro_bs] for s in range(0, len(indices), micro_bs)]
+            for mb_idx in mb_groups:
                 mb_inputs = [all_input_ids[i] for i in mb_idx]
                 max_len = self._round_seq_len(max(len(seq) for seq in mb_inputs), template.kind)
 

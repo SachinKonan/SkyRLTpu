@@ -78,6 +78,8 @@ READY_SLEEP_SEC="${READY_SLEEP_SEC:-5}"
 TINKER_BACKEND="${TINKER_BACKEND:-jax}"
 TUNIX_MODEL_SOURCE="${TUNIX_MODEL_SOURCE:-maxtext}"
 TUNIX_MAX_TARGET_LENGTH="${TUNIX_MAX_TARGET_LENGTH:-4096}"
+# >0 enables token-budget micro-batch packing in the tunix backend.
+TUNIX_TRAIN_TOKEN_BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-0}"
 TUNIX_MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-}"
 # Converted HF->orbax MaxText checkpoints live on the GCS mount so they
 # survive spot recreation.
@@ -461,6 +463,7 @@ if backend == "tunix":
         "sample_max_num_sequences": int("${SAMPLE_MAX_NUM_SEQUENCES}"),
         "param_dtype": "bfloat16",
         "maxtext_max_target_length": int("${TUNIX_MAX_TARGET_LENGTH}"),
+        "train_token_budget": int("${TUNIX_TRAIN_TOKEN_BUDGET}"),
         "maxtext_ckpt_cache_dir": "${TUNIX_MAXTEXT_CKPT_CACHE}",
         **vllm_cfg,
     }
