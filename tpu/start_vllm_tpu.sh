@@ -48,6 +48,12 @@ REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models
 # Persist the JAX/XLA compile cache on the GCS mount so precompiled kernels
 # survive spot VM recreation (vLLM defaults to local ~/.cache/vllm/xla_cache).
 VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH:-/home/${REMOTE_USER}/gcs/vllm-xla-cache}"
+# Optional shared XLA cache on GCS: restored to the local cache path before
+# vLLM starts, so the first host to compile a shape warms it for all others
+# (a fresh 22528 compile is ~55min; the 4GB same-region restore is ~1min).
+# Kept OFF the gcsfuse mount deliberately — writing the cache during compile
+# to a fuse mount flaked ("transport endpoint not connected").
+VLLM_XLA_CACHE_GCS="${VLLM_XLA_CACHE_GCS:-}"
 # Forked tpu-inference with the runtime-LoRA forwarders committed (tracked as
 # the third_party/tpu-inference submodule). Overlaid on the vllm-tpu wheel
 # install; replaces the old deploy-time apply_vllm_tpu_lora_patch.sh flow.
@@ -229,6 +235,11 @@ fi
 mkdir -p "\${VLLM_LORA_RESOLVER_CACHE_DIR}"
 export VLLM_XLA_CACHE_PATH="${VLLM_XLA_CACHE_PATH}"
 mkdir -p "${VLLM_XLA_CACHE_PATH}"
+# Restore shared compiled-program cache from GCS (skips cold compile). Best
+# effort: a miss or partial just means vLLM recompiles what's absent.
+if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
+  gsutil -m -q rsync -r "${VLLM_XLA_CACHE_GCS}" "${VLLM_XLA_CACHE_PATH}" 2>/dev/null && echo "restored XLA cache from ${VLLM_XLA_CACHE_GCS}" || echo "XLA cache restore skipped/failed (will compile)"
+fi
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
   export CLOUD_TPU_TASK_ID="\${VLLM_RELATIVE_WORKER_ID}"
 fi
