@@ -34,12 +34,12 @@ export GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-32}"
 export NUM_EPOCHS="${NUM_EPOCHS:-30}"
 export TTD_ELITE_SLOTS="${TTD_ELITE_SLOTS:-2}"
 export SAVE_EVERY="${SAVE_EVERY:-5}"
-export CONTEXT_WINDOW="${CONTEXT_WINDOW:-32768}"
+export CONTEXT_WINDOW="${CONTEXT_WINDOW:-20480}"
 # Thinking budget, exact gpt-oss structure: phase 1 = prompt+thinking capped
 # at PHASE1_MAX_TOKENS; on budget exhaustion </think> is forced and the
 # answer gets the remaining context (QwenTwoPhaseTokenCompleter).
 export TTD_QWEN_TWO_PHASE="${TTD_QWEN_TWO_PHASE:-1}"
-export PHASE1_MAX_TOKENS="${PHASE1_MAX_TOKENS:-26000}"
+export PHASE1_MAX_TOKENS="${PHASE1_MAX_TOKENS:-18432}"
 # s1-style budget forcing: intercept early </think> and inject a masked
 # continuation until at least this many thinking tokens are generated.
 export TTD_MIN_THINK_TOKENS="${TTD_MIN_THINK_TOKENS:-0}"
@@ -48,7 +48,7 @@ export TTD_MIN_THINK_TOKENS="${TTD_MIN_THINK_TOKENS:-0}"
 export TTD_SYSTEM_PROMPT="${TTD_SYSTEM_PROMPT:-You are an expert mathematical researcher. Before giving any final answer, think extremely long and hard inside your thinking block: deliberately explore multiple distinct construction ideas, analyze the weaknesses of the current best program in detail, work through the mathematics carefully, and verify your plan step by step before committing to it. Prefer deep, exhaustive reasoning over quick answers — use your full thinking budget. Use the thinking channel for thorough analysis. Explore alternative approaches and verify the result before giving the final answer.}"
 # Sequences beyond the trainer fb ceiling are dropped from the gradient
 # only (still graded + pooled); see probe_train_len.py.
-export TTD_TRAIN_MAX_SEQ="${TTD_TRAIN_MAX_SEQ:-24576}"
+export TTD_TRAIN_MAX_SEQ="${TTD_TRAIN_MAX_SEQ:-20480}"
 export KL_PENALTY_COEF="${KL_PENALTY_COEF:-0.1}"
 export TTD_ADV_ESTIMATOR="${TTD_ADV_ESTIMATOR:-entropic_adaptive_beta}"
 
