@@ -469,6 +469,11 @@ if backend == "tunix":
     }
     if "${TUNIX_MAXTEXT_MODEL_NAME}":
         cfg["maxtext_model_name"] = "${TUNIX_MAXTEXT_MODEL_NAME}"
+    # Extra MaxText pyconfig overrides (JSON), e.g. remat_policy for activation
+    # rematerialization / mesh parallelism knobs. Merged over the defaults.
+    _mt_kwargs = json.loads('${TUNIX_MAXTEXT_KWARGS:-{}}' or "{}")
+    if _mt_kwargs:
+        cfg["maxtext_kwargs"] = _mt_kwargs
 else:
     cfg = {
         "train_micro_batch_size": int("${TRAIN_MICRO_BATCH_SIZE}"),
