@@ -89,6 +89,9 @@ TUNIX_MAXTEXT_CKPT_CACHE="${TUNIX_MAXTEXT_CKPT_CACHE:-/home/${REMOTE_USER}/gcs/s
 # model needs unreleased MaxText support; the api script reinstalls it after
 # every `uv sync` (exact sync removes packages not in the lock).
 TUNIX_MAXTEXT_PIP_SPEC="${TUNIX_MAXTEXT_PIP_SPEC:-maxtext}"
+# Extra MaxText pyconfig overrides as JSON (e.g. remat_policy / mesh knobs).
+# Defaulted so `set -u` doesn't abort when the caller omits it.
+TUNIX_MAXTEXT_KWARGS="${TUNIX_MAXTEXT_KWARGS:-}"
 if [[ "$TINKER_BACKEND" == "tunix" ]]; then
   TINKER_ENGINE_EXTRA="tunix"
 else
