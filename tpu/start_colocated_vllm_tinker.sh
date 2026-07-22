@@ -471,7 +471,7 @@ if backend == "tunix":
         cfg["maxtext_model_name"] = "${TUNIX_MAXTEXT_MODEL_NAME}"
     # Extra MaxText pyconfig overrides (JSON), e.g. remat_policy for activation
     # rematerialization / mesh parallelism knobs. Merged over the defaults.
-    _mt_kwargs = json.loads('${TUNIX_MAXTEXT_KWARGS:-{}}' or "{}")
+    _mt_kwargs = json.loads('${TUNIX_MAXTEXT_KWARGS}' or "{}")
     if _mt_kwargs:
         cfg["maxtext_kwargs"] = _mt_kwargs
 else:
