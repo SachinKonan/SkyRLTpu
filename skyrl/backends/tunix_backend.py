@@ -1424,16 +1424,22 @@ class TunixBackend(AbstractBackend):
         shard = max(1, jax.device_count())
         if sub_batch is None:
             sub_batch = shard
-        # ONE program shape for all scoring (rows=shard, len=max_target):
-        # every distinct shape loads a program with a resident arena, and
-        # scoring bursts across many shapes are what exhausted HBM. Evict
-        # everything first so the single scoring arena loads into clean memory.
+        # Few program shapes (coarse 8192-buckets of the ACTUAL length), evict
+        # first so each scoring arena loads into clean memory. Pinning the full
+        # maxtext_max_target_length (32768) needed a ~57.5G contiguous arena vs
+        # ~56.9G free — off by ~670MB — while a forward at the real lengths
+        # (datums are pre-filtered to <=TTD_TRAIN_MAX_SEQ, ~24576) fits with
+        # room to spare. Cap defensively at the fb ceiling too.
         jax.clear_caches()
-        fixed_len = int(self.config.maxtext_max_target_length or 32768)
+        score_cap = min(
+            int(self.config.maxtext_max_target_length or 32768),
+            int(os.environ.get("TTD_TRAIN_MAX_SEQ", "24576") or 24576),
+        )
         out: list[list[float]] = []
         for start in range(0, len(prompts), sub_batch):
             chunk = prompts[start : start + sub_batch]
-            max_len = fixed_len
+            raw_len = max(len(p) for p in chunk)
+            max_len = min(score_cap, max(8192, -(-raw_len // 8192) * 8192))
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
