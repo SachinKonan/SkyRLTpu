@@ -81,6 +81,10 @@ TUNIX_MODEL_SOURCE="${TUNIX_MODEL_SOURCE:-maxtext}"
 TUNIX_MAX_TARGET_LENGTH="${TUNIX_MAX_TARGET_LENGTH:-4096}"
 # >0 enables token-budget micro-batch packing in the tunix backend.
 TUNIX_TRAIN_TOKEN_BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-0}"
+# >0 enables fused-linear cross-entropy target-logprob computation (project the
+# flattened B*T token axis in this many tiles, never forming the full [B*T,V]).
+# Requires maxtext_kwargs.num_vocab_tiling>1 so the decoder returns hidden.
+TUNIX_FLCE_TILES="${TUNIX_FLCE_TILES:-0}"
 TUNIX_MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-}"
 # Converted HF->orbax MaxText checkpoints live on the GCS mount so they
 # survive spot recreation.
@@ -345,6 +349,8 @@ if [[ "$SYNC_SKYRL" == "1" ]]; then
       --exclude='*/__pycache__' \
       --exclude='runs' \
       --exclude='benchmark_artifacts' \
+      --exclude='third_party/discover' \
+      --exclude='third_party/jobman' \
       -C "$repo_root" .
 
     remote_archive="/tmp/SkyRLTpu-worktree-$(date +%s)-$$.tar.gz"
@@ -469,6 +475,7 @@ if backend == "tunix":
         "param_dtype": "bfloat16",
         "maxtext_max_target_length": int("${TUNIX_MAX_TARGET_LENGTH}"),
         "train_token_budget": int("${TUNIX_TRAIN_TOKEN_BUDGET}"),
+        "flce_tiles": int("${TUNIX_FLCE_TILES}"),
         "maxtext_ckpt_cache_dir": "${TUNIX_MAXTEXT_CKPT_CACHE}",
         **vllm_cfg,
     }
@@ -504,7 +511,18 @@ PY
 
 external_inference_flag=""
 if [[ "$EXTERNAL_SAMPLING" == "1" ]]; then
-  external_inference_flag="--external-inference-url http://$(worker_internal_ip "${vllm_workers[0]}"):${VLLM_PORT}"
+  # Round-robin sampling across every vLLM worker (the client splits this
+  # comma-separated list). With one vLLM worker it's just the single URL.
+  if [[ "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "1" || "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "true" ]]; then
+    external_inference_urls=""
+    for w in "${vllm_workers[@]}"; do
+      if [[ -n "$external_inference_urls" ]]; then external_inference_urls+=","; fi
+      external_inference_urls+="http://$(worker_internal_ip "$w"):${VLLM_PORT}"
+    done
+    external_inference_flag="--external-inference-url ${external_inference_urls}"
+  else
+    external_inference_flag="--external-inference-url http://$(worker_internal_ip "${vllm_workers[0]}"):${VLLM_PORT}"
+  fi
 fi
 
 if [[ "$START_TINKER" == "1" ]]; then
@@ -558,6 +576,33 @@ if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
   uv sync --extra tpu --extra tinker --extra tunix
   (cd "\$HOME" && uv pip install --python "${REMOTE_SKYRL_DIR}/.venv/bin/python" \\
       "${TUNIX_MAXTEXT_PIP_SPEC}" aqtp pathwaysutils tokamax tiktoken)
+fi
+
+# FLCE needs MaxText's Transformer.__call__ to surface hidden when
+# num_vocab_tiling>1 (the decoder already skips the output head there but the
+# wrapper returns the None logits). Re-apply this one-liner after every reinstall
+# above. Idempotent; only when FLCE is enabled.
+if [[ "${TUNIX_FLCE_TILES}" -gt 0 ]]; then
+  "${REMOTE_SKYRL_DIR}/.venv/bin/python" - <<'PYPATCH'
+import glob, os
+for mt in glob.glob(os.path.expanduser("~/SkyRLTpu/.venv/lib/python*/site-packages/maxtext/models/models.py")):
+    src = open(mt).read()
+    if "num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN" in src:
+        continue
+    old = ('    if self.config.attention == "vllm_rpa":\n'
+           '      # In vLLM, logits are computed separately after updating the KV cache.\n'
+           '      return hidden_state, kv_caches\n\n'
+           '    return logits')
+    new = ('    if self.config.attention == "vllm_rpa":\n'
+           '      # In vLLM, logits are computed separately after updating the KV cache.\n'
+           '      return hidden_state, kv_caches\n\n'
+           '    if self.config.num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN:\n'
+           '      return hidden_state\n\n'
+           '    return logits')
+    if old in src:
+        open(mt, "w").write(src.replace(old, new))
+        print("FLCE-patched", mt, flush=True)
+PYPATCH
 fi
 
 exec uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}" -m skyrl.tinker.api \\

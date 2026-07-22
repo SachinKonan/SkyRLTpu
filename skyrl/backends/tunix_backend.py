@@ -125,6 +125,18 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
         default=0,
         description="Maximum concurrent sequences per native generation call; 0 means full batch.",
     )
+    flce_tiles: int = Field(
+        default=0,
+        description=(
+            "When >0 (MaxText only), compute target log-probs with fused-linear "
+            "cross-entropy: the model returns hidden [B,T,H] (needs "
+            "maxtext_kwargs.num_vocab_tiling>1 so the decoder skips the output "
+            "head) and the loss projects the flattened B*T token axis in this "
+            "many tiles via a custom_vjp, so the full [B*T, V] logits are never "
+            "materialized in the forward or backward. B*T is padded up to a "
+            "multiple of this. 0 keeps the single-shot [B,T,V] path."
+        ),
+    )
     enforce_eager: bool = Field(default=False, description="Disable JAX JIT compilation")
     param_dtype: str = Field(default="float32", description="Parameter dtype for the base model (float32/bfloat16)")
 
@@ -199,6 +211,14 @@ class _MaxTextAdapterShim(nnx.Module):
     def compute_final_logits(self, x):
         # __call__ already produced final logits; just fix the dtype.
         return x.astype(jnp.float32)
+
+    def logits_from_hidden(self, hidden_chunk):
+        """Project a hidden tile [tile, H] -> logits [tile, V] via MaxText's
+        output head (decoder_norm + tied/untied lm-head, exactly what
+        apply_output_head does). Used by the FLCE loss to project token tiles
+        without ever forming the full [B, T, V]. Requires num_vocab_tiling>1 so
+        __call__ returns hidden instead of logits."""
+        return self.adapter.base.logits_from_hidden_states_for_vocab_tiling(hidden_chunk, True, "train")
 
     def get_model_input(self):
         # Batch must be divisible by every mesh axis the decoder shards it
@@ -639,10 +659,68 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ jitted model passes
 
     @staticmethod
-    def _loss_from_logits(logits, target_ids, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config):
+    def _flce_target_logprobs(project_fn, hidden, target_ids, num_tiles):
+        """Fused-linear-CE target log-probs: ``logit[target] - logsumexp(logits)``
+        computed by tiling the flattened ``B*T`` token axis, so the full
+        ``[B*T, V]`` logits are never materialized — only ``[tile, V]`` at a
+        time, in BOTH the forward and the (custom-VJP) backward.
+
+        ``project_fn`` maps a hidden tile ``[tile, H]`` -> logits ``[tile, V]``
+        (the model's frozen output head). A ``custom_vjp`` runs the projection
+        in ``lax.scan`` chunks on the forward and recomputes chunks (via
+        per-chunk ``jax.vjp``) on the backward, mirroring MaxText's
+        ``vocab_tiling_nnx_loss``. Under LoRA the head is frozen, so only
+        ``d/d(hidden)`` flows here; hidden's gradient reaches the LoRA params
+        through the ordinary transformer backward outside this function.
+        """
+        *lead, hdim = hidden.shape
+        n = 1
+        for d in lead:
+            n *= d
+        flat = hidden.reshape(n, hdim)
+        tgt = target_ids.reshape(n)
+        pad = (-n) % num_tiles
+        if pad:
+            flat = jnp.pad(flat, ((0, pad), (0, 0)))
+            tgt = jnp.pad(tgt, ((0, pad),))
+        tile = (n + pad) // num_tiles
+        hf = flat.reshape(num_tiles, tile, hdim)
+        tf = tgt.reshape(num_tiles, tile)
+
+        # jax.checkpoint on the scan body is load-bearing: without it the scan
+        # stashes every tile's [tile, V] logits for the backward, which stacks
+        # back up to the full [B*T, V] tensor we're trying to avoid. With it,
+        # the backward recomputes one tile at a time. The scan operand is the
+        # hidden tiles ([B*T, H], small) — projecting *inside* the tile is what
+        # keeps [tile, V] transient in both directions (unlike scanning over
+        # pre-formed logits, which materializes the full [B*T, V] cotangent).
+        @jax.checkpoint
+        def body(carry, xs):
+            h_tile, t_tile = xs  # [tile, H], [tile]
+            logits = project_fn(h_tile).astype(jnp.float32)  # [tile, V], transient
+            tl = jnp.take_along_axis(logits, t_tile[:, None], axis=1)[:, 0]
+            lp = tl - jax.nn.logsumexp(logits, axis=-1)
+            return carry, lp
+
+        _, lp = jax.lax.scan(body, None, (hf, tf))  # [num_tiles, tile]
+        return lp.reshape(n + pad)[:n].reshape(*lead)
+
+    @staticmethod
+    def _loss_from_logits(
+        logits,
+        target_ids,
+        loss_mask,
+        loss_fn_types,
+        sampling_logprobs,
+        advantages,
+        loss_fn_config,
+        target_logprobs=None,
+    ):
         """Shared per-token loss/logprob computation on final [B, T, V] logits.
 
-        Tinker pre-shifts inputs/targets: no internal shift here.
+        Tinker pre-shifts inputs/targets: no internal shift here. When
+        ``target_logprobs`` is supplied (FLCE path) the [B, T, V] logits are
+        never formed and this only runs the RL loss on the [B, T] log-probs.
         """
         # Memory-efficient cross-entropy: target_logprob = logit[target] -
         # logsumexp(logits), in the logits' native dtype (bf16 here, matching
@@ -651,8 +729,9 @@ class TunixBackend(AbstractBackend):
         # (XLA fuses it) instead of returning a full [B, T, V] tensor, dropping
         # the ~7.5 GB/chip log_softmax result that pushed the fb over HBM.
         # Standard large-vocab CE trick (cf. Liger / cut-cross-entropy).
-        target_logits = jnp.take_along_axis(logits, target_ids[..., None], axis=-1)[..., 0]
-        target_logprobs = target_logits - jax.nn.logsumexp(logits, axis=-1)
+        if target_logprobs is None:
+            target_logits = jnp.take_along_axis(logits, target_ids[..., None], axis=-1)[..., 0]
+            target_logprobs = target_logits - jax.nn.logsumexp(logits, axis=-1)
 
         def compute_loss_per_example(loss_fn_type, tl, lm, sl, adv, cfg):
             return jax.lax.switch(loss_fn_type, LOSS_FUNCTIONS, tl, lm, sl, adv, cfg)
@@ -708,6 +787,7 @@ class TunixBackend(AbstractBackend):
         (scan bookkeeping), so raw split/merge inside jax.value_and_grad hits
         TraceContextError; nnx's lifted transforms handle the mutation.
         """
+        flce_tiles = self.config.flce_tiles
 
         def loss_fn(
             model,
@@ -722,6 +802,22 @@ class TunixBackend(AbstractBackend):
             loss_fn_config,
         ):
             hidden, _ = model(input_ids, positions, None, attention_mask, skip_lm_head=True)
+            if flce_tiles > 0:
+                # FLCE: model returned hidden [B,T,H] (num_vocab_tiling>1 skips
+                # the output head). Project token tiles inside the loss so the
+                # full [B,T,V] logits never form. compute_final_logits is NOT
+                # called here — hidden is [B,T,H], not logits.
+                target_logprobs = self._flce_target_logprobs(model.logits_from_hidden, hidden, target_ids, flce_tiles)
+                return self._loss_from_logits(
+                    None,
+                    target_ids,
+                    loss_mask,
+                    loss_fn_types,
+                    sampling_logprobs,
+                    advantages,
+                    loss_fn_config,
+                    target_logprobs=target_logprobs,
+                )
             logits = model.compute_final_logits(hidden)
             return self._loss_from_logits(
                 logits, target_ids, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config
@@ -1395,8 +1491,16 @@ class TunixBackend(AbstractBackend):
         _pure_logps_fn.
         """
 
+        flce_tiles = self.config.flce_tiles
+        flce = TunixBackend._flce_target_logprobs
+
         def fwd(model, input_ids, positions, attention_mask, target_ids):
             hidden, _ = model(input_ids, positions, None, attention_mask, skip_lm_head=True)
+            if flce_tiles > 0:
+                # FLCE: model returned hidden [B,T,H] (num_vocab_tiling skips the
+                # output head). Project token tiles to get target log-probs
+                # without forming [B,L,V]. Same KL forward-scoring contract.
+                return flce(model.logits_from_hidden, hidden, target_ids, flce_tiles)
             logits = model.compute_final_logits(hidden)
             # logsumexp identity (see _loss_from_logits): avoid materializing
             # the full [B, L, V] log_softmax; KL forward-scoring path.

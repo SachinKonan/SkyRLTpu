@@ -53,7 +53,16 @@ class ExternalInferenceClient:
     """Client for calling external inference engines (e.g., vLLM)."""
 
     def __init__(self, engine_config: EngineConfig, db_engine):
-        self.base_url = f"{engine_config.external_inference_url}/v1"
+        # external_inference_url may be a comma-separated list of engine URLs
+        # (e.g. three colocated vLLM hosts). Requests round-robin across them at
+        # group granularity: one sample request (n=group_size) goes to one
+        # engine, so a group keeps prefix-cache locality while groups spread
+        # across engines to balance load.
+        raw_urls = str(engine_config.external_inference_url).split(",")
+        self.base_urls = [f"{u.strip().rstrip('/')}/v1" for u in raw_urls if u.strip()]
+        # Back-compat single-URL attribute (first engine).
+        self.base_url = self.base_urls[0]
+        self._rr_counter = 0
         self.api_key = engine_config.external_inference_api_key
         self.request_timeout_sec = engine_config.external_inference_timeout_sec
         self.allow_prompt_logprobs = engine_config.external_inference_prompt_logprobs
@@ -77,9 +86,13 @@ class ExternalInferenceClient:
         base_model: str | None = None,
     ):
         """Background task to call external engine and store result in database."""
+        # Pick the next engine round-robin. Runs on the single API event loop,
+        # so the read-increment is atomic w.r.t. other requests (no lock needed).
+        base_url = self.base_urls[self._rr_counter % len(self.base_urls)]
+        self._rr_counter += 1
         try:
             async with httpx.AsyncClient(
-                base_url=self.base_url,
+                base_url=base_url,
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 timeout=httpx.Timeout(self.request_timeout_sec, connect=10.0),
             ) as http_client:
