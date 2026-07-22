@@ -644,8 +644,15 @@ class TunixBackend(AbstractBackend):
 
         Tinker pre-shifts inputs/targets: no internal shift here.
         """
-        logps = jax.nn.log_softmax(logits, axis=-1)
-        target_logprobs = jnp.take_along_axis(logps, target_ids[..., None], axis=-1)[..., 0]
+        # Memory-efficient cross-entropy: target_logprob = logit[target] -
+        # logsumexp(logits), in the logits' native dtype (bf16 here, matching
+        # the original log_softmax). log_softmax(x)[i] == x[i] - logsumexp(x),
+        # so numerics are identical — but logsumexp reduces the vocab axis away
+        # (XLA fuses it) instead of returning a full [B, T, V] tensor, dropping
+        # the ~7.5 GB/chip log_softmax result that pushed the fb over HBM.
+        # Standard large-vocab CE trick (cf. Liger / cut-cross-entropy).
+        target_logits = jnp.take_along_axis(logits, target_ids[..., None], axis=-1)[..., 0]
+        target_logprobs = target_logits - jax.nn.logsumexp(logits, axis=-1)
 
         def compute_loss_per_example(loss_fn_type, tl, lm, sl, adv, cfg):
             return jax.lax.switch(loss_fn_type, LOSS_FUNCTIONS, tl, lm, sl, adv, cfg)
