@@ -1424,14 +1424,16 @@ class TunixBackend(AbstractBackend):
         shard = max(1, jax.device_count())
         if sub_batch is None:
             sub_batch = shard
+        # ONE program shape for all scoring (rows=shard, len=max_target):
+        # every distinct shape loads a program with a resident arena, and
+        # scoring bursts across many shapes are what exhausted HBM. Evict
+        # everything first so the single scoring arena loads into clean memory.
+        jax.clear_caches()
+        fixed_len = int(self.config.maxtext_max_target_length or 32768)
         out: list[list[float]] = []
         for start in range(0, len(prompts), sub_batch):
             chunk = prompts[start : start + sub_batch]
-            # Coarse buckets (8192-multiples): each distinct (rows, len) shape
-            # loads a program with a resident arena; scoring hundreds of
-            # sequences across fine-grained buckets exhausts HBM.
-            raw_len = max(len(p) for p in chunk)
-            max_len = max(8192, -(-raw_len // 8192) * 8192)
+            max_len = fixed_len
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
