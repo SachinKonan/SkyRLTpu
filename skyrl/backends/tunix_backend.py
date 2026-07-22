@@ -1375,8 +1375,10 @@ class TunixBackend(AbstractBackend):
             model = nnx.merge(graphdef, lora_state, rest_state)
             hidden, _ = model(input_ids, positions, None, attn_mask, skip_lm_head=True)
             logits = model.compute_final_logits(hidden)
-            logps = jax.nn.log_softmax(logits, axis=-1)
-            return jnp.take_along_axis(logps, target_ids[..., None], axis=-1)[..., 0]
+            # logsumexp identity (see _loss_from_logits): avoid materializing
+            # the full [B, L, V] log_softmax; KL forward-scoring path.
+            tgt = jnp.take_along_axis(logits, target_ids[..., None], axis=-1)[..., 0]
+            return tgt - jax.nn.logsumexp(logits, axis=-1)
 
         jitted = fwd if self.config.enforce_eager else jax.jit(fwd)
         return lambda input_ids, positions, attn_mask, target_ids: jitted(
@@ -1396,8 +1398,10 @@ class TunixBackend(AbstractBackend):
         def fwd(model, input_ids, positions, attention_mask, target_ids):
             hidden, _ = model(input_ids, positions, None, attention_mask, skip_lm_head=True)
             logits = model.compute_final_logits(hidden)
-            logps = jax.nn.log_softmax(logits, axis=-1)
-            return jnp.take_along_axis(logps, target_ids[..., None], axis=-1)[..., 0]
+            # logsumexp identity (see _loss_from_logits): avoid materializing
+            # the full [B, L, V] log_softmax; KL forward-scoring path.
+            tgt = jnp.take_along_axis(logits, target_ids[..., None], axis=-1)[..., 0]
+            return tgt - jax.nn.logsumexp(logits, axis=-1)
 
         jitted = fwd if self.config.enforce_eager else nnx.jit(fwd)
         return lambda input_ids, positions, attn_mask, target_ids: jitted(
