@@ -639,45 +639,21 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ jitted model passes
 
     @staticmethod
-    def _target_logprobs_from_logits(logits, target_ids):
-        """target_logprob = logit[target] - logsumexp(logits), native dtype.
+    def _loss_from_logits(logits, target_ids, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config):
+        """Shared per-token loss/logprob computation on final [B, T, V] logits.
 
-        log_softmax(x)[i] == x[i] - logsumexp(x) — numerically identical to the
-        old log_softmax+gather, but reduces the vocab axis away instead of
-        returning a full [B, T, V] tensor (standard large-vocab CE trick).
+        Tinker pre-shifts inputs/targets: no internal shift here.
         """
+        # Memory-efficient cross-entropy: target_logprob = logit[target] -
+        # logsumexp(logits), in the logits' native dtype (bf16 here, matching
+        # the original log_softmax). log_softmax(x)[i] == x[i] - logsumexp(x),
+        # so numerics are identical — but logsumexp reduces the vocab axis away
+        # (XLA fuses it) instead of returning a full [B, T, V] tensor, dropping
+        # the ~7.5 GB/chip log_softmax result that pushed the fb over HBM.
+        # Standard large-vocab CE trick (cf. Liger / cut-cross-entropy).
         target_logits = jnp.take_along_axis(logits, target_ids[..., None], axis=-1)[..., 0]
-        return target_logits - jax.nn.logsumexp(logits, axis=-1)
+        target_logprobs = target_logits - jax.nn.logsumexp(logits, axis=-1)
 
-    @staticmethod
-    def _chunked_target_logprobs(compute_logits, hidden, target_ids, chunk_size):
-        """Sequence-chunked target logprobs — peak logits = [B, chunk, V], not
-        [B, T, V]. Each token's value depends only on its own logit row, so
-        chunking the sequence is exact. jax.checkpoint recomputes each chunk's
-        logits in backward, so the full-length logits tensor is never held.
-        """
-        B, T, H = hidden.shape
-        n = -(-T // chunk_size)
-        pad = n * chunk_size - T
-        if pad:
-            hidden = jnp.pad(hidden, ((0, 0), (0, pad), (0, 0)))
-            target_ids = jnp.pad(target_ids, ((0, 0), (0, pad)))
-        # [n, B, chunk, *]
-        hc = jnp.moveaxis(hidden.reshape(B, n, chunk_size, H), 1, 0)
-        tc = jnp.moveaxis(target_ids.reshape(B, n, chunk_size), 1, 0)
-
-        def body(_carry, xs):
-            h_i, t_i = xs
-            logits_i = compute_logits(h_i)  # [B, chunk, V]
-            return None, TunixBackend._target_logprobs_from_logits(logits_i, t_i)
-
-        _c, out = jax.lax.scan(jax.checkpoint(body), None, (hc, tc))  # out: [n, B, chunk]
-        return jnp.moveaxis(out, 0, 1).reshape(B, n * chunk_size)[:, :T]
-
-    @staticmethod
-    def _loss_from_target_logprobs(
-        target_logprobs, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config
-    ):
         def compute_loss_per_example(loss_fn_type, tl, lm, sl, adv, cfg):
             return jax.lax.switch(loss_fn_type, LOSS_FUNCTIONS, tl, lm, sl, adv, cfg)
 
@@ -687,14 +663,6 @@ class TunixBackend(AbstractBackend):
         per_seq_loss = per_token_losses.sum(axis=-1) / jnp.maximum(loss_mask.sum(axis=-1), 1e-9)
         # Sum (not mean): gradients are divided by the accumulated example count at optim_step.
         return per_seq_loss.sum(), (target_logprobs, per_token_losses)
-
-    @staticmethod
-    def _loss_from_logits(logits, target_ids, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config):
-        """Per-token loss/logprob on final [B, T, V] logits (native path)."""
-        target_logprobs = TunixBackend._target_logprobs_from_logits(logits, target_ids)
-        return TunixBackend._loss_from_target_logprobs(
-            target_logprobs, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config
-        )
 
     def _build_model_pass_fns(self, graphdef: nnx.GraphDef) -> tuple[Callable, Callable]:
         """Pure split/merge model-pass fns for native tunix models."""
@@ -754,12 +722,9 @@ class TunixBackend(AbstractBackend):
             loss_fn_config,
         ):
             hidden, _ = model(input_ids, positions, None, attention_mask, skip_lm_head=True)
-            chunk = int(os.environ.get("TTD_LOGITS_CHUNK", "4096"))
-            target_logprobs = self._chunked_target_logprobs(
-                model.compute_final_logits, hidden, target_ids, chunk
-            )
-            return self._loss_from_target_logprobs(
-                target_logprobs, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config
+            logits = model.compute_final_logits(hidden)
+            return self._loss_from_logits(
+                logits, target_ids, loss_mask, loss_fn_types, sampling_logprobs, advantages, loss_fn_config
             )
 
         loss_and_grad = nnx.value_and_grad(loss_fn, argnums=nnx.DiffState(0, nnx.LoRAParam), has_aux=True)
@@ -1432,11 +1397,11 @@ class TunixBackend(AbstractBackend):
 
         def fwd(model, input_ids, positions, attention_mask, target_ids):
             hidden, _ = model(input_ids, positions, None, attention_mask, skip_lm_head=True)
-            # Sequence-chunked to bound peak logits (KL forward-scoring path).
-            chunk = int(os.environ.get("TTD_LOGITS_CHUNK", "4096"))
-            return self._chunked_target_logprobs(
-                model.compute_final_logits, hidden, target_ids, chunk
-            )
+            logits = model.compute_final_logits(hidden)
+            # logsumexp identity (see _loss_from_logits): avoid materializing
+            # the full [B, L, V] log_softmax; KL forward-scoring path.
+            tgt = jnp.take_along_axis(logits, target_ids[..., None], axis=-1)[..., 0]
+            return tgt - jax.nn.logsumexp(logits, axis=-1)
 
         jitted = fwd if self.config.enforce_eager else nnx.jit(fwd)
         return lambda input_ids, positions, attn_mask, target_ids: jitted(
