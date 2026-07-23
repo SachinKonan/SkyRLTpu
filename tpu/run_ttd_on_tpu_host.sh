@@ -62,7 +62,12 @@ export TTD_DISCOVER_SYNC=0
 
 export TTD_RUN_DIR="${TTD_RUN_DIR:-$HOME/skyrl-runs/${EXPERIMENT_NAME}}"
 GCS_BACKUP="${GCS_BACKUP:-$HOME/gcs/skyrl-runs/${EXPERIMENT_NAME}}"
-mkdir -p "$TTD_RUN_DIR" "$GCS_BACKUP"
+# Mid-step rollout cache: local every step (in the run dir), GCS only on
+# checkpoint-boundary steps written straight to the mount here. The per-step
+# local caches are excluded from the periodic backup rsync below so we don't
+# pay per-step GCS bandwidth — only the client's ~save_every writes land here.
+export TTD_SAMPLING_CACHE_GCS="${TTD_SAMPLING_CACHE_GCS:-$GCS_BACKUP/sampling_cache}"
+mkdir -p "$TTD_RUN_DIR" "$GCS_BACKUP" "$TTD_SAMPLING_CACHE_GCS"
 
 # Restore from GCS if the local disk is fresh (spot recreation).
 if [ ! -d "$TTD_RUN_DIR/tinker_log" ] && [ -d "$GCS_BACKUP/tinker_log" ]; then
@@ -73,7 +78,7 @@ fi
 backup_loop() {
   while true; do
     sleep 300
-    rsync -a --exclude 'wandb' "$TTD_RUN_DIR/" "$GCS_BACKUP/" 2>/dev/null
+    rsync -a --exclude 'wandb' --exclude 'sampling_cache' "$TTD_RUN_DIR/" "$GCS_BACKUP/" 2>/dev/null
   done
 }
 backup_loop &
@@ -87,7 +92,7 @@ while [ "$attempt" -lt 50 ]; do
   echo "[supervisor] attempt $attempt starting $(date -u)"
   bash "$CLIENT_ROOT/tpu/run_ttd_gptoss20b.sh"
   rc=$?
-  rsync -a --exclude 'wandb' "$TTD_RUN_DIR/" "$GCS_BACKUP/" 2>/dev/null
+  rsync -a --exclude 'wandb' --exclude 'sampling_cache' "$TTD_RUN_DIR/" "$GCS_BACKUP/" 2>/dev/null
   if [ "$rc" -eq 0 ]; then
     echo "[supervisor] client exited cleanly (run complete) $(date -u)"
     break
