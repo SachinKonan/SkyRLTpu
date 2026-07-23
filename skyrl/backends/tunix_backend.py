@@ -661,7 +661,7 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ jitted model passes
 
     @staticmethod
-    def _flce_target_logprobs(project_fn, hidden, target_ids, tile_size):
+    def _flce_target_logprobs(project_fn, hidden, target_ids, tile_size, use_checkpoint=True):
         """Fused-linear-CE target log-probs: ``logit[target] - logsumexp(logits)``
         computed by tiling the flattened ``B*T`` token axis, so the full
         ``[B*T, V]`` logits are never materialized — only ``[tile_size, V]`` at
@@ -692,14 +692,15 @@ class TunixBackend(AbstractBackend):
         hf = flat.reshape(num_tiles, tile_size, hdim)
         tf = tgt.reshape(num_tiles, tile_size)
 
-        # jax.checkpoint on the scan body is load-bearing: without it the scan
-        # stashes every tile's [tile, V] logits for the backward, which stacks
-        # back up to the full [B*T, V] tensor we're trying to avoid. With it,
-        # the backward recomputes one tile at a time. The scan operand is the
-        # hidden tiles ([B*T, H], small) — projecting *inside* the tile is what
-        # keeps [tile, V] transient in both directions (unlike scanning over
-        # pre-formed logits, which materializes the full [B*T, V] cotangent).
-        @jax.checkpoint
+        # Whether to jax.checkpoint the scan body is call-site dependent:
+        #  * Backward path (train loss, use_checkpoint=True): checkpoint is
+        #    load-bearing — without it the scan stashes every tile's [tile, V]
+        #    logits for the backward, stacking back to the full [B*T, V].
+        #  * Forward-only path (KL/prompt-logprobs, use_checkpoint=False): there
+        #    is no backward, so checkpoint is a no-op that instead defeats XLA's
+        #    ability to roll the scan (it then materializes ALL tiles' logits at
+        #    once -> [B*T, V] -> OOM at large batches). A plain scan rolls
+        #    sequentially, keeping only one tile's [tile, V] live.
         def body(carry, xs):
             h_tile, t_tile = xs  # [tile, H], [tile]
             logits = project_fn(h_tile).astype(jnp.float32)  # [tile, V], transient
@@ -707,7 +708,8 @@ class TunixBackend(AbstractBackend):
             lp = tl - jax.nn.logsumexp(logits, axis=-1)
             return carry, lp
 
-        _, lp = jax.lax.scan(body, None, (hf, tf))  # [num_tiles, tile]
+        scan_body = jax.checkpoint(body) if use_checkpoint else body
+        _, lp = jax.lax.scan(scan_body, None, (hf, tf))  # [num_tiles, tile]
         return lp.reshape(n + pad)[:n].reshape(*lead)
 
     @staticmethod
@@ -1505,7 +1507,9 @@ class TunixBackend(AbstractBackend):
                 # FLCE: model returned hidden [B,T,H] (num_vocab_tiling skips the
                 # output head). Project token tiles to get target log-probs
                 # without forming [B,L,V]. Same KL forward-scoring contract.
-                return flce(model.logits_from_hidden, hidden, target_ids, flce_tile_size)
+                # Forward-only (no backward): plain scan rolls, so skip the
+                # checkpoint that would otherwise materialize all tiles here.
+                return flce(model.logits_from_hidden, hidden, target_ids, flce_tile_size, use_checkpoint=False)
             logits = model.compute_final_logits(hidden)
             # logsumexp identity (see _loss_from_logits): avoid materializing
             # the full [B, L, V] log_softmax; KL forward-scoring path.
