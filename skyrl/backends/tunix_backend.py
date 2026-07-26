@@ -663,21 +663,28 @@ class TunixBackend(AbstractBackend):
     @staticmethod
     def _flce_target_logprobs(project_fn, hidden, target_ids, tile_size, use_checkpoint=True):
         """Fused-linear-CE target log-probs: ``logit[target] - logsumexp(logits)``
-        computed by tiling the flattened ``B*T`` token axis, so the full
-        ``[B*T, V]`` logits are never materialized — only ``[tile_size, V]`` at
-        a time, in BOTH the forward and the backward.
+        computed by tiling the flattened ``B*T`` token axis via a ``custom_vjp``,
+        so the full ``[B*T, V]`` logits are never materialized — only
+        ``[tile_size, V]`` at a time, in BOTH forward and backward.
+
+        The ``custom_vjp`` is the load-bearing part (the flash-CE / MaxText
+        ``vocab_tiling`` pattern): the FORWARD scans token tiles, accumulates
+        per-tile log-probs, and DISCARDS each tile's ``[tile, V]`` logits (the
+        residual is the hidden tiles, not the logits); the BACKWARD recomputes
+        one tile's logits at a time with ``jax.vjp``. A plain ``lax.scan`` — even
+        with ``jax.checkpoint`` — does NOT achieve this: autodiff-through-scan
+        stashes every tile's logits, stacking back to the full ``[B*T, V]`` and
+        OOMing (the failure hit at 22528, 52.89G). ``project_fn`` (the frozen
+        output head) is captured; only ``d/d(hidden)`` flows (LoRA-only
+        training), reaching the LoRA params through the transformer backward.
+        ``use_checkpoint`` is accepted for signature compatibility and ignored —
+        the custom_vjp subsumes it.
 
         ``tile_size`` is a fixed number of TOKENS per tile (not a tile count):
-        the per-tile ``[tile_size, V]`` logits footprint is then constant
-        across every call site regardless of ``B*T``. This matters because the
-        KL/prompt-logprobs forward runs much larger batches than the train fb
-        (e.g. 31x22528 vs 4x22528) — a fixed tile *count* would blow the tile
-        up and OOM, while a fixed tile *size* keeps it bounded (just more
-        tiles). ``project_fn`` maps a hidden tile ``[tile_size, H]`` -> logits
-        ``[tile_size, V]`` (the model's frozen output head). Under LoRA the
-        head is frozen, so only ``d/d(hidden)`` flows here; hidden's gradient
-        reaches the LoRA params through the ordinary transformer backward.
+        the per-tile ``[tile_size, V]`` footprint stays constant across call
+        sites regardless of ``B*T``.
         """
+        del use_checkpoint  # subsumed by the custom_vjp
         *lead, hdim = hidden.shape
         n = 1
         for d in lead:
@@ -692,25 +699,35 @@ class TunixBackend(AbstractBackend):
         hf = flat.reshape(num_tiles, tile_size, hdim)
         tf = tgt.reshape(num_tiles, tile_size)
 
-        # Whether to jax.checkpoint the scan body is call-site dependent:
-        #  * Backward path (train loss, use_checkpoint=True): checkpoint is
-        #    load-bearing — without it the scan stashes every tile's [tile, V]
-        #    logits for the backward, stacking back to the full [B*T, V].
-        #  * Forward-only path (KL/prompt-logprobs, use_checkpoint=False): there
-        #    is no backward, so checkpoint is a no-op that instead defeats XLA's
-        #    ability to roll the scan (it then materializes ALL tiles' logits at
-        #    once -> [B*T, V] -> OOM at large batches). A plain scan rolls
-        #    sequentially, keeping only one tile's [tile, V] live.
-        def body(carry, xs):
-            h_tile, t_tile = xs  # [tile, H], [tile]
+        def _tile_lp(h_tile, t_tile):  # [tile, H], [tile] -> [tile]
             logits = project_fn(h_tile).astype(jnp.float32)  # [tile, V], transient
             tl = jnp.take_along_axis(logits, t_tile[:, None], axis=1)[:, 0]
-            lp = tl - jax.nn.logsumexp(logits, axis=-1)
-            return carry, lp
+            return tl - jax.nn.logsumexp(logits, axis=-1)
 
-        scan_body = jax.checkpoint(body) if use_checkpoint else body
-        _, lp = jax.lax.scan(scan_body, None, (hf, tf))  # [num_tiles, tile]
-        return lp.reshape(n + pad)[:n].reshape(*lead)
+        # custom_vjp over the hidden tiles: fwd discards per-tile logits (residual
+        # = hidden tiles only); bwd recomputes each tile's logits via jax.vjp so
+        # peak logits memory is one [tile, V] chunk in both passes. tf (targets,
+        # int) and project_fn (frozen head) are captured, not differentiated.
+        @jax.custom_vjp
+        def _tiled(hf):
+            _, lp = jax.lax.scan(lambda c, x: (c, _tile_lp(x[0], x[1])), None, (hf, tf))
+            return lp  # [num_tiles, tile]
+
+        def _tiled_fwd(hf):
+            _, lp = jax.lax.scan(lambda c, x: (c, _tile_lp(x[0], x[1])), None, (hf, tf))
+            return lp, hf  # residual = hidden tiles only (never the logits)
+
+        def _tiled_bwd(hf_res, cot):  # cot: [num_tiles, tile]
+            def _bwd_body(_carry, xs):
+                h_tile, t_tile, c_tile = xs
+                _, vjp_fn = jax.vjp(lambda h: _tile_lp(h, t_tile), h_tile)
+                (grad_h_tile,) = vjp_fn(c_tile)
+                return None, grad_h_tile
+            _, grad_hf = jax.lax.scan(_bwd_body, None, (hf_res, tf, cot))
+            return (grad_hf,)
+
+        _tiled.defvjp(_tiled_fwd, _tiled_bwd)
+        return _tiled(hf).reshape(n + pad)[:n].reshape(*lead)
 
     @staticmethod
     def _loss_from_logits(
