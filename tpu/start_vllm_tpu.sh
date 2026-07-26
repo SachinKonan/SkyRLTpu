@@ -44,6 +44,13 @@ VLLM_RAY_PORT="${VLLM_RAY_PORT:-6379}"
 VLLM_RAY_DASHBOARD_PORT="${VLLM_RAY_DASHBOARD_PORT:-8265}"
 VLLM_VENV="${VLLM_VENV:-/home/${REMOTE_USER}/.venvs/vllm-tpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
+# Optional shared HF weight cache on GCS: restored to the local HF hub dir
+# (REMOTE_HF_HOME/hub, vLLM's --download-dir) before serve so vLLM finds the
+# weights already on local SSD instead of re-downloading from HuggingFace. The
+# first host to download self-seeds it (one-time, best-effort, backgrounded).
+# Kept OFF the gcsfuse mount deliberately (matches VLLM_XLA_CACHE_GCS): the
+# engine only ever reads a LOCAL path; GCS is purely the seed/restore source.
+HF_CACHE_GCS="${HF_CACHE_GCS:-}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
 # Persist the JAX/XLA compile cache on the GCS mount so precompiled kernels
 # survive spot VM recreation (vLLM defaults to local ~/.cache/vllm/xla_cache).
@@ -240,6 +247,13 @@ mkdir -p "${VLLM_XLA_CACHE_PATH}"
 if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
   gsutil -m -q rsync -r "${VLLM_XLA_CACHE_GCS}" "${VLLM_XLA_CACHE_PATH}" 2>/dev/null && echo "restored XLA cache from ${VLLM_XLA_CACHE_GCS}" || echo "XLA cache restore skipped/failed (will compile)"
 fi
+# Restore HF weights from the shared GCS cache onto local SSD so vLLM finds
+# them already present under --download-dir (below) instead of pulling from
+# HuggingFace. Best effort: a miss/partial just means vLLM downloads as usual.
+mkdir -p "${REMOTE_HF_HOME}/hub"
+if [[ -n "${HF_CACHE_GCS}" ]]; then
+  gsutil -m -q rsync -r "${HF_CACHE_GCS}" "${REMOTE_HF_HOME}/hub" 2>/dev/null && echo "restored HF cache from ${HF_CACHE_GCS}" || echo "HF cache restore skipped/failed (will download)"
+fi
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
   export CLOUD_TPU_TASK_ID="\${VLLM_RELATIVE_WORKER_ID}"
 fi
@@ -305,6 +319,25 @@ if [[ "${VLLM_UPLOAD_SERVER}" == "1" ]]; then
   server_cmd=(python "\$HOME/vllm_tpu_server.py" "${MODEL_NAME}" --skyrl-lora-dir "${VLLM_LOCAL_LORA_DIR}")
 else
   server_cmd=(vllm serve "${MODEL_NAME}")
+fi
+# One-time self-seed of the shared HF cache: once vLLM has pulled the weights
+# onto local SSD, stage them back to GCS so the next spot VM restores from
+# HF_CACHE_GCS instead of re-downloading from HuggingFace. Fully backgrounded
+# and best-effort (guarded on the GCS prefix currently being empty) — it must
+# never block or fail the serve launch, so it runs before the exec below.
+if [[ -n "${HF_CACHE_GCS}" ]]; then
+  nohup bash -c '
+    hub="${REMOTE_HF_HOME}/hub"
+    for _try in \$(seq 1 60); do
+      if compgen -G "\${hub}/models--*/snapshots/*/*.safetensors" >/dev/null 2>&1; then break; fi
+      sleep 10
+    done
+    if compgen -G "\${hub}/models--*/snapshots/*/*.safetensors" >/dev/null 2>&1 &&
+       [[ -z "\$(gsutil ls "${HF_CACHE_GCS}/**" 2>/dev/null)" ]]; then
+      gsutil -m rsync -r "\${hub}" "${HF_CACHE_GCS}" >/dev/null 2>&1 &&
+        echo "seeded HF cache to ${HF_CACHE_GCS}" || true
+    fi
+  ' >"\$HOME/skyrl-logs/hf-cache-seed.log" 2>&1 &
 fi
 exec "\${server_cmd[@]}" \\
   --served-model-name "${SERVED_MODEL_NAME}" \\

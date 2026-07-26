@@ -20,6 +20,9 @@ MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3.5-4B}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL_NAME}"
 REMOTE_SKYRL_DIR="${REMOTE_SKYRL_DIR:-/home/${REMOTE_USER}/SkyRLTpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
+# Optional shared HF weight cache on GCS, forwarded to start_vllm_tpu.sh (see
+# there). Empty = vLLM downloads from HuggingFace as before.
+HF_CACHE_GCS="${HF_CACHE_GCS:-}"
 REMOTE_CHECKPOINTS="${REMOTE_CHECKPOINTS:-/home/${REMOTE_USER}/gcs/skyrl-checkpoints}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
 TINKER_API_KEY="${TINKER_API_KEY:-tml-dummy}"
@@ -86,9 +89,16 @@ TUNIX_TRAIN_TOKEN_BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-0}"
 # Requires maxtext_kwargs.num_vocab_tiling>1 so the decoder returns hidden.
 TUNIX_FLCE_TILE_SIZE="${TUNIX_FLCE_TILE_SIZE:-0}"
 TUNIX_MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-}"
-# Converted HF->orbax MaxText checkpoints live on the GCS mount so they
-# survive spot recreation.
-TUNIX_MAXTEXT_CKPT_CACHE="${TUNIX_MAXTEXT_CKPT_CACHE:-/home/${REMOTE_USER}/gcs/skyrl-maxtext-ckpts}"
+# Converted HF->orbax MaxText checkpoints are cached on LOCAL SSD (reading
+# orbax through the gcsfuse mount is slow, and writing during conversion to a
+# fuse mount flakes). Persistence across spot recreation is handled by the
+# GCS mirror below: restored local before the engine loads, self-seeded back
+# to GCS the first time it is converted.
+TUNIX_MAXTEXT_CKPT_CACHE="${TUNIX_MAXTEXT_CKPT_CACHE:-/home/${REMOTE_USER}/skyrl-maxtext-ckpts-local}"
+# Shared GCS mirror of the converted orbax checkpoint. Restored to the LOCAL
+# cache above before the tinker engine starts, and self-seeded from local the
+# first time (one-time, best-effort, backgrounded). Empty disables both.
+TUNIX_MAXTEXT_CKPT_CACHE_GCS="${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts}"
 # Pip spec for MaxText in the train venv. Override with a fork/commit spec
 # (e.g. "maxtext @ git+https://github.com/<user>/maxtext.git@<sha>") when the
 # model needs unreleased MaxText support; the api script reinstalls it after
@@ -412,6 +422,7 @@ if [[ "$START_VLLM" == "1" ]]; then
     VLLM_RAY_EXECUTOR="$VLLM_RAY_EXECUTOR" \
     VLLM_USE_RAY_V2_EXECUTOR_BACKEND="$VLLM_USE_RAY_V2_EXECUTOR_BACKEND" \
     REMOTE_HF_HOME="$REMOTE_HF_HOME" \
+    HF_CACHE_GCS="$HF_CACHE_GCS" \
     REMOTE_LORA_BASE="$REMOTE_LORA_BASE" \
     "${repo_root}/tpu/start_vllm_tpu.sh"
 fi
@@ -576,6 +587,42 @@ if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
   uv sync --extra tpu --extra tinker --extra tunix
   (cd "\$HOME" && uv pip install --python "${REMOTE_SKYRL_DIR}/.venv/bin/python" \\
       "${TUNIX_MAXTEXT_PIP_SPEC}" aqtp pathwaysutils tokamax tiktoken)
+fi
+
+# Converted orbax MaxText checkpoint cache. The engine reads a LOCAL dir
+# (TUNIX_MAXTEXT_CKPT_CACHE) because reading orbax through the gcsfuse mount is
+# slow and writing during conversion to fuse flakes. Restore the local cache
+# from its shared GCS mirror before the engine loads (best effort: a miss just
+# means the tunix backend re-converts from HF), then self-seed the mirror the
+# first time the local cache is populated -- one-time (guarded on the GCS prefix
+# being empty), backgrounded, and best-effort so it never blocks/fails launch.
+#
+# Scoped to THIS model's subdir only: the backend caches under
+# <cache_dir>/<mt_name>/0/items (tunix_backend.py _ensure_maxtext_orbax_checkpoint),
+# and mt_name == maxtext_model_name (== TUNIX_MAXTEXT_MODEL_NAME) when set. The
+# shared GCS prefix holds several models (>100 GB); pulling the whole prefix
+# would overflow the host disk, so we sync only <subdir>. When
+# TUNIX_MAXTEXT_MODEL_NAME is empty the backend derives mt_name via tunix naming
+# (unknowable in shell), so we skip the GCS restore/seed and let it convert.
+if [[ "${TINKER_BACKEND}" == "tunix" && -n "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}" && -n "${TUNIX_MAXTEXT_MODEL_NAME}" ]]; then
+  export gsutil_bin="\$(command -v gsutil || echo "\$HOME/google-cloud-sdk/bin/gsutil")"
+  mkdir -p "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}"
+  if "\$gsutil_bin" -m -q rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" 2>/dev/null; then
+    echo "restored MaxText ckpt cache from ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}"
+  else
+    echo "MaxText ckpt cache restore skipped/failed (will convert)"
+  fi
+  nohup bash -c '
+    for _try in \$(seq 1 240); do
+      if [ -n "\$(ls -A "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" 2>/dev/null)" ]; then break; fi
+      sleep 15
+    done
+    if [ -n "\$(ls -A "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" 2>/dev/null)" ] &&
+       [ -z "\$("\$gsutil_bin" ls "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}/**" 2>/dev/null)" ]; then
+      "\$gsutil_bin" -m rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" >/dev/null 2>&1 &&
+        echo "seeded MaxText ckpt cache to ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" || true
+    fi
+  ' >"\$HOME/skyrl-logs/maxtext-ckpt-seed.log" 2>&1 &
 fi
 
 # FLCE needs MaxText's Transformer.__call__ to surface hidden when
