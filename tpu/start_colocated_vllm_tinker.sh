@@ -552,6 +552,9 @@ export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
 export TINKER_API_KEY="${TINKER_API_KEY}"
 export TUNIX_UNIFORM_SEQ_LEN="${TUNIX_UNIFORM_SEQ_LEN:-0}"
 export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-0}"
+# Length-bucket ladder for training microbatches (see tunix_backend._bucket_len).
+# Empty => exact per-datum rounding (many XLA shapes). UNIFORM, if set, wins.
+export TUNIX_SEQ_BUCKETS="${TUNIX_SEQ_BUCKETS:-}"
 export TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS}"
 export TPU_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS}"
 export TPU_PROCESS_ADDRESSES="${train_process_addresses}"

@@ -1006,6 +1006,29 @@ class TunixBackend(AbstractBackend):
             # set budget == shard * _ubkt so exactly `shard` datums pack per microbatch.
             _uniform = int(os.environ.get("TUNIX_UNIFORM_SEQ_LEN", "0") or "0")
             _ubkt = self._round_seq_len(_uniform, template.kind) if _uniform > 0 else 0
+            # Length bucketing (TUNIX_SEQ_BUCKETS="4096,8192,12288,18432"): quantize
+            # each datum's padded length to a short ladder instead of one global max.
+            # A single uniform shape compiles exactly once but makes a 3k datum cost
+            # the same as an 18k one; exact per-datum lengths avoid that waste but
+            # explode the XLA shape count (compile storm + memory churn). Buckets keep
+            # compiles to a handful -- cached after the first step -- while short
+            # datums stay cheap. Takes precedence over nothing: UNIFORM still wins if
+            # both are set, so the uniform escape hatch remains available.
+            _buckets = sorted(
+                {
+                    self._round_seq_len(int(b), template.kind)
+                    for b in os.environ.get("TUNIX_SEQ_BUCKETS", "").split(",")
+                    if b.strip().isdigit() and int(b) > 0
+                }
+            )
+
+            def _bucket_len(n: int) -> int:
+                if _ubkt:
+                    return _ubkt
+                for b in _buckets:
+                    if n <= b:
+                        return b
+                return self._round_seq_len(n, template.kind)
             if budget > 0:
                 # Token-budget packing: longest-first, greedy fill while the
                 # padded (rows x seq_len) area stays under the budget. The
@@ -1018,10 +1041,14 @@ class TunixBackend(AbstractBackend):
                 cur: list[int] = []
                 cur_len = 0
                 for i in order:
-                    _ln = _ubkt or self._round_seq_len(len(all_input_ids[i]), template.kind)
+                    _ln = _bucket_len(len(all_input_ids[i]))
                     cand_len = cur_len if cur else _ln
                     cand_rows = -(-(len(cur) + 1) // shard) * shard
-                    if cur and cand_rows * cand_len > budget:
+                    # Break the tile on a bucket change as well as on the budget:
+                    # `order` is longest-first, so a smaller bucket here means every
+                    # remaining datum would otherwise be padded up to this tile's
+                    # longer bucket -- exactly the waste bucketing exists to avoid.
+                    if cur and (_ln != cur_len or cand_rows * cand_len > budget):
                         mb_groups.append(cur)
                         cur = [i]
                         cur_len = _ln
@@ -1033,9 +1060,16 @@ class TunixBackend(AbstractBackend):
             else:
                 micro_bs = self._micro_batch_size(len(indices))
                 mb_groups = [indices[s : s + micro_bs] for s in range(0, len(indices), micro_bs)]
-            for mb_idx in mb_groups:
+            # Per-tile progress. A training fb over a full batch is ~100 microbatch
+            # tiles but only logs once, on completion -- which makes a long-running
+            # fb indistinguishable from a hang (we chased exactly that). Log one
+            # line per tile with its wall time and an ETA for the rest of the pass.
+            _mb_total = len(mb_groups)
+            _mb_start = time.time()
+            for _mb_n, mb_idx in enumerate(mb_groups, 1):
+                _mb_t0 = time.time()
                 mb_inputs = [all_input_ids[i] for i in mb_idx]
-                max_len = _ubkt or self._round_seq_len(max(len(seq) for seq in mb_inputs), template.kind)
+                max_len = _bucket_len(max(len(seq) for seq in mb_inputs))
 
                 input_ids = pad_batch(mb_inputs, max_len, np.int32)
                 target_ids = pad_batch([prepared_batch.all_targets[i] for i in mb_idx], max_len, np.int32)
@@ -1132,6 +1166,15 @@ class TunixBackend(AbstractBackend):
                 for row, i in enumerate(mb_idx):
                     token_losses_out[i] = per_token_losses[row, : seq_lens[i]].astype(np.float32)
                     logprobs_out[i] = target_logprobs[row, : seq_lens[i]].astype(np.float32)
+                # device_get above forces JAX's async dispatch to finish, so this
+                # elapsed time is the tile's real cost (not just enqueue time).
+                _mb_dt = time.time() - _mb_t0
+                _mb_el = time.time() - _mb_start
+                logger.info(
+                    f"{'fb' if with_grads else 'fwd'} tile {_mb_n}/{_mb_total} "
+                    f"shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
+                    f"(elapsed {_mb_el:.1f}s, eta {(_mb_el / _mb_n) * (_mb_total - _mb_n):.0f}s)"
+                )
 
         # A training fb over a large batch returns per-token elementwise_loss +
         # logprobs for EVERY datum (e.g. 376 datums x ~10k tokens = millions of
