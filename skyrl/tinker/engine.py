@@ -674,6 +674,14 @@ class TinkerEngine:
         Args:
             results: Dict mapping request_id to result (Pydantic BaseModel)
         """
+        import time as _t
+        def _edbg(m):
+            try:
+                with open("/tmp/enginedbg.log", "a") as _f:
+                    _f.write(f"{_t.time():.3f} {m}\n"); _f.flush()
+            except Exception:
+                pass
+        _edbg(f"_complete_futures: {len(results)} results; building params (model_dump)...")
         completed_at = datetime.now(timezone.utc)
         params = [
             {
@@ -685,9 +693,13 @@ class TinkerEngine:
             for request_id, result in results.items()
         ]
 
+        _edbg("_complete_futures: params built; opening Session...")
         with Session(self.db_engine) as session:
+            _edbg("_complete_futures: session open; execute(update)...")
             session.execute(update(FutureDB), params)
+            _edbg("_complete_futures: execute done; commit...")
             session.commit()
+        _edbg("_complete_futures: DONE (committed)")
 
     def process_single_request(self, request_type: types.RequestType, model_id: str, request_data: dict) -> BaseModel:
         match request_type:

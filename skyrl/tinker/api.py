@@ -1259,9 +1259,12 @@ async def retrieve_future(request: RetrieveFutureRequest, req: Request):
     timeout = 300  # 5 minutes
     deadline = time.perf_counter() + timeout
 
-    # Start with 100ms, grow to 1s
-    poll = 0.1
-    max_poll = 1.0
+    # Poll interval. Kept deliberately COARSE: this endpoint long-polls in a tight
+    # loop, and a sub-second interval means near-constant DB reads that pin WAL
+    # frames -> the WAL checkpoint can't reclaim space -> the WAL bloats and every
+    # DB op crawls, stalling the engine's future processing (diagnosed 2026-07-27).
+    poll = 0.5
+    max_poll = 3.0
 
     while time.perf_counter() < deadline:
         try:
