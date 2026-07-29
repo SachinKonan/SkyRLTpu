@@ -592,9 +592,56 @@ class TunixBackend(AbstractBackend):
                 maxtext_config, mesh=None, wrap_with_tunix_adapter=True
             )
         if isinstance(model, tuple):  # maxtext returns (model, mesh) when mesh=None
-            model, _mesh = model
+            model, mesh = model
+            # KEEP the mesh. It used to be dropped on the floor, which meant every
+            # jitted model pass ran with no mesh context and no sharding
+            # annotations -- the likely reason per-device memory looks like the
+            # weights are replicated rather than sharded across the chips.
+            self._mesh = mesh
+            logger.info(f"MaxText mesh: shape={getattr(mesh, 'shape', None)} axes={getattr(mesh, 'axis_names', None)}")
         logger.info(f"Loaded MaxText model {mt_name} for {self.base_model} (pure-NNX)")
+        self._log_param_sharding(model)
         return _MaxTextAdapterShim(model)
+
+    def _log_param_sharding(self, model) -> None:
+        """One-shot diagnostic: are params actually sharded, and how much HBM is live?
+
+        We have been unable to account for ~48GB/chip: sharded 27B weights should
+        occupy ~13.5GB of a ~95GB chip, yet only ~32GB was free. This prints the
+        real per-device footprint and the sharding of the largest parameters, which
+        distinguishes "weights replicated" from "compiled-program arenas piling up".
+        """
+        try:
+            import numpy as _np
+            from flax import nnx as _nnx
+
+            state = _nnx.state(model, _nnx.Param)
+            leaves = [x for x in jax.tree.leaves(state) if hasattr(x, "shape") and hasattr(x, "sharding")]
+            total = sum(int(_np.prod(x.shape)) * x.dtype.itemsize for x in leaves)
+            # per-device bytes = addressable shards only
+            per_dev = 0
+            for x in leaves:
+                try:
+                    per_dev += sum(s.data.nbytes for s in x.addressable_shards[:1])
+                except Exception:
+                    pass
+            logger.info(
+                f"PARAM DIAG: {len(leaves)} arrays, global={total / 1e9:.1f}GB, "
+                f"per-device={per_dev / 1e9:.1f}GB "
+                f"(sharded/{jax.device_count()} would be ~{total / 1e9 / max(1, jax.device_count()):.1f}GB, "
+                f"replicated would be ~{total / 1e9:.1f}GB)"
+            )
+            for x in sorted(leaves, key=lambda a: -int(_np.prod(a.shape)))[:3]:
+                logger.info(f"PARAM DIAG: shape={tuple(x.shape)} sharding={x.sharding}")
+            for d in jax.devices()[:2]:
+                s = d.memory_stats() or {}
+                lim = s.get("bytes_limit") or s.get("bytes_reservable_limit") or 0
+                logger.info(
+                    f"HBM DIAG dev{d.id}: in_use={s.get('bytes_in_use', 0) / 1e9:.1f}GB "
+                    f"peak={s.get('peak_bytes_in_use', 0) / 1e9:.1f}GB limit={lim / 1e9:.1f}GB"
+                )
+        except Exception as e:  # diagnostics must never break model load
+            logger.info(f"PARAM DIAG unavailable: {e}")
 
     # ------------------------------------------------------------------ templates
 
@@ -849,9 +896,18 @@ class TunixBackend(AbstractBackend):
 
         loss_and_grad = nnx.value_and_grad(loss_fn, argnums=nnx.DiffState(0, nnx.LoRAParam), has_aux=True)
 
-        def forward_backward_fn(model, *args):
+        def forward_backward_fn(model, accum_grads, *args):
+            # Gradient accumulation lives INSIDE the jit with the accumulator
+            # DONATED (the tunix peft_trainer convention). The old python-side
+            # `accum = tree_map(add, accum, grads)` kept three LoRA-grad pytrees
+            # live at once (old accum + fresh grads + new sum) and re-allocated
+            # every tile; over a ~90-tile pass that device-memory churn grew until
+            # a mid-pass allocation failed (deterministically around tile 55 at
+            # [4,16384]). Donating accum_grads makes the update in-place: one
+            # resident grads pytree, zero per-tile growth.
             (_, (target_logprobs, per_token_losses)), lora_grads = loss_and_grad(model, *args)
-            return per_token_losses, target_logprobs, lora_grads
+            new_accum = jax.tree.map(jnp.add, accum_grads, lora_grads)
+            return per_token_losses, target_logprobs, new_accum
 
         def forward_fn(model, *args):
             _, (target_logprobs, per_token_losses) = loss_fn(model, *args)
@@ -859,7 +915,7 @@ class TunixBackend(AbstractBackend):
 
         if self.config.enforce_eager:
             return forward_backward_fn, forward_fn
-        return nnx.jit(forward_backward_fn), nnx.jit(forward_fn)
+        return nnx.jit(forward_backward_fn, donate_argnums=1), nnx.jit(forward_fn)
 
     # ------------------------------------------------------------------ AbstractBackend: models
 
@@ -956,6 +1012,42 @@ class TunixBackend(AbstractBackend):
         except ValueError:
             override = 0
         return override if override > 0 else jax.device_count()
+
+    def _shard_batch_arrays(self, *arrays):
+        """Place microbatch arrays on the MaxText mesh, batch dim sharded.
+
+        Mirrors tunix sft/sharding_utils.shard_input (data_sharding_axis=("fsdp",)).
+        Row counts are already padded to the batch axis size (_row_shard), so dim 0
+        always divides. Kill switch: TUNIX_SHARD_INPUTS=0 restores the old
+        replicated-input behavior. Any failure falls back to the unsharded arrays —
+        sharding is an optimization, never a correctness requirement.
+        """
+        mesh = getattr(self, "_mesh", None)
+        if mesh is None or os.environ.get("TUNIX_SHARD_INPUTS", "1") != "1":
+            return arrays
+        try:
+            from jax.sharding import NamedSharding
+            from jax.sharding import PartitionSpec as P
+
+            batch_axes = tuple(
+                a for a in ("data", "fsdp") if a in getattr(mesh, "axis_names", ()) and mesh.shape[a] > 1
+            )
+            if not batch_axes:
+                return arrays
+            nrows = arrays[0].shape[0]
+            row_sharding = NamedSharding(mesh, P(batch_axes))
+            if not getattr(self, "_shard_inputs_logged", False):
+                self._shard_inputs_logged = True
+                logger.info(f"Sharding microbatch inputs over mesh axes {batch_axes} (rows={nrows})")
+            return tuple(
+                jax.device_put(a, row_sharding)
+                if getattr(a, "ndim", 0) >= 1 and a.shape[0] == nrows
+                else a
+                for a in arrays
+            )
+        except Exception as e:
+            logger.warning(f"input sharding failed ({e}); falling back to replicated inputs")
+            return arrays
 
     def _micro_batch_size(self, total: int) -> int:
         mb = self.config.train_micro_batch_size
@@ -1144,6 +1236,39 @@ class TunixBackend(AbstractBackend):
                         )
                     )
 
+                if template.kind == "maxtext":
+                    # Shard the batch dim over the mesh BEFORE the jitted pass —
+                    # exactly what tunix's trainer does via sharding_utils.shard_input
+                    # (data_sharding_axis=("fsdp",)). We used to hand jit raw numpy
+                    # arrays, which GSPMD treats as REPLICATED: every chip then
+                    # materializes activations for the whole batch. Measured cost at
+                    # [4,20480]: 36.8G/chip of remat checkpoints — exactly 4x the
+                    # ~9.2G a chip needs for its own row — plus 4x redundant compute
+                    # (the ~12% MFU). Sharding dim 0 makes each chip own one row.
+                    (
+                        input_ids,
+                        target_ids,
+                        loss_mask,
+                        sampling_logprobs,
+                        advantages,
+                        positions,
+                        attn_mask,
+                        mb_loss_fn_types,
+                        mb_clip_low,
+                        mb_clip_high,
+                    ) = self._shard_batch_arrays(
+                        input_ids,
+                        target_ids,
+                        loss_mask,
+                        sampling_logprobs,
+                        advantages,
+                        positions,
+                        attn_mask,
+                        mb_loss_fn_types,
+                        mb_clip_low,
+                        mb_clip_high,
+                    )
+
                 mb_config = LossFnConfig(
                     clip_low_threshold=mb_clip_low,
                     clip_high_threshold=mb_clip_high,
@@ -1165,21 +1290,40 @@ class TunixBackend(AbstractBackend):
                         # Swap this model's LoRA values into the shared template
                         # and run the module-passing (nnx-lifted) fns.
                         nnx.update(template.model, slot.lora_state)
-                        per_token_losses, target_logprobs, lora_grads = self._with_oom_recovery(
-                            lambda: pass_fn(template.model, *common_args), "model_pass"
-                        )
+                        if with_grads:
+                            # In-jit donated accumulation (see forward_backward_fn).
+                            # slot.accum_grads carries across fb REQUESTS until the
+                            # optim step; zeros on the very first tile. NOTE: the
+                            # donated buffer is consumed even by a FAILED execution,
+                            # so an OOM retry of this lambda raises a loud
+                            # deleted-array error instead of silently corrupting
+                            # the accumulated gradient -- that is intentional.
+                            if slot.accum_grads is None:
+                                slot.accum_grads = jax.tree.map(
+                                    jnp.zeros_like, nnx.state(template.model, nnx.LoRAParam)
+                                )
+                            per_token_losses, target_logprobs, slot.accum_grads = self._with_oom_recovery(
+                                lambda: pass_fn(template.model, slot.accum_grads, *common_args),
+                                "model_pass",
+                            )
+                            slot.accum_count += len(mb_idx)
+                        else:
+                            per_token_losses, target_logprobs, _ = self._with_oom_recovery(
+                                lambda: pass_fn(template.model, *common_args), "model_pass"
+                            )
                     else:
                         per_token_losses, target_logprobs, lora_grads = self._with_oom_recovery(
                             lambda: pass_fn(slot.lora_state, template.rest_state, *common_args),
                             "model_pass",
                         )
-
-                if with_grads and lora_grads is not None:
-                    if slot.accum_grads is None:
-                        slot.accum_grads = lora_grads
-                    else:
-                        slot.accum_grads = jax.tree.map(jnp.add, slot.accum_grads, lora_grads)
-                    slot.accum_count += len(mb_idx)
+                        # Non-maxtext (plain jax.jit) path keeps python-side
+                        # accumulation; its models are small enough not to care.
+                        if with_grads and lora_grads is not None:
+                            if slot.accum_grads is None:
+                                slot.accum_grads = lora_grads
+                            else:
+                                slot.accum_grads = jax.tree.map(jnp.add, slot.accum_grads, lora_grads)
+                            slot.accum_count += len(mb_idx)
 
                 per_token_losses, target_logprobs = jax.device_get((per_token_losses, target_logprobs))
                 for row, i in enumerate(mb_idx):
@@ -1189,10 +1333,18 @@ class TunixBackend(AbstractBackend):
                 # elapsed time is the tile's real cost (not just enqueue time).
                 _mb_dt = time.time() - _mb_t0
                 _mb_el = time.time() - _mb_start
+                try:
+                    _ms = jax.devices()[0].memory_stats() or {}
+                    _mem = (
+                        f" hbm={_ms.get('bytes_in_use', 0) / 1e9:.1f}G"
+                        f"/peak={_ms.get('peak_bytes_in_use', 0) / 1e9:.1f}G"
+                    )
+                except Exception:
+                    _mem = ""
                 logger.info(
                     f"{'fb' if with_grads else 'fwd'} tile {_mb_n}/{_mb_total} "
                     f"shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
-                    f"(elapsed {_mb_el:.1f}s, eta {(_mb_el / _mb_n) * (_mb_total - _mb_n):.0f}s)"
+                    f"(elapsed {_mb_el:.1f}s, eta {(_mb_el / _mb_n) * (_mb_total - _mb_n):.0f}s){_mem}"
                 )
 
         # A training fb over a large batch returns per-token elementwise_loss +
@@ -1630,17 +1782,53 @@ class TunixBackend(AbstractBackend):
             model, input_ids, positions, attn_mask, target_ids
         )
 
+    def _log_hbm(self, tag: str) -> None:
+        """One-line per-device HBM telemetry (in_use/peak), best-effort."""
+        try:
+            s = jax.devices()[0].memory_stats() or {}
+            logger.info(
+                f"HBM[{tag}] in_use={s.get('bytes_in_use', 0) / 1e9:.2f}G "
+                f"peak={s.get('peak_bytes_in_use', 0) / 1e9:.2f}G "
+                f"limit={(s.get('bytes_limit') or 0) / 1e9:.2f}G"
+            )
+        except Exception:
+            pass
+
     def _with_oom_recovery(self, fn, desc: str):
-        """Run fn; on RESOURCE_EXHAUSTED, evict all loaded XLA programs (their
-        resident arenas are the main same-boot HBM churn) and retry once."""
+        """Run fn; on RESOURCE_EXHAUSTED, retry GENTLY first, destructively last.
+
+        The old behavior -- jax.clear_caches() then retry once -- converted a
+        single transient OOM into an unrecoverable spiral: clearing evicts the
+        loaded fb program, whose ~37G arena then cannot be re-reserved into the
+        now-fragmented HBM, so the one retry dies too, the request fails, the
+        client resubmits, and every subsequent attempt recompiles into the same
+        wall (observed as 20+ identical E0101 loads across four configs).
+
+        Order matters: (1) plain retry after gc -- the usual cause is a
+        transient data-buffer spike and the program is STILL LOADED, so a bare
+        retry is cheap and safe; (2) only if that fails, clear caches and pay
+        the recompile as the last resort.
+        """
+        import gc
+
         try:
             return fn()
         except Exception as e:
             if "RESOURCE_EXHAUSTED" not in str(e):
                 raise
-            logger.warning(f"{desc}: RESOURCE_EXHAUSTED — jax.clear_caches() and retrying once")
-            jax.clear_caches()
-            return fn()
+            self._log_hbm(f"{desc}/oom1")
+            logger.warning(f"{desc}: RESOURCE_EXHAUSTED — gc + gentle retry (program kept loaded)")
+            gc.collect()
+            try:
+                return fn()
+            except Exception as e2:
+                if "RESOURCE_EXHAUSTED" not in str(e2):
+                    raise
+                self._log_hbm(f"{desc}/oom2")
+                logger.warning(f"{desc}: still exhausted — jax.clear_caches() and final retry")
+                jax.clear_caches()
+                gc.collect()
+                return fn()
 
     def _prompt_logprobs(
         self, logps_fn: Callable, prompts: list[list[int]], sub_batch: int | None = None
