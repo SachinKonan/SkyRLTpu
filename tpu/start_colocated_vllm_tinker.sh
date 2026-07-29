@@ -555,6 +555,11 @@ export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-0}"
 # Length-bucket ladder for training microbatches (see tunix_backend._bucket_len).
 # Empty => exact per-datum rounding (many XLA shapes). UNIFORM, if set, wins.
 export TUNIX_SEQ_BUCKETS="${TUNIX_SEQ_BUCKETS:-}"
+# Row-padding multiple = the MaxText batch-sharding axis. Empty/0 => chip count
+# (correct under pure FSDP). Set to the fsdp/data axis when using tensor
+# parallelism, e.g. TUNIX_ROW_SHARD=2 alongside
+# TUNIX_MAXTEXT_KWARGS='{"ici_fsdp_parallelism":2,"ici_tensor_parallelism":2}'.
+export TUNIX_ROW_SHARD="${TUNIX_ROW_SHARD:-0}"
 export TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS}"
 export TPU_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS}"
 export TPU_PROCESS_ADDRESSES="${train_process_addresses}"

@@ -938,6 +938,25 @@ class TunixBackend(AbstractBackend):
         else:
             yield
 
+    def _row_shard(self) -> int:
+        """Multiple the microbatch row count must be padded up to.
+
+        MaxText shards the batch dim over the data/fsdp mesh axes, so rows must be
+        a multiple of *that* axis -- not of the total chip count. Under pure FSDP
+        the two coincide, which is why device_count was used. With tensor
+        parallelism (e.g. ici_tensor_parallelism=2 x ici_fsdp_parallelism=2 on 4
+        chips) the batch axis is only 2, so padding to 4 doubles the rows -- and
+        therefore the activation footprint of every tile -- for nothing.
+
+        TUNIX_ROW_SHARD lets the deployment declare the real batch axis. It MUST
+        match the MaxText mesh: too small and the batch will not shard evenly.
+        """
+        try:
+            override = int(os.environ.get("TUNIX_ROW_SHARD", "0") or "0")
+        except ValueError:
+            override = 0
+        return override if override > 0 else jax.device_count()
+
     def _micro_batch_size(self, total: int) -> int:
         mb = self.config.train_micro_batch_size
         return total if mb <= 0 else max(1, min(mb, total))
@@ -1035,7 +1054,7 @@ class TunixBackend(AbstractBackend):
                 # longest sequences run as singletons; short buckets pack
                 # many-up. Row count is quantized to the fsdp multiple that
                 # pad_to_fsdp will impose so the budget check matches reality.
-                shard = jax.device_count() if template.kind == "maxtext" else 1
+                shard = self._row_shard() if template.kind == "maxtext" else 1
                 order = sorted(indices, key=lambda i: len(all_input_ids[i]), reverse=True)
                 mb_groups: list[list[int]] = []
                 cur: list[int] = []
@@ -1094,10 +1113,10 @@ class TunixBackend(AbstractBackend):
 
                 if template.kind == "maxtext":
                     # MaxText shards the batch dim over the data/fsdp mesh axes:
-                    # pad rows to a device-count multiple. Padded rows have
-                    # all-zero loss weights and are excluded from outputs and
-                    # the gradient-accumulation count.
-                    shard = jax.device_count()
+                    # pad rows to that axis's size. Padded rows have all-zero loss
+                    # weights and are excluded from outputs and the
+                    # gradient-accumulation count.
+                    shard = self._row_shard()
                     (
                         input_ids,
                         target_ids,
