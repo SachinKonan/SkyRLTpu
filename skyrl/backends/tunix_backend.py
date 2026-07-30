@@ -1346,6 +1346,53 @@ class TunixBackend(AbstractBackend):
                     f"shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
                     f"(elapsed {_mb_el:.1f}s, eta {(_mb_el / _mb_n) * (_mb_total - _mb_n):.0f}s){_mem}"
                 )
+                if template.kind == "maxtext":
+                    # THE LEAK (measured by the live-array profiler): one
+                    # [rows, seq, hidden] bf16 tensor is retained per tile --
+                    # +1 array of (4,16384,5120) every tile, 168MB/chip -- until
+                    # the allocator evicts the fb program to make room and its
+                    # ~38G reload fails (deterministically ~tile 56). The MaxText
+                    # pure-NNX decoder mutates module state during forward; under
+                    # nnx.jit those mutations PERSIST on template.model, so each
+                    # tile's sown intermediates pile up. Drop them eagerly.
+                    try:
+                        nnx.pop(template.model, nnx.Intermediate)
+                    except Exception:
+                        pass
+                # Leak hunter: device memory grows ~170MB/tile even with donated
+                # accumulation (measured 29.4G -> 38.7G over 55 tiles, then the
+                # allocator evicts the fb program to make room and its ~38G
+                # reload fails). Enumerate live arrays by shape every 10 tiles so
+                # the growth names itself instead of being theorized about.
+                if _mb_n % 10 == 0 or _mb_n == _mb_total:
+                    try:
+                        _by: dict = {}
+                        for _a in jax.live_arrays():
+                            _k = (str(_a.shape), str(_a.dtype))
+                            _c, _b = _by.get(_k, (0, 0))
+                            _by[_k] = (_c + 1, _b + _a.nbytes)
+                        _top = sorted(_by.items(), key=lambda kv: -kv[1][1])[:6]
+                        logger.info(
+                            f"live_arrays n={sum(v[0] for v in _by.values())} "
+                            + "; ".join(f"{k[0]}/{k[1]}x{v[0]}={v[1] / 1e9:.2f}G" for k, v in _top)
+                        )
+                        if template.kind == "maxtext":
+                            # Name the retainer: any module-state leaf shaped like a
+                            # per-batch activation ([rows, ...]) is the smoking gun.
+                            _st = list(nnx.state(template.model).flat_state())
+                            _hits = [
+                                ("/".join(map(str, p)), tuple(v.value.shape))
+                                for p, v in _st
+                                if hasattr(v, "value")
+                                and getattr(v.value, "ndim", 0) >= 2
+                                and v.value.shape[0] == input_ids.shape[0]
+                            ]
+                            logger.info(
+                                f"module_state leaves={len(_st)} batch-shaped={len(_hits)} "
+                                f"sample={_hits[:3]}"
+                            )
+                    except Exception:
+                        pass
 
         # A training fb over a large batch returns per-token elementwise_loss +
         # logprobs for EVERY datum (e.g. 376 datums x ~10k tokens = millions of
