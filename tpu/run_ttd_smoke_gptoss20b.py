@@ -72,7 +72,18 @@ def main() -> None:
     ).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    from examples.erdos_min_overlap.env import ErdosMinOverlapEnv
+    # Pick the problem environment from TTD_ENV (default: Erdős, unchanged behavior).
+    import importlib
+    _ENVS = {
+        "erdos_min_overlap": ("examples.erdos_min_overlap.env", "ErdosMinOverlapEnv"),
+        "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv"),
+        "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv"),
+        "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv"),
+    }
+    env_key = os.environ.get("TTD_ENV", "erdos_min_overlap")
+    _mod, _cls = _ENVS[env_key]
+    env_type = getattr(importlib.import_module(_mod), _cls)
+    problem_type = os.environ.get("PROBLEM_TYPE", "")
     from ttt_discover import DiscoverConfig, discover
 
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -88,7 +99,8 @@ def main() -> None:
     tinker_base_url = os.environ.get("TINKER_BASE_URL") or None
 
     config = DiscoverConfig(
-        env_type=ErdosMinOverlapEnv,
+        env_type=env_type,
+        problem_type=problem_type,
         model_name=model_name,
         renderer_name=os.environ.get("RENDERER_NAME", "gpt_oss_low_reasoning"),
         lora_rank=_env_int("LORA_RANK", 1),
