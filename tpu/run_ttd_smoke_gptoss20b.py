@@ -74,16 +74,19 @@ def main() -> None:
 
     # Pick the problem environment from TTD_ENV (default: Erdős, unchanged behavior).
     import importlib
+    # Third field: default problem_type — circle asserts {"26","32"}, acineq
+    # asserts {"ac1","ac2"}; an empty PROBLEM_TYPE crashes those envs at the
+    # first rollout (and the crash-looping client then leaks engine slots).
     _ENVS = {
-        "erdos_min_overlap": ("examples.erdos_min_overlap.env", "ErdosMinOverlapEnv"),
-        "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv"),
-        "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv"),
-        "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv"),
+        "erdos_min_overlap": ("examples.erdos_min_overlap.env", "ErdosMinOverlapEnv", ""),
+        "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv", "ac1"),
+        "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv", "26"),
+        "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv", ""),
     }
     env_key = os.environ.get("TTD_ENV", "erdos_min_overlap")
-    _mod, _cls = _ENVS[env_key]
+    _mod, _cls, _default_problem = _ENVS[env_key]
     env_type = getattr(importlib.import_module(_mod), _cls)
-    problem_type = os.environ.get("PROBLEM_TYPE", "")
+    problem_type = os.environ.get("PROBLEM_TYPE", "") or _default_problem
     from ttt_discover import DiscoverConfig, discover
 
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
