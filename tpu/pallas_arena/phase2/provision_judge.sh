@@ -16,7 +16,7 @@ if [ ! -x "$HOME/arena-venv/bin/python" ]; then
   uv venv "$HOME/arena-venv" --python 3.12 --seed
 fi
 "$HOME/arena-venv/bin/pip" install --quiet \
-  "jax[tpu]==0.10.2" numpy fastapi uvicorn pydantic
+  "jax[tpu]==0.10.2" numpy fastapi uvicorn pydantic flatbuffers
 
 # TPU sanity: the chip must enumerate
 JAX_PLATFORMS=tpu "$HOME/arena-venv/bin/python" - <<'EOF'

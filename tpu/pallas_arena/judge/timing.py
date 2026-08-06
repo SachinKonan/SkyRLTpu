@@ -70,6 +70,38 @@ def interleaved_score(pairs: list[tuple[float, float]]) -> float:
     return median(pair_ratios(pairs))
 
 
+def counterbalanced_pair(i, run_ref, run_cand, perf, block):
+    """Run ONE timed pair with alternating position order: R,C on even i,
+    C,R on odd i.
+
+    Phase-2 shakedown finding: with a fixed R-first order, ref-vs-ref
+    graded 1.019-1.053 (FAILED the 1.00±2% invariant) — the first-position
+    leg after fresh on-device input generation is systematically slower.
+    Alternating which role runs first spreads that fixed penalty equally
+    over both roles, so it cancels in the median of per-pair ratios while
+    keeping the interleaving's drift cancellation.
+
+    Returns ((ref_latency_s, cand_latency_s), ref_out, cand_out).
+    """
+    if i % 2 == 0:
+        t0 = perf()
+        a = run_ref()
+        block(a)
+        t1 = perf()
+        b = run_cand()
+        block(b)
+        t2 = perf()
+        return (t1 - t0, t2 - t1), a, b
+    t0 = perf()
+    b = run_cand()
+    block(b)
+    t1 = perf()
+    a = run_ref()
+    block(a)
+    t2 = perf()
+    return (t2 - t1, t1 - t0), a, b
+
+
 def noise_floor_from_ref_pairs(pairs: list[tuple[float, float]]) -> float:
     """Noise floor from a ref-vs-ref run of the same interleaved protocol.
 

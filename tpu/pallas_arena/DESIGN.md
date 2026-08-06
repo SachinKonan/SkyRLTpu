@@ -93,7 +93,26 @@ second chip (17% tax) or spin a v5p-8 QR when the pool has room.
 ~110/min): use it if/when a winning v5p kernel should also claim Trillium.
 Everything else (funnel, gates, timing protocol, plumbing) is silicon-agnostic.
 
-**Alternative: warm v6e-1 fleet (if grading on Trillium is acceptable/desired).**
+**PHASE-3 ARCHITECTURE (user-settled 08-06, supersedes registry/push): pull
+queue with leases.** The work queue lives on the v5p training host (where
+rollouts are born): a thread-locked queue the client appends candidates to as
+sampling produces them. Each v6e-1 judge polls GET /work against that one
+stable address — judges are pure stateless workers; no GCS registry, no
+client-side routing or failover. The queue LEASES items (in-flight until the
+result returns); requeue on lease TIMEOUT (~2x max grading time) or missed
+heartbeat — a dead server can't release, so expiry is the requeue trigger.
+Double-grades after false-death are harmless: grading is idempotent and the
+hash→reward cache makes repeat results byte-identical. A preempted judge is a
+non-event by construction; the keeper's only job is fleet size = 5.
+Post-shakedown fixes folded in: persistent worker per chip (jax/TPU init +
+reference compile once at boot; sandbox only the candidate AOT compile);
+counterbalanced R,C/C,R timing order (first-position bias measured at 2-5%);
+tolerance recalibrated across multiple legitimate implementations (block-256/
+512 + unjitted honest goldens failed the 1.5x-ref-only margin). Reference
+TIMING stays interleaved per candidate (drift cancellation, ~2s) even though
+reference COMPILE is once; can drop to every-Nth if ever needed.
+
+**(superseded) warm v6e-1 fleet with GCS registry:**
 5× spot v6e-1 (not one slice): ~75 graded/min aggregate, preemption costs 20%
 not 100%; five QRs fit the v6e zone's own fresh quota pool. Keeper = ~80-line
 reconciliation loop generalized from forever_sweep: classify judge-{1..5} QRs

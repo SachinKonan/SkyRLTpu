@@ -13,10 +13,25 @@ import jax.numpy as jnp
 def _impl(x, g):
     x32 = x.astype(jnp.float32)
     var = jnp.mean(jnp.square(x32), axis=-1, keepdims=True)
-    return x32 * jax.lax.rsqrt(var + 1e-6) * g
+    return (x32 * jax.lax.rsqrt(var + 1e-6) * g).astype(x.dtype)
 
 def kernel(x, g):
     return _impl(x, g)
+"""
+
+# honest, unjitted, overflow-ROBUST (pre-scaled mean): the phase-2
+# "unjitted-honest" golden re-armed — eager op-by-op dispatch is a
+# legitimate (slow) implementation and must pass all gates including the
+# near-overflow-bf16 adversarial vector.
+UNJITTED_ROBUST_RMSNORM = """
+import jax
+import jax.numpy as jnp
+
+def kernel(x, g):
+    x32 = x.astype(jnp.float32)
+    m = jnp.maximum(jnp.max(jnp.abs(x32), axis=-1, keepdims=True), 1.0)
+    var = jnp.mean(jnp.square(x32 / m), axis=-1, keepdims=True) * m * m
+    return (x32 * jax.lax.rsqrt(var + 1e-6) * g).astype(x.dtype)
 """
 
 # subtly wrong: eps inside the rsqrt is 1e-3 instead of 1e-6 (the classic
@@ -121,9 +136,12 @@ def kernel(x, g):
     x32 = x.astype(jnp.float32)
     out = x32 * jax.lax.rsqrt(jnp.mean(jnp.square(x32), -1, keepdims=True) + 1e-6) * g
     waste = x32
-    for _ in range(200):  # deliberately slow (unjitted op-by-op dispatch)
+    # deliberately slow (unjitted op-by-op dispatch); kept short enough that
+    # jax.grad's residual chain fits HBM at production shapes (phase-2: 200
+    # sins x 134MB residuals OOM'd a v6e-1 during the gradient probe)
+    for _ in range(24):
         waste = jnp.sin(waste)
-    return out + 0.0 * waste
+    return (out + 0.0 * waste).astype(x.dtype)
 """
 
 # --- cheater 6: python-level memoizer — returns its first result forever.

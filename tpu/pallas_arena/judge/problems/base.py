@@ -205,6 +205,33 @@ class Problem(abc.ABC):
         except StopIteration:
             return False, "no smoke case to probe with"
 
+    # ------------------------------------------------------------- calibration
+    def honest_variants(self) -> list[Callable]:
+        """Legitimate alternative implementations spanning the honest
+        precision/reduction space (different output dtypes, reduction
+        orders, scaling paths). Tolerance calibration takes the WORST
+        spread across `reference_bf16` + these, so an honest kernel with a
+        different-but-valid numeric path is never rejected (phase-2
+        shakedown lesson: three honest goldens failed the
+        reference-bf16-only 1.5x margin). Default: none (reference_bf16
+        alone — the phase-1 behavior)."""
+        return []
+
+    def calibrated_tolerance(self, inputs, ref32) -> dict:
+        """Per-input tolerance: TOL_MULTIPLIER x the max error (max and q99
+        tails) of ANY honest implementation vs the fp32 reference."""
+        stats = [error_stats(self.reference_bf16(*inputs), ref32)]
+        for variant in self.honest_variants():
+            s = error_stats(variant(*inputs), ref32)
+            if s.get("finite"):
+                # a variant that goes non-finite on this input is NOT honest
+                # here; it must never widen the tolerance to infinity
+                stats.append(s)
+        return {
+            "max": TOL_MULTIPLIER * max(max(s["max"] for s in stats), ABS_FLOOR),
+            "q99": TOL_MULTIPLIER * max(max(s["q99"] for s in stats), ABS_FLOOR),
+        }
+
     # -------------------------------------------------------------- gradients
     def grad_outputs(self, kernel_fn: Callable, *inputs):
         """For has_bwd tasks: return the gradient pytree of a fixed scalar

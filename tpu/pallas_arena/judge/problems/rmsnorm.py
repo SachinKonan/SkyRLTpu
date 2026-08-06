@@ -39,6 +39,41 @@ def _baseline_jit(x, gamma):
     return _rmsnorm_f32(x, gamma).astype(x.dtype)
 
 
+# ----- honest implementation variants (tolerance calibration, phase-3) -----
+# Legitimate numeric paths a correct kernel may take; the calibrated margin
+# is the worst spread of these vs the fp32 reference (the phase-2 lesson:
+# honest goldens with different reduction/precision paths failed a
+# reference-only margin).
+
+
+@functools.partial(jax.jit)
+def _honest_bf16_out(x, gamma):
+    return _rmsnorm_f32(x, gamma).astype(jnp.bfloat16).astype(jnp.float32)
+
+
+@functools.partial(jax.jit)
+def _honest_chunked_reduction(x, gamma):
+    # a tiled kernel reduces in blocks: different fp summation order
+    x32 = x.astype(jnp.float32)
+    h = x32.shape[-1] // 2
+    s = jnp.sum(jnp.square(x32[..., :h]), axis=-1, keepdims=True) + jnp.sum(
+        jnp.square(x32[..., h:]), axis=-1, keepdims=True
+    )
+    var = s / x32.shape[-1]
+    return (x32 * jax.lax.rsqrt(var + EPS) * gamma).astype(jnp.bfloat16)
+
+
+@functools.partial(jax.jit)
+def _honest_scaled_mean(x, gamma):
+    # overflow-robust path: pre-scale by the row max before squaring (the
+    # fix that makes an eager/unjitted implementation survive the
+    # near-overflow-bf16 adversarial vector)
+    x32 = x.astype(jnp.float32)
+    m = jnp.maximum(jnp.max(jnp.abs(x32), axis=-1, keepdims=True), 1.0)
+    var = jnp.mean(jnp.square(x32 / m), axis=-1, keepdims=True) * m * m
+    return x32 * jax.lax.rsqrt(var + EPS) * gamma
+
+
 class RMSNormProblem(Problem):
     name = "rmsnorm"
     version = "1"
@@ -71,6 +106,9 @@ class RMSNormProblem(Problem):
 
     def baseline(self, x, gamma):
         return _baseline_jit(x, gamma)
+
+    def honest_variants(self):
+        return [_honest_bf16_out, _honest_chunked_reduction, _honest_scaled_mean]
 
     def grad_outputs(self, kernel_fn, x, gamma):
         """Gradient contract: d/d(x32), d/d(gamma) of a fixed scalar probe

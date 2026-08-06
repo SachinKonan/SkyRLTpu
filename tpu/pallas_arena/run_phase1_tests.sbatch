@@ -28,7 +28,7 @@ export JAX_PLATFORMS=cpu
 
 echo "=== pallas arena phase-1 battery ($(date +%H:%M:%S), job ${SLURM_JOB_ID}) ==="
 uv run --isolated --extra dev --extra jax \
-    --with fastapi --with httpx --with uvicorn \
+    --with fastapi --with httpx --with uvicorn --with flatbuffers \
     pytest tpu/pallas_arena/tests -v -rA --durations=15 \
     -p no:cacheprovider
 rc=$?

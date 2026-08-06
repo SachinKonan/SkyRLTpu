@@ -169,15 +169,11 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             for i in range(n_warmup + n_pairs):
                 inputs = problem.make_inputs(fold_in(k_floor, i), case)
                 block(inputs)
-                t0 = perf()
-                a = baseline_fn(*inputs)
-                block(a)
-                t1 = perf()
-                b = baseline_fn(*inputs)
-                block(b)
-                t2 = perf()
+                pair, _, _ = timing_mod.counterbalanced_pair(
+                    i, lambda: baseline_fn(*inputs), lambda: baseline_fn(*inputs), perf, block
+                )
                 if i >= n_warmup:
-                    pairs.append((t1 - t0, t2 - t1))
+                    pairs.append(pair)
             floors[case.name] = timing_mod.noise_floor_from_ref_pairs(pairs)
             med_ratios[case.name] = timing_mod.interleaved_score(pairs)
         result.update(
@@ -203,24 +199,27 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         return 0
 
     # ---------------- correctness / adversarial fixtures BEFORE exec
+    # (skipped for trace/export-only modes: they never touch concrete data)
     result["phase"] = "fixtures"
     corr_fixtures = []  # (label, inputs, ref32, tol)
-    for case in scored_cases:
+    fixture_cases = [] if mode in ("pregate", "aot_export") else scored_cases
+    for case in fixture_cases:
         for g in range(n_seeds):
             key = fold_in(fold_in(k_corr, g), case_salt(case.name))
             inputs = problem.make_inputs(key, case)
             block(inputs)
             ref32 = problem.reference(*inputs)
-            tol = tolerance_from_reference(ref32, problem.reference_bf16(*inputs))
+            tol = problem.calibrated_tolerance(inputs, ref32)
             corr_fixtures.append((f"{case.name}#seed{g}", inputs, ref32, tol))
     adv_fixtures = []
-    for i, adv in enumerate(problem.adversarial_cases()):
+    adv_list = [] if mode in ("pregate", "aot_export") else problem.adversarial_cases()
+    for i, adv in enumerate(adv_list):
         inputs = adv.make_inputs(fold_in(k_adv, i))
         block(inputs)
         ref32 = problem.reference(*inputs)
         if adv.expect is not None:
             adv.expect(ref32, inputs)  # reference sanity (also pytest-covered)
-        tol = tolerance_from_reference(ref32, problem.reference_bf16(*inputs))
+        tol = problem.calibrated_tolerance(inputs, ref32)
         adv_fixtures.append((f"adv:{adv.name}", inputs, ref32, tol))
 
     grad_fixture = None
@@ -268,6 +267,38 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
 
     def _fail(gate: str, why: str) -> int:
         result.update(ok=True, gate=gate, passed=False, violations=[why], reward=cfg.get("fail_reward", 0.0))
+        return 0
+
+    # ---------------- aot_export mode (persistent-worker path, phase 3):
+    # serialize the candidate per input signature; NO concrete data, NO
+    # device — the worker loads and times the artifact on the chip. All
+    # candidate python (and any Mosaic-compile bomb) stays in THIS
+    # throwaway child under the timeout + RLIMIT_AS.
+    if mode == "aot_export":
+        from jax import export as jax_export
+
+        artifact_dir = cfg["artifact_dir"]
+        os.makedirs(artifact_dir, exist_ok=True)
+        platforms = tuple(cfg.get("platforms") or (jax.default_backend(),))
+        artifacts = {}
+        t0 = perf()
+        try:
+            for sig in cfg["signatures"]:
+                args = tuple(jax.ShapeDtypeStruct(tuple(a["shape"]), a["dtype"]) for a in sig["args"])
+                if sig.get("kind") == "grad":
+                    target = jax.jit(lambda *i: problem.grad_outputs(fn, *i))
+                else:
+                    target = jax.jit(fn)
+                exp = jax_export.export(target, platforms=platforms)(*args)
+                path = os.path.join(artifact_dir, sig["name"] + ".jaxexport")
+                with open(path, "wb") as fh:
+                    fh.write(bytes(exp.serialize()))
+                artifacts[sig["name"]] = path
+        except ArenaBannedImport as e:
+            return _fail("poison_stub", str(e))
+        except Exception as e:
+            return _fail("aot_export", f"{type(e).__name__}: {e}")
+        result.update(ok=True, gate="aot_export", passed=True, artifacts=artifacts, export_s=perf() - t0)
         return 0
 
     # ---------------- pregate mode: trace/lower only, zero chip time
@@ -357,15 +388,11 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         for i in range(n_warmup + n_pairs):
             inputs = problem.make_inputs(fold_in(k_floor, i), scored_cases[0])
             block(inputs)
-            t0 = perf()
-            a = baseline_fn(*inputs)
-            block(a)
-            t1 = perf()
-            b = baseline_fn(*inputs)
-            block(b)
-            t2 = perf()
+            pair, _, _ = timing_mod.counterbalanced_pair(
+                i, lambda: baseline_fn(*inputs), lambda: baseline_fn(*inputs), perf, block
+            )
             if i >= n_warmup:
-                pairs.append((t1 - t0, t2 - t1))
+                pairs.append(pair)
         noise_floor = timing_mod.noise_floor_from_ref_pairs(pairs)
         result["noise_floor_source"] = "self-measured"
     else:
@@ -381,16 +408,12 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             for i in range(n_warmup + n_pairs):
                 inputs = problem.make_inputs(fold_in(fold_in(k_time, i), case_salt(case.name)), case)
                 block(inputs)
-                t0 = perf()
-                r_out = baseline_fn(*inputs)
-                block(r_out)
-                t1 = perf()
-                c_out = _call(inputs)
-                block(c_out)
-                t2 = perf()
+                pair, _r_out, c_out = timing_mod.counterbalanced_pair(
+                    i, lambda: baseline_fn(*inputs), lambda: _call(inputs), perf, block
+                )
                 if i >= n_warmup:
                     it = i - n_warmup
-                    pairs.append((t1 - t0, t2 - t1))
+                    pairs.append(pair)
                     if it in check_iters:
                         checks[it] = (inputs, c_out)
         except Exception as e:
@@ -399,7 +422,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         # fast-garbage/slow-correct split-personality kernels + memoizers)
         for it, (inputs, c_out) in checks.items():
             ref32 = problem.reference(*inputs)
-            tol = tolerance_from_reference(ref32, problem.reference_bf16(*inputs))
+            tol = problem.calibrated_tolerance(inputs, ref32)
             stats = error_stats(c_out, ref32)
             okay, why = check_tolerance(stats, tol)
             if not okay:

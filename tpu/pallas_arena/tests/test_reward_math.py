@@ -46,6 +46,76 @@ def test_interleaved_estimator_cancels_linear_drift():
     assert abs(interleaved - true_ratio) < abs(sequential_estimate - true_ratio)
 
 
+def test_counterbalanced_pair_cancels_first_position_penalty():
+    """Phase-2 finding: the first leg of each timed pair pays a fixed
+    penalty (ref-vs-ref graded 1.02-1.05). With a synthetic 25% first-slot
+    penalty, the fixed R,C order inherits the full bias while the
+    counterbalanced R,C/C,R order collapses it to the tiny arithmetic-vs-
+    geometric residual (~bias^2/2)."""
+    clock = [0.0]
+
+    def perf():
+        return clock[0]
+
+    def block(x):
+        return x
+
+    state = {"first_in_pair": True}
+
+    def run():
+        cost = 1e-3 * (1.25 if state["first_in_pair"] else 1.0)
+        state["first_in_pair"] = False
+        clock[0] += cost
+        return None
+
+    fixed_pairs = []
+    for _ in range(20):
+        state["first_in_pair"] = True
+        t0 = perf()
+        run()
+        t1 = perf()
+        run()
+        t2 = perf()
+        fixed_pairs.append((t1 - t0, t2 - t1))
+
+    cb_pairs = []
+    for i in range(20):
+        state["first_in_pair"] = True
+        pair, _, _ = tm.counterbalanced_pair(i, run, run, perf, block)
+        cb_pairs.append(pair)
+
+    fixed = tm.interleaved_score(fixed_pairs)
+    cb = tm.interleaved_score(cb_pairs)
+    assert abs(fixed - 1.25) < 0.01  # full first-position bias
+    assert abs(cb - 1.0) < 0.03  # collapsed to the residual
+    assert abs(cb - 1.0) < abs(fixed - 1.0) / 5
+
+
+def test_counterbalanced_pair_role_mapping():
+    """Latencies map to the correct roles in both orders."""
+    clock = [0.0]
+
+    def perf():
+        return clock[0]
+
+    def block(x):
+        return x
+
+    def make(cost, tagname):
+        def _r():
+            clock[0] += cost
+            return tagname
+
+        return _r
+
+    ref, cand = make(2e-3, "ref"), make(1e-3, "cand")
+    for i in (0, 1):  # both orders
+        (r_lat, c_lat), r_out, c_out = tm.counterbalanced_pair(i, ref, cand, perf, block)
+        assert (r_out, c_out) == ("ref", "cand")
+        assert r_lat == pytest.approx(2e-3)
+        assert c_lat == pytest.approx(1e-3)
+
+
 def test_pair_ratio_validation():
     with pytest.raises(ValueError):
         tm.pair_ratios([])

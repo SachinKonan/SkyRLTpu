@@ -76,6 +76,9 @@ def grade(
     child_env: dict[str, str] | None = None,
     workdir: str | None = None,
     problem_version: str | None = None,
+    export_signatures: list[dict] | None = None,
+    export_platforms: list[str] | None = None,
+    artifact_dir: str | None = None,
 ) -> dict:
     """Grade one candidate. Returns the child's result dict, augmented with
     parent-side bookkeeping (wall time, cache hit, timeout/oom classification).
@@ -122,6 +125,10 @@ def grade(
         "determinism_runs": determinism_runs,
         "correctness_seeds": correctness_seeds,
         "fail_reward": fail_reward,
+        # persistent-worker export path (mode="aot_export"):
+        "signatures": export_signatures,
+        "platforms": export_platforms,
+        "artifact_dir": str(wd / "artifacts") if artifact_dir is None else artifact_dir,
         # NB: no seed in this file — stdin only.
     }
     cfg_path = wd / "config.json"

@@ -76,45 +76,60 @@ Acceptance: full battery green under sbatch; every cheater rejected.
 wrong-eps-inside-bf16-tolerance gap → fixed with the small-magnitude-rows
 vector.**
 
-## Phase 2 — Single-judge shakedown on one v6e-1 @ us-east5-b (first TPU spend, ~1 day)
-- [ ] QR + provision script (baked venv, judge tmux) — becomes the keeper's
-      provision step verbatim. Measures real spot landing latency in -b
-      (decision input before committing to a 5-slice fleet).
-- [ ] RMSNorm end-to-end; on-chip goldens (naive-correct passes, wrapped
-      reference rejected, subtly-wrong fails); **determinism N≥5 bitwise**.
-- [ ] Timing invariants on silicon: ref-vs-ref = 1.00±2%, regrade ±3%,
-      per-chip noise floor measured at boot and logged; **reward > 1.0 only
-      when the win exceeds the noise floor; ties score exactly 1.0**.
-- [ ] **Peak HBM/VMEM measured and reported per grade** (memory honesty — a
-      kernel that wins latency by tripling workspace is useless for our arena
-      pressure).
-- [ ] Measure true compile + chip costs → recalibrate the throughput table.
-Acceptance: `POST /grade` on ~20 hand-written RMSNorm variants returns sane,
-stable, noise-floor-consistent rewards.
+## Phase 2 — Single-judge shakedown — **DONE 2026-08-06** (2 QRs, both deleted)
+Infrastructure fully green (5.5/7.3-min spot landings, 50s provision, artifact
+round-trip, always-delete 3/3). Three findings → the Phase 3 fixes:
+(1) cold per-candidate cost 112s mean vs 4s planned → persistent worker;
+(2) ref-vs-ref 1.019–1.053, FAILED ±2% → first-position bias, counterbalance
+R,C/C,R; (3) block-256/512 + unjitted honest goldens failed the 1.5×-ref-only
+tolerance → recalibrate across legitimate implementations. Reports:
+PHASE2-REPORT.md + runs/pallas_arena/phase2-shakedown-results-3645912.json.
 
-## Phase 3 — Fleet keeper (~half a day, alongside Phase 4)
-- [ ] `keeper.sh` reconcile loop (generalize forever_sweep): list judge-{1..5}
-      QRs in us-east5-b → delete SUSPENDED/FAILED → create to target 5 →
-      provision newly ACTIVE → health-check by grading a golden kernel
-      end-to-end → publish name→IP registry to
-      gs://sk7524-pallas-arena-us-east5/judge-registry.json.
-- [ ] Client: judge-URL list from the registry, round-robin, failover-on-timeout
-      (the vLLM round-robin pattern). Judges stateless; shared GCS reward cache
-      keeps repeat rewards byte-identical across fleet churn.
-- [ ] Chaos test: kill one judge mid-batch → batch completes on survivors,
-      keeper replaces within one cycle + provision (~5 min).
+## Phase 3 — Fixes + pull-queue, SIMULATED locally (zero TPU, sbatch only)
+Architecture (user-settled): work queue lives with the training client (v5p
+host); judges are pure stateless pollers. Queue leases items; requeue on lease
+timeout (~2× max grade time) / missed heartbeat; double-grades harmless
+(idempotent + hash cache). No GCS registry, no client-side routing; keeper's
+only job = fleet size 5.
+- [ ] Persistent worker per chip: jax/TPU init + reference compile ONCE at
+      boot; candidate AOT-compiled in the throwaway sandbox child (no TPU);
+      worker loads + times the compiled artifact. Target: ~4s/candidate warm.
+- [ ] Counterbalanced R,C/C,R timing; keep per-candidate interleaved ref
+      timing (drift cancellation; every-Nth re-time as a future knob).
+- [ ] Tolerance recalibration: margin from the spread across MULTIPLE honest
+      implementations (block sizes, unjitted), not the reference alone; the
+      three failed goldens become the regression tests.
+- [ ] Queue server (`judge/queue.py`): thread-locked FIFO + leases + heartbeat
+      endpoint; runs anywhere (localhost for sim, v5p w0 in prod).
+- [ ] **Local simulation**: queue + 5 simulated judge workers as processes
+      (CPU interpret-mode grading or mock timing) under sbatch; chaos tests —
+      kill workers mid-lease → item requeues and completes elsewhere; kill/
+      restart the queue; throughput + lease-expiry accounting exact.
+Acceptance: sim battery green incl. chaos; full CPU battery still 98/98.
 
-## Phase 4 — RL env integration (~half a day, borrowed v5p slice between sweep variants)
-- [ ] `examples/pallas_arena/` in discover (copy the gpu_mode pattern): prompt =
-      problem spec + reference signature + declared shapes; evaluator = AOT
-      pre-gate → hash-cache lookup → judge POST with failover.
-- [ ] Runner `_ENVS` entry, task as `problem_type` **WITH a default** (the
-      circle/acineq lesson, f2b522d1).
-- [ ] 2-step RL smoke vs RMSNorm at 8×8 on a v5p slice between sweep variants.
-Acceptance: nonzero valid rate, finite distinct rewards, cache hits on repeats,
-judge queue depth 0 when sampling ends.
+## Phase 4 — Small-scale real revalidation (1× spot v6e-1, ~1 chip-hour)
+- [ ] One judge polling the (login-node or compute-node) queue over the wire;
+      RMSNorm battery with the three fixes: warm cost ≈4s, ref-vs-ref within
+      ±2%, recalibrated goldens all pass, N≥5 bitwise determinism, peak-HBM.
+      Always-delete unchanged.
+Acceptance: every Phase-2 red is green on silicon.
 
-## Phase 5 — The science (per-run, standard sweep machinery)
+## Phase 5 — The real run: v5p-8 + 5× v6e-1 fleet (RL end-to-end)
+- [ ] `examples/pallas_arena/` env in discover (gpu_mode pattern): prompt =
+      spec + reference signature + declared shapes; evaluator = AOT pre-gate →
+      hash-cache → enqueue + await result. Runner `_ENVS` entry with a DEFAULT
+      problem_type (the circle lesson, f2b522d1).
+- [ ] Training side: v5p-8 is ONE host (4 chips) — needs split-host serving
+      (train TP/FSDP on 2 chips + vLLM TP=2 on 2 chips) at reduced ctx (kernel
+      prompts ≪ erdos; arena scales quadratically down). Agent sizes this; if
+      27B genuinely doesn't fit both roles, fall back to v5p-16 (w0 train +
+      w1 vLLM) and say so.
+- [ ] Fleet keeper (reconcile to 5 judges; provision = the phase-2 script);
+      queue on the v5p w0; short RL run (RMSNorm, ~5 steps) end-to-end.
+Acceptance: nonzero valid rate, finite distinct rewards, cache hits on
+repeats, queue depth ~0 while sampling streams, no idle spot left behind.
+
+## Phase 6 — The science (per-run, standard sweep machinery)
 Run order: RMSNorm (harness-calibration run) → splash → ragged paged attention
 → FLCE → megablox → RG-LRU. Each: 15-step variant via a driver spec line +
 forever supervisor, unchanged.
