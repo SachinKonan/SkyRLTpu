@@ -82,6 +82,12 @@ def main() -> None:
         "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv", "ac1"),
         "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv", "26"),
         "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv", "65536"),
+        # Frontier-CS algorithmic track; problem_type = FC problem id under
+        # examples/frontier_algo/problems/ (46=JSSP, 159, 302). Grades by
+        # compiling the model's C++ with `g++ -O2 -pipe -std=gnu++17`: the TPU
+        # hosts' /usr/bin/g++ 11.3 and neuronic's 11.5 both suffice, so
+        # TTD_FCALGO_GXX only needs setting on a host without a C++17 g++.
+        "frontier_algo": ("examples.frontier_algo.env", "FrontierAlgoEnv", "46"),
     }
     env_key = os.environ.get("TTD_ENV", "erdos_min_overlap")
     _mod, _cls, _default_problem = _ENVS[env_key]
