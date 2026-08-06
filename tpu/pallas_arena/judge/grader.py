@@ -127,9 +127,16 @@ def grade(
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(
         [str(IMPORT_ROOT), str(REPO_ROOT), env.get("PYTHONPATH", "")])
-    env.setdefault("JAX_PLATFORMS", env.get("ARENA_JAX_PLATFORMS", ""))
-    if not env["JAX_PLATFORMS"]:
-        del env["JAX_PLATFORMS"]
+    # TPU-host split: the judge parent runs jax-CPU (JAX_PLATFORMS=cpu) so
+    # the exclusive TPU chip stays free for the grading child. Setting
+    # ARENA_CHILD_JAX_PLATFORMS=tpu on the judge redirects children to the
+    # chip; unset means children inherit the parent's platform (CPU battery).
+    child_platforms = env.pop("ARENA_CHILD_JAX_PLATFORMS", None)
+    if child_platforms is not None:
+        if child_platforms:
+            env["JAX_PLATFORMS"] = child_platforms
+        else:
+            env.pop("JAX_PLATFORMS", None)
     for var, val in (child_env or {}).items():
         env[var] = val
     env.pop("ARENA_HIDDEN_SEED", None)  # belt & suspenders: never via env

@@ -105,6 +105,17 @@ class RMSNormProblem(Problem):
             x = x.at[1].set(jnp.full((x.shape[1],), 1.5e19, jnp.bfloat16))
             return (x, g)
 
+        def small_magnitude_rows(key):
+            # rows with var ~= eps: the ONLY regime where the epsilon inside
+            # rsqrt matters — a wrong-eps kernel (1e-3 vs 1e-6) is invisible
+            # on unit-scale rows but ~40% off here
+            x, g = self.make_inputs(key, self.case_by_name("tiny"))
+            kx = jax.random.fold_in(key, 99)
+            small = (0.03 * jax.random.normal(kx, (4, x.shape[1]),
+                                              jnp.float32)).astype(jnp.bfloat16)
+            x = x.at[4:8].set(small)
+            return (x, g)
+
         def expect_finite(ref, inputs):
             assert np.isfinite(np.asarray(ref, np.float64)).all(), \
                 "reference produced non-finite values"
@@ -118,6 +129,8 @@ class RMSNormProblem(Problem):
             AdversarialCase("outlier-rows", outlier_rows, expect_finite),
             AdversarialCase("zero-row", zero_row, expect_zero_row),
             AdversarialCase("near-overflow-bf16", near_overflow_bf16,
+                            expect_finite),
+            AdversarialCase("small-magnitude-rows", small_magnitude_rows,
                             expect_finite),
         ]
 
