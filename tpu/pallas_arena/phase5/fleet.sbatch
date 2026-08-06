@@ -272,7 +272,18 @@ uv run --isolated --extra dev --extra jax python -m pallas_arena.phase5.keeper \
 keeper_pid=$!
 
 # ------------------------------------------------------------------- driver
-echo "=== running fleet driver $(date +%H:%M:%S) ==="
+# The grade wait is derived, not fixed: the corpus costs ~9200 judge-seconds
+# (phase-4 per-variant `item_wall_s` x the corpus plan), so a degraded fleet
+# legitimately needs proportionally longer, and a fixed 4800 s would call a
+# 2-judge run "not all graded" when it was merely half as wide. It is then
+# clamped by what is actually LEFT under the 3 h hard cap (minus 20 min for
+# the duplicate/cache pass, artifact fetch and teardown), so the derived
+# number can never push the run past the cap.
+want_wait=$(( 1200 + 14000 / n_landed ))
+remain_wait=$(( t_first_qr + HARD_CAP_S - $(date +%s) - 1200 ))
+grade_wait=$(( want_wait < remain_wait ? want_wait : remain_wait ))
+[ "$grade_wait" -lt 600 ] && grade_wait=600
+echo "=== running fleet driver $(date +%H:%M:%S) (grade-wait ${grade_wait}s for ${n_landed} judges) ==="
 uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with flatbuffers \
   python tpu/pallas_arena/phase5/fleet_driver.py \
   --queue "http://127.0.0.1:${PORT}" \
@@ -280,7 +291,7 @@ uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with f
   --judges "$landed" --judges-expected "$n_landed" --judges-min "$MIN_JUDGES" \
   --target "$TARGET" --dups "$DUPS" --expect-tpu \
   --zone "$ZONE" --project "$PROJECT" \
-  --fleet-wait-s 900 --grade-wait-s 4800 --chaos-after 0.35
+  --fleet-wait-s 900 --grade-wait-s "$grade_wait" --chaos-after 0.35
 rc=$?
 
 # ---------------------------------------------------------------- artifacts
