@@ -94,6 +94,9 @@ def main():
                     help="base completion prompt; sample_farm appends the instruction to it")
     ap.add_argument("--farm-max-tokens", type=int, default=28000)
     ap.add_argument("--farm-temperature", type=float, default=1.0)
+    ap.add_argument("--farm-extra-body", default=None,
+                    help='JSON merged into farm requests (gemma4 thinking: '
+                         '\'{"chat_template_kwargs": {"enable_thinking": true}}\')')
     args = ap.parse_args()
 
     logdir = Path(args.logdir)
@@ -181,14 +184,17 @@ def main():
             prompt = base_prompt + (("\n\n## Additional instruction from the orchestrator\n"
                                      + instruction) if instruction.strip() else "")
             out = []
+            body = {"model": args.farm_model, "n": n,
+                    "temperature": args.farm_temperature,
+                    "max_tokens": args.farm_max_tokens,
+                    "messages": [{"role": "user", "content": prompt}]}
+            if args.farm_extra_body:
+                body.update(json.loads(args.farm_extra_body))
             async with httpx.AsyncClient(timeout=1800) as cli:
                 r = await cli.post(
                     f"{args.farm_url.rstrip('/')}/v1/chat/completions",
                     headers={"Authorization": f"Bearer {args.farm_key}"},
-                    json={"model": args.farm_model, "n": n,
-                          "temperature": args.farm_temperature,
-                          "max_tokens": args.farm_max_tokens,
-                          "messages": [{"role": "user", "content": prompt}]})
+                    json=body)
                 r.raise_for_status()
                 data = r.json()
             for j, ch in enumerate(data.get("choices", [])):

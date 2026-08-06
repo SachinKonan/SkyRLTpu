@@ -41,14 +41,17 @@ def strip_fence(t):
 async def one(i, cli, args, prompt, out, lock):
     sid = f"t2_{i:03d}"
     rawf = out / "raw" / f"{sid}.json"
+    body = {"model": args.model, "temperature": args.temperature,
+            "max_tokens": args.max_tokens,
+            "messages": [{"role": "user", "content": prompt}]}
+    if args.extra_body:
+        body.update(json.loads(args.extra_body))
     for attempt in range(4):
         try:
             r = await cli.post(
                 f"{args.farm_url.rstrip('/')}/v1/chat/completions",
                 headers={"Authorization": f"Bearer {args.api_key}"},
-                json={"model": args.model, "temperature": args.temperature,
-                      "max_tokens": args.max_tokens,
-                      "messages": [{"role": "user", "content": prompt}]})
+                json=body)
             r.raise_for_status()
             data = r.json()
             break
@@ -86,7 +89,8 @@ async def run(args):
     (out / "manifest.json").write_text(json.dumps({
         "cell": args.cell, "problem": args.problem, "n": args.n, "model": args.model,
         "farm_url": args.farm_url, "temperature": args.temperature,
-        "max_tokens": args.max_tokens, "seed_score": meta.get("seed_score"),
+        "max_tokens": args.max_tokens, "extra_body": args.extra_body,
+        "seed_score": meta.get("seed_score"),
         "started": time.strftime("%F %T")}, indent=2))
 
     todo = [i for i in range(args.n)
@@ -121,6 +125,11 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--max-tokens", type=int, default=28000)
+    ap.add_argument("--extra-body", default=None,
+                    help="JSON merged into the request body. gemma4 THINKING NEEDS "
+                         '\'{"chat_template_kwargs": {"enable_thinking": true}}\' -- the '
+                         "stock template only injects the <|think|> system turn with that "
+                         "flag; without it the model emits an empty thought channel.")
     ap.add_argument("--out", required=True)
     ap.add_argument("--cell", default="C")
     ap.add_argument("--resume", action="store_true")

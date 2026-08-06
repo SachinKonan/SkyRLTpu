@@ -1,7 +1,8 @@
 #!/bin/bash
 # T2 farm smoke/run from a compute node: open SSH tunnel to the TPU's vLLM, wait for health
 # (first XLA compile can take ~55 min), then sample.
-#   sbatch t2_smoke.sh <tpu_name> <model_name> <problem> <out_dir> [n] [concurrency] [cell]
+#   sbatch t2_smoke.sh <tpu_name> <model_name> <problem> <out_dir> [n] [concurrency] [cell] [extra_body_json]
+# gemma4 thinking REQUIRES extra_body_json='{"chat_template_kwargs": {"enable_thinking": true}}'
 #SBATCH --job-name=rq1_t2
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -12,6 +13,7 @@
 #SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/logs/%x_%j.log
 set -uo pipefail
 TPU_NAME="$1"; MODEL="$2"; PROBLEM="$3"; OUT="$4"; N="${5:-5}"; CONC="${6:-4}"; CELL="${7:-C}"
+EXTRA_BODY="${8:-}"
 RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1
 PORT=$((18000 + RANDOM % 1000))
 
@@ -35,5 +37,8 @@ for i in $(seq 1 150); do
 done
 
 cd "$RQ1/client"
+EXTRA_ARGS=()
+[ -n "$EXTRA_BODY" ] && EXTRA_ARGS=(--extra-body "$EXTRA_BODY")
 uv run collect_t2.py --problem "$PROBLEM" --n "$N" --concurrency "$CONC" \
-  --farm-url "http://127.0.0.1:$PORT" --model "$MODEL" --out "$OUT" --cell "$CELL" --resume
+  --farm-url "http://127.0.0.1:$PORT" --model "$MODEL" --out "$OUT" --cell "$CELL" --resume \
+  "${EXTRA_ARGS[@]}"
