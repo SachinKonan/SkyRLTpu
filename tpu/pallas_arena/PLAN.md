@@ -117,12 +117,30 @@ only job = fleet size 5.
 Acceptance MET 2026-08-06: **121/121** green under sbatch (job 3646312;
 legacy 98 still green inside it). Logs runs/pallas_arena/phase1-tests-*.log.
 
-## Phase 4 — Small-scale real revalidation (1× spot v6e-1, ~1 chip-hour)
-- [ ] One judge polling the (login-node or compute-node) queue over the wire;
-      RMSNorm battery with the three fixes: warm cost ≈4s, ref-vs-ref within
-      ±2%, recalibrated goldens all pass, N≥5 bitwise determinism, peak-HBM.
+## Phase 4 — Small-scale real revalidation (1× spot v6e-1) — **DONE 2026-08-06**
+- [x] One judge polling the compute-node queue over the wire; RMSNorm battery
+      with the three fixes: warm cost ≈4s, ref-vs-ref within ±2%,
+      recalibrated goldens all pass, N≥5 bitwise determinism, peak-HBM.
       Always-delete unchanged.
-Acceptance: every Phase-2 red is green on silicon.
+Acceptance MET: **every phase-2 red is green on silicon**, driver `rc=0`,
+0 hard failures. Two attempts, both spot v6e-1 in us-east5-b, both QRs
+deleted (zero pallas QRs/nodes remain).
+- Attempt 1 (job 3646330) = the diagnosis: ref-vs-ref and determinism green,
+  but warm cost **261.3 s**, br512 golden VMEM-OOM, `cached-output` at the
+  wrong gate label, and `timer-tamperer` wedged the judge 19+ min. Four
+  fixes: device-side `error_stats`, VMEM budget at the measured 23.05 B/elt,
+  a `constant-output` cheater closing a CPU blind spot, a per-grade wall
+  budget.
+- Attempt 2 (job 3646679) = **ALL GREEN**: warm cost **1.944 s** (134× down,
+  target 4 s), ref-vs-ref 0.9994/0.99996/0.9968 (max dev 0.32%), all five
+  goldens pass incl. br512 (0.8258), determinism N≥5 bitwise in all 10
+  passing grades, peak HBM 16.8–20.9 GB, cheater battery **11/11 at the
+  correct gate**, queue 20/20 with 0 duplicates, and the mid-lease SIGKILL
+  chaos test green (kill proven mid-grade, `attempts=2`, regrade 0.5650 vs
+  0.5681 = 0.55%). End-to-end lane cost **5.0 s median** (`item_wall_s`).
+  Full scorecard + the one residual (the wall budget does not bound XLA
+  compilation) in PHASE4-REPORT.md.
+- CPU battery with the fixes: **126/126** green under sbatch (job 3646652).
 
 ## Phase 5 — GRADING-SERVER FLEET DEMONSTRATION (user-scoped 08-06: NO RL)
 The deliverable is proof the grading server works at fleet scale — not a
