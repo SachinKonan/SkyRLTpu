@@ -18,8 +18,17 @@ the owner. Comparability is the whole point: do not tweak prompts, budgets, or m
 
 1. Needs: Linux, `uv` (https://astral.sh/uv), the `codex` CLI on PATH and logged in
    (`codex login` if `~/.codex/auth.json` is missing), `g++` (C++ problems), `python3`.
-2. Get this directory (`tpu/rq1/client/` of branch `rq1-collection`) onto the box — git clone
-   or the tarball you were given. Everything runs from inside `client/`.
+2. Get this directory onto the box (needs GitHub auth for the fork — `gh auth login` or a PAT):
+
+       git clone --depth 1 --branch rq1-collection --filter=blob:none --no-checkout \
+           https://github.com/SachinKonan/SkyRLTpu.git rq1
+       cd rq1
+       git sparse-checkout set tpu/rq1
+       git checkout rq1-collection
+       cd tpu/rq1/client
+
+   (Sparse+shallow keeps it to a few MB; the repo's submodules are NOT needed — never run
+   `git submodule update`.) Everything below runs from inside `client/`.
 3. Preflight (2 short codex probes, ~2 min):
 
        uv run preflight.py
