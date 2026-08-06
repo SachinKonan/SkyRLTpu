@@ -22,12 +22,13 @@ candidate cannot touch the judge's timer, reference outputs, or reward cache.
 
 ## Phase 0 — Prerequisites (no TPU, ~half a day)
 - [x] Zone: us-east5-b. Bucket: gs://sk7524-pallas-arena-us-east5 (created).
-- [ ] Confirm QueuedResourcePerProjectPerZone in us-east5-b ≥ 5 free slots.
-- [ ] Verify each baseline imports at our pins, CPU interpret mode, tiny shapes:
-      `jax.experimental.pallas.ops.tpu.splash_attention`; vLLM-TPU
-      `ragged_paged_attention`; MaxText megablox gmm; recurrentgemma RG-LRU
-      Pallas scan; our in-tree FLCE (198f41fa/2e85086f). Record module paths +
-      versions in `problems/README`. This is the early-kill gate.
+- [x] Confirm QueuedResourcePerProjectPerZone in us-east5-b ≥ 5 free slots.
+      (2026-08-06: limit 20, 13 in use by another user's fleet → 7 free.
+      CAPACITY warning: a v6e-8 QR in-zone FAILED with "no more capacity";
+      see PHASE0-REPORT.md.)
+- [x] Verify each baseline imports at our pins, CPU interpret mode, tiny shapes
+      — GREEN, sbatch job 3645849, all six at jax 0.10.2; exact module paths
+      + versions in `PHASE0-REPORT.md` (kept there instead of problems/README).
 - [ ] Service-account IAM grant (admin): without it the keeper dies at each
       daily gcloud expiry — the single 24/7-availability blocker.
 
@@ -42,32 +43,38 @@ candidate per the idiom above), `timing.py`, `cache.py` (GCS hash→reward),
 calibration, adversarial vector generator, golden candidates).
 
 Test battery — the three layers PLUS the sufficiency additions:
-- [ ] References vs closed forms (interpret mode, tiny shapes); reward math on
+- [x] References vs closed forms (interpret mode, tiny shapes); reward math on
       synthetic latencies.
-- [ ] Cheater battery, every one must fail: cached-output (fails fresh seeds);
+- [x] Cheater battery, every one must fail: cached-output (fails fresh seeds);
       aliased reference call (AST); **obfuscated import**
       (`importlib.import_module("jax."+x)` — caught by child module stubs, not
       AST); **timer-tamperer** (defeated by process isolation); seed-reader
       (impossible by construction — inputs generated on-device from a seed the
       child never receives); Python-level memoizer (defeated by fresh inputs
-      per timed iteration).
-- [ ] **Adversarial vector library per task** (tolerance-exploitation defense —
+      per timed iteration). (Plus: split-personality, wrong-backward,
+      nondeterministic, RLIMIT hog, sleeper.)
+- [x] **Adversarial vector library per task** (tolerance-exploitation defense —
       approximation passes allclose on Gaussian seeds forever): softmax-
       saturating logits / fully-masked rows must yield 0 not NaN (attention);
-      label-in-tail, ignore-index, LSE stability at 150k vocab (FLCE);
+      label-in-tail, LSE stability at 150k vocab (FLCE);
       group_size=0 and max-skew single-expert (megablox); a→1 long memory,
       reset boundaries, non-divisible T (RG-LRU); page-boundary + single-token
-      + max-length (paged attention). Check per-element error TAILS (max +
-      quantiles), not just global allclose.
-- [ ] **Gradient checks** for fwd+bwd tasks (RMSNorm, FLCE; splash bwd is
+      + max-length (paged attention); small-magnitude rows where var≈eps
+      (RMSNorm — this is what catches wrong-epsilon). Per-element error TAILS
+      (max + q99), not global allclose.
+- [x] **Gradient checks** for fwd+bwd tasks (RMSNorm, FLCE; splash bwd is
       phase-2 of its task): jax.grad vs fp32 reference at its own calibrated
-      tolerance + finite-difference spot checks. Pin the fwd-only vs fwd+bwd
-      contract per task so candidate and baseline do the same work.
-- [ ] Timing protocol: interleaved R,C median-of-20, **fresh inputs per
+      tolerance + finite-difference spot checks. Contract pinned per task via
+      Problem.has_bwd.
+- [x] Timing protocol: interleaved R,C median-of-20, **fresh inputs per
       iteration**, block_until_ready, **correctness verified on an output from
       a timed invocation** (kills fast-garbage/slow-correct split kernels).
-- [ ] CPU AOT pre-gate helper (client side).
+- [x] CPU AOT pre-gate helper (client side) — judge/aot_gate.py.
 Acceptance: full battery green under sbatch; every cheater rejected.
+**DONE 2026-08-06: 98/98 green, sbatch job 3645902
+(runs/pallas_arena/phase1-tests-3645902.log); first run 3645889 caught the
+wrong-eps-inside-bf16-tolerance gap → fixed with the small-magnitude-rows
+vector.**
 
 ## Phase 2 — Single-judge shakedown on one v6e-1 @ us-east5-b (first TPU spend, ~1 day)
 - [ ] QR + provision script (baked venv, judge tmux) — becomes the keeper's
