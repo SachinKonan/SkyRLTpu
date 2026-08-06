@@ -149,6 +149,7 @@ def shakedown_variants() -> dict[str, str]:
         # must FAIL (cheaters / bugs)
         "wrong-eps": cand.WRONG_EPS_RMSNORM,
         "cached-output": cand.CACHED_OUTPUT_RMSNORM,
+        "constant-output": cand.CONSTANT_OUTPUT_RMSNORM,
         "aliased-reference": cand.ALIASED_REFERENCE_RMSNORM,
         "obfuscated-import": cand.OBFUSCATED_IMPORT_RMSNORM,
         "seed-reader": cand.SEED_READER_RMSNORM,
@@ -184,7 +185,13 @@ WORKER_EXPECT_PASS = EXPECT_PASS | {"split-personality", "nondeterministic"}
 WORKER_EXPECT_SLOW = {"timer-tamperer"}
 WORKER_EXPECT_FAIL_GATE = {
     "wrong-eps": ("correctness",),
-    "cached-output": ("correctness",),
+    # measured on silicon (phase 4): the (32, 64) constant cannot broadcast
+    # against a declared signature, so jax.export refuses to serialize it and
+    # the cheat dies one gate EARLIER than on the fork path — structurally
+    # stronger, never weaker. `constant-output` below is the shape-correct
+    # form that still has to be caught by correctness on fresh seeds.
+    "cached-output": ("correctness", "aot_export"),
+    "constant-output": ("correctness",),
     "aliased-reference": ("ast",),
     "obfuscated-import": ("poison_stub", "aot_export"),
     "seed-reader": ("correctness",),

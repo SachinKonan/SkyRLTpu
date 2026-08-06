@@ -62,6 +62,22 @@ def kernel(x, g):
     return _out
 """
 
+# --- cheater 1b: SHAPE-CORRECT canned answer. Phase 4 measured that the
+# cheater above never reaches the correctness gate on the persistent-worker
+# path: its (32, 64) constant fails to broadcast against the real signature
+# and jax.export rejects it outright. That is a fine outcome, but it left the
+# "ignores its inputs and returns a plausible answer" cheat untested against
+# the gate that is actually supposed to catch it. This one exports cleanly
+# for every declared signature and must die on fresh hidden seeds.
+CONSTANT_OUTPUT_RMSNORM = """
+import jax
+import jax.numpy as jnp
+
+def kernel(x, g):
+    canned = jnp.float32(0.5) * g.astype(jnp.float32)
+    return jnp.broadcast_to(canned, x.shape).astype(x.dtype)
+"""
+
 # --- cheater 2: aliased/wrapped reference call (AST-rejected)
 ALIASED_REFERENCE_RMSNORM = """
 from pallas_arena.judge.problems.rmsnorm import PROBLEM as _p
