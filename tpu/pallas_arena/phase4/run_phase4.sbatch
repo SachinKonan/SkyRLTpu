@@ -21,11 +21,17 @@ if [ -z "${SLURM_JOB_ID:-}" ]; then
   exit 1
 fi
 
-QR_NAME=sk7524-pallas-judge-shakedown
-ZONE=us-east5-b
-PROJECT=vision-mix
-ACCEL=v6e-1
-RUNTIME=v2-alpha-tpuv6e
+# Judge slice. Default = spot v6e-1 in us-east5-b, the SAME chip attempt 1
+# measured on: attempt 2's whole job is to show warm chip time falling from
+# the measured 261 s, and a cross-generation comparison would confound
+# exactly that number. It is also the chip the fleet demonstration uses.
+# For a v5p judge (4 chips on ONE host; the worker uses chip 0 only):
+#   ZONE=us-east5-a ACCEL=v5p-8 RUNTIME=v2-alpha-tpuv5 sbatch ...
+QR_NAME=${QR_NAME:-sk7524-pallas-judge-shakedown}
+ZONE=${ZONE:-us-east5-b}
+PROJECT=${PROJECT:-vision-mix}
+ACCEL=${ACCEL:-v6e-1}
+RUNTIME=${RUNTIME:-v2-alpha-tpuv6e}
 PORT=${PORT:-8770}
 WAIT_ACTIVE_S=${WAIT_ACTIVE_S:-7200}
 repo_root=/n/fs/vision-mix/sk7524/SkyRLTpu
@@ -40,13 +46,20 @@ tssh() { timeout 300 gcloud compute tpus tpu-vm ssh "$QR_NAME" --zone="$ZONE" \
 
 queue_pid=""
 worker_pid=""
+cleaned=""
 cleanup() {
+  [ -n "$cleaned" ] && return 0   # idempotent: the TERM path exits through EXIT too
+  cleaned=1
   echo "[cleanup] $(date +%H:%M:%S) killing worker/queue, deleting QR (always-delete)"
   [ -n "$worker_pid" ] && kill "$worker_pid" 2>/dev/null
   [ -n "$queue_pid" ] && kill "$queue_pid" 2>/dev/null
   gc queued-resources delete "$QR_NAME" --force --quiet 2>&1 | tail -2 || true
 }
+# EXIT alone is NOT enough: an untrapped SIGTERM (slurm time limit, scancel,
+# node drain) kills bash outright without running the EXIT trap, which would
+# strand a spot QR burning chips with nobody watching. Trap the signals too.
 trap cleanup EXIT
+trap 'cleanup; exit 143' TERM INT HUP
 
 echo "=== phase 4: starting queue on $(hostname):${PORT} $(date +%H:%M:%S) ==="
 uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with flatbuffers \
@@ -87,19 +100,24 @@ tssh "bash ~/arena/pallas_arena/phase2/provision_judge.sh" || { echo "provision 
 echo "=== launching worker over reverse tunnel $(date +%H:%M:%S) ==="
 # The ssh session IS the tunnel: the worker on the TPU host reaches this
 # node's queue at 127.0.0.1:${PORT} through -R. Restart loop survives ssh
-# drops; the driver decides when we are done.
+# drops AND the chaos kill; the driver decides when we are done.
+# ExitOnForwardFailure=yes matters here: after the mid-lease SIGKILL the old
+# sshd may still hold the remote listen port for a moment, and without it ssh
+# would come back up with a WARNING and a worker that can never see the queue.
 (
   while true; do
     timeout 3600 gcloud compute tpus tpu-vm ssh "$QR_NAME" --zone="$ZONE" --project="$PROJECT" --worker=0 \
       --command="cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
         ~/arena-venv/bin/python -m pallas_arena.judge.worker \
         --problem rmsnorm --queue http://127.0.0.1:${PORT} --sim-mode real \
-        --timing-pairs 20 --worker-id v6e-judge --boot-report /home/sk7524/boot-report.json --poll-s 2" \
-      -- -R "${PORT}:localhost:${PORT}" -o ServerAliveInterval=30 -o ServerAliveCountMax=4 \
+        --timing-pairs 20 --worker-id ${ACCEL}-judge --boot-report \$HOME/boot-report.json --poll-s 2 \
+        2>&1 | tee -a \$HOME/worker-progress.log" \
+      -- -R "${PORT}:localhost:${PORT}" -o ExitOnForwardFailure=yes \
+         -o ServerAliveInterval=30 -o ServerAliveCountMax=4 \
       >> "${out_dir}/phase4-worker-${SLURM_JOB_ID}.log" 2>&1
-    echo "[worker-ssh] session ended rc=$? $(date +%H:%M:%S); restarting in 15s" \
+    echo "[worker-ssh] session ended rc=$? $(date +%H:%M:%S); restarting in 10s" \
       >> "${out_dir}/phase4-worker-${SLURM_JOB_ID}.log"
-    sleep 15
+    sleep 10
   done
 ) &
 worker_pid=$!
@@ -109,13 +127,19 @@ uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with f
   python tpu/pallas_arena/phase4/driver.py \
   --queue "http://127.0.0.1:${PORT}" \
   --out "${out_dir}/phase4-results-${SLURM_JOB_ID}.json" \
-  --worker-wait-s 2400 --grade-wait-s 3600
+  --worker-wait-s 2400 --grade-wait-s 3600 \
+  --chaos-qr "$QR_NAME" --chaos-zone "$ZONE" --chaos-project "$PROJECT"
 rc=$?
 
 echo "=== fetching artifacts $(date +%H:%M:%S) ==="
 kill "$worker_pid" 2>/dev/null; worker_pid=""
 timeout 300 gcloud compute tpus tpu-vm scp \
   "${QR_NAME}:~/boot-report.json" "${out_dir}/phase4-boot-report-${SLURM_JOB_ID}.json" \
+  --zone="$ZONE" --project="$PROJECT" --worker=0 || true
+# per-item breakdown straight off the host: gcloud's ssh pipe block-buffers
+# the worker's stdout, so the tee'd copy is the authoritative progress log
+timeout 300 gcloud compute tpus tpu-vm scp \
+  "${QR_NAME}:~/worker-progress.log" "${out_dir}/phase4-worker-progress-${SLURM_JOB_ID}.log" \
   --zone="$ZONE" --project="$PROJECT" --worker=0 || true
 
 echo "=== phase 4 done rc=${rc} $(date +%H:%M:%S) (QR deleted by trap) ==="

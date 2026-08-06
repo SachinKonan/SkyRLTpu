@@ -124,7 +124,22 @@ legacy 98 still green inside it). Logs runs/pallas_arena/phase1-tests-*.log.
       Always-delete unchanged.
 Acceptance: every Phase-2 red is green on silicon.
 
-## Phase 5 — The real run: v5p-8 + 5× v6e-1 fleet (RL end-to-end)
+## Phase 5 — GRADING-SERVER FLEET DEMONSTRATION (user-scoped 08-06: NO RL)
+The deliverable is proof the grading server works at fleet scale — not a
+training run. No v5p, no vLLM, no policy: a fixed corpus of candidate kernels
+is submitted through the queue and graded by 5 judges.
+- [ ] 5× spot v6e-1 (us-east5-b) all polling ONE queue (queue runs wherever —
+      login-adjacent host or a compute node).
+- [ ] Corpus: honest variants (block sizes, unjitted, bf16-out) + the full
+      cheater battery + a fast/slow spread, submitted as one batch.
+- [ ] Acceptance: every cheater rejected at the correct gate; every honest
+      candidate scored reproducibly (regrade within ±3%); ref-vs-ref 1.00±2%;
+      rewards byte-identical for repeats via the shared cache.
+- [ ] Chaos: kill a judge mid-lease → its work requeues and completes on the
+      survivors, no lost or double-counted results.
+- [ ] Measured fleet throughput (candidates/min) + zero resources left behind.
+
+## (deferred, NOT now) The real RL run: v5p + fleet
 - [ ] `examples/pallas_arena/` env in discover (gpu_mode pattern): prompt =
       spec + reference signature + declared shapes; evaluator = AOT pre-gate →
       hash-cache → enqueue + await result. Runner `_ENVS` entry with a DEFAULT

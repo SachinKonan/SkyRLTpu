@@ -45,6 +45,10 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--worker-wait-s", type=float, default=1800.0)
     ap.add_argument("--grade-wait-s", type=float, default=3600.0)
+    ap.add_argument("--chaos-qr", default=None, help="QR name; enables the mid-lease worker-kill test")
+    ap.add_argument("--chaos-zone", default="us-east5-b")
+    ap.add_argument("--chaos-project", default="vision-mix")
+    ap.add_argument("--chaos-wait-s", type=float, default=1200.0)
     args = ap.parse_args()
 
     client = ArenaQueueClient(args.queue)
@@ -56,6 +60,12 @@ def main() -> int:
         print(f"[inv] {'PASS' if ok else 'FAIL'} {name}: {json.dumps(detail, default=str)[:400]}", flush=True)
         if not ok:
             hard_fail.append(name)
+
+    def measure(name: str, detail):
+        """Recorded + printed, never a gate: numbers the phase report quotes
+        but that no acceptance item is defined against."""
+        results.setdefault("measurements", {})[name] = detail
+        print(f"[measure] {name}: {json.dumps(detail, default=str)[:400]}", flush=True)
 
     # ---- wait for the (tunneled) worker to start polling
     deadline = time.time() + args.worker_wait_s
@@ -127,6 +137,27 @@ def main() -> int:
     else:
         invariant("warm-cost", False, "no warm_chip_s measurements")
 
+    # end-to-end lease wall + its breakdown: what a judge lane actually costs
+    # per candidate (the fleet-throughput number), reported not gated.
+    def _stat(key, only_passing=True):
+        src = passing.values() if only_passing else [g for g in grades.values() if g]
+        vals = sorted(v for v in (g.get(key) for g in src) if isinstance(v, (int, float)))
+        if not vals:
+            return None
+        return {"n": len(vals), "median": vals[len(vals) // 2], "min": vals[0], "max": vals[-1]}
+
+    measure(
+        "per-candidate-cost-breakdown-s",
+        {
+            "item_wall": _stat("item_wall_s", only_passing=False),
+            "item_wall_passing": _stat("item_wall_s"),
+            "export_child": _stat("export_s", only_passing=False),
+            "artifact_load": _stat("load_s"),
+            "candidate_compile": _stat("candidate_compile_s"),
+            "warm_chip": _stat("warm_chip_s"),
+        },
+    )
+
     # ---- phase-2 red 3: recalibrated goldens
     goldens = ["pallas-br16", "pallas-br256", "pallas-br512", "unjitted-robust", "honest-xla-f32out"]
     bad_g = [n for n in goldens if not (grades.get(n) or {}).get("passed")]
@@ -149,6 +180,87 @@ def main() -> int:
     invariant("peak-hbm-reported", bool(hbm), {"max_gb": max(hbm) / 2**30 if hbm else None})
     backends = {g.get("backend") for g in grades.values() if g and g.get("backend")}
     invariant("children-on-tpu", backends == {"tpu"}, sorted(backends))
+
+    # ---- chaos: SIGKILL the worker MID-LEASE over the wire. Phase 3 proved
+    # requeue-on-lease-expiry in local simulation; this is the same property
+    # against a real preempted-judge stand-in (the orchestrator's ssh restart
+    # loop brings the worker back, exactly like the fleet keeper would).
+    if args.chaos_qr:
+        import subprocess
+
+        # Payload = the costliest RELIABLY-COMPLETING variant (phase 4
+        # measured `nondeterministic` at ~14 s export + ~46 s compile), so
+        # the ssh round-trip (~10-30 s) lands while the grade is in flight.
+        # The test only counts if we can PROVE the kill was mid-lease, so we
+        # re-read the item straight after the kill and retry if the worker
+        # had already posted its result.
+        chaos_detail: dict = {}
+        chaos_ok = False
+        for attempt in range(3):
+            wid = client.submit("rmsnorm", variants["nondeterministic"], tag=f"chaos-requeue-{attempt}")
+            leased, t0 = False, time.time()
+            while time.time() - t0 < 600:
+                try:
+                    if client._get(f"/result/{wid}").get("state") == "leased":
+                        leased = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(1)
+            if not leased:
+                chaos_detail = {"attempt": attempt, "why": "item never leased within 600 s"}
+                continue
+            # bracket the pattern so pkill never matches its own command line
+            kill = subprocess.run(
+                [
+                    "gcloud",
+                    "compute",
+                    "tpus",
+                    "tpu-vm",
+                    "ssh",
+                    args.chaos_qr,
+                    f"--zone={args.chaos_zone}",
+                    f"--project={args.chaos_project}",
+                    "--worker=0",
+                    "--command=pkill -9 -f '[p]allas_arena.judge.worker'",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            post = {}
+            try:
+                post = client._get(f"/result/{wid}")
+            except Exception:
+                pass
+            midlease = not post.get("done")
+            print(
+                f"[driver] chaos attempt={attempt} kill rc={kill.returncode} "
+                f"midlease={midlease} state={post.get('state')}",
+                flush=True,
+            )
+            if not midlease:
+                chaos_detail = {"attempt": attempt, "why": "grade completed before the kill landed; retrying"}
+                continue
+            got_c = client.wait([wid], timeout_s=args.chaos_wait_s, poll_s=3.0)
+            raw = {}
+            try:
+                raw = client._get(f"/result/{wid}")
+            except Exception:
+                pass
+            res_c = got_c.get(wid) or {}
+            chaos_ok = bool(res_c.get("passed") and raw.get("attempts", 0) >= 2)
+            chaos_detail = {
+                "attempt": attempt,
+                "killed_mid_lease": True,
+                "kill_rc": kill.returncode,
+                "attempts": raw.get("attempts"),
+                "regraded_passed": res_c.get("passed"),
+                "score": res_c.get("score"),
+            }
+            results["chaos"] = {"result": res_c, **chaos_detail}
+            break
+        invariant("chaos-midlease-kill-requeued", chaos_ok, chaos_detail)
 
     # ---- queue accounting after the run
     st = client.status()
