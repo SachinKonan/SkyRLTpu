@@ -159,6 +159,7 @@ def shakedown_variants() -> dict[str, str]:
         "nondeterministic": cand.NONDETERMINISTIC_RMSNORM,
         "no-kernel": cand.NO_KERNEL,
         "timer-tamperer": cand.TIMER_TAMPERER_RMSNORM,
+        "compile-bomb": cand.COMPILE_BOMB_RMSNORM,
     }
 
 
@@ -198,4 +199,13 @@ WORKER_EXPECT_FAIL_GATE = {
     "memoizer": ("aot_export", "correctness"),
     "wrong-grad": ("gradient",),
     "no-kernel": ("exec",),
+    # phase-5: the fleet-wide poison pill. `compile_budget` is the intended
+    # gate (judge-side compile-warm deadline). `timeout`/`aot_export` are
+    # accepted as STRONGER outcomes — the export child killed it first, one
+    # gate earlier and at zero chip cost.
+    "compile-bomb": ("compile_budget", "timeout", "aot_export"),
 }
+
+# Rejections that must never be handed to another judge: the verdict is a
+# property of the candidate, not of the judge that drew it.
+WORKER_EXPECT_TERMINAL = {"compile-bomb"}

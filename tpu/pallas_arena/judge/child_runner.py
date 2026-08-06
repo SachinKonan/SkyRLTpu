@@ -301,16 +301,41 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         result.update(ok=True, gate="aot_export", passed=True, artifacts=artifacts, export_s=perf() - t0)
         return 0
 
-    # ---------------- pregate mode: trace/lower only, zero chip time
+    # ---------------- pregate mode: trace/lower only, zero chip time.
+    # The parent bounds this child with the SAME compile budget the judge
+    # applies to its own compile-warm, so a compile bomb dies here (killable
+    # subprocess, no chip) instead of stalling a judge lane. The gradient
+    # functional is lowered too: that is where phase 4's 569.5 s compile
+    # lived, and a fwd-only probe would wave it straight through.
     if mode == "pregate":
         try:
             case = scored_cases[0]
             abstract = problem.abstract_inputs(case)
+            t0 = perf()
             lowered = jax.jit(fn).lower(*abstract)
-            if jax.default_backend() == "tpu":
+            result["lower_fwd_s"] = perf() - t0
+            if problem.has_bwd:
                 t0 = perf()
+                jax.jit(lambda *i: problem.grad_outputs(fn, *i)).lower(*abstract)
+                result["lower_grad_s"] = perf() - t0
+            # Backend compile too, when the client's backend can do it. On a
+            # v5p training host that is a real Mosaic/XLA compile, so an
+            # XLA-optimization bomb dies here at zero JUDGE chip cost; on a
+            # CPU-only client it is the XLA:CPU compile, which shares the
+            # platform-independent passes where these bombs actually live.
+            # A candidate whose lowering the local backend cannot handle at
+            # all (a real pallas_call on CPU) is NOT a failure of the
+            # candidate — record it and let the judge decide.
+            t0 = perf()
+            try:
                 lowered.compile()
                 result["compile_s"] = perf() - t0
+            except NotImplementedError as e:
+                result["compile_skipped"] = f"{type(e).__name__}: {e}"[:200]
+            except Exception as e:
+                if jax.default_backend() == "tpu":
+                    raise
+                result["compile_skipped"] = f"{type(e).__name__}: {e}"[:200]
             result.update(ok=True, gate="pregate", passed=True)
             return 0
         except ArenaBannedImport as e:

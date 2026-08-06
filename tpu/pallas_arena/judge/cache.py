@@ -50,6 +50,55 @@ class RewardCache:
         os.replace(tmp, p)
 
     # ------------------------------------------------------------------- gcs
+    # Two GCS backends. The python client is ~30 ms per object; shelling out
+    # to `gcloud storage cp` is 1-3 s, almost entirely CLI startup, which on
+    # a ~6 s grading lane would be a 30-50% throughput tax and would make the
+    # fleet's measured candidates/min a measurement of the gcloud CLI. The
+    # CLI stays as the no-dependency fallback. Every GCS error degrades to a
+    # cache miss: the cache must never take grading down with it.
+    _client_state = None
+
+    def _bucket(self):
+        if RewardCache._client_state is False:
+            return None
+        try:
+            from google.cloud import storage  # type: ignore
+
+            if RewardCache._client_state is None:
+                RewardCache._client_state = storage.Client()
+        except Exception:
+            RewardCache._client_state = False
+            return None
+        name = self.root[len("gs://") :].split("/", 1)[0]
+        return RewardCache._client_state.bucket(name)
+
+    def _blob_name(self, key: str) -> str:
+        rest = self.root[len("gs://") :].split("/", 1)
+        prefix = rest[1] if len(rest) > 1 else ""
+        return f"{prefix.rstrip('/')}/{key[:2]}/{key}.json".lstrip("/")
+
+    def _api_get(self, key: str):
+        b = self._bucket()
+        if b is None:
+            return None
+        try:
+            blob = b.blob(self._blob_name(key))
+            if not blob.exists():
+                return None
+            return json.loads(blob.download_as_bytes())
+        except Exception:
+            return None
+
+    def _api_put(self, key: str, value: dict) -> bool:
+        b = self._bucket()
+        if b is None:
+            return False
+        try:
+            b.blob(self._blob_name(key)).upload_from_string(json.dumps(value), content_type="application/json")
+            return True
+        except Exception:
+            return False
+
     def _gcs_get(self, key: str):
         with tempfile.NamedTemporaryFile(suffix=".json") as tf:
             try:
@@ -83,10 +132,13 @@ class RewardCache:
 
     # ------------------------------------------------------------------- api
     def get(self, key: str):
-        return self._gcs_get(key) if self.is_gcs else self._local_get(key)
+        if not self.is_gcs:
+            return self._local_get(key)
+        hit = self._api_get(key)
+        return hit if hit is not None or RewardCache._client_state else self._gcs_get(key)
 
     def put(self, key: str, value: dict) -> None:
-        if self.is_gcs:
-            self._gcs_put(key, value)
-        else:
+        if not self.is_gcs:
             self._local_put(key, value)
+        elif not self._api_put(key, value):
+            self._gcs_put(key, value)

@@ -56,10 +56,22 @@ class HeartbeatRequest(BaseModel):
     lease_id: str
 
 
+class ResultsRequest(BaseModel):
+    """Bulk poll. A fleet corpus is ~1700 items; one GET per item per poll
+    would make the client, not the judges, the bottleneck."""
+
+    work_ids: list[str]
+
+
 class ResultRequest(BaseModel):
     lease_id: str
     work_id: str
     result: dict
+    # A TERMINAL verdict is a property of the candidate, not of the judge
+    # that drew it (compile-budget rejection): the item must never be handed
+    # to another judge, because doing so is how one poison kernel eats a
+    # whole fleet. Terminal items are pinned done and skipped by the sweep.
+    terminal: bool = False
 
 
 @dataclass
@@ -72,6 +84,7 @@ class _Item:
     worker_id: str | None = None
     attempts: int = 0
     result: dict | None = None
+    terminal: bool = False
     enqueued_at: float = field(default_factory=time.time)
     completed_at: float | None = None
 
@@ -87,13 +100,16 @@ def create_queue_app(lease_timeout_s: float = 120.0) -> FastAPI:
         "requeues": 0,
         "duplicates": 0,
         "expired_leases": 0,
+        "terminal_rejections": 0,
     }
     workers_last_poll: dict[str, float] = {}
 
     def _sweep_expired_locked(now: float) -> None:
         # lazy sweep: any leased item past expiry goes back to the FIFO head
         # region (front, preserving age order among requeues)
-        expired = [it for it in items.values() if it.state == "leased" and it.lease_expiry <= now]
+        expired = [
+            it for it in items.values() if it.state == "leased" and it.lease_expiry <= now and not it.terminal
+        ]
         for it in sorted(expired, key=lambda x: x.enqueued_at):
             it.state = "queued"
             it.lease_id = None
@@ -163,6 +179,9 @@ def create_queue_app(lease_timeout_s: float = 120.0) -> FastAPI:
                 return {"ok": True, "duplicate": True}
             # accept results even from an expired lease (double-grades are
             # harmless and the item may not have been re-leased yet)
+            if req.terminal or req.result.get("terminal"):
+                it.terminal = True
+                stats["terminal_rejections"] += 1
             it.result = req.result
             it.state = "done"
             it.completed_at = now
@@ -178,7 +197,51 @@ def create_queue_app(lease_timeout_s: float = 120.0) -> FastAPI:
                 raise HTTPException(status_code=404, detail="unknown work_id")
             if it.state != "done":
                 return {"done": False, "state": it.state, "attempts": it.attempts}
-            return {"done": True, "result": it.result, "attempts": it.attempts}
+            return {
+                "done": True,
+                "result": it.result,
+                "attempts": it.attempts,
+                "terminal": it.terminal,
+                "worker_id": it.worker_id,
+            }
+
+    @app.post("/results")
+    async def get_results(req: ResultsRequest):
+        with lock:
+            out = {}
+            for wid in req.work_ids:
+                it = items.get(wid)
+                if it is None:
+                    out[wid] = {"missing": True}
+                elif it.state == "done":
+                    out[wid] = {
+                        "done": True,
+                        "result": it.result,
+                        "attempts": it.attempts,
+                        "terminal": it.terminal,
+                        "worker_id": it.worker_id,
+                        "completed_at": it.completed_at,
+                    }
+            return {"results": out}
+
+    @app.get("/leases")
+    async def leases():
+        """Who is holding what right now. The fleet chaos test needs this to
+        PROVE a kill landed mid-lease rather than racing a finished grade."""
+        with lock:
+            return {
+                "leased": [
+                    {
+                        "work_id": it.work_id,
+                        "worker_id": it.worker_id,
+                        "attempts": it.attempts,
+                        "tag": (it.payload or {}).get("tag"),
+                        "lease_expiry": it.lease_expiry,
+                    }
+                    for it in items.values()
+                    if it.state == "leased"
+                ]
+            }
 
     @app.get("/status")
     async def status():
@@ -233,6 +296,25 @@ class ArenaQueueClient:
 
     def status(self) -> dict:
         return self._get("/status")
+
+    def leases(self) -> list[dict]:
+        return self._get("/leases")["leased"]
+
+    def poll_bulk(self, work_ids: list[str], batch: int = 400) -> dict[str, dict]:
+        """One request per <=batch outstanding ids; returns only the done
+        ones, with their queue-side accounting (attempts, terminal, which
+        judge held the lease)."""
+        out: dict[str, dict] = {}
+        for i in range(0, len(work_ids), batch):
+            chunk = work_ids[i : i + batch]
+            try:
+                got = self._post("/results", {"work_ids": chunk})["results"]
+            except Exception:
+                continue
+            for wid, rec in got.items():
+                if rec.get("done"):
+                    out[wid] = rec
+        return out
 
     def wait(self, work_ids: list[str], timeout_s: float = 600.0, poll_s: float = 1.0) -> dict[str, dict]:
         """Wait for all ids; returns {original_work_id: result}. Resubmits

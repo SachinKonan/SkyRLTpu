@@ -48,6 +48,30 @@ from pathlib import Path
 from pallas_arena.judge import grader
 from pallas_arena.judge import timing as timing_mod
 
+# Compile-warm deadline (phase-5 prerequisite). Phase 4 measured the honest
+# distribution of `candidate_compile_s` on a v6e-1: median 2.98 s, typical
+# band 2.2-3.7 s, worst HONEST candidate 46.2 s (`nondeterministic`) and
+# 45.7 s in attempt 1. One adversarial candidate spent 569.5 s inside a
+# single XLA compile while using 3.1 s of chip time.
+#
+# 90 s = ~2x the worst honest compile ever measured (46.2 s) and ~30x the
+# median. Rationale for each side of the bound:
+#   * high enough that no honest kernel is at risk: 2x margin over the worst
+#     observation absorbs chip-to-chip and boot-to-boot compiler variance,
+#     and a candidate needing >90 s of compile has already lost on score;
+#   * low enough to be worth having: it caps a poison candidate's lane cost
+#     at ~6x the median item wall (5.01 s) instead of 114x, so a fully
+#     adversarial corpus costs a 5-judge fleet at most 7.5 judge-minutes of
+#     compile instead of an unbounded stall;
+#   * strictly under the 240 s lease timeout, so the rejection is POSTed
+#     before the queue would requeue the item — the poison pill is never
+#     handed to a second judge.
+DEFAULT_COMPILE_BUDGET_S = 90.0
+
+
+class CompileBudgetExceeded(Exception):
+    """Candidate blew the compile-warm deadline. Terminal: never requeued."""
+
 
 class PersistentWorker:
     def __init__(
@@ -63,6 +87,7 @@ class PersistentWorker:
         export_timeout_s: float = 240.0,
         export_rlimit_gb: float | None = None,
         grade_budget_s: float | None = 900.0,
+        compile_budget_s: float | None = DEFAULT_COMPILE_BUDGET_S,
         cache=None,
         worker_id: str = "worker-0",
     ):
@@ -81,8 +106,14 @@ class PersistentWorker:
         self.export_timeout_s = export_timeout_s
         self.export_rlimit_gb = export_rlimit_gb
         self.grade_budget_s = grade_budget_s
+        self.compile_budget_s = compile_budget_s
         self.cache = cache
         self.worker_id = worker_id
+        # Set by poll_loop before each grade: posts a TERMINAL result for the
+        # item currently leased and then hard-exits. Only the compile-warm
+        # watchdog uses it (see _compile_warm).
+        self.terminal_poster = None
+        self.compile_timeouts = 0
 
         self.perf = time.perf_counter
         self.block = jax.block_until_ready
@@ -239,8 +270,14 @@ class PersistentWorker:
                 hit["cache_hit"] = True
                 return hit
 
-        def fail(gate, why):
+        def fail(gate, why, terminal=False):
             result.update(passed=False, gate=gate, violations=[why], reward=0.0)
+            if terminal:
+                # A terminal verdict is a property of the CANDIDATE, not of
+                # the judge that happened to draw it, so the queue must not
+                # hand it to anyone else and the cache must serve it to every
+                # future judge for free.
+                result["terminal"] = True
             self._store(code, result)
             return result
 
@@ -322,25 +359,41 @@ class PersistentWorker:
                 inputs = adv.make_inputs(fold_in(k_adv, i))
                 block(inputs)
                 fixtures.append((f"adv:{adv.name}", adv_sig[adv.name], inputs))
+        except Exception as e:
+            return fail("fixtures", f"{type(e).__name__}: {e}")
 
-            t_warmc = self.perf()
-            warmed = set()
-            for _label, sig_name, inputs in fixtures:
-                if sig_name not in warmed:
-                    block(fns[sig_name](*inputs))
-                    warmed.add(sig_name)
+        # Compile-warm units: one per distinct exported signature, plus the
+        # gradient functional. Built as thunks so the deadline can be checked
+        # BETWEEN them (see _compile_warm).
+        warm_units, warmed = [], set()
+        for _label, sig_name, inputs in fixtures:
+            if sig_name not in warmed:
+                warm_units.append((sig_name, lambda s=sig_name, i=inputs: block(fns[s](*i))))
+                warmed.add(sig_name)
+        try:
             for case in self.holdout_cases:
                 sig_name = case_sig[case.name]
                 if sig_name not in warmed:
                     w_in = problem.make_inputs(fold_in(k_time, 10_000), case)
                     block(w_in)
-                    block(fns[sig_name](*w_in))
+                    warm_units.append((sig_name, lambda s=sig_name, i=w_in: block(fns[s](*i))))
                     warmed.add(sig_name)
-            if grad_sig is not None and fixtures:
-                block(fns[grad_sig](*fixtures[0][2]))
-            result["candidate_compile_s"] = self.perf() - t_warmc
         except Exception as e:
+            return fail("fixtures", f"{type(e).__name__}: {e}")
+        if grad_sig is not None and fixtures:
+            warm_units.append(("grad", lambda: block(fns[grad_sig](*fixtures[0][2]))))
+
+        t_warmc = self.perf()
+        try:
+            self._compile_warm(warm_units, code, tag)
+        except CompileBudgetExceeded as e:
+            result["candidate_compile_s"] = self.perf() - t_warmc
+            result["compile_budget_s"] = self.compile_budget_s
+            return fail("compile_budget", str(e), terminal=True)
+        except Exception as e:
+            result["candidate_compile_s"] = self.perf() - t_warmc
             return fail("candidate_compile", f"{type(e).__name__}: {e}")
+        result["candidate_compile_s"] = self.perf() - t_warmc
         if over_budget():
             return budget_fail("candidate_compile")
 
@@ -459,6 +512,108 @@ class PersistentWorker:
         self._store(code, result)
         return result
 
+    # --------------------------------------------------- compile-warm budget
+    def _compile_warm(self, units, code: str, tag) -> None:
+        """Run the compile-warm units under their OWN deadline.
+
+        The per-grade wall budget cannot bound this: it is checked between
+        phases, and a single `jax.jit(exported.call)(...)` first call is one
+        un-cancellable C++ XLA compile. Phase 4 measured one candidate at
+        569.5 s inside exactly that call while spending 3.1 s on the chip,
+        with the 900 s wall budget looking on. Under lease-requeue that is a
+        fleet-wide poison pill: the judge stalls, the lease expires, the item
+        migrates to the next judge and wedges it too.
+
+        Two layers, in order of preference:
+
+          1. **Between units** (clean, no process loss): each exported
+             signature and the gradient functional is its own compile, and
+             the deadline is checked before and after each. Costs "one
+             compile unit late", exactly the idiom the wall budget uses.
+          2. **Watchdog thread** (backstop for an overrun INSIDE one unit,
+             which is the shape of the 569.5 s case): XLA releases the GIL
+             while it compiles, so this thread still runs. There is no way to
+             cancel the compile, so the only bound left is process death —
+             but the watchdog POSTS THE TERMINAL VERDICT FIRST, so the queue
+             marks the item done (never requeued, and cached for every future
+             judge) and only then hard-exits. The supervisor restarts the
+             judge in ~1 min. Bounded cost on ONE judge, once, versus an
+             unbounded stall on ALL of them.
+        """
+        budget = self.compile_budget_s
+        if not budget:
+            for _label, run in units:
+                run()
+            return
+
+        t0 = self.perf()
+        deadline = t0 + budget
+        stop = threading.Event()
+        state = {"unit": "?"}
+
+        def watchdog():
+            while not stop.wait(0.05):
+                if self.perf() >= deadline:
+                    self._on_compile_timeout(code, tag, state["unit"], self.perf() - t0)
+                    return
+
+        wd = threading.Thread(target=watchdog, daemon=True, name="compile-budget-watchdog")
+        wd.start()
+        try:
+            for label, run in units:
+                state["unit"] = label
+                self._check_compile_deadline(t0, deadline, label)
+                run()
+                self._check_compile_deadline(t0, deadline, label)
+        finally:
+            stop.set()
+
+    def _check_compile_deadline(self, t0, deadline, label) -> None:
+        if self.perf() >= deadline:
+            raise CompileBudgetExceeded(
+                f"candidate compile exceeded the {self.compile_budget_s:.0f}s compile budget "
+                f"({self.perf() - t0:.1f}s at unit {label!r})"
+            )
+
+    def _on_compile_timeout(self, code: str, tag, unit, elapsed: float) -> None:
+        self.compile_timeouts += 1
+        why = (
+            f"candidate compile exceeded the {self.compile_budget_s:.0f}s compile budget "
+            f"({elapsed:.1f}s inside a single un-cancellable XLA compile at unit {unit!r}); "
+            f"judge restarting"
+        )
+        result = {
+            "ok": True,
+            "problem": self.problem_name,
+            "problem_version": self.problem.version,
+            "worker_id": self.worker_id,
+            "backend": self.platform,
+            "tag": tag,
+            "passed": False,
+            "gate": "compile_budget",
+            "terminal": True,
+            "violations": [why],
+            "reward": 0.0,
+            "compile_budget_s": self.compile_budget_s,
+            "candidate_compile_s": elapsed,
+            "judge_restarted": True,
+        }
+        self._store(code, result)
+        print(f"[worker {self.worker_id}] COMPILE BUDGET: {why}", flush=True)
+        poster = self.terminal_poster
+        if poster is None:
+            # In-process use (tests, or a judge with no queue): nothing owns
+            # the process lifecycle here, so let the between-unit check
+            # deliver the same verdict when the compile finally returns.
+            return
+        # The poster owns BOTH recording the verdict and ending the process —
+        # process death is a lifecycle decision, and keeping it out of the
+        # grading path is what makes this mechanism testable at all.
+        try:
+            poster(result)
+        except Exception:
+            pass
+
     def _store(self, code: str, result: dict) -> None:
         if self.cache is None:
             return
@@ -476,20 +631,93 @@ def hash_stable(name: str) -> int:
 # ------------------------------------------------------------- mock grading
 def mock_grade(payload: dict, grade_s: float, worker_id: str) -> dict:
     """Deterministic pseudo-grade for queue/chaos simulation: same code ->
-    same reward, wall time controlled by --mock-grade-s."""
-    time.sleep(grade_s)
+    same reward, wall time controlled by --mock-grade-s.
+
+    When the payload carries a phase-5 corpus tag (`<variant>#s0007`) the
+    mock also reproduces that variant's EXPECTED verdict, gate and rough
+    cost, so the fleet driver's full acceptance logic — verdicts, cross-judge
+    agreement, regrade spread, throughput accounting — is exercised on CPU
+    before a single chip is provisioned. Scores carry a small deterministic
+    per-worker offset so cross-judge agreement is a real check, not a
+    tautology."""
+    tag = payload.get("tag") or ""
+    base = tag.split("#", 1)[0]
     code = payload.get("code", "")
     h = hashlib.sha256(code.encode()).hexdigest()
-    passed = "MOCK_FAIL" not in code
-    return {
+
+    profile = MOCK_VARIANT_PROFILES.get(base)
+    if profile is None:
+        time.sleep(grade_s)
+        passed = "MOCK_FAIL" not in code
+        return {
+            "ok": True,
+            "passed": passed,
+            "gate": "all" if passed else "correctness",
+            "reward": (int(h[:6], 16) % 1000) / 1000.0 if passed else 0.0,
+            "score": (int(h[:6], 16) % 1000) / 1000.0 if passed else None,
+            "mock": True,
+            "worker_id": worker_id,
+        }
+
+    passed, gate, base_score, cost = profile
+    time.sleep(min(grade_s * cost, 30.0))
+    res = {
         "ok": True,
         "passed": passed,
-        "gate": "all" if passed else "correctness",
-        "reward": (int(h[:6], 16) % 1000) / 1000.0 if passed else 0.0,
-        "score": (int(h[:6], 16) % 1000) / 1000.0 if passed else None,
+        "gate": gate,
         "mock": True,
         "worker_id": worker_id,
+        "backend": "tpu",
+        "device_kind": "mock v6e",
+        "tag": tag,
+        "export_s": 0.8 * cost,
+        "load_s": 0.004,
+        "candidate_compile_s": 3.0 * cost,
+        "warm_chip_s": 1.9 * cost if passed else None,
+        "peak_hbm_bytes": 18 * 2**30 if passed else None,
+        "worker_boot": {"ref_vs_ref_scores": {"mock": 1.0 + (int(h[6:8], 16) - 128) / 128 * 0.004}},
     }
+    if passed:
+        # +-0.6% spread within a judge, +-0.4% offset between judges: inside
+        # the +-3% acceptance band, wide enough that a broken comparison shows.
+        jitter = (int(h[:6], 16) % 1201 - 600) / 1e5
+        wjit = (int(hashlib.sha256(worker_id.encode()).hexdigest()[:4], 16) % 801 - 400) / 1e5
+        res["score"] = base_score * (1.0 + jitter + wjit)
+        res["reward"] = 1.0 if 0.99 < res["score"] < 1.01 else res["score"]
+    else:
+        res["reward"] = 0.0
+        res["score"] = None
+        if gate == "compile_budget":
+            res["terminal"] = True
+            res["compile_budget_s"] = DEFAULT_COMPILE_BUDGET_S
+    return res
+
+
+# variant -> (passed, gate, base_score, relative cost). Costs are the phase-4
+# measured item_wall ratios (AST reject 0.74 s .. full grade 5.9 s .. the
+# compile bomb pinned at its budget).
+MOCK_VARIANT_PROFILES: dict[str, tuple] = {
+    "honest-xla": (True, "all", 1.002, 1.0),
+    "honest-xla-b": (True, "all", 1.001, 1.0),
+    "honest-xla-f32out": (True, "all", 0.783, 1.0),
+    "unjitted-robust": (True, "all", 0.828, 1.0),
+    "pallas-br16": (True, "all", 0.474, 1.0),
+    "pallas-br256": (True, "all", 0.826, 1.0),
+    "pallas-br512": (True, "all", 0.826, 1.0),
+    "split-personality": (True, "all", 0.778, 1.0),
+    "nondeterministic": (True, "all", 0.568, 10.0),
+    "timer-tamperer": (True, "all", 0.062, 3.0),
+    "wrong-eps": (False, "correctness", 0.0, 0.7),
+    "cached-output": (False, "aot_export", 0.0, 0.2),
+    "constant-output": (False, "correctness", 0.0, 0.7),
+    "aliased-reference": (False, "ast", 0.0, 0.05),
+    "obfuscated-import": (False, "poison_stub", 0.0, 0.15),
+    "seed-reader": (False, "correctness", 0.0, 0.7),
+    "memoizer": (False, "aot_export", 0.0, 0.2),
+    "wrong-grad": (False, "gradient", 0.0, 0.8),
+    "no-kernel": (False, "exec", 0.0, 0.05),
+    "compile-bomb": (False, "compile_budget", 0.0, 4.0),
+}
 
 
 # ------------------------------------------------------------ queue polling
@@ -514,9 +742,14 @@ def poll_loop(
     poll_s: float = 1.0,
     max_items: int | None = None,
     heartbeat_frac: float = 3.0,
+    attach_terminal_poster=None,
 ) -> int:
     """GET /work -> grade (heartbeating) -> POST /result, forever (or until
-    max_items). Every network error is survivable: sleep and re-poll."""
+    max_items). Every network error is survivable: sleep and re-poll.
+
+    `attach_terminal_poster` is handed a one-shot poster for the item
+    currently leased; the compile-budget watchdog uses it to record a
+    terminal verdict from a thread before the judge hard-exits."""
     done = 0
     base = queue_url.rstrip("/")
     while max_items is None or done < max_items:
@@ -545,6 +778,27 @@ def poll_loop(
 
         hb = threading.Thread(target=beat, daemon=True)
         hb.start()
+        if attach_terminal_poster is not None:
+
+            def poster(res, _lease=lease_id, _wid=item["work_id"], _t0=t_item):
+                """Record a TERMINAL verdict for the item in flight and end
+                this judge. Only the compile-budget watchdog calls it, from
+                a thread, while the main thread is stuck inside one
+                un-cancellable XLA compile — so the result MUST be posted
+                before the process dies, otherwise the lease expires and the
+                poison candidate migrates to the next judge, which is the
+                exact failure this whole mechanism exists to prevent."""
+                import os
+
+                res["item_wall_s"] = time.time() - _t0
+                try:
+                    _http_json(f"{base}/result", {"lease_id": _lease, "work_id": _wid, "result": res, "terminal": True})
+                    print(f"[worker {worker_id}] terminal verdict posted for {_wid}; exiting", flush=True)
+                except Exception as e:
+                    print(f"[worker {worker_id}] terminal post FAILED ({e!r}); exiting anyway", flush=True)
+                os._exit(17)
+
+            attach_terminal_poster(poster)
         try:
             result = grade_fn(item["payload"])
         except Exception as e:
@@ -565,9 +819,19 @@ def poll_loop(
             flush=True,
         )
         try:
-            _http_json(f"{base}/result", {"lease_id": lease_id, "work_id": item["work_id"], "result": result})
+            _http_json(
+                f"{base}/result",
+                {
+                    "lease_id": lease_id,
+                    "work_id": item["work_id"],
+                    "result": result,
+                    "terminal": bool(isinstance(result, dict) and result.get("terminal")),
+                },
+            )
         except Exception:
             pass  # lease will expire; someone else regrades (idempotent)
+        if attach_terminal_poster is not None:
+            attach_terminal_poster(None)
         done += 1
     return done
 
@@ -582,6 +846,12 @@ def main() -> None:
     ap.add_argument("--cases", default=None, help="comma-separated case names")
     ap.add_argument("--timing-pairs", type=int, default=20)
     ap.add_argument("--grade-budget-s", type=float, default=900.0, help="0 disables the per-grade wall budget")
+    ap.add_argument(
+        "--compile-budget-s",
+        type=float,
+        default=DEFAULT_COMPILE_BUDGET_S,
+        help="deadline for candidate compile-warm alone; 0 disables (NOT recommended on a fleet)",
+    )
     ap.add_argument("--mock-grade-s", type=float, default=1.0)
     ap.add_argument("--poll-s", type=float, default=1.0)
     ap.add_argument("--max-items", type=int, default=None)
@@ -590,6 +860,7 @@ def main() -> None:
     args = ap.parse_args()
 
     worker_id = args.worker_id or f"worker-{secrets.token_hex(3)}"
+    attach = None
 
     if args.sim_mode == "mock":
         grade_fn = lambda payload: mock_grade(payload, args.mock_grade_s, worker_id)  # noqa: E731
@@ -605,9 +876,11 @@ def main() -> None:
             cases=args.cases.split(",") if args.cases else None,
             timing_pairs=args.timing_pairs,
             grade_budget_s=args.grade_budget_s or None,
+            compile_budget_s=args.compile_budget_s or None,
             cache=cache,
             worker_id=worker_id,
         )
+        attach = lambda poster: setattr(w, "terminal_poster", poster)  # noqa: E731
         report = w.boot()
         print(f"[worker {worker_id}] boot: {json.dumps(report, default=str)}", flush=True)
         if args.boot_report:
@@ -628,6 +901,7 @@ def main() -> None:
         worker_id=worker_id,
         poll_s=args.poll_s,
         max_items=args.max_items,
+        attach_terminal_poster=attach,
     )
     print(f"[worker {worker_id}] done after {n} items", flush=True)
 

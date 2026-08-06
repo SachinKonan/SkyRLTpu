@@ -250,6 +250,43 @@ def not_the_entrypoint(x, g):
     return x
 """
 
+# --- cheater 12 (phase 5): COMPILE BOMB — the fleet-wide poison pill.
+#
+# Numerically correct and cheap on the chip; ruinous in the XLA compiler.
+# Phase 4 measured the shape of this attack for real: a SIX-deep unjitted
+# `sin` chain spent 569.5 s inside one `candidate_compile` while using 3.1 s
+# of chip time, because reverse-mode through a chain of elementwise ops on a
+# [32768, 8192] f32 array explodes the live-range/fusion/scheduling passes.
+# The per-grade wall budget cannot see it (it is checked BETWEEN phases and
+# an XLA compile is one un-cancellable call), so under lease-requeue one such
+# candidate stalls a judge, expires its lease, migrates to the next judge and
+# wedges that one too, until the fleet is consumed.
+#
+# Deliberately loaded on BOTH axes so it is catchable at either gate:
+#   * op count (a long unrolled chain) makes trace+lower expensive, which is
+#     what the CPU pre-gate can see at zero judge chip cost;
+#   * large live intermediates in the reverse pass make BACKEND compilation
+#     expensive, which only the judge-side compile-warm deadline can see.
+# Must be rejected at `compile_budget` and marked TERMINAL — never requeued.
+def make_compile_bomb(depth: int) -> str:
+    return f"""
+import jax
+import jax.numpy as jnp
+
+_DEPTH = {depth}
+
+def kernel(x, g):
+    x32 = x.astype(jnp.float32)
+    out = x32 * jax.lax.rsqrt(jnp.mean(jnp.square(x32), -1, keepdims=True) + 1e-6) * g
+    w = out
+    for i in range(_DEPTH):
+        w = jnp.sin(w) * jnp.cos(w) + jnp.tanh(w * (1.0 + 1e-3 * i))
+    return (out + 0.0 * w).astype(x.dtype)
+"""
+
+
+COMPILE_BOMB_RMSNORM = make_compile_bomb(220)
+
 NONDETERMINISTIC_RMSNORM = """
 import numpy as np
 import jax
