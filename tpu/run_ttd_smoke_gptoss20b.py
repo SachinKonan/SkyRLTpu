@@ -81,7 +81,7 @@ def main() -> None:
         "erdos_min_overlap": ("examples.erdos_min_overlap.env", "ErdosMinOverlapEnv", ""),
         "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv", "ac1"),
         "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv", "26"),
-        "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv", ""),
+        "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv", "65536"),
     }
     env_key = os.environ.get("TTD_ENV", "erdos_min_overlap")
     _mod, _cls, _default_problem = _ENVS[env_key]
