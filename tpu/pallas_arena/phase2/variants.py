@@ -47,7 +47,7 @@ def _make_kernel(d):
 def _fwd(x, g):
     rows, d = x.shape
     dp = ((d + 127) // 128) * 128
-    br = _BR if rows % _BR == 0 else 8
+    br = _BR if rows % _BR == 0 else 16  # 16 = bf16 sublane tile
     xp = jnp.pad(x, ((0, 0), (0, dp - d))) if dp != d else x
     gp = jnp.pad(g, ((0, dp - d),)) if dp != d else g
     out = pl.pallas_call(
@@ -86,7 +86,7 @@ def kernel(x, g):
 '''
 
 
-PALLAS_BR8 = make_pallas_variant(8)
+PALLAS_BR16 = make_pallas_variant(16)
 PALLAS_BR256 = make_pallas_variant(256)
 PALLAS_BR512 = make_pallas_variant(512)
 
@@ -117,7 +117,7 @@ def shakedown_variants() -> dict[str, str]:
         # must PASS
         "honest-xla": HONEST_XLA,
         "honest-xla-b": HONEST_XLA_B,
-        "pallas-br8": PALLAS_BR8,
+        "pallas-br16": PALLAS_BR16,
         "pallas-br256": PALLAS_BR256,
         "pallas-br512": PALLAS_BR512,
         # must PASS with score < 1 (honest slowdown)
@@ -138,6 +138,6 @@ def shakedown_variants() -> dict[str, str]:
     }
 
 
-EXPECT_PASS = {"honest-xla", "honest-xla-b", "pallas-br8", "pallas-br256",
+EXPECT_PASS = {"honest-xla", "honest-xla-b", "pallas-br16", "pallas-br256",
                "pallas-br512", "unjitted-honest", "timer-tamperer"}
 EXPECT_SLOW = {"unjitted-honest", "timer-tamperer"}  # passed but score < 1
