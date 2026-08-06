@@ -34,8 +34,7 @@ def test_obfuscated_import_hits_poison_stub(fast_grade_kwargs):
     assert r["gate"] in ("poison_stub", "correctness")
     if r["gate"] == "correctness":
         # the poison must be the cause, not a numeric miss
-        assert any("off-limits" in v or "ArenaBannedImport" in v
-                   for v in r["violations"])
+        assert any("off-limits" in v or "ArenaBannedImport" in v for v in r["violations"])
 
 
 def test_seed_reader_finds_nothing_and_fails(fast_grade_kwargs):
@@ -69,8 +68,7 @@ def test_split_personality_caught_on_timed_outputs(fast_grade_kwargs):
     because correctness is verified on outputs of TIMED invocations."""
     r = _grade(cand.SPLIT_PERSONALITY_RMSNORM, **fast_grade_kwargs)
     assert r["ok"] and not r["passed"], r
-    assert r["gate"] in ("timed_output_correctness", "correctness",
-                         "determinism", "gradient")
+    assert r["gate"] in ("timed_output_correctness", "correctness", "determinism", "gradient")
 
 
 def test_wrong_backward_caught_by_gradient_contract(fast_grade_kwargs):
@@ -89,14 +87,12 @@ def test_pallas_requirement_rejects_plain_jax_when_enforced(fast_grade_kwargs):
     """splash requires a real pallas_call; the same naive-jax candidate is
     AST-rejected when enforced and passes gates when enforcement is off."""
     kw = dict(fast_grade_kwargs, cases=["tiny"], mode="gates")
-    r = grader.grade("splash_attention", cand.NAIVE_SPLASH,
-                     enforce_pallas=True, **kw)
+    r = grader.grade("splash_attention", cand.NAIVE_SPLASH, enforce_pallas=True, **kw)
     assert not r["passed"]
     assert r["gate"] == "ast"
     assert any("pallas_call" in v for v in r["violations"])
 
-    r2 = grader.grade("splash_attention", cand.NAIVE_SPLASH,
-                      enforce_pallas=False, **kw)
+    r2 = grader.grade("splash_attention", cand.NAIVE_SPLASH, enforce_pallas=False, **kw)
     assert r2["passed"], r2
 
 
@@ -106,30 +102,34 @@ def test_banned_attention_call_rejected():
     from pallas_arena.judge.problems import get_problem
 
     p = get_problem("splash_attention")
-    code = ("import jax\n"
-            "def kernel(q, k, v, seg):\n"
-            "    return jax.nn.dot_product_attention(q, k, v)\n")
-    v = ast_gate(code, banned_import_prefixes=p.all_banned_prefixes,
-                 banned_call_names=p.banned_call_names, require_pallas=False)
+    code = "import jax\n" "def kernel(q, k, v, seg):\n" "    return jax.nn.dot_product_attention(q, k, v)\n"
+    v = ast_gate(
+        code, banned_import_prefixes=p.all_banned_prefixes, banned_call_names=p.banned_call_names, require_pallas=False
+    )
     assert any("banned call" in s for s in v)
 
 
-@pytest.mark.parametrize("snippet,expect", [
-    ("import tpu_inference.kernels", "banned import"),
-    ("from recurrentgemma.jax import pallas", "banned import"),
-    ("from jax.experimental.pallas.ops.tpu import splash_attention",
-     "banned import"),
-    ("import skyrl.backends.tunix_backend", "banned import"),
-    ("from jax.experimental import pallas as pl\n"
-     "def kernel(x, g):\n    return pl.pallas_call\n", None),
-])
+@pytest.mark.parametrize(
+    "snippet,expect",
+    [
+        ("import tpu_inference.kernels", "banned import"),
+        ("from recurrentgemma.jax import pallas", "banned import"),
+        ("from jax.experimental.pallas.ops.tpu import splash_attention", "banned import"),
+        ("import skyrl.backends.tunix_backend", "banned import"),
+        ("from jax.experimental import pallas as pl\n" "def kernel(x, g):\n    return pl.pallas_call\n", None),
+    ],
+)
 def test_ast_gate_prefix_matrix(snippet, expect):
     from pallas_arena.judge.gates import ast_gate
     from pallas_arena.judge.problems import get_problem
 
     p = get_problem("splash_attention")
-    v = ast_gate(snippet, banned_import_prefixes=p.all_banned_prefixes,
-                 banned_call_names=p.banned_call_names, require_pallas=False)
+    v = ast_gate(
+        snippet,
+        banned_import_prefixes=p.all_banned_prefixes,
+        banned_call_names=p.banned_call_names,
+        require_pallas=False,
+    )
     if expect is None:
         assert v == []
     else:

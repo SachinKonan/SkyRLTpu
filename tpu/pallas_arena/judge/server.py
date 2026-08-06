@@ -25,7 +25,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from pallas_arena.judge import grader
 from pallas_arena.judge.cache import RewardCache
@@ -86,8 +86,7 @@ def create_app(
                 if req.timeout_s:
                     kwargs["timeout_s"] = min(req.timeout_s, 900.0)
                 kwargs.update(grade_overrides)
-                result = await asyncio.to_thread(
-                    grader.grade, problem_name, req.code, **kwargs)
+                result = await asyncio.to_thread(grader.grade, problem_name, req.code, **kwargs)
                 result["request_id"] = req_id
                 result["worker"] = idx
                 state["graded_total"] += 1
@@ -107,12 +106,11 @@ def create_app(
         if measure_floor_on_boot:
             for idx in range(workers):
                 floor_res = await asyncio.to_thread(
-                    grader.measure_noise_floor, problem_name,
-                    smoke=smoke, child_env=worker_envs[idx])
+                    grader.measure_noise_floor, problem_name, smoke=smoke, child_env=worker_envs[idx]
+                )
                 if floor_res.get("ok"):
                     state["noise_floors"][idx] = floor_res.get("noise_floor")
-                    state["boot_ref_vs_ref"][idx] = floor_res.get(
-                        "ref_vs_ref_scores")
+                    state["boot_ref_vs_ref"][idx] = floor_res.get("ref_vs_ref_scores")
         tasks = [asyncio.create_task(_worker(i, queue)) for i in range(workers)]
         try:
             yield
@@ -120,8 +118,7 @@ def create_app(
             for t in tasks:
                 t.cancel()
 
-    app = FastAPI(title=f"pallas-arena judge [{problem_name}]",
-                  lifespan=lifespan)
+    app = FastAPI(title=f"pallas-arena judge [{problem_name}]", lifespan=lifespan)
     app.state.arena = state
 
     @app.post("/grade")
@@ -129,11 +126,10 @@ def create_app(
         if req.problem != problem_name:
             raise HTTPException(
                 status_code=400,
-                detail=f"this judge grades only {problem_name!r} "
-                       f"(launch flag); got {req.problem!r}")
+                detail=f"this judge grades only {problem_name!r} " f"(launch flag); got {req.problem!r}",
+            )
         if req.mode not in VALID_MODES:
-            raise HTTPException(status_code=400,
-                                detail=f"mode must be one of {VALID_MODES}")
+            raise HTTPException(status_code=400, detail=f"mode must be one of {VALID_MODES}")
         req_id = next(state["seq"])
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         await state["queue"].put((req_id, req, fut))
@@ -160,15 +156,11 @@ def main() -> None:
     ap.add_argument("--problem", required=True)
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--workers", type=int, default=1,
-                    help="one grading worker per chip")
-    ap.add_argument("--cache", default=None,
-                    help="gs://... prefix or local dir for the reward cache")
-    ap.add_argument("--smoke", action="store_true",
-                    help="grade tiny smoke shapes (CPU battery)")
+    ap.add_argument("--workers", type=int, default=1, help="one grading worker per chip")
+    ap.add_argument("--cache", default=None, help="gs://... prefix or local dir for the reward cache")
+    ap.add_argument("--smoke", action="store_true", help="grade tiny smoke shapes (CPU battery)")
     ap.add_argument("--no-boot-floor", action="store_true")
-    ap.add_argument("--worker-envs", default=None,
-                    help="JSON list of env dicts, one per worker/chip")
+    ap.add_argument("--worker-envs", default=None, help="JSON list of env dicts, one per worker/chip")
     args = ap.parse_args()
 
     import uvicorn

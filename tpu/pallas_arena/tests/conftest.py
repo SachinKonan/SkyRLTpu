@@ -10,8 +10,8 @@ import os
 import sys
 from pathlib import Path
 
-ARENA_ROOT = Path(__file__).resolve().parents[1]   # tpu/pallas_arena
-IMPORT_ROOT = ARENA_ROOT.parent                    # tpu/
+ARENA_ROOT = Path(__file__).resolve().parents[1]  # tpu/pallas_arena
+IMPORT_ROOT = ARENA_ROOT.parent  # tpu/
 REPO_ROOT = IMPORT_ROOT.parent
 
 for p in (str(IMPORT_ROOT), str(REPO_ROOT)):

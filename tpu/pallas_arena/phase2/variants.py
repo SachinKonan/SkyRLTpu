@@ -6,7 +6,7 @@ cheater suite re-run on silicon. Every Pallas variant ships a custom_vjp
 (task 0 is fwd+bwd) with an analytic XLA backward.
 """
 
-HONEST_XLA = '''
+HONEST_XLA = """
 import functools
 import jax
 import jax.numpy as jnp
@@ -19,7 +19,7 @@ def _impl(x, g):
 
 def kernel(x, g):
     return _impl(x, g)
-'''
+"""
 
 # an independent second copy (different text -> different hash) for the
 # same-kernel-regrade +/-3% invariant without cache interference
@@ -27,7 +27,7 @@ HONEST_XLA_B = HONEST_XLA.replace("_impl", "_impl_b")
 
 
 def make_pallas_variant(block_rows: int) -> str:
-    return f'''
+    return f"""
 import functools
 import jax
 import jax.numpy as jnp
@@ -83,14 +83,14 @@ _rms.defvjp(_rms_f, _rms_b)
 
 def kernel(x, g):
     return _rms(x, g)
-'''
+"""
 
 
 PALLAS_BR16 = make_pallas_variant(16)
 PALLAS_BR256 = make_pallas_variant(256)
 PALLAS_BR512 = make_pallas_variant(512)
 
-UNJITTED_HONEST = '''
+UNJITTED_HONEST = """
 import jax
 import jax.numpy as jnp
 
@@ -101,7 +101,7 @@ def kernel(x, g):
     for _ in range(6):  # deliberately slow: honest slowdown must score < 1
         out = out + 0.0 * jnp.mean(jnp.square(x32), axis=-1, keepdims=True)
     return out
-'''
+"""
 
 
 def shakedown_variants() -> dict[str, str]:
@@ -138,6 +138,13 @@ def shakedown_variants() -> dict[str, str]:
     }
 
 
-EXPECT_PASS = {"honest-xla", "honest-xla-b", "pallas-br16", "pallas-br256",
-               "pallas-br512", "unjitted-honest", "timer-tamperer"}
+EXPECT_PASS = {
+    "honest-xla",
+    "honest-xla-b",
+    "pallas-br16",
+    "pallas-br256",
+    "pallas-br512",
+    "unjitted-honest",
+    "timer-tamperer",
+}
 EXPECT_SLOW = {"unjitted-honest", "timer-tamperer"}  # passed but score < 1

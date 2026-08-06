@@ -62,8 +62,7 @@ def test_rg_lru_a_to_one_calibration_and_reset_vector_teeth():
     ref1 = p.reference(*inputs1)
     adv1.expect(ref1, inputs1)
     tol1 = tolerance_from_reference(ref1, p.reference_bf16(*inputs1))
-    assert tol1["max"] < 0.1, \
-        "a->1 calibration collapsed (gates must not be bf16-quantized)"
+    assert tol1["max"] < 0.1, "a->1 calibration collapsed (gates must not be bf16-quantized)"
     ok, why = check_tolerance(error_stats(ref1, ref1), tol1)
     assert ok, why
 
@@ -89,13 +88,16 @@ def test_error_tails_catch_unsafe_softmax_on_masked_rows():
         q32, k32, v32 = (t.astype(jnp.float32) for t in (q, k, v))
         s = q.shape[1]
         idx = jnp.arange(s)
-        mask = ((idx[:, None] >= idx[None, :])
-                & (segment_ids[:, None] == segment_ids[None, :])
-                & (segment_ids != 0)[None, :] & (segment_ids != 0)[:, None])
+        mask = (
+            (idx[:, None] >= idx[None, :])
+            & (segment_ids[:, None] == segment_ids[None, :])
+            & (segment_ids != 0)[None, :]
+            & (segment_ids != 0)[:, None]
+        )
         logits = jnp.einsum("hqd,hkd->hqk", q32, k32)
         logits = jnp.where(mask[None], logits, -jnp.inf)
-        p_ = jnp.exp(logits)                       # no max shift
-        p_ = p_ / p_.sum(-1, keepdims=True)        # 0/0 on dead rows -> NaN
+        p_ = jnp.exp(logits)  # no max shift
+        p_ = p_ / p_.sum(-1, keepdims=True)  # 0/0 on dead rows -> NaN
         return jnp.einsum("hqk,hkd->hqd", p_, v32)
 
     adv = _adv_by_name(p, "fully-masked-rows")
@@ -124,7 +126,7 @@ def test_error_tails_catch_empty_group_skipper():
         for j, g in enumerate(used):
             n = int(sizes_n[used[j]])
             start = int(sizes_n[:g].sum())
-            out.append(lhs32[start:start + n] @ rhs32[j])  # rhs[j] != rhs[g]!
+            out.append(lhs32[start : start + n] @ rhs32[j])  # rhs[j] != rhs[g]!
         return jnp.concatenate(out, axis=0)
 
     tiny = p.case_by_name("tiny")
@@ -139,8 +141,7 @@ def test_error_tails_catch_empty_group_skipper():
     adv_inputs = adv.make_inputs(jax.random.PRNGKey(25))
     ref_a = p.reference(*adv_inputs)
     tol_a = tolerance_from_reference(ref_a, p.reference_bf16(*adv_inputs))
-    ok_adv, _ = check_tolerance(error_stats(buggy_kernel(*adv_inputs), ref_a),
-                                tol_a)
+    ok_adv, _ = check_tolerance(error_stats(buggy_kernel(*adv_inputs), ref_a), tol_a)
     assert not ok_adv, "empty-group vector must expose the bookkeeping bug"
 
 
@@ -150,10 +151,10 @@ def test_flce_label_in_tail_catches_topk_lse():
     p = get_problem("flce")
 
     def topk_kernel(hidden, w, targets, k=32):
-        logits = (hidden.astype(jnp.float32) @ w.astype(jnp.float32))
+        logits = hidden.astype(jnp.float32) @ w.astype(jnp.float32)
         tl = jnp.take_along_axis(logits, targets[:, None], axis=1)[:, 0]
         top = jax.lax.top_k(logits, k)[0]
-        lse = jax.nn.logsumexp(top, axis=-1)      # truncated tail
+        lse = jax.nn.logsumexp(top, axis=-1)  # truncated tail
         return tl - lse
 
     adv = _adv_by_name(p, "label-in-tail")

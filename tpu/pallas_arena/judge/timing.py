@@ -95,8 +95,7 @@ def gate_reward(score: float, noise_floor: float) -> float:
     return score
 
 
-def speed_of_light_fraction(bytes_moved: int, latency_s: float,
-                            chip: str) -> float | None:
+def speed_of_light_fraction(bytes_moved: int, latency_s: float, chip: str) -> float | None:
     """Fraction of peak HBM bandwidth achieved (memory-bound tasks only).
 
     Logged alongside the latency-ratio score to expose weak-baseline
@@ -111,6 +110,7 @@ def speed_of_light_fraction(bytes_moved: int, latency_s: float,
 @dataclass
 class CaseTiming:
     """Timing result for one shape case."""
+
     case: str
     pairs: list[tuple[float, float]] = field(default_factory=list)
     holdout: bool = False

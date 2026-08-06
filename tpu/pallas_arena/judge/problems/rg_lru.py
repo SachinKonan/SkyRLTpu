@@ -48,8 +48,7 @@ def rg_lru_scan_reference(x, a, reset):
         return h, h
 
     h0 = jnp.zeros((x32.shape[0], x32.shape[2]), jnp.float32)
-    _, hs = jax.lax.scan(
-        step, h0, (jnp.moveaxis(a32, 1, 0), jnp.moveaxis(gx, 1, 0)))
+    _, hs = jax.lax.scan(step, h0, (jnp.moveaxis(a32, 1, 0), jnp.moveaxis(gx, 1, 0)))
     return jnp.moveaxis(hs, 0, 1)
 
 
@@ -60,9 +59,9 @@ def rg_lru_associative(x, a, reset):
     a32 = _apply_reset(a.astype(jnp.float32), reset)
     gx = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a32), 0.0)) * x32
 
-    def combine(l, r):
-        a_l, b_l = l
-        a_r, b_r = r
+    def combine(left, right):
+        a_l, b_l = left
+        a_r, b_r = right
         return a_l * a_r, b_l * a_r + b_r
 
     _, hs = jax.lax.associative_scan(combine, (a32, gx), axis=1)
@@ -72,8 +71,8 @@ def rg_lru_associative(x, a, reset):
 class RGLRUProblem(Problem):
     name = "rg_lru"
     version = "1"
-    has_bwd = False              # kernel-vs-kernel forward scan
-    require_pallas = False       # associative_scan is explicitly legal
+    has_bwd = False  # kernel-vs-kernel forward scan
+    require_pallas = False  # associative_scan is explicitly legal
     memory_bound = True
 
     def shape_cases(self):
@@ -81,13 +80,11 @@ class RGLRUProblem(Problem):
             # RecurrentGemma-2B width
             ShapeCase("8x4096x2560", {"b": 8, "t": 4096, "d": 2560}),
             ShapeCase("1x32768x2560", {"b": 1, "t": 32768, "d": 2560}),
-            ShapeCase("holdout-4x8192x2560", {"b": 4, "t": 8192, "d": 2560},
-                      holdout=True),
+            ShapeCase("holdout-4x8192x2560", {"b": 4, "t": 8192, "d": 2560}, holdout=True),
             # CPU battery (tiny-ragged: non-block-divisible T)
             ShapeCase("tiny", {"b": 2, "t": 64, "d": 16}, smoke=True),
             ShapeCase("tiny-ragged", {"b": 2, "t": 100, "d": 16}, smoke=True),
-            ShapeCase("tiny-holdout", {"b": 1, "t": 128, "d": 8}, smoke=True,
-                      holdout=True),
+            ShapeCase("tiny-holdout", {"b": 1, "t": 128, "d": 8}, smoke=True, holdout=True),
         ]
 
     def make_inputs(self, key, case):
@@ -95,8 +92,7 @@ class RGLRUProblem(Problem):
         b, t, d = case.dims["b"], case.dims["t"], case.dims["d"]
         x = jax.random.normal(kx, (b, t, d), jnp.float32).astype(jnp.bfloat16)
         # gates concentrated near 1 (long memory), as the trained model has
-        a = jax.nn.sigmoid(
-            jax.random.normal(ka, (b, t, d), jnp.float32) * 2.0 + 3.0)
+        a = jax.nn.sigmoid(jax.random.normal(ka, (b, t, d), jnp.float32) * 2.0 + 3.0)
         reset = jax.random.bernoulli(kr, 0.02, (b, t))
         reset = reset.at[:, 0].set(True)
         return (x, a, reset)
@@ -115,15 +111,14 @@ class RGLRUProblem(Problem):
     def baseline(self, x, a, reset):
         try:
             from recurrentgemma.jax import scan as rg_scan  # noqa: F401
+
             # Production judge path (TPU host with recurrentgemma installed):
             # bound during Phase-2 bring-up; shapes/layout adapted there.
-            raise BaselineUnavailable(
-                "recurrentgemma pallas scan binding is a Phase-2 (TPU judge) step")
+            raise BaselineUnavailable("recurrentgemma pallas scan binding is a Phase-2 (TPU judge) step")
         except ImportError:
             if jax.default_backend() == "cpu":
                 return rg_lru_associative(x, a, reset)
-            raise BaselineUnavailable(
-                "recurrentgemma not installed on this judge host")
+            raise BaselineUnavailable("recurrentgemma not installed on this judge host")
 
     def adversarial_cases(self):
         tiny = self.case_by_name("tiny")
@@ -135,8 +130,7 @@ class RGLRUProblem(Problem):
 
         def dense_resets(key):
             x, a, reset = self.make_inputs(key, tiny)
-            reset = (jnp.arange(x.shape[1]) % 7 == 0)[None, :].repeat(
-                x.shape[0], axis=0)
+            reset = (jnp.arange(x.shape[1]) % 7 == 0)[None, :].repeat(x.shape[0], axis=0)
             return (x, a, reset)
 
         def a_zero(key):
@@ -160,8 +154,7 @@ class RGLRUProblem(Problem):
 
         return [
             AdversarialCase("a-to-one-long-memory", a_to_one, expect_finite),
-            AdversarialCase("dense-reset-boundaries", dense_resets,
-                            expect_reset_rows),
+            AdversarialCase("dense-reset-boundaries", dense_resets, expect_reset_rows),
             AdversarialCase("a-zero-passthrough", a_zero, expect_passthrough),
         ]
 

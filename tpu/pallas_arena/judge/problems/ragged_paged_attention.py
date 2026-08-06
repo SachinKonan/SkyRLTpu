@@ -45,9 +45,8 @@ def paged_decode_attention_reference(q, k_pages, v_pages, page_tables, seq_lens)
 
     logits = jnp.einsum("bhgd,bthd->bhgt", q32, k)  # [b, kvh, group, t]
     pos = jnp.arange(max_len)
-    live = pos[None, :] < seq_lens[:, None]         # [b, t]
-    logits = jnp.where(live[:, None, None, :], logits,
-                       -0.7 * float(np.finfo(np.float32).max))
+    live = pos[None, :] < seq_lens[:, None]  # [b, t]
+    logits = jnp.where(live[:, None, None, :], logits, -0.7 * float(np.finfo(np.float32).max))
     m = jnp.max(logits, axis=-1, keepdims=True)
     p = jnp.exp(logits - m)
     p = jnp.where(live[:, None, None, :], p, 0.0)
@@ -61,37 +60,50 @@ class RaggedPagedAttentionProblem(Problem):
     version = "1"
     has_bwd = False
     require_pallas = True
-    memory_bound = True          # decode attention is HBM-bandwidth bound
-    banned_call_names = (
-        "jax.nn.dot_product_attention",
-    )
+    memory_bound = True  # decode attention is HBM-bandwidth bound
+    banned_call_names = ("jax.nn.dot_product_attention",)
 
     PAGE_SIZE = 64
-    KV_HEADS = 8                 # GQA 8 KV heads (our sampling config)
+    KV_HEADS = 8  # GQA 8 KV heads (our sampling config)
     Q_HEADS = 32
     HEAD_DIM = 128
 
     def shape_cases(self):
-        d = dict(page_size=self.PAGE_SIZE, kv_heads=self.KV_HEADS,
-                 q_heads=self.Q_HEADS, head_dim=self.HEAD_DIM)
+        d = dict(page_size=self.PAGE_SIZE, kv_heads=self.KV_HEADS, q_heads=self.Q_HEADS, head_dim=self.HEAD_DIM)
         return [
-            ShapeCase("b64-len2048", {**d, "batch": 64, "max_len": 2048,
-                                      "num_pages": 64 * 32 + 8}),
-            ShapeCase("b256-len1024", {**d, "batch": 256, "max_len": 1024,
-                                       "num_pages": 256 * 16 + 8}),
-            ShapeCase("holdout-b128-len4096", {**d, "batch": 128,
-                                               "max_len": 4096,
-                                               "num_pages": 128 * 64 + 8},
-                      holdout=True),
+            ShapeCase("b64-len2048", {**d, "batch": 64, "max_len": 2048, "num_pages": 64 * 32 + 8}),
+            ShapeCase("b256-len1024", {**d, "batch": 256, "max_len": 1024, "num_pages": 256 * 16 + 8}),
+            ShapeCase(
+                "holdout-b128-len4096", {**d, "batch": 128, "max_len": 4096, "num_pages": 128 * 64 + 8}, holdout=True
+            ),
             # CPU battery
-            ShapeCase("tiny", {"page_size": 8, "kv_heads": 2, "q_heads": 4,
-                               "head_dim": 16, "batch": 3, "max_len": 32,
-                               "num_pages": 16}, smoke=True),
-            ShapeCase("tiny-holdout", {"page_size": 8, "kv_heads": 2,
-                                       "q_heads": 4, "head_dim": 16,
-                                       "batch": 2, "max_len": 16,
-                                       "num_pages": 8},
-                      smoke=True, holdout=True),
+            ShapeCase(
+                "tiny",
+                {
+                    "page_size": 8,
+                    "kv_heads": 2,
+                    "q_heads": 4,
+                    "head_dim": 16,
+                    "batch": 3,
+                    "max_len": 32,
+                    "num_pages": 16,
+                },
+                smoke=True,
+            ),
+            ShapeCase(
+                "tiny-holdout",
+                {
+                    "page_size": 8,
+                    "kv_heads": 2,
+                    "q_heads": 4,
+                    "head_dim": 16,
+                    "batch": 2,
+                    "max_len": 16,
+                    "num_pages": 8,
+                },
+                smoke=True,
+                holdout=True,
+            ),
         ]
 
     def make_inputs(self, key, case):
@@ -101,36 +113,30 @@ class RaggedPagedAttentionProblem(Problem):
         ps, np_, ml = dm["page_size"], dm["num_pages"], dm["max_len"]
         mp = ml // ps
         scale = 1.0 / np.sqrt(d)
-        q = (jax.random.normal(kq, (b, qh, d), jnp.float32) * scale
-             ).astype(jnp.bfloat16)
-        k_pages = jax.random.normal(kk, (np_, ps, kvh, d), jnp.float32
-                                    ).astype(jnp.bfloat16)
-        v_pages = jax.random.normal(kv, (np_, ps, kvh, d), jnp.float32
-                                    ).astype(jnp.bfloat16)
+        q = (jax.random.normal(kq, (b, qh, d), jnp.float32) * scale).astype(jnp.bfloat16)
+        k_pages = jax.random.normal(kk, (np_, ps, kvh, d), jnp.float32).astype(jnp.bfloat16)
+        v_pages = jax.random.normal(kv, (np_, ps, kvh, d), jnp.float32).astype(jnp.bfloat16)
         seq_lens = jax.random.randint(kl, (b,), 1, ml + 1, jnp.int32)
         page_tables = jax.random.randint(kp, (b, mp), 0, np_, jnp.int32)
         return (q, k_pages, v_pages, page_tables, seq_lens)
 
     def reference(self, q, k_pages, v_pages, page_tables, seq_lens):
-        return paged_decode_attention_reference(
-            q, k_pages, v_pages, page_tables, seq_lens)
+        return paged_decode_attention_reference(q, k_pages, v_pages, page_tables, seq_lens)
 
     def baseline(self, *inputs):
         if jax.default_backend() != "tpu":
-            raise BaselineUnavailable(
-                "vLLM-TPU ragged_paged_attention v3 requires TPU (bound in Phase 2)")
+            raise BaselineUnavailable("vLLM-TPU ragged_paged_attention v3 requires TPU (bound in Phase 2)")
         import sys
         from pathlib import Path
 
-        tpu_inf = (Path(__file__).resolve().parents[4] / "third_party"
-                   / "tpu-inference")
+        tpu_inf = Path(__file__).resolve().parents[4] / "third_party" / "tpu-inference"
         if str(tpu_inf) not in sys.path:
             sys.path.insert(0, str(tpu_inf))
         from tpu_inference.kernels.ragged_paged_attention.v3.kernel import (  # noqa: F401
             ragged_paged_attention,
         )
-        raise BaselineUnavailable(
-            "v3 kernel layout adapter is a Phase-2 (TPU judge) binding step")
+
+        raise BaselineUnavailable("v3 kernel layout adapter is a Phase-2 (TPU judge) binding step")
 
     def adversarial_cases(self):
         tiny = self.case_by_name("tiny")
@@ -168,14 +174,11 @@ class RaggedPagedAttentionProblem(Problem):
             first_page = np.asarray(pt)[:, 0]
             v0 = np.asarray(vp, np.float32)[first_page, 0]  # [b, kvh, d]
             want = np.repeat(v0, group, axis=1)
-            np.testing.assert_allclose(np.asarray(ref), want, rtol=1e-4,
-                                       atol=1e-4)
+            np.testing.assert_allclose(np.asarray(ref), want, rtol=1e-4, atol=1e-4)
 
         return [
-            AdversarialCase("single-token-decode", single_token,
-                            expect_single_token),
-            AdversarialCase("page-boundary-lengths", page_boundary,
-                            expect_finite),
+            AdversarialCase("single-token-decode", single_token, expect_single_token),
+            AdversarialCase("page-boundary-lengths", page_boundary, expect_finite),
             AdversarialCase("max-length", max_length, expect_finite),
             AdversarialCase("softmax-saturating", saturating, expect_finite),
         ]
@@ -184,8 +187,9 @@ class RaggedPagedAttentionProblem(Problem):
         dm = case.dims
         # dominant term: reading the live KV pages once
         avg_len = dm["max_len"] // 2
-        return (dm["batch"] * avg_len * dm["kv_heads"] * dm["head_dim"] * 2 * 2
-                + dm["batch"] * dm["q_heads"] * dm["head_dim"] * (2 + 4))
+        return dm["batch"] * avg_len * dm["kv_heads"] * dm["head_dim"] * 2 * 2 + dm["batch"] * dm["q_heads"] * dm[
+            "head_dim"
+        ] * (2 + 4)
 
 
 PROBLEM = RaggedPagedAttentionProblem()

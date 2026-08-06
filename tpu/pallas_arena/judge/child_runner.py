@@ -41,8 +41,7 @@ def main() -> int:
     with open(sys.argv[1]) as f:
         cfg = json.load(f)
 
-    result: dict = {"ok": False, "mode": cfg["mode"], "problem": cfg["problem"],
-                    "phase": "boot"}
+    result: dict = {"ok": False, "mode": cfg["mode"], "problem": cfg["problem"], "phase": "boot"}
     try:
         # ---- 1. hidden seed over stdin, then close it for good
         seed_line = sys.stdin.readline()
@@ -70,6 +69,8 @@ def main() -> int:
 
 def _run(cfg: dict, seed: int, result: dict) -> int:
     # ---- 2. bind everything the harness needs BEFORE candidate code exists
+    import zlib
+
     import jax
     import jax.numpy as jnp  # noqa: F401
     import numpy as np
@@ -88,10 +89,8 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         tolerance_from_reference,
     )
 
-    import zlib
-
-    perf = time.perf_counter            # held ref: candidate patches to
-    block = jax.block_until_ready       # time.perf_counter can't reach us
+    perf = time.perf_counter  # held ref: candidate patches to
+    block = jax.block_until_ready  # time.perf_counter can't reach us
     fold_in = jax.random.fold_in
     prng_key = jax.random.PRNGKey
 
@@ -100,15 +99,17 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         return zlib.crc32(name.encode()) & 0x7FFF
 
     problem = get_problem(cfg["problem"])
-    mode = cfg["mode"]                  # pregate | gates | full | noise_floor
+    mode = cfg["mode"]  # pregate | gates | full | noise_floor
     code = cfg.get("code", "")
     result["problem_version"] = problem.version
     result["backend"] = jax.default_backend()
     device = jax.local_devices()[0]
     result["device_kind"] = getattr(device, "device_kind", "?")
-    chip = ("v6e" if "v6e" in result["device_kind"].lower() else
-            "v5p" if "v5p" in result["device_kind"].lower() else
-            result["backend"])
+    chip = (
+        "v6e"
+        if "v6e" in result["device_kind"].lower()
+        else "v5p" if "v5p" in result["device_kind"].lower() else result["backend"]
+    )
     smoke = bool(cfg.get("smoke", False))
 
     def _mem_stats():
@@ -147,7 +148,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             for case in cases:
                 w_inputs = problem.make_inputs(fold_in(k_time, 999), case)
                 block(w_inputs)
-                block(baseline_fn(*w_inputs))   # compile + warm NOW
+                block(baseline_fn(*w_inputs))  # compile + warm NOW
                 warmed[case.name] = ()
         except BaselineUnavailable as e:
             baseline_fn, baseline_reason = None, str(e)
@@ -168,16 +169,25 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             for i in range(n_warmup + n_pairs):
                 inputs = problem.make_inputs(fold_in(k_floor, i), case)
                 block(inputs)
-                t0 = perf(); a = baseline_fn(*inputs); block(a); t1 = perf()
-                b = baseline_fn(*inputs); block(b); t2 = perf()
+                t0 = perf()
+                a = baseline_fn(*inputs)
+                block(a)
+                t1 = perf()
+                b = baseline_fn(*inputs)
+                block(b)
+                t2 = perf()
                 if i >= n_warmup:
                     pairs.append((t1 - t0, t2 - t1))
             floors[case.name] = timing_mod.noise_floor_from_ref_pairs(pairs)
             med_ratios[case.name] = timing_mod.interleaved_score(pairs)
-        result.update(ok=True, phase="done", noise_floors=floors,
-                      ref_vs_ref_scores=med_ratios,
-                      noise_floor=max(floors.values()),
-                      peak_hbm_bytes=_mem_stats())
+        result.update(
+            ok=True,
+            phase="done",
+            noise_floors=floors,
+            ref_vs_ref_scores=med_ratios,
+            noise_floor=max(floors.values()),
+            peak_hbm_bytes=_mem_stats(),
+        )
         return 0
 
     # ---------------- AST gate
@@ -189,8 +199,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         require_pallas=enforce_pallas,
     )
     if violations:
-        result.update(ok=True, gate="ast", passed=False,
-                      violations=violations, reward=cfg.get("fail_reward", 0.0))
+        result.update(ok=True, gate="ast", passed=False, violations=violations, reward=cfg.get("fail_reward", 0.0))
         return 0
 
     # ---------------- correctness / adversarial fixtures BEFORE exec
@@ -217,44 +226,48 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
     grad_fixture = None
     if problem.has_bwd and corr_fixtures:
         _, g_inputs, _, _ = corr_fixtures[0]
-        ref_g = problem.grad_outputs(
-            lambda *i: problem.reference(*i), *g_inputs)
-        cal_g = problem.grad_outputs(
-            lambda *i: problem.reference_bf16(*i), *g_inputs)
+        ref_g = problem.grad_outputs(lambda *i: problem.reference(*i), *g_inputs)
+        cal_g = problem.grad_outputs(lambda *i: problem.reference_bf16(*i), *g_inputs)
         grad_fixture = (g_inputs, ref_g, tolerance_from_reference(ref_g, cal_g))
 
     # ---------------- 4. poison the reference modules; 5. exec candidate
     result["phase"] = "exec"
-    result["poisoned_modules"] = len(
-        install_poison_stubs(problem.all_banned_prefixes))
+    result["poisoned_modules"] = len(install_poison_stubs(problem.all_banned_prefixes))
 
     cand_mod = types.ModuleType("candidate")
     cand_mod.__dict__["__name__"] = "candidate"
     try:
         exec(compile(code, "<candidate>", "exec"), cand_mod.__dict__)
     except ArenaBannedImport as e:
-        result.update(ok=True, gate="poison_stub", passed=False,
-                      violations=[str(e)], reward=cfg.get("fail_reward", 0.0))
+        result.update(
+            ok=True, gate="poison_stub", passed=False, violations=[str(e)], reward=cfg.get("fail_reward", 0.0)
+        )
         return 0
     except Exception:
-        result.update(ok=True, gate="exec", passed=False,
-                      violations=[traceback.format_exc(limit=6)],
-                      reward=cfg.get("fail_reward", 0.0))
+        result.update(
+            ok=True,
+            gate="exec",
+            passed=False,
+            violations=[traceback.format_exc(limit=6)],
+            reward=cfg.get("fail_reward", 0.0),
+        )
         return 0
     fn = getattr(cand_mod, problem.kernel_entrypoint, None)
     if fn is None:
-        result.update(ok=True, gate="exec", passed=False,
-                      violations=[f"no `{problem.kernel_entrypoint}` function "
-                                  f"defined"],
-                      reward=cfg.get("fail_reward", 0.0))
+        result.update(
+            ok=True,
+            gate="exec",
+            passed=False,
+            violations=[f"no `{problem.kernel_entrypoint}` function " f"defined"],
+            reward=cfg.get("fail_reward", 0.0),
+        )
         return 0
 
     def _call(inputs):
         return fn(*inputs)
 
     def _fail(gate: str, why: str) -> int:
-        result.update(ok=True, gate=gate, passed=False, violations=[why],
-                      reward=cfg.get("fail_reward", 0.0))
+        result.update(ok=True, gate=gate, passed=False, violations=[why], reward=cfg.get("fail_reward", 0.0))
         return 0
 
     # ---------------- pregate mode: trace/lower only, zero chip time
@@ -284,8 +297,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         except ArenaBannedImport as e:
             return _fail("poison_stub", str(e))
         except Exception as e:
-            return _fail("correctness",
-                         f"{label}: runtime error {type(e).__name__}: {e}")
+            return _fail("correctness", f"{label}: runtime error {type(e).__name__}: {e}")
         stats = error_stats(out, ref32)
         okay, why = check_tolerance(stats, tol)
         if not okay:
@@ -302,8 +314,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         leaves = o if isinstance(o, (tuple, list)) else (o,)
         outs.append(b"".join(np.asarray(x).tobytes() for x in leaves))
     if len(set(outs)) != 1:
-        return _fail("determinism",
-                     f"outputs not bitwise identical across {n_det} runs")
+        return _fail("determinism", f"outputs not bitwise identical across {n_det} runs")
 
     # ---------------- gradient contract
     if grad_fixture is not None:
@@ -313,26 +324,29 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             cand_g = problem.grad_outputs(fn, *g_inputs)
             block(cand_g)
         except Exception as e:
-            return _fail("gradient",
-                         f"grad failed: {type(e).__name__}: {e}")
+            return _fail("gradient", f"grad failed: {type(e).__name__}: {e}")
         stats = error_stats(cand_g, ref_g)
         okay, why = check_tolerance(stats, g_tol)
         if not okay:
             return _fail("gradient", why)
 
     if mode == "gates":
-        result.update(ok=True, gate="all", passed=True,
-                      peak_hbm_bytes=_mem_stats())
+        result.update(ok=True, gate="all", passed=True, peak_hbm_bytes=_mem_stats())
         return 0
 
     # ---------------- timing: interleaved R,C, fresh inputs per iteration,
     # ---------------- correctness verified on timed outputs
     result["phase"] = "timing"
     if baseline_fn is None:
-        result.update(ok=True, gate="all", passed=True, score=None,
-                      reward=None,
-                      error=f"baseline unavailable: {baseline_reason}",
-                      peak_hbm_bytes=_mem_stats())
+        result.update(
+            ok=True,
+            gate="all",
+            passed=True,
+            score=None,
+            reward=None,
+            error=f"baseline unavailable: {baseline_reason}",
+            peak_hbm_bytes=_mem_stats(),
+        )
         return 0
 
     noise_floor = cfg.get("noise_floor")
@@ -343,8 +357,13 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         for i in range(n_warmup + n_pairs):
             inputs = problem.make_inputs(fold_in(k_floor, i), scored_cases[0])
             block(inputs)
-            t0 = perf(); a = baseline_fn(*inputs); block(a); t1 = perf()
-            b = baseline_fn(*inputs); block(b); t2 = perf()
+            t0 = perf()
+            a = baseline_fn(*inputs)
+            block(a)
+            t1 = perf()
+            b = baseline_fn(*inputs)
+            block(b)
+            t2 = perf()
             if i >= n_warmup:
                 pairs.append((t1 - t0, t2 - t1))
         noise_floor = timing_mod.noise_floor_from_ref_pairs(pairs)
@@ -360,8 +379,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         checks = {}  # iter -> (inputs, timed_output)
         try:
             for i in range(n_warmup + n_pairs):
-                inputs = problem.make_inputs(
-                    fold_in(fold_in(k_time, i), case_salt(case.name)), case)
+                inputs = problem.make_inputs(fold_in(fold_in(k_time, i), case_salt(case.name)), case)
                 block(inputs)
                 t0 = perf()
                 r_out = baseline_fn(*inputs)
@@ -376,38 +394,32 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
                     if it in check_iters:
                         checks[it] = (inputs, c_out)
         except Exception as e:
-            return _fail("timing",
-                         f"{case.name}: runtime error during timing: "
-                         f"{type(e).__name__}: {e}")
+            return _fail("timing", f"{case.name}: runtime error during timing: " f"{type(e).__name__}: {e}")
         # correctness on outputs produced by TIMED invocations (kills
         # fast-garbage/slow-correct split-personality kernels + memoizers)
         for it, (inputs, c_out) in checks.items():
             ref32 = problem.reference(*inputs)
-            tol = tolerance_from_reference(
-                ref32, problem.reference_bf16(*inputs))
+            tol = tolerance_from_reference(ref32, problem.reference_bf16(*inputs))
             stats = error_stats(c_out, ref32)
             okay, why = check_tolerance(stats, tol)
             if not okay:
-                return _fail("timed_output_correctness",
-                             f"{case.name} timed iter {it}: {why}")
-        ct = timing_mod.CaseTiming(case=case.name, pairs=pairs,
-                                   holdout=case.holdout)
+                return _fail("timed_output_correctness", f"{case.name} timed iter {it}: {why}")
+        ct = timing_mod.CaseTiming(case=case.name, pairs=pairs, holdout=case.holdout)
         case_timings.append(ct)
         bm = problem.bytes_moved(case)
         if problem.memory_bound and bm:
-            frac = timing_mod.speed_of_light_fraction(
-                bm, ct.cand_median_s, chip)
+            frac = timing_mod.speed_of_light_fraction(bm, ct.cand_median_s, chip)
             if frac is not None:
                 sol_fracs[case.name] = frac
 
     reward_frame = timing_mod.final_reward(case_timings, noise_floor)
     result.update(
-        ok=True, gate="all", passed=True,
+        ok=True,
+        gate="all",
+        passed=True,
         **reward_frame,
         speed_of_light_fracs=sol_fracs,
-        latencies={t.case: {"ref_median_s": t.ref_median_s,
-                            "cand_median_s": t.cand_median_s}
-                   for t in case_timings},
+        latencies={t.case: {"ref_median_s": t.ref_median_s, "cand_median_s": t.cand_median_s} for t in case_timings},
         peak_hbm_bytes=_mem_stats(),
         phase="done",
     )

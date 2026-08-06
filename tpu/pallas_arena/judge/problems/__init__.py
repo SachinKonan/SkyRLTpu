@@ -20,6 +20,5 @@ def problem_names() -> list[str]:
 
 def get_problem(name: str):
     if name not in _PROBLEM_MODULES:
-        raise KeyError(
-            f"unknown problem {name!r}; known: {sorted(_PROBLEM_MODULES)}")
+        raise KeyError(f"unknown problem {name!r}; known: {sorted(_PROBLEM_MODULES)}")
     return importlib.import_module(_PROBLEM_MODULES[name]).PROBLEM

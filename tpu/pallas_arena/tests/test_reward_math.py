@@ -31,7 +31,7 @@ def test_interleaved_estimator_cancels_linear_drift():
     true_ratio = 1.0
     # drift: everything gets 2x slower over the run
     drift = [1.0 + i / n for i in range(2 * n)]
-    seq_ref = [100e-6 * drift[i] for i in range(n)]                # R first
+    seq_ref = [100e-6 * drift[i] for i in range(n)]  # R first
     seq_cand = [100e-6 / true_ratio * drift[n + i] for i in range(n)]  # then C
     sequential_estimate = (sum(seq_ref) / n) / (sum(seq_cand) / n)
 
@@ -86,14 +86,14 @@ def test_speed_of_light_fraction():
 
 
 def test_final_reward_holdout_logged_not_scored():
-    declared1 = tm.CaseTiming("a", [(2e-4, 1e-4)] * 5)            # 2.0x
-    declared2 = tm.CaseTiming("b", [(1e-4, 2e-4)] * 5)            # 0.5x
+    declared1 = tm.CaseTiming("a", [(2e-4, 1e-4)] * 5)  # 2.0x
+    declared2 = tm.CaseTiming("b", [(1e-4, 2e-4)] * 5)  # 0.5x
     holdout = tm.CaseTiming("h", [(5e-4, 1e-4)] * 5, holdout=True)  # 5x
     out = tm.final_reward([declared1, declared2, holdout], noise_floor=0.02)
-    assert out["score"] == pytest.approx(1.0)          # geomean(2, 0.5)
-    assert out["reward"] == 1.0                        # tie -> exactly 1.0
+    assert out["score"] == pytest.approx(1.0)  # geomean(2, 0.5)
+    assert out["reward"] == 1.0  # tie -> exactly 1.0
     assert set(out["per_case"]) == {"a", "b"}
-    assert set(out["holdout"]) == {"h"}                # logged, unscored
+    assert set(out["holdout"]) == {"h"}  # logged, unscored
     with pytest.raises(ValueError):
         tm.final_reward([holdout], noise_floor=0.0)
 

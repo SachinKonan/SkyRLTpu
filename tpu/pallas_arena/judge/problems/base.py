@@ -20,23 +20,24 @@ check on the adversarial vectors).
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
 
-TOL_MULTIPLIER = 1.5           # candidate error budget vs reference's own bf16 error
-ABS_FLOOR = 1e-6               # absolute floor so exact-zero reference error
-                               # does not demand bitwise equality
+TOL_MULTIPLIER = 1.5  # candidate error budget vs reference's own bf16 error
+ABS_FLOOR = 1e-6  # absolute floor so exact-zero reference error
+# does not demand bitwise equality
 
 
 @dataclass(frozen=True)
 class ShapeCase:
     """One entry of a task's shape set."""
+
     name: str
     dims: dict[str, Any]
-    holdout: bool = False      # logged-unscored (declared-set overfit detector)
-    smoke: bool = False        # tiny CPU-battery case, never scored in prod
+    holdout: bool = False  # logged-unscored (declared-set overfit detector)
+    smoke: bool = False  # tiny CPU-battery case, never scored in prod
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class AdversarialCase:
     assert extra structural facts about the REFERENCE output (e.g. a fully
     masked row must be exactly 0, not NaN).
     """
+
     name: str
     make_inputs: Callable[[Any], tuple]
     expect: Callable[[Any, tuple], None] | None = None
@@ -64,14 +66,23 @@ def error_stats(cand, ref) -> dict:
     hybrid so huge-magnitude outputs don't drown small-magnitude rows."""
     cl, rl = _leaves(cand), _leaves(ref)
     if len(cl) != len(rl):
-        return {"finite": False, "max": float("inf"), "q99": float("inf"),
-                "mean": float("inf"), "why": "output arity mismatch"}
+        return {
+            "finite": False,
+            "max": float("inf"),
+            "q99": float("inf"),
+            "mean": float("inf"),
+            "why": "output arity mismatch",
+        }
     errs = []
     for c, r in zip(cl, rl):
         if c.shape != r.shape:
-            return {"finite": False, "max": float("inf"), "q99": float("inf"),
-                    "mean": float("inf"),
-                    "why": f"shape mismatch {c.shape} vs {r.shape}"}
+            return {
+                "finite": False,
+                "max": float("inf"),
+                "q99": float("inf"),
+                "mean": float("inf"),
+                "why": f"shape mismatch {c.shape} vs {r.shape}",
+            }
         e = np.abs(c - r) / (np.abs(r) + 1.0)
         errs.append(e.reshape(-1))
     e = np.concatenate(errs) if errs else np.zeros(1)
@@ -98,11 +109,11 @@ def check_tolerance(stats: dict, tol: dict) -> tuple[bool, str]:
     if not stats.get("finite", False):
         return False, f"non-finite or malformed output ({stats.get('why', 'NaN/inf')})"
     if stats["max"] > tol["max"]:
-        return False, (f"per-element max error {stats['max']:.3e} exceeds "
-                       f"calibrated tolerance {tol['max']:.3e}")
+        return False, (f"per-element max error {stats['max']:.3e} exceeds " f"calibrated tolerance {tol['max']:.3e}")
     if stats["q99"] > tol["q99"]:
-        return False, (f"per-element q99 error tail {stats['q99']:.3e} exceeds "
-                       f"calibrated tolerance {tol['q99']:.3e}")
+        return False, (
+            f"per-element q99 error tail {stats['q99']:.3e} exceeds " f"calibrated tolerance {tol['q99']:.3e}"
+        )
     return True, "ok"
 
 
@@ -145,8 +156,7 @@ class Problem(abc.ABC):
 
     # ------------------------------------------------------------------ data
     @abc.abstractmethod
-    def shape_cases(self) -> list[ShapeCase]:
-        ...
+    def shape_cases(self) -> list[ShapeCase]: ...
 
     @abc.abstractmethod
     def make_inputs(self, key, case: ShapeCase) -> tuple:
@@ -166,9 +176,9 @@ class Problem(abc.ABC):
         import jax.numpy as jnp
 
         cast = tuple(
-            x.astype(jnp.bfloat16) if hasattr(x, "dtype") and
-            jnp.issubdtype(x.dtype, jnp.floating) else x
-            for x in inputs)
+            x.astype(jnp.bfloat16) if hasattr(x, "dtype") and jnp.issubdtype(x.dtype, jnp.floating) else x
+            for x in inputs
+        )
         out = self.reference(*cast)
 
         def _round(o):
@@ -185,6 +195,7 @@ class Problem(abc.ABC):
     def baseline_available(self) -> tuple[bool, str]:
         try:
             import jax
+
             case = next(c for c in self.shape_cases() if c.smoke)
             key = jax.random.PRNGKey(0)
             self.baseline(*self.make_inputs(key, case))
@@ -221,12 +232,10 @@ class Problem(abc.ABC):
         )
 
     def scored_cases(self, smoke: bool = False) -> list[ShapeCase]:
-        return [c for c in self.shape_cases()
-                if not c.holdout and c.smoke == smoke]
+        return [c for c in self.shape_cases() if not c.holdout and c.smoke == smoke]
 
     def holdout_cases(self, smoke: bool = False) -> list[ShapeCase]:
-        return [c for c in self.shape_cases()
-                if c.holdout and c.smoke == smoke]
+        return [c for c in self.shape_cases() if c.holdout and c.smoke == smoke]
 
     def case_by_name(self, name: str) -> ShapeCase:
         for c in self.shape_cases():

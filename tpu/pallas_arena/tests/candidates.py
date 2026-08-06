@@ -4,7 +4,7 @@ Every cheater here encodes one known hack class from DESIGN.md's
 adversarial addendum, and every one of them MUST fail grading.
 """
 
-HONEST_RMSNORM = '''
+HONEST_RMSNORM = """
 import functools
 import jax
 import jax.numpy as jnp
@@ -17,11 +17,11 @@ def _impl(x, g):
 
 def kernel(x, g):
     return _impl(x, g)
-'''
+"""
 
 # subtly wrong: eps inside the rsqrt is 1e-3 instead of 1e-6 (the classic
 # wrong-LN-epsilon bug from DESIGN.md test layer 2)
-WRONG_EPS_RMSNORM = '''
+WRONG_EPS_RMSNORM = """
 import jax
 import jax.numpy as jnp
 
@@ -29,11 +29,11 @@ def kernel(x, g):
     x32 = x.astype(jnp.float32)
     var = jnp.mean(jnp.square(x32), axis=-1, keepdims=True)
     return x32 * jax.lax.rsqrt(var + 1e-3) * g
-'''
+"""
 
 # --- cheater 1: cached-output. Precomputes the answer for the seed it
 # GUESSES the judge uses (0); fresh hidden seeds make this garbage.
-CACHED_OUTPUT_RMSNORM = '''
+CACHED_OUTPUT_RMSNORM = """
 import jax
 import jax.numpy as jnp
 
@@ -45,30 +45,30 @@ _out = _x32 * jax.lax.rsqrt(jnp.mean(jnp.square(_x32), -1, keepdims=True) + 1e-6
 
 def kernel(x, g):
     return _out
-'''
+"""
 
 # --- cheater 2: aliased/wrapped reference call (AST-rejected)
-ALIASED_REFERENCE_RMSNORM = '''
+ALIASED_REFERENCE_RMSNORM = """
 from pallas_arena.judge.problems.rmsnorm import PROBLEM as _p
 
 def kernel(x, g):
     return _p.reference(x, g)
-'''
+"""
 
 # --- cheater 3: obfuscated import — invisible to AST, caught by the poison
 # stubs installed in the child's sys.modules
-OBFUSCATED_IMPORT_RMSNORM = '''
+OBFUSCATED_IMPORT_RMSNORM = """
 import importlib
 
 def kernel(x, g):
     m = importlib.import_module("pallas_" + "arena.judge.problems.rmsnorm")
     return m.PROBLEM.reference(x, g)
-'''
+"""
 
 # --- cheater 4: seed reader — scans env/argv/cwd for the grading seed; the
 # seed only ever crosses on stdin (already consumed and closed), so it finds
 # nothing and its "precomputed" answer is garbage.
-SEED_READER_RMSNORM = '''
+SEED_READER_RMSNORM = """
 import os
 import sys
 import glob
@@ -99,13 +99,13 @@ def kernel(x, g):
     xx = jax.random.normal(kx, x.shape, jnp.float32).astype(jnp.bfloat16)
     x32 = xx.astype(jnp.float32)
     return x32 * jax.lax.rsqrt(jnp.mean(jnp.square(x32), -1, keepdims=True) + 1e-6) * g
-'''
+"""
 
 # --- cheater 5: timer tamperer — patches time.perf_counter to zero and then
 # runs a deliberately SLOW but correct kernel, hoping the judge times it at
 # zero cost. The harness holds a direct reference to the real counter, so
 # the slowdown is measured honestly (score << 1).
-TIMER_TAMPERER_RMSNORM = '''
+TIMER_TAMPERER_RMSNORM = """
 import time
 time.perf_counter = lambda: 0.0
 try:
@@ -124,12 +124,12 @@ def kernel(x, g):
     for _ in range(200):  # deliberately slow (unjitted op-by-op dispatch)
         waste = jnp.sin(waste)
     return out + 0.0 * waste
-'''
+"""
 
 # --- cheater 6: python-level memoizer — returns its first result forever.
 # Fresh inputs per correctness seed / timed iteration make the stale answer
 # wrong immediately.
-MEMOIZER_RMSNORM = '''
+MEMOIZER_RMSNORM = """
 import jax
 import jax.numpy as jnp
 
@@ -141,12 +141,12 @@ def kernel(x, g):
         _cache["out"] = x32 * jax.lax.rsqrt(
             jnp.mean(jnp.square(x32), -1, keepdims=True) + 1e-6) * g
     return _cache["out"]
-'''
+"""
 
 # --- cheater 7: split personality — correct for the first N calls (enough
 # to clear the gates), then fast garbage during timing. Killed by verifying
 # correctness ON OUTPUTS PRODUCED BY TIMED INVOCATIONS.
-SPLIT_PERSONALITY_RMSNORM = '''
+SPLIT_PERSONALITY_RMSNORM = """
 import jax
 import jax.numpy as jnp
 
@@ -159,11 +159,11 @@ def kernel(x, g):
         return x32 * jax.lax.rsqrt(
             jnp.mean(jnp.square(x32), -1, keepdims=True) + 1e-6) * g
     return jnp.zeros(x.shape, jnp.float32)
-'''
+"""
 
 # --- cheater 8: wrong backward — forward is perfect, custom_vjp backward is
 # scaled 0.9x. Caught by the gradient contract, not by fwd correctness.
-WRONG_GRAD_RMSNORM = '''
+WRONG_GRAD_RMSNORM = """
 import jax
 import jax.numpy as jnp
 
@@ -187,31 +187,31 @@ _f.defvjp(_f_fwd, _f_bwd)
 
 def kernel(x, g):
     return _f(x.astype(jnp.float32), g)
-'''
+"""
 
 # --- resource abusers
-MEMORY_HOG = '''
+MEMORY_HOG = """
 import numpy as np
 _a = np.ones(6_000_000_000, dtype=np.uint8)  # 6 GB > RLIMIT_AS
 
 def kernel(x, g):
     return x
-'''
+"""
 
-SLEEPER = '''
+SLEEPER = """
 import time
 time.sleep(300)
 
 def kernel(x, g):
     return x
-'''
+"""
 
-NO_KERNEL = '''
+NO_KERNEL = """
 def not_the_entrypoint(x, g):
     return x
-'''
+"""
 
-NONDETERMINISTIC_RMSNORM = '''
+NONDETERMINISTIC_RMSNORM = """
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -221,11 +221,11 @@ def kernel(x, g):
     out = x32 * jax.lax.rsqrt(jnp.mean(jnp.square(x32), -1, keepdims=True) + 1e-6) * g
     # tiny fresh noise: well inside tolerance, but flips low mantissa bits
     return out + np.random.default_rng().normal(0, 1e-6, out.shape).astype(np.float32)
-'''
+"""
 
 # honest naive splash-attention candidate (no pallas_call: rejected when the
 # problem enforces pallas, passes gates when enforcement is off)
-NAIVE_SPLASH = '''
+NAIVE_SPLASH = """
 import jax
 import jax.numpy as jnp
 
@@ -247,4 +247,4 @@ def kernel(q, k, v, segment_ids):
     p = jnp.where(row_live[None, :, None],
                   p / jnp.maximum(p.sum(-1, keepdims=True), 1e-30), 0.0)
     return jnp.einsum("hqk,hkd->hqd", p, v32)
-'''
+"""

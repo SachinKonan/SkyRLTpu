@@ -44,8 +44,7 @@ def test_seed_never_in_config_env_or_argv(fast_grade_kwargs, tmp_path):
     """The hidden seed crosses ONLY on stdin: the config file the child (and
     thus the candidate) can read contains no seed."""
     wd = tmp_path / "wd"
-    r = grader.grade("rmsnorm", cand.HONEST_RMSNORM, workdir=str(wd),
-                     seed=123456789, **fast_grade_kwargs)
+    r = grader.grade("rmsnorm", cand.HONEST_RMSNORM, workdir=str(wd), seed=123456789, **fast_grade_kwargs)
     assert r["passed"], r
     cfg_text = (wd / "config.json").read_text()
     assert "seed" not in json.loads(cfg_text)
@@ -80,8 +79,7 @@ def test_deterministic_gates_across_regrades(fast_grade_kwargs):
 
 def test_child_artifacts_in_workdir(fast_grade_kwargs, tmp_path):
     wd = tmp_path / "wd2"
-    r = grader.grade("rmsnorm", cand.HONEST_RMSNORM, workdir=str(wd),
-                     **fast_grade_kwargs)
+    r = grader.grade("rmsnorm", cand.HONEST_RMSNORM, workdir=str(wd), **fast_grade_kwargs)
     assert r["passed"]
     assert (wd / "result.json").exists()
     assert (wd / "child.stdout").exists()

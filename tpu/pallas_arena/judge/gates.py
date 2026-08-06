@@ -108,7 +108,8 @@ class _PoisonModule(types.ModuleType):
             raise AttributeError(item)
         raise ArenaBannedImport(
             f"reference module '{object.__getattribute__(self, '_poison_name')}' "
-            f"is off-limits to candidates (attribute {item!r})")
+            f"is off-limits to candidates (attribute {item!r})"
+        )
 
 
 def install_poison_stubs(prefixes: tuple[str, ...]) -> list[str]:

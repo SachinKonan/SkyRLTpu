@@ -65,8 +65,7 @@ def test_flce_baseline_grad_matches_reference_grad():
 
 def test_flce_reference_grad_vs_finite_differences():
     p = get_problem("flce")
-    hidden, w, targets = p.make_inputs(jax.random.PRNGKey(33),
-                                       p.case_by_name("tiny"))
+    hidden, w, targets = p.make_inputs(jax.random.PRNGKey(33), p.case_by_name("tiny"))
     h32 = hidden.astype(jnp.float32)
     n = h32.shape[0]
     probe = jnp.cos(jnp.arange(n, dtype=jnp.float32))

@@ -82,51 +82,47 @@ class FLCEProblem(Problem):
     name = "flce"
     version = "1"
     has_bwd = True
-    require_pallas = False       # baseline is a custom_vjp scan, not pallas;
-                                 # candidates may use pallas but need not
+    require_pallas = False  # baseline is a custom_vjp scan, not pallas;
+    # candidates may use pallas but need not
     memory_bound = False
 
     def shape_cases(self):
         return [
-            ShapeCase("73728x2880x151936",
-                      {"n": 73728, "h": 2880, "v": 151936, "tile": BASELINE_TILE_TOKENS}),
-            ShapeCase("24576x2880x151936",
-                      {"n": 24576, "h": 2880, "v": 151936, "tile": BASELINE_TILE_TOKENS}),
-            ShapeCase("holdout-36864x4096x131072",
-                      {"n": 36864, "h": 4096, "v": 131072, "tile": BASELINE_TILE_TOKENS},
-                      holdout=True),
+            ShapeCase("73728x2880x151936", {"n": 73728, "h": 2880, "v": 151936, "tile": BASELINE_TILE_TOKENS}),
+            ShapeCase("24576x2880x151936", {"n": 24576, "h": 2880, "v": 151936, "tile": BASELINE_TILE_TOKENS}),
+            ShapeCase(
+                "holdout-36864x4096x131072",
+                {"n": 36864, "h": 4096, "v": 131072, "tile": BASELINE_TILE_TOKENS},
+                holdout=True,
+            ),
             # CPU battery cases (non-divisible n exercises the pad path)
             ShapeCase("tiny", {"n": 64, "h": 32, "v": 997, "tile": 16}, smoke=True),
-            ShapeCase("tiny-ragged", {"n": 45, "h": 32, "v": 997, "tile": 16},
-                      smoke=True),
-            ShapeCase("tiny-holdout", {"n": 40, "h": 16, "v": 499, "tile": 16},
-                      smoke=True, holdout=True),
+            ShapeCase("tiny-ragged", {"n": 45, "h": 32, "v": 997, "tile": 16}, smoke=True),
+            ShapeCase("tiny-holdout", {"n": 40, "h": 16, "v": 499, "tile": 16}, smoke=True, holdout=True),
         ]
 
     def make_inputs(self, key, case):
         kh, kw, kt = jax.random.split(key, 3)
         n, h, v = case.dims["n"], case.dims["h"], case.dims["v"]
-        hidden = (jax.random.normal(kh, (n, h), jnp.float32) /
-                  np.sqrt(h)).astype(jnp.bfloat16)
+        hidden = (jax.random.normal(kh, (n, h), jnp.float32) / np.sqrt(h)).astype(jnp.bfloat16)
         w = jax.random.normal(kw, (h, v), jnp.float32).astype(jnp.bfloat16)
         targets = jax.random.randint(kt, (n,), 0, v, jnp.int32)
         return (hidden, w, targets)
 
     def reference(self, hidden, w, targets):
-        logits = (hidden.astype(jnp.float32) @ w.astype(jnp.float32))
+        logits = hidden.astype(jnp.float32) @ w.astype(jnp.float32)
         tl = jnp.take_along_axis(logits, targets[:, None], axis=1)[:, 0]
         return tl - jax.nn.logsumexp(logits, axis=-1)
 
     def baseline(self, hidden, w, targets):
         tile = min(BASELINE_TILE_TOKENS, hidden.shape[0])
-        return flce_target_logprobs(
-            lambda ht: ht @ w, hidden, targets, tile)
+        return flce_target_logprobs(lambda ht: ht @ w, hidden, targets, tile)
 
     def reference_bf16(self, hidden, w, targets):
         """Calibration at the baseline's true precision: logits materialized
         at bf16 (the bf16 matmul path), LSE at fp32 — matches what our
         custom_vjp kernel (and any honest bf16 candidate) actually computes."""
-        logits = (hidden.astype(jnp.float32) @ w.astype(jnp.float32))
+        logits = hidden.astype(jnp.float32) @ w.astype(jnp.float32)
         logits = logits.astype(jnp.bfloat16).astype(jnp.float32)
         tl = jnp.take_along_axis(logits, targets[:, None], axis=1)[:, 0]
         return tl - jax.nn.logsumexp(logits, axis=-1)
@@ -168,8 +164,7 @@ class FLCEProblem(Problem):
 
         def expect_finite(ref, inputs):
             assert np.isfinite(np.asarray(ref, np.float64)).all()
-            assert (np.asarray(ref) <= 1e-6).all(), \
-                "log-probs must be <= 0"
+            assert (np.asarray(ref) <= 1e-6).all(), "log-probs must be <= 0"
 
         return [
             AdversarialCase("label-in-tail", label_in_tail, expect_finite),

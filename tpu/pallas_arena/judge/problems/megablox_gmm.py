@@ -23,7 +23,6 @@ import numpy as np
 
 from pallas_arena.judge.problems.base import (
     AdversarialCase,
-    BaselineUnavailable,
     Problem,
     ShapeCase,
 )
@@ -32,8 +31,7 @@ from pallas_arena.judge.problems.base import (
 def gmm_reference(lhs, rhs, group_sizes):
     """fp32 closed form via lax.ragged_dot (the design floor) — itself
     cross-checked against a python loop in the CPU battery."""
-    return jax.lax.ragged_dot(
-        lhs.astype(jnp.float32), rhs.astype(jnp.float32), group_sizes)
+    return jax.lax.ragged_dot(lhs.astype(jnp.float32), rhs.astype(jnp.float32), group_sizes)
 
 
 def gmm_loop_reference(lhs, rhs, group_sizes):
@@ -45,7 +43,7 @@ def gmm_loop_reference(lhs, rhs, group_sizes):
     row = 0
     for g, size in enumerate(sizes):
         if size:
-            out[row:row + size] = lhs[row:row + size] @ rhs[g]
+            out[row : row + size] = lhs[row : row + size] @ rhs[g]
         row += size
     return out
 
@@ -77,34 +75,24 @@ class MegabloxGmmProblem(Problem):
     def shape_cases(self):
         return [
             # (tokens=32k, experts=8 and 64, k=4096, n=14336)
-            ShapeCase("32k-e8-uniform", {"m": 32768, "g": 8, "k": 4096,
-                                         "n": 14336, "dist": "uniform"}),
-            ShapeCase("32k-e8-zipf", {"m": 32768, "g": 8, "k": 4096,
-                                      "n": 14336, "dist": "zipf"}),
-            ShapeCase("32k-e64-uniform", {"m": 32768, "g": 64, "k": 4096,
-                                          "n": 14336, "dist": "uniform"}),
-            ShapeCase("32k-e64-zipf", {"m": 32768, "g": 64, "k": 4096,
-                                       "n": 14336, "dist": "zipf"}),
-            ShapeCase("holdout-16k-e32-zipf", {"m": 16384, "g": 32, "k": 2048,
-                                               "n": 7168, "dist": "zipf"},
-                      holdout=True),
+            ShapeCase("32k-e8-uniform", {"m": 32768, "g": 8, "k": 4096, "n": 14336, "dist": "uniform"}),
+            ShapeCase("32k-e8-zipf", {"m": 32768, "g": 8, "k": 4096, "n": 14336, "dist": "zipf"}),
+            ShapeCase("32k-e64-uniform", {"m": 32768, "g": 64, "k": 4096, "n": 14336, "dist": "uniform"}),
+            ShapeCase("32k-e64-zipf", {"m": 32768, "g": 64, "k": 4096, "n": 14336, "dist": "zipf"}),
+            ShapeCase(
+                "holdout-16k-e32-zipf", {"m": 16384, "g": 32, "k": 2048, "n": 7168, "dist": "zipf"}, holdout=True
+            ),
             # CPU battery
-            ShapeCase("tiny", {"m": 64, "g": 4, "k": 16, "n": 24,
-                               "dist": "uniform"}, smoke=True),
-            ShapeCase("tiny-zipf", {"m": 64, "g": 4, "k": 16, "n": 24,
-                                    "dist": "zipf"}, smoke=True),
-            ShapeCase("tiny-holdout", {"m": 32, "g": 4, "k": 8, "n": 16,
-                                       "dist": "zipf"}, smoke=True,
-                      holdout=True),
+            ShapeCase("tiny", {"m": 64, "g": 4, "k": 16, "n": 24, "dist": "uniform"}, smoke=True),
+            ShapeCase("tiny-zipf", {"m": 64, "g": 4, "k": 16, "n": 24, "dist": "zipf"}, smoke=True),
+            ShapeCase("tiny-holdout", {"m": 32, "g": 4, "k": 8, "n": 16, "dist": "zipf"}, smoke=True, holdout=True),
         ]
 
     def make_inputs(self, key, case):
         kl, kr, kg = jax.random.split(key, 3)
         dm = case.dims
-        lhs = jax.random.normal(kl, (dm["m"], dm["k"]), jnp.float32
-                                ).astype(jnp.bfloat16)
-        rhs = (jax.random.normal(kr, (dm["g"], dm["k"], dm["n"]), jnp.float32)
-               / np.sqrt(dm["k"])).astype(jnp.bfloat16)
+        lhs = jax.random.normal(kl, (dm["m"], dm["k"]), jnp.float32).astype(jnp.bfloat16)
+        rhs = (jax.random.normal(kr, (dm["g"], dm["k"], dm["n"]), jnp.float32) / np.sqrt(dm["k"])).astype(jnp.bfloat16)
         sizes = _sample_group_sizes(kg, dm["g"], dm["m"], dm["dist"])
         return (lhs, rhs, sizes)
 
@@ -139,14 +127,12 @@ class MegabloxGmmProblem(Problem):
 
         def expect_skew_exact(ref, inputs):
             lhs, rhs, sizes = inputs
-            want = (np.asarray(lhs, np.float32) @ np.asarray(rhs, np.float32)[0])
-            np.testing.assert_allclose(np.asarray(ref), want, rtol=2e-4,
-                                       atol=2e-4)
+            want = np.asarray(lhs, np.float32) @ np.asarray(rhs, np.float32)[0]
+            np.testing.assert_allclose(np.asarray(ref), want, rtol=2e-4, atol=2e-4)
 
         return [
             AdversarialCase("empty-expert-groups", empty_group, expect_finite),
-            AdversarialCase("max-skew-single-expert", max_skew,
-                            expect_skew_exact),
+            AdversarialCase("max-skew-single-expert", max_skew, expect_skew_exact),
         ]
 
 

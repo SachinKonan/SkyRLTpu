@@ -55,7 +55,9 @@ class RewardCache:
             try:
                 r = subprocess.run(
                     ["gcloud", "storage", "cp", self._path(key), tf.name],
-                    capture_output=True, timeout=self.gcloud_timeout_s)
+                    capture_output=True,
+                    timeout=self.gcloud_timeout_s,
+                )
                 if r.returncode != 0:
                     return None
                 with open(tf.name) as f:
@@ -64,14 +66,13 @@ class RewardCache:
                 return None
 
     def _gcs_put(self, key: str, value: dict) -> None:
-        with tempfile.NamedTemporaryFile("w", suffix=".json",
-                                         delete=False) as tf:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
             json.dump(value, tf)
             tmp = tf.name
         try:
             subprocess.run(
-                ["gcloud", "storage", "cp", tmp, self._path(key)],
-                capture_output=True, timeout=self.gcloud_timeout_s)
+                ["gcloud", "storage", "cp", tmp, self._path(key)], capture_output=True, timeout=self.gcloud_timeout_s
+            )
         except Exception:
             pass
         finally:

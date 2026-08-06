@@ -41,8 +41,8 @@ def causal_segment_attention(q, k, v, segment_ids):
     logits = jnp.einsum("hqd,hkd->hqk", q32, k32)
     idx = jnp.arange(seq)
     causal = idx[:, None] >= idx[None, :]
-    same_seg = (segment_ids[:, None] == segment_ids[None, :])
-    live = (segment_ids != 0)
+    same_seg = segment_ids[:, None] == segment_ids[None, :]
+    live = segment_ids != 0
     mask = causal & same_seg & live[:, None] & live[None, :]
     logits = jnp.where(mask[None, :, :], logits, NEG_INF)
     row_live = mask.any(axis=-1)  # [q] rows with at least one visible key
@@ -58,7 +58,7 @@ def causal_segment_attention(q, k, v, segment_ids):
 class SplashAttentionProblem(Problem):
     name = "splash_attention"
     version = "1"
-    has_bwd = False              # fwd-only contract in phase 1 of the task
+    has_bwd = False  # fwd-only contract in phase 1 of the task
     require_pallas = True
     memory_bound = False
     banned_call_names = (
@@ -73,14 +73,11 @@ class SplashAttentionProblem(Problem):
             ShapeCase("h8-s18432", {"heads": 8, "seq": 18432, "d": 128}),
             # the non-block-divisible length splash itself rejects (TP=4 bite)
             ShapeCase("h8-s18433-ragged", {"heads": 8, "seq": 18433, "d": 128}),
-            ShapeCase("holdout-h16-s12288", {"heads": 16, "seq": 12288, "d": 128},
-                      holdout=True),
+            ShapeCase("holdout-h16-s12288", {"heads": 16, "seq": 12288, "d": 128}, holdout=True),
             # CPU battery
             ShapeCase("tiny", {"heads": 2, "seq": 128, "d": 32}, smoke=True),
-            ShapeCase("tiny-ragged", {"heads": 2, "seq": 67, "d": 32},
-                      smoke=True),
-            ShapeCase("tiny-holdout", {"heads": 1, "seq": 96, "d": 16},
-                      smoke=True, holdout=True),
+            ShapeCase("tiny-ragged", {"heads": 2, "seq": 67, "d": 32}, smoke=True),
+            ShapeCase("tiny-holdout", {"heads": 1, "seq": 96, "d": 16}, smoke=True, holdout=True),
         ]
 
     def make_inputs(self, key, case):
@@ -103,21 +100,19 @@ class SplashAttentionProblem(Problem):
 
     def baseline(self, q, k, v, segment_ids):
         if jax.default_backend() != "tpu":
-            raise BaselineUnavailable(
-                "splash attention pallas kernel requires TPU (bound in Phase 2)")
+            raise BaselineUnavailable("splash attention pallas kernel requires TPU (bound in Phase 2)")
         from jax.experimental.pallas.ops.tpu.splash_attention import (
             splash_attention_kernel as sak,
+        )
+        from jax.experimental.pallas.ops.tpu.splash_attention import (
             splash_attention_mask as sam,
         )
 
         seq = q.shape[1]
-        mask = sam.MultiHeadMask(
-            [sam.CausalMask(shape=(seq, seq)) for _ in range(q.shape[0])])
-        kernel = sak.make_splash_mha(
-            mask=mask, head_shards=1, q_seq_shards=1)
+        mask = sam.MultiHeadMask([sam.CausalMask(shape=(seq, seq)) for _ in range(q.shape[0])])
+        kernel = sak.make_splash_mha(mask=mask, head_shards=1, q_seq_shards=1)
         segs = sak.SegmentIds(q=segment_ids, kv=segment_ids)
-        return jax.vmap(kernel, in_axes=(None,))(  # placeholder; bound in ph2
-            q, k, v, segment_ids=segs)
+        return jax.vmap(kernel, in_axes=(None,))(q, k, v, segment_ids=segs)  # placeholder; bound in ph2
 
     def adversarial_cases(self):
         tiny = self.case_by_name("tiny")
@@ -135,14 +130,12 @@ class SplashAttentionProblem(Problem):
 
         def outlier_rows(key):
             q, k, v, seg = self.make_inputs(key, tiny)
-            v = v.at[:, 3, :].set(jnp.full((v.shape[0], v.shape[2]), 3e4,
-                                           jnp.bfloat16))
+            v = v.at[:, 3, :].set(jnp.full((v.shape[0], v.shape[2]), 3e4, jnp.bfloat16))
             return (q, k, v, seg)
 
         def near_overflow_bf16(key):
             q, k, v, seg = self.make_inputs(key, tiny)
-            k = k.at[:, 1, :].set(jnp.full((k.shape[0], k.shape[2]), 1e4,
-                                           jnp.bfloat16))
+            k = k.at[:, 1, :].set(jnp.full((k.shape[0], k.shape[2]), 1e4, jnp.bfloat16))
             return (q, k, v, seg)
 
         def expect_finite(ref, inputs):
@@ -153,17 +146,13 @@ class SplashAttentionProblem(Problem):
             out = np.asarray(ref)
             dead = seg == 0
             assert np.isfinite(out).all(), "NaN in attention output"
-            assert np.abs(out[:, dead, :]).max() == 0.0, \
-                "fully-masked (padding) query rows must be exactly 0"
+            assert np.abs(out[:, dead, :]).max() == 0.0, "fully-masked (padding) query rows must be exactly 0"
 
         return [
-            AdversarialCase("softmax-saturating", saturating_logits,
-                            expect_finite),
-            AdversarialCase("fully-masked-rows", fully_masked_rows,
-                            expect_masked_zero),
+            AdversarialCase("softmax-saturating", saturating_logits, expect_finite),
+            AdversarialCase("fully-masked-rows", fully_masked_rows, expect_masked_zero),
             AdversarialCase("outlier-value-rows", outlier_rows, expect_finite),
-            AdversarialCase("near-overflow-bf16-keys", near_overflow_bf16,
-                            expect_finite),
+            AdversarialCase("near-overflow-bf16-keys", near_overflow_bf16, expect_finite),
         ]
 
 

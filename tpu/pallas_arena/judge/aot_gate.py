@@ -42,12 +42,16 @@ def aot_pregate(
         return False, "; ".join(violations)
 
     result = grader.grade(
-        problem_name, code, mode="pregate", smoke=smoke,
-        timeout_s=timeout_s, rlimit_gb=rlimit_gb,
-        enforce_pallas=enforce_pallas, cache=None,
+        problem_name,
+        code,
+        mode="pregate",
+        smoke=smoke,
+        timeout_s=timeout_s,
+        rlimit_gb=rlimit_gb,
+        enforce_pallas=enforce_pallas,
+        cache=None,
     )
     if result.get("passed"):
         return True, "ok"
-    why = "; ".join(result.get("violations", [])) or \
-        result.get("error", "pregate failed")
+    why = "; ".join(result.get("violations", [])) or result.get("error", "pregate failed")
     return False, f"[{result.get('gate', '?')}] {why}"

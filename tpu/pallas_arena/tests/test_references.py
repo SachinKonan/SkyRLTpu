@@ -14,8 +14,7 @@ ALL = problem_names()
 
 
 def test_registry_complete():
-    assert set(ALL) == {"rmsnorm", "splash_attention", "ragged_paged_attention",
-                        "megablox_gmm", "flce", "rg_lru"}
+    assert set(ALL) == {"rmsnorm", "splash_attention", "ragged_paged_attention", "megablox_gmm", "flce", "rg_lru"}
 
 
 @pytest.mark.parametrize("name", ALL)
@@ -66,10 +65,8 @@ def test_flce_reference_vs_log_softmax_and_baseline():
         h, w, t = p.make_inputs(jax.random.PRNGKey(1), p.case_by_name(cname))
         ref = np.asarray(p.reference(h, w, t))
         logits = np.asarray(h, np.float32) @ np.asarray(w, np.float32)
-        lsm = logits - jax.nn.logsumexp(jnp.asarray(logits), axis=-1,
-                                        keepdims=True)
-        want = np.take_along_axis(np.asarray(lsm), np.asarray(t)[:, None],
-                                  axis=1)[:, 0]
+        lsm = logits - jax.nn.logsumexp(jnp.asarray(logits), axis=-1, keepdims=True)
+        want = np.take_along_axis(np.asarray(lsm), np.asarray(t)[:, None], axis=1)[:, 0]
         np.testing.assert_allclose(ref, want, rtol=1e-4, atol=1e-4)
         # our custom_vjp kernel (the baseline-to-beat) agrees at its own
         # bf16-logits precision (also covers the non-tile-divisible pad path)
@@ -79,8 +76,7 @@ def test_flce_reference_vs_log_softmax_and_baseline():
 
 def test_rg_lru_reference_vs_python_loop_and_associative():
     p = get_problem("rg_lru")
-    x, a, reset = p.make_inputs(jax.random.PRNGKey(2),
-                                p.case_by_name("tiny-ragged"))
+    x, a, reset = p.make_inputs(jax.random.PRNGKey(2), p.case_by_name("tiny-ragged"))
     ref = np.asarray(p.reference(x, a, reset))
     xn = np.asarray(x, np.float32)
     an = np.asarray(a, np.float32) * (1.0 - np.asarray(reset, np.float32)[..., None])
@@ -96,8 +92,7 @@ def test_rg_lru_reference_vs_python_loop_and_associative():
 
 def test_splash_reference_vs_numpy_loop():
     p = get_problem("splash_attention")
-    q, k, v, seg = p.make_inputs(jax.random.PRNGKey(4),
-                                 p.case_by_name("tiny-ragged"))
+    q, k, v, seg = p.make_inputs(jax.random.PRNGKey(4), p.case_by_name("tiny-ragged"))
     ref = np.asarray(p.reference(q, k, v, seg))
     qn, kn, vn = (np.asarray(t, np.float32) for t in (q, k, v))
     segn = np.asarray(seg)
@@ -107,8 +102,7 @@ def test_splash_reference_vs_numpy_loop():
         for i in range(S):
             if segn[i] == 0:
                 continue
-            js = [j for j in range(S)
-                  if j <= i and segn[j] == segn[i] and segn[j] != 0]
+            js = [j for j in range(S) if j <= i and segn[j] == segn[i] and segn[j] != 0]
             logits = np.array([qn[h, i] @ kn[h, j] for j in js])
             e = np.exp(logits - logits.max())
             want[h, i] = (e / e.sum()) @ vn[h, js]
@@ -119,15 +113,14 @@ def test_splash_reference_vs_numpy_loop():
 
 def test_rpa_reference_vs_numpy_loop():
     p = get_problem("ragged_paged_attention")
-    q, kp, vp, pt, sl = p.make_inputs(jax.random.PRNGKey(5),
-                                      p.case_by_name("tiny"))
+    q, kp, vp, pt, sl = p.make_inputs(jax.random.PRNGKey(5), p.case_by_name("tiny"))
     ref = np.asarray(p.reference(q, kp, vp, pt, sl))
     qn = np.asarray(q, np.float32)
     kpn = np.asarray(kp, np.float32)
     vpn = np.asarray(vp, np.float32)
     ptn, sln = np.asarray(pt), np.asarray(sl)
     b, qh, d = qn.shape
-    ps, kvh = kpn.shape[1], kpn.shape[2]
+    kvh = kpn.shape[2]
     group = qh // kvh
     for i in range(b):
         kk = kpn[ptn[i]].reshape(-1, kvh, d)[: sln[i]]
@@ -143,8 +136,7 @@ def test_rpa_reference_vs_numpy_loop():
 def test_megablox_reference_vs_loop_including_empty_and_skew():
     p = get_problem("megablox_gmm")
     for cname in ("tiny", "tiny-zipf"):
-        lhs, rhs, sizes = p.make_inputs(jax.random.PRNGKey(6),
-                                        p.case_by_name(cname))
+        lhs, rhs, sizes = p.make_inputs(jax.random.PRNGKey(6), p.case_by_name(cname))
         assert int(np.asarray(sizes).sum()) == lhs.shape[0]
         ref = np.asarray(p.reference(lhs, rhs, sizes))
         want = gmm_loop_reference(lhs, rhs, sizes)
@@ -155,15 +147,14 @@ def test_megablox_reference_vs_loop_including_empty_and_skew():
     for sizes in ([0, m // 2, 0, m - m // 2], [m, 0, 0, 0]):
         s = jnp.asarray(sizes, jnp.int32)
         np.testing.assert_allclose(
-            np.asarray(p.reference(lhs, rhs, s)),
-            gmm_loop_reference(lhs, rhs, s), rtol=2e-4, atol=2e-4)
+            np.asarray(p.reference(lhs, rhs, s)), gmm_loop_reference(lhs, rhs, s), rtol=2e-4, atol=2e-4
+        )
 
 
 def test_megablox_group_size_sampling_uniform_vs_zipf():
     p = get_problem("megablox_gmm")
     _, _, uni = p.make_inputs(jax.random.PRNGKey(9), p.case_by_name("tiny"))
-    _, _, zipf = p.make_inputs(jax.random.PRNGKey(9),
-                               p.case_by_name("tiny-zipf"))
+    _, _, zipf = p.make_inputs(jax.random.PRNGKey(9), p.case_by_name("tiny-zipf"))
     assert int(np.asarray(uni).sum()) == int(np.asarray(zipf).sum()) == 64
     # zipf must be visibly skewed, uniform must not be
     assert np.asarray(zipf).max() > np.asarray(uni).max()

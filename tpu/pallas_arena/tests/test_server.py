@@ -18,8 +18,12 @@ def _app(**kw):
         smoke=True,
         measure_floor_on_boot=False,
         grade_overrides=dict(
-            cases=["tiny"], timing_pairs=4, timing_warmup=1,
-            correctness_seeds=1, determinism_runs=3, timeout_s=120.0,
+            cases=["tiny"],
+            timing_pairs=4,
+            timing_warmup=1,
+            correctness_seeds=1,
+            determinism_runs=3,
+            timeout_s=120.0,
         ),
     )
     defaults.update(kw)
@@ -28,16 +32,14 @@ def _app(**kw):
 
 def test_rejects_other_problem_types_400():
     with TestClient(_app()) as client:
-        resp = client.post("/grade", json={
-            "problem": "splash_attention", "code": "def kernel(): pass"})
+        resp = client.post("/grade", json={"problem": "splash_attention", "code": "def kernel(): pass"})
         assert resp.status_code == 400
         assert "rmsnorm" in resp.json()["detail"]
 
 
 def test_rejects_bad_mode_400():
     with TestClient(_app()) as client:
-        resp = client.post("/grade", json={
-            "problem": "rmsnorm", "code": "x", "mode": "noise_floor"})
+        resp = client.post("/grade", json={"problem": "rmsnorm", "code": "x", "mode": "noise_floor"})
         assert resp.status_code == 400
 
 
@@ -51,12 +53,10 @@ def test_healthz_reports_state():
 
 def test_grade_end_to_end_honest_and_cheater():
     with TestClient(_app()) as client:
-        r = client.post("/grade", json={
-            "problem": "rmsnorm", "code": cand.HONEST_RMSNORM}).json()
+        r = client.post("/grade", json={"problem": "rmsnorm", "code": cand.HONEST_RMSNORM}).json()
         assert r["passed"], r
         assert r["worker"] == 0
-        r2 = client.post("/grade", json={
-            "problem": "rmsnorm", "code": cand.CACHED_OUTPUT_RMSNORM}).json()
+        r2 = client.post("/grade", json={"problem": "rmsnorm", "code": cand.CACHED_OUTPUT_RMSNORM}).json()
         assert not r2["passed"]
         assert r2["gate"] == "correctness"
         h = client.get("/healthz").json()
@@ -66,15 +66,22 @@ def test_grade_end_to_end_honest_and_cheater():
 def test_fifo_single_worker_completion_order():
     """Request ids are assigned at enqueue; a single worker must complete
     them in exactly that order."""
-    app = _app(grade_overrides=dict(
-        cases=["tiny"], mode="gates", timing_pairs=2, timing_warmup=0,
-        correctness_seeds=1, determinism_runs=2, timeout_s=120.0))
+    app = _app(
+        grade_overrides=dict(
+            cases=["tiny"],
+            mode="gates",
+            timing_pairs=2,
+            timing_warmup=0,
+            correctness_seeds=1,
+            determinism_runs=2,
+            timeout_s=120.0,
+        )
+    )
     results = []
     with TestClient(app) as client:
+
         def post():
-            r = client.post("/grade", json={
-                "problem": "rmsnorm", "code": cand.HONEST_RMSNORM,
-                "mode": "gates"})
+            r = client.post("/grade", json={"problem": "rmsnorm", "code": cand.HONEST_RMSNORM, "mode": "gates"})
             results.append(r.json())
 
         threads = [threading.Thread(target=post) for _ in range(3)]
@@ -95,7 +102,6 @@ def test_boot_noise_floor_measured_and_used():
         assert h["noise_floors"][0] is not None
         assert h["noise_floors"][0] >= 0.0
         assert h["boot_ref_vs_ref"][0] is not None
-        r = client.post("/grade", json={
-            "problem": "rmsnorm", "code": cand.HONEST_RMSNORM}).json()
+        r = client.post("/grade", json={"problem": "rmsnorm", "code": cand.HONEST_RMSNORM}).json()
         assert r["passed"]
         assert r["noise_floor_source"] == "judge-provided"

@@ -27,8 +27,8 @@ import tempfile
 import time
 from pathlib import Path
 
-ARENA_ROOT = Path(__file__).resolve().parents[1]      # tpu/pallas_arena
-IMPORT_ROOT = ARENA_ROOT.parent                        # tpu/ (pallas_arena.*)
+ARENA_ROOT = Path(__file__).resolve().parents[1]  # tpu/pallas_arena
+IMPORT_ROOT = ARENA_ROOT.parent  # tpu/ (pallas_arena.*)
 REPO_ROOT = IMPORT_ROOT.parent
 CHILD_RUNNER = Path(__file__).with_name("child_runner.py")
 
@@ -41,8 +41,7 @@ def normalize_code(code: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def cache_key(problem_name: str, problem_version: str, mode: str,
-              code: str, smoke: bool) -> str:
+def cache_key(problem_name: str, problem_version: str, mode: str, code: str, smoke: bool) -> str:
     h = hashlib.sha256()
     h.update(f"{problem_name}:{problem_version}:{mode}:{int(smoke)}:".encode())
     h.update(normalize_code(code).encode())
@@ -51,8 +50,7 @@ def cache_key(problem_name: str, problem_version: str, mode: str,
 
 def _kill_group(proc: subprocess.Popen, hard: bool) -> None:
     try:
-        os.killpg(os.getpgid(proc.pid),
-                  signal.SIGKILL if hard else signal.SIGTERM)
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL if hard else signal.SIGTERM)
     except Exception:
         pass
 
@@ -97,7 +95,7 @@ def grade(
             return hit
 
     if seed is None:
-        seed = secrets.randbits(31)     # hidden; never logged to the client
+        seed = secrets.randbits(31)  # hidden; never logged to the client
 
     own_workdir = workdir is None
     workdir = workdir or tempfile.mkdtemp(prefix="arena-grade-")
@@ -125,8 +123,7 @@ def grade(
     cfg_path.write_text(json.dumps(config))
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(IMPORT_ROOT), str(REPO_ROOT), env.get("PYTHONPATH", "")])
+    env["PYTHONPATH"] = os.pathsep.join([str(IMPORT_ROOT), str(REPO_ROOT), env.get("PYTHONPATH", "")])
     # TPU-host split: the judge parent runs jax-CPU (JAX_PLATFORMS=cpu) so
     # the exclusive TPU chip stays free for the grading child. Setting
     # ARENA_CHILD_JAX_PLATFORMS=tpu on the judge redirects children to the
@@ -196,19 +193,31 @@ def grade(
         except Exception:
             pass
         if timed_out:
-            result = {"ok": True, "gate": "timeout", "passed": False,
-                      "violations": [f"timed out after {timeout_s}s"],
-                      "reward": fail_reward}
+            result = {
+                "ok": True,
+                "gate": "timeout",
+                "passed": False,
+                "violations": [f"timed out after {timeout_s}s"],
+                "reward": fail_reward,
+            }
         elif proc.returncode and -proc.returncode == signal.SIGKILL:
-            result = {"ok": True, "gate": "rlimit", "passed": False,
-                      "violations": [f"child killed (rc={proc.returncode}; "
-                                     f"likely RLIMIT_AS {rlimit_gb}G exceeded)"],
-                      "reward": fail_reward, "stderr_tail": stderr_tail}
+            result = {
+                "ok": True,
+                "gate": "rlimit",
+                "passed": False,
+                "violations": [f"child killed (rc={proc.returncode}; " f"likely RLIMIT_AS {rlimit_gb}G exceeded)"],
+                "reward": fail_reward,
+                "stderr_tail": stderr_tail,
+            }
         else:
-            result = {"ok": False, "gate": "harness", "passed": False,
-                      "violations": [f"child died rc={proc.returncode} with "
-                                     f"no result"],
-                      "reward": fail_reward, "stderr_tail": stderr_tail}
+            result = {
+                "ok": False,
+                "gate": "harness",
+                "passed": False,
+                "violations": [f"child died rc={proc.returncode} with " f"no result"],
+                "reward": fail_reward,
+                "stderr_tail": stderr_tail,
+            }
     if timed_out:
         result.setdefault("gate", "timeout")
         result["timed_out"] = True
@@ -220,8 +229,7 @@ def grade(
 
     if cache is not None and mode in ("full", "gates") and result.get("ok"):
         try:
-            store = {k: v for k, v in result.items()
-                     if k not in ("wall_s", "returncode", "cache_hit")}
+            store = {k: v for k, v in result.items() if k not in ("wall_s", "returncode", "cache_hit")}
             cache.put(key, store)
         except Exception:
             pass
@@ -231,11 +239,23 @@ def grade(
     return result
 
 
-def measure_noise_floor(problem_name: str, *, smoke: bool = False,
-                        timing_pairs: int = 20, timeout_s: float = 600.0,
-                        child_env: dict[str, str] | None = None) -> dict:
+def measure_noise_floor(
+    problem_name: str,
+    *,
+    smoke: bool = False,
+    timing_pairs: int = 20,
+    timeout_s: float = 600.0,
+    child_env: dict[str, str] | None = None,
+) -> dict:
     """Boot-time per-chip noise floor: ref-vs-ref through the identical
     interleaved protocol (DESIGN.md test layer 3)."""
-    return grade(problem_name, code="", mode="noise_floor", smoke=smoke,
-                 timing_pairs=timing_pairs, timeout_s=timeout_s,
-                 cache=None, child_env=child_env)
+    return grade(
+        problem_name,
+        code="",
+        mode="noise_floor",
+        smoke=smoke,
+        timing_pairs=timing_pairs,
+        timeout_s=timeout_s,
+        cache=None,
+        child_env=child_env,
+    )

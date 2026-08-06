@@ -43,22 +43,20 @@ class RMSNormProblem(Problem):
     name = "rmsnorm"
     version = "1"
     has_bwd = True
-    require_pallas = False       # the baseline IS XLA; shakedown task
+    require_pallas = False  # the baseline IS XLA; shakedown task
     memory_bound = True
-    banned_call_names = ()       # nothing to wrap: closed form is public
+    banned_call_names = ()  # nothing to wrap: closed form is public
 
     def shape_cases(self):
         return [
             ShapeCase("8192x4096", {"rows": 8192, "d": 4096}),
             ShapeCase("32768x8192", {"rows": 32768, "d": 8192}),
             ShapeCase("73728x2880", {"rows": 73728, "d": 2880}),  # our fb tokens x gpt-oss width
-            ShapeCase("holdout-16384x6144", {"rows": 16384, "d": 6144},
-                      holdout=True),
+            ShapeCase("holdout-16384x6144", {"rows": 16384, "d": 6144}, holdout=True),
             # CPU battery cases
             ShapeCase("tiny", {"rows": 32, "d": 64}, smoke=True),
             ShapeCase("tiny-odd", {"rows": 17, "d": 96}, smoke=True),
-            ShapeCase("tiny-holdout", {"rows": 24, "d": 128}, smoke=True,
-                      holdout=True),
+            ShapeCase("tiny-holdout", {"rows": 24, "d": 128}, smoke=True, holdout=True),
         ]
 
     def make_inputs(self, key, case):
@@ -111,27 +109,24 @@ class RMSNormProblem(Problem):
             # on unit-scale rows but ~40% off here
             x, g = self.make_inputs(key, self.case_by_name("tiny"))
             kx = jax.random.fold_in(key, 99)
-            small = (0.03 * jax.random.normal(kx, (4, x.shape[1]),
-                                              jnp.float32)).astype(jnp.bfloat16)
+            small = (0.03 * jax.random.normal(kx, (4, x.shape[1]), jnp.float32)).astype(jnp.bfloat16)
             x = x.at[4:8].set(small)
             return (x, g)
 
         def expect_finite(ref, inputs):
-            assert np.isfinite(np.asarray(ref, np.float64)).all(), \
-                "reference produced non-finite values"
+            assert np.isfinite(np.asarray(ref, np.float64)).all(), "reference produced non-finite values"
 
         def expect_zero_row(ref, inputs):
             row = np.asarray(ref)[0]
-            assert np.isfinite(row).all() and np.abs(row).max() == 0.0, \
-                "all-zero input row must normalize to exactly 0, not NaN"
+            assert (
+                np.isfinite(row).all() and np.abs(row).max() == 0.0
+            ), "all-zero input row must normalize to exactly 0, not NaN"
 
         return [
             AdversarialCase("outlier-rows", outlier_rows, expect_finite),
             AdversarialCase("zero-row", zero_row, expect_zero_row),
-            AdversarialCase("near-overflow-bf16", near_overflow_bf16,
-                            expect_finite),
-            AdversarialCase("small-magnitude-rows", small_magnitude_rows,
-                            expect_finite),
+            AdversarialCase("near-overflow-bf16", near_overflow_bf16, expect_finite),
+            AdversarialCase("small-magnitude-rows", small_magnitude_rows, expect_finite),
         ]
 
     def bytes_moved(self, case):

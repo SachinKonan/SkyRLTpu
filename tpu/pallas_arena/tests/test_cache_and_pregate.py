@@ -57,17 +57,15 @@ def test_pregate_rejects_banned_import_before_forking():
 
 
 def test_pregate_rejects_trace_time_failure(fast_grade_kwargs):
-    bad = ("import jax.numpy as jnp\n"
-           "def kernel(x, g):\n"
-           "    return x + undefined_name\n")
+    bad = "import jax.numpy as jnp\n" "def kernel(x, g):\n" "    return x + undefined_name\n"
     ok, why = aot_pregate("rmsnorm", bad, smoke=True)
     assert not ok
     assert "pregate" in why or "exec" in why
 
 
 def test_pregate_shape_mismatch_caught_at_trace(fast_grade_kwargs):
-    bad = ("import jax.numpy as jnp\n"
-           "def kernel(x, g):\n"
-           "    return jnp.matmul(x, x)\n")  # [32,64]@[32,64]: shape error
+    bad = (
+        "import jax.numpy as jnp\n" "def kernel(x, g):\n" "    return jnp.matmul(x, x)\n"
+    )  # [32,64]@[32,64]: shape error
     ok, why = aot_pregate("rmsnorm", bad, smoke=True)
     assert not ok
