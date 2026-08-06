@@ -123,24 +123,7 @@ The judge then computes the earliest-feasible schedule and its makespan.
   a timed-out case scores 0.
 
 You are iteratively optimizing mean checker ratio.
-No previous code available.
-Current mean checker ratio (higher is better): 0.000000
-Target: 1.0. Current gap: 1.000000. Further improvements will also be generously rewarded.
-
-Reason about how you could further improve on the previous approach.
-Ideally, try to do something different than the above algorithm. Could be using
-different algorithmic ideas, adjusting your heuristics, adjusting / sweeping your
-hyperparameters, etc. Unless you make a meaningful improvement, you will not be
-rewarded.
-
-Rules:
-- Output exactly one complete C++ program in a single ```cpp code block.
-- Make the program deterministic or internally seeded (fixed seed).
-- Include a short comment at the top summarizing your algorithm.
-
-## Starting program to improve on
-This program's PRODUCTION score is 0.073942. HIGHER scores are BETTER (maximize). Your goal is a program that scores meaningfully higher than 0.073942 at the same production budget.
-
+Here is the last code we ran:
 ```cpp
 /*
  * Job‑Shop Open‑Optimization Solver
@@ -291,5 +274,19 @@ int main() {
     return 0;
 }
 ```
+Current mean checker ratio (higher is better): 0.073942
+Target: 1.0. Current gap: 0.926058. Further improvements will also be generously rewarded.
+
+Reason about how you could further improve on the previous approach.
+Ideally, try to do something different than the above algorithm. Could be using
+different algorithmic ideas, adjusting your heuristics, adjusting / sweeping your
+hyperparameters, etc. Unless you make a meaningful improvement, you will not be
+rewarded.
+
+Rules:
+- Output exactly one complete C++ program in a single ```cpp code block.
+- Make the program deterministic or internally seeded (fixed seed).
+- Include a short comment at the top summarizing your algorithm.
+
 
 Think the problem through, then output your single best COMPLETE program as ONE ```cpp code block (the last such block in your reply is taken as your answer). The program must compute its result within the stated budget; embedding a precomputed answer as data (literal arrays, base64) is invalid and will be rejected.

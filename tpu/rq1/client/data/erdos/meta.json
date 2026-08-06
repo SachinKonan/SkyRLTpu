@@ -1,0 +1,12 @@
+{
+  "problem": "erdos",
+  "lang": "python",
+  "fence": "python",
+  "maximize": false,
+  "problem_type": "",
+  "seed_score": 0.3814394273410035,
+  "seed_recorded_score": 0.38144727204390017,
+  "seed_sha": "557d5681a3f2",
+  "prompt_style": "env_get_question",
+  "built": "2026-08-06 15:33:45"
+}

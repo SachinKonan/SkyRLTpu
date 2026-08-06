@@ -1,0 +1,12 @@
+{
+  "problem": "ud",
+  "lang": "python",
+  "fence": "python",
+  "maximize": true,
+  "problem_type": "65536",
+  "seed_score": 1.9921875,
+  "seed_recorded_score": 1.9921875,
+  "seed_sha": "68940152cc16",
+  "prompt_style": "env_get_question",
+  "built": "2026-08-06 15:36:23"
+}

@@ -1,24 +1,30 @@
 """Build the portable per-problem data packs consumed by client/ collectors. NEURONIC-ONLY:
 imports the discover trees + distill_ablation corpora from the MAIN checkout by absolute path.
 
-Run with the discover venv, on a compute node (it grades each seed once at PRODUCTION budget
-to stamp the true seed_score into the prompts -- the exp-1 regression was agents never being
-told the number to beat):
+PROMPTS ARE ENV-FAITHFUL: the statement is each env's own `get_question()` -- the exact prompt
+shape our RL runs use (formal problem + rules + seed program + its score + target/gap +
+"improve meaningfully" closer) -- with OUR seed injected as the initial state and its
+PRODUCTION-graded score as the state value. Nothing hand-written. This keeps RQ1 cells
+comparable to the RL runs and to each other.
 
-  srun ... $PY make_problem_pack.py --problems fc46 erdos ac1 ud
+Run with the discover venv, on a compute node (seed grading = real 1000s production runs):
+
+  srun ... $PY make_problem_pack.py --problems fc46 erdos ac1 ud [--reuse-scores]
 
 Pack contents (client/data/<problem>/):
-  prompt_agent.md        statement + seed + seed PRODUCTION score + direction (T1/T3)
-  prompt_completion.md   same content as a pure completion prompt (T2/farm)
+  prompt_agent.md        get_question(seed-state) [+ erdos local-testing construction note]
+  prompt_completion.md   same + single-code-block closer (T2/farm)
   seed.<py|cpp>          the seed program
-  seed_construction.json (erdos only) the base construction, preloaded as initial_h_values
-  meta.json              {problem, lang, fence, maximize, problem_type, seed_score, ...}
+  seed_construction.json (erdos) base construction, preloaded as initial_h_values at grading
+  meta.json              {problem, lang, fence, maximize, problem_type, seed_score, seed_sha, ...}
 
-Build asserts the numeric seed score AND the direction sentence appear in both prompts.
+Build asserts the graded score AND the correct direction phrase appear in both prompts.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import importlib
 import json
 import re
 import sys
@@ -30,10 +36,8 @@ AB = f"{REPO}/tpu/distill_ablation"          # untracked, disk-only -- reference
 MAIN = f"{REPO}/third_party/discover"
 FRONTIER = "/n/fs/vision-mix/sk7524/SkyRLTpu-frontiercs/third_party/discover"
 sys.path.insert(0, AB)                        # grading_mcp._grade
-sys.path.insert(0, f"{AB}/portfolio")         # prompts.TASK
 
 from grading_mcp import _grade  # noqa: E402
-from prompts import TASK  # noqa: E402
 
 CLIENT_DATA = Path(__file__).resolve().parent.parent / "client" / "data"
 
@@ -46,36 +50,8 @@ PROBLEMS = {
 }
 FENCE = {"python": "python", "cpp": "cpp"}
 
-UD_TASK = """Planar unit-distance problem: place exactly N = 65536 DISTINCT points in the
-Euclidean plane so that the number of unordered pairs of points at Euclidean distance exactly 1
-is as large as possible.
-
-## Scoring
-- A pair counts if |d^2 - 1| <= 1e-10 (squared-distance tolerance). Make distances exact to full
-  float64 precision; do not rely on the tolerance.
-- Validity: exactly 65536 points, all coordinates finite, and every two points at least 1e-3
-  apart. An invalid construction scores 0.
-- Your score is unit_pairs / N (the regular N-gon baseline scores 1.0; a triangular lattice patch
-  scores about 3.0; the goal is to go as far beyond that as possible). HIGHER is better.
-- If your construction naturally uses a different common distance, scale all coordinates so that
-  the repeated distance is exactly 1 before returning.
-
-## Rules
-- Return one ```python block defining `run_construction()` (NO arguments) that returns a list of
-  65536 (x, y) tuples.
-- The production run gives your function 1000 seconds under a hard 1100s wall; return the best
-  construction found within that budget.
-- You may use numpy, scipy, math. All helper functions top level, no closures or lambdas.
-- No filesystem or network IO.
-
-## Background
-Known strong constructions come from sections of scaled integer lattices (points with many
-representations of a radius as sums of two squares), triangular-lattice patches, and Minkowski
-sums / rotated unions of smaller unit-distance graphs (e.g. Moser spindles). The count of the
-best known constructions grows superlinearly, n^(1 + c/log log n)."""
-
-# Hand-written UD seed: 256x256 unit square lattice -> pairs = 2*256*255, score ~1.992.
-# Deliberately simple with large headroom to the ~3.0 triangular-lattice reference.
+# Hand-written UD seed: 256x256 unit square lattice, score 1.9921875 (each interior point
+# pairs right+up at distance exactly 1). Simple, valid, big headroom to the ~3.0 lattice ref.
 UD_SEED = '''"""Seed: axis-aligned 256x256 unit square lattice (each interior point pairs with
 its right and up neighbor at distance exactly 1)."""
 
@@ -89,25 +65,19 @@ def run_construction():
 '''
 
 
-def load_seed(problem, idx=None):
-    """(program_text, construction|None, recorded_score) -- copied from portfolio/sweep.py
-    (same corpora, same median-of-nonzero-records selection)."""
-    corpora = Path(AB) / "corpora"
-    if problem == "erdos":
-        ws = json.loads((corpora / "worse_set.json").read_text())["worse"]
-        e = ws[idx if idx is not None else 2]
-        return e["code"], list(e["construction"]), -e["value"]
-    if problem == "ud":
-        return UD_SEED, None, None
-    f = {"fc46": "initial_fcalgo46.json", "ac1": "initial_ac1.json"}[problem]
-    recs = json.loads((corpora / f).read_text())["records"]
-    ok = [r for r in recs if r.get("code") and r.get("score") is not None]
-    maximize = PROBLEMS[problem][5]
-    if maximize:  # score==0 on the frontier problems means FAILURE, not a weak solution
-        ok = [r for r in ok if r["score"] > 0] or ok
-    ok.sort(key=lambda r: r["score"], reverse=not maximize)
-    e = ok[idx if idx is not None else len(ok) // 2]
-    return e["code"], None, e["score"]
+def _load_env_class(root, mod, cls):
+    """Both discover trees ship an `examples` package; python caches whichever loaded first.
+    Purge and re-point sys.path per problem so each env comes from ITS root."""
+    for k in [k for k in sys.modules if k == "examples" or k.startswith("examples.")]:
+        del sys.modules[k]
+    while root in sys.path:
+        sys.path.remove(root)
+    sys.path.insert(0, root)
+    return getattr(importlib.import_module(mod), cls)
+
+
+def sha(s):
+    return hashlib.sha1((s or "").encode()).hexdigest()[:12]
 
 
 def strip_fence(t):
@@ -115,34 +85,83 @@ def strip_fence(t):
     return m.group(1) if m else (t or "")
 
 
-def task_text(problem):
+def load_seed(problem, idx=None):
+    """(program_text, construction|None, parent_values|None, observation, recorded_score)."""
+    corpora = Path(AB) / "corpora"
+    if problem == "erdos":
+        ws = json.loads((corpora / "worse_set.json").read_text())["worse"]
+        e = ws[idx if idx is not None else 2]
+        return (e["code"], list(e["construction"]), e.get("parent_values"),
+                e.get("observation") or "", -e["value"])
     if problem == "ud":
-        return UD_TASK
-    if problem in TASK:  # erdos, ac1 -- hand-written minimal statements
-        return TASK[problem]
-    cache = Path(AB) / "corpora" / f"question_{problem}.txt"
-    if not (cache.exists() and cache.read_text().strip()):
-        raise SystemExit(f"missing cached statement {cache}; generate it via the exp-1 harness")
-    return cache.read_text()
+        return UD_SEED, None, None, "", 1.9921875
+    f = {"fc46": "initial_fcalgo46.json", "ac1": "initial_ac1.json"}[problem]
+    recs = json.loads((corpora / f).read_text())["records"]
+    ok = [r for r in recs if r.get("code") and r.get("score") is not None]
+    maximize = PROBLEMS[problem][5]
+    if maximize:  # score==0 on the frontier problems means FAILURE, not a weak solution
+        ok = [r for r in ok if r["score"] > 0] or ok
+        # ASCENDING sort, median index -- matches exp-1's sweep.load_seed exactly, keeping the
+        # fc46 seed at the 0.073942 program (a descending sort here silently swaps the seed).
+        ok.sort(key=lambda r: r["score"])
+        e = ok[idx if idx is not None else len(ok) // 2]   # mid-range: room to improve
+    else:
+        # ac1: 8/22 records sit on the trivial 2.0 plateau (constant-function value); the
+        # "median" seed landed there. Take the WORST score that is still genuinely below the
+        # plateau -- a real mid-range program with headroom to the 1.503 target.
+        genuine = [r for r in ok if r["score"] < 1.999] or ok
+        e = max(genuine, key=lambda r: r["score"]) if idx is None else \
+            sorted(ok, key=lambda r: r["score"])[idx]
+    return e["code"], None, None, "", e["score"]
 
 
-def build_one(problem, no_grade=False):
+def build_question(problem, seed_prog, score, constr, parents, observation):
+    """env.get_question() with OUR seed as the initial state. get_question implementations
+    only touch initial_state / problem_type / eval_timeout (+ os.environ for fc46), so an
+    attribute-stub env suffices -- no renderer/sampler/config needed."""
+    root, mod, cls, ptype, lang, maximize = PROBLEMS[problem]
+    EnvClass = _load_env_class(root, mod, cls)
+    state = EnvClass.create_initial_state(ptype)
+    state.code = seed_prog
+    state.value = score if maximize else -score   # State stores negated values for minimize
+    if constr is not None:
+        state.construction = constr
+    state.parent_values = parents                 # erdos: real before->after like the RL runs
+    state.observation = observation
+    env = EnvClass.__new__(EnvClass)
+    env.initial_state = state
+    env.problem_type = ptype
+    env.eval_timeout = 1000                        # question text shows the production budget
+    q = env.get_question()
+    if not maximize:
+        # State.to_prompt hardcodes "(higher is better)" in its no-parent branch; our RL runs
+        # never hit it (states always have parents). Fix the direction for minimize problems.
+        q = q.replace("(higher is better):", "(lower is better):")
+    return q
+
+
+def build_one(problem, reuse_scores=False):
     root, mod, cls, ptype, lang, maximize = PROBLEMS[problem]
     fence = FENCE[lang]
-    seed_prog, seed_constr, recorded = load_seed(problem)
+    seed_prog, constr, parents, observation, recorded = load_seed(problem)
     seed_prog = strip_fence(seed_prog)
+    seed_sha = sha(seed_prog)
     d = CLIENT_DATA / problem
     d.mkdir(parents=True, exist_ok=True)
 
-    # ---- grade the seed once at PRODUCTION budget: the number every prompt must state ----
-    if no_grade:
-        score = recorded
-        assert score is not None, f"{problem}: --no-grade needs a recorded seed score"
-    else:
+    # ---- the number every prompt must state: ONE production grade of the seed ----
+    score = None
+    mf = d / "meta.json"
+    if reuse_scores and mf.exists():
+        old = json.loads(mf.read_text())
+        if old.get("seed_sha") == seed_sha and old.get("seed_score") is not None:
+            score = old["seed_score"]
+            print(f"[pack] {problem}: reusing graded seed_score={score}", flush=True)
+    if score is None:
         print(f"[pack] {problem}: production-grading seed...", flush=True)
         t0 = time.time()
         payload = f"```{fence}\n{seed_prog}\n```" if lang == "python" else seed_prog
-        g = _grade(root, mod, cls, ptype, lang, seed_constr, payload, False, str(d))
+        g = _grade(root, mod, cls, ptype, lang, constr, payload, False, str(d))
         print(f"[pack] {problem}: seed grade={g} in {int(time.time()-t0)}s", flush=True)
         if not g["valid"]:
             raise SystemExit(f"{problem}: seed FAILED production grading: {g['detail']}")
@@ -150,51 +169,45 @@ def build_one(problem, no_grade=False):
         if recorded is not None and abs(score - recorded) > max(1e-6, abs(recorded) * 0.05):
             print(f"[pack] WARNING {problem}: graded {score} vs recorded {recorded}", flush=True)
 
-    score_str = f"{score:.6g}"
-    direction = ("HIGHER scores are BETTER (maximize)" if maximize
-                 else "LOWER scores are BETTER (minimize)")
-    better = "higher" if maximize else "lower"
+    question = build_question(problem, seed_prog, score, constr, parents, observation)
 
-    seed_block = [
-        "## Starting program to improve on",
-        f"This program's PRODUCTION score is {score_str}. {direction}. Your goal is a program "
-        f"that scores meaningfully {better} than {score_str} at the same production budget.",
-        "", f"```{fence}", seed_prog, "```"]
+    agent = question
     if problem == "erdos":
-        (d / "seed_construction.json").write_text(json.dumps(seed_constr))
-        seed_block += [
-            "", "Note: at grading time, `initial_h_values` (the seed's construction, the list "
-            "below) and `evaluate_erdos_solution()` are pre-imported for your program. For local "
-            "testing, use this same list:",
-            "```json", json.dumps([round(x, 12) for x in seed_constr]), "```"]
+        (d / "seed_construction.json").write_text(json.dumps(constr))
+        agent += ("\n\n## Local testing note\n"
+                  "At grading time `initial_h_values` (the current construction) and "
+                  "`evaluate_erdos_solution()` are pre-imported for your program. For local "
+                  "testing, `initial_h_values` is exactly this list:\n```json\n"
+                  + json.dumps([round(x, 12) for x in constr]) + "\n```")
+    completion = (question + "\n\nThink the problem through, then output your single best "
+                  f"COMPLETE program as ONE ```{fence} code block (the last such block in "
+                  "your reply is taken as your answer). The program must compute its result "
+                  "within the stated budget; embedding a precomputed answer as data (literal "
+                  "arrays, base64) is invalid and will be rejected.\n")
 
-    body = task_text(problem).rstrip() + "\n\n" + "\n".join(seed_block) + "\n"
-    agent = body  # T1/T3 append their own tool/workflow contract at collect time
-    completion = (body + "\nThink the problem through, then output your single best COMPLETE "
-                  f"program as ONE ```{fence} code block (the last such block in your reply is "
-                  "taken as your answer). The program must compute its result within the stated "
-                  "budget; embedding a precomputed answer as data (literal arrays, base64) is "
-                  "invalid and will be rejected.\n")
+    s6 = f"{score:.6f}"
+    direction = "higher is better" if maximize else "lower is better"
     for name, text in [("prompt_agent.md", agent), ("prompt_completion.md", completion)]:
-        assert score_str in text, f"{problem}/{name}: seed score missing"
-        assert direction in text, f"{problem}/{name}: direction missing"
+        assert s6 in text, f"{problem}/{name}: graded seed score {s6} missing from prompt"
+        assert direction in text, f"{problem}/{name}: direction phrase '{direction}' missing"
         (d / name).write_text(text)
     (d / f"seed.{'py' if lang == 'python' else 'cpp'}").write_text(seed_prog)
     (d / "meta.json").write_text(json.dumps({
         "problem": problem, "lang": lang, "fence": fence, "maximize": maximize,
         "problem_type": ptype, "seed_score": score, "seed_recorded_score": recorded,
+        "seed_sha": seed_sha, "prompt_style": "env_get_question",
         "built": time.strftime("%F %T")}, indent=2))
-    print(f"[pack] {problem}: OK seed_score={score_str} -> {d}", flush=True)
+    print(f"[pack] {problem}: OK seed_score={s6} prompt_chars={len(agent)} -> {d}", flush=True)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--problems", nargs="+", default=list(PROBLEMS))
-    ap.add_argument("--no-grade", action="store_true",
-                    help="use recorded seed scores instead of re-grading (NOT for real runs)")
+    ap.add_argument("--reuse-scores", action="store_true",
+                    help="reuse an existing meta.json seed_score when the seed is unchanged")
     args = ap.parse_args()
     for p in args.problems:
-        build_one(p, args.no_grade)
+        build_one(p, args.reuse_scores)
 
 
 if __name__ == "__main__":
