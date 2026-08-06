@@ -43,24 +43,30 @@ if [[ "$st" == "SUSPENDED" || "$st" == "FAILED" ]]; then
   gcloud compute tpus queued-resources delete "$TPU_NAME" --zone=$ZONE --project=$PROJECT --force --quiet
   while [[ -n "$(state)" ]]; do sleep 20; done
 fi
-if [[ -z "$(state)" ]]; then
-  echo "[farm] jobman create $YAML"
-  # jobman/cli.py has no __main__ guard and its .venv never had the package installed, so
-  # neither `uv run jobman` nor `python -m jobman.cli` works -- call the click group directly.
-  (cd "$MAIN/third_party/jobman" && \
-   PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" create "$YAML")
-fi
+# jobman notes (all earned today): the CLI has no __main__ guard and its .venv never had the
+# package installed, so the click group must be called directly from source; and
+# `jobman create` launches its worker as `jobman run <id>` inside a detached tmux -- which
+# dies instantly for the same missing-entrypoint reason. So: register the job with create
+# (or reuse an existing snapshot for this TPU), then run the worker OURSELVES in the
+# foreground -- it requests the QR, waits for capacity, and does full node setup (ssh,
+# gcsfuse, code bundle) before returning.
+JM="$MAIN/third_party/jobman"
+jobman_cli() { (cd "$JM" && PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" "$@"); }
 
-echo "[farm] waiting for ACTIVE (spot queue can take a while)..."
-while true; do
-  st=$(state)
-  echo "[farm] $(date '+%T') state=$st"
-  [[ "$st" == "ACTIVE" ]] && break
-  [[ "$st" == "SUSPENDED" || "$st" == "FAILED" ]] && { echo "[farm] QR died while waiting" >&2; exit 1; }
-  sleep 60
-done
-# jobman's post-create setup (ssh keys, gcsfuse, code bundle) needs a beat after ACTIVE
-sleep 120
+jid=$(grep -l "name: ${TPU_NAME}" "$JM"/jobs/sk7524/*/config.yaml 2>/dev/null | tail -1 \
+      | sed -E 's|.*/([0-9]+)/config.yaml|\1|')
+if [[ -z "$jid" ]]; then
+  echo "[farm] jobman create $YAML"
+  jid=$(jobman_cli create "$YAML" 2>&1 | tee /dev/stderr | grep -oE 'Created job [0-9]+' | grep -oE '[0-9]+' | head -1)
+  [[ -n "$jid" ]] || { echo "[farm] create failed" >&2; exit 1; }
+fi
+tmux kill-session -t "job_${jid}" 2>/dev/null || true   # the broken detached worker, if any
+echo "[farm] jobman run $jid (foreground: QR request + wait + node setup)"
+jobman_cli run "$jid"
+
+st=$(state)
+echo "[farm] after jobman run: state=$st"
+[[ "$st" == "ACTIVE" ]] || { echo "[farm] QR not ACTIVE after jobman run" >&2; exit 1; }
 
 echo "[farm] bring-up: vLLM only, 32k ctx"
 START_TINKER=0 START_VLLM=1 \
