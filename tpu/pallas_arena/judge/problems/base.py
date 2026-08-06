@@ -54,44 +54,114 @@ class AdversarialCase:
     expect: Callable[[Any, tuple], None] | None = None
 
 
-def _leaves(out) -> list[np.ndarray]:
-    if isinstance(out, (tuple, list)):
-        return [np.asarray(o, dtype=np.float64) for o in out]
-    return [np.asarray(out, dtype=np.float64)]
+# q99 is estimated from a deterministic strided subsample once a leaf gets
+# big. Phase 4 measured why: the old host-side path upcast every leaf to
+# float64, pulled it off the chip and built ~5 full-size temporaries per
+# call — at 32768x8192 that is ~10 GB of host traffic, and the worker makes
+# ~90 of these calls per candidate (tolerance calibration runs 4 honest
+# implementations per fixture). The host-side np.quantile over ~14 G
+# elements per candidate was the single largest term in the 261 s attempt-1
+# warm cost. Now the elementwise error, max, mean and finiteness are EXACT
+# on device and only a capped sample crosses to the host for the tail
+# quantile. Striding is deterministic, so regrades stay bit-stable; and it
+# is unexploitable — a candidate never learns the hidden fixture seed, the
+# reference output, or which elements are compared, and `max` remains exact
+# over every element.
+Q99_SAMPLE_CAP = 1 << 19  # 524,288 elements: q99 sampling error ~0.4% at the
+# tail, i.e. two orders below the 1.5x calibrated margin it feeds
+
+
+def _leaves(out) -> list:
+    return list(out) if isinstance(out, (tuple, list)) else [out]
+
+
+def _bad(why: str) -> dict:
+    return {"finite": False, "max": float("inf"), "q99": float("inf"), "mean": float("inf"), "why": why}
+
+
+def _sample_stride(n: int, row_len: int) -> int:
+    """Stride for the q99 subsample, chosen COPRIME to the row length.
+
+    A plain ceil(n / cap) stride is usually a power of two, and so are the
+    row lengths (4096, 8192, ...) — the sample would then only ever land on
+    a handful of column indices, repeated in every row. Error in a tiled
+    kernel is column-correlated (edge tiles, padding), and the strides are
+    derivable from the public shapes, so that would be a tail-check blind
+    spot a candidate could aim at. With gcd(stride, row_len) = 1 the walk
+    visits every column index in turn. (`max` is exact either way, so this
+    only hardens the q99 tail.)"""
+    import math
+
+    s = max(1, -(-n // Q99_SAMPLE_CAP))  # ceil-div: sample <= cap
+    while s < n and math.gcd(s, row_len) != 1:
+        s += 1
+    return s
+
+
+_LEAF_STATS = None
+
+
+def _leaf_stats_fn():
+    """One fused pass per leaf: XLA never materializes the error array, so
+    peak memory is unchanged and only (max, sum, finite, sample) come back.
+    The upcasts live INSIDE the jit so no full-size f32 temporary is
+    materialized eagerly on the way in."""
+    global _LEAF_STATS
+    if _LEAF_STATS is None:
+        import functools
+
+        import jax
+        import jax.numpy as jnp
+
+        @functools.partial(jax.jit, static_argnums=2)
+        def _f(c, r, stride):
+            c32 = c.astype(jnp.float32)
+            r32 = r.astype(jnp.float32)
+            e = (jnp.abs(c32 - r32) / (jnp.abs(r32) + 1.0)).reshape(-1)
+            return jnp.max(e), jnp.sum(e), e[::stride], jnp.isfinite(c32).all()
+
+        _LEAF_STATS = _f
+    return _LEAF_STATS
 
 
 def error_stats(cand, ref) -> dict:
     """Per-element |cand - ref| distribution stats across all output leaves,
     normalized per element by (|ref| + 1): a scale-aware absolute/relative
-    hybrid so huge-magnitude outputs don't drown small-magnitude rows."""
+    hybrid so huge-magnitude outputs don't drown small-magnitude rows.
+
+    Computed on whatever device the arrays already live on (float32); only
+    scalars and the capped q99 sample are transferred."""
+    import jax.numpy as jnp
+
     cl, rl = _leaves(cand), _leaves(ref)
     if len(cl) != len(rl):
-        return {
-            "finite": False,
-            "max": float("inf"),
-            "q99": float("inf"),
-            "mean": float("inf"),
-            "why": "output arity mismatch",
-        }
-    errs = []
+        return _bad("output arity mismatch")
+
+    leaf_stats = _leaf_stats_fn()
+    maxes, total, counts, finite, samples = [], 0.0, 0, True, []
     for c, r in zip(cl, rl):
-        if c.shape != r.shape:
-            return {
-                "finite": False,
-                "max": float("inf"),
-                "q99": float("inf"),
-                "mean": float("inf"),
-                "why": f"shape mismatch {c.shape} vs {r.shape}",
-            }
-        e = np.abs(c - r) / (np.abs(r) + 1.0)
-        errs.append(e.reshape(-1))
-    e = np.concatenate(errs) if errs else np.zeros(1)
-    finite = bool(np.isfinite(np.concatenate([c.reshape(-1) for c in cl])).all())
+        ca, ra = jnp.asarray(c), jnp.asarray(r)
+        if ca.shape != ra.shape:
+            return _bad(f"shape mismatch {ca.shape} vs {ra.shape}")
+        n = int(ca.size)
+        if n == 0:
+            continue
+        stride = _sample_stride(n, ca.shape[-1] if ca.ndim else 1)
+        mx, sm, sample, fin = leaf_stats(ca, ra, stride)
+        maxes.append(float(mx))
+        total += float(sm)
+        counts += n
+        finite = finite and bool(fin)
+        samples.append(np.asarray(sample))
+
+    if not counts:
+        return {"finite": finite, "max": 0.0, "q99": 0.0, "mean": 0.0}
+    sample = np.concatenate(samples) if len(samples) > 1 else samples[0]
     return {
         "finite": finite,
-        "max": float(np.max(e)) if e.size else 0.0,
-        "q99": float(np.quantile(e, 0.99)) if e.size else 0.0,
-        "mean": float(np.mean(e)) if e.size else 0.0,
+        "max": max(maxes),
+        "q99": float(np.quantile(sample, 0.99)),
+        "mean": total / counts,
     }
 
 

@@ -184,3 +184,61 @@ def test_rmsnorm_zero_row_and_overflow_vectors():
         adv = _adv_by_name(p, name)
         inputs = adv.make_inputs(jax.random.PRNGKey(29))
         adv.expect(p.reference(*inputs), inputs)
+
+
+def test_q99_subsample_matches_exact_on_large_leaves():
+    """`error_stats` estimates the tail quantile from a strided subsample once
+    a leaf exceeds Q99_SAMPLE_CAP (phase-4 fix: the exact host-side path cost
+    ~10 GB of transfers per call and dominated warm chip time). Prove the
+    estimate still tracks the exact q99, that `max` stays EXACT, and that the
+    estimator is deterministic — regrade stability depends on it."""
+    from pallas_arena.judge.problems.base import Q99_SAMPLE_CAP, error_stats
+
+    n = Q99_SAMPLE_CAP * 2 + 12345  # forces stride > 1 and a ragged tail
+    ref = jnp.zeros((n,), jnp.float32)
+    err = jax.random.exponential(jax.random.PRNGKey(31), (n,), jnp.float32)
+    # one deliberate spike that the subsample will almost surely skip: the
+    # exact `max` must find it anyway
+    err = err.at[n - 2].set(97.5)
+
+    stats = error_stats(err, ref)
+    exact = np.asarray(err)
+    assert stats["max"] == pytest.approx(float(exact.max()), rel=1e-6)
+    assert stats["mean"] == pytest.approx(float(exact.mean()), rel=1e-3)
+    assert stats["q99"] == pytest.approx(float(np.quantile(exact, 0.99)), rel=0.02)
+    assert stats["finite"]
+    assert error_stats(err, ref)["q99"] == stats["q99"], "estimator must be deterministic"
+
+
+def test_q99_subsample_stride_is_coprime_with_the_row_length():
+    """The subsample must WALK the columns, not sit on a fixed few of them.
+
+    Row lengths in the shape set are powers of two (4096, 8192, ...), and so
+    is a plain ceil(n/cap) stride — the sample would then only ever land on
+    the same handful of column indices in every row. Error in a tiled kernel
+    is column-correlated and the stride is derivable from the public shapes,
+    so that would be a q99 blind spot a candidate could aim at. Also check
+    the walk really covers every column on a small worked example."""
+    import math
+
+    from pallas_arena.judge.problems.base import _sample_stride
+
+    for rows, d in ((32768, 8192), (8192, 4096), (73728, 2880), (16384, 6144)):
+        s = _sample_stride(rows * d, d)
+        assert math.gcd(s, d) == 1, (rows, d, s)
+
+    assert _sample_stride(64 * 8, 8) == 1  # under the cap: no subsampling
+
+    # the walk really does reach every column of a 32768x8192 leaf
+    rows, d = 32768, 8192
+    s = _sample_stride(rows * d, d)
+    assert len({(k * s) % d for k in range(d)}) == d
+
+
+def test_error_stats_rejects_malformed_outputs():
+    from pallas_arena.judge.problems.base import error_stats
+
+    ref = jnp.ones((8, 4), jnp.float32)
+    assert not error_stats(jnp.ones((8, 5), jnp.float32), ref)["finite"]
+    assert not error_stats((ref, ref), ref)["finite"]
+    assert not error_stats(jnp.full((8, 4), jnp.nan, jnp.float32), ref)["finite"]
