@@ -45,7 +45,10 @@ if [[ "$st" == "SUSPENDED" || "$st" == "FAILED" ]]; then
 fi
 if [[ -z "$(state)" ]]; then
   echo "[farm] jobman create $YAML"
-  (cd "$MAIN/third_party/jobman" && uv run jobman create "$YAML")
+  # jobman/cli.py has no __main__ guard and its .venv never had the package installed, so
+  # neither `uv run jobman` nor `python -m jobman.cli` works -- call the click group directly.
+  (cd "$MAIN/third_party/jobman" && \
+   PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" create "$YAML")
 fi
 
 echo "[farm] waiting for ACTIVE (spot queue can take a while)..."
