@@ -57,6 +57,13 @@ from jax.experimental import pallas as pl
 
 _BR = {block_rows}
 _VMEM_BUDGET = 24 * 1024 * 1024  # stay clear of the 32M scoped-vmem limit
+# Scoped VMEM per (row x padded-col) element. The phase-3 formula counted
+# only the bf16 in/out blocks, double-buffered (8 B/elt), and still OOM'd:
+# the kernel body upcasts to f32, so x32, x*x and the f32 product are all
+# live inside the block too. Phase 4 measured the truth on silicon — a
+# 256-row block at dp=6144 requested 36.25 M, i.e. 23.05 B/elt — so the
+# budget now comes from that measurement with a little margin.
+_BYTES_PER_ELT = 24
 
 def _make_kernel(d):
     def _kern(x_ref, g_ref, o_ref):
@@ -70,10 +77,11 @@ def _make_kernel(d):
 def _fwd(x, g):
     rows, d = x.shape
     dp = ((d + 127) // 128) * 128
-    # VMEM budget: bf16 in + bf16 out, double-buffered (phase-2 lesson:
-    # an f32-out 256-row block at d=8192 blew the 32M scoped limit)
+    # Budget the block against the measured per-element scoped-VMEM cost
+    # (phase-2 lesson: an f32-out 256-row block at d=8192 blew the 32M
+    # scoped limit; phase-4 lesson: the f32 working set counts too)
     br = _BR
-    while br > 16 and br * dp * (2 + 2) * 2 > _VMEM_BUDGET:
+    while br > 16 and br * dp * _BYTES_PER_ELT > _VMEM_BUDGET:
         br //= 2
     rp = ((rows + br - 1) // br) * br
     xp = jnp.pad(x, ((0, rp - rows), (0, dp - d))) if (rp != rows or dp != d) else x
