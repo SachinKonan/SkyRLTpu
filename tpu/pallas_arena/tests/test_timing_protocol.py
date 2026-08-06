@@ -35,14 +35,17 @@ def test_self_measured_floor_when_not_provided(fast_grade_kwargs):
 
 
 def test_regrade_same_kernel_is_stable(fast_grade_kwargs):
-    """Same-kernel regrade: scores agree within a loose CPU band (the +/-3%
-    silicon invariant is a phase-2 assertion)."""
-    kw = dict(fast_grade_kwargs, timing_pairs=10)
+    """Same-kernel regrade: scores agree within a very loose CPU band —
+    ~40us kernels on a shared node see multi-x scheduler jitter (observed:
+    0.70 vs 1.42 on a busy node). This asserts the plumbing returns
+    comparable scores; the real +/-3% invariant is asserted on silicon in
+    phase 4."""
+    kw = dict(fast_grade_kwargs, timing_pairs=20)
     r1 = grader.grade("rmsnorm", cand.HONEST_RMSNORM, **kw)
     r2 = grader.grade("rmsnorm", cand.HONEST_RMSNORM, **kw)
     assert r1["passed"] and r2["passed"]
     ratio = r1["score"] / r2["score"]
-    assert 0.5 < ratio < 2.0, (r1["score"], r2["score"])
+    assert 0.25 < ratio < 4.0, (r1["score"], r2["score"])
 
 
 def test_latencies_and_memory_fields_reported(fast_grade_kwargs):

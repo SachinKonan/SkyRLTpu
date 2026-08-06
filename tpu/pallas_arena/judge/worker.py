@@ -247,9 +247,10 @@ class PersistentWorker:
         seed_key = jax.random.PRNGKey(secrets.randbits(31))  # never leaves us
         k_corr, k_adv, k_time = jax.random.split(seed_key, 3)
 
-        t_chip = self.perf()
+        # ---- 2b. build fixtures + compile-warm EVERY artifact off the timed
+        # path (the compile-vs-chip split the throughput table assumes:
+        # warm_chip_s below is pure steady-state chip time)
         try:
-            # ---- 3. correctness on fresh hidden seeds + adversarial vectors
             fixtures = []
             for case in self.scored_cases:
                 for g in range(self.correctness_seeds):
@@ -261,6 +262,28 @@ class PersistentWorker:
                 block(inputs)
                 fixtures.append((f"adv:{adv.name}", adv_sig[adv.name], inputs))
 
+            t_warmc = self.perf()
+            warmed = set()
+            for _label, sig_name, inputs in fixtures:
+                if sig_name not in warmed:
+                    block(fns[sig_name](*inputs))
+                    warmed.add(sig_name)
+            for case in self.holdout_cases:
+                sig_name = case_sig[case.name]
+                if sig_name not in warmed:
+                    w_in = problem.make_inputs(fold_in(k_time, 10_000), case)
+                    block(w_in)
+                    block(fns[sig_name](*w_in))
+                    warmed.add(sig_name)
+            if grad_sig is not None and fixtures:
+                block(fns[grad_sig](*fixtures[0][2]))
+            result["candidate_compile_s"] = self.perf() - t_warmc
+        except Exception as e:
+            return fail("candidate_compile", f"{type(e).__name__}: {e}")
+
+        t_chip = self.perf()
+        try:
+            # ---- 3. correctness on fresh hidden seeds + adversarial vectors
             from pallas_arena.judge.problems.base import check_tolerance, error_stats
 
             for label, sig_name, inputs in fixtures:
