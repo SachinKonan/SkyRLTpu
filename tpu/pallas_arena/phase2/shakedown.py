@@ -59,6 +59,11 @@ def main() -> int:
     ap.add_argument("--skip-server", action="store_true")
     args = ap.parse_args()
 
+    # Set BEFORE any grader call: every child (incl. the very first
+    # measure_noise_floor fork) needs the TPU-sized RLIMIT_AS — libtpu's VA
+    # reservations blow through the 16G CPU default (attempt-1 lesson).
+    os.environ["ARENA_RLIMIT_GB"] = str(int(RLIMIT_GB))
+
     results: dict = {"invariants": {}, "grades": {}, "meta": {"started": time.strftime("%Y-%m-%dT%H:%M:%S")}}
     hard_fail = []
 

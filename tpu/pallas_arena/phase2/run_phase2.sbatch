@@ -89,7 +89,8 @@ tssh "bash ~/arena/pallas_arena/phase2/provision_judge.sh" || { echo "provision 
 
 echo "=== launching shakedown in tmux $(date +%H:%M:%S) ==="
 tssh "tmux kill-session -t shakedown 2>/dev/null; tmux new-session -d -s shakedown \
-  'cd ~/arena && JAX_PLATFORMS=cpu ARENA_CHILD_JAX_PLATFORMS=tpu PYTHONPATH=~/arena \
+  'cd ~/arena && JAX_PLATFORMS=cpu ARENA_CHILD_JAX_PLATFORMS=tpu ARENA_RLIMIT_GB=512 \
+   PYTHONPATH=~/arena \
    ~/arena-venv/bin/python pallas_arena/phase2/shakedown.py \
    --out ~/shakedown-results.json > ~/shakedown.log 2>&1'"
 
