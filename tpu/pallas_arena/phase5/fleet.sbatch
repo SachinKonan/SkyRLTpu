@@ -83,12 +83,18 @@ cleanup() {
   pkill -P $$ 2>/dev/null
   pkill -f "tpu-vm ssh ${QR_PREFIX}-" 2>/dev/null
   sleep 1
+  del_pids=()
   for name in "${judges[@]}"; do
     ( timeout 600 gcloud compute tpus queued-resources delete "$name" \
         --zone="$ZONE" --project="$PROJECT" --force --quiet >/dev/null 2>&1
       echo "[cleanup] delete issued: $name" ) &
+    del_pids+=($!)
   done
-  wait
+  # NEVER a bare `wait` in this script: the queue server is a background child
+  # that by design never exits, so `wait` with no arguments blocks forever.
+  # (Measured: run 3648750 wedged here for 4 minutes with 5 QRs alive before
+  # it was killed.) Always wait on the explicit PIDs we care about.
+  wait "${del_pids[@]}" 2>/dev/null
   # Verify, then delete anything of ours that survived. "Issued" is not
   # "gone"; the only acceptable end state is an empty list in BOTH zones.
   for z in us-east5-b us-east5-a; do
@@ -139,11 +145,13 @@ curl -sf "http://127.0.0.1:${PORT}/status" >/dev/null || { echo "queue failed to
 
 # ----------------------------------------------------------------- create N
 echo "=== creating ${N} spot ${ACCEL} QRs in ${ZONE} $(date +%H:%M:%S) ==="
+create_pids=()
 for name in "${judges[@]}"; do
   gc queued-resources create "$name" --node-id="$name" --accelerator-type="$ACCEL" \
      --runtime-version="$RUNTIME" --spot 2>&1 | tail -1 &
+  create_pids+=($!)
 done
-wait
+wait "${create_pids[@]}" 2>/dev/null
 t_first_qr=$(date +%s)
 
 ( trap - EXIT TERM INT HUP
@@ -244,13 +252,15 @@ echo "=== ${n_landed}/${N} judges landed: ${landed:-none} $(date +%H:%M:%S) ==="
 
 if [ "$n_landed" -lt "$N" ]; then
   echo "=== degraded fleet: deleting the QRs that never landed ==="
+  pend_pids=()
   for name in "${judges[@]}"; do
     if [ ! -e "${ready_dir}/${name}" ]; then
       echo "  deleting pending ${name}"
       gc queued-resources delete "$name" --force --quiet >/dev/null 2>&1 &
+      pend_pids+=($!)
     fi
   done
-  wait
+  [ ${#pend_pids[@]} -gt 0 ] && wait "${pend_pids[@]}" 2>/dev/null
 fi
 if [ "$n_landed" -lt "$MIN_JUDGES" ]; then
   echo "FATAL: only ${n_landed} judges; need >= ${MIN_JUDGES}"
