@@ -167,6 +167,7 @@ def main() -> int:
         env = os.environ.copy()
         env["JAX_PLATFORMS"] = "cpu"
         env["ARENA_CHILD_JAX_PLATFORMS"] = "tpu"
+        env["ARENA_RLIMIT_GB"] = str(int(RLIMIT_GB))
         env["PYTHONPATH"] = str(ARENA_IMPORT_ROOT)
         cache_dir = os.path.expanduser("~/arena-reward-cache")
         srv = subprocess.Popen(

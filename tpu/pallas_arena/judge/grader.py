@@ -64,7 +64,7 @@ def grade(
     cases: list[str] | None = None,
     seed: int | None = None,
     timeout_s: float = DEFAULT_TIMEOUT_S,
-    rlimit_gb: float = DEFAULT_RLIMIT_GB,
+    rlimit_gb: float | None = None,
     enforce_pallas: bool | None = None,
     noise_floor: float | None = None,
     timing_pairs: int = 20,
@@ -80,6 +80,11 @@ def grade(
     """Grade one candidate. Returns the child's result dict, augmented with
     parent-side bookkeeping (wall time, cache hit, timeout/oom classification).
     """
+    if rlimit_gb is None:
+        # ARENA_RLIMIT_GB lets a TPU judge raise the cap globally: libtpu's
+        # virtual-address reservations dwarf the CPU default.
+        rlimit_gb = float(os.environ.get("ARENA_RLIMIT_GB", DEFAULT_RLIMIT_GB))
+
     if problem_version is None:
         # resolve lazily without importing jax in the server process
         from pallas_arena.judge.problems import get_problem
