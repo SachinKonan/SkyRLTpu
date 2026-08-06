@@ -505,17 +505,28 @@ class Datum(BaseModel):
     def to_types(self) -> types.Datum:
         inp = self.loss_fn_inputs
 
-        if "weights" not in inp:
-            weights = types.TensorData(data=[1.0] * len(inp["target_tokens"].data))
-        else:
-            weights = inp["weights"].to_types()
+        # Fill absent per-token arrays to TARGET LENGTH with neutral values
+        # (weights=1, advantages=0, logprobs=0) — never length-0. The tunix
+        # backend jits ONE forward_backward program whose signature includes
+        # each input array's shape; a datum schema that leaves e.g. advantages
+        # empty while another populates it RETRACES the program (a second
+        # multi-10G resident program → OOM on memory-tight models, plus
+        # untested graph variants — both seen live). Uniform fills let every
+        # schema (RL, plain cross_entropy, distill-style) reuse the same
+        # compiled program.
+        n_targets = len(inp["target_tokens"].data)
+
+        def _fill(key: str, fill: float) -> types.TensorData:
+            if key in inp:
+                return inp[key].to_types()
+            return types.TensorData(data=[fill] * n_targets)
 
         return types.Datum(
             loss_fn_inputs=types.LossFnInputs(
                 target_tokens=inp["target_tokens"].to_types(),
-                weights=weights,
-                advantages=inp["advantages"].to_types() if "advantages" in inp else types.TensorData(data=[]),
-                logprobs=inp["logprobs"].to_types() if "logprobs" in inp else types.TensorData(data=[]),
+                weights=_fill("weights", 1.0),
+                advantages=_fill("advantages", 0.0),
+                logprobs=_fill("logprobs", 0.0),
                 values=inp["values"].to_types() if "values" in inp else types.TensorData(data=[]),
                 returns=inp["returns"].to_types() if "returns" in inp else types.TensorData(data=[]),
             ),

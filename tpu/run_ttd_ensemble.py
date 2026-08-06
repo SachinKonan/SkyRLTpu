@@ -4,7 +4,13 @@ each with its own LoRA/GRPO/KL objective, sharing ONE PUCT state pool.
 
 Member spec via TTD_ENSEMBLE_MODELS="model:renderer[:tag],model:renderer[:tag]".
 Per-member overrides: TTD_M{i}_{LORA_RANK,PHASE1_MAX_TOKENS,COMPLETION_MAX_TOKENS,
-GROUPS_PER_BATCH,LEARNING_RATE,KL_PENALTY_COEF} (i = member index, 0-based).
+GROUPS_PER_BATCH,LEARNING_RATE,KL_PENALTY_COEF,BASE_URL,CONTEXT_WINDOW,
+TRAIN_MAX_SEQ} (i = member index, 0-based).
+
+League mode (rl/cross_import.py): TTD_CROSS_WEIGHT (lambda, default 0.1; 0
+disables) + TTD_CROSS_MAX_IMPORTS (per problem/direction, default 4).
+Problem env via TTD_ENV (erdos_min_overlap | circle_packing | ac_inequalities |
+frontier_erdos_ud), matching run_ttd_smoke_gptoss20b.py.
 """
 
 from __future__ import annotations
@@ -66,7 +72,20 @@ def main() -> None:
     ).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    from examples.erdos_min_overlap.env import ErdosMinOverlapEnv
+    # Problem env from TTD_ENV (default: Erdős), same map as the smoke runner.
+    import importlib
+    _ENVS = {
+        "erdos_min_overlap": ("examples.erdos_min_overlap.env", "ErdosMinOverlapEnv"),
+        "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv"),
+        "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv"),
+        "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv"),
+        # Frontier-CS algorithmic track (ported from the frontiercs worktree);
+        # problem id via TTD_PROBLEM_TYPE (46=JSSP), knobs TTD_FCALGO_*
+        "frontier_algo": ("examples.frontier_algo.env", "FrontierAlgoEnv"),
+    }
+    _mod, _cls = _ENVS[os.environ.get("TTD_ENV", "erdos_min_overlap")]
+    env_type = getattr(importlib.import_module(_mod), _cls)
+
     from ttt_discover.rl.ensemble import (
         EnsembleConfig,
         EnsembleMemberConfig,
@@ -79,6 +98,7 @@ def main() -> None:
         model, renderer = parts[0], parts[1]
         tag = parts[2] if len(parts) > 2 else _default_tag(model)
         is_gptoss = model.startswith("openai/gpt-oss")
+        is_gemma = "gemma" in model.lower()
         members.append(EnsembleMemberConfig(
             model_name=model,
             renderer_name=renderer,
@@ -90,15 +110,20 @@ def main() -> None:
             # into truncated zero-reward samples, so default None (remaining context).
             completion_max_tokens=(None if is_gptoss
                                    else _env_optional_int(f"TTD_M{i}_COMPLETION_MAX_TOKENS")),
-            # Nemotron's HF chat template emits an empty leading system turn.
+            # Nemotron's HF chat template emits an empty leading system turn;
+            # qwen3.5 proper runs without one (matches the single-model sweep),
+            # and Gemma4Renderer injects its own <|think|> system turn.
             convo_prefix=([{"role": "system", "content": ""}]
-                          if renderer.startswith("qwen3") else None),
+                          if "nemotron" in model.lower() else None),
             groups_per_batch=_env_int(f"TTD_M{i}_GROUPS_PER_BATCH",
                                       _env_int("GROUPS_PER_BATCH", 32)),
             learning_rate=_env_float(f"TTD_M{i}_LEARNING_RATE",
                                      _env_float("LEARNING_RATE", 4e-5)),
             kl_penalty_coef=_env_float(f"TTD_M{i}_KL_PENALTY_COEF",
                                        _env_float("KL_PENALTY_COEF", 0.1)),
+            tinker_base_url=os.environ.get(f"TTD_M{i}_BASE_URL") or None,
+            context_window=_env_optional_int(f"TTD_M{i}_CONTEXT_WINDOW"),
+            train_max_seq=_env_optional_int(f"TTD_M{i}_TRAIN_MAX_SEQ"),
         ))
 
     if len(members) < 2:
@@ -117,19 +142,28 @@ def main() -> None:
 
     cfg = EnsembleConfig(
         members=members,
-        env_type=ErdosMinOverlapEnv,
+        env_type=env_type,
         log_path=log_path,
         group_size=_env_int("GROUP_SIZE", 8),
         num_epochs=_env_int("NUM_EPOCHS", 15),
         temperature=_env_float("TEMPERATURE", 1.0),
         context_window=_env_int("CONTEXT_WINDOW", 32768),
         save_every=_env_int("SAVE_EVERY", 0),
+        loss_fn=os.environ.get("TTD_LOSS_FN", "importance_sampling"),
+        adv_estimator=os.environ.get("TTD_ADV_ESTIMATOR", "entropic_adaptive_beta"),
+        adv_estimator_beta=_env_float("TTD_ADV_ESTIMATOR_BETA", 2.0),
         wandb_project=os.environ.get("WANDB_PROJECT") or None,
         wandb_name=experiment_name,
         tinker_base_url=os.environ.get("TINKER_BASE_URL") or None,
         num_cpus_per_task=_env_int("NUM_CPUS_PER_TASK", 1),
+        problem_type=os.environ.get("TTD_PROBLEM_TYPE", ""),
         eval_backend=os.environ.get("TTD_EVAL_BACKEND", "local"),
         eval_timeout=_env_int("EVAL_TIMEOUT", 1100),
+        # League cross-imitation (frontier-gated imports; lambda=0 disables)
+        cross_import_weight=_env_float("TTD_CROSS_WEIGHT", 0.1),
+        cross_max_imports_per_seed=_env_int("TTD_CROSS_MAX_IMPORTS", 4),
+        # v2 dataflow executor (stream per-group fb + per-problem cross-CE)
+        pipeline_dataflow=os.environ.get("TTD_LEAGUE_PIPELINE", "0") == "1",
         # Cross-model contrastive distillation (symmetric; off by default)
         distill_enabled=os.environ.get("TTD_DISTILL_ENABLED", "0") == "1",
         distill_pairs_per_step=_env_int("TTD_DISTILL_PAIRS_PER_STEP", 16),
@@ -143,11 +177,15 @@ def main() -> None:
     )
 
     print(f"[ensemble] run_dir    : {run_dir}")
+    print(f"[ensemble] env        : {env_type.__name__}  league lambda={cfg.cross_import_weight} "
+          f"max_imports={cfg.cross_max_imports_per_seed} "
+          f"pipeline={int(cfg.pipeline_dataflow)} eval_backend={cfg.eval_backend}")
     for i, m in enumerate(members):
         print(f"[ensemble] member {i}   : {m.model_name} renderer={m.renderer_name} "
               f"tag={m.metric_prefix} groups={m.groups_per_batch} lr={m.learning_rate} "
               f"kl={m.kl_penalty_coef} phase1={m.phase1_max_tokens} "
-              f"cmax={m.completion_max_tokens}")
+              f"cmax={m.completion_max_tokens} base_url={m.tinker_base_url or 'shared'} "
+              f"ctx={m.context_window or cfg.context_window} tms={m.train_max_seq}")
     print(f"[ensemble] shared     : group_size={cfg.group_size} steps={cfg.num_epochs} "
           f"ctx={cfg.context_window} eval={cfg.eval_backend}@{cfg.eval_timeout}s "
           f"save_every={cfg.save_every}")
