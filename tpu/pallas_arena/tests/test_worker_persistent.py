@@ -58,10 +58,47 @@ def test_recalibrated_goldens_pass(worker):
 
 def test_cached_output_constant_baked_into_graph_fails(worker):
     """In the export path a cached-output cheat becomes a baked constant —
-    fresh worker-side seeds still kill it."""
+    fresh worker-side seeds still kill it.
+
+    Gate depends on the shape it cached. This suite's smoke case is `tiny`
+    = (32, 64), which is exactly the constant the cheater hard-codes, so
+    here it survives export and dies at `correctness`. On silicon (phase 4)
+    the declared signatures are 8192x4096 and larger, the constant cannot
+    broadcast, and jax.export refuses to serialize it at all — rejected one
+    gate EARLIER. Both outcomes are rejections; neither is weaker."""
     r = worker.grade_code(cand.CACHED_OUTPUT_RMSNORM)
     assert not r["passed"]
-    assert r["gate"] == "correctness"
+    assert r["gate"] in ("correctness", "aot_export"), r
+
+
+def test_constant_output_shape_correct_cheat_dies_at_correctness(worker):
+    """The shape-coincidence above meant the "ignores its inputs, returns a
+    plausible answer" cheat was never actually exercised against the gate
+    that is supposed to catch it. This variant broadcasts to whatever shape
+    it is handed, so it exports cleanly at EVERY declared signature and has
+    to be killed by fresh hidden seeds."""
+    r = worker.grade_code(cand.CONSTANT_OUTPUT_RMSNORM)
+    assert not r["passed"]
+    assert r["gate"] == "correctness", r
+
+
+def test_grade_budget_rejects_a_wedging_candidate(worker):
+    """Phase-4 lesson: an unbounded grade turns one pathological kernel into
+    a fleet-wide poison pill. A 24-deep unjitted waste chain held the judge
+    for 19+ minutes and never returned, so its lease expired and the item
+    requeued — onto the next judge, which would wedge identically. The
+    budget bounds the blast radius to one candidate. It is checked between
+    phases, so an honest kernel graded under an impossible budget must come
+    back rejected at gate `budget` rather than hang."""
+    prev = worker.grade_budget_s
+    worker.grade_budget_s = 1e-9
+    try:
+        r = worker.grade_code(cand.HONEST_RMSNORM + "\n# budget probe\n")
+    finally:
+        worker.grade_budget_s = prev
+    assert not r["passed"]
+    assert r["gate"] == "budget", r
+    assert "budget" in r["violations"][0]
 
 
 def test_obfuscated_import_dies_in_export_child(worker):

@@ -152,10 +152,15 @@ def kernel(x, g):
     x32 = x.astype(jnp.float32)
     out = x32 * jax.lax.rsqrt(jnp.mean(jnp.square(x32), -1, keepdims=True) + 1e-6) * g
     waste = x32
-    # deliberately slow (unjitted op-by-op dispatch); kept short enough that
-    # jax.grad's residual chain fits HBM at production shapes (phase-2: 200
-    # sins x 134MB residuals OOM'd a v6e-1 during the gradient probe)
-    for _ in range(24):
+    # Deliberately slow, but only as slow as the point requires: this variant
+    # exists to prove (a) timer tampering is neutralized by process isolation
+    # and (b) a genuinely slow kernel scores well below 1 — neither needs a
+    # deep chain. Sized down twice by measurement: phase 2 cut 200 -> 24 when
+    # jax.grad's residual chain OOM'd a v6e-1 during the gradient probe, and
+    # phase 4 cut 24 -> 6 when the 24-deep chain held a judge lane for 19+
+    # minutes without returning. 6 sins is still ~7x the baseline's traffic
+    # on a memory-bound task, so the slowdown remains unmistakable.
+    for _ in range(6):
         waste = jnp.sin(waste)
     return (out + 0.0 * waste).astype(x.dtype)
 """

@@ -62,6 +62,7 @@ class PersistentWorker:
         correctness_seeds: int = 2,
         export_timeout_s: float = 240.0,
         export_rlimit_gb: float | None = None,
+        grade_budget_s: float | None = 900.0,
         cache=None,
         worker_id: str = "worker-0",
     ):
@@ -79,6 +80,7 @@ class PersistentWorker:
         self.correctness_seeds = correctness_seeds
         self.export_timeout_s = export_timeout_s
         self.export_rlimit_gb = export_rlimit_gb
+        self.grade_budget_s = grade_budget_s
         self.cache = cache
         self.worker_id = worker_id
 
@@ -86,6 +88,15 @@ class PersistentWorker:
         self.block = jax.block_until_ready
         self.device = jax.local_devices()[0]
         self.platform = jax.default_backend()
+        # A v5p-8 (4 chips) or v6e-8 host hands ONE process every local chip.
+        # Pin uncommitted computations to chip 0 so a multi-chip host grades
+        # exactly like the single-chip judge the timing protocol was
+        # calibrated on, and so peak_hbm_bytes below is the whole story
+        # rather than one chip's share of a silently-sharded computation.
+        try:
+            jax.config.update("jax_default_device", self.device)
+        except Exception:
+            pass
 
         if cases:
             sel = [self.problem.case_by_name(n) for n in cases]
@@ -112,6 +123,37 @@ class PersistentWorker:
             self.boot_report = {"ok": False, "error": f"baseline: {type(e).__name__}: {e}"}
             return self.boot_report
 
+        # Warm the CALIBRATION path too, not just the baseline. Every
+        # correctness check runs the fp32 reference, the three honest
+        # variants and the fused error-stats kernel — one XLA compile per
+        # (shape, dtype) apiece. Off the clock here, they would otherwise
+        # all land inside candidate #1's warm_chip_s.
+        t_cal = self.perf()
+        cal_warm_err = None
+        try:
+            from pallas_arena.judge.problems.base import error_stats
+
+            k_warm = jax.random.PRNGKey(1)
+            probes = [
+                (c, lambda c=c, i=i: self.problem.make_inputs(jax.random.fold_in(k_warm, i), c))
+                for i, c in enumerate(self.scored_cases + self.holdout_cases)
+            ]
+            probes += [
+                (a, lambda a=a, i=i: a.make_inputs(jax.random.fold_in(k_warm, 1000 + i)))
+                for i, a in enumerate(self.problem.adversarial_cases())
+            ]
+            for _what, make in probes:
+                inputs = make()
+                self.block(inputs)
+                ref32 = self.problem.reference(*inputs)
+                self.block(ref32)
+                self.problem.calibrated_tolerance(inputs, ref32)
+                error_stats(ref32, ref32)
+                del inputs, ref32  # keep boot peak HBM to one fixture
+        except Exception as e:  # never fatal: a warm-up is an optimization
+            cal_warm_err = f"{type(e).__name__}: {e}"
+        cal_warm_s = self.perf() - t_cal
+
         floors, ref_scores = {}, {}
         k_floor = jax.random.PRNGKey(secrets.randbits(31))
         for case in self.scored_cases:
@@ -135,6 +177,8 @@ class PersistentWorker:
             "noise_floors": floors,
             "ref_vs_ref_scores": ref_scores,
             "noise_floor": self.noise_floor,
+            "calibration_warm_s": cal_warm_s,
+            "calibration_warm_error": cal_warm_err,
             "boot_s": self.perf() - t0,
         }
         return self.boot_report
@@ -199,6 +243,23 @@ class PersistentWorker:
             result.update(passed=False, gate=gate, violations=[why], reward=0.0)
             self._store(code, result)
             return result
+
+        # Wall budget for the whole grade. Phase 4 measured why this is not
+        # optional: one candidate (a 24-deep unjitted waste chain) stayed on
+        # the chip for 19+ minutes and never returned, so its lease expired
+        # and the item requeued — onto the next judge, which would wedge the
+        # same way. Unbounded grading turns a single pathological kernel into
+        # a fleet-wide poison pill. Checked between phases only: XLA work
+        # already dispatched still has to finish, so the bound is "one op
+        # late", not a hard kill. A candidate this slow has already lost on
+        # score, so failing it here costs nothing legitimate.
+        t_budget = self.perf()
+
+        def over_budget() -> bool:
+            return self.grade_budget_s is not None and (self.perf() - t_budget) > self.grade_budget_s
+
+        def budget_fail(phase):
+            return fail("budget", f"grade exceeded {self.grade_budget_s:.0f}s wall budget during {phase}")
 
         # ---- 1. sandbox child: AST + stubs + exec + jax.export (no device)
         sigs, case_sig, adv_sig, grad_sig = self._signatures()
@@ -280,6 +341,8 @@ class PersistentWorker:
             result["candidate_compile_s"] = self.perf() - t_warmc
         except Exception as e:
             return fail("candidate_compile", f"{type(e).__name__}: {e}")
+        if over_budget():
+            return budget_fail("candidate_compile")
 
         t_chip = self.perf()
         try:
@@ -287,6 +350,8 @@ class PersistentWorker:
             from pallas_arena.judge.problems.base import check_tolerance, error_stats
 
             for label, sig_name, inputs in fixtures:
+                if over_budget():
+                    return budget_fail(f"correctness ({label})")
                 ref32 = problem.reference(*inputs)
                 tol = problem.calibrated_tolerance(inputs, ref32)
                 try:
@@ -312,6 +377,8 @@ class PersistentWorker:
                 return fail("determinism", f"outputs not bitwise identical across {self.determinism_runs} runs")
 
             # ---- 5. gradient contract via the exported grad artifact
+            if over_budget():
+                return budget_fail("gradient")
             if grad_sig is not None:
                 from pallas_arena.judge.problems.base import tolerance_from_reference
 
@@ -333,6 +400,8 @@ class PersistentWorker:
             # ---- iteration, correctness verified on TIMED outputs
             case_timings, sol_fracs = [], {}
             for case in self.scored_cases + self.holdout_cases:
+                if over_budget():
+                    return budget_fail(f"timing ({case.name})")
                 pairs = []
                 check_iters = sorted({0, self.timing_pairs // 2, self.timing_pairs - 1})
                 checks = {}
@@ -461,6 +530,9 @@ def poll_loop(
             continue
 
         lease_id = item["lease_id"]
+        t_item = time.time()
+        tag = (item.get("payload") or {}).get("tag")
+        print(f"[worker {worker_id}] lease {item['work_id']} tag={tag} attempt={item.get('attempt')}", flush=True)
         stop = threading.Event()
         interval = max(item.get("lease_timeout_s", 60.0) / heartbeat_frac, 0.5)
 
@@ -480,6 +552,18 @@ def poll_loop(
         finally:
             stop.set()
             hb.join(timeout=2.0)
+        # end-to-end lease wall: the number the fleet throughput table is
+        # actually built from (export child + artifact compile + chip time),
+        # as opposed to warm_chip_s which is the steady-state chip slice only.
+        if isinstance(result, dict):
+            result["item_wall_s"] = time.time() - t_item
+        print(
+            f"[worker {worker_id}] done {item['work_id']} tag={tag} wall={time.time() - t_item:.1f}s "
+            f"passed={result.get('passed')} gate={result.get('gate')} "
+            f"export={result.get('export_s')} load={result.get('load_s')} "
+            f"compile={result.get('candidate_compile_s')} warm={result.get('warm_chip_s')}",
+            flush=True,
+        )
         try:
             _http_json(f"{base}/result", {"lease_id": lease_id, "work_id": item["work_id"], "result": result})
         except Exception:
@@ -497,6 +581,7 @@ def main() -> None:
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--cases", default=None, help="comma-separated case names")
     ap.add_argument("--timing-pairs", type=int, default=20)
+    ap.add_argument("--grade-budget-s", type=float, default=900.0, help="0 disables the per-grade wall budget")
     ap.add_argument("--mock-grade-s", type=float, default=1.0)
     ap.add_argument("--poll-s", type=float, default=1.0)
     ap.add_argument("--max-items", type=int, default=None)
@@ -519,6 +604,7 @@ def main() -> None:
             smoke=args.smoke,
             cases=args.cases.split(",") if args.cases else None,
             timing_pairs=args.timing_pairs,
+            grade_budget_s=args.grade_budget_s or None,
             cache=cache,
             worker_id=worker_id,
         )
