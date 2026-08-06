@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["mcp>=1.9", "httpx>=0.27"]
+# dependencies = ["mcp>=1.9,<2", "httpx>=0.27"]
 # ///
 """Capture-only MCP server for RQ1 sample collection. PORTABLE: no repo imports, run with
 `uv run capture_mcp.py` anywhere.
