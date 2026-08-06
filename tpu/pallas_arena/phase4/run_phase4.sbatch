@@ -32,6 +32,7 @@ repo_root=/n/fs/vision-mix/sk7524/SkyRLTpu
 out_dir="${repo_root}/runs/pallas_arena"
 mkdir -p "$out_dir"
 cd "$repo_root"
+export PYTHONPATH="${repo_root}/tpu:${PYTHONPATH:-}"   # pallas_arena.* import root
 
 gc() { gcloud compute tpus "$@" --zone="$ZONE" --project="$PROJECT"; }
 tssh() { timeout 300 gcloud compute tpus tpu-vm ssh "$QR_NAME" --zone="$ZONE" \
