@@ -91,21 +91,31 @@ host); judges are pure stateless pollers. Queue leases items; requeue on lease
 timeout (~2× max grade time) / missed heartbeat; double-grades harmless
 (idempotent + hash cache). No GCS registry, no client-side routing; keeper's
 only job = fleet size 5.
-- [ ] Persistent worker per chip: jax/TPU init + reference compile ONCE at
-      boot; candidate AOT-compiled in the throwaway sandbox child (no TPU);
-      worker loads + times the compiled artifact. Target: ~4s/candidate warm.
-- [ ] Counterbalanced R,C/C,R timing; keep per-candidate interleaved ref
-      timing (drift cancellation; every-Nth re-time as a future knob).
-- [ ] Tolerance recalibration: margin from the spread across MULTIPLE honest
-      implementations (block sizes, unjitted), not the reference alone; the
-      three failed goldens become the regression tests.
-- [ ] Queue server (`judge/queue.py`): thread-locked FIFO + leases + heartbeat
-      endpoint; runs anywhere (localhost for sim, v5p w0 in prod).
-- [ ] **Local simulation**: queue + 5 simulated judge workers as processes
-      (CPU interpret-mode grading or mock timing) under sbatch; chaos tests —
-      kill workers mid-lease → item requeues and completes elsewhere; kill/
-      restart the queue; throughput + lease-expiry accounting exact.
-Acceptance: sim battery green incl. chaos; full CPU battery still 98/98.
+- [x] Persistent worker per chip (`judge/worker.py`): jax/TPU init +
+      reference compile + counterbalanced noise floor ONCE at boot;
+      candidate serialized via jax.export in the throwaway sandbox child
+      (mode="aot_export": AST+stubs+timeout+RLIMIT, JAX_PLATFORMS=cpu, no
+      device); worker loads + compile-warms the artifact off the clock and
+      times steady-state (warm_chip_s). Bonus: no candidate python ever
+      runs in the worker — timer-tamper/split-personality/host-RNG cheats
+      become structurally impossible. Needs `flatbuffers` (jax.export
+      serialize) in the judge venv.
+- [x] Counterbalanced R,C/C,R timing (`timing.counterbalanced_pair`) in all
+      three timing loops + the worker.
+- [x] Tolerance recalibration: `Problem.calibrated_tolerance` = 1.5x the
+      worst spread across `honest_variants()` (rmsnorm: bf16-out, chunked
+      reduction, overflow-robust scaled mean; non-finite variants never
+      widen the margin); goldens re-armed as regression tests (bf16-out
+      honest, UNJITTED_ROBUST, VMEM-budgeted row-padded pallas kernels).
+- [x] Queue server (`judge/queue.py`): thread-locked FIFO + leases +
+      heartbeat + lazy expiry sweep + idempotent duplicate accounting;
+      memoryless by design — ArenaQueueClient resubmits through restarts.
+- [x] **Local simulation** under sbatch: queue + 5 mock-timed worker
+      processes; chaos green — SIGKILL workers mid-lease → requeue +
+      completion on survivors; queue kill/restart → client resubmits all;
+      exact lease-expiry/heartbeat/duplicate accounting unit-tested.
+Acceptance MET 2026-08-06: **121/121** green under sbatch (job 3646312;
+legacy 98 still green inside it). Logs runs/pallas_arena/phase1-tests-*.log.
 
 ## Phase 4 — Small-scale real revalidation (1× spot v6e-1, ~1 chip-hour)
 - [ ] One judge polling the (login-node or compute-node) queue over the wire;
