@@ -61,12 +61,23 @@ if [[ -z "$jid" ]]; then
   [[ -n "$jid" ]] || { echo "[farm] create failed" >&2; exit 1; }
 fi
 tmux kill-session -t "job_${jid}" 2>/dev/null || true   # the broken detached worker, if any
-echo "[farm] jobman run $jid (foreground: QR request + wait + node setup)"
-jobman_cli run "$jid"
+echo "[farm] jobman run $jid (pass 1: submits the QR request, returns without waiting)"
+jobman_cli run "$jid" || true
 
+echo "[farm] waiting for ACTIVE (spot queue can take a while)..."
+while true; do
+  st=$(state)
+  echo "[farm] $(date '+%T') state=$st"
+  [[ "$st" == "ACTIVE" ]] && break
+  [[ "$st" == "SUSPENDED" || "$st" == "FAILED" ]] && { echo "[farm] QR died while waiting" >&2; exit 1; }
+  [[ -z "$st" ]] && { echo "[farm] QR vanished while waiting" >&2; exit 1; }
+  sleep 60
+done
+
+echo "[farm] jobman run $jid (pass 2: node setup on the ACTIVE slice -- idempotent)"
+jobman_cli run "$jid"
 st=$(state)
-echo "[farm] after jobman run: state=$st"
-[[ "$st" == "ACTIVE" ]] || { echo "[farm] QR not ACTIVE after jobman run" >&2; exit 1; }
+[[ "$st" == "ACTIVE" ]] || { echo "[farm] QR lost ACTIVE during setup (state=$st)" >&2; exit 1; }
 
 echo "[farm] bring-up: vLLM only, 32k ctx"
 START_TINKER=0 START_VLLM=1 \
