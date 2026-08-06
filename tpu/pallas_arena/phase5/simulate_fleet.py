@@ -87,6 +87,10 @@ def main() -> int:
             print("[sim] queue never became healthy")
             return 1
 
+        # ONE cache directory for all five judges: the local stand-in for the
+        # shared GCS reward cache, and the only way the simulation can show a
+        # repeat landing on judge B returning judge A's verdict verbatim.
+        cache_dir = f"/tmp/phase5-sim-cache-{os.getpid()}"
         for name in names:
             procs.append(
                 subprocess.Popen(
@@ -94,7 +98,7 @@ def main() -> int:
                         sys.executable, "-m", "pallas_arena.judge.worker",
                         "--problem", "rmsnorm", "--queue", f"http://127.0.0.1:{port}",
                         "--sim-mode", "mock", "--mock-grade-s", str(args.mock_grade_s),
-                        "--worker-id", name, "--poll-s", "0.2",
+                        "--worker-id", name, "--poll-s", "0.2", "--cache", cache_dir,
                     ],
                     env=_env(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )

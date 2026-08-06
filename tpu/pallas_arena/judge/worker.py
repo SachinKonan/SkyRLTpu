@@ -863,7 +863,31 @@ def main() -> None:
     attach = None
 
     if args.sim_mode == "mock":
-        grade_fn = lambda payload: mock_grade(payload, args.mock_grade_s, worker_id)  # noqa: E731
+        # The mock honours --cache through the SAME hash->reward path the real
+        # worker uses. Without it a simulated fleet cannot exercise the
+        # byte-identical-repeat property at all: every duplicate would get a
+        # fresh mock grade with fresh per-judge jitter, and the driver's cache
+        # check would be testing the mock rather than the cache.
+        mock_cache = None
+        if args.cache:
+            from pallas_arena.judge.cache import RewardCache
+
+            mock_cache = RewardCache(args.cache)
+
+        def grade_fn(payload):
+            key = grader.cache_key(args.problem, "mock", "mock_full", payload.get("code", ""), args.smoke)
+            if mock_cache is not None:
+                hit = mock_cache.get(key)
+                if hit is not None:
+                    hit = dict(hit)
+                    hit["cache_hit"] = True
+                    return hit
+            res = mock_grade(payload, args.mock_grade_s, worker_id)
+            res["cache_hit"] = False
+            if mock_cache is not None:
+                mock_cache.put(key, {k: v for k, v in res.items() if k != "cache_hit"})
+            return res
+
     else:
         cache = None
         if args.cache:

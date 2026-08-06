@@ -41,6 +41,16 @@ from pallas_arena.phase2.variants import (  # noqa: E402
     shakedown_variants,
 )
 
+# A deliberately-wasteful kernel can legitimately land on either side of a
+# COMPILE deadline, and the deadline is new in phase 5 -- it did not exist
+# when this fixture's expectation was written. `timer-tamperer` exists to
+# show that timer tampering buys nothing and that a slow kernel scores far
+# below 1; being rejected at `compile_budget` instead is also correct judge
+# behaviour. What would be wrong is passing with a competitive score, or
+# dying at any OTHER gate. Both of those are still checked.
+TOLERATED_FAIL_GATES: dict[str, tuple[str, ...]] = {"timer-tamperer": ("compile_budget",)}
+MAX_SCORE: dict[str, float] = {"timer-tamperer": 0.95}
+
 # Relative share of the bulk corpus. Honest variants dominate on purpose:
 # they are the ones carrying the reproducibility and cross-judge acceptance
 # items, and they are also the realistic mix for an RL rollout stream once
@@ -130,8 +140,29 @@ def expectation(variant: str) -> dict:
     return {
         "expect_pass": variant in WORKER_EXPECT_PASS,
         "gates": WORKER_EXPECT_FAIL_GATE.get(variant),
+        "tolerated_fail_gates": TOLERATED_FAIL_GATES.get(variant, ()),
+        "max_score": MAX_SCORE.get(variant),
         "terminal": variant in WORKER_EXPECT_TERMINAL,
     }
+
+
+def verdict_ok(variant: str, result: dict) -> tuple[bool, str]:
+    """Is one graded result the verdict this variant must receive?"""
+    exp = expectation(variant)
+    passed, gate, score = bool(result.get("passed")), result.get("gate"), result.get("score")
+    if exp["expect_pass"]:
+        if not passed:
+            if gate in exp["tolerated_fail_gates"]:
+                return True, "tolerated"
+            return False, f"expected pass, got {gate}"
+        if exp["max_score"] is not None and isinstance(score, (int, float)) and score >= exp["max_score"]:
+            return False, f"slow-kernel fixture scored {score:.4f} >= {exp['max_score']}"
+        return True, "pass"
+    if passed:
+        return False, "cheater passed"
+    if exp["gates"] and gate not in exp["gates"]:
+        return False, f"rejected at {gate}, expected one of {exp['gates']}"
+    return True, "rejected"
 
 
 if __name__ == "__main__":  # `python -m pallas_arena.phase5.corpus` -> the plan

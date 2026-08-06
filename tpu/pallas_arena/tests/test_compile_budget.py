@@ -113,22 +113,62 @@ def test_watchdog_fires_inside_a_single_uncancellable_unit():
 
 
 # ------------------------------------------------------------ pre-gate side
-def test_pregate_rejects_compile_bomb_at_zero_chip_cost(capsys):
-    """Same budget, killable CPU child, no chip anywhere.
-
-    Run at the DECLARED production shapes, which is what the pre-gate does
-    in production -- a compile bomb is a cost that scales with the graph AND
-    the shapes, and a smoke-shape probe is exactly the blind spot phase 4
-    found for `cached-output`. The bomb must die at `compile_budget`, and
-    the wall must be bounded BY the budget rather than by the bomb."""
+def test_pregate_budget_is_enforced_and_bounds_the_wall(capsys):
+    """The pre-gate runs the same deadline, enforced by the parent's
+    process-group kill on a killable child with no chip anywhere. The
+    verdict must be `compile_budget` (not the generic `timeout`) and the
+    wall must be bounded BY THE BUDGET rather than by the candidate."""
     t0 = time.perf_counter()
-    ok, why = aot_pregate("rmsnorm", cand.COMPILE_BOMB_RMSNORM, smoke=False, compile_budget_s=20.0)
+    ok, why = aot_pregate("rmsnorm", cand.COMPILE_BOMB_RMSNORM, smoke=False, compile_budget_s=2.0)
     wall = time.perf_counter() - t0
     with capsys.disabled():
-        print(f"\n[measure] pre-gate compile-bomb (production shapes): {wall:.1f}s -> ok={ok} {why[:80]}")
+        print(f"\n[measure] pre-gate budget=2s: {wall:.1f}s -> ok={ok} {why[:70]}")
     assert not ok
     assert "compile_budget" in why, why
-    assert wall < 60.0, f"pre-gate took {wall:.1f}s for a 20s budget"
+    assert wall < 20.0, f"pre-gate took {wall:.1f}s for a 2s budget"
+
+
+def test_pregate_kills_a_graph_size_bomb_at_zero_chip_cost(capsys):
+    """The attack sub-class the pre-gate CAN see: cost carried by graph size,
+    so tracing and lowering are expensive on any backend. This one never
+    reaches a judge at all."""
+    t0 = time.perf_counter()
+    ok, why = aot_pregate("rmsnorm", cand.make_compile_bomb(4000), smoke=False, compile_budget_s=20.0)
+    wall = time.perf_counter() - t0
+    with capsys.disabled():
+        print(f"\n[measure] pre-gate graph-size bomb (depth 4000, budget 20s): {wall:.1f}s -> ok={ok}")
+    assert not ok
+    assert "compile_budget" in why, why
+    assert wall < 60.0
+
+
+def test_measure_cpu_pregate_cannot_see_a_backend_compile_bomb(capsys):
+    """Measurement + documented limit, deliberately not a gate.
+
+    Phase 4 measured a SIX-deep sin chain at 569.5 s inside one XLA:TPU
+    compile. The shipped `compile-bomb` is 220 deep -- 37x that graph -- and
+    XLA:CPU lowers AND compiles it at production shapes in a couple of
+    seconds, because the cost of these bombs lives in the backend's
+    fusion/live-range/scheduling passes, which CPU and TPU do not share.
+
+    The conclusion is the one that matters for the fleet: a CPU-only
+    pre-gate is NOT a substitute for the judge-side compile deadline. On a
+    real client (a v5p training host) the pre-gate child compiles on TPU
+    under the same budget and does catch it; on CPU it cannot, by
+    construction. If this test ever starts failing because the CPU pre-gate
+    began rejecting the bomb, that is good news, not a regression."""
+    t0 = time.perf_counter()
+    ok_bomb, _ = aot_pregate("rmsnorm", cand.COMPILE_BOMB_RMSNORM, smoke=False, compile_budget_s=90.0)
+    bomb_s = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    ok_honest, _ = aot_pregate("rmsnorm", cand.HONEST_RMSNORM, smoke=False, compile_budget_s=90.0)
+    honest_s = time.perf_counter() - t0
+    with capsys.disabled():
+        print(
+            f"\n[measure] CPU pre-gate at production shapes, 90s budget: "
+            f"compile-bomb(220)={bomb_s:.1f}s ok={ok_bomb} | honest={honest_s:.1f}s ok={ok_honest}"
+        )
+    assert ok_honest, "the honest control must always pass"
 
 
 @pytest.mark.parametrize("depth", [24, 220])

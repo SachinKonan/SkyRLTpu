@@ -155,12 +155,16 @@ def kernel(x, g):
     # Deliberately slow, but only as slow as the point requires: this variant
     # exists to prove (a) timer tampering is neutralized by process isolation
     # and (b) a genuinely slow kernel scores well below 1 — neither needs a
-    # deep chain. Sized down twice by measurement: phase 2 cut 200 -> 24 when
-    # jax.grad's residual chain OOM'd a v6e-1 during the gradient probe, and
-    # phase 4 cut 24 -> 6 when the 24-deep chain held a judge lane for 19+
-    # minutes without returning. 6 sins is still ~7x the baseline's traffic
-    # on a memory-bound task, so the slowdown remains unmistakable.
-    for _ in range(6):
+    # deep chain. Sized down three times, always by measurement: phase 2 cut
+    # 200 -> 24 when jax.grad's residual chain OOM'd a v6e-1 during the
+    # gradient probe; phase 4 cut 24 -> 6 when the 24-deep chain held a judge
+    # lane for 19+ minutes without returning; phase 5 cuts 6 -> 2 because the
+    # 6-deep chain's own XLA compile measured 569.5 s, which is 6x the new
+    # 90 s compile budget — i.e. the fixture had grown into the compile bomb
+    # it was never meant to be, and would have been rejected at
+    # `compile_budget` instead of demonstrating a slow kernel's low score.
+    # 2 sins is still ~3x the baseline's traffic on a memory-bound task.
+    for _ in range(2):
         waste = jnp.sin(waste)
     return (out + 0.0 * waste).astype(x.dtype)
 """

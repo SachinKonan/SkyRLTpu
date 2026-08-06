@@ -78,8 +78,10 @@ cleanup() {
   for p in "${sup_pids[@]:-}" "$keeper_pid" "$watchdog_pid" "$queue_pid"; do
     [ -n "${p:-}" ] && kill "$p" 2>/dev/null
   done
-  # kill any ssh/gcloud children the supervisors left holding tunnels
+  # the supervisors' gcloud-ssh grandchildren hold the reverse tunnels and
+  # would outlive their parents; the pattern is scoped to our own QR names
   pkill -P $$ 2>/dev/null
+  pkill -f "tpu-vm ssh ${QR_PREFIX}-" 2>/dev/null
   sleep 1
   for name in "${judges[@]}"; do
     ( timeout 600 gcloud compute tpus queued-resources delete "$name" \
@@ -101,10 +103,22 @@ cleanup() {
       sleep 20
       timeout 300 gcloud compute tpus queued-resources list --zone="$z" --project="$PROJECT" \
         --format='value(name,state.state)' 2>/dev/null | grep -E "^${QR_PREFIX}-" \
-        && echo "[cleanup] STILL PRESENT in $z -- MANUAL ACTION NEEDED" \
-        || echo "[cleanup] verified empty in $z"
+        && echo "[cleanup] QRs STILL PRESENT in $z -- MANUAL ACTION NEEDED" \
+        || echo "[cleanup] verified empty of arena QRs in $z"
     else
-      echo "[cleanup] verified empty in $z"
+      echo "[cleanup] verified empty of arena QRs in $z"
+    fi
+    # A QR delete takes its node with it, but "should" is not "did": phase 2
+    # made checking both the standing rule, so check both.
+    nodes=$(timeout 300 gcloud compute tpus tpu-vm list --zone="$z" --project="$PROJECT" \
+              --format='value(name)' 2>/dev/null | grep -E "^${QR_PREFIX}-" || true)
+    if [ -n "$nodes" ]; then
+      echo "[cleanup] ORPHAN NODES in $z: $nodes -- deleting"
+      for n in $nodes; do
+        timeout 600 gcloud compute tpus tpu-vm delete "$n" --zone="$z" --project="$PROJECT" --quiet >/dev/null 2>&1
+      done
+    else
+      echo "[cleanup] verified empty of arena nodes in $z"
     fi
   done
 }
@@ -132,7 +146,8 @@ done
 wait
 t_first_qr=$(date +%s)
 
-( sleep "$HARD_CAP_S"
+( trap - EXIT TERM INT HUP
+  sleep "$HARD_CAP_S"
   echo "[watchdog] $(date +%H:%M:%S) HARD CAP ${HARD_CAP_S}s since first QR create -- tearing down"
   kill -TERM $$ ) &
 watchdog_pid=$!
@@ -145,6 +160,11 @@ watchdog_pid=$!
 slot_supervisor() {
   local name=$1
   local log="${out_dir}/phase5-judge-${name}-${SLURM_JOB_ID}.log"
+  # bash resets traps in a subshell, so this function does NOT inherit the
+  # EXIT/TERM cleanup — verified, and relied upon: a supervisor exiting must
+  # never tear down the fleet. Made explicit so a future edit cannot make it
+  # so by accident.
+  trap - EXIT TERM INT HUP
   while true; do
     local st=""
     local deadline=$(( $(date +%s) + LAND_DEADLINE_S ))
@@ -172,7 +192,15 @@ slot_supervisor() {
     fi
     touch "${ready_dir}/${name}"
     echo "[$name] provisioned at $(date +%H:%M:%S); starting worker loop" >> "$log"
+    # Restart loop. It has to survive three different deaths that all look
+    # alike from here: an ssh drop, the chaos test's SIGKILL, and the
+    # compile-budget watchdog's deliberate os._exit(17) after it has already
+    # recorded the terminal verdict. What it must NOT do is spin forever
+    # against a preempted host, so three consecutive short sessions send us
+    # back to the QR state check (where the keeper may have replaced it).
+    local fails=0 t_s dur rc
     while true; do
+      t_s=$(date +%s)
       timeout 14400 gcloud compute tpus tpu-vm ssh "$name" --zone="$ZONE" --project="$PROJECT" --worker=0 \
         --command="cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
           ~/arena-venv/bin/python -m pallas_arena.judge.worker \
@@ -182,7 +210,15 @@ slot_supervisor() {
           2>&1 | tee -a \$HOME/worker-progress.log" \
         -- -R "${PORT}:localhost:${PORT}" -o ExitOnForwardFailure=yes \
            -o ServerAliveInterval=30 -o ServerAliveCountMax=4 >> "$log" 2>&1
-      echo "[$name] worker ssh session ended rc=$? $(date +%H:%M:%S); restarting in 10s" >> "$log"
+      rc=$?
+      dur=$(( $(date +%s) - t_s ))
+      echo "[$name] worker ssh session ended rc=${rc} after ${dur}s $(date +%H:%M:%S)" >> "$log"
+      if [ "$dur" -lt 60 ]; then fails=$(( fails + 1 )); else fails=0; fi
+      if [ "$fails" -ge 3 ]; then
+        echo "[$name] 3 consecutive short sessions; re-checking the QR" >> "$log"
+        rm -f "${ready_dir}/${name}"
+        break
+      fi
       sleep 10
     done
   done
@@ -251,7 +287,8 @@ rc=$?
 echo "=== fetching artifacts $(date +%H:%M:%S) ==="
 for p in "${sup_pids[@]:-}"; do kill "$p" 2>/dev/null; done
 sup_pids=()
-pkill -P $$ -f "gcloud compute tpus tpu-vm ssh" 2>/dev/null
+pkill -f "tpu-vm ssh ${QR_PREFIX}-" 2>/dev/null
+sleep 5
 for name in $(ls "$ready_dir" 2>/dev/null); do
   timeout 300 gcloud compute tpus tpu-vm scp "${name}:~/boot-report.json" \
     "${out_dir}/phase5-boot-${name}-${SLURM_JOB_ID}.json" \
