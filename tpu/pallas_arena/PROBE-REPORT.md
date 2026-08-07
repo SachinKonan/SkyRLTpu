@@ -509,6 +509,66 @@ ratios*, not on the pass rate. A prompt can be too good: hand over the whole
 scaffold and the discriminating variable disappears from the gate and has to
 be carried by timing alone.
 
+### The complete arm-3 grid, with rewards (round 0, n=16 per cell, 186 candidates)
+
+| model | variant | task | `stop` | export | judged | PASS | reward min / med / max | **spread** |
+|---|---|---|---|---|---|---|---|---|
+| gemma4-31b | minimal | **flce** | 16 | 10 | 10 | **2** | 0.2636 / 0.3777 / 0.4919 | **0.2283** |
+| gemma4-31b | reference | **flce** | 16 | 10 | 10 | **5** | 0.0659 / 0.2636 / 0.2637 | **0.1978** |
+| gemma4-31b | tailored | **flce** | 16 | 16 | 16 | **16** | 0.6966 / 0.6980 / 0.7008 | **0.0042** |
+| gemma4-31b | minimal | splash | 14 | 0 | 0 | 0 | — | — |
+| gemma4-31b | reference | splash | 16 | 0 | 0 | 0 | — | — |
+| gemma4-31b | tailored | splash | 0† | 0 | 0 | 0 | — | — |
+| qwen35-27b | minimal | flce | 2 | 0 | 0 | 0 | — | — |
+| qwen35-27b | minimal | splash | 1 | 0 | 0 | 0 | — | — |
+| qwen35-27b | reference | flce | 0 | 0 | 0 | 0 | — | — |
+| qwen35-27b | reference | splash | 0 | 0 | 0 | 0 | — | — |
+| qwen35-27b | tailored | flce | 1 | 0 | 0 | 0 | — | — |
+| qwen35-27b | tailored | splash | 0 | 0 | 0 | 0 | — | — |
+
+† the `HTTPError 400` cell; the 10000-token rerun reached 1/16 export and one
+`correctness` verdict.
+
+```json
+{"overall_nonuniform_groups": "3/11",
+ "overall_nonuniform_group_frac": 0.273,
+ "configs_with_any_nonuniform_group": ["gemma4-31b|minimal|flce",
+                                       "gemma4-31b|reference|flce",
+                                       "gemma4-31b|tailored|flce"],
+ "best_config_by_max_score": "gemma4-31b|tailored|flce",
+ "best_score": 0.7008, "any_candidate_passed": true}
+```
+
+### The tailored cell's spread is BELOW the judge's own noise floor
+
+This is the result I did not expect and would have missed by reading pass
+rates alone. `tailored|flce` passes 16/16 with rewards in
+**[0.6966, 0.7008]** — a spread of **0.0042**. The judge's measured noise
+floors for those very shapes, from its boot report, are **0.0069 and 0.0158**.
+
+**The within-group reward variation is smaller than the measurement noise.**
+That group is nominally "non-uniform" and therefore counted in the 3/11, but
+the differences it would train on are not real: they are timing jitter. The
+scaffold is so complete that all sixteen candidates converge on essentially
+the same kernel, and the arena cannot tell them apart.
+
+So the ranking by *trainability* inverts the ranking by pass rate:
+
+| cell | PASS | spread | spread vs noise floor | usable signal? |
+|---|---|---|---|---|
+| minimal / flce | 2/16 | 0.2283 | **14–33×** | **yes** |
+| reference / flce | 5/16 | 0.1978 | **13–29×** | **yes** |
+| tailored / flce | 16/16 | 0.0042 | **0.27–0.61×** | **no — under the noise** |
+
+A prompt can be too good. The tailored scaffold removes the very variance RL
+needs, and the honest reading of the headline is **2 of 11 complete groups
+carry usable signal**, not 3.
+
+Also worth noting: the best score anywhere is **0.7008**, i.e. every passing
+candidate is *slower* than the production `custom_vjp` baseline. Base models
+can write a correct FLCE kernel; none of them beat the thing they are trying
+to beat. That is the gap RL would be asked to close.
+
 ### Overall gate histogram (arm 3, 155 pre-gate records)
 
 | gate | n |
@@ -521,16 +581,21 @@ be carried by timing alone.
 
 ## Verdict
 
-**Yes — one configuration is trainable today, and it is a narrow one.**
+**Yes — two configurations are trainable today, and both are narrow.**
 
-**`gemma-4-31B-it` × FLCE × the `reference` prompt** is the recommendation.
-It exports 10/16, passes 5/16, and its failures are concentrated on
-`gradient` — mixed outcomes inside every group of 16, which is exactly the
-condition ttt-discover needs. `minimal` also works (2/16) and is the honest
-floor. `tailored` passes 16/16, which sounds better and is arguably worse:
-with no pass/fail variance left, the whole gradient rides on the spread of the
-speed scores, and a prompt that hands over the scaffold has removed the
-variable the group statistic is built on.
+Headline: **3 of 11 complete groups had non-uniform reward — but only 2 of 11
+carry signal above the judge's noise floor.**
+
+**`gemma-4-31B-it` × FLCE × `reference`** is the recommendation (10/16 export,
+5/16 pass, within-group spread **0.1978** = 13–29× the noise floor), with
+**`minimal`** the close second (10/16, 2/16 pass, spread **0.2283**). Their
+failures concentrate on `gradient`, which is a dense, learnable error.
+
+**`tailored` is the trap.** It passes 16/16 — and its reward spread is
+**0.0042**, *below* the judge's own measured noise floors (0.0069 / 0.0158)
+for those shapes. All sixteen candidates converge on the same kernel and the
+arena cannot distinguish them; what looks like the best cell is the one with
+no usable gradient. A prompt can be too good.
 
 **No splash-attention configuration is trainable yet, and the reason is
 specific and fixable.** gemma finishes the task (14–16 of 16 reach `stop`) and
