@@ -285,7 +285,45 @@ measuring the models, not a rendering bug.
 
 ## Results
 
-*(filled in at the end of the run)*
+### Arm 1 — `max_tokens = 6144`: the budget, not the model, is the constraint
+
+The first measurement is about the harness. Across **both** models and
+**both** tasks, the first 48 generations came back with
+`finish_reason = "length"` — **48/48**, no exceptions — and **0/48** survived
+the pre-gate:
+
+| config (round 0) | gens | wall | survived pre-gate | gates |
+|---|---|---|---|---|
+| gemma4-31b / minimal / splash | 16 | 205 s | 0/16 | `ast` ×16 |
+| gemma4-31b / minimal / flce | 16 | 117 s | 0/16 | `ast` ×11, `exec` ×3, `aot_export` ×2 |
+| qwen35-27b / minimal / splash | 16 | 335 s | 0/16 | `ast` ×9, `no_code` ×4, `aot_export` ×2, `exec` ×1 |
+
+Reading the raw text explains it. The entire budget is spent in the **thinking
+channel** and the answer is never reached — a gemma generation ends mid-
+sentence with `Hmm, the pl.load(ref, index) is for when the ref is a pl.Ref
+but not necessarily tied to the block spec of` — so the extractor picks up a
+partial sketch quoted *inside* the thought, which is why the modal gate is
+`ast` with `syntax error: unexpected indent`. Median extracted program: 1 108
+characters, against ~17 000 characters of generation.
+
+This is the failure mode the repo already documents for Qwen in
+`tpu/runs/qwen35-27b.env` — *"the default qwen3_5 thinking renderer burns the
+whole 512-token budget inside `<think>`"* — hit again at 6144. **Reporting
+"no configuration is trainable" from this arm would have been a false
+negative caused by my own choice of `MAX_NEW_TOKENS`, not by model
+capability.**
+
+### Arm 2 — `max_tokens = 12000`
+
+A second driver was attached to the *same* two engines and the *same* queue
+via `srun --overlap` on the job's own node, writing to its own results file.
+The first driver could not simply be killed: it is the sbatch's foreground
+child, so killing it would run the teardown and delete both QRs. Both arms
+therefore run concurrently and share engine throughput, and both are
+reported — arm 1 is a genuine measurement of what thinking-mode costs on this
+task, not a wasted run.
+
+*(arm-2 tables filled in at the end of the run)*
 
 ## Verdict
 
