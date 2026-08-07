@@ -26,7 +26,7 @@ rc2=$?
 
 echo "=== legacy arena battery (regression: the probe must not have broken it) ==="
 uv run --isolated --extra dev --extra jax --with flatbuffers python -m pytest \
-  tpu/pallas_arena/tests/ -q -p no:cacheprovider -x --timeout=900
+  tpu/pallas_arena/tests/ -q -p no:cacheprovider
 rc3=$?
 
 echo "=== dryrun rc: observation=${rc1} probe=${rc2} legacy=${rc3} ==="
