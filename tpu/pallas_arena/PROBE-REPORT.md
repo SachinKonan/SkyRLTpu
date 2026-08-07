@@ -200,7 +200,49 @@ timeout sends); a 3 h cap from the first create; a 45 min landing rule with
 **no** fallback to a bigger slice; and both zones verified empty of both names
 at the end.
 
+Regression: the full arena battery is **175 passed, 0 failed** with all of the
+above in place (sbatch 3650246) — phase 5's 138 plus the 37 new observation
+tests. Nothing about the production path changed.
+
 ---
+
+## Bring-up (job 3650240)
+
+| event | time | elapsed |
+|---|---|---|
+| both QRs created | 09:34:56 | — |
+| `sk7524-probe-serve` (v5p-16) ACTIVE | 09:40:09 | **5 min 13 s** |
+| `sk7524-probe-judge` (v6e-1) ACTIVE | 09:42:20 | 7 min 24 s |
+| judge provisioned, shared reward cache RW OK | 09:43:48 | 8 min 52 s |
+| judge booted **both** problems | 09:44:4x | ~9 min 50 s |
+| vLLM installed on both hosts (stock `vllm-tpu==0.23.0`) | ~09:41:40 | ~6 min 45 s |
+
+The v5p-16 landed comfortably inside the 45 min rule, so the no-fallback
+branch was not exercised.
+
+### The judge serving two tasks from one chip — boot report
+
+| | splash_attention | flce |
+|---|---|---|
+| boot | 20.23 s | 24.91 s |
+| calibration warm | 10.42 s | 11.78 s |
+| ref-vs-ref, case 1 | 1.000119 | 0.998555 |
+| ref-vs-ref, case 2 | 0.991150 | 0.999165 |
+| noise floor, case 1 | 0.00339 | 0.00694 |
+| noise floor, case 2 | 0.02843 | 0.01578 |
+| baseline actually used | **`xla-fallback`** | production `custom_vjp` |
+
+Both ref-vs-ref measurements are inside the ±2% band the arena requires, on
+a chip that had never run either task.
+
+**Caveat that must travel with every splash number below**: `baseline_impl`
+came back `xla-fallback`, i.e. Google's production Pallas splash kernel
+refused the probe shapes and the score denominator is the query-blocked XLA
+attention instead. Splash scores are therefore "speed versus a competent XLA
+implementation", not "speed versus splash". This does not affect any gate —
+compile, correctness, determinism and the group-uniformity headline are all
+independent of the denominator — but it does mean a splash score near 1.0
+should not be read as parity with the production kernel.
 
 ## Results
 
