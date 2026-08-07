@@ -244,6 +244,45 @@ compile, correctness, determinism and the group-uniformity headline are all
 independent of the denominator — but it does mean a splash score near 1.0
 should not be read as parity with the production kernel.
 
+### The serving slice needed a fix that is worth recording
+
+Both engines initially hung with
+
+```
+jax/_src/xla_bridge.py: UserWarning: TPU backend initialization is taking
+more than 60.0 seconds. Did you run your code on all TPU hosts?
+```
+
+and never reached the serving loop. On a v5p-16 (2 hosts × 4 chips) libtpu
+defaults to forming the **full two-host mesh**, so a single-host vLLM blocks
+waiting for a peer that is itself running an independent server. Unsetting
+`TPU_VISIBLE_CHIPS` does not make a host standalone.
+`TPU_PROCESS_BOUNDS=1,1,1` with `TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1` pins each
+runtime to its own 4 chips — what TP=4 wants, and what
+`start_colocated_vllm_tinker.sh` already does for its single-worker vLLM. It
+also has to be threaded into the `tmux` environment, which does not inherit
+the caller's exports. Fixed in `26c840d9` and relaunched out-of-band; neither
+QR nor the judge was disturbed.
+
+### Chat rendering, verified before a single sample was spent
+
+| model | our rendering == server's own chat template | special tokens all single | sample non-empty |
+|---|---|---|---|
+| `Qwen/Qwen3.5-27B` | **True** | True | True |
+| `google/gemma-4-31B-it` | **True** | True | True |
+
+```
+qwen35-27b: '<|im_start|>user\n…<|im_end|>\n<|im_start|>assistant\n<think>\n'
+gemma4-31b: '<bos><|turn>system\n<|think|>\n<turn|>\n<|turn>user\n…<turn|>\n<|turn>model\n'
+```
+
+Token-for-token agreement through vLLM's `/tokenize`, including gemma's
+explicit `<bos>` and its injected thinking-mode system turn. The probe is
+measuring the models, not a rendering bug.
+
+**Engines live at 10:00:59** — 26 min from QR create. Generation started
+**10:05:38** with an 8058 s wall budget, judge grading enabled.
+
 ## Results
 
 *(filled in at the end of the run)*

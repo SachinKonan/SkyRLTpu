@@ -25,7 +25,8 @@ uv run --isolated --extra dev --extra jax --with flatbuffers python tpu/pallas_a
 rc2=$?
 
 echo "=== legacy arena battery (regression: the probe must not have broken it) ==="
-uv run --isolated --extra dev --extra jax --with flatbuffers python -m pytest \
+uv run --isolated --extra dev --extra jax \
+  --with fastapi --with httpx --with uvicorn --with flatbuffers python -m pytest \
   tpu/pallas_arena/tests/ -q -p no:cacheprovider
 rc3=$?
 
