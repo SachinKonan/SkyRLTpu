@@ -217,6 +217,11 @@ The metric test encodes the exact mistake the last run made: a group that is
 0.0042, floor 0.0158) must count as **non-uniform** and **not** as signal.
 `overall_signal_groups == "1/3"` while `overall_nonuniform_groups == "2/3"`.
 
+The full arena regression battery is **175 passed, 0 failed** (job 3650953,
+5 min) — identical to the count before this work, with three baselines
+rewritten, fifteen probe shape cases added and three `adversarial_cases()`
+changed. Nothing about the production path moved.
+
 ## 5. The headline metric, restated in code
 
 `metrics.group_uniformity` now takes the judge's own per-task noise floors —
@@ -252,6 +257,7 @@ numbers land.
 * The headline metric returns the right answer on the case the previous run
   got wrong.
 * Three tasks that could not have been served now boot-resolve their baselines.
+* The arena regression battery is unchanged at 175 passed, 0 failed.
 
 **Not known — needs the TPU run:** compile rate, pass rate, gate histogram,
 reward distribution, best score, and **the headline** — per configuration and
@@ -281,7 +287,7 @@ they are empty of `sk7524-seam-*`. The names have never been used. The running
 RL sweep (`sk7524-tunix-qwen35-v5p32-dbtest-{d,e}`, `sk7524-league-*`,
 `forever_sweep`) was not touched, read or otherwise.
 
-Cost: five short CPU jobs on one neuronic node (16 cpu, 48–64 G), ~11 minutes
+Cost: six short CPU jobs on one neuronic node (16 cpu, 48–64 G), ~17 minutes
 of wall time total.
 
 ## 7. How to finish it

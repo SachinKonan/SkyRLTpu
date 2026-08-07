@@ -42,7 +42,7 @@ rc=$(( rc + ${PIPESTATUS[0]} ))
 
 echo
 echo "=== arena regression battery $(date +%H:%M:%S) ==="
-uv run --isolated --extra dev --extra jax --with flatbuffers \
+uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with httpx --with flatbuffers \
   python -m pytest tpu/pallas_arena/tests -q 2>&1 | tail -40
 rc=$(( rc + ${PIPESTATUS[0]} ))
 
