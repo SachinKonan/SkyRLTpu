@@ -10,4 +10,4 @@ set -euo pipefail
 PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/python
 export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
 $PY /n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1/server/fastcheck_gate.py \
-  --problem erdos --run-dir /n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/erdos_D --concurrency 24
+  --problem "$1" --run-dir "$2" --concurrency "${3:-24}"
