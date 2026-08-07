@@ -69,8 +69,11 @@ def main():
     run = Path(args.run_dir).resolve()
     logdir = run / "grade_logs"
     logdir.mkdir(parents=True, exist_ok=True)
-    subs = [json.loads(l) for l in (run / "submissions.jsonl").read_text().splitlines()
-            if l.strip()]
+    subf = run / "submissions.jsonl"
+    if not subf.exists() or not subf.read_text().strip():
+        raise SystemExit(f"[grade] nothing to grade: {subf} is missing or empty "
+                         f"(collection for this cell has not produced submissions yet)")
+    subs = [json.loads(l) for l in subf.read_text().splitlines() if l.strip()]
     by_hash = {}
     for s in subs:
         by_hash.setdefault(s["sol_hash"], []).append(s.get("session"))
