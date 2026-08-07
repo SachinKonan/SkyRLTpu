@@ -1,8 +1,13 @@
 # Cold-start probe — can a base model write a Pallas kernel at all?
 
-*Status: RUNNING. This file is written incrementally so an interruption still
-leaves a complete record of what was measured. Results sections are filled in
-from `runs/pallas_arena/probe-results-<job>.json`.*
+*Run: sbatch 3650240, 2026-08-07. Written incrementally so an interruption
+still leaves a complete record. Raw data:
+`runs/pallas_arena/probe-results-fixed-3650240.{json,jsonl}` (the corrected
+grid), `probe-results-3650240.jsonl` (the 6144-token truncation arm),
+`probe-results-gemmatail-3650240.jsonl` (one re-run cell),
+`probe-control-3650240.json` (the harness control),
+`probe-render-3650240.json` (chat-template verification),
+`probe-judge-boot-3650240.json`, and `probe-raw-3650240/` (raw generations).*
 
 The question, precisely: **before any RL is built, do base models produce
 trainable attempts at Pallas kernels?** Generation and grading only — no
