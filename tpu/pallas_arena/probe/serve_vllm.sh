@@ -57,6 +57,17 @@ export CLOUD_TPU_TASK_ID=0           # standalone single-host server
 export SKIP_JAX_PRECOMPILE=1
 unset TPU_VISIBLE_CHIPS              # all 4 local chips, TP=4
 
+# MAKE THIS HOST A STANDALONE TPU RUNTIME. Without these, libtpu on a v5p-16
+# tries to form the full TWO-HOST mesh and blocks -- observed as
+#   "TPU backend initialization is taking more than 60.0 seconds.
+#    Did you run your code on all TPU hosts?"
+# with the engine never reaching the serving loop. 1,1,1 processes x 2,2,1
+# chips = the 4 chips of THIS host, which is exactly what TP=4 wants, and it
+# is what start_colocated_vllm_tinker.sh sets for its single-worker vLLM.
+export TPU_PROCESS_BOUNDS=1,1,1
+export TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1
+unset TPU_PROCESS_ADDRESSES
+
 pkill -f "vllm serve" >/dev/null 2>&1 || true
 pkill -f "VLLM::EngineCore" >/dev/null 2>&1 || true
 sleep 3
@@ -65,6 +76,7 @@ rm -f "$LOG"
 tmux kill-session -t vllm-probe >/dev/null 2>&1 || true
 tmux new-session -d -s vllm-probe \
   "MODEL_IMPL_TYPE=vllm TPU_BACKEND_TYPE=torchax SKIP_JAX_PRECOMPILE=1 CLOUD_TPU_TASK_ID=0 \
+   TPU_PROCESS_BOUNDS=1,1,1 TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1 \
    HF_HOME='$HF_HOME' HF_HUB_ENABLE_HF_TRANSFER=1 VLLM_XLA_CACHE_PATH='$VLLM_XLA_CACHE_PATH' \
    '$VENV/bin/vllm' serve '$MODEL' \
      --served-model-name '$MODEL' \
