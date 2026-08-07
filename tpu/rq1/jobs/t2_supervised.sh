@@ -16,6 +16,7 @@
 #SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/logs/%x_%j.log
 set -uo pipefail
 KEY="$1"; PROBLEM="$2"; OUT="$3"; N="${4:-200}"; CONC="${5:-32}"; CELL="${6:-C}"; EXTRA="${7:-}"
+EXTRA_ARGS="${8:-}"
 RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1
 ROUNDS="${ROUNDS:-8}"
 
@@ -53,7 +54,7 @@ for r in $(seq 1 "$ROUNDS"); do
   # farm_up is idempotent: reuses an ACTIVE slice, recreates a dead one, restarts vLLM.
   bash "$RQ1/jobs/farm_up.sh" "$KEY" || { echo "[sup] farm_up failed; retrying"; sleep 120; continue; }
   # t2_smoke.sh works as a plain script too (its #SBATCH lines are just comments).
-  bash "$RQ1/jobs/t2_smoke.sh" "$TPU" "$MODEL" "$PROBLEM" "$OUT" "$N" "$CONC" "$CELL" "$EXTRA"
+  bash "$RQ1/jobs/t2_smoke.sh" "$TPU" "$MODEL" "$PROBLEM" "$OUT" "$N" "$CONC" "$CELL" "$EXTRA" "$EXTRA_ARGS"
   echo "[sup] round $r finished with rc=$? at $(have)/$N samples"
 done
 

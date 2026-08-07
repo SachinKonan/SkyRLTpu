@@ -14,6 +14,7 @@
 set -uo pipefail
 TPU_NAME="$1"; MODEL="$2"; PROBLEM="$3"; OUT="$4"; N="${5:-5}"; CONC="${6:-4}"; CELL="${7:-C}"
 EXTRA_BODY="${8:-}"
+EXTRA_ARGS_IN="${9:-}"   # e.g. "--two-phase" for verbose reasoners
 RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1
 PORT=$((18000 + RANDOM % 1000))
 
@@ -65,6 +66,7 @@ done
 cd "$RQ1/client"
 EXTRA_ARGS=()
 [ -n "$EXTRA_BODY" ] && EXTRA_ARGS=(--extra-body "$EXTRA_BODY")
+[ -n "$EXTRA_ARGS_IN" ] && EXTRA_ARGS+=($EXTRA_ARGS_IN)
 uv run collect_t2.py --problem "$PROBLEM" --n "$N" --concurrency "$CONC" \
   --farm-url "http://127.0.0.1:$PORT" --model "$MODEL" --out "$OUT" --cell "$CELL" --resume \
   "${EXTRA_ARGS[@]}"

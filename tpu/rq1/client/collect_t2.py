@@ -39,38 +39,77 @@ def strip_fence(t):
     return m[-1] if m else ""
 
 
+FORCE = ("\n\nI have thought about this enough. Here is my final, complete, self-contained "
+         "program:\n\n```{fence}\n")
+
+
+async def _post(cli, args, body, tries=ATTEMPTS):
+    """POST with patient retries (the farm tunnel can be down for minutes at a time)."""
+    last = None
+    for attempt in range(tries):
+        try:
+            r = await cli.post(f"{args.farm_url.rstrip('/')}/v1/chat/completions",
+                               headers={"Authorization": f"Bearer {args.api_key}"}, json=body)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            last = e
+            if attempt == tries - 1:
+                raise last
+            await asyncio.sleep(min(60, 10 * (attempt + 1)))
+
+
 async def one(i, cli, args, prompt, out, lock):
     sid = f"t2_{i:03d}"
     rawf = out / "raw" / f"{sid}.json"
-    body = {"model": args.model, "temperature": args.temperature,
-            "max_tokens": args.max_tokens,
+    base = {"model": args.model, "temperature": args.temperature,
             "messages": [{"role": "user", "content": prompt}]}
     if args.extra_body:
-        body.update(json.loads(args.extra_body))
-    # Patient retries: the SSH tunnel to the farm drops on transient gcloud faults and can stay
-    # down for a couple of minutes while it reconnects, with the TPU perfectly healthy. Total
-    # tolerance here is ~5 min, which comfortably outlasts a reconnect.
-    for attempt in range(ATTEMPTS):
-        try:
-            r = await cli.post(
-                f"{args.farm_url.rstrip('/')}/v1/chat/completions",
-                headers={"Authorization": f"Bearer {args.api_key}"},
-                json=body)
-            r.raise_for_status()
-            data = r.json()
-            break
-        except Exception as e:
-            if attempt == ATTEMPTS - 1:
-                rawf.write_text(json.dumps({"id": sid, "error": str(e)[:400]}))
-                return sid, "request-failed"
-            await asyncio.sleep(min(60, 10 * (attempt + 1)))
+        base.update(json.loads(args.extra_body))
+    p1 = args.phase1_tokens if args.two_phase else args.max_tokens
+    # Patient retries live in _post: the farm tunnel can be down for minutes with a healthy TPU.
+    try:
+        data = await _post(cli, args, {**base, "max_tokens": p1})
+    except Exception as e:
+        rawf.write_text(json.dumps({"id": sid, "error": str(e)[:400]}))
+        return sid, "request-failed"
     msg = data["choices"][0]["message"]
     think = msg.get("reasoning_content") or ""
     text = msg.get("content") or ""
+    finish = data["choices"][0].get("finish_reason")
+
+    # ---- phase 2: force the final program ----
+    # A verbose reasoner (qwen: 83% truncated at 28k, median exactly at the cap) never reaches
+    # its answer, and its transcript is littered with exploratory code blocks -- so "last fenced
+    # block" grabs a stub like "// Greedy construction\n// ...". Mirroring ttt_discover's
+    # TwoPhaseTokenCompleter, cap the thinking, then continue the assistant turn with an explicit
+    # hand-off into an open fence, so the continuation IS the final program.
+    forced = ""
+    if args.two_phase and finish == "length":
+        forced = FORCE.format(fence=args.fence)
+        try:
+            d2 = await _post(cli, args, {
+                **base, "max_tokens": args.phase2_tokens,
+                "messages": base["messages"] + [{"role": "assistant", "content": text + forced}],
+                "continue_final_message": True, "add_generation_prompt": False})
+            cont = d2["choices"][0]["message"].get("content") or ""
+            text = text + forced + cont
+            finish = f"length+{d2['choices'][0].get('finish_reason')}"
+        except Exception as e:
+            rawf.write_text(json.dumps({"id": sid, "think": think, "text": text,
+                                        "usage": data.get("usage"), "finish": finish,
+                                        "phase2_error": str(e)[:300]}))
+            return sid, "phase2-failed"
+
     rawf.write_text(json.dumps({"id": sid, "think": think, "text": text,
-                                "usage": data.get("usage"),
-                                "finish": data["choices"][0].get("finish_reason")}))
-    code = strip_fence(text) or strip_fence(think)
+                                "usage": data.get("usage"), "finish": finish,
+                                "two_phase": bool(forced)}))
+    if forced:
+        # Everything after the hand-off is the answer; it may or may not close its fence.
+        tail = text.split(forced, 1)[1]
+        code = tail.split("```")[0]
+    else:
+        code = strip_fence(text) or strip_fence(think)
     if not code.strip():
         return sid, "no-code-block"
     h = sha(code)
@@ -90,6 +129,7 @@ async def run(args):
     d = HERE / "data" / args.problem
     prompt = (d / "prompt_completion.md").read_text()
     meta = json.loads((d / "meta.json").read_text())
+    args.fence = meta["fence"]          # phase-2 hand-off opens a fence of the right language
     (out / "manifest.json").write_text(json.dumps({
         "cell": args.cell, "problem": args.problem, "n": args.n, "model": args.model,
         "farm_url": args.farm_url, "temperature": args.temperature,
@@ -146,6 +186,12 @@ def main():
                          '\'{"chat_template_kwargs": {"enable_thinking": true}}\' -- the '
                          "stock template only injects the <|think|> system turn with that "
                          "flag; without it the model emits an empty thought channel.")
+    ap.add_argument("--two-phase", action="store_true",
+                    help="cap thinking at --phase1-tokens, then continue the assistant turn "
+                         "into an open code fence so a verbose model still emits a final "
+                         "program (mirrors ttt_discover's TwoPhaseTokenCompleter)")
+    ap.add_argument("--phase1-tokens", type=int, default=16000)
+    ap.add_argument("--phase2-tokens", type=int, default=12000)
     ap.add_argument("--out", required=True)
     ap.add_argument("--cell", default="C")
     ap.add_argument("--resume", action="store_true")
