@@ -35,7 +35,10 @@ tunnel_loop() {
 }
 tunnel_loop &
 TUN=$!
-trap 'kill -- -$$ 2>/dev/null; kill $TUN 2>/dev/null' EXIT
+# Kill the loop AND its live gcloud child -- but never the process group ($$ included), which
+# would signal this script and turn a clean 200/200 collection into a FAILED job state.
+cleanup() { RC=$?; pkill -P "$TUN" 2>/dev/null; kill "$TUN" 2>/dev/null; exit $RC; }
+trap cleanup EXIT
 
 echo "[t2smoke] waiting for vLLM health (up to 75 min: model load + XLA compile)..."
 for i in $(seq 1 150); do
