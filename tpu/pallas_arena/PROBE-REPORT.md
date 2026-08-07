@@ -422,12 +422,161 @@ and the reason differs sharply by model:
   **more than 12000 tokens** on this task, so most candidates are still
   truncated fragments (6× `syntax error: unexpected indent`).
 
-*(remaining arm-3 tables filled in at the end of the run)*
+### Arm 3 — the full grid, n=16 per cell (round 0)
+
+`export` = survived the CPU AOT pre-gate (traces at all three declared shapes
+for the TPU platform). `judged` = graded on the v6e-1. `PASS` = gate `all`.
+
+| model | variant | task | `stop` | export | judged | **PASS** |
+|---|---|---|---|---|---|---|
+| gemma4-31b | minimal | splash | 14/16 | 0/16 | 0 | 0 |
+| gemma4-31b | minimal | **flce** | 16/16 | **10/16** | 10 | **2** |
+| gemma4-31b | reference | splash | 16/16 | 0/16 | 0 | 0 |
+| gemma4-31b | reference | **flce** | 16/16 | **10/16** | 10 | **5** |
+| gemma4-31b | tailored | splash | 30/47† | 1/47† | 1 | 0 |
+| gemma4-31b | tailored | **flce** | 16/16 | **16/16** | 16 | **16** |
+| qwen35-27b | minimal | splash | 1/16 | 0/16 | 0 | 0 |
+| qwen35-27b | minimal | flce | 2/16 | 0/16 | 0 | 0 |
+| qwen35-27b | reference | splash | 0/16 | 0/16 | 0 | 0 |
+| qwen35-27b | reference | flce | 0/16 | 0/16 | 0 | 0 |
+| qwen35-27b | tailored | splash | 0/16 | 0/16 | 0 | 0 |
+| qwen35-27b | tailored | flce | — | — | — | — |
+
+† the first 16 were the `HTTPError 400` cell; the number shown pools that with
+the 31-candidate rerun at 10000 tokens.
+
+### The two findings that dominate everything else
+
+**1. Qwen3.5-27B cannot finish this task in its thinking budget.**
+
+| model | generations | `stop` | `length` |
+|---|---|---|---|
+| gemma4-31b | 105 | **86** | 3 |
+| qwen35-27b | 80 | **3** | 77 |
+
+At 12000 new tokens gemma finishes 82% of the time and Qwen finishes 4% of the
+time. Every Qwen cell is 0, and the modal Qwen gate is `ast: syntax error:
+unexpected indent` — a fragment quoted mid-thought, not an attempted kernel.
+This is not a statement about Qwen's kernel ability; it is a statement that
+**Qwen's thinking channel needs a far larger budget (or a non-thinking
+renderer) before its ability can be measured at all.** The repo already knew
+this for the 512-token math setting (`tpu/runs/qwen35-27b.env` pins
+`qwen3_5_disable_thinking`); it holds at 12000 too.
+
+**2. On splash, gemma writes plausible Pallas and hallucinates the API.**
+
+Every gemma splash cell is 0/16 at export, with `stop` rates of 14/16 and
+16/16 — the model finishes, and the AST gate confirms it wrote a real
+`pallas_call`. It dies at `jax.export` on invented signatures:
+
+```
+pallas_call() got an unexpected keyword argument 'out_spec'
+pallas_call() got an unexpected keyword argument 'out_dtype' / 'out_dtypes'
+pallas_call() got an unexpected keyword argument 'out_shapes' / 'in_shapes'
+pallas_call() got an unexpected keyword argument 'block_shapes' / 'index_map'
+pallas_call() missing 1 required positional argument: 'out_shape'
+BlockSpec.__init__() got multiple values for argument 'block_shape'
+module 'jax' has no attribute 'Shape'
+module 'jax.experimental.pallas' has no attribute 'Ref'
+'AbstractRef' object has no attribute 'astype'
+```
+
+The `reference` prompt's prose gotcha list does **not** fix this — 16/16 still
+finish and 0/16 still export. Prose about VMEM budgets cannot teach a function
+signature the model does not have.
+
+### The trainable cell, and how prompt strength moves it
+
+For gemma on FLCE the three variants are cleanly monotonic:
+
+| variant | export | PASS | judge gate mix |
+|---|---|---|---|
+| minimal | 10/16 | 2 | 2 `all`, 7 `gradient`, 1 `correctness` |
+| reference | 10/16 | 5 | 5 `all`, 5 `gradient` |
+| tailored | **16/16** | **16** | 16 `all` |
+
+`gradient` is the informative failure: those kernels compiled and were
+numerically correct forward, then missed `d/d(hidden)` — the "a tiled forward
+is not enough, the backward must recompute per tile under `jax.custom_vjp`"
+lesson, delivered as a dense error signal rather than a flat zero.
+
+**And this is where the headline metric earns its keep.** `minimal` and
+`reference` are unambiguously trainable — mixed pass/fail inside a group of
+16. But `tailored|flce` at **16/16 passing** has no pass/fail variance left:
+its entire training signal now lives in the continuous speed score, and
+whether that group produces a gradient depends on the *spread of the speed
+ratios*, not on the pass rate. A prompt can be too good: hand over the whole
+scaffold and the discriminating variable disappears from the gate and has to
+be carried by timing alone.
+
+### Overall gate histogram (arm 3, 155 pre-gate records)
+
+| gate | n |
+|---|---|
+| `aot_export` | 76 |
+| `ast` | 39 |
+| `no_code` | 28 |
+| `exec` | 11 |
+| `correctness` | 1 |
 
 ## Verdict
 
-*(filled in at the end of the run)*
+**Yes — one configuration is trainable today, and it is a narrow one.**
+
+**`gemma-4-31B-it` × FLCE × the `reference` prompt** is the recommendation.
+It exports 10/16, passes 5/16, and its failures are concentrated on
+`gradient` — mixed outcomes inside every group of 16, which is exactly the
+condition ttt-discover needs. `minimal` also works (2/16) and is the honest
+floor. `tailored` passes 16/16, which sounds better and is arguably worse:
+with no pass/fail variance left, the whole gradient rides on the spread of the
+speed scores, and a prompt that hands over the scaffold has removed the
+variable the group statistic is built on.
+
+**No splash-attention configuration is trainable yet, and the reason is
+specific and fixable.** gemma finishes the task (14–16 of 16 reach `stop`) and
+writes a genuine `pallas_call`, then invents the signature. Prose gotchas do
+not fix it. Two things would, and neither is RL: put the *exact*
+`pallas_call` / `BlockSpec` / `pltpu.VMEM` signatures in the prompt as an API
+reference (the tailored scaffold does this and is the only splash arm that
+ever reached the chip), or give the environment one retry with the judge's own
+`aot_export` observation fed back — the curated observation from work item A
+names the bad kwarg exactly, and these are one-line fixes.
+
+**No Qwen3.5-27B configuration is measurable yet.** 3 of 80 generations
+finished. Before Qwen can be judged on kernels at all it needs either the
+`qwen3_5_disable_thinking` renderer the repo already uses for math, or a
+budget well past 12000 tokens. Reporting Qwen as "cannot write kernels" from
+this run would be wrong.
+
+**The judge is ready.** Both tasks boot on one v6e-1 with ref-vs-ref inside
+±2%, a known-good FLCE kernel scores 0.6981 through the full path, and 40/40
+submissions were graded with 0 duplicates and 0 requeues.
+
+### What I would change before the RL run
+
+1. Per-model token budgets, enforced (now in `ModelSpec`); an over-long
+   request is a 400, not a data point.
+2. Drop Qwen thinking-mode, or raise its budget past 16k.
+3. Use `reference` for FLCE. For splash, add an API-signature block — the
+   measured failure is signature recall, not reasoning.
+4. Feed the curated observation back for one retry. Nothing in this run tests
+   that, and the observations are precisely the information a retry needs.
+5. Splash's score denominator is currently the XLA fallback; bind the real
+   splash kernel (or accept the fallback explicitly) before ranking champions.
 
 ## Resources
 
-*(filled in at the end of the run)*
+| | |
+|---|---|
+| QRs | exactly **2**, never more: `sk7524-probe-serve` (v5p-16, us-east5-a), `sk7524-probe-judge` (v6e-1, us-east5-b) |
+| created | 09:34:56 |
+| serve ACTIVE | 09:40:09 (5 min 13 s) |
+| judge ACTIVE | 09:42:20 (7 min 24 s) |
+| both engines serving | 10:00:59 (26 min) |
+| generation start | 10:05:38 |
+| hard cap | 12:34:56 (3 h), never approached |
+| chip-hours | v5p-16 = 8 chips, v6e-1 = 1 chip. At ~2 h 45 m of QR lifetime: **≈ 22 v5p chip-hours + ≈ 2.75 v6e chip-hours ≈ 24.8 chip-hours** |
+| judged candidates | 40 (+2 controls), 0 duplicates, 0 requeues |
+
+Plus one neuronic compute node (16 cpu, 48 G) for the queue, the pre-gate and
+three drivers, and three short sbatch CPU jobs (dry runs + regression).
