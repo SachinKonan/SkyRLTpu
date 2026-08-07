@@ -82,6 +82,23 @@ class MegabloxGmmProblem(Problem):
             ShapeCase(
                 "holdout-16k-e32-zipf", {"m": 16384, "g": 32, "k": 2048, "n": 7168, "dist": "zipf"}, holdout=True
             ),
+            # PROBE set: one-chip sizes at the UNCHANGED expert widths
+            # (k=4096, n=14336). Only the token count and the expert COUNT
+            # shrink -- 4 experts instead of 8/64 -- because `rhs` is the whole
+            # memory budget here: [g, 4096, 14336] bf16 is 940 MB at g=8, and
+            # the worker holds `#scored x correctness_seeds` full input tuples
+            # live at once. At g=4 that is 470 MB a fixture. Zipf is kept so
+            # the imbalance (and the zero-size-group trap) survives the shrink,
+            # and the holdout m=3000 is deliberately not a multiple of any
+            # reasonable row tile.
+            ShapeCase("probe-m4096-e4-uniform", {"m": 4096, "g": 4, "k": 4096, "n": 14336, "dist": "uniform"}, probe=True),
+            ShapeCase("probe-m2048-e4-zipf", {"m": 2048, "g": 4, "k": 4096, "n": 14336, "dist": "zipf"}, probe=True),
+            ShapeCase(
+                "probe-holdout-m3000-e4-zipf",
+                {"m": 3000, "g": 4, "k": 4096, "n": 14336, "dist": "zipf"},
+                holdout=True,
+                probe=True,
+            ),
             # CPU battery
             ShapeCase("tiny", {"m": 64, "g": 4, "k": 16, "n": 24, "dist": "uniform"}, smoke=True),
             ShapeCase("tiny-zipf", {"m": 64, "g": 4, "k": 16, "n": 24, "dist": "zipf"}, smoke=True),
@@ -99,16 +116,37 @@ class MegabloxGmmProblem(Problem):
     def reference(self, lhs, rhs, group_sizes):
         return gmm_reference(lhs, rhs, group_sizes)
 
-    def baseline(self, lhs, rhs, group_sizes):
-        if jax.default_backend() != "tpu":
-            # CPU battery: the design floor is the stand-in baseline
-            return jax.lax.ragged_dot(lhs, rhs, group_sizes).astype(jnp.float32)
-        from jax.experimental.pallas.ops.tpu.megablox import gmm
+    # Which baseline the last `baseline()` call actually used. Recorded (not
+    # asserted) so a boot report says plainly what the score denominator IS.
+    baseline_impl: str = "?"
 
-        return gmm(lhs, rhs, group_sizes).astype(jnp.float32)
+    def baseline(self, lhs, rhs, group_sizes):
+        """The tuned Pallas megablox gmm, with `lax.ragged_dot` as the honest
+        fallback (the design floor, and the CPU stand-in).
+
+        megablox has its own tiling constraints and refuses some (m, k, n); a
+        judge that dies at BOOT on that has graded nothing at all. Which one
+        ran is recorded, because a score against `ragged_dot` is not a score
+        against the production kernel.
+        """
+        if jax.default_backend() != "tpu":
+            type(self).baseline_impl = "lax-ragged-dot"
+            return jax.lax.ragged_dot(lhs, rhs, group_sizes).astype(jnp.float32)
+        try:
+            from jax.experimental.pallas.ops.tpu.megablox import gmm
+
+            out = gmm(lhs, rhs, group_sizes).astype(jnp.float32)
+            type(self).baseline_impl = "pallas-megablox-gmm"
+            return out
+        except Exception:
+            type(self).baseline_impl = "lax-ragged-dot-fallback"
+            return jax.lax.ragged_dot(lhs, rhs, group_sizes).astype(jnp.float32)
 
     def adversarial_cases(self):
-        tiny = self.case_by_name("tiny")
+        # settable base case: a judge grading a non-default (e.g. probe) case
+        # set must not silently force candidates to also trace at the tiny
+        # CPU-battery shapes, which no prompt declares
+        tiny = self.case_by_name(self.adversarial_case_name)
 
         def empty_group(key):
             lhs, rhs, sizes = self.make_inputs(key, tiny)

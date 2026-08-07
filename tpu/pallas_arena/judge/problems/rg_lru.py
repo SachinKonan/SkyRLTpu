@@ -81,6 +81,15 @@ class RGLRUProblem(Problem):
             ShapeCase("8x4096x2560", {"b": 8, "t": 4096, "d": 2560}),
             ShapeCase("1x32768x2560", {"b": 1, "t": 32768, "d": 2560}),
             ShapeCase("holdout-4x8192x2560", {"b": 4, "t": 8192, "d": 2560}, holdout=True),
+            # PROBE set: one-chip sizes at the UNCHANGED RecurrentGemma width
+            # (d=2560); only the batch and time axes shrink, so the long-memory
+            # fp32-drift difficulty the task exists for is intact. The holdout
+            # T is deliberately not a multiple of any reasonable chunk length.
+            ShapeCase("probe-4x2048x2560", {"b": 4, "t": 2048, "d": 2560}, probe=True),
+            ShapeCase("probe-2x1024x2560", {"b": 2, "t": 1024, "d": 2560}, probe=True),
+            ShapeCase(
+                "probe-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, holdout=True, probe=True
+            ),
             # CPU battery (tiny-ragged: non-block-divisible T)
             ShapeCase("tiny", {"b": 2, "t": 64, "d": 16}, smoke=True),
             ShapeCase("tiny-ragged", {"b": 2, "t": 100, "d": 16}, smoke=True),
@@ -108,20 +117,40 @@ class RGLRUProblem(Problem):
         h = rg_lru_scan_reference(x, a, reset)
         return h.astype(jnp.bfloat16).astype(jnp.float32)
 
+    # Which baseline the last `baseline()` call actually used. Recorded (not
+    # asserted) so a boot report says plainly what the score denominator IS.
+    baseline_impl: str = "?"
+
     def baseline(self, x, a, reset):
+        """DeepMind's recurrentgemma Pallas scan when the judge host has it;
+        otherwise `lax.associative_scan`, recorded as such.
+
+        The fallback is honest and strong rather than a straw man: the parallel
+        scan is the formulation you would actually reach for on TPU, it is an
+        explicitly LEGAL candidate strategy for this task, and the design
+        document already names it the legal floor. What it is NOT is
+        recurrentgemma's kernel, so a score against it must be reported as
+        "versus lax.associative_scan", never as beating the production scan.
+
+        A judge that refuses to boot has graded nothing at all, which is
+        strictly worse than scoring against a slower-but-real denominator --
+        the same trade splash_attention already makes.
+        """
         try:
             from recurrentgemma.jax import scan as rg_scan  # noqa: F401
 
             # Production judge path (TPU host with recurrentgemma installed):
             # bound during Phase-2 bring-up; shapes/layout adapted there.
             raise BaselineUnavailable("recurrentgemma pallas scan binding is a Phase-2 (TPU judge) step")
-        except ImportError:
-            if jax.default_backend() == "cpu":
-                return rg_lru_associative(x, a, reset)
-            raise BaselineUnavailable("recurrentgemma not installed on this judge host")
+        except (ImportError, BaselineUnavailable):
+            type(self).baseline_impl = "lax-associative-scan"
+            return rg_lru_associative(x, a, reset)
 
     def adversarial_cases(self):
-        tiny = self.case_by_name("tiny")
+        # settable base case: a judge grading a non-default (e.g. probe) case
+        # set must not silently force candidates to also trace at the tiny
+        # CPU-battery shapes, which no prompt declares
+        tiny = self.case_by_name(self.adversarial_case_name)
 
         def a_to_one(key):
             x, a, reset = self.make_inputs(key, tiny)

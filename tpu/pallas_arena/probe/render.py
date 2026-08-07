@@ -56,8 +56,31 @@ def render_gemma4(user_prompt: str) -> str:
     )
 
 
-RENDERERS = {"qwen3": render_qwen3, "gemma4": render_gemma4}
-STOPS = {"qwen3": QWEN3_STOP, "gemma4": GEMMA4_STOP}
+# --------------------------------------------------------------------------
+# Qwen3.5 with thinking DISABLED
+# (tinker_cookbook.renderers.qwen3_5.Qwen3_5DisableThinkingRenderer).
+#
+# The previous probe could not MEASURE Qwen at all: 3 of 80 generations reached
+# `stop`, because the thinking channel ate the entire 12000-token budget and the
+# extractor picked up a fragment quoted mid-thought (the modal gate was
+# `ast: syntax error: unexpected indent`). Reporting that as "Qwen cannot write
+# kernels" would have been wrong. `tpu/runs/qwen35-27b.env` already pins this
+# renderer for the 512-token math setting for exactly the same reason.
+#
+# The ONLY difference from the thinking renderer is the generation suffix:
+# `<think>\n\n</think>\n\n` (a PRE-CLOSED, empty thought) instead of `<think>\n`,
+# which is byte-identical to the HF template at enable_thinking=False.
+def render_qwen3_nothink(user_prompt: str) -> str:
+    return (
+        "<|im_start|>user\n"
+        + user_prompt
+        + "<|im_end|>"
+        + "\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    )
+
+
+RENDERERS = {"qwen3": render_qwen3, "qwen3-nothink": render_qwen3_nothink, "gemma4": render_gemma4}
+STOPS = {"qwen3": QWEN3_STOP, "qwen3-nothink": QWEN3_STOP, "gemma4": GEMMA4_STOP}
 
 
 def render(renderer: str, user_prompt: str) -> str:
@@ -84,6 +107,7 @@ def verify_against_server(base_url: str, model: str, renderer: str, probe_text: 
     """
     base = base_url.rstrip("/")
     ours = render(renderer, probe_text)
+    thinking = renderer != "qwen3-nothink"
     out: dict = {"model": model, "renderer": renderer, "rendered_prefix": ours[:200], "rendered_len": len(ours)}
     try:
         a = _post(f"{base}/tokenize", {"model": model, "prompt": ours, "add_special_tokens": False})
@@ -99,7 +123,7 @@ def verify_against_server(base_url: str, model: str, renderer: str, probe_text: 
                 "model": model,
                 "messages": [{"role": "user", "content": probe_text}],
                 "add_generation_prompt": True,
-                "chat_template_kwargs": {"enable_thinking": True},
+                "chat_template_kwargs": {"enable_thinking": thinking},
             },
         )
         out["template_tokens"] = b.get("count")
@@ -118,7 +142,7 @@ def verify_against_server(base_url: str, model: str, renderer: str, probe_text: 
     # The single fact that must hold no matter what: the special tokens the
     # renderer relies on must each be ONE token.
     singles = {}
-    for tok in (["<|im_start|>", "<|im_end|>", "<think>"] if renderer == "qwen3"
+    for tok in (["<|im_start|>", "<|im_end|>", "<think>", "</think>"] if renderer.startswith("qwen3")
                 else ["<bos>", "<|turn>", "<turn|>", "<|think|>", "<|channel>", "<channel|>"]):
         try:
             r = _post(f"{base}/tokenize", {"model": model, "prompt": tok, "add_special_tokens": False})
