@@ -40,13 +40,24 @@ TUN=$!
 cleanup() { RC=$?; pkill -P "$TUN" 2>/dev/null; kill "$TUN" 2>/dev/null; exit $RC; }
 trap cleanup EXIT
 
+qr_state() {
+  gcloud compute tpus queued-resources describe "$TPU_NAME" --zone=us-east5-a \
+    --project=vision-mix --format='value(state.state)' 2>/dev/null
+}
+
 echo "[t2smoke] waiting for vLLM health (up to 75 min: model load + XLA compile)..."
 for i in $(seq 1 150); do
   if curl -sf -m 10 "http://127.0.0.1:$PORT/v1/models" > /tmp/models_$$.json 2>/dev/null; then
     echo "[t2smoke] vLLM healthy after ~$((i*30))s:"; cat /tmp/models_$$.json; echo
     break
   fi
-  kill -0 $TUN 2>/dev/null || { echo "[t2smoke] tunnel died; TPU unreachable (preempted?)" >&2; exit 1; }
+  # Fail FAST on preemption. Without this the tunnel loop hammers a dead node for the full
+  # 75 min (measured: 402 reconnects against a SUSPENDED slice) before anyone finds out.
+  if [ $((i % 4)) -eq 0 ]; then
+    ST=$(qr_state)
+    [ "$ST" = "ACTIVE" ] || { echo "[t2smoke] slice not ACTIVE (state=${ST:-ABSENT}); aborting" >&2; exit 2; }
+  fi
+  kill -0 $TUN 2>/dev/null || { echo "[t2smoke] tunnel supervisor died" >&2; exit 1; }
   [ "$i" -eq 150 ] && { echo "[t2smoke] vLLM never became healthy" >&2; exit 1; }
   sleep 30
 done
