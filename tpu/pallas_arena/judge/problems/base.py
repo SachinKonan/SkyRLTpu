@@ -38,6 +38,15 @@ class ShapeCase:
     dims: dict[str, Any]
     holdout: bool = False  # logged-unscored (declared-set overfit detector)
     smoke: bool = False  # tiny CPU-battery case, never scored in prod
+    # PROBE cases exist so a task can be graded end-to-end on ONE chip. The
+    # production shape sets are deliberately full-size, and for two tasks the
+    # fp32 REFERENCE cannot run there at all on a 32 GB judge: splash's
+    # closed form materializes [heads, seq, seq] (10.9 GB at h8-s18432,
+    # 43.5 GB at h32) and FLCE's materializes [n, v] fp32 (44.8 GB at
+    # 73728x151936). Probe cases are the same op at a size one chip can hold,
+    # selected explicitly by name (`--cases`), and are NEVER part of the
+    # default scored/holdout sets, so nothing about a production run changes.
+    probe: bool = False
 
 
 @dataclass(frozen=True)
@@ -205,6 +214,11 @@ class Problem(abc.ABC):
     banned_import_prefixes: tuple[str, ...] = ()
     banned_call_names: tuple[str, ...] = ()
     kernel_entrypoint: str = "kernel"
+    # Which shape case the adversarial vector library is built on. Instance-
+    # settable so a judge grading a non-default case set does not silently
+    # require the candidate to also trace at the CPU-battery `tiny` shapes,
+    # which no prompt ever declares.
+    adversarial_case_name: str = "tiny"
 
     # Blanket bans for every task: the judge's own package, the whole
     # jax-bundled pallas ops tree (candidates write kernels, not wrappers),
@@ -329,10 +343,13 @@ class Problem(abc.ABC):
         )
 
     def scored_cases(self, smoke: bool = False) -> list[ShapeCase]:
-        return [c for c in self.shape_cases() if not c.holdout and c.smoke == smoke]
+        return [c for c in self.shape_cases() if not c.holdout and c.smoke == smoke and not c.probe]
 
     def holdout_cases(self, smoke: bool = False) -> list[ShapeCase]:
-        return [c for c in self.shape_cases() if c.holdout and c.smoke == smoke]
+        return [c for c in self.shape_cases() if c.holdout and c.smoke == smoke and not c.probe]
+
+    def probe_cases(self) -> list[ShapeCase]:
+        return [c for c in self.shape_cases() if c.probe]
 
     def case_by_name(self, name: str) -> ShapeCase:
         for c in self.shape_cases():

@@ -46,6 +46,7 @@ import urllib.request
 from pathlib import Path
 
 from pallas_arena.judge import grader
+from pallas_arena.judge import observation
 from pallas_arena.judge import timing as timing_mod
 
 # Compile-warm deadline (phase-5 prerequisite). Phase 4 measured the honest
@@ -80,6 +81,8 @@ class PersistentWorker:
         *,
         smoke: bool = False,
         cases: list[str] | None = None,
+        use_adversarial: bool = True,
+        adversarial_case: str | None = None,
         timing_pairs: int = 20,
         timing_warmup: int = 3,
         determinism_runs: int = 5,
@@ -99,6 +102,14 @@ class PersistentWorker:
         self.problem = get_problem(problem_name)
         self.problem_name = problem_name
         self.smoke = smoke
+        # The adversarial library is built on ONE shape case (`tiny` by
+        # default). Its shapes are exported alongside the scored ones, so a
+        # judge running a non-default case set would silently require every
+        # candidate to trace at shapes no prompt ever declared. Both knobs
+        # exist to keep the graded contract equal to the published one.
+        self.use_adversarial = use_adversarial
+        if adversarial_case:
+            self.problem.adversarial_case_name = adversarial_case
         self.timing_pairs = timing_pairs
         self.timing_warmup = timing_warmup
         self.determinism_runs = determinism_runs
@@ -171,7 +182,7 @@ class PersistentWorker:
             ]
             probes += [
                 (a, lambda a=a, i=i: a.make_inputs(jax.random.fold_in(k_warm, 1000 + i)))
-                for i, a in enumerate(self.problem.adversarial_cases())
+                for i, a in enumerate(self.adversarial_cases())
             ]
             for _what, make in probes:
                 inputs = make()
@@ -211,8 +222,16 @@ class PersistentWorker:
             "calibration_warm_s": cal_warm_s,
             "calibration_warm_error": cal_warm_err,
             "boot_s": self.perf() - t0,
+            "baseline_impl": getattr(self.problem, "baseline_impl", None),
+            "cases": [c.name for c in self.scored_cases],
+            "holdout_cases": [c.name for c in self.holdout_cases],
+            "adversarial": self.use_adversarial,
         }
         return self.boot_report
+
+    def adversarial_cases(self):
+        """The adversarial vector library, or nothing when it is disabled."""
+        return self.problem.adversarial_cases() if self.use_adversarial else []
 
     # ------------------------------------------------------------ signatures
     def _signatures(self):
@@ -235,7 +254,7 @@ class PersistentWorker:
         for case in self.scored_cases + self.holdout_cases:
             case_sig[case.name] = sig_of(self.problem.abstract_inputs(case), "fwd", case.name)
         adv_sig = {}
-        for i, adv in enumerate(self.problem.adversarial_cases()):
+        for i, adv in enumerate(self.adversarial_cases()):
             abstract = jax.eval_shape(adv.make_inputs, jax.ShapeDtypeStruct((2,), "uint32"))
             adv_sig[adv.name] = sig_of(abstract, "fwd", f"adv:{adv.name}")
         grad_sig = None
@@ -272,6 +291,7 @@ class PersistentWorker:
 
         def fail(gate, why, terminal=False):
             result.update(passed=False, gate=gate, violations=[why], reward=0.0)
+            observation.attach_observation(result)
             if terminal:
                 # A terminal verdict is a property of the CANDIDATE, not of
                 # the judge that happened to draw it, so the queue must not
@@ -324,6 +344,7 @@ class PersistentWorker:
                 violations=child.get("violations", [child.get("error", "export failed")]),
                 reward=0.0,
             )
+            observation.attach_observation(result)
             self._store(code, result)
             return result
 
@@ -355,7 +376,7 @@ class PersistentWorker:
                     inputs = problem.make_inputs(fold_in(fold_in(k_corr, g), hash_stable(case.name)), case)
                     block(inputs)
                     fixtures.append((f"{case.name}#seed{g}", case_sig[case.name], inputs))
-            for i, adv in enumerate(problem.adversarial_cases()):
+            for i, adv in enumerate(self.adversarial_cases()):
                 inputs = adv.make_inputs(fold_in(k_adv, i))
                 block(inputs)
                 fixtures.append((f"adv:{adv.name}", adv_sig[adv.name], inputs))
@@ -509,6 +530,7 @@ class PersistentWorker:
             export_child_s=child.get("export_s"),
             cache_hit=False,
         )
+        observation.attach_observation(result)
         self._store(code, result)
         return result
 
@@ -598,6 +620,7 @@ class PersistentWorker:
             "candidate_compile_s": elapsed,
             "judge_restarted": True,
         }
+        observation.attach_observation(result)
         self._store(code, result)
         print(f"[worker {self.worker_id}] COMPILE BUDGET: {why}", flush=True)
         poster = self.terminal_poster
@@ -838,12 +861,28 @@ def poll_loop(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--problem", required=True)
+    ap.add_argument(
+        "--problem",
+        required=True,
+        help="problem name, or a ';'-separated list of 'name[:case1,case2,...]' to serve "
+        "several problems from ONE chip (dispatch is on the payload's `problem` field). "
+        "The arena's rule that a judge only answers for the problem it was launched with "
+        "is unchanged -- the launch flag just names more than one.",
+    )
     ap.add_argument("--queue", required=True)
     ap.add_argument("--worker-id", default=None)
     ap.add_argument("--sim-mode", choices=["real", "mock"], default="real")
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--cases", default=None, help="comma-separated case names")
+    ap.add_argument(
+        "--no-adversarial",
+        action="store_true",
+        help="skip the adversarial vector library. Its shapes are exported alongside the "
+        "scored ones, so on a non-default case set it would require candidates to trace at "
+        "shapes no prompt declared. Anti-cheat relevance is a trained policy gaming the "
+        "judge; a base-model probe has no policy.",
+    )
+    ap.add_argument("--adversarial-case", default=None, help="shape case the adversarial library is built on")
     ap.add_argument("--timing-pairs", type=int, default=20)
     ap.add_argument("--grade-budget-s", type=float, default=900.0, help="0 disables the per-grade wall budget")
     ap.add_argument(
@@ -894,25 +933,58 @@ def main() -> None:
             from pallas_arena.judge.cache import RewardCache
 
             cache = RewardCache(args.cache)
-        w = PersistentWorker(
-            args.problem,
-            smoke=args.smoke,
-            cases=args.cases.split(",") if args.cases else None,
-            timing_pairs=args.timing_pairs,
-            grade_budget_s=args.grade_budget_s or None,
-            compile_budget_s=args.compile_budget_s or None,
-            cache=cache,
-            worker_id=worker_id,
-        )
-        attach = lambda poster: setattr(w, "terminal_poster", poster)  # noqa: E731
-        report = w.boot()
-        print(f"[worker {worker_id}] boot: {json.dumps(report, default=str)}", flush=True)
+        workers: dict[str, PersistentWorker] = {}
+        reports: dict[str, dict] = {}
+        for spec in args.problem.split(";"):
+            spec = spec.strip()
+            if not spec:
+                continue
+            name, _, case_str = spec.partition(":")
+            case_list = (case_str or args.cases or "").split(",") if (case_str or args.cases) else None
+            w = PersistentWorker(
+                name,
+                smoke=args.smoke,
+                cases=[c for c in case_list if c] if case_list else None,
+                use_adversarial=not args.no_adversarial,
+                adversarial_case=args.adversarial_case,
+                timing_pairs=args.timing_pairs,
+                grade_budget_s=args.grade_budget_s or None,
+                compile_budget_s=args.compile_budget_s or None,
+                cache=cache,
+                worker_id=worker_id,
+            )
+            reports[name] = w.boot()
+            print(f"[worker {worker_id}] boot {name}: {json.dumps(reports[name], default=str)}", flush=True)
+            if not reports[name].get("ok"):
+                # One dead problem must not silently take the others with it,
+                # but it must be loud: record it and keep serving the rest.
+                print(f"[worker {worker_id}] BOOT FAILED for {name}; it will not be served", flush=True)
+                continue
+            workers[name] = w
         if args.boot_report:
-            Path(args.boot_report).write_text(json.dumps(report, indent=1, default=str))
-        if not report.get("ok"):
+            Path(args.boot_report).write_text(json.dumps(reports, indent=1, default=str))
+        if not workers:
             raise SystemExit(1)
+        default_name = next(iter(workers))
+        # The terminal poster belongs to whichever worker is mid-grade.
+        holder = {"w": workers[default_name]}
+        attach = lambda poster: setattr(holder["w"], "terminal_poster", poster)  # noqa: E731
 
         def grade_fn(payload):
+            name = payload.get("problem") or default_name
+            w = workers.get(name)
+            if w is None:
+                return {
+                    "ok": True,
+                    "passed": False,
+                    "gate": "harness",
+                    "reward": 0.0,
+                    "problem": name,
+                    "violations": [f"this judge does not serve problem {name!r}"],
+                }
+            prev = holder["w"]
+            holder["w"] = w
+            w.terminal_poster = prev.terminal_poster
             return w.grade_code(
                 payload["code"],
                 enforce_pallas=payload.get("enforce_pallas"),

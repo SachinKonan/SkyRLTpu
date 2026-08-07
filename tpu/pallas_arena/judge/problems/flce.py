@@ -95,6 +95,19 @@ class FLCEProblem(Problem):
                 {"n": 36864, "h": 4096, "v": 131072, "tile": BASELINE_TILE_TOKENS},
                 holdout=True,
             ),
+            # PROBE set: same op, one-chip size. The production reference
+            # materializes [n, v] fp32 (44.8 GB at 73728x151936), which no
+            # 32 GB judge can hold; at n=4096 it is 2.5 GB. Vocab and hidden
+            # width are UNCHANGED -- only the token axis shrinks -- so the
+            # LSE-at-150k-vocab difficulty the task exists for is intact.
+            ShapeCase("probe-4096x2880x151936", {"n": 4096, "h": 2880, "v": 151936, "tile": 2048}, probe=True),
+            ShapeCase("probe-2048x2880x151936", {"n": 2048, "h": 2880, "v": 151936, "tile": 2048}, probe=True),
+            ShapeCase(
+                "probe-holdout-3000x2880x151936",
+                {"n": 3000, "h": 2880, "v": 151936, "tile": 2048},
+                holdout=True,
+                probe=True,
+            ),
             # CPU battery cases (non-divisible n exercises the pad path)
             ShapeCase("tiny", {"n": 64, "h": 32, "v": 997, "tile": 16}, smoke=True),
             ShapeCase("tiny-ragged", {"n": 45, "h": 32, "v": 997, "tile": 16}, smoke=True),
@@ -139,7 +152,7 @@ class FLCEProblem(Problem):
         return jax.grad(scalar)(hidden.astype(jnp.float32))
 
     def adversarial_cases(self):
-        tiny = self.case_by_name("tiny")
+        tiny = self.case_by_name(self.adversarial_case_name)
 
         def label_in_tail(key):
             hidden, w, targets = self.make_inputs(key, tiny)
