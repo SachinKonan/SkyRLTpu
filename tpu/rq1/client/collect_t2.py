@@ -97,8 +97,20 @@ async def run(args):
         "seed_score": meta.get("seed_score"),
         "started": time.strftime("%F %T")}, indent=2))
 
-    todo = [i for i in range(args.n)
-            if not (args.resume and (out / "raw" / f"t2_{i:03d}.json").exists())]
+    def collected(i):
+        """A raw file exists for FAILED requests too (it records the error), so resuming on
+        mere existence silently abandons every sample lost to a preemption. Only a raw file
+        with actual model output counts as collected."""
+        f = out / "raw" / f"t2_{i:03d}.json"
+        if not f.exists():
+            return False
+        try:
+            d = json.loads(f.read_text())
+        except Exception:
+            return False
+        return not d.get("error") and bool((d.get("text") or "") or (d.get("think") or ""))
+
+    todo = [i for i in range(args.n) if not (args.resume and collected(i))]
     print(f"[t2] {args.problem} cell={args.cell}: {len(todo)}/{args.n} samples, "
           f"conc={args.concurrency}, model={args.model}", flush=True)
     sem = asyncio.Semaphore(args.concurrency)

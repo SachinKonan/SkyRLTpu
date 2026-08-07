@@ -25,7 +25,10 @@ case "$KEY" in
   *) echo "unknown model key $KEY" >&2; exit 2 ;;
 esac
 
-have() { ls "$OUT"/raw/*.json 2>/dev/null | wc -l; }
+# Count only SUCCESSFUL samples: a failed request also leaves a raw/*.json (holding its error),
+# so counting files would call a preempted cell complete (measured: ac1_D showed 200 files for
+# 137 real samples).
+have() { grep -L '"error"' "$OUT"/raw/*.json 2>/dev/null | wc -l; }
 
 for r in $(seq 1 "$ROUNDS"); do
   H=$(have)
