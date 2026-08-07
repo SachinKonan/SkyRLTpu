@@ -80,7 +80,15 @@ class Probe:
                 continue
             self.samplers[key] = VllmSampler(url, spec.hf_id)
         self.configs = [c for c in self.configs if c.model in self.samplers]
-        self.sigs = {t: probe_signatures(t, C.TASK_CASES[t]) for t in {c.task for c in self.configs}}
+        # probe_signatures returns (sigs, case_sig, adv_sig, grad_sig); the
+        # export child wants ONLY the first element. Passing the whole tuple
+        # made the child iterate (sigs, case_sig, ...) and do `sig["args"]`
+        # on a LIST, so every candidate that was well-formed enough to REACH
+        # export died at gate `aot_export` with
+        #   TypeError: list indices must be integers or slices, not str
+        # -- a harness fault wearing a candidate's clothes. It cost 14 of 32
+        # arm-2 candidates before it was caught.
+        self.sigs = {t: probe_signatures(t, C.TASK_CASES[t])[0] for t in {c.task for c in self.configs}}
         self.queue = ArenaQueueClient(args.queue, timeout_s=120.0) if args.queue else None
         self.pool = ProcessPoolExecutor(max_workers=args.pregate_workers)
         self.judge_pending: dict[str, dict] = {}
