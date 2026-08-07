@@ -36,6 +36,11 @@ def check(name: str, ok: bool, detail=""):
 
 # --------------------------------------------------------------- candidates
 NO_KERNEL = "import jax\nx = 1\n"
+NO_ENTRYPOINT_PALLAS = (
+    "import jax\nimport jax.numpy as jnp\nfrom jax.experimental import pallas as pl\n"
+    "def not_the_entrypoint(q, k, v, segment_ids):\n"
+    "    return pl.pallas_call(lambda a, o: None, out_shape=q)(q)\n"
+)
 SYNTAX_BOOM = "def kernel(q, k, v, segment_ids)\n    return q\n"
 BANNED = (
     "import jax\n"
@@ -98,11 +103,17 @@ def kernel(hidden, w, targets):
 '''
 
 EXPECT = {
+    # The AST gate runs FIRST and, for a require_pallas task, also enforces
+    # "there is a real pallas_call in here" -- so a splash candidate with no
+    # kernel, or one that will not even parse, dies at `ast` before exec is
+    # ever reached. That is the judge behaving correctly; the probe's gate
+    # histogram just has to be read with it in mind.
     "splash_attention": [
-        ("no-kernel", NO_KERNEL, {"exec"}),
-        ("syntax-error", SYNTAX_BOOM, {"exec"}),
+        ("no-kernel", NO_KERNEL, {"ast"}),
+        ("syntax-error", SYNTAX_BOOM, {"ast"}),
         ("banned-import", BANNED, {"ast"}),
         ("no-pallas-call", NO_PALLAS_SPLASH, {"ast"}),
+        ("pallas-but-no-entrypoint", NO_ENTRYPOINT_PALLAS, {"exec"}),
     ],
     "flce": [
         ("no-kernel", NO_KERNEL, {"exec"}),

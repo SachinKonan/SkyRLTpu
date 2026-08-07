@@ -16,16 +16,16 @@ export PYTHONPATH="${repo_root}/tpu:${PYTHONPATH:-}"
 export JAX_PLATFORMS=cpu
 
 echo "=== observation unit battery ==="
-uv run --isolated --extra dev --extra jax python -m pytest \
+uv run --isolated --extra dev --extra jax --with flatbuffers python -m pytest \
   tpu/pallas_arena/tests/test_observation.py -q -p no:cacheprovider
 rc1=$?
 
 echo "=== probe dry run ==="
-uv run --isolated --extra dev --extra jax python tpu/pallas_arena/probe/dryrun.py
+uv run --isolated --extra dev --extra jax --with flatbuffers python tpu/pallas_arena/probe/dryrun.py
 rc2=$?
 
 echo "=== legacy arena battery (regression: the probe must not have broken it) ==="
-uv run --isolated --extra dev --extra jax python -m pytest \
+uv run --isolated --extra dev --extra jax --with flatbuffers python -m pytest \
   tpu/pallas_arena/tests/ -q -p no:cacheprovider -x --timeout=900
 rc3=$?
 
