@@ -27,6 +27,7 @@ from pathlib import Path
 import httpx
 
 HERE = Path(__file__).resolve().parent
+ATTEMPTS = 8
 
 
 def sha(s):
@@ -46,7 +47,10 @@ async def one(i, cli, args, prompt, out, lock):
             "messages": [{"role": "user", "content": prompt}]}
     if args.extra_body:
         body.update(json.loads(args.extra_body))
-    for attempt in range(4):
+    # Patient retries: the SSH tunnel to the farm drops on transient gcloud faults and can stay
+    # down for a couple of minutes while it reconnects, with the TPU perfectly healthy. Total
+    # tolerance here is ~5 min, which comfortably outlasts a reconnect.
+    for attempt in range(ATTEMPTS):
         try:
             r = await cli.post(
                 f"{args.farm_url.rstrip('/')}/v1/chat/completions",
@@ -56,10 +60,10 @@ async def one(i, cli, args, prompt, out, lock):
             data = r.json()
             break
         except Exception as e:
-            if attempt == 3:
+            if attempt == ATTEMPTS - 1:
                 rawf.write_text(json.dumps({"id": sid, "error": str(e)[:400]}))
                 return sid, "request-failed"
-            await asyncio.sleep(10 * (attempt + 1))
+            await asyncio.sleep(min(60, 10 * (attempt + 1)))
     msg = data["choices"][0]["message"]
     think = msg.get("reasoning_content") or ""
     text = msg.get("content") or ""

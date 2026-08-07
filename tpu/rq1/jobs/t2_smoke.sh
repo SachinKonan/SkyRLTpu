@@ -18,12 +18,24 @@ RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1
 PORT=$((18000 + RANDOM % 1000))
 
 echo "[t2smoke] tunnel localhost:$PORT -> $TPU_NAME worker1:8001"
-gcloud alpha compute tpus tpu-vm ssh "sk7524_princeton_edu@$TPU_NAME" \
-  --project=vision-mix --zone=us-east5-a --worker=1 \
-  --ssh-key-file="$HOME/.ssh/jobman_tpu_ed25519" \
-  -- -L "$PORT:localhost:8001" -N -o ServerAliveInterval=60 -o ExitOnForwardFailure=yes &
+# Self-healing tunnel. gcloud's ssh wrapper drops with rc=255 on transient faults and its
+# internal retry leaves the forward DOWN for longer than a client retry window -- measured:
+# health check passed, then 5/5 requests died with "All connection attempts failed" while the
+# TPU itself stayed ACTIVE. So supervise it and reconnect immediately, for the whole run.
+tunnel_loop() {
+  while :; do
+    gcloud alpha compute tpus tpu-vm ssh "sk7524_princeton_edu@$TPU_NAME" \
+      --project=vision-mix --zone=us-east5-a --worker=1 \
+      --ssh-key-file="$HOME/.ssh/jobman_tpu_ed25519" \
+      -- -L "$PORT:localhost:8001" -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+         -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=no >/dev/null 2>&1
+    echo "[t2smoke] tunnel dropped (rc=$?); reconnecting in 10s"
+    sleep 10
+  done
+}
+tunnel_loop &
 TUN=$!
-trap 'kill $TUN 2>/dev/null' EXIT
+trap 'kill -- -$$ 2>/dev/null; kill $TUN 2>/dev/null' EXIT
 
 echo "[t2smoke] waiting for vLLM health (up to 75 min: model load + XLA compile)..."
 for i in $(seq 1 150); do
