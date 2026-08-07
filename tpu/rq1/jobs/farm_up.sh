@@ -55,14 +55,20 @@ jobman_cli() { (cd "/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/jobman" && PYTH
 
 jid=$(grep -l "name: ${TPU_NAME}" "$JM"/jobs/sk7524/*/config.yaml 2>/dev/null | tail -1 \
       | sed -E 's|.*/([0-9]+)/config.yaml|\1|')
-if [[ -z "$jid" ]]; then
-  echo "[farm] jobman create $YAML"
+# If the QR is ABSENT (deleted, not merely suspended), `jobman run` on the existing job record
+# does NOT re-request it -- its state file already considers the request placed. That hole span
+# 10 dead supervisor rounds ("QR vanished while waiting") with no provisioning at all. A fresh
+# `create` from the YAML always places a new request, so use it whenever there is no QR.
+if [[ -z "$(state)" || -z "$jid" ]]; then
+  echo "[farm] no live QR -> jobman create $YAML (fresh request)"
   jid=$(jobman_cli create "$YAML" 2>&1 | tee /dev/stderr | grep -oE 'Created job [0-9]+' | grep -oE '[0-9]+' | head -1)
   [[ -n "$jid" ]] || { echo "[farm] create failed" >&2; exit 1; }
+  tmux kill-session -t "job_${jid}" 2>/dev/null || true
+else
+  tmux kill-session -t "job_${jid}" 2>/dev/null || true   # the broken detached worker, if any
+  echo "[farm] jobman run $jid (pass 1: submits the QR request, returns without waiting)"
+  jobman_cli run "$jid" || true
 fi
-tmux kill-session -t "job_${jid}" 2>/dev/null || true   # the broken detached worker, if any
-echo "[farm] jobman run $jid (pass 1: submits the QR request, returns without waiting)"
-jobman_cli run "$jid" || true
 
 echo "[farm] waiting for ACTIVE (spot queue can take a while)..."
 while true; do
@@ -70,7 +76,13 @@ while true; do
   echo "[farm] $(date '+%T') state=$st"
   [[ "$st" == "ACTIVE" ]] && break
   [[ "$st" == "SUSPENDED" || "$st" == "FAILED" ]] && { echo "[farm] QR died while waiting" >&2; exit 1; }
-  [[ -z "$st" ]] && { echo "[farm] QR vanished while waiting" >&2; exit 1; }
+  if [[ -z "$st" ]]; then
+    # vanished mid-wait: re-request once rather than failing the whole round
+    echo "[farm] QR vanished while waiting -> re-creating"
+    jid=$(jobman_cli create "$YAML" 2>&1 | grep -oE 'Created job [0-9]+' | grep -oE '[0-9]+' | head -1)
+    [[ -n "$jid" ]] || { echo "[farm] re-create failed" >&2; exit 1; }
+    sleep 30
+  fi
   sleep 60
 done
 
