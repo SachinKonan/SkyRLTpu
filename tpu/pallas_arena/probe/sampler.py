@@ -58,6 +58,20 @@ class VllmSampler:
         except Exception:
             return False
 
+    def count_tokens(self, text: str) -> int | None:
+        """Exact prompt length from the SERVER's own tokenizer. None if the
+        endpoint is unavailable, so the caller can fall back conservatively."""
+        try:
+            r = self._post(
+                "/tokenize",
+                {"model": self.model, "prompt": text, "add_special_tokens": False},
+                timeout=120.0,
+            )
+            n = r.get("count")
+            return int(n) if isinstance(n, int) else None
+        except Exception:
+            return None
+
     def wait_ready(self, deadline_s: float, poll_s: float = 15.0) -> bool:
         end = time.time() + deadline_s
         while time.time() < end:

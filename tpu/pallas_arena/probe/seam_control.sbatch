@@ -43,7 +43,7 @@ rc=$(( rc + ${PIPESTATUS[0]} ))
 echo
 echo "=== arena regression battery $(date +%H:%M:%S) ==="
 uv run --isolated --extra dev --extra jax --with flatbuffers \
-  python -m pytest tpu/pallas_arena/tests -q -x --timeout=1800 2>&1 | tail -30
+  python -m pytest tpu/pallas_arena/tests -q 2>&1 | tail -40
 rc=$(( rc + ${PIPESTATUS[0]} ))
 
 echo "=== seam control done rc=${rc} $(date +%H:%M:%S) ==="

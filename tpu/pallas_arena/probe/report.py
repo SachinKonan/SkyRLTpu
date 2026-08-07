@@ -24,20 +24,58 @@ def _f(x, n=4):
 
 
 def table(summary: dict) -> str:
+    """The comparison table. The last two columns are the point of the run:
+    a group's within-group spread is only signal RELATIVE to the judge's own
+    measured noise floor, and `tailored|flce` passed 16/16 last run with a
+    spread of 0.0042 against floors of 0.0069/0.0158 -- nominally non-uniform,
+    actually pure timing jitter."""
+    floors = summary.get("noise_floors", {})
     rows = [
-        "| model | variant | task | n | export | compile | correct | nonzero R | mean | median | max | "
-        "**non-uniform groups** |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| model | variant | task | n | export | compile | correct | nonzero R | mean | max | "
+        "spread | floor | spread/floor | **signal groups** |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, c in summary["per_config"].items():
         model, variant, task = name.split("|")
         s = c["score_all"]
+        spread = c.get("max_within_group_spread")
+        floor = floors.get(task)
+        ratio = (spread / floor) if (spread and floor) else None
         rows.append(
             f"| {model} | {variant} | {task} | {c['n_judged']} | {_pct(c['export_rate'])} | "
             f"{_pct(c['compile_rate'])} | {_pct(c['correctness_rate'])} | {_pct(c['nonzero_reward_rate'])} | "
-            f"{_f(s.get('mean'))} | {_f(s.get('median'))} | {_f(s.get('max'))} | "
-            f"**{c['nonuniform_groups']}/{c['complete_groups']}** |"
+            f"{_f(s.get('mean'))} | {_f(s.get('max'))} | {_f(spread)} | {_f(floor)} | "
+            f"{'-' if ratio is None else f'{ratio:.1f}x'} | "
+            f"**{c['signal_groups']}/{c['complete_groups']}** |"
         )
+    return "\n".join(rows)
+
+
+def seam_vs_reference(summary: dict) -> str:
+    """The one table the run exists to produce: seam against reference, per
+    task, on the metric that decides whether RL has a gradient to climb."""
+    floors = summary.get("noise_floors", {})
+    cells = summary["by_task_variant"]
+    tasks = sorted({k.split("|")[0] for k in cells})
+    rows = [
+        "| task | noise floor | variant | judged | export | PASS | max reward | max spread | "
+        "spread/floor | **signal groups** |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for t in tasks:
+        floor = floors.get(t)
+        for v in ("reference", "seam"):
+            c = cells.get(f"{t}|{v}")
+            if not c:
+                continue
+            spread = c.get("max_within_group_spread")
+            ratio = (spread / floor) if (spread and floor) else None
+            rows.append(
+                f"| {t} | {_f(floor)} | {v} | {c['n_judged']} | {_pct(c['export_rate'])} | "
+                f"{_pct(c['correctness_rate'])} | {_f(c['score_all'].get('max'))} | {_f(spread)} | "
+                f"{'-' if ratio is None else f'{ratio:.1f}x'} | "
+                f"**{c['signal_groups']}/{c['complete_groups']}** |"
+            )
     return "\n".join(rows)
 
 
@@ -66,13 +104,16 @@ def rollups(summary: dict) -> str:
     out = []
     for key, title in (("by_variant", "prompt variant"), ("by_model", "model"), ("by_task", "task")):
         out.append(f"\n**By {title}**\n")
-        out.append("| " + title + " | n | export | compile | correct | mean | max | non-uniform groups |")
-        out.append("|---|---|---|---|---|---|---|---|")
+        out.append("| " + title + " | n | export | compile | correct | mean | max | median fill ch | "
+                   "signal groups | non-uniform groups |")
+        out.append("|---|---|---|---|---|---|---|---|---|---|")
         for k, c in summary[key].items():
             s = c["score_all"]
             out.append(
                 f"| {k} | {c['n_judged']} | {_pct(c['export_rate'])} | {_pct(c['compile_rate'])} | "
                 f"{_pct(c['correctness_rate'])} | {_f(s.get('mean'))} | {_f(s.get('max'))} | "
+                f"{c.get('median_fill_chars', '-')} | "
+                f"{c['signal_groups']}/{c['complete_groups']} | "
                 f"{c['nonuniform_groups']}/{c['complete_groups']} |"
             )
     return "\n".join(out)
@@ -110,6 +151,7 @@ def main() -> int:
     summary = json.loads(Path(args.summary).read_text())
     recs = [json.loads(ln) for ln in Path(args.jsonl).read_text().splitlines() if ln.strip()]
     md = "\n\n".join([
+        "## Seam vs reference, per task\n\n" + seam_vs_reference(summary),
         "## Full metric table\n\n" + table(summary),
         "## Gate histogram\n\n" + gate_tables(summary),
         "## Score distribution\n\n" + dist_tables(summary),
