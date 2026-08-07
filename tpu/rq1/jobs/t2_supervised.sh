@@ -27,8 +27,22 @@ esac
 
 # Count only SUCCESSFUL samples: a failed request also leaves a raw/*.json (holding its error),
 # so counting files would call a preempted cell complete (measured: ac1_D showed 200 files for
-# 137 real samples).
-have() { grep -L '"error"' "$OUT"/raw/*.json 2>/dev/null | wc -l; }
+# 137 real samples). Parse the JSON rather than grepping for '"error"' -- generated code
+# routinely contains that literal, which would undercount and trigger endless re-collection.
+have() {
+python3 - "$OUT" <<'PY'
+import glob, json, sys
+n = 0
+for f in glob.glob(sys.argv[1] + "/raw/*.json"):
+    try:
+        d = json.load(open(f))
+    except Exception:
+        continue
+    if not d.get("error") and ((d.get("text") or "") or (d.get("think") or "")):
+        n += 1
+print(n)
+PY
+}
 
 for r in $(seq 1 "$ROUNDS"); do
   H=$(have)
