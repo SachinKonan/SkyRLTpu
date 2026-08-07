@@ -323,7 +323,68 @@ therefore run concurrently and share engine throughput, and both are
 reported — arm 1 is a genuine measurement of what thinking-mode costs on this
 task, not a wasted run.
 
-*(arm-2 tables filled in at the end of the run)*
+Raising the budget worked as intended: at 12000 tokens **13/32 generations
+finished at `stop`** rather than `length`, median extracted program went from
+331 → 2 200 characters, and `pallas_call` appeared in 26/32 rather than 13/80.
+
+### Arm 2 also exposed a HARNESS BUG, and it was the bigger problem
+
+Of arm 2's first 32 candidates, **14 died at `aot_export` with the identical
+message**
+
+```
+TypeError: list indices must be integers or slices, not str
+```
+
+Fourteen byte-identical failures are not fourteen independent candidate bugs.
+`probe_signatures()` returns a 4-tuple `(sigs, case_sig, adv_sig, grad_sig)`;
+the driver stored the **whole tuple** and handed it to the export child as
+`export_signatures`, so the child iterated `(sigs, case_sig, …)` and evaluated
+`sig["args"]` on a **list**. A harness fault wearing a candidate's clothes —
+and it destroyed exactly the candidates that were well-formed enough to
+*reach* export. Fixed in `05c4847f`.
+
+### The control experiment — the harness is sound
+
+Because a grid of zeros is only evidence about *models* if the path is known
+to pass a correct kernel, `probe/control.py` pushes **known-good** kernels
+through the identical pipeline — wrapped in a model-style response with a
+decoy code block first, then `extract_program` → CPU AOT pre-gate → queue →
+judge:
+
+| control kernel | extraction | pre-gate | judge |
+|---|---|---|---|
+| `rmsnorm/pallas-br256` — green on silicon in phases 2, 4 and 5 | picks the real block, not the decoy | **PASS** (2.42 s) | n/a (not served by this judge) |
+| `flce-known-good` | picks the real block | **PASS** (1.47 s) | **PASS, gate `all`, reward 0.6981** |
+| `splash-scaffold-filled` (the prompt's own scaffold, blank filled) | picks the real block | **PASS** (1.97 s) | compiled and ran; `correctness`, max err 4.11e-3 vs tol 3.48e-3 |
+
+The FLCE control's judge observation, verbatim:
+
+```
+GATE all | flce | PASS reward=0.6981
+probe-4096x2880x151936: cand 10.095ms vs ref 6.868ms (0.680x)
+probe-2048x2880x151936: cand 4.650ms vs ref 3.312ms (0.712x)
+probe-holdout-3000x2880x151936: cand 7.087ms vs ref 6.886ms (0.972x)
+peak HBM 30.50GB
+```
+
+**3/3 reached a chip and one earned a non-zero reward**, so extraction, the
+entrypoint name, the signature set, the import environment and the pre-gate
+configuration are all correct end to end. The splash control is a useful
+calibration in its own right: the prompt's scaffold with a textbook
+online-softmax fill *compiles and runs on TPU at all three declared shapes*
+and lands within 18% of the correctness tolerance — the task is reachable,
+not absurd.
+
+### Arm 3 — the corrected grid
+
+Launched 10:22:30 with the signature fix and `max_tokens = 12000`
+(`probe-results-fixed-3650240`). The arm-1 driver cannot be killed — it is the
+sbatch's foreground child, so killing it would run the teardown and delete
+both QRs — so it keeps running and shares engine throughput; its records stay
+in a separate file and are reported only as the truncation measurement.
+
+*(arm-3 tables filled in at the end of the run)*
 
 ## Verdict
 
