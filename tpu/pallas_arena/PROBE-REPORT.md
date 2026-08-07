@@ -384,7 +384,45 @@ sbatch's foreground child, so killing it would run the teardown and delete
 both QRs — so it keeps running and shares engine throughput; its records stay
 in a separate file and are reported only as the truncation measurement.
 
-*(arm-3 tables filled in at the end of the run)*
+**The headline arrived in arm 3's first round.** `gemma4-31b | minimal | flce`,
+16 generations: **10/16 survived the pre-gate**, all 10 were graded on the
+chip, and
+
+| verdict | n |
+|---|---|
+| `all` (**PASS**) | **2** |
+| `gradient` | 7 |
+| `correctness` | 1 |
+
+That group has **non-uniform reward** — two candidates earn a real score and
+eight earn zero — which is exactly the condition ttt-discover needs to produce
+a gradient. A base model, on the *minimal* prompt, with no RL, wrote a fused
+linear cross-entropy kernel that passed correctness on hidden seeds,
+bitwise determinism, the `custom_vjp` gradient check and the timed re-check.
+
+The 7 `gradient` failures are the single most informative number in the run:
+those candidates compiled and produced correct forward values, then failed
+`d/d(hidden)`. That is precisely the "a tiled forward is not enough, the
+backward must recompute per tile under `jax.custom_vjp`" lesson the task
+exists to teach — and it is a *dense*, learnable error signal rather than a
+flat zero.
+
+By contrast both `minimal | splash_attention` cells were 0/16 at the pre-gate,
+and the reason differs sharply by model:
+
+* **gemma4-31b**: 14/16 finished at `stop`, all 16 passed the AST gate (they
+  do write a real `pallas_call`), and they die at export on **hallucinated
+  API** — `pallas_call() got an unexpected keyword argument 'out_spec'` /
+  `'out_dtype'` / `'out_dtypes'` / `'out_shapes'` / `'block_shapes'`,
+  `pallas_call() missing 1 required positional argument: 'out_shape'`,
+  `module 'jax' has no attribute 'Shape'`, `module 'jax.experimental.pallas'
+  has no attribute 'Ref'`. The model knows the *shape* of a Pallas kernel and
+  invents the signature.
+* **qwen35-27b**: only 1/16 finished at `stop` — Qwen's thinking channel needs
+  **more than 12000 tokens** on this task, so most candidates are still
+  truncated fragments (6× `syntax error: unexpected indent`).
+
+*(remaining arm-3 tables filled in at the end of the run)*
 
 ## Verdict
 
