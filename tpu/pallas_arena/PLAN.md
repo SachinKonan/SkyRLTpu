@@ -142,20 +142,34 @@ deleted (zero pallas QRs/nodes remain).
   compilation) in PHASE4-REPORT.md.
 - CPU battery with the fixes: **126/126** green under sbatch (job 3646652).
 
-## Phase 5 — GRADING-SERVER FLEET DEMONSTRATION (user-scoped 08-06: NO RL)
+## Phase 5 — GRADING-SERVER FLEET DEMONSTRATION — **DONE 2026-08-06, ALL GREEN**
 The deliverable is proof the grading server works at fleet scale — not a
 training run. No v5p, no vLLM, no policy: a fixed corpus of candidate kernels
 is submitted through the queue and graded by 5 judges.
-- [ ] 5× spot v6e-1 (us-east5-b) all polling ONE queue (queue runs wherever —
-      login-adjacent host or a compute node).
-- [ ] Corpus: honest variants (block sizes, unjitted, bf16-out) + the full
-      cheater battery + a fast/slow spread, submitted as one batch.
-- [ ] Acceptance: every cheater rejected at the correct gate; every honest
-      candidate scored reproducibly (regrade within ±3%); ref-vs-ref 1.00±2%;
-      rewards byte-identical for repeats via the shared cache.
-- [ ] Chaos: kill a judge mid-lease → its work requeues and completes on the
-      survivors, no lost or double-counted results.
-- [ ] Measured fleet throughput (candidates/min) + zero resources left behind.
+- [x] **Prerequisite**: compile-warm deadline (`DEFAULT_COMPILE_BUDGET_S=90`,
+      ~2× the worst honest compile, strictly under the 240 s lease timeout),
+      two layers (between-unit check + a watchdog thread that POSTS the
+      terminal verdict before hard-exiting), the same budget reconciled into
+      the CPU AOT pre-gate, and a `compile-bomb` fixture. Battery **138/138**
+      under sbatch 3648630; CPU fleet simulation **12/12** under 3648631.
+- [x] 5× spot v6e-1 (us-east5-b) all polling ONE queue (queue on a neuronic
+      compute node). Landed 5/5 in **7.0 min**; boot 56.3–58.3 s each.
+- [x] Corpus: **1599 salted candidates** across 20 variants + **100
+      duplicates** = 1699 queue items, submitted as one batch.
+- [x] Acceptance: **1599/1599 verdicts at the correct gate** (no variant split
+      across two gates); regrade worst **max** dev **1.60%**; ref-vs-ref
+      median 0.306% / worst 1.462% across all 15 judge×case measurements;
+      **100/100** duplicates byte-identical from the shared GCS cache at
+      65.9 ms median (85× a real grade).
+- [x] Cross-judge agreement (the new fleet property): worst **0.794%**.
+- [x] Chaos: judge-4 SIGKILLed mid-lease → requeued → completed on judge-2,
+      `attempts=2`, 248 s; **1699 submitted / 1699 completed / 0 duplicates**.
+- [x] Throughput **52.4 candidates/min** over everything, **64.9/min** steady
+      state (prediction was 50–60). **≈3.8 chip-hours**; zero QRs and zero TPU
+      nodes left in either us-east5-b or us-east5-a, verified independently.
+Attempt 1 (3648750) graded nothing: a bare `wait` blocked on the queue server,
+and the same bug sat on two teardown paths — fixed in `fbb68d67`, cost 0.67
+chip-hours. Full scorecard in PHASE5-REPORT.md; run 3648773.
 
 ## (deferred, NOT now) The real RL run: v5p + fleet
 - [ ] `examples/pallas_arena/` env in discover (gpu_mode pattern): prompt =
