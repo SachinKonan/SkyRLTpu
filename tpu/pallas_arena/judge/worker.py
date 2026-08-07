@@ -70,6 +70,43 @@ from pallas_arena.judge import timing as timing_mod
 DEFAULT_COMPILE_BUDGET_S = 90.0
 
 
+def build_signatures(problem, scored_cases, holdout_cases, adv_cases):
+    """Deduped input signatures the sandbox child must export: shape cases +
+    adversarial shapes + the gradient functional. Shapes are public.
+
+    Module-level so a CLIENT-side AOT pre-gate exports the EXACT same
+    signature set the judge will demand. If the two ever diverge the pre-gate
+    stops being a pre-gate: it would pass candidates the judge rejects (or
+    worse, reject ones it would have accepted) and the gate histogram would
+    be measuring two different contracts.
+    """
+    import jax
+
+    sigs, seen = [], {}
+
+    def sig_of(abstract, kind, label):
+        args = [{"shape": list(a.shape), "dtype": str(a.dtype)} for a in abstract]
+        key = (kind, json.dumps(args))
+        if key in seen:
+            return seen[key]
+        name = f"{kind}{len(sigs):02d}"
+        sigs.append({"name": name, "kind": kind, "args": args, "label": label})
+        seen[key] = name
+        return name
+
+    case_sig = {}
+    for case in list(scored_cases) + list(holdout_cases):
+        case_sig[case.name] = sig_of(problem.abstract_inputs(case), "fwd", case.name)
+    adv_sig = {}
+    for adv in adv_cases:
+        abstract = jax.eval_shape(adv.make_inputs, jax.ShapeDtypeStruct((2,), "uint32"))
+        adv_sig[adv.name] = sig_of(abstract, "fwd", f"adv:{adv.name}")
+    grad_sig = None
+    if problem.has_bwd and scored_cases:
+        grad_sig = sig_of(problem.abstract_inputs(scored_cases[0]), "grad", "grad")
+    return sigs, case_sig, adv_sig, grad_sig
+
+
 class CompileBudgetExceeded(Exception):
     """Candidate blew the compile-warm deadline. Terminal: never requeued."""
 
@@ -235,32 +272,7 @@ class PersistentWorker:
 
     # ------------------------------------------------------------ signatures
     def _signatures(self):
-        """Deduped input signatures the child must export: shape cases +
-        adversarial shapes + the gradient functional. Shapes are public."""
-        jax = self.jax
-        sigs, seen = [], {}
-
-        def sig_of(abstract, kind, label):
-            args = [{"shape": list(a.shape), "dtype": str(a.dtype)} for a in abstract]
-            key = (kind, json.dumps(args))
-            if key in seen:
-                return seen[key]
-            name = f"{kind}{len(sigs):02d}"
-            sigs.append({"name": name, "kind": kind, "args": args, "label": label})
-            seen[key] = name
-            return name
-
-        case_sig = {}
-        for case in self.scored_cases + self.holdout_cases:
-            case_sig[case.name] = sig_of(self.problem.abstract_inputs(case), "fwd", case.name)
-        adv_sig = {}
-        for i, adv in enumerate(self.adversarial_cases()):
-            abstract = jax.eval_shape(adv.make_inputs, jax.ShapeDtypeStruct((2,), "uint32"))
-            adv_sig[adv.name] = sig_of(abstract, "fwd", f"adv:{adv.name}")
-        grad_sig = None
-        if self.problem.has_bwd and self.scored_cases:
-            grad_sig = sig_of(self.problem.abstract_inputs(self.scored_cases[0]), "grad", "grad")
-        return sigs, case_sig, adv_sig, grad_sig
+        return build_signatures(self.problem, self.scored_cases, self.holdout_cases, self.adversarial_cases())
 
     # ----------------------------------------------------------------- grade
     def grade_code(self, code: str, *, enforce_pallas: bool | None = None, tag=None) -> dict:

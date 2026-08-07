@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Bring up ONE sampling-only vLLM server on ONE v5p host (4 chips, TP=4).
+# Runs ON the TPU VM. Idempotent.
+#
+# Deliberately NOT tpu/start_vllm_tpu.sh: that script exists to serve a
+# TRAINING run -- it installs a tpu-inference fork purely for LoRA
+# forwarders, asserts those forwarders exist, and passes --enable-lora.
+# The probe pushes no adapters and trains nothing, so stock vllm-tpu is both
+# sufficient and one git-clone-and-build faster. The env vars below are the
+# ones that script sets and that actually matter off the LoRA path.
+set -euo pipefail
+
+MODEL="${MODEL:?MODEL required}"
+PORT="${PORT:-8001}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-16384}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
+HF_CACHE_GCS="${HF_CACHE_GCS:-}"
+XLA_CACHE_GCS="${XLA_CACHE_GCS:-}"
+LOG="${LOG:-$HOME/vllm-probe.log}"
+
+export PATH="$HOME/.local/bin:$PATH"
+command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+command -v tmux >/dev/null 2>&1 || sudo apt-get install -y -qq tmux
+
+VENV="$HOME/.venvs/vllm-tpu"
+if ! "$VENV/bin/python" -c "import vllm" >/dev/null 2>&1; then
+  uv venv --python 3.12 "$VENV"
+  uv pip install --python "$VENV/bin/python" "vllm-tpu==0.23.0"
+  uv pip install --python "$VENV/bin/python" hf_transfer || true
+fi
+
+export HF_HOME="$HOME/.cache/huggingface"
+export HF_HUB_ENABLE_HF_TRANSFER=1
+mkdir -p "$HF_HOME/hub"
+if [ -n "$HF_CACHE_GCS" ]; then
+  echo "restoring HF cache from ${HF_CACHE_GCS}"
+  gsutil -m -q rsync -r "$HF_CACHE_GCS" "$HF_HOME/hub" 2>/dev/null \
+    && echo "HF cache restored" || echo "HF cache restore failed (will download from the hub)"
+fi
+
+# The XLA cache goes on LOCAL disk, never the gcsfuse mount: writing it
+# during compile has flaked with "transport endpoint not connected".
+export VLLM_XLA_CACHE_PATH="$HOME/vllm-xla-cache-local"
+mkdir -p "$VLLM_XLA_CACHE_PATH"
+if [ -n "$XLA_CACHE_GCS" ]; then
+  gsutil -m -q rsync -r "$XLA_CACHE_GCS" "$VLLM_XLA_CACHE_PATH" 2>/dev/null \
+    && echo "XLA cache restored from ${XLA_CACHE_GCS}" || echo "XLA cache restore failed (will compile)"
+fi
+
+export MODEL_IMPL_TYPE=vllm          # required for the Qwen3.5 arch on TPU
+export TPU_BACKEND_TYPE=torchax
+export CLOUD_TPU_TASK_ID=0           # standalone single-host server
+# SKIP the all-buckets precompile. A cold 22k precompile has been measured at
+# ~55 min on this stack, which is a third of the probe's entire wall budget;
+# skipping it compiles the shapes we actually use, on first use.
+export SKIP_JAX_PRECOMPILE=1
+unset TPU_VISIBLE_CHIPS              # all 4 local chips, TP=4
+
+pkill -f "vllm serve" >/dev/null 2>&1 || true
+pkill -f "VLLM::EngineCore" >/dev/null 2>&1 || true
+sleep 3
+rm -f "$LOG"
+
+tmux kill-session -t vllm-probe >/dev/null 2>&1 || true
+tmux new-session -d -s vllm-probe \
+  "MODEL_IMPL_TYPE=vllm TPU_BACKEND_TYPE=torchax SKIP_JAX_PRECOMPILE=1 CLOUD_TPU_TASK_ID=0 \
+   HF_HOME='$HF_HOME' HF_HUB_ENABLE_HF_TRANSFER=1 VLLM_XLA_CACHE_PATH='$VLLM_XLA_CACHE_PATH' \
+   '$VENV/bin/vllm' serve '$MODEL' \
+     --served-model-name '$MODEL' \
+     --host 127.0.0.1 --port $PORT \
+     --tensor-parallel-size 4 \
+     --max-model-len $MAX_MODEL_LEN \
+     --max-num-seqs $MAX_NUM_SEQS \
+     --max-num-batched-tokens 4096 \
+     --download-dir '$HF_HOME/hub' \
+     2>&1 | tee -a '$LOG'"
+
+echo "serve_vllm: launched ${MODEL} on port ${PORT} (log ${LOG})"
