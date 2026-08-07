@@ -94,6 +94,55 @@ class Probe:
         self.pool = ProcessPoolExecutor(max_workers=args.pregate_workers)
         self.judge_pending: dict[str, dict] = {}
         self._prompt_tokens: dict[tuple[str, str, str], int] = {}
+        self.aborted: str | None = None
+        self.no_code_alarms = 0
+
+    def abort(self, why: str):
+        if self.aborted is None:
+            self.aborted = why
+            print(f"\n[probe] *** ABORTING THE GRID: {why} ***\n", flush=True)
+
+    # ------------------------------------------------------------- liveness
+    def engine_alive(self, model: str, *, retries: int = 1) -> tuple[bool, str]:
+        """ONE real completion, and it must come back with non-empty text.
+
+        `/v1/models` answering 200 is NOT evidence that the engine can
+        generate, and neither is a check that ran twenty minutes ago.
+        """
+        for attempt in range(retries + 1):
+            try:
+                spec = C.MODELS[model]
+                out = self.samplers[model].sample_group(
+                    R.render(spec.renderer, "Reply with the single word: OK"),
+                    1, max_tokens=16, temperature=0.0, stop=R.STOPS[spec.renderer], retries=0,
+                )
+                text = (out[0].get("text") or "").strip()
+                fr = out[0].get("finish_reason") or ""
+                if text and not str(fr).startswith("error:"):
+                    return True, f"ok ({text[:24]!r})"
+                why = f"empty text, finish_reason={fr!r}"
+            except Exception as e:
+                why = repr(e)
+            if attempt < retries:
+                time.sleep(20)
+        return False, why
+
+    def preflight(self) -> bool:
+        """HARD GATE before a single grid candidate is generated.
+
+        Two consecutive probe runs burned their whole budget sampling against
+        engines that were not serving -- first a two-host mesh hang, then a
+        spot preemption -- and both recorded a full grid of confident zeros
+        that means nothing. 640 of run 3650988's 672 rows were
+        `error:URLError(ConnectionRefused)` with gen_chars=0. Five seconds of
+        insurance in front of an hour of sampling.
+        """
+        ok = True
+        for model in sorted(self.samplers):
+            alive, why = self.engine_alive(model, retries=2)
+            print(f"[preflight] {model}: {'ALIVE' if alive else 'DEAD'} -- {why}", flush=True)
+            ok = ok and alive
+        return ok
 
     # ------------------------------------------------------------ budgeting
     def token_budget(self, cfg: C.ProbeConfig, text: str) -> int:
@@ -186,6 +235,34 @@ class Probe:
         gen_s = time.time() - t_gen
         print(f"[probe] {cfg.name} r{rnd}: {len(recs)} gens in {gen_s:.0f}s", flush=True)
 
+        # MID-RUN LIVENESS. A preemption happens in the middle, not at the
+        # start, so a pre-flight check alone would not have saved run 3650988:
+        # the engines answered at 14:12 and were gone by 14:25, and the grid
+        # then wrote 640 zero rows. If a whole group came back as transport
+        # errors, stop the run rather than keep recording zeros that read as
+        # model failures.
+        errs = sum(1 for r in recs if str(r.get("finish_reason", "")).startswith("error:"))
+        if errs == len(recs) and recs:
+            alive, why = self.engine_alive(cfg.model, retries=2)
+            if not alive:
+                self.abort(f"{cfg.model} stopped serving mid-run ({why}); "
+                           f"{cfg.name} r{rnd} returned {errs}/{len(recs)} transport errors")
+                return
+            print(f"[probe] {cfg.name} r{rnd}: whole group errored but {cfg.model} answers; continuing", flush=True)
+
+        # NO_CODE ALARM. The last good run's baseline was 14%; a config over
+        # 30% is a harness symptom (a truncating budget, a broken renderer, a
+        # bad extractor), not a finding about the model.
+        no_code = sum(1 for r in recs if not (r.get("code") or "").strip())
+        if recs and no_code / len(recs) > self.args.no_code_alarm:
+            print(f"[probe] ALARM {cfg.name} r{rnd}: {no_code}/{len(recs)} produced NO extractable code "
+                  f"(> {self.args.no_code_alarm:.0%}); this is a harness symptom, not a finding", flush=True)
+            self.no_code_alarms += 1
+            if self.no_code_alarms >= self.args.no_code_alarm_configs:
+                self.abort(f"{self.no_code_alarms} configurations exceeded the "
+                           f"{self.args.no_code_alarm:.0%} no-code rate; stopping to diagnose")
+                return
+
         sigs = self.sigs[cfg.task]
         futs = {
             i: self.pool.submit(pregate_one, cfg.task, r["code"], sigs, timeout_s=self.args.pregate_timeout_s)
@@ -269,7 +346,13 @@ class Probe:
             return 1
         print(f"[probe] {len(self.configs)} configurations, {self.args.rounds} rounds of "
               f"{self.args.group_size}, wall {self.args.wall_s:.0f}s", flush=True)
+        if not self.preflight():
+            print("[probe] FATAL: an engine did not answer a real completion. Refusing to "
+                  "generate a grid against a dead endpoint.", flush=True)
+            return 4
         for rnd in range(self.args.rounds):
+            if self.aborted:
+                break
             if self.time_left() < self.args.round_reserve_s:
                 print(f"[probe] stopping before round {rnd}: {self.time_left():.0f}s left", flush=True)
                 break
@@ -283,7 +366,7 @@ class Probe:
 
                 def run_model(cfgs):
                     for cfg in cfgs:
-                        if self.time_left() < 60:
+                        if self.time_left() < 60 or self.aborted:
                             return
                         try:
                             self.process_round(cfg, rnd)
@@ -294,11 +377,15 @@ class Probe:
             if self.queue is not None:
                 self.drain_judge()
             self.snapshot()
-        # final drain
+        # Final drain happens even after an abort: candidates already on the
+        # judge are real data and are worth waiting for.
         if self.queue is not None:
             print("[probe] draining the judge queue", flush=True)
             self.drain_judge(block_until_empty=True, timeout_s=max(60.0, min(self.time_left(), 1800.0)))
         self.snapshot()
+        if self.aborted:
+            print(f"[probe] grid ABORTED: {self.aborted}", flush=True)
+            return 5
         return 0
 
     def noise_floors(self) -> dict:
@@ -350,6 +437,11 @@ def main() -> int:
     ap.add_argument("--pregate-timeout-s", type=float, default=180.0)
     ap.add_argument("--wall-s", type=float, default=5400.0)
     ap.add_argument("--round-reserve-s", type=float, default=600.0)
+    ap.add_argument("--no-code-alarm", type=float, default=0.30,
+                    help="per-config no-extractable-code rate above which this is a HARNESS symptom "
+                         "(the last good run's baseline was 14%%)")
+    ap.add_argument("--no-code-alarm-configs", type=int, default=3,
+                    help="how many configs may trip the no-code alarm before the grid stops to diagnose")
     ap.add_argument(
         "--boot-report",
         default=None,

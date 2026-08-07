@@ -28,6 +28,7 @@
 #SBATCH --mem=64G
 #SBATCH -t 4:30:00
 #SBATCH --job-name=seam-probe
+#SBATCH --signal=B:TERM@180
 #SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/pallas_arena/seam-probe-%j.log
 
 set -uo pipefail
@@ -113,12 +114,26 @@ cleanup() {
   pkill -f "tpu-vm ssh ${SERVE_QR}" 2>/dev/null
   pkill -f "tpu-vm ssh ${JUDGE_QR}" 2>/dev/null
   sleep 1
+  # DETACHED deletes first, and only then the (slow) verification pass.
+  # Measured the hard way on job 3650988: `scancel` sends TERM and then KILL
+  # after KillWait (30 s by default), while ONE queued-resource delete takes
+  # ~90 s to return -- so the trap was killed mid-delete and BOTH QRs survived
+  # a cancellation that was supposed to remove them. `setsid` reparents the
+  # deletes to init so they complete even if this shell is killed a second
+  # later. The in-band waits below are then belt-and-braces, not the mechanism.
+  setsid nohup timeout 900 gcloud compute tpus queued-resources delete "$SERVE_QR" \
+    --zone="$SERVE_ZONE" --project="$PROJECT" --force --quiet \
+    > "${out_dir}/seam-del-serve-${SLURM_JOB_ID}.log" 2>&1 < /dev/null &
+  setsid nohup timeout 900 gcloud compute tpus queued-resources delete "$JUDGE_QR" \
+    --zone="$JUDGE_ZONE" --project="$PROJECT" --force --quiet \
+    > "${out_dir}/seam-del-judge-${SLURM_JOB_ID}.log" 2>&1 < /dev/null &
+  echo "[cleanup] detached deletes issued for $SERVE_QR and $JUDGE_QR"
   del_pids=()
   ( timeout 600 gcloud compute tpus queued-resources delete "$SERVE_QR" --zone="$SERVE_ZONE" \
-      --project="$PROJECT" --force --quiet >/dev/null 2>&1; echo "[cleanup] delete issued: $SERVE_QR" ) &
+      --project="$PROJECT" --force --quiet >/dev/null 2>&1; echo "[cleanup] delete confirmed: $SERVE_QR" ) &
   del_pids+=($!)
   ( timeout 600 gcloud compute tpus queued-resources delete "$JUDGE_QR" --zone="$JUDGE_ZONE" \
-      --project="$PROJECT" --force --quiet >/dev/null 2>&1; echo "[cleanup] delete issued: $JUDGE_QR" ) &
+      --project="$PROJECT" --force --quiet >/dev/null 2>&1; echo "[cleanup] delete confirmed: $JUDGE_QR" ) &
   del_pids+=($!)
   # NEVER a bare `wait` here: the queue server is a background child that by
   # design never exits (phase-5 attempt 1 wedged on exactly that, with five
