@@ -645,8 +645,10 @@ submissions were graded with 0 duplicates and 0 requeues.
 | both engines serving | 10:00:59 (26 min) |
 | generation start | 10:05:38 |
 | hard cap | 12:34:56 (3 h), never approached |
-| chip-hours | v5p-16 = 8 chips, v6e-1 = 1 chip. At ~2 h 45 m of QR lifetime: **≈ 22 v5p chip-hours + ≈ 2.75 v6e chip-hours ≈ 24.8 chip-hours** |
+| chip-hours | v5p-16 = 8 chips, v6e-1 = 1 chip, over 1 h 49 m: **14.5 v5p chip-hours + 1.8 v6e chip-hours = 16.3 chip-hours** |
 | judged candidates | 40 (+2 controls), 0 duplicates, 0 requeues |
+| QR lifetime | 09:34:56 -> both confirmed deleted 11:23:57 (**1 h 49 m**), 45 min inside the 3 h cap |
+| end state | **zero probe QRs and zero probe TPU nodes in BOTH us-east5-a and us-east5-b**, verified independently after the job exited |
 
 Plus one neuronic compute node (16 cpu, 48 G) for the queue, the pre-gate and
 three drivers, and three short sbatch CPU jobs (dry runs + regression).
