@@ -1,363 +1,376 @@
 # The seam — a prompt that gives away the plumbing and keeps the decisions
 
-*Run: 2026-08-07. CPU jobs 3650754 / 3650776 / 3650796 / 3650817 / 3650852.
-Raw data: `runs/pallas_arena/seam-control-3650852.json`,
-`runs/pallas_arena/seam-c{1,2,3}-*.log`, `runs/pallas_arena/seam-dry-3650817.log`.*
+*Run: 2026-08-07. TPU jobs 3650988 (preempted) and **3651278** (the
+measurement). CPU jobs 3650754/76/96, 3650817, 3650852, 3650953. Raw data:
+`runs/pallas_arena/seam-results-3651278.{json,jsonl}` (160 candidates, one row
+each: full generation text, extracted fill, composed program, gate,
+observation, reward), `seam-judge-boot-3651278.json`, `seam-tables-3651278.md`,
+`seam-control-3650852.json`, `seam-results-3650988.jsonl` (the preempted arm).*
 
-**Read this first: the TPU measurement did not happen.** `gcloud` credentials
-on the login node have expired (`Reauthentication failed. cannot prompt during
-non-interactive execution`), which is a report-and-stop condition. **Zero
-queued resources were created, so zero were leaked** — but the honest
-consequence is that every model-facing number this report was supposed to
-carry (compile rate, pass rate, gate histogram, reward distribution, best
-score, and the noise-floor-relative spread verdict) is **UNMEASURED**. §6 says
-exactly what is and is not known, and §7 is the single command that produces
-the missing half once auth is restored.
+The question: does a prompt that hands over the **scaffolding** and keeps the
+**strategy** raise export rate without collapsing the within-group reward
+spread the way `tailored` did?
 
-What *is* measured, on CPU, is the whole harness: the seam composes, the
-composed programs are numerically correct against each problem's own fp32
-reference, they export at every declared shape including the non-divisible
-holdouts, and three of the five tasks — which **could never have been graded
-at all** — now can be.
+**Answer: on the API-hallucination failure it works decisively — invented
+`pallas_call` kwargs fell from 8/80 to 1/80 and the failures moved to real
+in-kernel semantics. On the headline it is a draw at 5/20 signal groups, and
+every one of those 5 groups clears its noise floor by 18–31x, so nothing
+collapsed into noise anywhere. But the seam did not raise pass rate: it beat
+reference on splash (first non-tailored exports ever) and lost to it on FLCE.**
+
+Also, for the first time in this arena, **a candidate beat its baseline**:
+`gemma4-31b | seam | rg_lru` at **1.1941**.
 
 ---
 
-## 1. Why a new variant, in one paragraph
+## 1. Headline
 
-The cold-start probe measured that 47% of candidates die at the static gate
-and 14% emit no code at all: models flail on *scaffolding*, not algorithms.
-Every gemma splash cell was **0/16 at export** while 14–16 of 16 reached
-`stop` — they write real `pallas_call` structure and then invent the
-signature (`out_spec`, `out_dtype`, `jax.Shape`, `pl.Ref`). The `reference`
-prompt's ten-item prose gotcha list moved that number by **zero candidates**.
-
-And the opposite failure is just as bad. `tailored`, the fill-in-the-blank
-variant, passed **16/16** — with a within-group reward spread of **0.0042**,
-*below* the judge's own measured noise floors (0.0069 / 0.0158). All sixteen
-candidates converged on the same kernel. Nominally "non-uniform", actually
-timing jitter. **A prompt can be too good**, and pass rate is the wrong
-headline.
-
-The seam cuts between the two: **the harness owns the interface, the model
-owns the strategy.**
-
-## 2. The design
-
-Per task the prompt shows, verbatim, the scaffold the answer will be wrapped
-in, and asks only for named fill-in functions. After extraction the harness
-composes `fill + scaffold` into one module and submits that.
-
-```
-model text --extract_fill--> fill source --compose--> program defining `kernel`
+```json
+{"overall_signal_groups": "5/20", "overall_signal_group_frac": 0.25,
+ "overall_nonuniform_groups": "5/20",
+ "best_config_by_max_score": "gemma4-31b|seam|rg_lru",
+ "best_score": 1.1940660961115808, "any_candidate_passed": true}
 ```
 
-**The judge contract is unchanged.** The submission is still one
-self-contained module with a module-level `kernel`; the judge cannot tell it
-was assembled. The scaffold goes *last*, so a model that pastes a whole
-program back is harmless — the harness's `kernel` is the one that survives.
+`signal groups` = complete groups whose within-group reward spread exceeds the
+**judge's own measured noise floor** for that task. **Signal == non-uniform,
+5 and 5** — every group that varied at all varied by far more than the timing
+jitter. That is the direct contrast with the previous run, where
+`tailored|flce` passed 16/16 with a spread of 0.0042 against floors of
+0.0069/0.0158 and was counted as trainable while being pure noise. **No cell
+in this run collapsed into the noise floor.**
 
-`prompt_seam.py` interpolates `seam.SCAFFOLDS[task]` **itself**, not a retyped
-copy, so what the model reads is byte-identical to what its code is appended
-to. `seam_dryrun.py` asserts that for all five.
+## 2. Seam vs reference, per task
 
-| task | harness owns | model writes | the real decisions left open |
+Groups of 8 (see §7), one round, 160 candidates, all with a terminal verdict.
+
+| task | noise floor | variant | judged | export | PASS | max reward | spread | spread/floor | **signal groups** |
+|---|---|---|---|---|---|---|---|---|---|
+| flce | 0.0143 | reference | 16 | **50.0%** | **12.5%** | **0.2630** | 0.2630 | **18.4x** | **1/2** |
+| flce | 0.0143 | seam | 16 | 31.2% | 0.0% | — | — | — | 0/2 |
+| rg_lru | 0.0383 | reference | 16 | **50.0%** | 43.8% | 1.0000 | 1.0000 | 26.1x | **2/2** |
+| rg_lru | 0.0383 | seam | 16 | 37.5% | 37.5% | **1.1941** | 1.1941 | **31.1x** | **2/2** |
+| splash_attention | 0.0312 | reference | 16 | 0.0% | 0.0% | — | — | — | 0/2 |
+| splash_attention | 0.0312 | seam | 16 | **12.5%** | 0.0% | — | — | — | 0/2 |
+| megablox_gmm | 0.0017 | reference | 16 | 0.0% | 0.0% | — | — | — | 0/2 |
+| megablox_gmm | 0.0017 | seam | 16 | 0.0% | 0.0% | — | — | — | 0/2 |
+| ragged_paged_attention | 0.2239 | reference | 16 | 0.0% | 0.0% | — | — | — | 0/2 |
+| ragged_paged_attention | 0.2239 | seam | 16 | 0.0% | 0.0% | — | — | — | 0/2 |
+
+Per configuration (8 candidates each; `sig` = signal groups / complete groups):
+
+| model | variant | task | export | PASS | max reward | spread | sig |
+|---|---|---|---|---|---|---|---|
+| gemma4-31b | reference | flce | 75% | 2 | 0.2630 | 0.2630 | **1/1** |
+| gemma4-31b | seam | flce | 50% | 0 | — | — | 0/1 |
+| gemma4-31b | reference | rg_lru | 38% | 2 | 0.5986 | 0.5986 | **1/1** |
+| gemma4-31b | **seam** | **rg_lru** | 50% | **4** | **1.1941** | 1.1941 | **1/1** |
+| qwen35-27b | reference | rg_lru | 62% | 5 | 1.0000 | 1.0000 | **1/1** |
+| qwen35-27b | seam | rg_lru | 25% | 2 | 1.0989 | 1.0989 | **1/1** |
+| qwen35-27b | reference | flce | 25% | 0 | — | — | 0/1 |
+| qwen35-27b | seam | flce | 12% | 0 | — | — | 0/1 |
+| gemma4-31b | seam | splash_attention | 12% | 0 | — | — | 0/1 |
+| qwen35-27b | seam | splash_attention | 12% | 0 | — | — | 0/1 |
+| *(the other 10 cells)* | | | 0% | 0 | — | — | 0/1 |
+
+**rg_lru is the best RL target of the five, by a distance**: 4/4 cells carry
+signal, 13 of 32 candidates pass, the spread clears the floor by 26–31x, and
+it is the only task where anything beats its baseline.
+
+## 3. The one thing the seam unambiguously fixed
+
+The previous run's diagnosis was that gemma writes real Pallas structure and
+then invents the signature, and that prose gotchas do not fix it. Both halves
+replicated, and the seam fixed it:
+
+| | reference | seam |
+|---|---|---|
+| candidates emitting an invented `pallas_call` kwarg | **8/80** | **1/80** |
+
+And the failure *modes* moved wholesale. Top `aot_export` messages:
+
+| reference (n=42) | seam (n=59) |
+|---|---|
+| 5 × `pallas_call() got an unexpected keyword argument 'out_spec'` | 7 × `'MemoryRef' object does not support item assignment` |
+| 4 × `'PjitFunction' object is not subscriptable` | 7 × `TracerBoolConversionError` |
+| 2 × `module 'jax.experimental.pallas.tpu' has no attribute 'pallas_call'` | 6 × `Invalid shape for swap. Ref shape: (8, 4, 128)` |
+| 2 × `block shape are divisible by 8 and 128 …` | 5 × `too many values to unpack (expected 2)` |
+| 1 × `module 'jax.experimental.pallas' has no attribute 'Ref'` | 3 × `not enough values to unpack (expected 2, got 1)` |
+
+Reference fails at *"I do not know this library's API"*. Seam fails at *"I
+wrote the wrong thing into a Ref"* and *"I got the return contract wrong"* —
+dense, specific, learnable errors about the actual kernel. That is exactly the
+shift the design was aiming at, and it is visible in the observations the RL
+side would be fed.
+
+`no_code` also went to **zero**: 0/160, against 28/155 (18%) in the previous
+run — far under the 30% harness-alarm threshold. The extractor found every
+required name in **74/80** seam candidates (92.5%), overwhelmingly from a
+single fenced block.
+
+## 4. Qwen is measurable now
+
+The previous run could not measure Qwen at all: 3 of 80 generations reached
+`stop`, so every Qwen cell was zero and the honest reading was *unmeasured,
+not incapable*. With the `<think>\n\n</think>\n\n` disable-thinking renderer
+(verified token-for-token against the server's own template before samples
+were spent):
+
+| model | `stop` | `length` | best cell |
 |---|---|---|---|
-| **flce** | token-axis tiling driver, pad/un-pad, `custom_vjp` registration, residual contract | `TILE`, `tile_forward(h,w,t)->(lp,carry)`, `tile_backward(h,w,t,g,carry)` | tile size, vocab chunking, one-pass online LSE vs two-pass, accum dtype, **recompute-vs-save** (that is what `carry` is) |
-| **splash_attention** | the ENTIRE `pallas_call` — grid, every `BlockSpec`/`index_map`, `out_shape`, padding of *both* axes, un-pad slice | `choose_blocks(seq,d)->(bq,bk)`, `attn_block(q,k,v,sq,sk,o,*,bq,bk,kv_len)` | block shape, key chunking, skipping blocks above the diagonal, online vs two-pass softmax, accum dtype + matmul precision |
-| **ragged_paged_attention** | `pallas_call`, grid `(seq, page)`, BlockSpecs, and the page-id→page-slice helper (scalar-prefetched `page_tables` in the k/v index maps) | `decode_block(...)` | mask vs `pl.when` loop-bound for the ragged tail, online vs two-pass, how to sweep the 8 kv heads, accum dtype |
-| **megablox_gmm** | exclusive scan to offsets, **group-aligned row permutation** (zero-size groups and boundary tiles are the harness's trap, not the model's), `pallas_call` + scalar-prefetched per-tile expert ids, un-permute | `choose_tiles(m,k,n,g)->(bm,bk,bn)`, `gmm_tile(l,r,o,*,bm,bk,bn,k)` | tile shape (= the VMEM budget), k-loop chunking and order, accum dtype |
-| **rg_lru** | outer entrypoint, time chunking + padding, carry-state and reset contract | `CHUNK`, `scan_chunk(x,a,reset,h_prev)->(h_chunk,h_last)` | chunk length (the whole sequential/parallel trade), `lax.scan` vs `lax.associative_scan`, fp32 state handling, layout |
+| gemma4-31b | **78/80** | 2 | seam \| rg_lru, 4/8 PASS, **1.1941** |
+| qwen35-27b | **63/80** (was 3/80) | 17 | reference \| rg_lru, 5/8 PASS |
 
-Measured fill sizes for the known-good controls: **110–423 tokens**, against a
-300–1200 target and a 2000 ceiling. Prompts are 2 849–3 684 tokens (seam) and
-1 436–1 874 (reference), so a 12 000-token completion fits behind either inside
-gemma's 16 384 window — and the driver now asks the server's own `/tokenize`
-for the exact prompt length and clamps per request, because the previous run
-lost an entire 16-candidate cell to `HTTPError 400` from a char/4 estimate.
+Qwen produced its first passing kernels in this arena. It is now a real second
+model, not a hole in the grid.
 
-### The API block is introspected, not remembered
+## 5. Where the seam did NOT help, and why that is informative
 
-Prose demonstrably did not fix signature hallucination, so every seam prompt
-carries the real signatures at the pin (jax **0.10.2**) — `pallas_call`,
-`BlockSpec` (positional `(block_shape, index_map)`, third positional is
-`pipeline_mode`), `GridSpec`, `PrefetchScalarGridSpec`, `CompilerParams`,
-`ShapeDtypeStruct`, `program_id`/`num_programs`/`when`/`ds` — **and the names
-that do not exist**: `pl.load`, `pl.store`, `pltpu.ANY`,
-`pltpu.TPUCompilerParams`, `jax.Shape`, and every invented `pallas_call`
-kwarg. `seam_dryrun.py` re-derives all of it with `inspect.signature` and
-fails if a line has drifted (33 assertions, all green).
+* **FLCE: the seam lost.** reference 50% export / 2 PASS / max 0.2630; seam
+  31% export / **0 PASS**. Both gemma cells concentrate on gate `gradient`
+  (4 each) — kernels that compile and are numerically correct forward and then
+  miss `d/d(hidden)`. For FLCE the harness already owned the `custom_vjp`, so
+  the seam gave away less than it did elsewhere while adding a two-function
+  return contract (`(logprobs, carry)`) that models got wrong 8 times
+  (`too many values to unpack`). **On a task whose plumbing is a `lax.scan`,
+  the seam's interface is a net cost.** Nothing beat FLCE's baseline; the best
+  anywhere is still **0.7008** from the previous run, and this run's best FLCE
+  score was 0.2630.
+* **splash_attention: the seam is the only thing that has ever exported.**
+  0/16 reference (replicating last run's 0/16), **2/16 seam**, and *both* seam
+  candidates reached the chip and got a `correctness` verdict rather than
+  dying at export. First non-`tailored` splash candidates ever to run on
+  silicon. Still 0 PASS.
+* **megablox_gmm and ragged_paged_attention: 0/16 in every cell.** Not a seam
+  failure specifically — reference is 0/16 too. These are the two seams with
+  the most intricate interface (scalar-prefetched index maps, an 8-argument
+  `decode_block` with two persistent scratch Refs), and the modal seam failure
+  is `Invalid shape for swap. Ref shape: (8, 4, 128)` — models writing a
+  wrong-shaped value into the `m_ref`/`l_ref` scratch. **The seam's own
+  interface became the difficulty.** If these two are worth pursuing, the next
+  move is to shrink their fill signature, not to add more prose.
 
-Two facts in that block came out of introspection and would have been wrong
-from memory: **`pl.load`/`pl.store` do not exist in 0.10.2 at all** (a Ref is
-read and written by indexing), and `ANY` is `pl.ANY`, not `pltpu.ANY`.
+**RPA carries a second, independent warning: its noise floor is 0.2239** —
+22%. The op is short enough that the timing protocol cannot resolve better
+than that, so a candidate would have to be >22% faster before the arena could
+tell. As configured, RPA is close to untrainable by timing regardless of what
+the model writes. GMM is the opposite extreme at 0.0017.
 
-A third came out of the *previous* control run and is a genuine numerics
-lesson: on TPU, `jax.lax.dot_general` on **float32** operands runs **one
-bfloat16 pass** at default precision. The previous splash control missed the
-judge's calibrated tolerance by 18% (max err 4.11e-3 vs a 3.48e-3 budget) for
-that reason alone. The block now states it as the speed/accuracy trade it is,
-and the run ships **two** splash controls — `HIGHEST` and default — so the
-judge *measures* which side of the tolerance the fast one lands on instead of
-anyone guessing.
+## 6. The judge now grades all five tasks — three for the first time
 
-## 3. Three of the five tasks could never have been graded
+The persistent worker calls `jax.jit(problem.baseline)` at boot and treats any
+exception, including `BaselineUnavailable`, as *"problem not served"*. It does
+not fall back. `ragged_paged_attention` raised on **both** branches
+unconditionally; `rg_lru` raised on TPU whether or not `recurrentgemma`
+imported. **Neither could ever have booted.** Fixed with labelled fallbacks —
+a judge that refuses to boot has graded nothing at all, which is strictly
+worse than a slower-but-real denominator.
 
-This is the scope-change prerequisite, and it was a real blocker, not a
-formality. The persistent worker calls `jax.jit(problem.baseline)` at boot and
-treats **any** exception — including `BaselineUnavailable` — as *"problem not
-served"* (`worker.py:201`, `:970`). It does not fall back.
+Boot report, all five on one v6e-1:
 
-* `ragged_paged_attention.baseline()` raised `BaselineUnavailable` on **both**
-  branches — unconditionally, even on TPU.
-* `rg_lru.baseline()` raised on TPU whether or not `recurrentgemma` imported.
-* `megablox_gmm` was the only one that returned, and it was unguarded.
-
-Fixed, with the same trade splash already makes — *a judge that refuses to
-boot has graded nothing at all, which is strictly worse than scoring against a
-slower-but-real denominator* — and every fallback **labelled**:
-
-| task | baseline actually used | `baseline_impl` | honest reading of a score |
-|---|---|---|---|
-| flce | our production `custom_vjp` tiled kernel | n/a | vs the thing we ship |
-| splash_attention | production splash MHA, else query-blocked XLA | `pallas-splash-mha` / `xla-fallback` | last run it was the **fallback** |
-| ragged_paged_attention | batch-blocked XLA paged decode | `xla-paged-decode-fallback` | **not** vs vLLM's Pallas v3 kernel |
-| megablox_gmm | tuned Pallas megablox `gmm`, else `ragged_dot` | `pallas-megablox-gmm` / `lax-ragged-dot-fallback` | — |
-| rg_lru | `lax.associative_scan` | `lax-associative-scan` | **not** vs recurrentgemma's scan |
-
-`baseline_impl` lands in the boot report, so the run states its own
-denominator. **Any score against a fallback must be reported as "versus that
-fallback", never as beating the production kernel.**
-
-Also added: one-chip **probe shape sets** for the three new tasks, each keeping
-the axis the task exists for at production width and each with a
-deliberately non-block-divisible holdout —
-
-| task | scored | scored | holdout (traced + correctness, unscored) |
-|---|---|---|---|
-| ragged_paged_attention | `b=16, len=1024` | `b=8, len=512` | **`b=17`**, len=512 (prime batch) |
-| megablox_gmm | `m=4096, g=4, k=4096, n=14336` | `m=2048, g=4` zipf | **`m=3000`**, g=4 zipf |
-| rg_lru | `b=4, t=2048, d=2560` | `b=2, t=1024` | **`t=1500`** |
-
-`k=4096`/`n=14336`, `d=2560`, and page_size 64 / 8 kv heads / 32 q heads / 128
-head_dim are all unchanged. `g` drops 8→4 for GMM for one measured reason: the
-worker holds `#scored × correctness_seeds` full input tuples live at once, and
-`rhs` is 940 MB per fixture at g=8.
-
-One more latent trap closed: all three problems' `adversarial_cases()`
-hardcoded `case_by_name("tiny")` instead of the settable
-`adversarial_case_name`, which silently forces candidates to trace at
-CPU-battery shapes no prompt declares.
-
-## 4. Control first — and it earned its keep three times
-
-Mandatory before chips. Every seam's known-good fill goes through the
-identical path a generation takes, wrapped in a model-style response **with a
-decoy block first**:
-
-```
-fill -> extract_fill -> compose -> CPU AOT export (TPU platform, CPU host)
-     -> [queue -> judge]
-```
-
-plus `--interpret`, which runs the composed program on CPU (`interpret=True`
-for the Pallas ones) against each problem's own fp32 reference.
-
-**Final state (job 3650852): interpret 8/8 OK, pre-gate 8/8 PASS.**
-
-| seam | control fill | fill size | CPU numerics (max rel. err) | AOT export at all 3 declared shapes |
+| task | noise floor | ref-vs-ref | `baseline_impl` | denominator, stated honestly |
 |---|---|---|---|---|
-| flce | `flce-recompute` (carry=None) | 590 ch / ~147 tok | fwd **0.0**, grad **0.0** | PASS (1.4 s) |
-| flce | `flce-saved-lse` (carry = LSE, closed-form bwd) | 690 ch / ~172 tok | fwd **0.0**, grad **0.0** | PASS (1.2 s) |
-| splash_attention | `splash-highest-precision` | 1 604 ch / ~401 tok | **1.69e-07** | PASS (1.4 s) |
-| splash_attention | `splash-default-precision` | 1 486 ch / ~371 tok | **1.69e-07** | PASS (1.4 s) |
-| rg_lru | `rglru-sequential` | 443 ch / ~110 tok | **9.87e-07** | PASS (1.2 s) |
-| rg_lru | `rglru-associative` | 549 ch / ~137 tok | **9.87e-07** | PASS (1.2 s) |
-| megablox_gmm | `gmm-ktiled` | 469 ch / ~117 tok | **9.41e-08** | PASS (1.4 s) |
-| ragged_paged_attention | `rpa-online-softmax` | 1 693 ch / ~423 tok | **1.13e-07** | PASS (1.5 s) |
+| splash_attention | 0.0312 | 0.998 / 1.019 | `xla-fallback` | a competent query-blocked XLA attention, **not** Google's splash kernel |
+| flce | 0.0143 | 0.999 / 0.997 | *(production)* | our own `custom_vjp` tiled kernel |
+| ragged_paged_attention | 0.2239 | 1.032 / 1.004 | `xla-paged-decode-fallback` | **not** vLLM-TPU's Pallas v3 kernel |
+| megablox_gmm | 0.0017 | 1.000 / 1.000 | `lax-ragged-dot-fallback` | **megablox refused these shapes**; this is `ragged_dot`, not the tuned kernel |
+| rg_lru | 0.0383 | 0.996 / 1.015 | `lax-associative-scan` | **not** recurrentgemma's Pallas scan |
 
-Two fills per seam for FLCE, splash and rg_lru on purpose: they are *genuinely
-different strategies* through the same seam (recompute vs saved-LSE;
-`HIGHEST` vs default precision; sequential vs associative scan). The seam
-admits more than one answer — which is the entire hypothesis.
+Every ref-vs-ref is inside the ±2% band. **Three of five scores are against a
+labelled fallback, and the 1.1941 headline is "1.19x `lax.associative_scan`",
+not "1.19x recurrentgemma".** The megablox fallback is a live finding: the
+guard I added is the only reason GMM booted at all.
 
-### The three bugs the control caught before any chip
+Plus one-chip probe shape sets for the three new tasks, each keeping the axis
+the task exists for at production width (k=4096/n=14336, d=2560, page_size 64 /
+8 kv heads / 32 q heads / 128 head_dim) and each with a non-block-divisible
+holdout (batch=**17**, m=**3000**, t=**1500**).
 
-1. **The extractor carried a decoy.** Models routinely show a rejected sketch
-   first. `extract_fill` concatenated every block that bound a required name,
-   so a decoy `def tile_forward: raise NotImplementedError` rode along with the
-   real answer. Fixed: prefer the **last single block that binds every**
-   required name; concatenate only when no single block is complete. (Kept the
-   multi-block path — models do answer one function per block, and
-   `extract_program` would silently drop all but the last.)
-2. **An RPA `BlockSpec` violated Mosaic's tiling rule.** `k_pages` is
-   `[num_pages, page_size, kv_heads, head_dim]`, so a per-head block of
-   `[1, ps, 1, d]` has a second-minor dim of 1 against an array dim of 8:
-   `block shape are divisible by 8 and 128 respectively, or be equal to the
-   respective dimensions of the overall array`. The kv-head axis came out of
-   the grid; one step now holds all 8 heads, which is also 8× fewer grid steps.
-   **This is exactly the class of failure the seam exists to absorb** — had it
-   been in the prompt instead of the harness, every RPA candidate would have
-   died at export and it would have read as "models cannot write paged
-   attention".
-3. A `SyntaxError` in the control's own `interpret=True` injection (a keyword
-   inserted before the positional kernel body).
+## 7. Method, and what to distrust
 
-### CPU battery
+* **Groups of 8, not 16.** The first attempt's serving slice was preempted, and
+  the second had ~80 minutes. ttt-discover normalizes over 16, so 8 is a proxy.
+  It errs *conservative*: a smaller group has a smaller expected max−min
+  spread, so this under-reports signal rather than over-reporting it. One
+  round, so exactly one complete group per cell and 20 in total — enough for a
+  per-task verdict, not enough to separate two cells whose spreads are close.
+* **Fills are 2–3x over budget.** Target was 300–1200 tokens; measured medians
+  were ~1000 (gmm) to ~2500 (splash) tokens, max 26 050 chars. Models restate
+  the scaffold despite being told not to. Worth tightening.
+* **`aot_export` still dominates** at 101/160 overall. The seam changed *which*
+  errors these are, not how many candidates clear the gate.
+* One arm is discarded: job **3650988** was preempted five minutes into
+  generation and 640 of its 672 rows are `error:URLError(ConnectionRefused)`
+  with `gen_chars=0`. Those rows are **not** model failures and are excluded
+  from every number here. Its 32 real generations are consistent with the
+  above (gemma reference splash 16/16 `stop`, 0/16 export, modal error
+  `unexpected keyword argument 'out_spec'`).
 
-`seam_dryrun.py`: **ALL GREEN** — prompts (both variants × five tasks declare
-every probe shape, embed the scaffold verbatim, name every required fill, carry
-the API block), extraction (six model-answer shapes incl. decoy and
-unterminated fence), composition (harness `kernel` wins in all five), case sets
-(`--problem` parses, every name resolves, none holdout-only), baselines resolve
-on CPU for four of five (splash is TPU-only *by design*), the 33 API
-assertions, and the metric.
+### Three guards added because of that preemption
 
-The metric test encodes the exact mistake the last run made: a group that is
-**non-uniform but entirely below the noise floor** (16/16 passing, spread
-0.0042, floor 0.0158) must count as **non-uniform** and **not** as signal.
-`overall_signal_groups == "1/3"` while `overall_nonuniform_groups == "2/3"`.
+Two consecutive probe runs have now burned budget sampling against engines
+that were not serving (first a two-host mesh hang, then this), and both
+recorded a full grid of confident zeros. Now, in the driver:
 
-The full arena regression battery is **175 passed, 0 failed** (job 3650953,
-5 min) — identical to the count before this work, with three baselines
-rewritten, fifteen probe shape cases added and three `adversarial_cases()`
-changed. Nothing about the production path moved.
+1. **Pre-flight (hard).** One *real* completion per engine that must return
+   non-empty text, before a single grid candidate. It fired correctly on the
+   measurement run: `[preflight] gemma4-31b: ALIVE`, `qwen35-27b: ALIVE`.
+   `/v1/models` returning 200 is not evidence an engine can generate.
+2. **Mid-run liveness.** A preemption happens in the middle — the engines
+   answered at 14:12 and were gone by 14:25 — so a pre-flight alone is not
+   enough. A whole group of transport errors now re-checks the engine and
+   aborts the grid if it is dead, instead of writing zeros. Candidates already
+   on the judge are still drained.
+3. **`no_code` alarm** at 30% per config (the last good run's baseline was
+   14%), stopping the grid after three tripped configs. It did not fire: the
+   measured rate was 0%.
 
-## 5. The headline metric, restated in code
+And teardown was hardened: `scancel` sends TERM then KILL after ~30 s while one
+queued-resource delete takes ~90 s, so on job 3650988 the trap was killed
+mid-delete and **both QRs survived a cancellation meant to remove them**. I
+deleted them by hand and verified both zones. Cleanup now issues `setsid nohup`
+deletes *first* so they outlive the shell, then verifies.
 
-`metrics.group_uniformity` now takes the judge's own per-task noise floors —
-the p95 of `|ref/ref − 1|` over counterbalanced pairs, straight from the boot
-report — and reports:
+## 8. Control first — it caught three real bugs before any chip
+
+Every seam's known-good fill through the identical path, wrapped in a
+model-style response with a **decoy block first**:
+`fill -> extract_fill -> compose -> CPU AOT export -> [judge]`, plus CPU
+numerics against each problem's own fp32 reference.
+
+**interpret 8/8 OK, pre-gate 8/8 PASS** (job 3650852). Max relative error:
+FLCE fwd and grad **0.0**, splash **1.69e-07**, rg_lru **9.87e-07**, gmm
+**9.41e-08**, RPA **1.13e-07**. Fills 110–423 tokens. Two genuinely different
+strategies per seam where possible (recompute vs saved-LSE; `HIGHEST` vs
+default matmul precision; sequential vs associative scan).
+
+Caught before chips: (1) the extractor carried a decoy block along with the
+real answer — fixed to prefer the last *complete* block; (2) an RPA `BlockSpec`
+whose second-minor block dim (1 of 8 kv heads) violates Mosaic's tiling rule —
+**exactly the class of failure the seam exists to absorb**, and had it been in
+the prompt every RPA candidate would have died at export and read as "models
+cannot write paged attention"; (3) a `SyntaxError` in the control's own
+`interpret=True` injection.
+
+Arena regression battery: **175 passed, 0 failed** (job 3650953) — unchanged
+after three rewritten baselines, fifteen new shape cases and three
+`adversarial_cases()` fixes.
+
+The prompt's API block is **introspected, not remembered**:
+`seam_dryrun.py` re-derives every signature with `inspect.signature` at the pin
+(jax 0.10.2) and asserts that the names it says do not exist really do not —
+`pl.load`, `pl.store`, `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`, and
+every invented `pallas_call` kwarg. 33 assertions, all green. Two of those
+facts would have been wrong from memory.
+
+## 9. Example fill-ins
+
+**Best — `gemma4-31b | seam | rg_lru`, reward 1.1941, the first candidate in
+this arena to beat its baseline.** Chunked associative scan at `CHUNK = 256`;
+the whole decision is the chunk length and the fold-in of the carry:
 
 ```
-signal_group_frac = (complete groups whose within-group reward spread > that task's noise floor)
-                    / (complete groups)
+GATE all | rg_lru | PASS reward=1.1941
+probe-4x2048x2560:          cand 1.268ms vs ref 2.207ms (1.740x)
+probe-2x1024x2560:          cand 0.358ms vs ref 0.295ms (0.825x)
+probe-holdout-2x1500x2560:  cand 0.558ms vs ref 0.808ms (1.449x)
+peak HBM 28.63GB
 ```
-
-`nonuniform_group_frac` is still emitted, next to it, so the two can be
-compared directly and the gap is visible rather than assumed. `report.py` leads
-with a **seam-vs-reference table per task**, carrying `max spread`, the floor,
-`spread/floor`, and signal groups.
-
-One property of the judge worth stating because it interacts with this metric:
-`reward = 1.0` when `|score − 1| <= noise_floor`, else `score`. Candidates near
-parity are snapped to exactly 1.0, which *suppresses* spread near the baseline.
-A seam that lands many candidates near parity can therefore look flat for a
-reason that is the reward shaping, not the prompt — worth separating when the
-numbers land.
-
-## 6. What is and is not known
-
-**Known (CPU, this session):**
-
-* The seam composes and is numerically correct for all five tasks, 8/8.
-* Composed programs export at every declared shape including all five
-  non-divisible holdouts, 8/8.
-* The API block matches the installed jax on all 33 assertions.
-* The extractor survives six realistic model-answer shapes.
-* The headline metric returns the right answer on the case the previous run
-  got wrong.
-* Three tasks that could not have been served now boot-resolve their baselines.
-* The arena regression battery is unchanged at 175 passed, 0 failed.
-
-**Not known — needs the TPU run:** compile rate, pass rate, gate histogram,
-reward distribution, best score, and **the headline** — per configuration and
-per task, seam against reference. Specifically unanswered:
-
-1. Does the seam preserve gradient signal, or collapse it like `tailored`?
-   The design argues it should (block/tile choice drives VMEM pressure and
-   speed, which are continuous and hard), but *argues* is not *measures*.
-2. Does FLCE's seam still allow beating the baseline? Nothing anywhere has
-   beaten our `custom_vjp` yet — best score to date **0.7008**, i.e. every
-   passing candidate so far is *slower* than the thing it is trying to beat.
-3. Which of the five is the best RL target.
-4. Whether Qwen is measurable at all with thinking disabled. Last run it
-   finished 3 of 80 generations, which is **unmeasured, not incapable**; the
-   `<think>\n\n</think>\n\n` disable-thinking renderer is now wired and
-   verified against the server's own template before samples are spent. If it
-   still does not finish, it must be reported as unmeasured again.
-5. Whether the splash-default-precision control lands inside the calibrated
-   tolerance, and whether the RPA/GMM/rg_lru baselines behave on silicon.
-
-**Resources: zero chip-hours. Zero queued resources created, in either zone,
-at any point.** The launch script was never invoked; `gcloud` failed at the
-read-only list step, before anything could be created. Because no QR was ever
-created there is nothing to tear down — and I must be equally plain that with
-credentials expired I could **not** independently list the zones to confirm
-they are empty of `sk7524-seam-*`. The names have never been used. The running
-RL sweep (`sk7524-tunix-qwen35-v5p32-dbtest-{d,e}`, `sk7524-league-*`,
-`forever_sweep`) was not touched, read or otherwise.
-
-Cost: six short CPU jobs on one neuronic node (16 cpu, 48–64 G), ~17 minutes
-of wall time total.
-
-## 7. How to finish it
-
-After `gcloud auth login`, one command:
-
-```bash
-sbatch tpu/pallas_arena/probe/seam_probe.sbatch
-```
-
-Two spot QRs, distinctly named (`sk7524-seam-serve` v5p-16 us-east5-a,
-`sk7524-seam-judge` v6e-1 us-east5-b), never more than two alive, deleted on
-every exit path including untrapped SIGTERM, a 3 h cap from the first create, a
-45-min landing rule with no fallback to a bigger slice, and both zones verified
-empty of both names at the end. `TPU_PROCESS_BOUNDS=1,1,1` /
-`TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1` are set **inside the tmux env** on both
-serving hosts, without which the two engines deadlock forming a two-host mesh.
-
-The grid is 2 models × {`reference`, `seam`} × 5 tasks = **20 cells**, groups of
-16, round-robin by round so every cell has the same number of complete groups
-whenever the clock stops. `ROUNDS=3` with a 1 800 s draining tail, chosen
-because the headline counts only **complete** groups and one v6e-1 grades every
-survivor: finishing 2–3 rounds across all 20 cells beats starting 5 and
-completing none.
-
-One JSONL row per candidate — full generation text, extracted fill, composed
-program, gate, observation, reward — at
-`runs/pallas_arena/seam-results-<jobid>.jsonl`.
-
-## 8. Example fill-ins
-
-**Best-in-kind — the FLCE saved-LSE strategy** (172 tokens; the seam's `carry`
-channel is what makes this expressible at all, and it skips recomputing the
-logsumexp in the backward):
 
 ```python
-TILE = 1024
+# Trade-off between parallel associative scan (log-depth, high memory/flops)
+# and sequential scan (linear-depth, low memory). 256 is a typical TPU
+# sweet spot for SSMs of this dimension (d=2560) to maintain VMEM efficiency.
+CHUNK = 256
 
-def tile_forward(h_tile, w, t_tile):
-    logits = _logits(h_tile, w)
-    lse = jax.nn.logsumexp(logits, axis=-1)
-    tl = jnp.take_along_axis(logits, t_tile[:, None], axis=1)[:, 0]
-    return tl - lse, lse                      # <- carry
+def scan_chunk(x_chunk, a_chunk, reset_chunk, h_prev):
+    x_fp32 = x_chunk.astype(jnp.float32)
+    g_chunk = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a_chunk), 0.0)) * x_fp32
 
-def tile_backward(h_tile, w, t_tile, g_tile, carry):
-    lse = carry
-    logits = _logits(h_tile, w)
-    probs = jnp.exp(logits - lse[:, None])
-    onehot = (jax.lax.broadcasted_iota(jnp.int32, logits.shape, 1) == t_tile[:, None])
-    dlogits = (onehot.astype(jnp.float32) - probs) * g_tile[:, None]
-    return dlogits @ w.astype(jnp.float32).T
+    def combine(left, right):
+        a_l, g_l = left
+        a_r, g_r = right
+        return (a_l * a_r, g_l * a_r + g_r)
+    ...
 ```
 
-**A representative failure — the RPA BlockSpec, before the fix.** Not a model's
-failure: the harness's, caught by the control, and the reason the control is
-mandatory:
+It wins where it should — 1.74x on the long sequence, 1.45x on the holdout —
+and loses (0.825x) on the short one, which is precisely the chunk-length trade
+the seam left open. That is a real strategy decision producing a real score
+difference, which is the whole hypothesis.
+
+**Representative failure — the modal seam error, RPA:**
 
 ```
 GATE aot_export | ragged_paged_attention | ValueError
-block shape are divisible by 8 and 128 respectively, or be equal to the
-respective dimensions of the overall array
-need: the SAME entrypoint must trace at EVERY declared shape (jax.export, no
-concrete data)
+Invalid shape for `swap`. Ref shape: (8, 4, 128). Expected shape: ...
+need: the SAME entrypoint must trace at EVERY declared shape
 ```
 
-## 9. Verdict
+The model understood the algorithm and wrote a wrong-shaped store into the
+scratch Ref. Compare the modal *reference* failure — `pallas_call() got an
+unexpected keyword argument 'out_spec'` — which carries no information about
+attention at all.
 
-The seam is **built, controlled and ready**, and the judge can now grade all
-five tasks instead of two — which was a genuine latent blocker, not
-bookkeeping. Whether it does the one thing it was designed to do — keep
-within-group reward spread above the judge's noise floor while lifting export
-rate — is **not yet measured**, and this report does not claim it. The
-apparatus is one authenticated command away from saying.
+## 10. Resources and teardown
+
+| | attempt 1 (3650988) | attempt 2 (3651278) |
+|---|---|---|
+| QRs | `sk7524-seam-serve` v5p-16 us-east5-a, `sk7524-seam-judge` v6e-1 us-east5-b | `sk7524-seam2-serve`, `sk7524-seam2-judge` (same shapes/zones) |
+| created | 13:38:28 | 14:42:59 |
+| serve ACTIVE | ~13:58 (20 min) | ~14:47 (5 min) |
+| both engines serving | 14:12:50 (34 min) | 15:01:21 (18 min, warm caches) |
+| outcome | **spot-preempted** ~14:25, serve QR `SUSPENDED` | completed, 160 candidates |
+| QR lifetime | 61.8 min | **59.98 min** |
+
+Never more than 2 QRs alive at any moment. Hard cap 3 h from the first create
+(16:38) — never approached; the second attempt was additionally capped at
+16:28 and finished at 15:42.
+
+**Chip-hours: 16.2 v5p chip-hours + 2.0 v6e chip-hours ≈ 18.3 chip-hours**
+(8 chips × 61.8 min + 8 chips × 60.0 min; 1 chip × 61.8 min + 1 chip ×
+60.0 min). Plus two neuronic compute nodes and six short CPU jobs (~17 min).
+
+**Teardown, verified.** Attempt 2 tore itself down: `verified empty of seam QRs
+in us-east5-a`, `… in us-east5-b`, and the same for nodes. Attempt 1's trap was
+killed mid-delete by `scancel`; I deleted both QRs by hand at 14:38–14:40 and
+independently confirmed. Final state, checked directly in both zones after both
+jobs exited:
+
+```
+us-east5-a QRs: (no seam QRs)     us-east5-a nodes: (no seam nodes)
+us-east5-b QRs: (no seam QRs)     us-east5-b nodes: (no seam nodes)
+```
+
+**Zero probe QRs and zero probe TPU nodes in BOTH us-east5-a and us-east5-b.**
+The running RL sweep (`sk7524-tunix-qwen35-v5p32-dbtest-{d,e}`,
+`sk7524-league-*`, `forever_sweep`) was read-only-observed and never touched.
+
+## 11. Verdict
+
+**The seam does not collapse gradient signal — that was the risk, and it did
+not happen.** All 5 signal groups clear their noise floor by 18–31x; nothing
+landed in the `tailored` trap. But at 5/20 it does not *beat* reference on the
+headline either: it wins on splash (0% → 12.5% export, first silicon), loses
+on FLCE (2 PASS → 0), and ties on rg_lru while producing the better kernel.
+
+**Its unambiguous win is the failure mode.** Invented `pallas_call` kwargs
+8/80 → 1/80, `no_code` 18% → 0%, and the residual errors are about Refs, shapes
+and return contracts instead of about the library's API. That is the difference
+between an environment that teaches JAX trivia and one that teaches kernels.
+
+**What I would change before the RL run:**
+
+1. **Train on `rg_lru` first.** 4/4 cells carry signal, 13/32 pass, 26–31x the
+   floor, and it is the only task where a candidate beats its baseline. It is
+   also the cheapest to grade.
+2. **Use `reference` for FLCE and `seam` for splash.** The seam's value is
+   task-dependent and this run says which way for each.
+3. **Simplify the RPA and GMM fill signatures** — 8 arguments and two
+   persistent scratch Refs made the *interface* the difficulty. And RPA's
+   0.2239 noise floor needs a bigger shape or more timing pairs before it can
+   be trained on at all.
+4. **Rerun at groups of 16 and ≥3 rounds.** 20 groups is a per-task verdict,
+   not a cell-vs-cell one.
+5. **Bind the real baselines, or keep saying "fallback" out loud.** Three of
+   five denominators are fallbacks; megablox refused our shapes outright.
