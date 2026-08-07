@@ -51,7 +51,7 @@ fi
 # foreground -- it requests the QR, waits for capacity, and does full node setup (ssh,
 # gcsfuse, code bundle) before returning.
 JM="$MAIN/third_party/jobman"
-jobman_cli() { (cd "$JM" && PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" "$@"); }
+jobman_cli() { (cd "/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/jobman" && PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" "$@"); }
 
 jid=$(grep -l "name: ${TPU_NAME}" "$JM"/jobs/sk7524/*/config.yaml 2>/dev/null | tail -1 \
       | sed -E 's|.*/([0-9]+)/config.yaml|\1|')
@@ -75,14 +75,21 @@ while true; do
 done
 
 echo "[farm] jobman run $jid (pass 2: node setup on the ACTIVE slice -- idempotent)"
-jobman_cli run "$jid"
+# HARD timeout: jobman's setup pass hangs indefinitely on "SSH: Attempting to connect to
+# worker 0..." when a worker is unreachable (seen twice; once it ate ~2h of a collection job
+# with the slice sitting ACTIVE). Better to fail the round and let the supervisor retry.
+timeout 1200 bash -c "$(declare -f jobman_cli); jobman_cli run '$jid'" \
+  || echo "[farm] pass 2 timed out/failed (rc=$?); continuing to bring-up anyway"
 st=$(state)
 [[ "$st" == "ACTIVE" ]] || { echo "[farm] QR lost ACTIVE during setup (state=$st)" >&2; exit 1; }
 
 echo "[farm] bring-up: vLLM only, 32k ctx"
+# Also timed out: the launcher SSHes to workers and can hang the same way. 50 min covers a
+# cold XLA compile (~55 min is the worst case, but the GCS cache normally makes it ~1 min).
 START_TINKER=0 START_VLLM=1 \
 VLLM_MAX_MODEL_LEN=32768 VLLM_MAX_NUM_SEQS=64 VLLM_MAX_CONCURRENT_REQUESTS=64 \
-  "$MAIN/tpu/start_colocated_vllm_tinker.sh"
+  timeout 3000 "$MAIN/tpu/start_colocated_vllm_tinker.sh" \
+  || { echo "[farm] bring-up timed out/failed (rc=$?)" >&2; exit 1; }
 
 cat <<EOF
 [farm] $1 up. Tunnel from the machine running collect_t2:
