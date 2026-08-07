@@ -91,10 +91,31 @@ def main():
     results = {h: {"sol_hash": h, "sessions": by_hash[h]} for h in progs}
     Pool = ProcessPoolExecutor if lang == "cpp" else ThreadPoolExecutor
 
+    # Persistent per-program cache. A ud/erdos batch can run many hours (each candidate burns
+    # its full 1000s production budget), and a wall-clock kill used to discard everything --
+    # measured: ud_D lost ~5h of grading to a TIMEOUT. Results are appended as they land, so a
+    # rerun picks up where it stopped.
+    cachef = run / "grade_cache.jsonl"
+    cache = {}
+    if cachef.exists():
+        for line in cachef.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                c = json.loads(line)
+                cache[(c["sol_hash"], c["stage"])] = c["res"]
+            except Exception:
+                pass
+    clock = __import__("threading").Lock()
+
     def run_stage(items, fast, tag):
+        stage = "check" if fast else "full"
+        out = {h: cache[(h, stage)] for h in items if (h, stage) in cache}
+        todo = [h for h in items if h not in out]
+        if out:
+            print(f"[grade] {tag}: {len(out)} cached, {len(todo)} to run", flush=True)
         tasks = {h: (root, mod, cls, ptype, lang, constr,
-                     _payload(progs[h], lang, fence), fast, str(logdir)) for h in items}
-        out = {}
+                     _payload(progs[h], lang, fence), fast, str(logdir)) for h in todo}
         with Pool(max_workers=args.concurrency) as ex:
             futs = {ex.submit(_job, t): h for h, t in tasks.items()}
             n = 0
@@ -105,6 +126,8 @@ def main():
                 except Exception as e:
                     out[h] = {"score": None, "valid": False,
                               "detail": f"grader crashed: {e}"[:200], "secs": None}
+                with clock, open(cachef, "a") as fh:
+                    fh.write(json.dumps({"sol_hash": h, "stage": stage, "res": out[h]}) + "\n")
                 n += 1
                 if n % 10 == 0:
                     print(f"[grade] {tag}: {n}/{len(tasks)}", flush=True)
