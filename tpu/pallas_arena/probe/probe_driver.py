@@ -107,10 +107,15 @@ class Probe:
         spec = C.MODELS[cfg.model]
         prompt = get_prompt(cfg.task, cfg.variant)
         text = R.render(spec.renderer, prompt)
+        # Never ask for more than fits behind THIS model's prompt in THIS
+        # model's context: vLLM answers an over-long request with a 400 and
+        # the cell silently records empty generations that read as model
+        # failures (measured: gemma tailored/splash, 16/16 HTTPError 400).
+        max_tok = min(self.args.max_new_tokens, spec.max_new_tokens)
         gens = self.samplers[cfg.model].sample_group(
             text,
             self.args.group_size,
-            max_tokens=self.args.max_new_tokens,
+            max_tokens=max_tok,
             temperature=self.args.temperature,
             stop=R.STOPS[spec.renderer],
         )

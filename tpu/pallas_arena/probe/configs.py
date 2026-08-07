@@ -32,11 +32,19 @@ class ModelSpec:
     renderer: str
     worker: int  # v5p-16 host index that serves it
     stop: str  # end-of-turn marker, for /v1/completions
+    max_model_len: int  # the served context window
+    # Longest generation that still fits behind the LONGEST prompt. Measured
+    # the hard way: gemma is served at 16384, its tailored splash prompt is
+    # ~4.4k tokens, and 4.4k + 12000 > 16384 -- so vLLM returned
+    # `HTTPError 400: Bad Request` for all 16 of that cell's requests and the
+    # cell recorded 16 empty generations that LOOK like model failures.
+    # Cap per model, never globally.
+    max_new_tokens: int
 
 
 MODELS = {
-    "qwen35-27b": ModelSpec("qwen35-27b", "Qwen/Qwen3.5-27B", "qwen3", 0, "<|im_end|>"),
-    "gemma4-31b": ModelSpec("gemma4-31b", "google/gemma-4-31B-it", "gemma4", 1, "<turn|>"),
+    "qwen35-27b": ModelSpec("qwen35-27b", "Qwen/Qwen3.5-27B", "qwen3", 0, "<|im_end|>", 22528, 16000),
+    "gemma4-31b": ModelSpec("gemma4-31b", "google/gemma-4-31B-it", "gemma4", 1, "<turn|>", 16384, 10000),
 }
 
 
