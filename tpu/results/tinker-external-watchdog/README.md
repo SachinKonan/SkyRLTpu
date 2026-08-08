@@ -293,9 +293,10 @@ import sqlite3
 db = sqlite3.connect("file:/home/sk7524_princeton_edu/SkyRLTpu/skyrl/tinker/tinker.db?mode=ro", uri=True)
 for row in db.execute("select request_type, status, count(*) from futures group by 1,2"):
     print(row)
+# NB: SQLAlchemy stores enum NAMES, so these are uppercase in the DB.
 print("oldest pending EXTERNAL:", db.execute(
     "select min(created_at), max(created_at), count(*) from futures "
-    "where request_type='EXTERNAL' and status='pending'").fetchone())
+    "where request_type='EXTERNAL' and status='PENDING'").fetchone())
 print("models by status:", db.execute("select status, count(*) from models group by 1").fetchall())
 PY
 ```
@@ -310,7 +311,7 @@ Healthy after deployment:
    requests *are* being dropped or wedged and you now have the count; a rate that
    climbs with load points back at vLLM, not at the dispatcher.
 3. **No FAILED row has a blank error**:
-   `select count(*) from futures where status='failed' and json_extract(result_data,'$.error')='';`
+   `select count(*) from futures where status='FAILED' and json_extract(result_data,'$.error')='';`
    should be 0 for rows created after the deploy.
 4. **Slot leak closed**: `select status, count(*) from models group by 1` should show
    `unloaded` growing as sweep variants finish, instead of `created` only. Expect the

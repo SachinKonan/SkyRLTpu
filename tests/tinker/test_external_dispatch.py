@@ -230,11 +230,8 @@ async def test_hung_worker_is_cancelled_and_redispatched(db_engine):
     assert report.cancelled == [] and report.redispatched == []
     assert not task.done()
 
-    # Backdate the row past the ceiling and let a healthy worker take over.
-    async with AsyncSession(db_engine) as session:
-        row = await session.get(FutureDB, request_id)
-        row.created_at = datetime.now(timezone.utc) - timedelta(seconds=500)
-        await session.commit()
+    # Push this attempt's start past the ceiling and let a healthy worker take over.
+    dispatcher._started[request_id] = dispatcher._started[request_id] - 500.0
     client.behavior = "ok"
 
     report = await dispatcher.sweep_once()
@@ -245,6 +242,38 @@ async def test_hung_worker_is_cancelled_and_redispatched(db_engine):
 
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_redispatched_attempt_gets_a_fresh_inflight_clock(db_engine):
+    """The ceiling is measured per attempt, not from the row's created_at.
+
+    Measuring from created_at would cancel the replacement on the very next sweep
+    (the row only gets older) and burn the whole retry budget in three sweeps.
+    """
+    client = FakeInferenceClient(db_engine, behavior="hang")
+    dispatcher = ExternalDispatcher(client, db_engine, stale_after_sec=0.0, inflight_timeout_sec=1.0)
+
+    # Row is an hour old and the first attempt has been hanging past the ceiling.
+    request_id = await insert_external_future(db_engine, age_sec=3600.0)
+    first = dispatcher.dispatch(request_id, object(), "model_test", "ckpt0")
+    await client.started.wait()
+    dispatcher._started[request_id] = dispatcher._started[request_id] - 10.0
+
+    report = await dispatcher.sweep_once()
+    assert report.cancelled == [request_id] and report.redispatched == [request_id]
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    second = dispatcher._inflight[request_id]
+
+    # The replacement is brand new: the next sweep must leave it alone even though
+    # the row itself is now well over an hour old.
+    report = await dispatcher.sweep_once()
+    assert report.inflight == 1
+    assert report.cancelled == [] and report.redispatched == [] and report.failed == []
+    assert not second.done()
+    assert dispatcher._attempts[request_id] == 1
+
+    await dispatcher.aclose()
 
 
 # --- the "do not touch a healthy request" guard ----------------------------

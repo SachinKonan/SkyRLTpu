@@ -334,6 +334,12 @@ class ExternalDispatcher:
         # Strong references: without these the event loop only weakly references
         # a task and it can vanish mid-execution.
         self._inflight: dict[int, asyncio.Task] = {}
+        # When the CURRENT attempt started (monotonic). The in-flight ceiling has
+        # to be measured from here, not from the row's created_at: a re-dispatch
+        # inherits an already-old row, and measuring from created_at would cancel
+        # the fresh attempt on the very next sweep and burn the retry budget in
+        # three sweeps flat.
+        self._started: dict[int, float] = {}
         self._attempts: dict[int, int] = {}
         self._watchdog: asyncio.Task | None = None
 
@@ -351,6 +357,7 @@ class ExternalDispatcher:
         """Start (and track) the task that serves one EXTERNAL request."""
         task = asyncio.ensure_future(self._run(request_id, sample_req, model_id, checkpoint_id, base_model=base_model))
         self._inflight[request_id] = task
+        self._started[request_id] = time.monotonic()
         task.add_done_callback(lambda t, rid=request_id: self._on_task_done(rid, t))
         return task
 
@@ -359,6 +366,7 @@ class ExternalDispatcher:
         # have cancelled it and already registered a replacement.
         if self._inflight.get(request_id) is task:
             self._inflight.pop(request_id, None)
+            self._started.pop(request_id, None)
         if task.cancelled():
             return
         exc = task.exception()
@@ -450,22 +458,30 @@ class ExternalDispatcher:
         report.pending = len(rows)
         now = datetime.now(timezone.utc)
 
+        monotonic_now = time.monotonic()
+
         for request_id, created_at in rows:
             age = (now - _as_utc(created_at)).total_seconds()
             task = self._inflight.get(request_id)
 
             if task is not None and not task.done():
                 report.inflight += 1
-                if self.inflight_timeout_sec > 0 and age > self.inflight_timeout_sec:
+                # Measured from when THIS attempt started, so a re-dispatch gets a
+                # full fresh budget instead of inheriting the row's age.
+                inflight_age = monotonic_now - self._started.get(request_id, monotonic_now)
+                if self.inflight_timeout_sec > 0 and inflight_age > self.inflight_timeout_sec:
                     logger.error(
                         "WATCHDOG: external request %s has been in flight for %.0fs "
-                        "(ceiling %.0fs) — the worker is wedged; cancelling and re-dispatching",
+                        "(row age %.0fs, ceiling %.0fs) — the worker is wedged; "
+                        "cancelling and re-dispatching",
                         request_id,
+                        inflight_age,
                         age,
                         self.inflight_timeout_sec,
                     )
                     task.cancel()
                     self._inflight.pop(request_id, None)
+                    self._started.pop(request_id, None)
                     report.cancelled.append(request_id)
                     if await self._redispatch(request_id, age, report):
                         continue
@@ -571,4 +587,5 @@ class ExternalDispatcher:
         for task in list(self._inflight.values()):
             task.cancel()
         self._inflight.clear()
+        self._started.clear()
         self._attempts.clear()
