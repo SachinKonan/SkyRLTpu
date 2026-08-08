@@ -259,7 +259,7 @@ Suite status: see `RESULTS.md` in this directory.
 The watchdog lives entirely in the **API process**. The engine needs a restart only
 for the `coalesce` change; the launcher change needs a fresh launch.
 
-Files to copy to each host (`~/SkyRLTpu/` on the train-coordinator worker):
+Files that changed:
 
 ```
 skyrl/tinker/dispatch.py                              (new)
@@ -267,16 +267,34 @@ skyrl/tinker/api.py
 skyrl/tinker/engine.py
 skyrl/tinker/extra/external_inference.py
 skyrl/tinker/extra/skyrl_train_inference_forwarding.py
+tpu/start_colocated_vllm_tinker.sh                    (launcher default only)
 ```
 
-`tpu/sync_skyrl_to_tpu.sh` already does this; a targeted rsync of `skyrl/tinker/`
-is sufficient.
+**Only the train-coordinator worker needs them.** The other train workers run
+`-m skyrl.backends.jax`, not the tinker server; `skyrl.tinker.api` and the
+`skyrl.tinker.engine` subprocess it spawns both live on `train_coord_worker`
+(`start_colocated_vllm_tinker.sh` line ~720).
+
+Two options:
+
+* **Full sync** — `TPU_NAME=<slice> tpu/sync_skyrl_to_tpu.sh`. Note this replaces
+  the *entire* remote tree from a clean `HEAD` (it `mv`s the old dir aside and
+  refuses a dirty checkout), so it also ships every other change on this branch.
+* **Targeted** — `gcloud alpha compute tpus tpu-vm scp` the five files to
+  `~/SkyRLTpu/skyrl/tinker/` on `--worker=<train_coord_worker>`. Smaller blast
+  radius; preferred if the slice is mid-experiment.
 
 **Restart required: yes, both processes.** The API imports `dispatch` at module
-load and starts the watchdog in `lifespan`; the engine's stale-session query is
-compiled at call time but the process must be restarted to pick up the new file.
-Since `api.py` spawns the engine as a subprocess, restarting the API restarts both.
-No DB migration — no schema change.
+load and starts the watchdog in `lifespan`; the engine must be restarted to pick
+up the `coalesce` change. Since `api.py` spawns the engine as a subprocess,
+restarting the API (`tmux kill-session -t skyrl-tinker`, then
+`bash ~/start_colocated_skyrl_api.sh`) restarts both. The vLLM workers are
+untouched and do **not** need a restart. No DB migration — no schema change.
+
+The launcher default (`SESSION_TIMEOUT_SEC`) only applies on a fresh
+`start_colocated_vllm_tinker.sh`; to get it on an already-running slice, edit
+`--session-timeout-sec` in `~/start_colocated_skyrl_api.sh` on the host before
+restarting, or export `SESSION_TIMEOUT_SEC=1800` and re-run the launcher.
 
 Recommended env for the sweep slices (client progress timeout is 900s):
 
