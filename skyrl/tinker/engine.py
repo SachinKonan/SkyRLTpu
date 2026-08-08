@@ -518,11 +518,19 @@ class TinkerEngine:
         unloaded_count = 0
 
         with Session(self.db_engine) as session:
-            # Find stale sessions (active sessions with heartbeat older than cutoff)
+            # Find stale sessions (active sessions with heartbeat older than cutoff).
+            #
+            # coalesce is load-bearing: `last_heartbeat_at` is NULL until the
+            # client's background heartbeat thread first fires, and in SQL
+            # `NULL < cutoff` is NULL, i.e. the row is NOT matched. A client that
+            # created a model and then died before its first heartbeat therefore
+            # kept its adapter slot allocated FOREVER — the HBM slot leak that
+            # forced the sweep driver to restart the engine per variant. Falling
+            # back to created_at starts the staleness clock at session creation.
             stale_sessions = session.exec(
                 select(SessionDB).where(
                     SessionDB.status == "active",
-                    SessionDB.last_heartbeat_at < cutoff,
+                    func.coalesce(SessionDB.last_heartbeat_at, SessionDB.created_at) < cutoff,
                 )
             ).all()
 

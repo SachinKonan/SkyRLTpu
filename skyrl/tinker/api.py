@@ -862,6 +862,11 @@ async def create_session(request: CreateSessionRequest, session: AsyncSession = 
         user_metadata=request.user_metadata or {},
         sdk_version=request.sdk_version,
         status="active",
+        # Start the staleness clock now instead of leaving it NULL. A NULL
+        # heartbeat is invisible to the engine's stale-session sweep (NULL
+        # comparisons never match), so a client that died before its first
+        # heartbeat used to hold its model's adapter slot forever.
+        last_heartbeat_at=datetime.now(timezone.utc),
     )
     session.add(session_db)
     await session.commit()

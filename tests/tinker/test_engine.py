@@ -93,6 +93,106 @@ def test_cleanup_stale_sessions():
     assert not engine.backend.has_model(model_id)
 
 
+@pytest.mark.parametrize("last_heartbeat", [None, "stale"], ids=["never_heartbeat", "stale_heartbeat"])
+def test_cleanup_stale_sessions_reclaims_slots_with_no_heartbeat(last_heartbeat):
+    """A session that never heartbeat must still lose its adapter slot.
+
+    `last_heartbeat_at` is NULL until the client's background heartbeat thread
+    first fires, and `NULL < cutoff` is NULL in SQL -- the row was never matched,
+    so a client that created a model and died before its first heartbeat held an
+    HBM slot forever. The query now falls back to `created_at`.
+    """
+    config = EngineConfig(
+        base_model=BASE_MODEL,
+        checkpoints_base=AnyPath(""),
+        backend_config={"max_lora_adapters": 4, "max_lora_rank": 32},
+        session_timeout_sec=60,
+        database_url="sqlite:///:memory:",
+    )
+    engine = TinkerEngine(config)
+    SQLModel.metadata.create_all(engine.db_engine)
+
+    model_id = "orphaned_model"
+    session_id = "never_beat_session"
+    _ = engine.process_single_request(
+        types.RequestType.CREATE_MODEL, model_id, {"lora_config": {"rank": 8, "alpha": 16, "seed": 0}}
+    )
+    assert engine.backend.has_model(model_id)
+
+    old = datetime.now(timezone.utc) - timedelta(seconds=120)
+    with Session(engine.db_engine) as session:
+        session.add(
+            SessionDB(
+                session_id=session_id,
+                sdk_version="test",
+                status="active",
+                created_at=old,
+                last_heartbeat_at=None if last_heartbeat is None else old,
+            )
+        )
+        session.add(
+            ModelDB(
+                model_id=model_id,
+                base_model=BASE_MODEL,
+                lora_config=types.LoraConfig(rank=8, alpha=16, seed=0).model_dump(),
+                status="ready",
+                request_id=1,
+                session_id=session_id,
+            )
+        )
+        session.commit()
+
+    assert engine.cleanup_stale_sessions() == 1
+    assert not engine.backend.has_model(model_id)
+
+    with Session(engine.db_engine) as session:
+        assert session.get(SessionDB, session_id).status == "expired"
+        assert session.get(ModelDB, model_id).status == "unloaded"
+
+
+def test_cleanup_stale_sessions_keeps_a_live_session():
+    """A session inside the timeout keeps its model, whether or not it has beat yet."""
+    config = EngineConfig(
+        base_model=BASE_MODEL,
+        checkpoints_base=AnyPath(""),
+        backend_config={"max_lora_adapters": 4, "max_lora_rank": 32},
+        session_timeout_sec=600,
+        database_url="sqlite:///:memory:",
+    )
+    engine = TinkerEngine(config)
+    SQLModel.metadata.create_all(engine.db_engine)
+
+    model_id = "live_model"
+    _ = engine.process_single_request(
+        types.RequestType.CREATE_MODEL, model_id, {"lora_config": {"rank": 8, "alpha": 16, "seed": 0}}
+    )
+
+    with Session(engine.db_engine) as session:
+        session.add(
+            SessionDB(
+                session_id="live_session",
+                sdk_version="test",
+                status="active",
+                created_at=datetime.now(timezone.utc) - timedelta(seconds=30),
+                last_heartbeat_at=None,
+            )
+        )
+        session.add(
+            ModelDB(
+                model_id=model_id,
+                base_model=BASE_MODEL,
+                lora_config=types.LoraConfig(rank=8, alpha=16, seed=0).model_dump(),
+                status="ready",
+                request_id=1,
+                session_id="live_session",
+            )
+        )
+        session.commit()
+
+    assert engine.cleanup_stale_sessions() == 0
+    assert engine.backend.has_model(model_id)
+
+
 @pytest.mark.parametrize(
     ("loss_fn", "loss_fn_config", "advantages", "logprobs", "values", "returns"),
     [

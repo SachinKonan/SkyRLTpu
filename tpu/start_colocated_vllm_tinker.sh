@@ -28,7 +28,14 @@ REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models
 TINKER_API_KEY="${TINKER_API_KEY:-tml-dummy}"
 
 API_PORT="${API_PORT:-8000}"
-SESSION_TIMEOUT_SEC="${SESSION_TIMEOUT_SEC:-86400}"
+# Seconds without a client heartbeat before the engine expires a session and
+# unloads its models. This is the ONLY path that reclaims a dead client's LoRA
+# adapter slot, so 86400 (the old default) meant every crashed client leaked one
+# HBM slot for a full day — with a restart loop that exhausts the adapter pool
+# long before the day is up. The tinker SDK heartbeats every 10s from a
+# background thread for the life of the client process, so a live-but-idle
+# client is never at risk; 1800s is ~180 missed heartbeats of slack.
+SESSION_TIMEOUT_SEC="${SESSION_TIMEOUT_SEC:-1800}"
 VLLM_PORT="${VLLM_PORT:-8001}"
 VLLM_TPU_VERSION="${VLLM_TPU_VERSION:-0.23.0}"
 VLLM_MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE:-vllm}"
