@@ -41,6 +41,7 @@ from skyrl.tinker.db_models import (
     enable_sqlite_wal,
     get_async_database_url,
 )
+from skyrl.tinker.dispatch import ExternalDispatcher
 from skyrl.tinker.extra import (
     ExternalInferenceClient,
     SkyRLTrainInferenceForwardingClient,
@@ -210,6 +211,16 @@ async def lifespan(app: FastAPI):
         app.state.external_inference_client = None
         logger.info("Using internal engine for inference")
 
+    # EXTERNAL futures are the one request type the engine loop never picks up
+    # (see engine.find_single_requests), so a dropped dispatch task used to
+    # strand its row as PENDING forever. The dispatcher keeps strong references
+    # to in-flight tasks and runs a watchdog that re-dispatches orphans.
+    if app.state.external_inference_client is not None:
+        app.state.external_dispatcher = ExternalDispatcher(app.state.external_inference_client, app.state.db_engine)
+        app.state.external_dispatcher.start_watchdog()
+    else:
+        app.state.external_dispatcher = None
+
     # Build subprocess command with engine config parameters.
     parent_cmd = psutil.Process(os.getppid()).cmdline()
     cmd = _build_uv_run_cmd_engine(parent_cmd, app.state.engine_config)
@@ -248,6 +259,11 @@ async def lifespan(app: FastAPI):
 
     shutting_down = True
     monitor_task.cancel()
+
+    dispatcher = getattr(app.state, "external_dispatcher", None)
+    if dispatcher is not None:
+        with suppress(Exception):
+            await dispatcher.aclose()
 
     # Close the forwarding client's persistent httpx connection pool if we
     # installed one. Cheap no-op when external_inference_client doesn't own
@@ -1163,6 +1179,17 @@ async def save_weights_for_sampler(request: SaveWeightsForSamplerRequest, sessio
     return FutureResponse(future_id=str(request_id), status="pending", request_id=str(request_id))
 
 
+def _get_external_dispatcher(app: FastAPI) -> ExternalDispatcher:
+    """Return the app's ExternalDispatcher, creating it if an embedder installed
+    an inference client directly on ``app.state`` without going through lifespan."""
+    dispatcher = getattr(app.state, "external_dispatcher", None)
+    if dispatcher is None:
+        dispatcher = ExternalDispatcher(app.state.external_inference_client, app.state.db_engine)
+        dispatcher.start_watchdog()
+        app.state.external_dispatcher = dispatcher
+    return dispatcher
+
+
 async def get_sampling_model(request: SampleRequest, session: AsyncSession) -> (str | None, str | None):
     """Return (base_model, model_path) for a sampling request."""
     # Resolve model/base from sampling_session_id if provided
@@ -1231,11 +1258,12 @@ async def asample(request: SampleRequest, req: Request, session: AsyncSession = 
     await session.commit()
 
     if route_external:
-        asyncio.create_task(
-            req.app.state.external_inference_client.call_and_store_result(
-                request_id, request, model_id, checkpoint_id, base_model=base_model
-            )
-        )
+        # Dispatch through the tracked dispatcher, never a bare create_task: the
+        # event loop keeps only a weak reference to an untracked task (it can be
+        # GC'd mid-flight) and its exception is never retrieved. The dispatcher
+        # holds the reference, logs failures, and lets the watchdog recover the
+        # row if the task dies before writing a result.
+        _get_external_dispatcher(req.app).dispatch(request_id, request, model_id, checkpoint_id, base_model=base_model)
 
     return FutureResponse(future_id=str(request_id), status="pending", request_id=str(request_id))
 

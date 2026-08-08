@@ -1,18 +1,17 @@
 import asyncio
 import os
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
 from cloudpathlib import AnyPath
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from skyrl.backends.renderer import render_model_input
 from skyrl.tinker import types
 from skyrl.tinker.config import EngineConfig
-from skyrl.tinker.db_models import FutureDB, RequestStatus
+from skyrl.tinker.db_models import RequestStatus
+from skyrl.tinker.dispatch import complete_external_future, format_exception
 from skyrl.utils.log import logger
 from skyrl.utils.storage import download_and_unpack
 
@@ -102,16 +101,20 @@ class ExternalInferenceClient:
             result_data = result.model_dump()
             status = RequestStatus.COMPLETED
         except Exception as e:
-            logger.exception("External engine error")
-            result_data = {"error": str(e), "status": "failed"}
+            logger.exception("External engine error (request_id=%s, engine=%s)", request_id, base_url)
+            # format_exception, not str(e): httpx timeouts stringify to "".
+            result_data = {"error": format_exception(e), "status": "failed"}
             status = RequestStatus.FAILED
 
-        async with AsyncSession(self.db_engine) as session:
-            future = await session.get(FutureDB, request_id)
-            future.result_data = result_data
-            future.status = status
-            future.completed_at = datetime.now(timezone.utc)
-            await session.commit()
+        # The terminal write used to sit outside any try/except and used a
+        # read-modify-write on the ORM object. Both were load-bearing bugs: a
+        # pool timeout or 'database is locked' here killed the task with the
+        # sample result already in hand, and the row stayed PENDING forever with
+        # nothing to re-dispatch it. complete_external_future retries, is
+        # conditional on the row still being PENDING (so a re-dispatched request
+        # can never be completed twice), and leaves the row PENDING for the
+        # watchdog if it truly cannot write.
+        await complete_external_future(self.db_engine, request_id, result_data, status)
 
     async def _forward_to_engine(
         self,

@@ -5,7 +5,6 @@ Pair to :class:`ExternalInferenceClient`; resolves the target URL from
 """
 
 import asyncio
-from datetime import datetime, timezone
 
 import httpx
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -13,7 +12,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from skyrl.backends.renderer import render_model_input
 from skyrl.tinker import types
 from skyrl.tinker.config import EngineConfig
-from skyrl.tinker.db_models import EngineStateDB, FutureDB, RequestStatus
+from skyrl.tinker.db_models import EngineStateDB, RequestStatus
+from skyrl.tinker.dispatch import complete_external_future, format_exception
 from skyrl.utils.log import logger
 
 
@@ -77,20 +77,14 @@ class SkyRLTrainInferenceForwardingClient:
             status = RequestStatus.COMPLETED
         except Exception as e:
             logger.exception("Backend-forwarded sample failed (request_id=%s)", request_id)
-            result_data = {"error": str(e), "status": "failed"}
+            # format_exception, not str(e): httpx timeouts stringify to "".
+            result_data = {"error": format_exception(e), "status": "failed"}
             status = RequestStatus.FAILED
 
-        async with AsyncSession(self.db_engine) as session:
-            future = await session.get(FutureDB, request_id)
-            if future is None:
-                # Row was deleted between scheduling and completion (cancelled
-                # request, stale-session GC). Nothing to write back.
-                logger.warning("FutureDB row %s missing on completion write — skipping", request_id)
-                return
-            future.result_data = result_data
-            future.status = status
-            future.completed_at = datetime.now(timezone.utc)
-            await session.commit()
+        # Retried + conditional on the row still being PENDING; see
+        # skyrl.tinker.dispatch.complete_external_future. If the write cannot
+        # land the row is left PENDING for the watchdog to re-dispatch.
+        await complete_external_future(self.db_engine, request_id, result_data, status)
 
     async def _forward_with_retry(self, sample_req, model_id: str, *, base_model: str | None) -> types.SampleOutput:
         # httpx.RequestError covers ConnectError, ReadError, TimeoutException, etc.
