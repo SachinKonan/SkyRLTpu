@@ -393,6 +393,30 @@ async def test_request_is_failed_after_max_redispatch(db_engine):
     assert client.calls == [request_id] * 3
 
 
+async def test_abandoned_rows_are_failed_not_regenerated(db_engine):
+    """An API restart against a populated DB must not start a re-dispatch storm.
+
+    Rows far past any client deadline are failed outright: regenerating them would
+    burn real vLLM time on results nobody will ever read.
+    """
+    client = FakeInferenceClient(db_engine, behavior="ok")
+    dispatcher = ExternalDispatcher(client, db_engine, stale_after_sec=300.0, abandon_after_sec=7200.0)
+
+    recoverable = await insert_external_future(db_engine, age_sec=600.0)
+    abandoned = [await insert_external_future(db_engine, age_sec=20000.0) for _ in range(3)]
+
+    report = await dispatcher.sweep_once()
+
+    assert report.redispatched == [recoverable]
+    assert report.failed == abandoned
+    assert client.calls == [recoverable]  # zero wasted generations
+
+    for request_id in abandoned:
+        future = await read_future(db_engine, request_id)
+        assert future.status == RequestStatus.FAILED
+        assert "abandoned" in future.result_data["error"]
+
+
 # --- task lifetime ---------------------------------------------------------
 
 
@@ -522,6 +546,7 @@ async def test_watchdog_reads_env_configuration(db_engine, monkeypatch):
     monkeypatch.setenv("SKYRL_EXTERNAL_WATCHDOG_STALE_SEC", "111")
     monkeypatch.setenv("SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC", "2222")
     monkeypatch.setenv("SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH", "5")
+    monkeypatch.setenv("SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC", "3333")
     monkeypatch.setenv("SKYRL_EXTERNAL_WATCHDOG_ENABLED", "0")
 
     dispatcher = ExternalDispatcher(FakeInferenceClient(db_engine), db_engine)
@@ -529,6 +554,7 @@ async def test_watchdog_reads_env_configuration(db_engine, monkeypatch):
     assert dispatcher.stale_after_sec == 111
     assert dispatcher.inflight_timeout_sec == 2222
     assert dispatcher.max_redispatch == 5
+    assert dispatcher.abandon_after_sec == 3333
     assert dispatcher.enabled is False
     assert dispatcher.start_watchdog() is None
 

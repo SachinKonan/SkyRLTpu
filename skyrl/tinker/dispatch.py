@@ -66,6 +66,7 @@ ENV_POLL_SEC = "SKYRL_EXTERNAL_WATCHDOG_POLL_SEC"
 ENV_STALE_SEC = "SKYRL_EXTERNAL_WATCHDOG_STALE_SEC"
 ENV_INFLIGHT_SEC = "SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC"
 ENV_MAX_REDISPATCH = "SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH"
+ENV_ABANDON_SEC = "SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC"
 
 # How often the watchdog sweeps the futures table.
 DEFAULT_POLL_SEC = 30.0
@@ -87,6 +88,12 @@ DEFAULT_STALE_SEC = 300.0
 DEFAULT_INFLIGHT_SEC = 3600.0
 # Re-dispatch attempts before the row is failed so the client can retry.
 DEFAULT_MAX_REDISPATCH = 2
+# Past this age a row is failed outright rather than re-dispatched: no client is
+# still waiting (the SDK's own ceiling is 7200s, the discover client's is 900s),
+# so regenerating it would burn real vLLM time on a result nobody reads. This is
+# what stops an API restart against a populated DB from kicking off a storm of
+# useless generations. Set <= 0 to always re-dispatch regardless of age.
+DEFAULT_ABANDON_SEC = 7200.0
 
 # Retries for the terminal write itself (pool timeouts / 'database is locked').
 _COMPLETE_WRITE_ATTEMPTS = 3
@@ -314,6 +321,7 @@ class ExternalDispatcher:
         stale_after_sec: float | None = None,
         inflight_timeout_sec: float | None = None,
         max_redispatch: int | None = None,
+        abandon_after_sec: float | None = None,
     ):
         self.client = client
         self.db_engine = db_engine
@@ -329,6 +337,9 @@ class ExternalDispatcher:
         )
         self.max_redispatch = (
             _env_int(ENV_MAX_REDISPATCH, DEFAULT_MAX_REDISPATCH) if max_redispatch is None else max_redispatch
+        )
+        self.abandon_after_sec = (
+            _env_float(ENV_ABANDON_SEC, DEFAULT_ABANDON_SEC) if abandon_after_sec is None else abandon_after_sec
         )
 
         # Strong references: without these the event loop only weakly references
@@ -506,7 +517,36 @@ class ExternalDispatcher:
             )
         return report
 
+    async def _fail(self, request_id: int, reason: str, report: SweepReport) -> None:
+        await complete_external_future(
+            self.db_engine,
+            request_id,
+            {"error": reason, "status": "failed"},
+            RequestStatus.FAILED,
+        )
+        self._attempts.pop(request_id, None)
+        report.failed.append(request_id)
+
     async def _redispatch(self, request_id: int, age: float, report: SweepReport) -> bool:
+        if self.abandon_after_sec > 0 and age > self.abandon_after_sec:
+            # Nobody is waiting on a row this old, so regenerating it would burn
+            # vLLM time for nothing. Fail it instead — this is also what keeps an
+            # API restart against a populated DB from starting a re-dispatch storm.
+            logger.error(
+                "WATCHDOG: external request %s is %.0fs old (abandon threshold %.0fs) — "
+                "no client is still waiting; failing it instead of re-dispatching",
+                request_id,
+                age,
+                self.abandon_after_sec,
+            )
+            await self._fail(
+                request_id,
+                f"external sampling request {request_id} was abandoned after {age:.0f}s "
+                f"(abandon threshold {self.abandon_after_sec:.0f}s); it was never served",
+                report,
+            )
+            return False
+
         attempts = self._attempts.get(request_id, 0)
         if attempts >= self.max_redispatch:
             logger.error(
@@ -516,20 +556,12 @@ class ExternalDispatcher:
                 attempts,
                 age,
             )
-            await complete_external_future(
-                self.db_engine,
+            await self._fail(
                 request_id,
-                {
-                    "error": (
-                        f"external sampling request {request_id} was dropped and could not be "
-                        f"recovered after {attempts} re-dispatch attempts (age {age:.0f}s)"
-                    ),
-                    "status": "failed",
-                },
-                RequestStatus.FAILED,
+                f"external sampling request {request_id} was dropped and could not be "
+                f"recovered after {attempts} re-dispatch attempts (age {age:.0f}s)",
+                report,
             )
-            self._attempts.pop(request_id, None)
-            report.failed.append(request_id)
             return False
 
         loaded = await self._load_request(request_id)

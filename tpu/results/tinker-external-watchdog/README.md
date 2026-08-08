@@ -152,8 +152,11 @@ New module `skyrl/tinker/dispatch.py`.
   * **no live task, older than `STALE_SEC`** → orphan (task died, was cancelled at
     shutdown, or belonged to a previous API process). Re-dispatch by replaying the
     stored `SampleInput` through duck-typed shims.
-  * **past `MAX_REDISPATCH` attempts** → fail explicitly with a descriptive error
-    so the client gets a 400 and can retry, instead of hanging.
+  * **past `MAX_REDISPATCH` attempts, or older than `ABANDON_SEC`** → fail
+    explicitly with a descriptive error so the client gets a 400 and can retry,
+    instead of hanging. The abandon threshold matters on restart: without it, an
+    API coming up against a populated DB would regenerate every stale row it
+    found, burning vLLM time on results no client is still waiting for.
 * Every re-dispatch logs at ERROR with request id, age, and attempt number, plus a
   per-sweep summary line, so the rate is visible in the API log.
 * `aclose()` (wired into the lifespan) leaves in-flight rows PENDING rather than
@@ -171,6 +174,7 @@ rows stop reading `{"error": ""}`.
 | `SKYRL_EXTERNAL_WATCHDOG_STALE_SEC` | `300` | Age at which a row with **no live task** is re-dispatched. |
 | `SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC` | `3600` | Age at which a row **with** a live task is cancelled + retried. `<= 0` disables. |
 | `SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH` | `2` | Attempts before the row is failed. |
+| `SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC` | `7200` | Past this age a row is failed outright instead of re-dispatched. `<= 0` disables. |
 
 `INFLIGHT_SEC=3600` sits above the measured 18-55min legitimate latency and below
 the 7200s read timeout. An operator who would rather burn a duplicate generation
@@ -236,6 +240,10 @@ a fake inference client; no engine, no backend, no model). Highlights:
   resurrected original cannot overwrite a re-dispatched success.
 * `test_request_is_failed_after_max_redispatch` — budget exhausted → FAILED with
   `"could not be recovered"`, total calls = original + 2.
+* `test_redispatched_attempt_gets_a_fresh_inflight_clock` — the ceiling is measured
+  per attempt, so a replacement is not cancelled on the next sweep.
+* `test_abandoned_rows_are_failed_not_regenerated` — three 20000s-old rows are
+  failed and a 600s-old one recovered, with **zero** wasted generations.
 * `test_dispatcher_holds_a_strong_reference_to_in_flight_tasks` — survives a forced
   `gc.collect()` while suspended; `_inflight` drains on completion.
 * `test_create_session_starts_the_staleness_clock`,
