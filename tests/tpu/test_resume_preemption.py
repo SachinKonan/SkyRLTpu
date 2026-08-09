@@ -137,6 +137,31 @@ def test_missing_state_file_starts_at_zero(tmp_path: Path):
     assert R.read_global_step(str(tmp_path / "nonexistent")) == 0
 
 
+def test_seeds_from_existing_metrics_when_state_file_absent(tmp_path: Path):
+    """A run that predates this counter has already logged N steps to its wandb
+    run. Starting the counter at 0 would emit steps BELOW wandb's max, and wandb
+    drops out-of-order steps on a resumed run -- silently losing everything."""
+    (tmp_path / "metrics.jsonl").write_text(
+        "".join(json.dumps({"step": i}) + "\n" for i in range(9))
+    )
+    assert R.read_global_step(str(tmp_path)) == 9
+    assert R.advance_global_step(str(tmp_path)) == 10
+
+
+def test_state_file_takes_over_after_first_write(tmp_path: Path):
+    """Seeded once from the 1 pre-existing metrics row, then the state file is
+    authoritative -- so the count continues 2,3,4,5 rather than re-seeding."""
+    (tmp_path / "metrics.jsonl").write_text('{"step": 0}\n')
+    seen = [R.advance_global_step(str(tmp_path)) for _ in range(4)]
+    assert seen == [2, 3, 4, 5]
+    assert R.read_global_step(str(tmp_path)) == 5
+
+
+def test_blank_lines_in_metrics_are_not_counted(tmp_path: Path):
+    (tmp_path / "metrics.jsonl").write_text('{"step": 0}\n\n{"step": 1}\n\n')
+    assert R.read_global_step(str(tmp_path)) == 2
+
+
 # ---------------------------------------------------------------------------
 # Arm R trigger -- validated against the four historical restart events
 # ---------------------------------------------------------------------------

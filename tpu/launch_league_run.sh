@@ -9,8 +9,9 @@ mkdir -p ~/skyrl-runs
 
 # Durable run state (spot slices die ~2h): restore the run dir (PUCT tree,
 # metrics, best-seq) from GCS before launching, and keep a backup sidecar
-# rsyncing it up every 5 min. On preemption-restart the TREE resumes (the
-# discoveries survive); LoRA weights restart fresh (save_every=0).
+# rsyncing it up every 5 min. With SAVE_EVERY=1 and the re-register step below,
+# a preemption is a no-op: tree, LoRA weights, optimizer state and the step
+# counter all come back and the run continues where it left off.
 GCS_RUN=gs://sk7524-tinker-tpu-us-east5/skyrl-runs/league1
 mkdir -p ~/skyrl-runs/league1
 for _r in 1 2 3; do
@@ -33,6 +34,28 @@ sed -i "s|GCSRUNPLACEHOLDER|$GCS_RUN|" ~/sidecar_league1.sh
 chmod +x ~/sidecar_league1.sh
 tmux kill-session -t league-backup 2>/dev/null
 tmux new-session -d -s league-backup "bash ~/sidecar_league1.sh"
+
+# Re-register durable checkpoints BEFORE the client starts.
+#
+# This MUST live here, not only in bring-up step 4z: the guardian relaunches a
+# dead client by invoking THIS script directly and never re-runs bring-up, so 4z
+# is skipped on every relaunch. That gap silently reset LoRA weights to base on
+# all three Erdos arms (2026-08-09) -- the tarballs were on the gcsfuse mount the
+# whole time, but the per-VM sqlite registry had no rows, so
+# create_training_client_from_state 404'd and each member started from scratch.
+#
+# Reads the LOCAL checkpoints.jsonl the restore above just pulled down; 4z
+# fetched it with gsutil and so died whenever gcloud auth expired.
+# reregister_states.py is idempotent (INSERT OR IGNORE, skips absent tarballs).
+for _spec in "member_qwen:Qwen/Qwen3.5-27B" "member_gemma:google/gemma-4-31B-it"; do
+  _md=${_spec%%:*}; _bm=${_spec##*:}
+  _jsonl=$(ls ~/skyrl-runs/league1/tinker_log/*/"$_md"/checkpoints.jsonl 2>/dev/null | head -1)
+  if [ -s "${_jsonl:-}" ]; then
+    python3 ~/ttd-client/tpu/reregister_states.py --base-model "$_bm" --jsonl "$_jsonl" 2>&1 | tail -2
+  else
+    echo "reregister $_md: no local checkpoints.jsonl (fresh lineage)"
+  fi
+done
 
 tmux kill-session -t league 2>/dev/null
 tmux new-session -d -s league "cd ~/ttd-client && \
