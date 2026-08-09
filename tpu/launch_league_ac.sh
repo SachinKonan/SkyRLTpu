@@ -12,12 +12,27 @@ EXP=${EXPERIMENT_NAME:-league1e-ac1-qwen-gemma}
 mkdir -p ~/skyrl-runs
 
 GCS_RUN=gs://sk7524-tinker-tpu-us-east5/skyrl-runs/league1e
+mkdir -p ~/skyrl-runs/league1e
 for _r in 1 2 3; do
   gsutil -m rsync -r "$GCS_RUN" ~/skyrl-runs/league1e >> ~/restore.log 2>&1 && break
   echo "restore attempt $_r failed; retrying" >> ~/restore.log; sleep 10
 done
+# run-dir backup sidecar. The loop lives in a FILE, not an inline tmux string:
+# inline quoting of the rsync -x regex made the session die at spawn on every
+# arm (healer had to recreate it every time).
+cat > ~/sidecar_league1e.sh <<'SIDECAR'
+#!/bin/bash
+while true; do
+  gsutil -m rsync -r -x '.*wandb/.*|.*\.tmp$|.*\.gstmp$' \
+    "$HOME/skyrl-runs/league1e" "GCSRUNPLACEHOLDER" >> "$HOME/sidecar.log" 2>&1
+  echo "sidecar-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/sidecar.log"
+  sleep 300
+done
+SIDECAR
+sed -i "s|GCSRUNPLACEHOLDER|$GCS_RUN|" ~/sidecar_league1e.sh
+chmod +x ~/sidecar_league1e.sh
 tmux kill-session -t league-backup 2>/dev/null
-tmux new-session -d -s league-backup "while true; do gsutil -m rsync -r -x '.*wandb/.*|.*\.tmp$|.*\.gstmp$' ~/skyrl-runs/league1e $GCS_RUN >> ~/sidecar.log 2>&1; echo sidecar-rc=\$? >> ~/sidecar.log; sleep 300; done"
+tmux new-session -d -s league-backup "bash ~/sidecar_league1e.sh"
 
 tmux kill-session -t league 2>/dev/null
 tmux new-session -d -s league "cd ~/ttd-client && \
@@ -36,7 +51,7 @@ tmux new-session -d -s league "cd ~/ttd-client && \
   TTD_EVAL_BACKEND=${TTD_EVAL_BACKEND:-ray} TTD_RAY_PAYLOAD=${TTD_RAY_PAYLOAD:-1} \
   TTD_LEAGUE_PIPELINE=${TTD_LEAGUE_PIPELINE:-1} \
   RAY_ADDRESS=${RAY_ADDRESS:-127.0.0.1:6379} NUM_CPUS_PER_TASK=1 \
-  GROUPS_PER_BATCH=16 GROUP_SIZE=32 NUM_EPOCHS=15 \
+  GROUPS_PER_BATCH=16 GROUP_SIZE=32 NUM_EPOCHS=${NUM_EPOCHS:-40} \
   LEARNING_RATE=4e-5 LORA_RANK=32 KL_PENALTY_COEF=0 TEMPERATURE=1.0 \
   CONTEXT_WINDOW=18432 EVAL_TIMEOUT=1100 SAVE_EVERY=${SAVE_EVERY:-1} \
   WANDB_PROJECT=tpu-tinker-exps \

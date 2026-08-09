@@ -12,12 +12,27 @@ mkdir -p ~/skyrl-runs
 # rsyncing it up every 5 min. On preemption-restart the TREE resumes (the
 # discoveries survive); LoRA weights restart fresh (save_every=0).
 GCS_RUN=gs://sk7524-tinker-tpu-us-east5/skyrl-runs/league1
+mkdir -p ~/skyrl-runs/league1
 for _r in 1 2 3; do
   gsutil -m rsync -r "$GCS_RUN" ~/skyrl-runs/league1 >> ~/restore.log 2>&1 && break
   echo "restore attempt $_r failed; retrying" >> ~/restore.log; sleep 10
 done
+# run-dir backup sidecar. The loop lives in a FILE, not an inline tmux string:
+# inline quoting of the rsync -x regex made the session die at spawn on every
+# arm (healer had to recreate it every time).
+cat > ~/sidecar_league1.sh <<'SIDECAR'
+#!/bin/bash
+while true; do
+  gsutil -m rsync -r -x '.*wandb/.*|.*\.tmp$|.*\.gstmp$' \
+    "$HOME/skyrl-runs/league1" "GCSRUNPLACEHOLDER" >> "$HOME/sidecar.log" 2>&1
+  echo "sidecar-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/sidecar.log"
+  sleep 300
+done
+SIDECAR
+sed -i "s|GCSRUNPLACEHOLDER|$GCS_RUN|" ~/sidecar_league1.sh
+chmod +x ~/sidecar_league1.sh
 tmux kill-session -t league-backup 2>/dev/null
-tmux new-session -d -s league-backup "while true; do gsutil -m rsync -r -x '.*wandb/.*|.*\.tmp$|.*\.gstmp$' ~/skyrl-runs/league1 $GCS_RUN >> ~/sidecar.log 2>&1; echo sidecar-rc=\$? >> ~/sidecar.log; sleep 300; done"
+tmux new-session -d -s league-backup "bash ~/sidecar_league1.sh"
 
 tmux kill-session -t league 2>/dev/null
 tmux new-session -d -s league "cd ~/ttd-client && \

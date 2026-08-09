@@ -484,12 +484,23 @@ wait_from_worker() {
   local worker="$1"
   local url="$2"
   local label="$3"
+  # Fail fast when the engine is already dead: a vLLM whose EngineCore failed
+  # (commonly "No space left on device" from a partial HF-cache shard) never
+  # recovers, but the plain poll would still burn the full READY_ATTEMPTS
+  # window -- ~60min, i.e. an entire spot slice's median lifetime -- before the
+  # attempt fails and the guardian can recycle.
   local remote_cmd="
 set -euo pipefail
+vlog=\"\$HOME/skyrl-logs/vllm-tpu.log\"
 for i in \$(seq 1 '${READY_ATTEMPTS}'); do
   if curl -fsS --max-time 5 '${url}' >/dev/null 2>&1; then
     echo '${label} ready at ${url}'
     exit 0
+  fi
+  if [ -f \"\$vlog\" ] && grep -qE 'Engine core initialization failed|EngineCore failed to start|No space left on device' \"\$vlog\" 2>/dev/null; then
+    echo '${label} FATAL: vLLM engine core died -- not waiting out the poll window' >&2
+    grep -aE 'RuntimeError|No space left on device' \"\$vlog\" 2>/dev/null | tail -3 >&2
+    exit 1
   fi
   sleep '${READY_SLEEP_SEC}'
 done

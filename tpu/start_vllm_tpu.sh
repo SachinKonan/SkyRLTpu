@@ -347,10 +347,33 @@ if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
 fi
 # Restore HF weights from the shared GCS cache onto local SSD so vLLM finds
 # them already present under --download-dir (below) instead of pulling from
-# HuggingFace. Best effort: a miss/partial just means vLLM downloads as usual.
+# HuggingFace.
+# NOT best-effort: an interrupted rsync leaves <shard>_.gstmp partials, and a
+# partial shard is WORSE than no cache -- vLLM ignores it, re-downloads the
+# full weights via xet alongside the 40GB+ of dead partial, fills the disk, and
+# dies with "Engine core initialization failed / No space left on device".
+# The bring-up then waits for that worker forever. So: retry, and if partials
+# survive, delete them so the fallback download starts from a clean disk.
 mkdir -p "${REMOTE_HF_HOME}/hub"
 if [[ -n "${HF_CACHE_GCS}" ]]; then
-  gsutil -m -q rsync -r "${HF_CACHE_GCS}" "${REMOTE_HF_HOME}/hub" 2>/dev/null && echo "restored HF cache from ${HF_CACHE_GCS}" || echo "HF cache restore skipped/failed (will download)"
+  hf_ok=0
+  for _try in 1 2 3; do
+    if gsutil -m -q rsync -r "${HF_CACHE_GCS}" "${REMOTE_HF_HOME}/hub" 2>/dev/null; then
+      hf_ok=1
+    fi
+    _partials="\$(find "${REMOTE_HF_HOME}/hub" -name '*_.gstmp' -o -name '*.incomplete' 2>/dev/null | head -1)"
+    if [[ "\$hf_ok" == "1" && -z "\$_partials" ]]; then
+      echo "restored HF cache from ${HF_CACHE_GCS} (attempt \$_try)"
+      break
+    fi
+    echo "HF cache restore incomplete (attempt \$_try): partial=\${_partials:-none}"
+    hf_ok=0
+    sleep 15
+  done
+  if [[ "\$hf_ok" != "1" ]]; then
+    _n="\$(find "${REMOTE_HF_HOME}/hub" \( -name '*_.gstmp' -o -name '*.incomplete' \) -delete -print 2>/dev/null | wc -l)"
+    echo "HF cache restore FAILED after 3 tries; purged \$_n partial file(s) so vLLM downloads onto a clean disk"
+  fi
 fi
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
   export CLOUD_TPU_TASK_ID="\${VLLM_RELATIVE_WORKER_ID}"

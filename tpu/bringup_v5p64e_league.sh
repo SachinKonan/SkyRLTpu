@@ -144,20 +144,31 @@ gk=$(timeout 20 ssh $SSHO sk7524_princeton_edu@$W0 "curl -fsS -m6 http://$W4INT:
 log "gemma tinker (from w0 via $W4INT)=$gk"
 [ "$gk" = UP ] || { log "gemma half FAILED -- see gemma_engine.log"; echo V5P64-GEMMAFAIL; exit 1; }
 
-# 4z. trainer-state durability: restore engine checkpoints (client resume
-# reads /tmp/skyrl_checkpoints/<model_id>/<ckpt>.tar.gz by relative path, so a
-# rebuilt trainer can load the pre-preemption LoRA+optimizer) and start the
-# per-host state-backup sidecar (5-min GCS rsync).
-GCSROOT=gs://sk7524-tinker-tpu-us-east5/league-state
-for spec in "e-w0:1" "e-w4:5"; do
-  skey=${spec%%:*}; f=${spec##*:}
+# 4z. trainer-state durability: checkpoint tarballs are already durable (the
+# server's --checkpoints-base is the gcsfuse bucket mount), but the per-VM
+# sqlite registry (models/checkpoints tables) dies with the slice and makes
+# create_training_client_from_state 404. Re-register rows for every state the
+# run's checkpoints.jsonl mentions whose tarball exists.
+GCS_RUN=gs://sk7524-tinker-tpu-us-east5/skyrl-runs/league1e
+for spec in "member_qwen:1:Qwen/Qwen3.5-27B" "member_gemma:5:google/gemma-4-31B-it"; do
+  md=$(echo "$spec"|cut -d: -f1); f=$(echo "$spec"|cut -d: -f2); bm=$(echo "$spec"|cut -d: -f3)
   h=$(echo "$EXT"|cut -d, -f$f)
-  timeout 600 ssh $SSHO sk7524_princeton_edu@$h "
-    mkdir -p /tmp/skyrl_checkpoints
-    gsutil -q -m rsync -r $GCSROOT/$skey /tmp/skyrl_checkpoints 2>/dev/null
-    tmux kill-session -t state-backup 2>/dev/null
-    tmux new-session -d -s state-backup 'while true; do gsutil -q -m rsync -r /tmp/skyrl_checkpoints $GCSROOT/$skey 2>/dev/null; sleep 300; done'
-    echo $skey-state-restored" 2>/dev/null | grep -v Warning | tee -a "$PROG"
+  # A FAILED FETCH IS NOT "NO RECORDS". Expired gcloud auth makes this cp fail,
+  # and treating that as a fresh lineage silently discards a real weight history
+  # (hit the 4-agent 2026-08-08). Distinguish the two: only declare fresh when
+  # gsutil says the object does not exist.
+  _err=$(gsutil -q cp "$GCS_RUN/tinker_log/*/$md/checkpoints.jsonl" /tmp/rr_e_$md.jsonl 2>&1)
+  if [ ! -s /tmp/rr_e_$md.jsonl ]; then
+    if printf '%s' "$_err" | grep -qiE "reauthentication|invalid_grant|credentials|401"; then
+      log "reregister $md: AUTH-FAIL fetching records -- SKIPPING re-register (NOT declaring fresh)"
+    else
+      log "reregister $md: no jsonl in GCS (fresh lineage)"
+    fi
+    continue
+  fi
+  timeout 60 scp $SSHO "$REPO/tpu/reregister_states.py" sk7524_princeton_edu@$h:~/reregister_states.py 2>/dev/null
+  timeout 60 scp $SSHO /tmp/rr_e_$md.jsonl sk7524_princeton_edu@$h:~/rr_$md.jsonl 2>/dev/null
+  timeout 90 ssh $SSHO sk7524_princeton_edu@$h "python3 ~/reregister_states.py --base-model '$bm' --jsonl ~/rr_$md.jsonl" 2>/dev/null | grep -v Warning | tee -a "$PROG"
 done
 
 # 4y. reclaim vLLM-worker disks: once a worker's server is SERVING, its HF
