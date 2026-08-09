@@ -126,12 +126,17 @@ def main() -> None:
             train_max_seq=_env_optional_int(f"TTD_M{i}_TRAIN_MAX_SEQ"),
         ))
 
-    if len(members) < 2:
+    # Single-member runs are legitimate for the Stage-A single-model cells, but a
+    # lone member is ALSO what a comma-split TTD_ENSEMBLE_MODELS looks like
+    # (sbatch --export=ALL,... splits on commas) -- a silent way to run half the
+    # experiment you meant to. Require an explicit opt-in rather than guessing.
+    if len(members) < 2 and os.environ.get("TTD_ALLOW_SINGLE_MEMBER", "0") != "1":
         raise SystemExit(
             f"TTD_ENSEMBLE_MODELS parsed to {len(members)} member(s): "
-            f"{[m.model_name for m in members]}. An ensemble needs >=2. NOTE: if you "
-            "passed this var inside 'sbatch --export=ALL,...', sbatch split it on "
-            "commas — export it into the shell instead and rely on --export=ALL."
+            f"{[m.model_name for m in members]}. An ensemble needs >=2, or set "
+            "TTD_ALLOW_SINGLE_MEMBER=1 for a deliberate single-model run. NOTE: if "
+            "you passed this var inside 'sbatch --export=ALL,...', sbatch split it "
+            "on commas — export it into the shell instead and rely on --export=ALL."
         )
 
     date = datetime.now().strftime("%Y%m%d-%H%M%S")
