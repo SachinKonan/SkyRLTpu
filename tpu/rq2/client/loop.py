@@ -336,6 +336,12 @@ def main():
     args = ap.parse_args()
     if args.B is not None and args.G is not None:
         args.n, args.k = args.B * args.G, args.G     # the B x G framing: n rollouts as B bundles of G
+        # C = B: one bundle per chain per step ("sample one from each chain"). With C < B the
+        # extra bundles per chain would select against IDENTICAL visit counts -- selection is
+        # deterministic, so they would all carry the same 5 inspirations and effective B
+        # collapses to C. The async reference never hits this because visits update between a
+        # chain's consecutive batches.
+        args.chains = args.B
 
     out = Path(args.out).resolve()
     (out / "raw").mkdir(parents=True, exist_ok=True)
