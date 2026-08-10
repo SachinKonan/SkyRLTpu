@@ -12,6 +12,10 @@ set -euo pipefail
 
 MODEL="${MODEL:?MODEL required}"
 PORT="${PORT:-8001}"
+# Default stays loopback (the pallas probe reaches it locally). The llama-farm sets
+# BIND_HOST=0.0.0.0 so neuronic can reach it directly over the existing
+# strategist-vllm-ingress firewall rule (128.112.0.0/16 -> tcp:8001-8012).
+BIND_HOST="${BIND_HOST:-127.0.0.1}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-16384}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
 HF_CACHE_GCS="${HF_CACHE_GCS:-}"
@@ -28,6 +32,13 @@ if ! "$VENV/bin/python" -c "import vllm" >/dev/null 2>&1; then
   uv venv --python 3.12 "$VENV"
   uv pip install --python "$VENV/bin/python" "vllm-tpu==0.23.0"
   uv pip install --python "$VENV/bin/python" hf_transfer || true
+fi
+# Optional extra pins applied AFTER the base install. gemma-4-31B fails to load under
+# transformers 5.15.0 with AmbiguousGlobalPerLayerAttributeError ('head_dim' is per-layer),
+# while qwen is fine, so the pin is per-model rather than global.
+if [ -n "${EXTRA_PIP:-}" ]; then
+  echo "applying extra pins: $EXTRA_PIP"
+  uv pip install --python "$VENV/bin/python" $EXTRA_PIP || echo "extra pin failed (continuing)"
 fi
 
 export HF_HOME="$HOME/.cache/huggingface"
@@ -80,7 +91,7 @@ tmux new-session -d -s vllm-probe \
    HF_HOME='$HF_HOME' HF_HUB_ENABLE_HF_TRANSFER=1 VLLM_XLA_CACHE_PATH='$VLLM_XLA_CACHE_PATH' \
    '$VENV/bin/vllm' serve '$MODEL' \
      --served-model-name '$MODEL' \
-     --host 127.0.0.1 --port $PORT \
+     --host ${BIND_HOST:-127.0.0.1} --port $PORT \
      --tensor-parallel-size 4 \
      --max-model-len $MAX_MODEL_LEN \
      --max-num-seqs $MAX_NUM_SEQS \
