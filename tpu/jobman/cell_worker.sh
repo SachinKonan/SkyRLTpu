@@ -72,7 +72,7 @@ RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray
 for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
   timeout 900 ssh $SSHO sk7524_princeton_edu@"$ip" "
     export PATH=\$HOME/.local/bin:\$PATH
-    pgrep -f 'ray/core' >/dev/null && { echo \"ray already on \$(hostname)\"; exit 0; }
+    pgrep -f '[r]ay/core' >/dev/null && { echo \"ray already on \$(hostname)\"; exit 0; }
     [ -x ~/.venvs/grader/bin/ray ] || {
       uv venv ~/.venvs/grader --python 3.11 >/dev/null 2>&1
       uv pip install --python ~/.venvs/grader/bin/python 'ray==$RAYV' numpy scipy shapely numba scikit-learn psutil >/dev/null 2>&1
