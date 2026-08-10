@@ -26,8 +26,17 @@ from pathlib import Path
 sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio")
 from store import Store  # noqa: E402
 
-MAX_MIX = 5          # SimpleTES: up to 5 states mixed into one prompt
+MAX_MIX = 5          # matches SimpleTES's num_inspirations default of 5
 MAX_PROGRAM_CHARS = 24000
+# SimpleTES's generation prompt carries THREE context channels, not one (verified against the
+# repo: templates/generation.py + templates/elite_context.py). We had only the first:
+#   [SAMPLED INSPIRATIONS] ~5 full solutions WITH code+reflections   -- depth
+#   [ELITE POOL OVERVIEW]  N solutions, scores+insights, NO code     -- breadth
+#   [FAILURE PATTERNS]     aggregated common errors                  -- negative constraints
+# The latter two are assembled in CODE, not by an LLM, so they cost nothing and add no
+# aggregator to this arm.
+N_ELITE = 12
+N_FAILURE_PATTERNS = 4
 
 
 class State:
@@ -82,8 +91,50 @@ class PuctState(State):
                 if m.get("summary"):
                     parts.append(f"Reflection from its author: {m['summary']}")
                 parts.append(f"```{fence}\n{(m.get('program') or '')[:MAX_PROGRAM_CHARS]}\n```")
+            elite = self._elite_overview()
+            if elite:
+                parts += ["", elite]
+            fails = self._failure_patterns()
+            if fails:
+                parts += ["", fails]
             out.append("\n".join(parts))
         return out
+
+    def _elite_overview(self):
+        """Breadth channel: what directions have already been tried, scores and reflections only
+        -- deliberately NO code, so it stays cheap enough to show many more than the 5 mixed
+        inspirations."""
+        scored = [n for n in self.store.g.nodes if self.store.g.nodes[n].get("r") is not None]
+        if len(scored) < 2:
+            return ""
+        scored.sort(key=lambda n: self.store.g.nodes[n]["r"], reverse=self.maximize)
+        lines = [f"[ELITE POOL OVERVIEW] ({min(N_ELITE, len(scored))} of {len(scored)} solutions "
+                 f"so far; scores and insights only)",
+                 "Use this to see which directions are already explored, avoid duplicating them,",
+                 "and identify gaps worth a genuinely different approach.", ""]
+        for i, n in enumerate(scored[:N_ELITE], 1):
+            nd = self.store.g.nodes[n]
+            refl = (nd.get("summary") or "").strip().replace("\n", " ")
+            lines.append(f"#{i} [score {nd['r']}] {refl[:240]}")
+        return "\n".join(lines)
+
+    def _failure_patterns(self):
+        """Negative constraints: the round's most common failure reasons, counted in code."""
+        from collections import Counter
+        import re as _re
+        c = Counter()
+        for n in self.store.g.nodes:
+            nd = self.store.g.nodes[n]
+            if nd.get("r") is not None:
+                continue
+            d = (nd.get("feedback") or "").strip()
+            if not d:
+                continue
+            c[_re.sub(r"0x[0-9a-f]+|\d{3,}", "#", d)[:110]] += 1
+        if not c:
+            return ""
+        return ("[FAILURE PATTERNS] (common errors to avoid)\n"
+                + "\n".join(f"- ({k}x) {m}" for m, k in c.most_common(N_FAILURE_PATTERNS)))
 
     def update(self, results, step, **kw):
         """Append every graded program with its own reflection. Nothing is discarded -- the

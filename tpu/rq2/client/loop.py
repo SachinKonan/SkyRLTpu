@@ -41,7 +41,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "fleet"))
 import prompts as P  # noqa: E402
 import registry as REG  # noqa: E402
-from state import make_state  # noqa: E402
+from state_reuse import make_state_reuse  # noqa: E402
 
 PACKS = HERE.parent.parent / "rq1" / "client" / "data"
 ATTEMPTS = 6
@@ -320,6 +320,10 @@ def main():
     ap.add_argument("--fast-budget", type=int, default=10)
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--turns", type=int, default=20)
+    ap.add_argument("--k", type=int, default=5,
+                    help="candidates per bundle (SimpleTES batch size: K candidates share one "
+                         "inspiration set; the local best commits + reflects)")
+    ap.add_argument("--chains", type=int, default=4)
     ap.add_argument("--orch-model", default="gpt-5.6-sol")
     ap.add_argument("--orch-effort", default="xhigh")
     ap.add_argument("--compact-model", default="gpt-5.3-codex-spark")
@@ -342,7 +346,9 @@ def main():
         import preflight
         preflight.write_codex_home(out, landlock=True, long_provider=True)
 
-    st = make_state(args.state, out / "state", maximize, seed, baseline)
+    st = make_state_reuse(args.state, out / "state", maximize, seed, baseline,
+                          num_chains=args.chains) if args.state in ("puct", "simpletes") \
+        else make_state_reuse(args.state, out / "state", maximize, seed, baseline)
     (out / "manifest.json").write_text(json.dumps({
         "problem": args.problem, "state": args.state, "execution": args.execution,
         "composition": args.composition, "n": args.n, "steps": args.steps,
@@ -367,11 +373,18 @@ def main():
             time.sleep(120)
             continue
 
-        base_prompts = st.render(args.n, task, fence)
-        base_prompts = [p + P.ROLLOUT_TAIL.format(fence=fence) for p in base_prompts]
+        bundles = st.sample(args.n, args.k)
+        # flatten: candidate i -> its bundle, all k candidates of a bundle share one prompt
+        bundle_of, base_prompts = [], []
+        for b in bundles:
+            bp = st.render_bundle(b, task, fence) + P.ROLLOUT_TAIL.format(fence=fence)
+            for _ in range(b.k):
+                bundle_of.append(b)
+                base_prompts.append(bp)
         allocations = None
         if args.execution == "orchestrator":
-            state_md = st.round_md([], step - 1) if args.state == "workspace" else (out / "state" / "graph.json")
+            state_md = (out / "state" / f"round_{step-1:02d}.md") if args.state == "workspace" \
+                else (out / "state" / "graph.json")
             allocations = orchestrate(step, args.n, state_md, out, args, codex_home)
             if allocations is None:
                 with open(trace, "a") as fh:
@@ -391,10 +404,18 @@ def main():
         results = asyncio.run(sample_round(base_prompts, models, urls, args, out, fence))
         print(f"[loop] step {step}: grading", flush=True)
         results = grade_round(results, args.problem, out, args.grade_concurrency, args.fast_budget)
-        if args.state == "puct":
-            asyncio.run(reflect_round(results, urls, args, maximize, baseline))
-
-        st.update(results, step,
+        # regroup by bundle (sid carries the flat candidate index)
+        by_idx = {int(r["sid"].rsplit("r", 1)[1]): r for r in results}
+        grouped = []
+        i = 0
+        for b in bundles:
+            grouped.append((b, [by_idx[j] for j in range(i, i + b.k) if j in by_idx]))
+            i += b.k
+        # reflection: only where the state says it matters (SimpleTES: batch winners)
+        targets = st.reflection_targets(grouped)
+        if targets:
+            asyncio.run(reflect_round(targets, urls, args, maximize, baseline))
+        st.update(grouped, step,
                   compact_fn=(lambda md, wp: compact(step, md, wp, out, args, codex_home))
                   if args.state == "workspace" else None)
         prog, best = st.best()
