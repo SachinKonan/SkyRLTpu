@@ -225,3 +225,53 @@ def test_gains_never_negative_on_regression():
     """best_value should be monotone, but a stale read must not yield a negative
     gain that corrupts the peak."""
     assert all(g >= 0 for g in R.gains_from_best_values([-0.381, -0.3805, -0.382]))
+
+
+def test_discovery_jump_does_not_poison_the_peak():
+    """A fresh run's family-discovery step gains ~0.1 while steady-state gains
+    are ~1e-4. With peak = max, the trigger fires ONE STEP after the run's
+    biggest discovery -- restarting a productive run, which historically gained
+    nothing. The robust (second-largest) peak must hold instead."""
+    gains = [0.0, 0.109, 3.3e-4, 1.2e-4]     # jump at step 1, healthy after
+    assert R.should_restart(gains) is False
+    # ...but a genuine collapse after the jump still fires
+    assert R.should_restart([0.0, 0.109, 3.3e-4, 1.2e-4, 8e-5, 1e-7]) is True
+
+
+def test_robust_peak_uses_max_below_three_observations():
+    """With <3 prior gains there is no second-largest to trust; fall back to
+    max (4-agent life 1 fired correctly off exactly two observations)."""
+    assert R.should_restart([4.239e-06, 3.686e-09]) is True
+
+
+# ---------------------------------------------------------------------------
+# Life state -- must survive preemption
+# ---------------------------------------------------------------------------
+
+def test_life_state_round_trips(tmp_path: Path):
+    state = {"gains": [0.0, 1e-4, 2e-5], "best": -0.3809, "restarts": 2}
+    R.write_life_state(str(tmp_path), state)
+    got = R.read_life_state(str(tmp_path))
+    assert got["gains"] == [0.0, 1e-4, 2e-5]
+    assert got["best"] == -0.3809
+    assert got["restarts"] == 2
+
+
+def test_life_state_missing_is_fresh(tmp_path: Path):
+    assert R.read_life_state(str(tmp_path / "nope")) == {
+        "gains": [], "best": None, "restarts": 0}
+
+
+def test_life_state_survives_preemption_semantics(tmp_path: Path):
+    """A preemption reloads the same life (history intact, so the trigger is
+    not starved under churn); a deliberate restart clears gains but keeps the
+    restart count."""
+    R.write_life_state(str(tmp_path), {"gains": [0.0, 5e-5], "best": -0.381,
+                                       "restarts": 0})
+    life = R.read_life_state(str(tmp_path))          # preemption -> same life
+    assert life["gains"] == [0.0, 5e-5]
+    life["gains"] = []                                # deliberate restart
+    life["restarts"] += 1
+    R.write_life_state(str(tmp_path), life)
+    after = R.read_life_state(str(tmp_path))
+    assert after["gains"] == [] and after["restarts"] == 1
