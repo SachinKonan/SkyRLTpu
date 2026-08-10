@@ -160,13 +160,21 @@ class SimpleTesState(StateReuse):
         p = {n: self.store.g.nodes[n].get("p") or 0.0 for n in self.store.g.nodes}
         return q, p
 
-    def _select_from_chain(self, chain_idx: int, n: int) -> list[int]:
+    def _select_from_chain(self, chain_idx: int, n: int, virtual: dict | None = None) -> list[int]:
+        """virtual = same-step visit overlay (parallel-MCTS virtual loss): when C < B, several
+        bundles draw from one chain in the same step, and without the overlay the deterministic
+        selection would hand them IDENTICAL inspiration sets (effective B collapses to C). Real
+        visits still only advance in update()."""
         members = [m for m in self.chains[chain_idx]
                    if self.store.g.nodes[m].get("r") is not None]
         if not members:
             return []
         q, p = self._q_p()
-        vis = self.visits[chain_idx]
+        base = self.visits[chain_idx]
+        v = dict(base)
+        for k2, n2 in (virtual or {}).items():
+            v[k2] = v.get(k2, 0) + n2
+        vis = v
         te = self.expansions[chain_idx]
         scored = sorted(
             ((m, q.get(m, 0.0) + RPUCG_C * p.get(m, 0.0)
@@ -215,10 +223,13 @@ class SimpleTesState(StateReuse):
         elite = self._elite_overview()
         fails = self._failure_patterns()
         remaining, bid = n, 0
+        virtual = {c: {} for c in self.chains}
         while remaining > 0:
             kk = min(k, remaining)
             chain = bid % len(self.chains)
-            insp = self._select_from_chain(chain, NUM_INSPIRATIONS)
+            insp = self._select_from_chain(chain, NUM_INSPIRATIONS, virtual[chain])
+            for nid in insp:
+                virtual[chain][nid] = virtual[chain].get(nid, 0) + 1
             metas = [self.store.meta(i, with_program=True) for i in insp]
             bundles.append(Bundle(batch_id=bid, k=kk, inspirations=metas,
                                   context=elite, failures=fails,
