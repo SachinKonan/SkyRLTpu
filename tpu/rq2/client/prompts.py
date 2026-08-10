@@ -92,8 +92,16 @@ The current shared workspace is here (it may be empty on the first step):
 Write the NEW shared workspace to {out_path}.
 
 That workspace is the only thing carried into the next step: every sub-agent in the next round
-will be given it alongside the problem, and nothing else from this round survives. You decide
-entirely what it should contain and how long it should be.
+will be given it alongside the problem, and nothing else from this round survives.
+
+The workspace must be exactly three sections, each AT MOST 8 sentences:
+
+  ## Portfolio of ideas
+  ## Lessons learned
+  ## Open questions / unvalidated ideas
+
+Within those limits you decide entirely what to keep. Code snippets count against the sentence
+budget (one snippet = one sentence); prefer describing an approach over pasting it.
 
 The round file may be large -- read it however you like (grep, head, sed). You have {turns}
 turns. Write the file, then stop.

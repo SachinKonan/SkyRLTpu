@@ -30,10 +30,10 @@ FAST_BUDGET = {"fc46": 10, "erdos": 10, "ac1": 60, "fc159": 10, "ud": 10}
 B = 16
 G_SCALES = [32, 64]             # n = B*G in {512, 1024} -- 16x32 is the RL shape
 # concurrent cells per scale, from 768 in-flight capacity
-THROTTLE = {512: 2, 1024: 1}
+THROTTLE = {512: 3, 1024: 1}   # sized to 24 workers x 64 seqs = 1536 in flight
 # per-cell client concurrency: throttle * conc ~= fleet in-flight capacity (768). The loop's
 # default of 64 would starve a 1024-rollout step at 24 workers.
-CLIENT_CONC = {512: 384, 1024: 768}
+CLIENT_CONC = {512: 512, 1024: 1024}   # a cell never needs more in flight than n
 GRADE_CONC = {"fc46": 8, "fc159": 8, "erdos": 16, "ac1": 16, "ud": 16}
 
 ARRAY = """#!/bin/bash

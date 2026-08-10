@@ -45,11 +45,23 @@ from state_reuse import make_state_reuse  # noqa: E402
 
 PACKS = HERE.parent.parent / "rq1" / "client" / "data"
 ATTEMPTS = 6
-# cached serving shapes; two-phase budgets must fit inside them (see the plan)
+# serving shapes (32k both models -- the SimpleTES reference assumes an effectively unbounded
+# window and 32k completion budget, so starving the prompt is the unfaithful choice); two-phase
+# budgets must fit inside them
 MODEL_CFG = {
-    "qwen35": {"model": "Qwen/Qwen3.5-27B", "ctx": 22528, "p1": 12000, "p2": 7000},
-    "gemma4": {"model": "google/gemma-4-31B-it", "ctx": 16384, "p1": 9000, "p2": 6000},
+    "qwen35": {"model": "Qwen/Qwen3.5-27B", "ctx": 32768, "p1": 12000, "p2": 7000},
+    "gemma4": {"model": "google/gemma-4-31B-it", "ctx": 32768, "p1": 9000, "p2": 6000},
 }
+# ~3 chars/token is conservative for C++/math-heavy text; margin covers template + tail
+CHARS_PER_TOKEN = 3.0
+WORKSPACE_MAX_CHARS = 12_000   # backstop for the compactor's 3x8-sentence contract
+
+
+def prompt_char_budget(models_for_bundle):
+    """Chars a bundle prompt may occupy so prompt + phase-1 budget fits every model that will
+    serve it (50-50: both)."""
+    return int(min((MODEL_CFG[m]["ctx"] - MODEL_CFG[m]["p1"] - 512) * CHARS_PER_TOKEN
+                   for m in models_for_bundle))
 FORCE = ("\n\nI have thought about this enough. Here is my final, complete, self-contained "
          "program:\n\n```{fence}\n")
 
@@ -347,7 +359,18 @@ def compact(step, round_md, workspace_path, outdir, args, codex_home):
     pr = P.compactor_prompt(round_md, workspace_path, out, args.turns)
     run_codex(args.compact_model, args.compact_effort, pr, wd, None,
               args.orch_wall, "compact", codex_home)
-    return out.read_text() if out.exists() else None
+    if not out.exists():
+        return None
+    ws = out.read_text()
+    # Physical backstop for the 3-sections/8-sentences contract. The first live compaction
+    # wrote 168KB (~45k tokens) -- larger than any servable window -- and 400'd the whole next
+    # step. Truncation is a logged last resort, not the normal path.
+    if len(ws) > WORKSPACE_MAX_CHARS:
+        print(f"[loop] compact step {step}: workspace {len(ws)} chars > "
+              f"{WORKSPACE_MAX_CHARS} -> TRUNCATED (contract violation)", flush=True)
+        ws = ws[:WORKSPACE_MAX_CHARS] + "\n[truncated: workspace exceeded size contract]\n"
+        out.write_text(ws)
+    return ws
 
 
 def main():
@@ -437,12 +460,33 @@ def main():
 
         bundles = st.sample(args.n, args.k)
         # flatten: candidate i -> its bundle, all k candidates of a bundle share one prompt
-        bundle_of, base_prompts = [], []
+        need_models = {"qwen": ["qwen35"], "gemma": ["gemma4"],
+                       "50-50": ["qwen35", "gemma4"]}[args.composition]
+        budget = prompt_char_budget(need_models)
+        if args.execution == "orchestrator":
+            budget -= 1500                       # room for the appended group instruction
+        bundle_of, base_prompts, trimmed = [], [], 0
         for b in bundles:
             bp = st.render_bundle(b, task, fence) + P.ROLLOUT_TAIL.format(fence=fence)
+            # Safety net, not the sizing mechanism: at 32k this should almost never fire. The
+            # alternative is what smoke 3672525-28 measured -- silent vLLM 400s eating 60-100%
+            # of a step's budget. Drop the least-preferred inspirations first, then trim the
+            # context block.
+            while len(bp) > budget and b.inspirations:
+                b.inspirations = b.inspirations[:-1]
+                bp = st.render_bundle(b, task, fence) + P.ROLLOUT_TAIL.format(fence=fence)
+                trimmed += 1
+            if len(bp) > budget and b.context:
+                overshoot = len(bp) - budget
+                b.context = b.context[:max(0, len(b.context) - overshoot - 64)]
+                bp = st.render_bundle(b, task, fence) + P.ROLLOUT_TAIL.format(fence=fence)
+                trimmed += 1
             for _ in range(b.k):
                 bundle_of.append(b)
                 base_prompts.append(bp)
+        if trimmed:
+            print(f"[loop] step {step}: PROMPT BUDGET trimmed {trimmed} block(s) "
+                  f"(budget {budget} chars)", flush=True)
         allocations = None
         if args.execution == "orchestrator":
             state_md = (out / "state" / f"round_{step-1:02d}.md") if args.state == "workspace" \

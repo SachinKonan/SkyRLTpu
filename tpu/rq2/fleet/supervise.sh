@@ -47,13 +47,17 @@ PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/
 
 SLICES="${SLICES:-sk7524-llamafarm-a-v5p64-east5a sk7524-llamafarm-b-v5p64-east5a sk7524-llamafarm-c-v5p64-east5a}"
 PORT=8001
-# cached shapes -- do NOT change these without accepting a ~55 min cold compile per model
+# cached shapes -- do NOT change these without accepting a ~55 min cold compile per model.
+# 32k/seqs=64 shapes (RQ2 decision 2026-08-10: SimpleTES-faithful window, throughput headroom;
+# KV pool holds ~4.8M tokens = 147x full-length requests). NEW cache prefixes so the old
+# 22k/16k-at-32-seqs shapes remain a rollback: point QWEN_XLA/GEMMA_XLA back and set
+# QWEN_MAXLEN=22528 GEMMA_MAXLEN=16384 MAX_NUM_SEQS=32 to revert without recompiling.
 BUCKET=gs://sk7524-tinker-tpu-us-east5
-QWEN_MODEL=Qwen/Qwen3.5-27B;        QWEN_MAXLEN=22528
-QWEN_HF=$BUCKET/hf-cache;           QWEN_XLA=$BUCKET/vllm-xla-cache-22k
-GEMMA_MODEL=google/gemma-4-31B-it;  GEMMA_MAXLEN=16384
-GEMMA_HF=$BUCKET/hf-cache-gemma4;   GEMMA_XLA=$BUCKET/vllm-xla-cache-gemma4-31b-16k
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
+QWEN_MODEL=Qwen/Qwen3.5-27B;        QWEN_MAXLEN="${QWEN_MAXLEN:-32768}"
+QWEN_HF=$BUCKET/hf-cache;           QWEN_XLA="${QWEN_XLA:-$BUCKET/vllm-xla-cache-qwen35-32k-b64}"
+GEMMA_MODEL=google/gemma-4-31B-it;  GEMMA_MAXLEN="${GEMMA_MAXLEN:-32768}"
+GEMMA_HF=$BUCKET/hf-cache-gemma4;   GEMMA_XLA="${GEMMA_XLA:-$BUCKET/vllm-xla-cache-gemma4-32k-b64}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
 QWEN_WORKERS="${QWEN_WORKERS:-0 1 2 3}"
 GEMMA_WORKERS="${GEMMA_WORKERS:-4 5 6 7}"
 PERIOD="${PERIOD:-180}"
