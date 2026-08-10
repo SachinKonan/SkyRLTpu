@@ -224,6 +224,26 @@ e=json.loads(sys.argv[1]); e.append({'slice':sys.argv[2],'worker':int(sys.argv[3
     done
   done
 
+  # graders are part of recovery too: vLLM relaunch alone leaves the shim dead after a
+  # preemption (new VM, no venvs, no ray). If a slice's vLLM is mostly up but its shim does
+  # not answer, kick grader_up in the background -- lockfile + grace so we never stack them.
+  for slice in $SLICES; do
+    st=$(qr_state "${slice}_spot"); [[ "$st" == "ACTIVE" ]] || continue
+    W0IP=$(worker_ips "$slice" | head -1 | awk '{print $2}'); [[ -n "$W0IP" ]] || continue
+    if ! timeout 8 curl -sf "http://${W0IP}:8002/health" >/dev/null 2>&1; then
+      glock="$RUNS/fleet/.graderup_${slice}"
+      if [[ ! -f "$glock" ]] || (( $(date +%s) - $(stat -c %Y "$glock") > 2400 )); then
+        nvllm=$(for line in $(worker_ips "$slice" | awk '{print $2}'); do
+                  timeout 5 curl -sf "http://${line}:${PORT}/v1/models" >/dev/null 2>&1 && echo x; done | wc -l)
+        if (( nvllm >= 4 )); then
+          touch "$glock"
+          log "$slice: shim dead, vLLM ${nvllm}/8 up -> grader_up (background)"
+          ( bash "$RQ2/fleet/grader_up.sh" "$slice" >>"$RUNS/logs/graderup_${slice}.log" 2>&1 ) &
+        fi
+      fi
+    fi
+  done
+
   # publish, then health-gate: a slice reading READY does not mean its workers serve
   $PY -c "
 import json,sys; sys.path.insert(0,'$RQ2/fleet')
