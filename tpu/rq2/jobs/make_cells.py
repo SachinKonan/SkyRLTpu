@@ -25,8 +25,12 @@ COMPOSITIONS = ["qwen", "gemma", "50-50"]
 # problem. Measured Spearman vs production -- fc46 0.97 @1 case, erdos 0.91 @10s, ac1 0.68 @10s
 # but 0.85 @60s, so ac1 buys its fidelity with budget.
 FAST_BUDGET = {"fc46": 10, "erdos": 10, "ac1": 60, "fc159": 10, "ud": 10}
+# scale = G sweep at FIXED B=16 (chains constant across scales, so chain depth stays
+# comparable and "scale" cleanly means more rollouts per sampled state, not a different tree)
+B = 16
+G_SCALES = [8, 16, 32]          # n = B*G in {128, 256, 512}
 # concurrent cells per scale, from 768 in-flight capacity
-THROTTLE = {100: 7, 200: 3, 500: 2}
+THROTTLE = {128: 6, 256: 3, 512: 2}
 GRADE_CONC = {"fc46": 8, "fc159": 8, "erdos": 16, "ac1": 16, "ud": 16}
 
 ARRAY = """#!/bin/bash
@@ -56,7 +60,7 @@ name="${{problem}}_${{state}}_${{execution}}_${{composition}}_n{n}"
 echo "=== cell $name (array task $SLURM_ARRAY_TASK_ID) ==="
 cd "$RQ2/client"
 $PY loop.py --problem "$problem" --state "$state" --execution "$execution" \\
-  --composition "$composition" --n {n} --steps {steps} \\
+  --composition "$composition" --B {B} --G {G} --steps {steps} \\
   --fast-budget $(python3 -c "
 import json; print(json.loads('''$cfg''')['fast_budget'])") \\
   --grade-concurrency $(python3 -c "
@@ -68,7 +72,8 @@ import json; print(json.loads('''$cfg''')['grade_concurrency'])") \\
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--problems", nargs="+", default=["fc46", "erdos", "ac1"])
-    ap.add_argument("--scales", nargs="+", type=int, default=[100, 200, 500])
+    ap.add_argument("--scales", nargs="+", type=int, default=G_SCALES,
+                    help="G values; n = 16*G per step")
     ap.add_argument("--steps", type=int, default=10)
     ap.add_argument("--runs", default="/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2")
     ap.add_argument("--out", default=str(Path(__file__).parent))
@@ -77,14 +82,15 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     total = 0
-    for n in args.scales:
+    for g in args.scales:
+        n = B * g
         cells = []
         # interleave compositions so both model pools stay busy
         combos = list(itertools.product(args.problems, STATES, EXECUTIONS))
         for ci, comp in enumerate(COMPOSITIONS):
             for (prob, st, ex) in combos:
                 cells.append({"problem": prob, "state": st, "execution": ex,
-                              "composition": comp, "n": n,
+                              "composition": comp, "n": n, "B": B, "G": g,
                               "fast_budget": FAST_BUDGET.get(prob, 10),
                               "grade_concurrency": GRADE_CONC.get(prob, 16)})
         cells.sort(key=lambda c: COMPOSITIONS.index(c["composition"]))
@@ -100,16 +106,16 @@ def main():
         cj.write_text(json.dumps(cells, indent=2))
         sh = out / f"run_n{n}.sh"
         sh.write_text(ARRAY.format(
-            n=n, last=len(cells) - 1, throttle=THROTTLE.get(n, 2),
+            n=n, B=B, G=g, last=len(cells) - 1, throttle=THROTTLE.get(n, 2),
             cpus=max(8, min(32, GRADE_CONC.get(args.problems[0], 16) + 8)),
             cells_json=cj, runs=args.runs, steps=args.steps))
         sh.chmod(0o755)
         total += len(cells)
-        print(f"n={n:3d}: {len(cells):2d} cells, throttle {THROTTLE.get(n,2)} -> {sh}")
+        print(f"B={B} G={g:2d} (n={n:3d}): {len(cells):2d} cells, throttle {THROTTLE.get(n,2)} -> {sh}")
     print(f"\ntotal {total} cells across {len(args.scales)} arrays "
           f"({len(args.problems)} problems x {len(STATES)}x{len(EXECUTIONS)} treatments "
           f"x {len(COMPOSITIONS)} compositions)")
-    print(f"programs: {sum(len(json.loads((out/f'cells_n{n}.json').read_text()))*args.steps*n for n in args.scales):,}")
+    print(f"programs: {sum(len(json.loads((out/f'cells_n{B*g}.json').read_text()))*args.steps*B*g for g in args.scales):,}")
 
 
 if __name__ == "__main__":
