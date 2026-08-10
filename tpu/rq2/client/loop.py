@@ -110,10 +110,28 @@ async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock)
     finish = d["choices"][0].get("finish_reason")
     forced = ""
     if finish == "length":
+        # Size phase 2 from what phase 1 ACTUALLY used. A fixed p2 overflows the context as soon
+        # as the prompt is large (fc46's statement plus a seed program), and vLLM answers 400 --
+        # measured: 2 of 4 rollouts lost that way. usage.prompt_tokens already counts the state
+        # context, so this adapts per problem and per state size.
+        u = d.get("usage") or {}
+        used = (u.get("prompt_tokens") or 0) + (u.get("completion_tokens") or cfg["p1"])
+        room = cfg["ctx"] - used - 256          # margin for the forcing text and template
+        p2 = min(cfg["p2"], room)
+        if p2 < 512:
+            # No room to force an answer; keep phase 1 and let the parser try.
+            code = strip_fence(text)
+            async with lock:
+                (outdir / "raw" / f"{sid}.json").write_text(json.dumps(
+                    {"sid": sid, "model": mkey, "url": url, "text": text, "finish": finish,
+                     "two_phase": False, "note": f"no room for phase 2 (used {used}/{cfg['ctx']})"}))
+            return {"sid": sid, "model": mkey, "program": code or None, "score": None,
+                    "detail": "" if code else "truncated, no room to force",
+                    "convo": base["messages"] + [{"role": "assistant", "content": text}]}
         forced = FORCE.format(fence=fence)
         try:
             d2 = await _post(cli, url, key, {
-                **base, "max_tokens": cfg["p2"],
+                **base, "max_tokens": p2,
                 "messages": base["messages"] + [{"role": "assistant", "content": text + forced}],
                 "continue_final_message": True, "add_generation_prompt": False})
             text = text + forced + (d2["choices"][0]["message"].get("content") or "")
