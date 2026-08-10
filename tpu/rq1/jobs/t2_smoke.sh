@@ -10,12 +10,12 @@
 #SBATCH --mem=16G
 #SBATCH --time=06:00:00
 #SBATCH --exclude=neu301
-#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/logs/%x_%j.log
+#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq1/logs/%x_%j.log
 set -uo pipefail
 TPU_NAME="$1"; MODEL="$2"; PROBLEM="$3"; OUT="$4"; N="${5:-5}"; CONC="${6:-4}"; CELL="${7:-C}"
 EXTRA_BODY="${8:-}"
 EXTRA_ARGS_IN="${9:-}"   # e.g. "--two-phase" for verbose reasoners
-RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1
+RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq1
 PORT=$((18000 + RANDOM % 1000))
 
 echo "[t2smoke] tunnel localhost:$PORT -> $TPU_NAME worker1:8001"

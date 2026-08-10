@@ -13,11 +13,11 @@
 #SBATCH --mem=16G
 #SBATCH --time=24:00:00
 #SBATCH --exclude=neu301
-#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/logs/%x_%j.log
+#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq1/logs/%x_%j.log
 set -uo pipefail
 KEY="$1"; PROBLEM="$2"; OUT="$3"; N="${4:-200}"; CONC="${5:-32}"; CELL="${6:-C}"; EXTRA="${7:-}"
 EXTRA_ARGS="${8:-}"
-RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1
+RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq1
 ROUNDS="${ROUNDS:-8}"
 
 case "$KEY" in

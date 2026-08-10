@@ -313,7 +313,7 @@ def main():
     ap.add_argument("--n", type=int, default=100)
     ap.add_argument("--steps", type=int, default=10)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--registry", default="/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/fleet/registry.json")
+    ap.add_argument("--registry", default="/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/fleet/registry.json")
     ap.add_argument("--api-key", default="EMPTY")
     ap.add_argument("--concurrency", type=int, default=64)
     ap.add_argument("--grade-concurrency", type=int, default=16)

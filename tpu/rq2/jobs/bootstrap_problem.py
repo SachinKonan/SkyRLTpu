@@ -136,8 +136,8 @@ def main():
     ap.add_argument("--problem", required=True, choices=list(NEW))
     ap.add_argument("--n", type=int, default=40)
     ap.add_argument("--registry",
-                    default="/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/fleet/registry.json")
-    ap.add_argument("--out", default="/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/bootstrap")
+                    default="/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/fleet/registry.json")
+    ap.add_argument("--out", default="/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/bootstrap")
     ap.add_argument("--grade-concurrency", type=int, default=16)
     args = ap.parse_args()
 

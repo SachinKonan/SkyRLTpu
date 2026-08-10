@@ -42,7 +42,7 @@ ARRAY = """#!/bin/bash
 #SBATCH --exclude=neu301
 #SBATCH --output={runs}/logs/%x_%A_%a.log
 set -uo pipefail
-RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq2
+RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq2
 CELLS="{cells_json}"
 export PATH="/n/fs/vision-mix/sk7524/.npm-global/bin:$PATH"
 PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/python
@@ -70,7 +70,7 @@ def main():
     ap.add_argument("--problems", nargs="+", default=["fc46", "erdos", "ac1"])
     ap.add_argument("--scales", nargs="+", type=int, default=[100, 200, 500])
     ap.add_argument("--steps", type=int, default=10)
-    ap.add_argument("--runs", default="/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2")
+    ap.add_argument("--runs", default="/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2")
     ap.add_argument("--out", default=str(Path(__file__).parent))
     args = ap.parse_args()
 

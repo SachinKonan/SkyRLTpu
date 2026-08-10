@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
-#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/logs/%x_%j.log
+#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq1/logs/%x_%j.log
 set -uo pipefail
 PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/python
 export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
@@ -18,10 +18,10 @@ $PY - <<'PY'
 import json, sys, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation")
-sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq2/../rq1/server")
+sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq2/../rq1/server")
 from grading_mcp import _grade
 from pathlib import Path
-run = Path("/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/ud_D")
+run = Path("/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq1/ud_D")
 res = json.loads((run/"result.json").read_text())
 hs = [h for h,v in res["results"].items() if v.get("full",{}).get("valid")][:6]
 MAIN="/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover"

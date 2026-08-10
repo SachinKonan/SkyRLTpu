@@ -30,12 +30,12 @@
 #SBATCH --mem=16G
 #SBATCH --time=48:00:00
 #SBATCH --exclude=neu301
-#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/logs/%x_%j.log
+#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/logs/%x_%j.log
 set -uo pipefail
 
 MAIN=/n/fs/vision-mix/sk7524/SkyRLTpu
-RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq2
-RUNS=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2
+RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq2
+RUNS=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2
 REGISTRY="${REGISTRY:-$RUNS/fleet/registry.json}"
 ZONE=us-east5-a
 PROJECT=vision-mix

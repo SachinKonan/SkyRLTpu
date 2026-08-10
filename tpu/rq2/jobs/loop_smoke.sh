@@ -9,9 +9,9 @@
 #SBATCH --mem=32G
 #SBATCH --time=03:00:00
 #SBATCH --exclude=neu301
-#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/logs/%x_%j.log
+#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/logs/%x_%j.log
 set -uo pipefail
-RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq2
+RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq2
 export PATH="/n/fs/vision-mix/sk7524/.npm-global/bin:$PATH"
 st="${1:-puct}"; ex="${2:-simple}"; comp="${3:-qwen}"; n="${4:-8}"; steps="${5:-2}"
 # NOT `uv run`: loop.py grades inline (ttt_discover, numpy) and its PUCT state uses
@@ -22,4 +22,4 @@ export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
 cd "$RQ2/client"
 $PY loop.py --problem fc46 --state "$st" --execution "$ex" --composition "$comp" \
   --n "$n" --steps "$steps" --concurrency 8 --grade-concurrency 8 \
-  --out "/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/smoke/fc46_${st}_${ex}_${comp}"
+  --out "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/smoke/fc46_${st}_${ex}_${comp}"

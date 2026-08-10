@@ -9,11 +9,11 @@
 #SBATCH --mem=32G
 #SBATCH --time=08:00:00
 #SBATCH --exclude=neu301
-#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/logs/%x_%j.log
+#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq1/logs/%x_%j.log
 set -euo pipefail
-RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq1
+RQ1=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq1
 export PATH="/n/fs/vision-mix/sk7524/.npm-global/bin:$PATH"
-mkdir -p /n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq1/logs
+mkdir -p /n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq1/logs
 cd "$RQ1/client"
 uv run collect_t1.py --problem "$1" --out "$2" --n "${3:-3}" \
   --concurrency "${4:-3}" --site neuronic --resume

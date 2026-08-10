@@ -9,10 +9,10 @@
 #SBATCH --mem=48G
 #SBATCH --time=24:00:00
 #SBATCH --exclude=neu301
-#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/logs/%x_%A_%a.log
+#SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/logs/%x_%A_%a.log
 set -uo pipefail
-RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq2
-CELLS="/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq2/jobs/cells_n200.json"
+RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq2
+CELLS="/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq2/jobs/cells_n200.json"
 export PATH="/n/fs/vision-mix/sk7524/.npm-global/bin:$PATH"
 cfg=$(python3 -c "
 import json,sys
@@ -30,4 +30,4 @@ $PY loop.py --problem "$problem" --state "$state" --execution "$execution" \
 import json; print(json.loads('''$cfg''')['fast_budget'])") \
   --grade-concurrency $(python3 -c "
 import json; print(json.loads('''$cfg''')['grade_concurrency'])") \
-  --out "/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/runs/rq2/cells/$name"
+  --out "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/cells/$name"
