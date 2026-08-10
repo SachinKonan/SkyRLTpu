@@ -205,6 +205,13 @@ while :; do
     done
     [[ ${#pids[@]} -gt 0 ]] && wait "${pids[@]}" 2>/dev/null
 
+    # grading shim ingress on w0:8002 (brought up by grader_up.sh; health-gated like the rest)
+    W0IP="${IPS[0]##* }"
+    ENTRIES=$($PY -c "
+import json,sys
+e=json.loads(sys.argv[1]); e.append({'slice':sys.argv[2],'worker':0,'model':'grader',
+  'ip':sys.argv[3],'port':8002,'url':'http://%s:8002'%sys.argv[3],'healthy':False,
+  'served_model':None,'last_ok':None,'checked':None}); print(json.dumps(e))"       "$ENTRIES" "$slice" "$W0IP")
     for line in "${IPS[@]}"; do
       w="${line%% *}"; ip="${line##* }"
       key="gemma4"; for q in $QWEN_WORKERS; do [[ "$w" == "$q" ]] && key="qwen35"; done

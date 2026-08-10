@@ -36,10 +36,14 @@ PORT = 8001
 PROBE_TIMEOUT = 8.0
 
 
-def probe(ip: str, port: int = PORT, api_key: str = "EMPTY", timeout: float = PROBE_TIMEOUT):
+def probe(ip: str, port: int = PORT, api_key: str = "EMPTY", timeout: float = PROBE_TIMEOUT,
+          kind: str = "vllm"):
     """-> (healthy, served_model_id|None). Cheap GET; used for every entry before it is
-    advertised."""
+    advertised. kind="grader" probes the grade shim's /health instead of /v1/models."""
     try:
+        if kind == "grader":
+            r = httpx.get(f"http://{ip}:{port}/health", timeout=timeout)
+            return (r.status_code == 200 and r.json().get("ray_alive", False)), "grader"
         r = httpx.get(f"http://{ip}:{port}/v1/models",
                       headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout)
         if r.status_code != 200:
@@ -94,7 +98,8 @@ def reprobe(path, api_key: str = "EMPTY"):
     reg = read(path)
     entries = reg.get("entries", [])
     for e in entries:
-        ok, served = probe(e["ip"], e.get("port", PORT), api_key)
+        kind = "grader" if e.get("model") == "grader" else "vllm"
+        ok, served = probe(e["ip"], e.get("port", PORT), api_key, kind=kind)
         e["healthy"] = ok
         e["served_model"] = served
         e["checked"] = round(time.time(), 1)

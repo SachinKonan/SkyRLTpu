@@ -208,6 +208,45 @@ async def reflect_round(results, urls_by_model, args, maximize, baseline):
 
 
 # ---------------------------------------------------------------------------- grading (fast)
+def _grader_shims(registry_path):
+    """Healthy per-slice grading shims from the registry (entries with model == 'grader')."""
+    return REG.urls(registry_path, model="grader")
+
+
+async def _grade_remote(results, problem, args, base_construction):
+    """Fan grading over the slice shims; route each program to the least-loaded shim by live
+    outstanding counts (client-side), Ray balances within the slice. Falls back per-item."""
+    shims = _grader_shims(args.registry)
+    if not shims:
+        return None
+    todo = [r for r in results if r.get("program")]
+    out_ct = {u: 0 for u in shims}
+    sem = asyncio.Semaphore(min(len(todo), 600))
+    async with httpx.AsyncClient(timeout=httpx.Timeout(1800, connect=20)) as cli:
+        async def go(r):
+            async with sem:
+                url = min(out_ct, key=out_ct.get)
+                out_ct[url] += 1
+                try:
+                    resp = await cli.post(f"{url}/grade", json={
+                        "problem": problem, "solution": r["program"], "fast": True,
+                        "fast_budget": args.fast_budget,
+                        "base_construction": base_construction})
+                    resp.raise_for_status()
+                    g = resp.json()
+                    r["score"] = g.get("score") if g.get("valid") else None
+                    r["detail"] = (g.get("detail") or "")[:200]
+                except Exception as e:
+                    r["score"] = None
+                    r["detail"] = f"remote grade failed: {str(e)[:120]}"
+                    r["_regrade_local"] = True
+                finally:
+                    out_ct[url] -= 1
+        await asyncio.gather(*[go(r) for r in todo])
+    return results
+
+
+
 def grade_round(results, problem, outdir, concurrency, fast_budget):
     """Inline fast grading -- the substitution the whole campaign rests on. Threads are PINNED:
     unconstrained BLAS under high concurrency inflated RQ1 grading by ~9x."""
@@ -427,7 +466,19 @@ def main():
         print(f"[loop] step {step}: sampling {args.n} ({args.composition})", flush=True)
         results = asyncio.run(sample_round(base_prompts, models, urls, args, out, fence))
         print(f"[loop] step {step}: grading", flush=True)
-        results = grade_round(results, args.problem, out, args.grade_concurrency, args.fast_budget)
+        base_constr = None
+        cj = PACKS / args.problem / "seed_construction.json"
+        if cj.exists():
+            base_constr = json.loads(cj.read_text())
+        remote = asyncio.run(_grade_remote(results, args.problem, args, base_constr))
+        if remote is None:
+            print(f"[loop] step {step}: no grader shims healthy -> grading locally", flush=True)
+            results = grade_round(results, args.problem, out, args.grade_concurrency, args.fast_budget)
+        else:
+            retry = [r for r in results if r.pop("_regrade_local", False)]
+            if retry:
+                print(f"[loop] step {step}: {len(retry)} remote failures -> local retry", flush=True)
+                grade_round(retry, args.problem, out, args.grade_concurrency, args.fast_budget)
         # regroup by bundle (sid carries the flat candidate index)
         by_idx = {int(r["sid"].rsplit("r", 1)[1]): r for r in results}
         grouped = []
