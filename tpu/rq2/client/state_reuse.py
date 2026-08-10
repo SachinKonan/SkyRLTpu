@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import sys
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -41,6 +42,7 @@ sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfo
 from store import Store  # noqa: E402
 
 NUM_INSPIRATIONS = 5     # SimpleTES num_inspirations default
+SAMPLE_GAMMA = 0.75      # geometric rank weight for inspiration sampling (rank r -> 0.75^r)
 # Verbatim from the reference templates/generation.py -- part of the PUCTS treatment definition,
 # applied to every SimpleTES bundle and never to PDR (whose workspace content is what is under
 # test).
@@ -160,36 +162,37 @@ class SimpleTesState(StateReuse):
         p = {n: self.store.g.nodes[n].get("p") or 0.0 for n in self.store.g.nodes}
         return q, p
 
-    def _select_from_chain(self, chain_idx: int, n: int, virtual: dict | None = None) -> list[int]:
-        """virtual = same-step visit overlay (parallel-MCTS virtual loss): when C < B, several
-        bundles draw from one chain in the same step, and without the overlay the deterministic
-        selection would hand them IDENTICAL inspiration sets (effective B collapses to C). Real
-        visits still only advance in update()."""
+    def _select_from_chain(self, chain_idx: int, n: int, rng: random.Random) -> list[int]:
+        """Rank RPUCG-style, then SAMPLE the n inspirations with probability skewed toward the
+        top (geometric rank weights SAMPLE_GAMMA**rank, without replacement, 1-hop
+        anti-inbreeding as in the reference). Deliberate deviation from the reference's pure
+        greedy pick (rpucg.py:206): with C < B, several bundles draw from one chain in the same
+        step against identical visit counts, and greedy selection would hand them IDENTICAL
+        inspiration sets (effective B collapses to C). The async reference never hits this --
+        visits update between a chain's consecutive batches; here within-step diversity comes
+        from sampling noise instead. rng is seeded deterministically by the caller so resume
+        replays the same bundles."""
         members = [m for m in self.chains[chain_idx]
                    if self.store.g.nodes[m].get("r") is not None]
         if not members:
             return []
         q, p = self._q_p()
-        base = self.visits[chain_idx]
-        v = dict(base)
-        for k2, n2 in (virtual or {}).items():
-            v[k2] = v.get(k2, 0) + n2
-        vis = v
+        vis = self.visits[chain_idx]
         te = self.expansions[chain_idx]
         scored = sorted(
             ((m, q.get(m, 0.0) + RPUCG_C * p.get(m, 0.0)
               * math.sqrt(1 + te) / (1 + vis.get(m, 0))) for m in members),
             key=lambda x: x[1], reverse=True)
+        weight = {nid: SAMPLE_GAMMA ** rank for rank, (nid, _) in enumerate(scored)}
+        avail = [nid for nid, _ in scored]
         picked, excluded = [], set()
-        for nid, _ in scored:
-            if nid in excluded:
-                continue
-            picked.append(nid)
-            if len(picked) >= n:
-                break
-            excluded.add(nid)
-            excluded.update(self.store.g.predecessors(nid))
-            excluded.update(self.store.g.successors(nid))
+        while avail and len(picked) < n:
+            choice = rng.choices(avail, weights=[weight[m] for m in avail], k=1)[0]
+            picked.append(choice)
+            excluded.add(choice)
+            excluded.update(self.store.g.predecessors(choice))
+            excluded.update(self.store.g.successors(choice))
+            avail = [m for m in avail if m not in excluded]
         return picked
 
     def _elite_overview(self):
@@ -223,13 +226,12 @@ class SimpleTesState(StateReuse):
         elite = self._elite_overview()
         fails = self._failure_patterns()
         remaining, bid = n, 0
-        virtual = {c: {} for c in self.chains}
+        pop = len(self.store.g.nodes)   # deterministic per step: store only grows in update()
         while remaining > 0:
             kk = min(k, remaining)
             chain = bid % len(self.chains)
-            insp = self._select_from_chain(chain, NUM_INSPIRATIONS, virtual[chain])
-            for nid in insp:
-                virtual[chain][nid] = virtual[chain].get(nid, 0) + 1
+            insp = self._select_from_chain(chain, NUM_INSPIRATIONS,
+                                           random.Random(f"{pop}:{chain}:{bid}"))
             metas = [self.store.meta(i, with_program=True) for i in insp]
             bundles.append(Bundle(batch_id=bid, k=kk, inspirations=metas,
                                   context=elite, failures=fails,

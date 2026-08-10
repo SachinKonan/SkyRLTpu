@@ -373,12 +373,12 @@ def main():
     ap.add_argument("--k", type=int, default=5,
                     help="candidates per bundle (SimpleTES batch size: K candidates share one "
                          "inspiration set; the local best commits + reflects)")
-    ap.add_argument("--chains", type=int, default=None,
-                    help="SimpleTES chain count C. Default: C = B (one bundle per chain per "
-                         "step). C < B is safe since virtual loss (parallel-MCTS style) steers "
-                         "same-step same-chain bundles onto distinct inspiration sets; "
-                         "SimpleTES's own default is C=4, which grows deeper chains "
-                         "(~1+steps*B/C members) and gives RPUCG real selection pressure.")
+    ap.add_argument("--chains", type=int, default=4,
+                    help="SimpleTES chain count C (reference default 4). With C < B a chain "
+                         "serves B/C bundles per step; inspiration selection SAMPLES with "
+                         "rank-skewed probability (state_reuse.SAMPLE_GAMMA) so those bundles "
+                         "diverge. Deeper chains (~1+steps*B/C members) give RPUCG real "
+                         "selection pressure vs C=B's ~11-member stubs.")
     ap.add_argument("--orch-model", default="gpt-5.6-sol")
     ap.add_argument("--orch-effort", default="xhigh")
     ap.add_argument("--compact-model", default="gpt-5.3-codex-spark")
@@ -387,8 +387,6 @@ def main():
     args = ap.parse_args()
     if args.B is not None and args.G is not None:
         args.n, args.k = args.B * args.G, args.G     # the B x G framing: n rollouts as B bundles of G
-    if args.chains is None:
-        args.chains = args.B if args.B is not None else 4
 
     out = Path(args.out).resolve()
     (out / "raw").mkdir(parents=True, exist_ok=True)
