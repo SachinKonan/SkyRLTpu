@@ -85,12 +85,25 @@ ensure_slice() {           # $1 = slice name (QR is "<name>_spot")
     st=""
   fi
   if [[ -z "$st" ]]; then
-    log "$name: no QR -> jobman create"
-    # keep the output: a silent create failure looks identical to a slow one and the loop
-    # will happily re-create every cycle forever
-    timeout 900 bash -c "$(declare -f jobman_cli); jobman_cli create '$RQ2/fleet/yamls/${name}.yaml'" \
-      2>&1 | grep -viE "userwarning|warnings.warn" | sed "s|^|    [jobman] |"
-    sleep 60      # let the request register before the next state poll
+    # Reuse an existing job record if there is one -- `create` every cycle just piles up
+    # duplicates (measured: 3 records, still no QR).
+    local jid
+    jid=$(grep -l "name: ${name}" "$JM"/jobs/sk7524/*/config.yaml 2>/dev/null | tail -1 \
+          | sed -E 's|.*/([0-9]+)/config.yaml|\1|')
+    if [[ -z "$jid" ]]; then
+      log "$name: no QR, no job record -> jobman create"
+      jid=$(timeout 900 bash -c "$(declare -f jobman_cli); jobman_cli create '$RQ2/fleet/yamls/${name}.yaml'" 2>&1 \
+            | grep -viE "userwarning|warnings.warn" | tee >(sed "s|^|    [jobman] |" >&2) \
+            | grep -oE 'Created job [0-9]+' | grep -oE '[0-9]+' | head -1)
+    fi
+    [[ -n "$jid" ]] || { log "$name: create failed"; return 1; }
+    # THE REQUEST IS PLACED HERE, not by create. `create` spawns its worker as `jobman run <id>`
+    # in a detached tmux which dies instantly (no console entrypoint), so create alone leaves no
+    # queued resource at all -- the loop then re-creates forever. Run the worker ourselves.
+    log "$name: jobman run $jid (places the QR request)"
+    timeout 900 bash -c "$(declare -f jobman_cli); jobman_cli run '$jid'" 2>&1 \
+      | grep -viE "userwarning|warnings.warn" | sed "s|^|    [jobman] |"
+    sleep 60
     return 1
   fi
   [[ "$st" == "ACTIVE" ]] || { log "$name: $st (waiting)"; return 1; }
