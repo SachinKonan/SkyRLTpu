@@ -239,7 +239,7 @@ def grade_round(results, problem, outdir, concurrency, fast_budget):
 # ------------------------------------------------------------------------ agent invocations
 def run_codex(model, effort, prompt, wd, mcp_url, wall, tag, codex_home):
     cmd = ["codex", "exec", "--strict-config", "-m", model,
-           "-c", f"model_reasoning_effort={effort}", "-s", "workspace-write",
+           "-c", f"model_reasoning_effort={effort}", "-s", "danger-full-access",
            "-c", "approval_policy=never", "--json", "-C", str(wd)]
     if mcp_url:
         cmd += ["-c", f'mcp_servers.planner.url="{mcp_url}"',
@@ -320,6 +320,10 @@ def main():
     ap.add_argument("--fast-budget", type=int, default=10)
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--turns", type=int, default=20)
+    ap.add_argument("--B", type=int, default=None,
+                    help="sampled states per step; with --G this sets n = B*G")
+    ap.add_argument("--G", type=int, default=None,
+                    help="rollouts per sampled state (group size); alias for --k")
     ap.add_argument("--k", type=int, default=5,
                     help="candidates per bundle (SimpleTES batch size: K candidates share one "
                          "inspiration set; the local best commits + reflects)")
@@ -330,6 +334,8 @@ def main():
     ap.add_argument("--compact-effort", default="medium")
     ap.add_argument("--orch-wall", type=int, default=2400)
     args = ap.parse_args()
+    if args.B is not None and args.G is not None:
+        args.n, args.k = args.B * args.G, args.G     # the B x G framing: n rollouts as B bundles of G
 
     out = Path(args.out).resolve()
     (out / "raw").mkdir(parents=True, exist_ok=True)
@@ -344,7 +350,12 @@ def main():
     if args.execution == "orchestrator" or args.state == "workspace":
         sys.path.insert(0, str(HERE.parent.parent / "rq1" / "client"))
         import preflight
-        preflight.write_codex_home(out, landlock=True, long_provider=True)
+        # Sandbox probe (job 3670962): landlock blocks ALL file access for the agent
+        # ("permission profiles requiring direct runtime enforcement are incompatible"),
+        # and without landlock bwrap cannot start (max_user_namespaces=0). The only mode on
+        # this cluster where the orchestrator can read state and write its plan is
+        # danger-full-access with no sandbox config at all.
+        preflight.write_codex_home(out, landlock=False, long_provider=True)
 
     st = make_state_reuse(args.state, out / "state", maximize, seed, baseline,
                           num_chains=args.chains) if args.state in ("puct", "simpletes") \

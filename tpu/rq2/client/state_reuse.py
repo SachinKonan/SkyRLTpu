@@ -41,6 +41,14 @@ sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfo
 from store import Store  # noqa: E402
 
 NUM_INSPIRATIONS = 5     # SimpleTES num_inspirations default
+# Verbatim from the reference templates/generation.py -- part of the PUCTS treatment definition,
+# applied to every SimpleTES bundle and never to PDR (whose workspace content is what is under
+# test).
+GENERATION_STRATEGY = """=== GENERATION STRATEGY ===
+- Prioritize NOVEL approaches not yet seen in the elite pool
+- Only refine existing approaches if you identify clear improvement potential
+- Combine insights from multiple solutions when beneficial
+- Avoid the listed failure patterns"""
 NUM_CHAINS = 4           # SimpleTES num_chains default
 RPUCG_C = 1.0
 N_ELITE = 12
@@ -56,6 +64,7 @@ class Bundle:
     inspirations: list[dict] = field(default_factory=list)   # node meta incl. program
     context: str = ""                                        # elite overview | workspace
     failures: str = ""
+    strategy: str = ""                                       # SimpleTES GENERATION STRATEGY
     chain_idx: int | None = None
 
 
@@ -98,6 +107,8 @@ class StateReuse(ABC):
                 parts.append(f"```{fence}\n{(m.get('program') or '')[:MAX_PROGRAM_CHARS]}\n```")
         if bundle.failures:
             parts += ["", bundle.failures]
+        if bundle.strategy:
+            parts += ["", bundle.strategy]
         return "\n".join(parts)
 
 
@@ -210,7 +221,8 @@ class SimpleTesState(StateReuse):
             insp = self._select_from_chain(chain, NUM_INSPIRATIONS)
             metas = [self.store.meta(i, with_program=True) for i in insp]
             bundles.append(Bundle(batch_id=bid, k=kk, inspirations=metas,
-                                  context=elite, failures=fails, chain_idx=chain))
+                                  context=elite, failures=fails,
+                                  strategy=GENERATION_STRATEGY, chain_idx=chain))
             remaining -= kk
             bid += 1
         return bundles
