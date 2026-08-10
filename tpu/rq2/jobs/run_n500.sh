@@ -21,8 +21,10 @@ read -r problem state execution composition <<< $(python3 -c "
 import json; c=json.loads('''$cfg'''); print(c['problem'], c['state'], c['execution'], c['composition'])")
 name="${problem}_${state}_${execution}_${composition}_n500"
 echo "=== cell $name (array task $SLURM_ARRAY_TASK_ID) ==="
+PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/python
+export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
 cd "$RQ2/client"
-uv run loop.py --problem "$problem" --state "$state" --execution "$execution" \
+$PY loop.py --problem "$problem" --state "$state" --execution "$execution" \
   --composition "$composition" --n 500 --steps 10 \
   --fast-budget $(python3 -c "
 import json; print(json.loads('''$cfg''')['fast_budget'])") \

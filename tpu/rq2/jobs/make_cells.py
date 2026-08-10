@@ -45,6 +45,8 @@ set -uo pipefail
 RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu-rq1/tpu/rq2
 CELLS="{cells_json}"
 export PATH="/n/fs/vision-mix/sk7524/.npm-global/bin:$PATH"
+PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/python
+export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
 cfg=$(python3 -c "
 import json,sys
 print(json.dumps(json.load(open('$CELLS'))[$SLURM_ARRAY_TASK_ID]))")
@@ -53,7 +55,7 @@ import json; c=json.loads('''$cfg'''); print(c['problem'], c['state'], c['execut
 name="${{problem}}_${{state}}_${{execution}}_${{composition}}_n{n}"
 echo "=== cell $name (array task $SLURM_ARRAY_TASK_ID) ==="
 cd "$RQ2/client"
-uv run loop.py --problem "$problem" --state "$state" --execution "$execution" \\
+$PY loop.py --problem "$problem" --state "$state" --execution "$execution" \\
   --composition "$composition" --n {n} --steps {steps} \\
   --fast-budget $(python3 -c "
 import json; print(json.loads('''$cfg''')['fast_budget'])") \\

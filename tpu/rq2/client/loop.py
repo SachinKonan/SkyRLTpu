@@ -100,6 +100,9 @@ async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock)
     try:
         d = await _post(cli, url, key, {**base, "max_tokens": cfg["p1"]})
     except Exception as e:
+        (outdir / "raw" / f"{sid}.json").write_text(json.dumps(
+            {"sid": sid, "model": mkey, "url": url, "phase": 1,
+             "error": f"{type(e).__name__}: {str(e)[:400]}"}))
         return {"sid": sid, "model": mkey, "program": None, "score": None,
                 "detail": f"request failed: {str(e)[:150]}", "convo": None}
     msg = d["choices"][0]["message"]
@@ -115,6 +118,9 @@ async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock)
                 "continue_final_message": True, "add_generation_prompt": False})
             text = text + forced + (d2["choices"][0]["message"].get("content") or "")
         except Exception as e:
+            (outdir / "raw" / f"{sid}.json").write_text(json.dumps(
+                {"sid": sid, "model": mkey, "url": url, "phase": 2, "text": text,
+                 "error": f"{type(e).__name__}: {str(e)[:400]}"}))
             return {"sid": sid, "model": mkey, "program": None, "score": None,
                     "detail": f"phase2 failed: {str(e)[:150]}", "convo": None}
     code = (text.split(forced, 1)[1].split("```")[0] if forced else strip_fence(text))
@@ -380,8 +386,12 @@ def main():
                                  "groups": len(allocations) if allocations else None,
                                  "n_requested": args.n, "valid": len(ok), "best": best,
                                  "secs": round(time.time() - t0)}) + "\n")
+        import collections
+        why = collections.Counter((r.get("detail") or "ok")[:60] for r in results if r.get("score") is None)
         print(f"[loop] step {step}: {len(ok)}/{args.n} valid, best={best} "
               f"({int(time.time()-t0)}s)", flush=True)
+        for d, c in why.most_common(4):
+            print(f"[loop]    {c:4d} x {d}", flush=True)
 
     prog, best = st.best()
     (out / "result.json").write_text(json.dumps(
