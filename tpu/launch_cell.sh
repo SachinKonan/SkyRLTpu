@@ -22,6 +22,11 @@ GSZ=${GROUP_SIZE:-32}
 KLC=${KL_PENALTY_COEF:-0}                         # arm K: 0.1
 RESTART=${TTD_RESTART_RATIO:-0}                   # arm R: 100 (0 disables)
 STEPS=${NUM_EPOCHS:-15}
+# ---- problem (default Erdos; JSSP cells set the frontier_algo knobs) --------
+PROB_ENV=${TTD_ENV:-erdos_min_overlap}
+PROB_TYPE=${TTD_PROBLEM_TYPE:-}                   # JSSP: 46
+FC_MAX_CASES=${TTD_FCALGO_MAX_CASES:-0}
+EVALT=${EVAL_TIMEOUT:-1100}                       # JSSP: 180 (C++ compile+run, fc46-proven)
 # Drift measurement is free when KL>0 (the pass runs anyway); at KL=0 it costs a
 # base-model logprob pass, so measure every N steps rather than never.
 KLMEAS=${TTD_KL_MEASURE_EVERY:-1}
@@ -61,7 +66,7 @@ tmux kill-session -t cell 2>/dev/null
 tmux new-session -d -s cell "cd ~/ttd-client && \
   EXPERIMENT_NAME=$EXP \
   TTD_RUN_DIR=\$HOME/skyrl-runs/$RUN \
-  TTD_ENV=erdos_min_overlap \
+  TTD_ENV=$PROB_ENV TTD_PROBLEM_TYPE=$PROB_TYPE TTD_FCALGO_MAX_CASES=$FC_MAX_CASES \
   TTD_ENSEMBLE_MODELS='Qwen/Qwen3.5-27B:qwen3:qwen' \
   TTD_ALLOW_SINGLE_MEMBER=1 \
   TTD_M0_BASE_URL=http://127.0.0.1:8000 \
@@ -77,7 +82,7 @@ tmux new-session -d -s cell "cd ~/ttd-client && \
   RAY_ADDRESS=${RAY_ADDRESS:-127.0.0.1:6379} NUM_CPUS_PER_TASK=1 \
   GROUPS_PER_BATCH=$GPB GROUP_SIZE=$GSZ NUM_EPOCHS=$STEPS \
   LEARNING_RATE=4e-5 LORA_RANK=32 KL_PENALTY_COEF=$KLC TEMPERATURE=1.0 \
-  CONTEXT_WINDOW=18432 EVAL_TIMEOUT=1100 SAVE_EVERY=1 \
+  CONTEXT_WINDOW=18432 EVAL_TIMEOUT=$EVALT SAVE_EVERY=1 \
   WANDB_PROJECT=tpu-tinker-exps \
   third_party/discover/.venv-ttd-discover/bin/python tpu/run_ttd_ensemble.py \
   2>&1 | tee -a ~/skyrl-runs/$EXP.console.log"
