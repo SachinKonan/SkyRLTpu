@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# jobman command.cmd for a Stage-A cell (runs on ALL workers, branches on
+# JOBMAN_WORKER_ID). w0 orchestrates: client venv, engines (tinker trainer on
+# itself + vLLM on w1-3, via the PROVEN start_colocated_vllm_tinker.sh invoked
+# from w0 over the slice's internal IPs with the jobman ssh key), and the Ray
+# grading cluster. Other workers no-op -- w0 reaches them over ssh exactly the
+# way the login-node bring-up did, so the engine recipe stays byte-identical.
+#
+# Idempotent: healthy engines are detected and left alone, so a jobman loop
+# iteration after a mere monitor-ssh hiccup does not restart a working slice.
+set -euo pipefail
+: "${JOBMAN_WORKER_ID:?}"; : "${JOBMAN_TPU_INTERNAL_IPS:?}"; : "${CELL:?}"
+[ "$JOBMAN_WORKER_ID" = "0" ] || { echo "worker $JOBMAN_WORKER_ID: engines are driven from w0"; exit 0; }
+
+export PATH="$HOME/.local/bin:$PATH"
+REPO="$HOME/SkyRLTpu-league"
+KEY="$HOME/.ssh/jobman_tpu_ed25519"
+SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+INT="$JOBMAN_TPU_INTERNAL_IPS"
+W0INT=$(echo "$INT" | cut -d, -f1)
+ln -sfn "$REPO" "$HOME/ttd-client"
+
+# --- client venv (idempotent) ------------------------------------------------
+if [ ! -x "$REPO/third_party/discover/.venv-ttd-discover/bin/python" ]; then
+  ( cd "$REPO/third_party/discover" && uv sync --extra math --python 3.11 > ~/venv-build.log 2>&1 \
+      && ln -sfn .venv .venv-ttd-discover )
+  "$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import tinker,numpy,wandb" \
+    || { echo "client venv build FAILED"; tail -5 ~/venv-build.log; exit 1; }
+fi
+echo "client venv OK"
+
+# --- engines: skip when healthy ---------------------------------------------
+engines_healthy() {
+  curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 || return 1
+  local ip
+  for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
+    curl -fsS -m6 "http://$ip:8001/v1/models" >/dev/null 2>&1 || return 1
+  done
+  return 0
+}
+if engines_healthy; then
+  echo "engines already healthy -- skipping bring-up"
+else
+  echo "engine bring-up (uniform=18432 budget=73728)..."
+  PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+  env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
+    PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
+    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    MODEL_NAME=Qwen/Qwen3.5-27B TUNIX_MAXTEXT_MODEL_NAME=qwen3.5-27b TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
+    TUNIX_MAXTEXT_KWARGS='{"num_vocab_tiling": 8}' \
+    TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=2048 TRAIN_MICRO_BATCH_SIZE=1 \
+    TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    VLLM_MAX_MODEL_LEN=22528 VLLM_MAX_NUM_SEQS=128 VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
+    VLLM_XLA_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k" \
+    HF_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache" \
+    VLLM_EXTRA_ARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85" \
+    READY_ATTEMPTS=900 SYNC_SKYRL=1 START_VLLM=1 START_TINKER=1 \
+    bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || true
+  curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 \
+    || { echo "engine bring-up FAILED"; tail -8 ~/engine-bringup.log; exit 1; }
+  echo "engines UP"
+fi
+
+# --- ray grading cluster (idempotent) ---------------------------------------
+RAYBIN="$REPO/third_party/discover/.venv-ttd-discover/bin/ray"
+if ! "$RAYBIN" status >/dev/null 2>&1; then
+  pkill -f "ray/core" 2>/dev/null || true; sleep 2
+  "$RAYBIN" start --head --port=6379 --num-cpus=0 --disable-usage-stats >/tmp/ray-head.log 2>&1
+  echo "ray head started"
+fi
+RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray; print(ray.__version__)")
+for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
+  timeout 900 ssh $SSHO sk7524_princeton_edu@"$ip" "
+    export PATH=\$HOME/.local/bin:\$PATH
+    pgrep -f 'ray/core' >/dev/null && { echo \"ray already on \$(hostname)\"; exit 0; }
+    [ -x ~/.venvs/grader/bin/ray ] || {
+      uv venv ~/.venvs/grader --python 3.11 >/dev/null 2>&1
+      uv pip install --python ~/.venvs/grader/bin/python 'ray==$RAYV' numpy scipy shapely numba scikit-learn psutil >/dev/null 2>&1
+    }
+    ~/.venvs/grader/bin/ray start --address=$W0INT:6379 --num-cpus=150 --disable-usage-stats >/tmp/ray-worker.log 2>&1 && echo \"ray worker \$(hostname)\"
+  " 2>/dev/null || echo "ray worker $ip FAILED (grading degrades, not fatal)"
+done
+echo "cell worker 0 ready ($CELL)"
