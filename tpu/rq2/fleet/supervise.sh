@@ -59,7 +59,11 @@ GEMMA_WORKERS="${GEMMA_WORKERS:-4 5 6 7}"
 PERIOD="${PERIOD:-180}"
 
 mkdir -p "$RUNS/fleet" "$RUNS/logs"
-jobman_cli() { (cd "$JM" && PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" "$@"); }
+# NB: path is hardcoded, not "$JM" -- this function is shipped into a `timeout bash -c` subshell
+# via `declare -f`, which carries the function body but NOT the enclosing variables. With $JM
+# empty the `cd` lands nowhere, PYTHONPATH=. resolves wrong, and the import fails silently.
+jobman_cli() { (cd "/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/jobman" \
+  && PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" "$@"); }
 qr_state() { gcloud compute tpus queued-resources describe "$1" --zone=$ZONE --project=$PROJECT \
                --format='value(state.state)' 2>/dev/null || true; }
 log() { echo "[$(date '+%F %T')] $*"; }
@@ -82,8 +86,12 @@ ensure_slice() {           # $1 = slice name (QR is "<name>_spot")
   fi
   if [[ -z "$st" ]]; then
     log "$name: no QR -> jobman create"
-    timeout 900 bash -c "$(declare -f jobman_cli); jobman_cli create '$RQ2/fleet/yamls/${name}.yaml'" >/dev/null 2>&1
-    return 1     # not ready this round; it has to land first
+    # keep the output: a silent create failure looks identical to a slow one and the loop
+    # will happily re-create every cycle forever
+    timeout 900 bash -c "$(declare -f jobman_cli); jobman_cli create '$RQ2/fleet/yamls/${name}.yaml'" \
+      2>&1 | grep -viE "userwarning|warnings.warn" | sed "s|^|    [jobman] |"
+    sleep 60      # let the request register before the next state poll
+    return 1
   fi
   [[ "$st" == "ACTIVE" ]] || { log "$name: $st (waiting)"; return 1; }
   return 0
