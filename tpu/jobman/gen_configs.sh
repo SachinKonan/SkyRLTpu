@@ -108,8 +108,13 @@ ${prob_env_block}
           sleep 5; waited=\$((waited + 5))
         done
       }
-      wait_for_apt; sudo apt-get update -y
-      wait_for_apt; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git curl tmux python3 python3-venv python3-pip build-essential
+      # Skip apt entirely once everything is present: prepare re-runs on EVERY
+      # loop iteration, and unattended-upgrades holding the dpkg lock 10+ min
+      # (seen live on grpo-k w2) must not fail an otherwise-healthy retry.
+      if ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then
+        wait_for_apt; sudo apt-get update -y
+        wait_for_apt; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git curl tmux python3 python3-venv python3-pip build-essential
+      fi
       command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
       export PATH="\$HOME/.local/bin:\$PATH"
       mkdir -p "\$HOME/gcs/skyrl-checkpoints" "\$HOME/skyrl-runs" "\$HOME/skyrl-logs"
