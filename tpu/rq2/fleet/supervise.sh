@@ -131,12 +131,19 @@ serve_worker() {           # $1=slice $2=worker $3=model-key
   local slice="$1" w="$2" key="$3" model maxlen hf xla
   if [[ "$key" == "qwen35" ]]; then model=$QWEN_MODEL; maxlen=$QWEN_MAXLEN; hf=$QWEN_HF; xla=$QWEN_XLA
   else model=$GEMMA_MODEL; maxlen=$GEMMA_MAXLEN; hf=$GEMMA_HF; xla=$GEMMA_XLA; fi
-  timeout 300 gcloud compute tpus tpu-vm scp "$SERVE_SH" "$(vm_name "$slice"):~/serve_vllm.sh" \
-    --zone=$ZONE --project=$PROJECT --worker="$w" >/dev/null 2>&1 || return 1
+  # The USER matters: scp without one uses gcloud's default, which is NOT sk7524_princeton_edu
+  # now that we authenticate as the service account -- the file landed in /home/sk7524 while ssh
+  # ran as sk7524_princeton_edu and saw nothing. Keep the log; a silent scp failure looks exactly
+  # like a slow bring-up.
+  timeout 300 gcloud compute tpus tpu-vm scp "$SERVE_SH" \
+    "${USER_AT}@$(vm_name "$slice"):~/serve_vllm.sh" \
+    --zone=$ZONE --project=$PROJECT --worker="$w" \
+    >>"$RUNS/logs/serve_${slice}_w${w}.log" 2>&1 || { echo "scp failed w$w"; return 1; }
   timeout 3600 gcloud alpha compute tpus tpu-vm ssh "${USER_AT}@$(vm_name "$slice")" --zone=$ZONE \
     --project=$PROJECT --worker="$w" --ssh-key-file="$KEY" \
     --command="MODEL='${model}' PORT=${PORT} MAX_MODEL_LEN=${maxlen} MAX_NUM_SEQS=${MAX_NUM_SEQS} \
-      HF_CACHE_GCS='${hf}' XLA_CACHE_GCS='${xla}' bash ~/serve_vllm.sh" >/dev/null 2>&1
+      HF_CACHE_GCS='${hf}' XLA_CACHE_GCS='${xla}' bash ~/serve_vllm.sh" \
+    >>"$RUNS/logs/serve_${slice}_w${w}.log" 2>&1
 }
 
 log "llama-farm supervisor up. slices: $SLICES"
