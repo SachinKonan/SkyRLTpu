@@ -63,13 +63,20 @@ def strip_fence(t):
     return m[-1] if m else ""
 
 
-def assign_models(n, composition):
-    """Deterministic so a resumed cell keeps the same split."""
-    if composition == "qwen":
-        return ["qwen35"] * n
-    if composition == "gemma":
-        return ["gemma4"] * n
-    return ["qwen35" if i % 2 == 0 else "gemma4" for i in range(n)]   # 50-50
+def assign_models_by_bundle(bundles, composition):
+    """Deterministic; for 50-50 the split is G/2 per model WITHIN EVERY BUNDLE, so each sampled
+    state is explored by both models equally -- not merely a global 50/50 that could leave some
+    states single-model."""
+    out = []
+    for b in bundles:
+        if composition == "qwen":
+            out += ["qwen35"] * b.k
+        elif composition == "gemma":
+            out += ["gemma4"] * b.k
+        else:
+            half = b.k // 2
+            out += ["qwen35"] * half + ["gemma4"] * (b.k - half)
+    return out
 
 
 # ------------------------------------------------------------------ farm sampling (2-phase)
@@ -416,7 +423,7 @@ def main():
             base_prompts = [p + "\n\n## Additional instruction for this group\n" + instr[i]
                             for i, p in enumerate(base_prompts)]
 
-        models = assign_models(args.n, args.composition)
+        models = assign_models_by_bundle(bundles, args.composition)
         print(f"[loop] step {step}: sampling {args.n} ({args.composition})", flush=True)
         results = asyncio.run(sample_round(base_prompts, models, urls, args, out, fence))
         print(f"[loop] step {step}: grading", flush=True)

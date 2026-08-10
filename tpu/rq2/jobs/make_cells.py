@@ -28,9 +28,12 @@ FAST_BUDGET = {"fc46": 10, "erdos": 10, "ac1": 60, "fc159": 10, "ud": 10}
 # scale = G sweep at FIXED B=16 (chains constant across scales, so chain depth stays
 # comparable and "scale" cleanly means more rollouts per sampled state, not a different tree)
 B = 16
-G_SCALES = [8, 16, 32]          # n = B*G in {128, 256, 512}
+G_SCALES = [32, 64]             # n = B*G in {512, 1024} -- 16x32 is the RL shape
 # concurrent cells per scale, from 768 in-flight capacity
-THROTTLE = {128: 6, 256: 3, 512: 2}
+THROTTLE = {512: 2, 1024: 1}
+# per-cell client concurrency: throttle * conc ~= fleet in-flight capacity (768). The loop's
+# default of 64 would starve a 1024-rollout step at 24 workers.
+CLIENT_CONC = {512: 384, 1024: 768}
 GRADE_CONC = {"fc46": 8, "fc159": 8, "erdos": 16, "ac1": 16, "ud": 16}
 
 ARRAY = """#!/bin/bash
@@ -61,6 +64,7 @@ echo "=== cell $name (array task $SLURM_ARRAY_TASK_ID) ==="
 cd "$RQ2/client"
 $PY loop.py --problem "$problem" --state "$state" --execution "$execution" \\
   --composition "$composition" --B {B} --G {G} --steps {steps} \\
+  --concurrency {conc} \\
   --fast-budget $(python3 -c "
 import json; print(json.loads('''$cfg''')['fast_budget'])") \\
   --grade-concurrency $(python3 -c "
@@ -106,7 +110,8 @@ def main():
         cj.write_text(json.dumps(cells, indent=2))
         sh = out / f"run_n{n}.sh"
         sh.write_text(ARRAY.format(
-            n=n, B=B, G=g, last=len(cells) - 1, throttle=THROTTLE.get(n, 2),
+            n=n, B=B, G=g, conc=CLIENT_CONC.get(n, 384),
+            last=len(cells) - 1, throttle=THROTTLE.get(n, 2),
             cpus=max(8, min(32, GRADE_CONC.get(args.problems[0], 16) + 8)),
             cells_json=cj, runs=args.runs, steps=args.steps))
         sh.chmod(0o755)

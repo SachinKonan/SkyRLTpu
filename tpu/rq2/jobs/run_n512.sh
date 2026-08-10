@@ -26,6 +26,7 @@ echo "=== cell $name (array task $SLURM_ARRAY_TASK_ID) ==="
 cd "$RQ2/client"
 $PY loop.py --problem "$problem" --state "$state" --execution "$execution" \
   --composition "$composition" --B 16 --G 32 --steps 10 \
+  --concurrency 384 \
   --fast-budget $(python3 -c "
 import json; print(json.loads('''$cfg''')['fast_budget'])") \
   --grade-concurrency $(python3 -c "
