@@ -21,5 +21,5 @@ PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/
 export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
 cd "$RQ2/client"
 $PY loop.py --problem fc46 --state "$st" --execution "$ex" --composition "$comp" \
-  --B "$BB" --G "$GG" --steps "$steps" --concurrency 32 --grade-concurrency 8 \
+  --B "$BB" --G "$GG" --steps "$steps" --concurrency "$((BB * GG > 1024 ? 1024 : BB * GG))" --grade-concurrency 16 \
   --out "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/smoke/fc46_${st}_${ex}_${comp}"
