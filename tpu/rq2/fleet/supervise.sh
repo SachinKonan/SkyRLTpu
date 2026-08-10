@@ -57,6 +57,7 @@ MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
 QWEN_WORKERS="${QWEN_WORKERS:-0 1 2 3}"
 GEMMA_WORKERS="${GEMMA_WORKERS:-4 5 6 7}"
 PERIOD="${PERIOD:-180}"
+GEMMA_EXTRA_PIP="${GEMMA_EXTRA_PIP:-transformers==5.14.0}"
 LAUNCH_GRACE="${LAUNCH_GRACE:-1500}"   # 25 min: first install is venv build + weight restore
 
 mkdir -p "$RUNS/fleet" "$RUNS/logs"
@@ -137,8 +138,15 @@ for i,e in enumerate(d.get('networkEndpoints',[])):
 
 serve_worker() {           # $1=slice $2=worker $3=model-key
   local slice="$1" w="$2" key="$3" model maxlen hf xla
+  local extra=""
   if [[ "$key" == "qwen35" ]]; then model=$QWEN_MODEL; maxlen=$QWEN_MAXLEN; hf=$QWEN_HF; xla=$QWEN_XLA
-  else model=$GEMMA_MODEL; maxlen=$GEMMA_MAXLEN; hf=$GEMMA_HF; xla=$GEMMA_XLA; fi
+  else
+    model=$GEMMA_MODEL; maxlen=$GEMMA_MAXLEN; hf=$GEMMA_HF; xla=$GEMMA_XLA
+    # transformers 5.15.0 cannot load gemma-4-31B: AmbiguousGlobalPerLayerAttributeError
+    # ('head_dim' is per-layer). 5.14.0 loads Gemma4Config fine and qwen is unaffected, so the
+    # pin is applied to gemma workers only.
+    extra="$GEMMA_EXTRA_PIP"
+  fi
   # The USER matters: scp without one uses gcloud's default, which is NOT sk7524_princeton_edu
   # now that we authenticate as the service account -- the file landed in /home/sk7524 while ssh
   # ran as sk7524_princeton_edu and saw nothing. Keep the log; a silent scp failure looks exactly
@@ -150,7 +158,8 @@ serve_worker() {           # $1=slice $2=worker $3=model-key
   timeout 3600 gcloud alpha compute tpus tpu-vm ssh "${USER_AT}@$(vm_name "$slice")" --zone=$ZONE \
     --project=$PROJECT --worker="$w" --ssh-key-file="$KEY" \
     --command="MODEL='${model}' PORT=${PORT} MAX_MODEL_LEN=${maxlen} MAX_NUM_SEQS=${MAX_NUM_SEQS} \
-      BIND_HOST=0.0.0.0 HF_CACHE_GCS='${hf}' XLA_CACHE_GCS='${xla}' bash ~/serve_vllm.sh" \
+      BIND_HOST=0.0.0.0 EXTRA_PIP='${extra}' \
+      HF_CACHE_GCS='${hf}' XLA_CACHE_GCS='${xla}' bash ~/serve_vllm.sh" \
     >>"$RUNS/logs/serve_${slice}_w${w}.log" 2>&1
 }
 
