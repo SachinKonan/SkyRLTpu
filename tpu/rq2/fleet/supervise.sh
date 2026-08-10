@@ -73,7 +73,15 @@ log() { echo "[$(date '+%F %T')] $*"; }
 # it DOES break `gcloud storage`, which jobman calls for its bucket/region check -- so every
 # bring-up fails with no obvious cause. RQ1 lost hours to exactly this.
 creds_ok() {
-  timeout 60 gcloud storage buckets describe "$BUCKET" --format="value(location)" >/dev/null 2>&1
+  # Retry: the FIRST gcloud call on a fresh node is slow (service-account credentials load from
+  # NFS-backed ~/.config/gcloud) and a 60s timeout tripped on it, stalling the whole fleet on a
+  # false "bad credentials". Only a repeated failure is real.
+  for try in 1 2 3; do
+    timeout 180 gcloud storage buckets describe "$BUCKET" --format="value(location)" >/dev/null 2>&1 \
+      && return 0
+    sleep 15
+  done
+  return 1
 }
 
 ensure_slice() {           # $1 = slice name (QR is "<name>_spot")
