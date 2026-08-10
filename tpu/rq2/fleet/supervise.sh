@@ -142,7 +142,7 @@ serve_worker() {           # $1=slice $2=worker $3=model-key
   timeout 3600 gcloud alpha compute tpus tpu-vm ssh "${USER_AT}@$(vm_name "$slice")" --zone=$ZONE \
     --project=$PROJECT --worker="$w" --ssh-key-file="$KEY" \
     --command="MODEL='${model}' PORT=${PORT} MAX_MODEL_LEN=${maxlen} MAX_NUM_SEQS=${MAX_NUM_SEQS} \
-      HF_CACHE_GCS='${hf}' XLA_CACHE_GCS='${xla}' bash ~/serve_vllm.sh" \
+      BIND_HOST=0.0.0.0 HF_CACHE_GCS='${hf}' XLA_CACHE_GCS='${xla}' bash ~/serve_vllm.sh" \
     >>"$RUNS/logs/serve_${slice}_w${w}.log" 2>&1
 }
 
