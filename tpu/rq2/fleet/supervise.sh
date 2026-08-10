@@ -57,6 +57,7 @@ MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
 QWEN_WORKERS="${QWEN_WORKERS:-0 1 2 3}"
 GEMMA_WORKERS="${GEMMA_WORKERS:-4 5 6 7}"
 PERIOD="${PERIOD:-180}"
+LAUNCH_GRACE="${LAUNCH_GRACE:-1500}"   # 25 min: first install is venv build + weight restore
 
 mkdir -p "$RUNS/fleet" "$RUNS/logs"
 # NB: path is hardcoded, not "$JM" -- this function is shipped into a `timeout bash -c` subshell
@@ -158,7 +159,23 @@ while :; do
     for line in "${IPS[@]}"; do
       w="${line%% *}"; ip="${line##* }"
       key="gemma4"; for q in $QWEN_WORKERS; do [[ "$w" == "$q" ]] && key="qwen35"; done
-      if timeout 8 curl -sf "http://${ip}:${PORT}/v1/models" >/dev/null 2>&1; then continue; fi
+      if timeout 8 curl -sf "http://${ip}:${PORT}/v1/models" >/dev/null 2>&1; then
+        rm -f "$RUNS/fleet/.launched_${slice}_w${w}"; continue
+      fi
+      # serve_vllm.sh starts vLLM in a tmux and RETURNS IMMEDIATELY, so a launch looks finished
+      # while the server still has ~10-20 min of venv build + weight restore ahead of it. Without
+      # a grace period every cycle re-launches every worker, stacking duplicate installs on the
+      # same host.
+      mark="$RUNS/fleet/.launched_${slice}_w${w}"
+      if [[ -f "$mark" ]]; then
+        age=$(( $(date +%s) - $(stat -c %Y "$mark") ))
+        if (( age < LAUNCH_GRACE )); then
+          log "$slice/w$w ($key): launched ${age}s ago, still coming up (grace ${LAUNCH_GRACE}s)"
+          continue
+        fi
+        log "$slice/w$w ($key): still dead after ${age}s -> relaunching"
+      fi
+      touch "$mark"
       log "$slice/w$w ($key): not serving -> launching"
       ( serve_worker "$slice" "$w" "$key" ) & pids+=($!)
     done
