@@ -1,0 +1,12 @@
+{
+  "problem": "ac1",
+  "lang": "python",
+  "fence": "python",
+  "maximize": false,
+  "problem_type": "ac1",
+  "seed_score": 1.9411254978398143,
+  "seed_recorded_score": 1.9411254978398143,
+  "seed_sha": "8b5a37bab38b",
+  "prompt_style": "env_get_question",
+  "built": "2026-08-06 15:36:23"
+}

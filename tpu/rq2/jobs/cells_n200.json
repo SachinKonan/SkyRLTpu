@@ -1,0 +1,326 @@
+[
+  {
+    "problem": "fc46",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "fc46",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 8
+  },
+  {
+    "problem": "erdos",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "erdos",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 10,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "puct",
+    "execution": "simple",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "puct",
+    "execution": "orchestrator",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "workspace",
+    "execution": "simple",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "qwen",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "gemma",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  },
+  {
+    "problem": "ac1",
+    "state": "workspace",
+    "execution": "orchestrator",
+    "composition": "50-50",
+    "n": 200,
+    "fast_budget": 60,
+    "grade_concurrency": 16
+  }
+]
