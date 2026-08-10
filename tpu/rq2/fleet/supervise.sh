@@ -110,8 +110,12 @@ ensure_slice() {           # $1 = slice name (QR is "<name>_spot")
   return 0
 }
 
+# jobman names the TPU VM "<slice>_spot", same as the queued resource (verified: the VM is
+# sk7524-llamafarm-a-v5p64-east5a_spot). Every node-level gcloud call must use the suffixed name.
+vm_name() { echo "${1}_spot"; }
+
 worker_ips() {             # $1 = slice -> lines "<worker> <ip>"
-  timeout 120 gcloud compute tpus tpu-vm describe "$1" --zone=$ZONE --project=$PROJECT \
+  timeout 120 gcloud compute tpus tpu-vm describe "$(vm_name "$1")" --zone=$ZONE --project=$PROJECT \
     --format="json(networkEndpoints)" 2>/dev/null \
   | $PY -c "
 import json,sys
@@ -126,9 +130,9 @@ serve_worker() {           # $1=slice $2=worker $3=model-key
   local slice="$1" w="$2" key="$3" model maxlen hf xla
   if [[ "$key" == "qwen35" ]]; then model=$QWEN_MODEL; maxlen=$QWEN_MAXLEN; hf=$QWEN_HF; xla=$QWEN_XLA
   else model=$GEMMA_MODEL; maxlen=$GEMMA_MAXLEN; hf=$GEMMA_HF; xla=$GEMMA_XLA; fi
-  timeout 300 gcloud compute tpus tpu-vm scp "$SERVE_SH" "${slice}:~/serve_vllm.sh" \
+  timeout 300 gcloud compute tpus tpu-vm scp "$SERVE_SH" "$(vm_name "$slice"):~/serve_vllm.sh" \
     --zone=$ZONE --project=$PROJECT --worker="$w" >/dev/null 2>&1 || return 1
-  timeout 3600 gcloud alpha compute tpus tpu-vm ssh "${USER_AT}@${slice}" --zone=$ZONE \
+  timeout 3600 gcloud alpha compute tpus tpu-vm ssh "${USER_AT}@$(vm_name "$slice")" --zone=$ZONE \
     --project=$PROJECT --worker="$w" --ssh-key-file="$KEY" \
     --command="MODEL='${model}' PORT=${PORT} MAX_MODEL_LEN=${maxlen} MAX_NUM_SEQS=${MAX_NUM_SEQS} \
       HF_CACHE_GCS='${hf}' XLA_CACHE_GCS='${xla}' bash ~/serve_vllm.sh" >/dev/null 2>&1
