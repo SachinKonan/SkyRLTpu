@@ -51,7 +51,7 @@ else
   # trained fine, so -j cells keep the faster original tiles.
   case "$CELL" in
     *-j) FLCE_TILE=2048; VOCAB_TILING=8 ;;
-    *)   FLCE_TILE=1024; VOCAB_TILING=32 ;;
+    *)   FLCE_TILE=512; VOCAB_TILING=64 ;;
   esac
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
