@@ -34,7 +34,7 @@ EVALT=${EVAL_TIMEOUT:-1100}                       # JSSP: 180 (C++ compile+run, 
 # JSSP trained fine (HBM[prompt_logprobs/oom1] in_use=62.39G). Default ON only
 # where it is safe.
 case "${TTD_ENV:-erdos_min_overlap}" in
-  erdos*) KLMEAS=${TTD_KL_MEASURE_EVERY:-0} ;;
+  erdos*) KLMEAS=${TTD_KL_MEASURE_EVERY:-3} ;;
   *)      KLMEAS=${TTD_KL_MEASURE_EVERY:-1} ;;
 esac
 

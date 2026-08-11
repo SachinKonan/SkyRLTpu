@@ -6,7 +6,7 @@
 # sidecar (wandb + partial tmp files).
 set -euo pipefail
 : "${CELL:?}"
-RUN="stageA-$CELL"
+RUN="${RUN_DIR_NAME:-stageA-$CELL}"
 GCS_RUN="${GCS_RUN:-gs://sk7524-tinker-tpu-us-east5/skyrl-runs/$RUN}"
 [ -d "$HOME/skyrl-runs/$RUN" ] || { echo "no local run dir yet"; exit 0; }
 gsutil -m rsync -r -x '.*wandb/.*|.*\.tmp$|.*\.gstmp$' \

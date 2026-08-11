@@ -6,7 +6,7 @@
 # failure mode).
 set -euo pipefail
 : "${CELL:?}"
-NUM_EPOCHS="${NUM_EPOCHS:-15}" RUN="stageA-$CELL" python3 - <<'PY'
+NUM_EPOCHS="${NUM_EPOCHS:-15}" RUN="${RUN_DIR_NAME:-stageA-$CELL}" python3 - <<'PY'
 import glob, json, os, sys
 
 run = os.environ["RUN"]

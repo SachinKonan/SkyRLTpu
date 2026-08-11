@@ -63,6 +63,8 @@ resumable:
     KL_PENALTY_COEF: "0"
     TTD_RESTART_RATIO: "100"
     NUM_EPOCHS: "15"
+    RUN_DIR_NAME: stageA2-ttd-r
+    EXPERIMENT_NAME: stageA2-ttd-r
     TTD_ENV: erdos_min_overlap
     SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/stagea-league.tar.gz
   prepare:

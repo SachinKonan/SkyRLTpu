@@ -49,9 +49,13 @@ else
   # without training. Heavier tiling (the values the gemma engine has always
   # used) shrinks the fb program. JSSP sequences land in small buckets and
   # trained fine, so -j cells keep the faster original tiles.
+  # K arms get small tiles even on JSSP: the penalty pass pins its own ~16G
+  # scoring arena beside the fb arena, and grpo-k-j proved 2048/8 + penalty
+  # does not fit (1/9 steps trained). Non-K JSSP keeps the faster tiles.
   case "$CELL" in
-    *-j) FLCE_TILE=2048; VOCAB_TILING=8 ;;
-    *)   FLCE_TILE=512; VOCAB_TILING=64 ;;
+    *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
+    *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
+    *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
   esac
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
