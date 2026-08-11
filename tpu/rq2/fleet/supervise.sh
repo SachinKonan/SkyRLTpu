@@ -94,6 +94,16 @@ ensure_slice() {           # $1 = slice name (QR is "<name>_spot")
   st=$(qr_state "$qr")
   if [[ "$st" == "SUSPENDED" || "$st" == "FAILED" ]]; then
     log "$name: QR $st -> deleting"
+    # Purge the dead slice from the registry NOW. With 8 slices a full cycle (creates run up to
+    # 15 min each) can leave the registry stale for 40+ min, and clients kept dispatching to
+    # this slice's dead IPs the whole time (measured: 143 ConnectTimeouts in 40 min).
+    $PY - "$REGISTRY" "$name" <<'PYEOF' 2>/dev/null || true
+import json, sys
+p, dead = sys.argv[1], sys.argv[2]
+r = json.load(open(p))
+r["entries"] = [e for e in r["entries"] if e.get("slice") != dead]
+json.dump(r, open(p, "w"))
+PYEOF
     timeout 600 gcloud compute tpus queued-resources delete "$qr" --zone=$ZONE --project=$PROJECT --force --quiet >/dev/null 2>&1
     for _ in $(seq 1 30); do [[ -z "$(qr_state "$qr")" ]] && break; sleep 20; done
     st=""
