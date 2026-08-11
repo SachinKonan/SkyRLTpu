@@ -64,10 +64,11 @@ class Bundle:
     batch_id: int
     k: int
     inspirations: list[dict] = field(default_factory=list)   # node meta incl. program
-    context: str = ""                                        # elite overview | workspace
+    context: str = ""                                        # elite overview | workspace | memory
     failures: str = ""
     strategy: str = ""                                       # SimpleTES GENERATION STRATEGY
     chain_idx: int | None = None
+    agent_idx: int = 0                                       # S4/S5 team arms; 0 otherwise
 
 
 class StateReuse(ABC):
@@ -283,6 +284,227 @@ class SimpleTesState(StateReuse):
         return nd.get("program"), nd.get("r")
 
 
+# ---------------------------------------------------- S3-S5: discovery-PUCT + perennial memory
+MEMORY_MAX_CHARS = 18_000    # mechanical backstop for the 5k-token MEMORY.md contract
+PUCT_C = 1.0
+TOPK_CHILDREN = 2            # discovery sampler default: top-k results of a group join the buffer
+
+
+class PerennialState(StateReuse):
+    """S3/S4/S5: ttt-discover-style PUCT buffer(s) + spark-edited perennial MEMORY.md file(s).
+
+    Lineage follows the RL sampler's semantics (tinker_utils/sampler.py PUCTSampler), NOT the
+    SimpleTES RPUCG: no chains -- one population per buffer; Q(i) = best child value if i has
+    children else own value (one-hop, not deep backup); P = rank-based prior; exploration scaled
+    by the value range; FULL-lineage exclusion between same-step picks (which is also what keeps
+    B same-step bundles distinct without stochastic draws -- each pick removes its ancestors and
+    descendants from the pool; the pool cycles if exhausted). Each bundle carries exactly ONE
+    state (the program to improve), as in RL. Top-2 valid results of a bundle commit as children.
+
+    Memory replaces the SimpleTES elite-overview + failure-pattern + strategy channels AND the
+    per-winner reflections: the ONLY language channel is MEMORY.md, appended to every prompt and
+    edited (not rebuilt) each step by a spark exec the loop provides via update(memory_fn=...).
+
+    n_agents=1, shared -> S3. n_agents=2, shared buffer -> S4 (memories private, merit-gated
+    crossing: agent i's editor also sees teammate results strictly better than i's best-so-far).
+    n_agents=2, split -> S5 (per-agent buffers; crossing ONLY through the memory channel).
+    """
+
+    def __init__(self, root: Path, maximize: bool, seed_program: str, seed_score: float | None,
+                 n_agents: int = 1, shared_buffer: bool = True):
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.maximize = maximize
+        self.n_agents = n_agents
+        self.shared = shared_buffer
+        n_stores = 1 if shared_buffer else n_agents
+        self.stores = []
+        for s in range(n_stores):
+            gp = self.root / (f"graph_{s}.json" if n_stores > 1 else "graph.json")
+            if gp.exists():
+                self.stores.append(Store.load(gp))
+            else:
+                st = Store(maximize, gp)
+                st.add(seed_program, seed_score, [], feedback="seed", rnd=0, summary="seed")
+                st.save()
+                self.stores.append(st)
+        vp = self.root / "visits.json"
+        self.visits = json.loads(vp.read_text()) if vp.exists() else \
+            {str(s): {} for s in range(n_stores)}
+        # Per-agent lifetime best of the agent's OWN rollouts. The merit gate must compare
+        # against this, never against the buffer: with a shared buffer (S4) the store's best
+        # already includes teammate commits, so a store-derived bar can never be beaten and
+        # nothing would ever cross (caught by unit test).
+        ap_ = self.root / "agent_best.json"
+        self.abest = json.loads(ap_.read_text()) if ap_.exists() else \
+            {str(a): seed_score for a in range(n_agents)}
+        for a in range(n_agents):
+            mp = self._mem_path(a)
+            if not mp.exists():
+                mp.write_text("")
+
+    def _mem_path(self, agent):
+        return self.root / (f"memory_{agent}.md" if self.n_agents > 1 else "MEMORY.md")
+
+    def _store_of(self, agent):
+        return self.stores[0] if self.shared else self.stores[agent]
+
+    def _vkey(self, agent):
+        return "0" if self.shared else str(agent)
+
+    def _select(self, store, vis, n_pick, rng):
+        """Discovery-PUCT pick of n_pick states with full-lineage exclusion. Deterministic
+        greedy like the RL sampler; rng only breaks exact score ties stably."""
+        g = store.g
+        pop = [nid for nid in g.nodes if g.nodes[nid].get("r") is not None]
+        if not pop:
+            return []
+        v = {nid: (g.nodes[nid]["r"] if self.maximize else -g.nodes[nid]["r"]) for nid in pop}
+        scale = (max(v.values()) - min(v.values())) or 1.0
+        ranked = sorted(pop, key=lambda nid: v[nid])
+        prior = {nid: (i + 1) / len(ranked) for i, nid in enumerate(ranked)}
+        T = sum(vis.values())
+
+        def q(nid):
+            kids = [c for c in g.successors(nid) if c in v]
+            return max((v[c] for c in kids), default=v[nid])
+
+        def score(nid):
+            return q(nid) + PUCT_C * scale * prior[nid] * math.sqrt(1 + T) / (1 + vis.get(nid, 0))
+
+        def lineage(nid):
+            import networkx as nx
+            return {nid} | nx.ancestors(g, nid) | nx.descendants(g, nid)
+
+        picked, excluded = [], set()
+        order = sorted(pop, key=lambda nid: (-score(nid), str(nid)))
+        while len(picked) < n_pick:
+            avail = [nid for nid in order if nid not in excluded]
+            if not avail:                       # pool exhausted (early steps): cycle
+                excluded = set()
+                avail = order
+            choice = avail[0]
+            picked.append(choice)
+            excluded |= lineage(choice)
+        return picked
+
+    def sample(self, n, k):
+        bundles, remaining, bid = [], n, 0
+        n_bundles = (n + k - 1) // k
+        picks = {}                              # per-store selections, computed once
+        for skey in range(len(self.stores)):
+            agents_here = [a for a in range(self.n_agents)
+                           if (0 if self.shared else a) == skey]
+            n_here = sum(1 for b in range(n_bundles)
+                         if (b % self.n_agents) in agents_here)
+            picks[skey] = self._select(self.stores[skey],
+                                       self.visits[str(skey)], n_here, None)
+        cursor = {skey: 0 for skey in picks}
+        while remaining > 0:
+            kk = min(k, remaining)
+            agent = bid % self.n_agents
+            skey = 0 if self.shared else agent
+            nid = picks[skey][cursor[skey]]
+            cursor[skey] += 1
+            store = self.stores[skey]
+            meta = store.meta(nid, with_program=True)
+            mem = self._mem_path(agent).read_text().strip()
+            ctx = f"## Long-term memory (MEMORY.md -- accumulated across all rounds)\n{mem}" \
+                if mem else ""
+            bundles.append(Bundle(batch_id=bid, k=kk, inspirations=[meta], context=ctx,
+                                  failures="", strategy="", chain_idx=None, agent_idx=agent))
+            remaining -= kk
+            bid += 1
+        return bundles
+
+    def reflection_targets(self, grouped):
+        return []                               # memory is the only language channel
+
+    def _round_md(self, agent, own, crossed, step):
+        p = self.root / f"round_{step:02d}_agent{agent}.md"
+        L = [f"# Step {step} -- agent {agent}: {len(own)} own results"
+             + (f", {len(crossed)} teammate results that beat your best" if crossed else ""),
+             f"direction: {'higher' if self.maximize else 'lower'} is better", ""]
+        def block(rs, title):
+            if not rs:
+                return
+            L.append(f"## {title}")
+            ok = sorted([r for r in rs if r.get("score") is not None],
+                        key=lambda r: r["score"], reverse=self.maximize)
+            bad = [r for r in rs if r.get("score") is None]
+            L.append("| id | score | status |"); L.append("|---|---|---|")
+            for r in ok + bad:
+                L.append(f"| {r.get('sid')} | {r.get('score')} | "
+                         f"{'ok' if r.get('score') is not None else (r.get('detail') or 'invalid')[:60]} |")
+            for r in ok:
+                L.extend([f"\n### {r['sid']}  score={r['score']}", "```",
+                          (r.get("program") or "")[:MAX_PROGRAM_CHARS], "```"])
+        block(own, "Your rollouts")
+        block(crossed, "Teammate rollouts that outperformed your best (merit-gated share)")
+        p.write_text("\n".join(L))
+        return p
+
+    def update(self, grouped, step, memory_fn=None, **kw):
+        by_agent = {a: [] for a in range(self.n_agents)}
+        # commit: top-2 valid results per bundle join the owning buffer as children
+        for bundle, results in grouped:
+            agent = bundle.agent_idx
+            store = self._store_of(agent)
+            parent = bundle.inspirations[0]["id"] if bundle.inspirations else None
+            ok = sorted([r for r in results if r.get("score") is not None],
+                        key=lambda r: r["score"], reverse=self.maximize)
+            for r in ok[:TOPK_CHILDREN]:
+                store.add(r["program"], r["score"], [parent] if parent is not None else [],
+                          feedback=(r.get("detail") or "")[:200], rnd=step, summary="")
+            if parent is not None:
+                vk = self._vkey(agent)
+                self.visits[vk][str(parent)] = self.visits[vk].get(str(parent), 0) + 1
+            by_agent[agent] += results
+        for st in self.stores:
+            st.save()
+        (self.root / "visits.json").write_text(json.dumps(self.visits))
+        # per-agent lifetime bests (own rollouts only), including this step's
+        for a in range(self.n_agents):
+            own = [r["score"] for r in by_agent[a] if r.get("score") is not None]
+            if own:
+                cand = max(own) if self.maximize else min(own)
+                cur = self.abest.get(str(a))
+                if cur is None or ((cand > cur) if self.maximize else (cand < cur)):
+                    self.abest[str(a)] = cand
+        (self.root / "agent_best.json").write_text(json.dumps(self.abest))
+        # memory edits: one spark exec per agent, merit-gated teammate visibility
+        if memory_fn is not None:
+            for a in range(self.n_agents):
+                bar = self.abest.get(str(a))
+                crossed = []
+                for other in range(self.n_agents):
+                    if other == a:
+                        continue
+                    for r in by_agent[other]:
+                        s = r.get("score")
+                        if s is None or bar is None:
+                            continue
+                        if (s > bar) if self.maximize else (s < bar):
+                            crossed.append(r)
+                md = self._round_md(a, by_agent[a], crossed, step)
+                new = memory_fn(a, md, self._mem_path(a))
+                if new and new.strip():
+                    self._mem_path(a).write_text(new)
+                    (self.root / f"memory_{a}_step{step:02d}.md").write_text(new)
+
+    def best(self):
+        top, prog = None, None
+        for store in self.stores:
+            b = store.best()
+            if b is None:
+                continue
+            nd = store.g.nodes[b]
+            r = nd.get("r")
+            if top is None or ((r > top) if self.maximize else (r < top)):
+                top, prog = r, nd.get("program")
+        return prog, top
+
+
 # ------------------------------------------------------------------------------ PDR workspace
 class WorkspaceState(StateReuse):
     def __init__(self, root: Path, maximize: bool, seed_program: str, seed_score: float | None):
@@ -351,4 +573,13 @@ def make_state_reuse(kind, root, maximize, seed_program, seed_score, num_chains=
         return SimpleTesState(root, maximize, seed_program, seed_score, num_chains)
     if kind == "workspace":
         return WorkspaceState(root, maximize, seed_program, seed_score)
+    if kind == "perennial":                  # S3: discovery-PUCT buffer + one MEMORY.md
+        return PerennialState(root, maximize, seed_program, seed_score,
+                              n_agents=1, shared_buffer=True)
+    if kind == "team":                       # S4: shared buffer, N=2 private memories
+        return PerennialState(root, maximize, seed_program, seed_score,
+                              n_agents=2, shared_buffer=True)
+    if kind == "team-split":                 # S5: per-agent buffers, memory-only crossing
+        return PerennialState(root, maximize, seed_program, seed_score,
+                              n_agents=2, shared_buffer=False)
     raise ValueError(f"unknown state kind: {kind}")

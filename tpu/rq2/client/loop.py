@@ -41,7 +41,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "fleet"))
 import prompts as P  # noqa: E402
 import registry as REG  # noqa: E402
-from state_reuse import make_state_reuse  # noqa: E402
+from state_reuse import MEMORY_MAX_CHARS, make_state_reuse  # noqa: E402
 
 PACKS = HERE.parent.parent / "rq1" / "client" / "data"
 ATTEMPTS = 6
@@ -75,16 +75,26 @@ def strip_fence(t):
     return m[-1] if m else ""
 
 
+TEAM_COMP = {"qq": ("qwen35", "qwen35"), "gg": ("gemma4", "gemma4"),
+             "qg": ("qwen35", "gemma4")}
+COMP_MODELS = {"qwen": ["qwen35"], "gemma": ["gemma4"], "50-50": ["qwen35", "gemma4"],
+               "qq": ["qwen35"], "gg": ["gemma4"], "qg": ["qwen35", "gemma4"]}
+
+
 def assign_models_by_bundle(bundles, composition):
     """Deterministic; for 50-50 the split is G/2 per model WITHIN EVERY BUNDLE, so each sampled
     state is explored by both models equally -- not merely a global 50/50 that could leave some
-    states single-model."""
+    states single-model. Team compositions (qq/gg/qg) assign by the bundle's AGENT: in a mixed
+    team, composition == team makeup, so agent 0 is qwen and agent 1 is gemma for every one of
+    the agent's bundles."""
     out = []
     for b in bundles:
         if composition == "qwen":
             out += ["qwen35"] * b.k
         elif composition == "gemma":
             out += ["gemma4"] * b.k
+        elif composition in TEAM_COMP:
+            out += [TEAM_COMP[composition][b.agent_idx]] * b.k
         else:
             half = b.k // 2
             out += ["qwen35"] * half + ["gemma4"] * (b.k - half)
@@ -385,12 +395,33 @@ def compact(step, round_md, workspace_path, outdir, args, codex_home):
     return ws
 
 
+def edit_memory(step, agent, round_md, mem_path, outdir, args, codex_home, shared):
+    wd = outdir / f"mem_{step:02d}_a{agent}"
+    wd.mkdir(parents=True, exist_ok=True)
+    out = wd / "memory_new.md"
+    cur = mem_path if Path(mem_path).exists() else "(empty -- first round)"
+    pr = P.memory_editor_prompt(round_md, cur, out, args.turns, shared=shared)
+    run_codex(args.compact_model, args.compact_effort, pr, wd, None,
+              args.orch_wall, f"mem{agent}", codex_home)
+    if not out.exists():
+        return None
+    ws = out.read_text()
+    if len(ws) > MEMORY_MAX_CHARS:
+        print(f"[loop] memory step {step} agent {agent}: {len(ws)} chars > "
+              f"{MEMORY_MAX_CHARS} -> TRUNCATED (contract violation)", flush=True)
+        ws = ws[:MEMORY_MAX_CHARS] + "\n[truncated: memory exceeded size contract]\n"
+        out.write_text(ws)
+    return ws
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--problem", required=True)
-    ap.add_argument("--state", required=True, choices=["puct", "workspace"])
+    ap.add_argument("--state", required=True,
+                    choices=["puct", "workspace", "perennial", "team", "team-split"])
     ap.add_argument("--execution", required=True, choices=["simple", "orchestrator"])
-    ap.add_argument("--composition", required=True, choices=["qwen", "gemma", "50-50"])
+    ap.add_argument("--composition", required=True,
+                    choices=["qwen", "gemma", "50-50", "qq", "gg", "qg"])
     ap.add_argument("--n", type=int, default=100)
     ap.add_argument("--steps", type=int, default=10)
     ap.add_argument("--out", required=True)
@@ -470,7 +501,7 @@ def main():
         args._step = step
         reg = REG.read(args.registry)
         urls = {m: REG.urls(args.registry, model=m) for m in ("qwen35", "gemma4")}
-        need = {"qwen": ["qwen35"], "gemma": ["gemma4"], "50-50": ["qwen35", "gemma4"]}[args.composition]
+        need = COMP_MODELS[args.composition]
         if any(not urls[m] for m in need):
             print(f"[loop] step {step}: farm has no healthy {need} endpoints; waiting", flush=True)
             time.sleep(120)
@@ -478,9 +509,7 @@ def main():
 
         bundles = st.sample(args.n, args.k)
         # flatten: candidate i -> its bundle, all k candidates of a bundle share one prompt
-        need_models = {"qwen": ["qwen35"], "gemma": ["gemma4"],
-                       "50-50": ["qwen35", "gemma4"]}[args.composition]
-        budget = prompt_char_budget(need_models)
+        budget = prompt_char_budget(need)
         if args.execution == "orchestrator":
             budget -= 1500                       # room for the appended group instruction
         bundle_of, base_prompts, trimmed = [], [], 0
@@ -562,9 +591,13 @@ def main():
         targets = st.reflection_targets(grouped)
         if targets:
             asyncio.run(reflect_round(targets, urls, args, maximize, baseline))
-        st.update(grouped, step,
-                  compact_fn=(lambda md, wp: compact(step, md, wp, out, args, codex_home))
-                  if args.state == "workspace" else None)
+        upkw = {}
+        if args.state == "workspace":
+            upkw["compact_fn"] = lambda md, wp: compact(step, md, wp, out, args, codex_home)
+        elif args.state in ("perennial", "team", "team-split"):
+            upkw["memory_fn"] = (lambda a, md, mp, _s=step: edit_memory(
+                _s, a, md, mp, out, args, codex_home, shared=args.state != "perennial"))
+        st.update(grouped, step, **upkw)
         prog, best = st.best()
         ok = [r for r in results if r.get("score") is not None]
         with open(trace, "a") as fh:

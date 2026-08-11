@@ -111,3 +111,32 @@ turns. Write the file, then stop.
 def compactor_prompt(round_md, workspace, out_path, turns):
     return COMPACTOR.format(round_md=round_md, workspace=workspace,
                             out_path=out_path, turns=turns)
+
+
+MEMORY_EDITOR = """One step of a program-search just finished. This round's results (yours{share}) are in:
+
+  {round_md}
+
+The current long-term memory file is:
+
+  {memory}
+
+Write the UPDATED memory to {out_path}.
+
+This file is the search's ONLY long-term memory: it is prepended to every sub-agent's prompt in
+every future round, alongside the problem and one program to improve, and nothing else survives
+between rounds. EDIT it -- keep what has lasting value, revise what this round changed, delete
+what earned its removal. Do not rebuild it from scratch each time.
+
+Hard limit: 5,000 tokens (~15,000 characters). Within that budget you decide entirely what it
+should contain.
+
+The round file may be large -- read it however you like (grep, head, sed). You have {turns}
+turns. Write the file, then stop.
+"""
+
+
+def memory_editor_prompt(round_md, memory, out_path, turns, shared=False):
+    return MEMORY_EDITOR.format(
+        round_md=round_md, memory=memory, out_path=out_path, turns=turns,
+        share=", plus teammate results that beat your best" if shared else "")
