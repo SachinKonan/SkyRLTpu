@@ -186,6 +186,16 @@ while :; do
     sleep "$PERIOD"; continue
   fi
 
+  # FAST registry refresh FIRST, before any QR management. ensure_slice can block for 15+ min
+  # per slice on jobman create/run; with 8 slices the end-of-cycle registry write left clients
+  # reading 40-70 min-stale health and dispatching into preempted slices' dead IPs the whole
+  # time. Reprobing existing entries costs seconds and caps staleness at ~PERIOD.
+  read -r H0 N0 < <($PY -c "
+import sys; sys.path.insert(0,'$RQ2/fleet')
+import registry as R
+h,n = R.reprobe('$REGISTRY'); print(h,n)" 2>/dev/null || echo "0 0")
+  log "registry: ${H0}/${N0} healthy (fast pass)"
+
   ENTRIES="[]"
   for slice in $SLICES; do
     if ! ensure_slice "$slice"; then continue; fi
