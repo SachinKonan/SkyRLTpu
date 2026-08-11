@@ -92,22 +92,34 @@ def assign_models_by_bundle(bundles, composition):
 
 
 # ------------------------------------------------------------------ farm sampling (2-phase)
-async def _post(cli, url, key, body):
+async def _post(cli, url, key, body, pool=None):
+    """pool: other same-model URLs to FAIL OVER to when `url` looks dead (connect-class
+    errors). A worker preempted mid-step used to burn every retry into its dead IP -- measured
+    117 ConnectTimeout losses in one hour of slice-B churn. HTTP-level errors (400 etc.) still
+    fail fast on the same URL: those are request problems, not worker problems."""
+    urls = [url] + [u for u in (pool or []) if u != url]
+    ui = 0
     last = None
     for a in range(ATTEMPTS):
         try:
-            r = await cli.post(f"{url}/v1/chat/completions",
+            r = await cli.post(f"{urls[ui]}/v1/chat/completions",
                                headers={"Authorization": f"Bearer {key}"}, json=body)
             r.raise_for_status()
             return r.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code < 500:
+                raise                    # live server rejected the request (e.g. 400): no retry helps
+            last = e                     # 5xx: transient; retry, next worker
+            ui = (ui + 1) % len(urls)
         except Exception as e:
-            last = e
-            if a == ATTEMPTS - 1:
-                raise last
-            await asyncio.sleep(min(45, 8 * (a + 1)))
+            last = e                     # transport-level (connect/read): try the next worker
+            ui = (ui + 1) % len(urls)
+        if a == ATTEMPTS - 1:
+            raise last
+        await asyncio.sleep(min(45, 8 * (a + 1)))
 
 
-async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock):
+async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock, pool=None):
     """Returns a result dict. Two-phase forcing fires only when phase 1 truncates, so it costs
     nothing for models that finish naturally."""
     cfg = MODEL_CFG[mkey]
@@ -117,7 +129,7 @@ async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock)
         base["chat_template_kwargs"] = {"enable_thinking": True}
     sid = f"s{args._step:02d}_r{i:04d}"
     try:
-        d = await _post(cli, url, key, {**base, "max_tokens": cfg["p1"]})
+        d = await _post(cli, url, key, {**base, "max_tokens": cfg["p1"]}, pool=pool)
     except Exception as e:
         (outdir / "raw" / f"{sid}.json").write_text(json.dumps(
             {"sid": sid, "model": mkey, "url": url, "phase": 1,
@@ -152,7 +164,7 @@ async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock)
             d2 = await _post(cli, url, key, {
                 **base, "max_tokens": p2,
                 "messages": base["messages"] + [{"role": "assistant", "content": text + forced}],
-                "continue_final_message": True, "add_generation_prompt": False})
+                "continue_final_message": True, "add_generation_prompt": False}, pool=pool)
             text = text + forced + (d2["choices"][0]["message"].get("content") or "")
         except Exception as e:
             (outdir / "raw" / f"{sid}.json").write_text(json.dumps(
@@ -183,7 +195,7 @@ async def sample_round(prompts, models, urls_by_model, args, outdir, fence):
             rr[mkey] += 1
             async with sem:
                 return await one_rollout(i, cli, url, args.api_key, mkey, prompts[i],
-                                         fence, args, outdir, lock)
+                                         fence, args, outdir, lock, pool=pool)
         done = 0
         for fut in asyncio.as_completed([go(i) for i in range(len(prompts))]):
             r = await fut
@@ -212,7 +224,7 @@ async def reflect_round(results, urls_by_model, args, maximize, baseline):
                                                "content": P.reflect_prompt(r["score"], maximize, baseline)}]}
             async with sem:
                 try:
-                    d = await _post(cli, url, args.api_key, body)
+                    d = await _post(cli, url, args.api_key, body, pool=pool)
                     r["reflection"] = (d["choices"][0]["message"].get("content") or "")[:400]
                 except Exception:
                     r["reflection"] = ""
