@@ -38,8 +38,41 @@ engines_healthy() {
   done
   return 0
 }
+tinker_healthy() { curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1; }
+vllm_healthy() {
+  local ip
+  for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
+    curl -fsS -m6 "http://$ip:8001/v1/models" >/dev/null 2>&1 || return 1
+  done
+  return 0
+}
 if engines_healthy; then
   echo "engines already healthy -- skipping bring-up"
+elif ! tinker_healthy && vllm_healthy; then
+  # Surgical recovery for a wedged/dead TRAINER with healthy samplers (the
+  # ENGINE-SICK case): restart only the tinker server -- a process restart is
+  # the only defragmentation the TPU runtime has, and bouncing three healthy
+  # vLLM workers would waste ~20 min of cache reloads for nothing. The client
+  # re-registers against the fresh registry at its next launch.
+  echo "trainer down, vLLM healthy -- surgical tinker-only restart"
+  tmux kill-session -t skyrl-tinker 2>/dev/null || true; sleep 3
+  PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+  case "$CELL" in
+    *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
+    *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
+    *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
+  esac
+  env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
+    PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
+    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    MODEL_NAME=Qwen/Qwen3.5-27B TUNIX_MAXTEXT_MODEL_NAME=qwen3.5-27b TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
+    TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
+    TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
+    TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
+    bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/tinker-restart.log 2>&1 || true
+  tinker_healthy || { echo "tinker-only restart FAILED"; tail -6 ~/tinker-restart.log; exit 1; }
+  echo "trainer restarted (vLLM untouched)"
 else
   echo "engine bring-up (uniform=18432 budget=73728)..."
   PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
