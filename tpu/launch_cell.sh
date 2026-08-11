@@ -27,9 +27,16 @@ PROB_ENV=${TTD_ENV:-erdos_min_overlap}
 PROB_TYPE=${TTD_PROBLEM_TYPE:-}                   # JSSP: 46
 FC_MAX_CASES=${TTD_FCALGO_MAX_CASES:-0}
 EVALT=${EVAL_TIMEOUT:-1100}                       # JSSP: 180 (C++ compile+run, fc46-proven)
-# Drift measurement is free when KL>0 (the pass runs anyway); at KL=0 it costs a
-# base-model logprob pass, so measure every N steps rather than never.
-KLMEAS=${TTD_KL_MEASURE_EVERY:-1}
+# Drift measurement (base-model logprob pass on the TRAINER engine). At JSSP's
+# short sequences it is nearly free; at Erdos's 18k sequences the pass balloons
+# to ~62G HBM, OOMs, and leaves the heap too fragmented for the fb itself --
+# this single knob is what made every Erdos cell sample-without-training while
+# JSSP trained fine (HBM[prompt_logprobs/oom1] in_use=62.39G). Default ON only
+# where it is safe.
+case "${TTD_ENV:-erdos_min_overlap}" in
+  erdos*) KLMEAS=${TTD_KL_MEASURE_EVERY:-0} ;;
+  *)      KLMEAS=${TTD_KL_MEASURE_EVERY:-1} ;;
+esac
 
 # ---- durable run state -----------------------------------------------------
 for _r in 1 2 3; do
