@@ -13,7 +13,7 @@ set -uo pipefail
 
 SLICE="${1:?usage: grader_up.sh <slice>}"
 VM="${SLICE}_spot"
-ZONE=us-east5-a
+case "$SLICE" in *east5b*) ZONE=us-east5-b;; *east5c*) ZONE=us-east5-c;; *) ZONE=us-east5-a;; esac
 PROJECT=vision-mix
 USER_AT=sk7524_princeton_edu
 KEY="$HOME/.ssh/jobman_tpu_ed25519"

@@ -37,7 +37,10 @@ MAIN=/n/fs/vision-mix/sk7524/SkyRLTpu
 RQ2=/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/rq2
 RUNS=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2
 REGISTRY="${REGISTRY:-$RUNS/fleet/registry.json}"
-ZONE=us-east5-a
+# Zone is derived from the slice-name suffix (east5a/east5b/east5c): v5p exists in all
+# three us-east5 zones and capacity draws are PER-ZONE, so spreading tickets decorrelates
+# against a single zone's drought. Same region -> same bucket, same XLA caches, same firewall.
+zone_of() { case "$1" in *east5b*) echo us-east5-b;; *east5c*) echo us-east5-c;; *) echo us-east5-a;; esac; }
 PROJECT=vision-mix
 USER_AT=sk7524_princeton_edu
 KEY="$HOME/.ssh/jobman_tpu_ed25519"
@@ -45,7 +48,7 @@ JM="$MAIN/third_party/jobman"
 SERVE_SH="$MAIN/tpu/pallas_arena/probe/serve_vllm.sh"
 PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/python
 
-SLICES="${SLICES:-sk7524-llamafarm-a-v5p64-east5a sk7524-llamafarm-b-v5p64-east5a sk7524-llamafarm-c-v5p64-east5a sk7524-llamafarm-d-v5p64-east5a sk7524-llamafarm-e-v5p64-east5a sk7524-llamafarm-f-v5p64-east5a sk7524-llamafarm-g-v5p64-east5a sk7524-llamafarm-h-v5p64-east5a}"
+SLICES="${SLICES:-sk7524-llamafarm-a-v5p64-east5a sk7524-llamafarm-b-v5p64-east5a sk7524-llamafarm-c-v5p64-east5a sk7524-llamafarm-d-v5p64-east5a sk7524-llamafarm-e-v5p64-east5a sk7524-llamafarm-f-v5p64-east5b sk7524-llamafarm-g-v5p64-east5b sk7524-llamafarm-h-v5p64-east5c}"
 PORT=8001
 # cached shapes -- do NOT change these without accepting a ~55 min cold compile per model.
 # 32k/seqs=64 shapes (RQ2 decision 2026-08-10: SimpleTES-faithful window, throughput headroom;
@@ -70,7 +73,7 @@ mkdir -p "$RUNS/fleet" "$RUNS/logs"
 # empty the `cd` lands nowhere, PYTHONPATH=. resolves wrong, and the import fails silently.
 jobman_cli() { (cd "/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/jobman" \
   && PYTHONPATH=. .venv/bin/python -c "from jobman.cli import cli; cli()" "$@"); }
-qr_state() { gcloud compute tpus queued-resources describe "$1" --zone=$ZONE --project=$PROJECT \
+qr_state() { gcloud compute tpus queued-resources describe "$1" --zone=$(zone_of "$1") --project=$PROJECT \
                --format='value(state.state)' 2>/dev/null || true; }
 log() { echo "[$(date '+%F %T')] $*"; }
 
@@ -104,7 +107,7 @@ r = json.load(open(p))
 r["entries"] = [e for e in r["entries"] if e.get("slice") != dead]
 json.dump(r, open(p, "w"))
 PYEOF
-    timeout 600 gcloud compute tpus queued-resources delete "$qr" --zone=$ZONE --project=$PROJECT --force --quiet >/dev/null 2>&1
+    timeout 600 gcloud compute tpus queued-resources delete "$qr" --zone=$(zone_of "$qr") --project=$PROJECT --force --quiet >/dev/null 2>&1
     for _ in $(seq 1 30); do [[ -z "$(qr_state "$qr")" ]] && break; sleep 20; done
     st=""
   fi
@@ -139,7 +142,7 @@ PYEOF
 vm_name() { echo "${1}_spot"; }
 
 worker_ips() {             # $1 = slice -> lines "<worker> <ip>"
-  timeout 120 gcloud compute tpus tpu-vm describe "$(vm_name "$1")" --zone=$ZONE --project=$PROJECT \
+  timeout 120 gcloud compute tpus tpu-vm describe "$(vm_name "$1")" --zone=$(zone_of "$1") --project=$PROJECT \
     --format="json(networkEndpoints)" 2>/dev/null \
   | $PY -c "
 import json,sys
@@ -167,9 +170,9 @@ serve_worker() {           # $1=slice $2=worker $3=model-key
   # like a slow bring-up.
   timeout 300 gcloud compute tpus tpu-vm scp "$SERVE_SH" \
     "${USER_AT}@$(vm_name "$slice"):~/serve_vllm.sh" \
-    --zone=$ZONE --project=$PROJECT --worker="$w" \
+    --zone=$(zone_of "$slice") --project=$PROJECT --worker="$w" \
     >>"$RUNS/logs/serve_${slice}_w${w}.log" 2>&1 || { echo "scp failed w$w"; return 1; }
-  timeout 3600 gcloud alpha compute tpus tpu-vm ssh "${USER_AT}@$(vm_name "$slice")" --zone=$ZONE \
+  timeout 3600 gcloud alpha compute tpus tpu-vm ssh "${USER_AT}@$(vm_name "$slice")" --zone=$(zone_of "$slice") \
     --project=$PROJECT --worker="$w" --ssh-key-file="$KEY" \
     --command="MODEL='${model}' PORT=${PORT} MAX_MODEL_LEN=${maxlen} MAX_NUM_SEQS=${MAX_NUM_SEQS} \
       BIND_HOST=0.0.0.0 EXTRA_PIP='${extra}' \
