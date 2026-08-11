@@ -20,7 +20,7 @@ PROBLEMS=("erdos" "jssp")
 # silently OOMed; grpo-k-j hit the same wall via penalty-pass + fat tiles).
 # A gen-2 name gives them a FRESH run dir, GCS path, wandb run and tree, while
 # the gen-1 dirs remain in place as the archive of the contaminated runs.
-RERUN2="grpo-n grpo-k grpo-r ttd-n ttd-k ttd-r grpo-k-j"
+RERUN2="grpo-n grpo-k grpo-r ttd-n ttd-k ttd-r grpo-n-j grpo-k-j grpo-r-j ttd-n-j ttd-k-j ttd-r-j"
 
 for prob in "${PROBLEMS[@]}"; do
 for row in "${STAGE_A_CELLS[@]}"; do

@@ -33,6 +33,16 @@ while true; do
 
   if ! tmux has-session -t cell 2>/dev/null; then
     echo "client tmux session gone before completion" >&2
+    # ENGINE-SICK marker: the client died because the trainer is wedged (fails
+    # every fb while still answering health checks). Kill the tinker session so
+    # the next loop's engines_healthy check fails and forces a FULL engine
+    # rebuild -- otherwise the loop relaunches the client against the same
+    # wedged engine forever.
+    if [ -f "$HOME/ENGINE-SICK" ]; then
+      echo "ENGINE-SICK marker present ($(cat "$HOME/ENGINE-SICK" 2>/dev/null | head -1)) -- killing tinker for full rebuild" >&2
+      tmux kill-session -t skyrl-tinker 2>/dev/null || true
+      rm -f "$HOME/ENGINE-SICK"
+    fi
     bash "${SCRIPT_DIR}/cell_sync.sh" || true
     exit 1
   fi

@@ -63,7 +63,8 @@ resumable:
     KL_PENALTY_COEF: "0"
     TTD_RESTART_RATIO: "0"
     NUM_EPOCHS: "15"
-
+    RUN_DIR_NAME: stageA2-ttd-n-j
+    EXPERIMENT_NAME: stageA2-ttd-n-j
     TTD_ENV: frontier_algo
     TTD_PROBLEM_TYPE: "46"
     TTD_FCALGO_MAX_CASES: "0"
