@@ -43,12 +43,22 @@ if engines_healthy; then
 else
   echo "engine bring-up (uniform=18432 budget=73728)..."
   PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+  # Erdos cells (long sequences, 18432-class fb buckets) OOM'd at compile with
+  # the league tiles on these builds: HLO temporaries 111G vs 95.7G/chip, every
+  # train step, silently caught by the ensemble guard -- the cells sampled
+  # without training. Heavier tiling (the values the gemma engine has always
+  # used) shrinks the fb program. JSSP sequences land in small buckets and
+  # trained fine, so -j cells keep the faster original tiles.
+  case "$CELL" in
+    *-j) FLCE_TILE=2048; VOCAB_TILING=8 ;;
+    *)   FLCE_TILE=1024; VOCAB_TILING=32 ;;
+  esac
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     MODEL_NAME=Qwen/Qwen3.5-27B TUNIX_MAXTEXT_MODEL_NAME=qwen3.5-27b TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
-    TUNIX_MAXTEXT_KWARGS='{"num_vocab_tiling": 8}' \
-    TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=2048 TRAIN_MICRO_BATCH_SIZE=1 \
+    TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
+    TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     VLLM_MAX_MODEL_LEN=22528 VLLM_MAX_NUM_SEQS=128 VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
     VLLM_XLA_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k" \
