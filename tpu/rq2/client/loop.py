@@ -444,9 +444,15 @@ def main():
     if trace.exists():
         done_steps = {json.loads(l)["step"] for l in trace.read_text().splitlines() if l.strip()}
 
-    for step in range(1, args.steps + 1):
+    step = 1
+    while step <= args.steps:
+        # An outage must STALL a step, never consume it: rehearsal 3673116 lost steps 1-3 to
+        # rollouts dispatched against a stale-healthy registry (0/512, all ConnectTimeout) and
+        # steps 8-10 to a `continue` that advanced the counter while "waiting" -- the cell
+        # finished at the seed score without doing a single step of work.
         if step in done_steps:
             print(f"[loop] step {step}: already done, skipping", flush=True)
+            step += 1
             continue
         t0 = time.time()
         args._step = step
@@ -456,7 +462,7 @@ def main():
         if any(not urls[m] for m in need):
             print(f"[loop] step {step}: farm has no healthy {need} endpoints; waiting", flush=True)
             time.sleep(120)
-            continue
+            continue                                 # same step, retried
 
         bundles = st.sample(args.n, args.k)
         # flatten: candidate i -> its bundle, all k candidates of a bundle share one prompt
@@ -498,6 +504,7 @@ def main():
                                          "note": "no valid plan within turn cap; step is a no-op",
                                          "secs": round(time.time() - t0)}) + "\n")
                 print(f"[loop] step {step}: NO PLAN -> no-op (budget unspent, recorded)", flush=True)
+                step += 1                            # no-plan is a CONSUMED no-op step by design
                 continue
             instr = []
             for g in allocations:
@@ -508,6 +515,16 @@ def main():
         models = assign_models_by_bundle(bundles, args.composition)
         print(f"[loop] step {step}: sampling {args.n} ({args.composition})", flush=True)
         results = asyncio.run(sample_round(base_prompts, models, urls, args, out, fence))
+        req_failed = sum(1 for r in results
+                         if r.get("program") is None
+                         and str(r.get("detail", "")).startswith(("request failed", "phase2 failed")))
+        if req_failed == len(results):
+            # 100% transport failure = the fleet died under us mid-step (stale-healthy
+            # registry). Nothing was generated; retry the SAME step once endpoints return.
+            print(f"[loop] step {step}: ALL {req_failed} rollouts failed at transport -> "
+                  "outage, retrying step", flush=True)
+            time.sleep(120)
+            continue
         print(f"[loop] step {step}: grading", flush=True)
         base_constr = None
         cj = PACKS / args.problem / "seed_construction.json"
@@ -549,6 +566,7 @@ def main():
               f"({int(time.time()-t0)}s)", flush=True)
         for d, c in why.most_common(4):
             print(f"[loop]    {c:4d} x {d}", flush=True)
+        step += 1
 
     prog, best = st.best()
     (out / "result.json").write_text(json.dumps(
