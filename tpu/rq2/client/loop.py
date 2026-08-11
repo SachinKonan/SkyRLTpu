@@ -464,7 +464,8 @@ def main():
     seed = (pack / ("seed.py" if meta["lang"] == "python" else "seed.cpp")).read_text()
 
     codex_home = out / "codex_home"
-    if args.execution == "orchestrator" or args.state == "workspace":
+    if (args.execution == "orchestrator" or args.state == "workspace"
+            or args.state in ("perennial", "team", "team-split")):   # memory editor runs codex too
         sys.path.insert(0, str(HERE.parent.parent / "rq1" / "client"))
         import preflight
         # Sandbox probe (job 3670962): landlock blocks ALL file access for the agent
