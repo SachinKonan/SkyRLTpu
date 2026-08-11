@@ -7,7 +7,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
-#SBATCH --time=03:00:00
+#SBATCH --time=24:00:00
 #SBATCH --exclude=neu301
 #SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/rq2/logs/%x_%j.log
 set -uo pipefail
