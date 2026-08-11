@@ -8,7 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$HERE/../stage_a_cells.sh"
 OUT="$HERE/configs"; mkdir -p "$OUT"
-BUNDLE_REMOTE=/home/sk7524_princeton_edu/gcs/code-bundles/stagea-league.tar.gz
+BUNDLE_URL=gs://sk7524-tinker-tpu-us-east5/code-bundles/stagea-league.tar.gz
 
 # Problem dimension. Same regularizer factorial on each problem:
 #   erdos: reference numeric-construction problem (dense signal, record baselines)
@@ -95,7 +95,7 @@ resumable:
     TTD_RESTART_RATIO: "${rr}"
     NUM_EPOCHS: "15"
 ${prob_env_block}
-    SKYRLTPU_BUNDLE_PATH: ${BUNDLE_REMOTE}
+    SKYRLTPU_BUNDLE_URL: ${BUNDLE_URL}
   prepare:
     workers: all
     timeout: 0
@@ -118,16 +118,20 @@ ${prob_env_block}
       command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
       export PATH="\$HOME/.local/bin:\$PATH"
       mkdir -p "\$HOME/gcs/skyrl-checkpoints" "\$HOME/skyrl-runs" "\$HOME/skyrl-logs"
-      # Unpack the league code bundle (visible through the gcsfuse mount) when
-      # absent or stale. Stale-detection via the bundle's byte size marker.
-      BUNDLE="${BUNDLE_REMOTE}"
+      # Unpack the league code bundle when absent or stale. Staleness and the
+      # copy go through gsutil, NOT the gcsfuse mount: fuse attribute caching
+      # served a same-path re-upload's OLD size for its TTL, so prepare saw
+      # "unchanged", skipped the unpack, and hosts rebuilt engines from stale
+      # code (bit the tile-fix rollout live).
+      BUNDLE_URL="${BUNDLE_URL}"
       DEST="\$HOME/SkyRLTpu-league"
-      test -f "\$BUNDLE"
-      want=\$(stat -c%s "\$BUNDLE")
+      want=\$(gsutil stat "\$BUNDLE_URL" | awk '/Content-Length/ {print \$2}')
+      test -n "\$want"
       have=\$(cat "\$DEST/.bundle-size" 2>/dev/null || echo none)
       if [ "\$want" != "\$have" ]; then
+        gsutil -q cp "\$BUNDLE_URL" /tmp/stagea-bundle.tar.gz
         rm -rf "\$DEST.new"; mkdir -p "\$DEST.new"
-        tar -xzf "\$BUNDLE" -C "\$DEST.new"
+        tar -xzf /tmp/stagea-bundle.tar.gz -C "\$DEST.new"
         test -x "\$DEST.new/tpu/jobman/cell_worker.sh"
         test -f "\$DEST.new/third_party/discover/.env"
         echo "\$want" > "\$DEST.new/.bundle-size"
