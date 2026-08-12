@@ -159,8 +159,49 @@ under the primitives prompt (a chunk length, one `chunk_scan` call, a carry)
 — exports at every declared shape and lands **1.67e-07** from the fp32
 reference. If an answer that obvious could not pass, the rung would be wrong.
 
-## 4. Results — placeholder
+## 4. Attempt 1 (job 3686851): a complete bring-up lost to one HTTP fetch
+
+Recorded because it is the fourth time this arena has nearly published an
+all-zero grid caused by infrastructure, and because the fix generalises.
+
+Everything worked: the v5p-8 was ACTIVE 11 minutes after create, the judge
+provisioned at 16:11 and booted all five problems with noise floors, the gemma
+engine was serving at 16:32:14 (26 min from create), and the chat rendering
+verified token-for-token against the server's own template
+(`template_agrees=True`, `special_tokens_single=True`, `sample_nonempty=True`).
+
+Then the driver's `uv run --isolated` died in **13 seconds**:
+
+```
+error: Failed to generate package metadata for `causal-conv1d==1.6.1 @
+  direct+https://github.com/erictang000/causal-conv1d/releases/download/...`
+  Caused by: http2 error: stream error received: refused stream
+=== ladder probe done rc=2 16:37:22 ===
+```
+
+`causal-conv1d` is pulled from a GitHub *release URL* by the `dev` extra and is
+used by nothing in this run. Zero candidates were generated; the job tore
+itself down and both zones verified empty. **This is a harness fault, not a
+finding, and none of it is reported as data.**
+
+Three changes (commit `8ee94229`), in the order they fire:
+
+1. **Pre-warm before any QR exists.** The exact grid environment is built and
+   the prompt/ladder modules imported *before* `queued-resources create`. A
+   resolution flake, a syntax error in a prompt module or a missing config name
+   now costs a minute and no chips.
+2. **`uv_retry`** (4 attempts, linear backoff) around the driver and the render
+   check, with `UV_HTTP_TIMEOUT` raised.
+3. **Offline fallback** (`UV_OFFLINE=1`) after the retries, resolving from the
+   local uv cache — the only path that does not depend on github.com.
+
+It paid for itself immediately. On attempt 2 the pre-warm hit the *same* host,
+now returning a sustained `503 Service Unavailable`, retried, and passed on the
+third attempt with `[prewarm] OK 15 configurations; 15 prompts` — **before a
+single chip was provisioned.**
+
+## 5. Results — placeholder
 
 *(filled in from `runs/pallas_arena/ladder-results-*.jsonl`)*
 
-## 5. Resources and teardown — placeholder
+## 6. Resources and teardown — placeholder
