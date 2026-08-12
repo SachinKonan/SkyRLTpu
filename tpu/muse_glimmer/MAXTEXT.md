@@ -19,6 +19,7 @@ that the pinned `maxtext` PyPI package is built from:
 | | |
 |---|---|
 | clone | `/n/fs/vision-mix/sk7524/maxtext-muse` |
+| pushed to | `SachinKonan/maxtext` branch `muse-glimmer` @ `4f65ba509` (remote `fork`) — DONE 2026-08-12 |
 | upstream | `https://github.com/AI-Hypercomputer/maxtext` |
 | base | tag `maxtext-v0.2.3` = `3f36aef23439dd5875b48cbf294bbcba1996a726` (the released `maxtext==0.2.3` the sweep installs today) |
 | branch | `muse-glimmer` |
@@ -143,7 +144,7 @@ near the project environment — the live RL sweep's transformers pin is untouch
 ```bash
 TINKER_BACKEND=tunix \
 TUNIX_MODEL_SOURCE=maxtext \
-TUNIX_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/<you>/maxtext.git@<sha-of-muse-glimmer>" \
+TUNIX_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509" \
 TUNIX_MAXTEXT_MODEL_NAME=muse-glimmer-30b \
 TUNIX_MAXTEXT_KWARGS='{"remat_policy":"full","ici_fsdp_parallelism":4}' \
 TUNIX_MAX_TARGET_LENGTH=24576 \
@@ -289,12 +290,8 @@ all parameters carry a logical sharding annotation
 
 ## 5. What remains before a real training run
 
-1. **Push the fork.** `TUNIX_MAXTEXT_PIP_SPEC` needs a git URL. The branch
-   `muse-glimmer` at `/n/fs/vision-mix/sk7524/maxtext-muse` (commit `4f65ba509`) has to
-   be pushed to a fork you own. Deliberately not done — flagged for your call.
-   Upstreaming to AI-Hypercomputer/maxtext is a separate, later question; the
-   `use_attn_output_gate` hook and the `logits_output_multiplier` field are written to be
-   generic enough for it.
+1. ~~**Push the fork.**~~ **DONE 2026-08-12** — branch `muse-glimmer` is on
+   `SachinKonan/maxtext` at `4f65ba509`; use the pip spec above verbatim.
 2. **Real-weight spot check.** Parity is on tiny random weights. Converting a real shard
    and checking a handful of tokens needs the 60 GB download, which I did not do. The
    converter is name-for-name against the real `model.safetensors.index.json`, and the
