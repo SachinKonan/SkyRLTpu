@@ -48,6 +48,27 @@ Two different diseases. splash / RPA / GMM die at the **Pallas API and layout
 contract**. FLCE gets the API right and dies at the **mathematics of the
 recompute backward**. They get different treatment below.
 
+Re-audited across all 145 non-passing judged candidates of job 3651278 with a
+regex over each candidate's observation and violations — this is the list the
+P1 DIALECT bullets were written from, one bullet per line:
+
+| n | signature |
+|---|---|
+| 8 | `TracerBoolConversionError` |
+| 7 | `'MemoryRef' object does not support item assignment` |
+| 7 | `` Invalid shape for `swap` `` |
+| 5 | `pallas_call() got an unexpected keyword argument 'out_spec'` |
+| 5 | `dot_general requires ...` |
+| 5 | `pl.when` misuse (`'function' object is not iterable`, `'NoneType' object is not callable`, context-manager) |
+| 5 | `too many values to unpack (expected 2)` |
+| 3 | `cannot reshape array ...` |
+| 2 | `block shape ... divisible by 8 and 128` |
+| 1 | `'custom_vjp' object has no attribute 'def_fwd'` |
+
+*(The per-bullet counts written into the prompt itself were taken from the
+per-task tallies and are within ±2 of this stricter whole-corpus audit. The
+prompt was frozen before the audit and was not edited mid-run.)*
+
 Also already measured, and the reason the ladder does not start at P0:
 
 * `gemma | minimal | splash_attention`: **0/32** export, two separate runs.
