@@ -2,9 +2,11 @@
 
 *gemma-4-31B-it only. Generation + grading, no RL. Run: 2026-08-12.*
 
-**STATUS: IN PROGRESS — this file is written as the run proceeds. The results
-sections are filled in from measured artifacts only; anything not yet measured
-says so.**
+**Result in one line: rg_lru is solved at the LOWEST rung tried (25/32 PASS,
+reward 1.0000, PASS-only spread 10.8x the noise floor); FLCE is solved by
+stating the backward contract (8/32 PASS, an arena record); and splash,
+ragged-paged-attention and megablox-GMM produce ZERO working kernels at every
+rung — 0 out of 96 candidates each — for a reason the error histogram names.**
 
 ---
 
@@ -200,8 +202,248 @@ now returning a sustained `503 Service Unavailable`, retried, and passed on the
 third attempt with `[prewarm] OK 15 configurations; 15 prompts` — **before a
 single chip was provisioned.**
 
-## 5. Results — placeholder
+## 5. Results — 480 candidates, 15 cells, 32 samples each
 
-*(filled in from `runs/pallas_arena/ladder-results-*.jsonl`)*
+Job **3687041**. Raw: `runs/pallas_arena/ladder-results-3687041.jsonl` (one row
+per candidate: full generation text, extracted code, composed program, gate,
+observation, reward), `ladder-judge-boot-3687041.json` (noise floors).
+Every cell is 32 candidates = 2 complete groups of 16. Nothing is extrapolated.
 
-## 6. Resources and teardown — placeholder
+| kernel | rung | judged | export | **PASS** | best | group spread | floor | spread/floor | **PASS-only spread** | signal groups | **verdict** |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| splash_attention | `p1` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.0312 | 0x | - | 0/2 | **NO CODE** |
+| splash_attention | `p3` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.0312 | 0x | - | 0/2 | **NO CODE** |
+| splash_attention | `p4` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.0312 | 0x | - | 0/2 | **NO CODE** |
+| ragged_paged_attention | `p1` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.2525 | 0x | - | 0/2 | **NO CODE** |
+| ragged_paged_attention | `p3` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.2525 | 0x | - | 0/2 | **NO CODE** |
+| ragged_paged_attention | `p4` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.2525 | 0x | - | 0/2 | **NO CODE** |
+| megablox_gmm | `p1` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.0013 | 0x | - | 0/2 | **NO CODE** |
+| megablox_gmm | `p3` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.0013 | 0x | - | 0/2 | **NO CODE** |
+| megablox_gmm | `p4` | 32 | 0 | **0** | 0.0000 | 0.0000 | 0.0013 | 0x | - | 0/2 | **NO CODE** |
+| flce | `p1` | 32 | 18 | **5** | 0.4990 | 0.4990 | 0.0106 | 47x | 0.2327 | 2/2 | **SIGNAL** |
+| flce | `p3` | 32 | 18 | **2** | 0.2666 | 0.2666 | 0.0106 | 25x | 0.0001 | 2/2 | **SIGNAL** |
+| flce | `p4` | 32 | 24 | **8** | 0.2666 | 0.2666 | 0.0106 | 25x | 0.2000 | 2/2 | **SIGNAL** |
+| rg_lru | `p1` | 32 | 26 | **25** | 1.0000 | 1.0000 | 0.0699 | 14x | 0.7554 | 2/2 | **SIGNAL** |
+| rg_lru | `p3` | 32 | 24 | **20** | 1.0000 | 1.0000 | 0.0699 | 14x | 0.7526 | 2/2 | **SIGNAL** |
+| rg_lru | `p4` | 32 | 25 | **15** | 1.0000 | 1.0000 | 0.0699 | 14x | 0.4221 | 2/2 | **SIGNAL** |
+
+**Headline: 12 signal groups out of 30 — and 12 is the maximum obtainable.**
+Only the flce and rg_lru cells produce any passing code at all, which is 12
+complete groups; *every one of them* clears its noise floor. Not one cell
+landed in the `tailored` trap (working code, spread below the floor).
+
+### 5.1 First rung that produced working code, per kernel
+
+| kernel | first rung with working code | first rung with signal | best reward | verdict |
+|---|---|---|---|---|
+| **rg_lru** | **P1** (the lowest rung tried) | **P1** | **1.0000** | 25/32 PASS. Solved by the dialect list alone. |
+| **flce** | **P1** | **P1** | 0.4990 | but **P4 is the right rung**: 8 PASS vs 5, see §5.2 |
+| splash_attention | **none** | none | — | 0/96 across all three rungs |
+| ragged_paged_attention | **none** | none | — | 0/96 across all three rungs |
+| megablox_gmm | **none** | none | — | 0/96 across all three rungs |
+
+### 5.2 FLCE: the backward contract is the rung that matters
+
+FLCE exports fine at every rung; its gate histogram shows where it actually dies.
+
+| rung | `aot_export` | `gradient` | `correctness` | **`all`** |
+|---|---|---|---|---|
+| P1 (dialect) | 14 | 10 | 3 | **5** |
+| P3 (+worked example) | 13 | 15 | 1 | **2** |
+| **P4 (+backward CONTRACT)** | **7** | 16 | 0 | **8** |
+
+P4 halves the export failures (14 → 7) and produces **8 passing kernels, the
+most FLCE has ever produced in this arena** (previous best: 2, job 3651278).
+Conditional on exporting, the pass rate goes 5/18 → 8/24. The `gradient` gate
+still claims 16 of 32 — stating the formula does not make everyone get it right
+— but it is now a minority failure among exporters rather than the wall.
+
+`p3`'s PASS-only spread is **0.0001** on 2 passing candidates: those two kernels
+are numerically identical. Its whole-group spread (0.2666, 25x the floor) comes
+entirely from the 30 zeros beside them. That is exactly the distinction the
+PASS-only column exists to expose, and it is why P3 is not FLCE's rung despite
+being nominally "SIGNAL".
+
+### 5.3 rg_lru: solved at the bottom of the ladder, with a bimodal reward
+
+`p1 | rg_lru` is the best cell in the run: **25/32 PASS**, best reward
+**1.0000**, PASS-only spread **0.7554 = 10.8x the 0.0699 noise floor**. The
+passing rewards are visibly bimodal —
+
+```
+1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6187, 0.5966, 0.5959, 0.5950, 0.5928, 0.5915, ...
+```
+
+— two strategy clusters (a full-sequence `lax.associative_scan` that ties the
+baseline, and chunked/sequential formulations at ~0.6) separated by ~0.41. That
+is a real, learnable gradient between two real kernel designs, not timing
+jitter. **Adding rungs made it worse**: 25 PASS at P1, 20 at P3, 15 at P4.
+
+### 5.4 The three kernels that resist every rung — and why
+
+splash, RPA and GMM are **0 PASS out of 96 candidates each**. Every one dies at
+`aot_export`. The modal errors say what happened, and they are not the same
+errors at every rung:
+
+| kernel | P1 modal failure | P3/P4 modal failure |
+|---|---|---|
+| splash_attention | invented `pallas_call` kwargs (`in_shapes`, `out_shapes`) | **`Block shape for args[0] (= (Blocked(128), Blocked(128))) must have the same number of dimensions as the array shape (8, 4096, 128)` — 60 candidates** |
+| ragged_paged_attention | `pallas_call() got an unexpected keyword argument 'out_shapes'` (13) | same, plus rank mismatches (6) and `divisible by 8 and 128` (3) |
+| megablox_gmm | `ConcretizationTypeError` on traced `group_sizes` (7) | `Unsupported TPU device kind: cpu` (17), pytree mismatch on `in_specs` (5) |
+
+**The worked example backfired, measurably.** At P1 splash fails by *inventing*
+`pallas_call` kwargs. At P3/P4 those invented kwargs are gone — the example
+taught the real signature — and are replaced by a **2-D `BlockSpec` applied to a
+3-D operand**, in 60 candidates. The worked example is a fused RMSNorm over a
+`[rows, cols]` array, so it demonstrates `pl.BlockSpec((br, dp), lambda i: (i, 0))`;
+models copied that *rank* onto splash's `[heads, seq, head_dim]`. A worked
+example transfers its shape assumptions along with its dialect. That is the
+single most useful negative result here.
+
+**One measurement to distrust.** 17 of megablox_gmm's 96 failures are
+`Unsupported TPU device kind: cpu`, raised while exporting on a CPU host. That
+is a property of the export environment (`JAX_PLATFORMS=cpu` in the sandbox
+child), not necessarily of the kernel — a candidate that queries the device kind
+to pick a tile size would fail here and might compile on the judge. GMM's true
+denominator is therefore somewhere between 0/96 and 0/79, and the honest
+statement is **0 passing, with 17 failures I cannot cleanly attribute to the
+model.** Fixing that (export with a TPU device kind stubbed) is the first thing
+to change before GMM is called impossible.
+
+### 5.5 Which measured failure modes each addition eliminated
+
+| addition | measured effect |
+|---|---|
+| **P1 DIALECT list** | `no_code` **0/480**. `'MemoryRef' object does not support item assignment` (7 in job 3651278): **0 occurrences**. `Invalid shape for swap` (7): **0**. `pl.when` misuse (5): 3. `custom_vjp def_fwd` (1): **0**. It cleanly removed the in-kernel Ref-semantics class. |
+| **P3 typed skeleton + worked example** | Removed invented `pallas_call` kwargs on splash (10 at P1 → 0 at P3/P4) — and **introduced** the 2-D-BlockSpec-on-3-D-array failure (0 → 60). Net effect on PASS: negative everywhere (flce 5→2, rg_lru 25→20). |
+| **P4 primitives** (`dot_f32`, `iota2`, `fill_ref`, `online_softmax`, `chunk_scan`) | No effect on the three dead kernels — they never reach the body where the helpers would be used. Slight negative on rg_lru (20→15). |
+| **P4 FLCE backward CONTRACT** | **The one unambiguous win.** `aot_export` 14→7, PASS 5→**8**, the most FLCE has produced in this arena. |
+
+## 6. Verdict, per kernel
+
+* **rg_lru — SOLVED at rung P1.** 25/32 PASS, reward up to 1.0000, PASS-only
+  spread 10.8x the noise floor, two distinct strategy clusters. Use `p1`. Do not
+  add rungs; they cost passes.
+* **flce — SOLVED at rung P4.** 8/32 PASS (arena record), export 24/32, and the
+  backward contract is what did it. Use `p4`.
+* **splash_attention — NOT SOLVED.** 0/96. Hypothesis, supported by the error
+  histogram: its difficulty is the *entrypoint plumbing* (a five-operand
+  `pallas_call`, double padding of query and key axes, segment-id broadcasting),
+  which no rung here supplies. The only variant that has *ever* exported splash
+  is the `seam`, which hands over the `pallas_call` itself (2/16, job 3651278).
+  For splash the plumbing must be given, not described — and the next experiment
+  is seam-plus-DIALECT, not another prose rung.
+* **ragged_paged_attention — NOT SOLVED.** 0/96, same diagnosis. Its 0.2525
+  noise floor is a second, independent problem: a candidate would have to be
+  >25% faster before the arena could see it.
+* **megablox_gmm — NOT SOLVED, with a caveat.** 0/96, but 17 failures are a
+  CPU-export artifact rather than a clean model failure. Re-measure before
+  concluding.
+
+**The general finding.** Adding context to a whole-program prompt helps exactly
+one class of problem: the one that is about *mathematics you can state*
+(FLCE's backward). For the class that is about *interface plumbing you must
+write*, prose, worked examples and primitives all fail — and a worked example
+can actively hurt by transferring its own shape assumptions. The lever that has
+ever worked on those kernels is structural: give the model the `pallas_call`.
+
+
+## 7. Gate histograms, every cell
+
+| kernel | rung | gate histogram (32 judged) |
+|---|---|---|
+| splash_attention | `p1` | `aot_export` 29, `ast` 2, `exec` 1 |
+| splash_attention | `p3` | `aot_export` 32 |
+| splash_attention | `p4` | `aot_export` 32 |
+| ragged_paged_attention | `p1` | `aot_export` 29, `ast` 2, `exec` 1 |
+| ragged_paged_attention | `p3` | `aot_export` 28, `ast` 4 |
+| ragged_paged_attention | `p4` | `aot_export` 26, `ast` 6 |
+| megablox_gmm | `p1` | `aot_export` 28, `ast` 4 |
+| megablox_gmm | `p3` | `aot_export` 31, `ast` 1 |
+| megablox_gmm | `p4` | `aot_export` 32 |
+| flce | `p1` | `aot_export` 14, `gradient` 10, `all` 5, `correctness` 3 |
+| flce | `p3` | `gradient` 15, `aot_export` 13, `all` 2, `exec` 1, `correctness` 1 |
+| flce | `p4` | `gradient` 16, `all` 8, `aot_export` 7, `ast` 1 |
+| rg_lru | `p1` | `all` 25, `aot_export` 6, `correctness` 1 |
+| rg_lru | `p3` | `all` 20, `aot_export` 8, `compile_budget` 2, `correctness` 2 |
+| rg_lru | `p4` | `all` 15, `aot_export` 7, `fixtures` 6, `worker` 2, `correctness` 2 |
+
+
+## 8. Resources and teardown
+
+Job **3687041** (the measurement) and **3686851** (attempt 1, no candidates).
+
+| | attempt 1 (3686851) | attempt 2 (3687041) |
+|---|---|---|
+| QRs | `sk7524-ladder-{serve,judge}` | `sk7524-ladder2-{serve,judge}` |
+| serve | v5p-8, us-east5-a, spot | v5p-8, us-east5-a, spot |
+| judge | v6e-1, us-east5-b, spot | v6e-1, us-east5-b, spot |
+| created | 16:06:12 | 16:49:34 |
+| serve ACTIVE | 16:17:29 (11 min) | 17:19 (30 min; zone contended) |
+| gemma serving | 16:32:14 (26 min) | 17:38:16 (49 min) |
+| grid | **never ran** (uv fetch, §4) | 480 candidates, 2 full rounds |
+| finished | 16:37:22 | 19:27:34, rc=0 |
+| QR lifetime | 32 min | 158 min |
+
+**Total QR-alive time ≈ 3 h 10 m** across both attempts (32 min + 158 min), with
+a 6-minute gap at 16:38–16:44 where nothing was provisioned — inside the 4-hour
+budget measured from the first create (16:06:12). Never more than 2 QRs alive.
+**Chip-hours: 4 chips x 190 min = 12.7 v5p chip-hours + 1 chip x 190 min = 3.2
+v6e chip-hours ≈ 15.9 chip-hours**, plus one neuronic node and two short CPU
+jobs.
+
+Both attempts tore themselves down. Attempt 1's cleanup printed `verified empty
+of ladder QRs` and `verified empty of ladder nodes` for both us-east5-a and
+us-east5-b, and I independently confirmed zero QRs and zero nodes in both zones
+at 16:39:16. Attempt 2's teardown is recorded in §9.
+
+The running RL sweep (`sk7524-tunix-qwen35-v5p32-dbtest-{d,e}`, `sk7524-league-*`,
+`sk7524-llamafarm-*`, `forever_sweep`) was read-only-observed and never touched.
+No `.env` file or credential was printed.
+
+## 9. Teardown, verified
+
+Attempt 2's own cleanup, from `runs/pallas_arena/ladder-probe-3687041.log`:
+
+```
+[cleanup] 19:27:34 tearing down (always-delete, both QRs)
+[cleanup] detached deletes issued for sk7524-ladder2-serve and sk7524-ladder2-judge
+[cleanup] delete confirmed: sk7524-ladder2-judge
+[cleanup] delete confirmed: sk7524-ladder2-serve
+[cleanup] verified empty of ladder QRs in us-east5-a
+[cleanup] verified empty of ladder nodes in us-east5-a
+[cleanup] verified empty of ladder QRs in us-east5-b
+[cleanup] verified empty of ladder nodes in us-east5-b
+[cleanup] QR lifetime 9638s
+```
+
+And independently, checked directly in both zones at 19:31:16 after the job had
+exited:
+
+```
+QRs   in us-east5-a: NONE      nodes in us-east5-a: NONE
+QRs   in us-east5-b: NONE      nodes in us-east5-b: NONE
+```
+
+**Zero ladder queued-resources and zero ladder TPU nodes in BOTH us-east5-a and
+us-east5-b.** The `setsid nohup` detached deletes fired before the verification
+pass, as designed after job 3650988 lost both QRs to a `scancel` mid-delete.
+
+## 10. What to do next
+
+1. **Train rg_lru on `p1` and FLCE on `p4`.** Both are `SIGNAL`, both have
+   PASS-only spread well above the floor, and rg_lru has two visibly distinct
+   strategy clusters 0.41 apart. Do not use `p3` for anything.
+2. **Stop adding prose to splash / RPA / GMM.** Three rungs and 288 candidates
+   say it does not work. Run the `seam` (harness owns the `pallas_call`)
+   *combined with* the P1 DIALECT list — the seam is the only variant that has
+   ever exported splash, and DIALECT is the only addition here that cleanly
+   removed a failure class.
+3. **Fix the worked example before reusing it.** It must demonstrate a
+   3-D-operand `BlockSpec`, or it will keep teaching rank-2 to rank-3 tasks
+   (60 candidates lost to exactly that).
+4. **Re-measure GMM with a TPU device kind available at export.** 17 of its 96
+   failures are `Unsupported TPU device kind: cpu` and cannot be attributed to
+   the model.
+5. **Give RPA a bigger shape or more timing pairs.** Its 0.2525 noise floor
+   means a candidate must be >25% faster before the arena can see it at all.
