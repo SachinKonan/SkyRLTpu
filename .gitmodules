@@ -10,4 +10,4 @@
 	url = https://github.com/SachinKonan/tinker-cookbook.git
 [submodule "third_party/discover"]
 	path = third_party/discover
-	url = https://github.com/test-time-training/discover.git
+	url = https://github.com/SachinKonan/discover-ttd.git
