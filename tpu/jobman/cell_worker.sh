@@ -62,6 +62,12 @@ elif ! tinker_healthy && vllm_healthy; then
     *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
     *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
   esac
+  # KL x Erdos cells: one fixed scorer bucket (see tunix_backend) -- exactly
+  # two pinned programs (fb + scorer), no per-bucket arena accumulation.
+  case "$CELL" in
+    grpo-k|ttd-k) SCORE_FIXED=18432 ;;
+    *)            SCORE_FIXED=0 ;;
+  esac
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
@@ -69,6 +75,7 @@ elif ! tinker_healthy && vllm_healthy; then
     TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
     TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
     READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/tinker-restart.log 2>&1 || true
   tinker_healthy || { echo "tinker-only restart FAILED"; tail -6 ~/tinker-restart.log; exit 1; }
@@ -90,6 +97,12 @@ else
     *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
     *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
   esac
+  # KL x Erdos cells: one fixed scorer bucket (see tunix_backend) -- exactly
+  # two pinned programs (fb + scorer), no per-bucket arena accumulation.
+  case "$CELL" in
+    grpo-k|ttd-k) SCORE_FIXED=18432 ;;
+    *)            SCORE_FIXED=0 ;;
+  esac
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
@@ -97,6 +110,7 @@ else
     TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
     TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
     VLLM_MAX_MODEL_LEN=22528 VLLM_MAX_NUM_SEQS=128 VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
     VLLM_XLA_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k" \
     HF_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache" \

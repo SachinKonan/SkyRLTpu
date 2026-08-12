@@ -1904,11 +1904,22 @@ class TunixBackend(AbstractBackend):
             int(self.config.maxtext_max_target_length or 32768),
             int(os.environ.get("TTD_TRAIN_MAX_SEQ", "24576") or 24576),
         )
+        # SKYRL_SCORE_FIXED_LEN: pin scoring to ONE bucket so exactly one
+        # scorer program ever exists. The 8192-bucket ladder compiles a NEW
+        # program (each pinning its own arena) as sequences grow across a run;
+        # on memory-edge cells (KL x Erdos) the accumulated scorer arenas
+        # eventually leave the fb unloadable -- observed as ENGINE-SICK trips
+        # arriving one step later per mitigation. Wastes pad compute on short
+        # sequences; only set it where the fb/scorer budget is tight.
+        _fixed = int(os.environ.get("SKYRL_SCORE_FIXED_LEN", "0") or 0)
         out: list[list[float]] = []
         for start in range(0, len(prompts), sub_batch):
             chunk = prompts[start : start + sub_batch]
             raw_len = max(len(p) for p in chunk)
-            max_len = min(score_cap, max(8192, -(-raw_len // 8192) * 8192))
+            if _fixed > 0:
+                max_len = min(score_cap, _fixed)
+            else:
+                max_len = min(score_cap, max(8192, -(-raw_len // 8192) * 8192))
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
