@@ -48,7 +48,7 @@ JM="$MAIN/third_party/jobman"
 SERVE_SH="$MAIN/tpu/pallas_arena/probe/serve_vllm.sh"
 PY=/n/fs/vision-mix/sk7524/SkyRLTpu/third_party/discover/.venv-ttd-discover/bin/python
 
-SLICES="${SLICES:-sk7524-llamafarm-a-v5p64-east5a sk7524-llamafarm-b-v5p64-east5a sk7524-llamafarm-c-v5p64-east5a sk7524-llamafarm-d-v5p64-east5a sk7524-llamafarm-e-v5p64-east5a sk7524-llamafarm-f-v5p64-east5b sk7524-llamafarm-g-v5p64-east5b sk7524-llamafarm-h-v5p64-east5c}"
+SLICES="${SLICES:-sk7524-llamafarm-a-v5p64-east5a sk7524-llamafarm-b-v5p64-east5a sk7524-llamafarm-c-v5p64-east5a sk7524-llamafarm-d-v5p64-east5a sk7524-llamafarm-e-v5p64-east5a sk7524-llamafarm-f-v5p64-east5a sk7524-llamafarm-g-v5p64-east5a sk7524-llamafarm-h-v5p64-east5a sk7524-llamafarm-i-v5p64-east5a}"
 PORT=8001
 # cached shapes -- do NOT change these without accepting a ~55 min cold compile per model.
 # 32k/seqs=64 shapes (RQ2 decision 2026-08-10: SimpleTES-faithful window, throughput headroom;

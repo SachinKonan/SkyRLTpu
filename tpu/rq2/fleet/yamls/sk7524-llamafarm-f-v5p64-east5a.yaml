@@ -1,5 +1,5 @@
 job:
-  name: sk7524-llamafarm-h-v5p64-east5c
+  name: sk7524-llamafarm-f-v5p64-east5a
   env_type: null
   loop: true
   remote_user: sk7524_princeton_edu
@@ -8,8 +8,8 @@ job:
 tpu:
   allocation_mode: "queued-resources"
   accelerator: v5p-64
-  name: sk7524-llamafarm-h-v5p64-east5c
-  zone: us-east5-c
+  name: sk7524-llamafarm-f-v5p64-east5a
+  zone: us-east5-a
   version: v2-alpha-tpuv5
   pricing: spot
   flags:
