@@ -93,6 +93,12 @@ def urls(path, model: str | None = None, healthy_only: bool = True):
     return out
 
 
+# healthy requires MODEL IDENTITY, not just a 200: spot VMs die and their external IPs get
+# recycled to other tenants -- a foreign OpenAI-compatible server on a reused IP passed the
+# bare /v1/models probe and swallowed 173 rollouts as 404s (2026-08-11, ip 34.162.93.16).
+EXPECTED_MODEL = {"qwen35": "Qwen/Qwen3.5-27B", "gemma4": "google/gemma-4-31B-it"}
+
+
 def reprobe(path, api_key: str = "EMPTY"):
     """Re-health-check every known entry and rewrite. Returns (n_healthy, n_total)."""
     reg = read(path)
@@ -100,6 +106,9 @@ def reprobe(path, api_key: str = "EMPTY"):
     for e in entries:
         kind = "grader" if e.get("model") == "grader" else "vllm"
         ok, served = probe(e["ip"], e.get("port", PORT), api_key, kind=kind)
+        want = EXPECTED_MODEL.get(e.get("model"))
+        if ok and want and served != want:
+            ok = False                       # right port, wrong (or foreign) model
         e["healthy"] = ok
         e["served_model"] = served
         e["checked"] = round(time.time(), 1)
