@@ -26,7 +26,9 @@ qk_scale_factor 3.87 · final_logit_softcapping 20.0 · output_multiplier 0.1961
 layer_types: `[sliding, sliding, sliding, full]` × 13 → 39 sliding + 13 full
 layer_rope_theta: 500000.0 on sliding layers, **0 on full layers** (= NoPE)
 rope_parameters.rope_theta 500000.0, rope_type "default"
-`lm_head.weight` is **TIED** to `model.language_model.embed_tokens.weight`.
+`tie_word_embeddings` **false** → `lm_head.weight` is a **separate** tensor, NOT tied to
+`model.language_model.embed_tokens.weight`. See trap 8; measured on the real 30B
+checkpoint, `max|lm_head − embed| = 3.09`.
 
 ## THREE norm flavours (get these wrong and nothing else matters)
 
