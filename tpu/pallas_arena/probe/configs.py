@@ -37,10 +37,15 @@ TASKS = tuple(TASK_CASES)
 # The PROMPT LADDER rungs (prompt_ladder.py). Each is a strict superset of the
 # one below it and each answer is a WHOLE program, not a fill.
 LADDER_VARIANTS = ("p1", "p3", "p4")
-VARIANTS = ("reference", "seam") + LADDER_VARIANTS
+# The SEAM + DIALECT arms (prompt_seam_dialect.py). The ladder measured that
+# splash / RPA / GMM fail at the `pallas_call` PLUMBING, which no whole-program
+# rung supplies, and that the seam is the only variant that has ever exported
+# splash. These two hand over the plumbing AND carry the P1 dialect list.
+SEAM_DIALECT_VARIANTS = ("sd1", "sd2")
+VARIANTS = ("reference", "seam") + LADDER_VARIANTS + SEAM_DIALECT_VARIANTS
 # variants whose answer is a FILL, assembled with a harness scaffold rather
 # than submitted as-is
-SEAM_VARIANTS = ("seam",)
+SEAM_VARIANTS = ("seam",) + SEAM_DIALECT_VARIANTS
 # variants whose answer is a whole program that the harness PREPENDS a tested
 # primitives prelude to (ladder.PRELUDES)
 PRELUDE_VARIANTS = ("p4",)
@@ -109,6 +114,36 @@ def all_configs(models=None, variants=None, tasks=None) -> list[ProbeConfig]:
     variants = list(variants or VARIANTS)
     tasks = list(tasks or TASKS)
     return [ProbeConfig(m, v, t) for m in models for v in variants for t in tasks]
+
+
+def parse_cells(spec: str) -> list[ProbeConfig]:
+    """`model|variant|task,model|variant|task,...` -> configurations.
+
+    The cross product is the wrong shape for a run that needs ONE control cell
+    on a different variant from the arm under test (e.g. three kernels x two
+    seam arms, plus `rg_lru|p1` to prove the harness is sound). Expressing that
+    as `--variants` x `--tasks` would silently add five cells nobody asked for
+    and spend their chip time.
+    """
+    out: list[ProbeConfig] = []
+    for raw in spec.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        parts = raw.split("|")
+        if len(parts) != 3:
+            raise ValueError(f"cell must be model|variant|task, got {raw!r}")
+        model, variant, task = (p.strip() for p in parts)
+        if model not in MODELS:
+            raise KeyError(f"unknown model {model!r}")
+        if task not in TASK_CASES:
+            raise KeyError(f"unknown task {task!r}")
+        if variant not in VARIANTS:
+            raise KeyError(f"unknown variant {variant!r}")
+        out.append(ProbeConfig(model, variant, task))
+    if not out:
+        raise ValueError("--cells named no configurations")
+    return out
 
 
 # ---------------------------------------------------------------- generation

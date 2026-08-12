@@ -27,6 +27,7 @@ from pallas_arena.probe.prompt_flce import PROMPTS as _FLCE
 from pallas_arena.probe.prompt_ladder import LADDER_PROMPTS as _LADDER
 from pallas_arena.probe.prompt_ref_extra import REFERENCE_PROMPTS as _REF_EXTRA
 from pallas_arena.probe.prompt_seam import SEAM_PROMPTS as _SEAM
+from pallas_arena.probe.prompt_seam_dialect import SEAM_DIALECT_PROMPTS as _SEAM_D
 from pallas_arena.probe.prompt_splash import PROMPTS as _SPLASH
 
 PROMPTS: dict[str, dict[str, str]] = {
@@ -39,6 +40,10 @@ for _task, _p in _SEAM.items():
     PROMPTS.setdefault(_task, {})["seam"] = _p
 # the ladder rungs (p1 / p3 / p4): whole-program answers, one variable per rung
 for _task, _rungs in _LADDER.items():
+    PROMPTS.setdefault(_task, {}).update(_rungs)
+# sd1 / sd2: the seam (a FILL answer) plus the P1 dialect list, and plus a typed
+# skeleton of the fill functions at the TASK'S OWN rank
+for _task, _rungs in _SEAM_D.items():
     PROMPTS.setdefault(_task, {}).update(_rungs)
 
 

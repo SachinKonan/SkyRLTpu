@@ -37,6 +37,55 @@ def _write_result(path: str, result: dict) -> None:
     os.replace(tmp, path)
 
 
+def _tpu_export_device_shim(platforms) -> str | None:
+    """Make `jax._src.pallas.mosaic.tpu_info` answer for a TPU while we export
+    FOR tpu from a CPU-only child. Returns the pretended device kind, or None.
+
+    MEASURED CONTAMINATION (job 3687041). 17 of megablox_gmm's 96 ladder
+    candidates died at gate `aot_export` with
+
+        ValueError: Unsupported TPU device kind: cpu
+
+    which is not a statement about the kernel at all. Every one of them wrote a
+    RANK-1 `BlockSpec` for the per-row expert-id array --
+    `pl.BlockSpec((bm,), lambda i, j: (i,))` -- and Pallas's rank-1 block-shape
+    check (jax/_src/pallas/mosaic/lowering.py) asks the *current device* for its
+    sublane and lane counts:
+
+        sublane_count = tpu_info.get_tpu_info().num_sublanes
+        lane_count    = tpu_info.get_tpu_info().num_lanes
+
+    `get_tpu_info()` resolves `get_device_kind()`, which under
+    `JAX_PLATFORMS=cpu` is the string `"cpu"`, and raises before the check can
+    run. GMM is the only task whose natural formulation has a rank-1 operand,
+    which is why only GMM hit it. On a real v6e those blocks (bm a power of two
+    >= 128) satisfy the check, so those candidates would have exported: the
+    error was the export ENVIRONMENT, not the model.
+
+    The shim pins the numbers the lowering asks for to the judge's own chip.
+    It is applied ONLY when the child is exporting for `tpu` while its own
+    backend is not tpu -- on a TPU host nothing is patched and the real device
+    answers. `get_tpu_info` is `jax_util.cache`d, so this must run before the
+    first lowering; it does, being immediately before the export loop.
+    """
+    import jax
+
+    if "tpu" not in tuple(platforms) or jax.default_backend() == "tpu":
+        return None
+    kind = os.environ.get("ARENA_EXPORT_DEVICE_KIND", "TPU v6e")
+    cores = int(os.environ.get("ARENA_EXPORT_DEVICE_CORES", "1"))
+    try:
+        from jax._src.pallas.mosaic import tpu_info as _tpu_info
+
+        if _tpu_info.chip_version_from_device_kind(kind) is None:
+            return None
+        _tpu_info.get_device_kind = lambda: kind
+        _tpu_info.get_num_device_cores = lambda: cores
+    except Exception:
+        return None
+    return kind
+
+
 def main() -> int:
     with open(sys.argv[1]) as f:
         cfg = json.load(f)
@@ -280,6 +329,12 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         artifact_dir = cfg["artifact_dir"]
         os.makedirs(artifact_dir, exist_ok=True)
         platforms = tuple(cfg.get("platforms") or (jax.default_backend(),))
+        # see _tpu_export_device_shim: without this, a rank-1 BlockSpec exported
+        # for tpu from a cpu child raises `Unsupported TPU device kind: cpu`,
+        # which reads as a model failure and is not one (17 GMM candidates).
+        shimmed = _tpu_export_device_shim(platforms)
+        if shimmed:
+            result["export_device_kind"] = shimmed
         artifacts = {}
         t0 = perf()
         try:

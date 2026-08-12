@@ -65,14 +65,19 @@ class Probe:
         self.t0 = time.time()
         self.deadline = self.t0 + args.wall_s
 
-        self.configs = [
-            c
-            for c in C.all_configs(
+        # --cells names the cells explicitly (model|variant|task); it is the
+        # only way to express a grid that is NOT a cross product, e.g. three
+        # kernels x two arms PLUS one control cell on a fourth kernel at a
+        # different variant.
+        self.configs = (
+            C.parse_cells(args.cells)
+            if getattr(args, "cells", None)
+            else C.all_configs(
                 models=args.models.split(",") if args.models else None,
                 variants=args.variants.split(",") if args.variants else None,
                 tasks=args.tasks.split(",") if args.tasks else None,
             )
-        ]
+        )
         self.samplers = {}
         for key in {c.model for c in self.configs}:
             spec = C.MODELS[key]
@@ -436,6 +441,9 @@ def main() -> int:
     ap.add_argument("--models", default=None)
     ap.add_argument("--variants", default=None)
     ap.add_argument("--tasks", default=None)
+    ap.add_argument("--cells", default=None,
+                    help="explicit cells: model|variant|task,... (overrides --models/--variants/--tasks; "
+                         "the only way to express a grid that is not a cross product)")
     ap.add_argument("--pregate-workers", type=int, default=14)
     ap.add_argument("--pregate-timeout-s", type=float, default=180.0)
     ap.add_argument("--wall-s", type=float, default=5400.0)

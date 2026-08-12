@@ -163,22 +163,23 @@ def reward_table(stats: dict) -> str:
     return "\n".join(out)
 
 
-def first_working_rung(stats: dict) -> dict:
+def first_working_rung(stats: dict, rungs_order=RUNGS) -> dict:
     per_task: dict[str, dict] = {}
     for key, c in stats.items():
         task, rung = key.split("|")
         per_task.setdefault(task, {})[rung] = c
     out = {}
     for task, rungs in sorted(per_task.items()):
-        first_pass = next((r for r in RUNGS if rungs.get(r, {}).get("n_pass", 0) > 0), None)
-        first_signal = next((r for r in RUNGS if rungs.get(r, {}).get("signal_groups", 0) > 0), None)
+        order = [r for r in rungs_order if r in rungs] or sorted(rungs)
+        first_pass = next((r for r in order if rungs[r].get("n_pass", 0) > 0), None)
+        first_signal = next((r for r in order if rungs[r].get("signal_groups", 0) > 0), None)
         out[task] = {
             "first_rung_with_working_code": first_pass,
             "first_rung_with_signal": first_signal,
             "best_score_any_rung": max(
                 (rungs[r].get("best") or 0.0) for r in rungs
             ),
-            "verdicts": {r: rungs[r]["verdict"] for r in RUNGS if r in rungs},
+            "verdicts": {r: rungs[r]["verdict"] for r in order},
         }
     return out
 
@@ -219,6 +220,8 @@ def main() -> int:
     ap.add_argument("--group-size", type=int, default=16)
     ap.add_argument("--out", default="-")
     ap.add_argument("--json-out", default=None)
+    ap.add_argument("--rungs", default=",".join(RUNGS),
+                    help="rung order for the 'first rung that worked' roll-up (e.g. sd1,sd2,p1)")
     args = ap.parse_args()
 
     recs = [json.loads(ln) for ln in Path(args.jsonl).read_text().splitlines() if ln.strip()]
@@ -228,7 +231,7 @@ def main() -> int:
         floors = {t: r.get("noise_floor") for t, r in rep.items() if isinstance(r, dict)}
 
     stats = build(recs, floors, args.group_size)
-    verdicts = first_working_rung(stats)
+    verdicts = first_working_rung(stats, tuple(r.strip() for r in args.rungs.split(",") if r.strip()))
     md = "\n\n".join([
         "## The ladder\n\n" + ladder_table(stats),
         "## First rung that worked, per kernel\n\n```json\n"
