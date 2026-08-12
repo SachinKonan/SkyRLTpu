@@ -192,15 +192,38 @@ async def one_rollout(i, cli, url, key, mkey, prompt, fence, args, outdir, lock,
             "convo": base["messages"] + [{"role": "assistant", "content": text}]}
 
 
+class LivePools:
+    """Registry-backed URL pools refreshed at most every TTL seconds. A step used to snapshot
+    its pools once at step start, so capacity arriving mid-step (recovered slices) sat idle
+    while the snapshot workers queued 400+ deep -- measured during the 2026-08-12 recovery."""
+
+    def __init__(self, registry_path, fallback, ttl=30):
+        self.path, self.fallback, self.ttl = registry_path, fallback, ttl
+        self._t, self._pools = 0.0, {}
+
+    def get(self, mkey):
+        now = time.time()
+        if now - self._t > self.ttl:
+            try:
+                fresh = {m: REG.urls(self.path, model=m) for m in ("qwen35", "gemma4")}
+                if any(fresh.values()):
+                    self._pools = fresh
+            except Exception:
+                pass                             # keep serving the last good pools
+            self._t = now
+        return self._pools.get(mkey) or self.fallback.get(mkey) or []
+
+
 async def sample_round(prompts, models, urls_by_model, args, outdir, fence):
     sem = asyncio.Semaphore(args.concurrency)
     lock = asyncio.Lock()
     rr = {k: 0 for k in urls_by_model}
+    live = LivePools(args.registry, urls_by_model)
     out = []
     async with httpx.AsyncClient(timeout=httpx.Timeout(2400, connect=30)) as cli:
         async def go(i):
             mkey = models[i]
-            pool = urls_by_model[mkey]
+            pool = live.get(mkey)
             url = pool[rr[mkey] % len(pool)]
             rr[mkey] += 1
             async with sem:
@@ -221,12 +244,13 @@ async def reflect_round(results, urls_by_model, args, maximize, baseline):
     reflection is about a measured outcome. Short decode over a cached prefix."""
     sem = asyncio.Semaphore(args.concurrency)
     rr = {k: 0 for k in urls_by_model}
+    live = LivePools(args.registry, urls_by_model)
     async with httpx.AsyncClient(timeout=httpx.Timeout(900, connect=30)) as cli:
         async def go(r):
             if not r.get("convo"):
                 return
             mkey = r["model"]
-            pool = urls_by_model[mkey]
+            pool = live.get(mkey)
             url = pool[rr[mkey] % len(pool)]
             rr[mkey] += 1
             body = {"model": MODEL_CFG[mkey]["model"], "temperature": 0.7, "max_tokens": 220,
