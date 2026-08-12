@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # tpu/
 from pallas_arena.judge.queue import ArenaQueueClient  # noqa: E402
 from pallas_arena.probe import configs as C  # noqa: E402
 from pallas_arena.probe import render as R  # noqa: E402
+from pallas_arena.probe.ladder import compose_ladder  # noqa: E402
 from pallas_arena.probe.pregate import pregate_one, probe_signatures  # noqa: E402
 from pallas_arena.probe.prompts import get_prompt  # noqa: E402
 from pallas_arena.probe.sampler import VllmSampler  # noqa: E402
@@ -202,7 +203,9 @@ class Probe:
                 program = compose(cfg.task, fill) if fill.strip() else ""
             else:
                 fill, how, missing = g["code"], g["extraction"], []
-                program = g["code"]
+                # ladder rung p4 PREPENDS a tested primitives prelude; every
+                # other whole-program variant is an identity here.
+                program = compose_ladder(cfg.task, cfg.variant, g["code"])
             recs.append(
                 {
                     "config": cfg.name,

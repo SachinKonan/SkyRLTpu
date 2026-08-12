@@ -24,6 +24,7 @@ experiment's independent variable should be diffable in one file.
 from __future__ import annotations
 
 from pallas_arena.probe.prompt_flce import PROMPTS as _FLCE
+from pallas_arena.probe.prompt_ladder import LADDER_PROMPTS as _LADDER
 from pallas_arena.probe.prompt_ref_extra import REFERENCE_PROMPTS as _REF_EXTRA
 from pallas_arena.probe.prompt_seam import SEAM_PROMPTS as _SEAM
 from pallas_arena.probe.prompt_splash import PROMPTS as _SPLASH
@@ -36,6 +37,9 @@ for _task, _p in _REF_EXTRA.items():
     PROMPTS.setdefault(_task, {})["reference"] = _p
 for _task, _p in _SEAM.items():
     PROMPTS.setdefault(_task, {})["seam"] = _p
+# the ladder rungs (p1 / p3 / p4): whole-program answers, one variable per rung
+for _task, _rungs in _LADDER.items():
+    PROMPTS.setdefault(_task, {}).update(_rungs)
 
 
 def get_prompt(task: str, variant: str) -> str:

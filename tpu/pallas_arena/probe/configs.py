@@ -34,10 +34,16 @@ TASK_CASES = {
     "rg_lru": ["probe-4x2048x2560", "probe-2x1024x2560", "probe-holdout-2x1500x2560"],
 }
 TASKS = tuple(TASK_CASES)
-VARIANTS = ("reference", "seam")
+# The PROMPT LADDER rungs (prompt_ladder.py). Each is a strict superset of the
+# one below it and each answer is a WHOLE program, not a fill.
+LADDER_VARIANTS = ("p1", "p3", "p4")
+VARIANTS = ("reference", "seam") + LADDER_VARIANTS
 # variants whose answer is a FILL, assembled with a harness scaffold rather
 # than submitted as-is
 SEAM_VARIANTS = ("seam",)
+# variants whose answer is a whole program that the harness PREPENDS a tested
+# primitives prelude to (ladder.PRELUDES)
+PRELUDE_VARIANTS = ("p4",)
 
 # The --problem argument the judge worker wants: `name:c1,c2;name2:c3,c4`.
 # No spaces anywhere -- the worker's parser strips only the outer whitespace of
@@ -92,6 +98,10 @@ class ProbeConfig:
     @property
     def is_seam(self) -> bool:
         return self.variant in SEAM_VARIANTS
+
+    @property
+    def is_prelude(self) -> bool:
+        return self.variant in PRELUDE_VARIANTS
 
 
 def all_configs(models=None, variants=None, tasks=None) -> list[ProbeConfig]:
