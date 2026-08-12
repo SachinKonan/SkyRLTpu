@@ -1,0 +1,1215 @@
+<title>sweep1 — entropic vs. GRPO on Qwen3.5-27B</title>
+
+<style>
+:root {
+  color-scheme: light;
+  --paper:        #ecefee;
+  --card:         #fbfcfb;
+  --card-2:       #f4f6f5;
+  --ink:          #10161a;
+  --ink-2:        #4b585e;
+  --ink-3:        #7c8a90;
+  --rule:         #d7dedc;
+  --rule-soft:    #e5eae8;
+  --accent:       #0d5f62;
+  --accent-soft:  #d9e8e7;
+  --ttd:          #4a3aa7;
+  --grpo:         #eb6834;
+  --ttd-wash:     #4a3aa71f;
+  --grpo-wash:    #eb68341f;
+  --warn:         #9a5b00;
+  --grid:         #dfe5e3;
+  --shadow:       0 1px 0 #0000000d, 0 6px 22px -14px #0e2b2a4d;
+
+  --mono: ui-monospace, "SF Mono", "SFMono-Regular", "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", Palatino, "Source Serif 4", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --paper:      #0d1011;
+    --card:       #16191c;
+    --card-2:     #1c2023;
+    --ink:        #eaeeed;
+    --ink-2:      #a1aeb1;
+    --ink-3:      #748387;
+    --rule:       #2a3033;
+    --rule-soft:  #21262a;
+    --accent:     #4fb3ae;
+    --accent-soft:#15302f;
+    --ttd:        #9085e9;
+    --grpo:       #d95926;
+    --ttd-wash:   #9085e926;
+    --grpo-wash:  #d9592626;
+    --warn:       #d19a4a;
+    --grid:       #262c2f;
+    --shadow:     0 1px 0 #ffffff08, 0 8px 26px -18px #000;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper:      #0d1011;
+  --card:       #16191c;
+  --card-2:     #1c2023;
+  --ink:        #eaeeed;
+  --ink-2:      #a1aeb1;
+  --ink-3:      #748387;
+  --rule:       #2a3033;
+  --rule-soft:  #21262a;
+  --accent:     #4fb3ae;
+  --accent-soft:#15302f;
+  --ttd:        #9085e9;
+  --grpo:       #d95926;
+  --ttd-wash:   #9085e926;
+  --grpo-wash:  #d9592626;
+  --warn:       #d19a4a;
+  --grid:       #262c2f;
+  --shadow:     0 1px 0 #ffffff08, 0 8px 26px -18px #000;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --paper:#ecefee; --card:#fbfcfb; --card-2:#f4f6f5; --ink:#10161a; --ink-2:#4b585e;
+  --ink-3:#7c8a90; --rule:#d7dedc; --rule-soft:#e5eae8; --accent:#0d5f62;
+  --accent-soft:#d9e8e7; --ttd:#4a3aa7; --grpo:#eb6834; --ttd-wash:#4a3aa71f;
+  --grpo-wash:#eb68341f; --warn:#9a5b00; --grid:#dfe5e3;
+  --shadow: 0 1px 0 #0000000d, 0 6px 22px -14px #0e2b2a4d;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--serif); font-size: 17px; line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px) 96px; }
+.prose { max-width: 66ch; }
+p { margin: 0 0 1em; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+strong { font-weight: 600; }
+code, .mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+code { font-size: 0.87em; background: var(--card-2); padding: 0.1em 0.34em; border-radius: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* ---------- masthead ---------- */
+.masthead { border-bottom: 1px solid var(--rule); margin-bottom: 40px; padding: 44px 0 26px; }
+.eyebrow {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--accent); margin: 0 0 14px;
+}
+h1 {
+  font-family: var(--mono); font-weight: 600; letter-spacing: -0.025em;
+  font-size: clamp(28px, 4.6vw, 46px); line-height: 1.08; margin: 0 0 18px;
+  text-wrap: balance; max-width: 20ch;
+}
+h1 .sep { color: var(--ink-3); font-weight: 400; }
+.dek { font-size: 19px; color: var(--ink-2); max-width: 60ch; margin: 0; }
+.mast-meta {
+  display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 24px;
+  font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+}
+.mast-meta b { color: var(--ink-2); font-weight: 500; }
+
+/* ---------- sections ---------- */
+section { margin: 0 0 68px; scroll-margin-top: 20px; }
+h2 {
+  font-family: var(--mono); font-size: 13px; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--ink); font-weight: 600; margin: 0 0 6px;
+  display: flex; align-items: baseline; gap: 12px;
+}
+h2 .qn { color: var(--accent); font-weight: 400; }
+h2::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+h3 {
+  font-family: var(--mono); font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em;
+  margin: 0 0 4px; color: var(--ink);
+}
+.sub { font-size: 15px; color: var(--ink-2); margin: 0 0 22px; max-width: 68ch; }
+.note {
+  font-size: 13.5px; color: var(--ink-3); max-width: 74ch; margin: 14px 0 0;
+  padding-left: 14px; border-left: 2px solid var(--rule);
+}
+
+/* ---------- verdict tiles ---------- */
+.verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 14px; }
+.vt {
+  background: var(--card); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 18px 18px 16px; box-shadow: var(--shadow);
+}
+.vt .vt-name { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+.vt-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 4px 0; }
+.vt-row + .vt-row { border-top: 1px dashed var(--rule-soft); }
+.vt-arm { font-family: var(--mono); font-size: 12px; display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+.swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.swatch.ttd { background: var(--ttd); }
+.swatch.grpo { background: var(--grpo); }
+.vt-val { font-family: var(--mono); font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.vt-foot { margin-top: 12px; font-size: 12.5px; color: var(--ink-3); font-family: var(--mono); line-height: 1.45; }
+.vt-foot b { color: var(--ink-2); font-weight: 500; }
+.pill {
+  display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid var(--rule); color: var(--ink-2); background: var(--card-2);
+}
+.pill.tie { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.pill.partial { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+
+/* ---------- charts ---------- */
+.panel {
+  background: var(--card); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 16px 16px 10px; box-shadow: var(--shadow);
+}
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 2px; }
+.chart-sub { font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: .02em; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 2px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 2px; border-radius: 1px; display: block; }
+.legend i.dash { height: 0; border-top: 2px dashed var(--ink-3); }
+svg { display: block; width: 100%; overflow: visible; }
+svg text { font-family: var(--mono); fill: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tick line { stroke: var(--grid); stroke-width: 1; }
+.axis line { stroke: var(--rule); stroke-width: 1; }
+.tip {
+  position: fixed; z-index: 40; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--card); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 8px 10px; font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+  box-shadow: 0 8px 26px -12px #0007; min-width: 132px; line-height: 1.5;
+}
+.tip .tip-x { color: var(--ink-3); border-bottom: 1px solid var(--rule-soft); padding-bottom: 4px; margin-bottom: 5px; }
+.tip .tip-r { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+.tip .tip-r em { font-style: normal; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+
+/* ---------- tabs / controls ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+.tab {
+  font-family: var(--mono); font-size: 12px; padding: 5px 11px; border-radius: 3px;
+  border: 1px solid var(--rule); background: var(--card); color: var(--ink-2); cursor: pointer;
+  letter-spacing: .02em;
+}
+.tab:hover { border-color: var(--accent); color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+.ctl-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); margin-right: 2px; }
+
+/* ---------- tables ---------- */
+.tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--card); }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12px; }
+th, td { padding: 7px 12px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th {
+  position: sticky; top: 0; background: var(--card-2); color: var(--ink-2); font-weight: 500;
+  font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; border-bottom: 1px solid var(--rule);
+}
+td { border-bottom: 1px solid var(--rule-soft); color: var(--ink); }
+tbody tr:hover td { background: var(--card-2); }
+th:first-child, td:first-child { text-align: left; }
+td.dim { color: var(--ink-3); }
+td.ttd { color: var(--ttd); }
+td.grpo { color: var(--grpo); }
+
+/* ---------- findings ---------- */
+.finding {
+  background: var(--card); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 18px 20px; box-shadow: var(--shadow); margin-bottom: 12px;
+}
+.finding-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.verdict {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 3px; border: 1px solid;
+}
+.verdict.holds { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.verdict.partial { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.verdict.fails { color: var(--grpo); border-color: color-mix(in srgb, var(--grpo) 50%, transparent); background: var(--grpo-wash); }
+.finding-claim { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); flex: 1; min-width: 240px; }
+.finding p { font-size: 15.5px; margin: 0; }
+.finding p + p { margin-top: .7em; }
+
+/* ---------- program cards ---------- */
+.prog { background: var(--card); border: 1px solid var(--rule); border-radius: 4px; padding: 16px 18px; box-shadow: var(--shadow); }
+.prog-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.prog-arm { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+.prog-score { font-family: var(--mono); font-size: 15px; margin-left: auto; font-variant-numeric: tabular-nums; }
+.prog h4 { font-family: var(--serif); font-size: 17px; margin: 0 0 6px; font-weight: 600; }
+.prog p { font-size: 14.5px; color: var(--ink-2); margin: 0; }
+.prog-code { margin-top: 12px; }
+.prog-code summary {
+  font-family: var(--mono); font-size: 11px; color: var(--accent); cursor: pointer;
+  letter-spacing: .04em; list-style: none;
+}
+.prog-code summary::marker { content: ""; }
+.prog-code summary::before { content: "▸ "; }
+.prog-code[open] summary::before { content: "▾ "; }
+.prog-code pre {
+  margin: 10px 0 0; padding: 12px; background: var(--card-2); border: 1px solid var(--rule-soft);
+  border-radius: 3px; overflow-x: auto; font-size: 11px; line-height: 1.5;
+}
+.prog-code code { background: none; padding: 0; font-size: 11px; color: var(--ink-2); }
+.prog-meta { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--rule-soft); }
+
+.gapnote {
+  display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+  font-size: 11px; color: var(--warn);
+}
+hr.soft { border: 0; border-top: 1px solid var(--rule); margin: 34px 0; }
+footer { border-top: 1px solid var(--rule); padding-top: 22px; font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+footer p { max-width: 78ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">SkyRL / ttt-discover · self-hosted TPU tinker · sweep1</p>
+  <h1>Entropic <span class="sep">vs.</span> GRPO on&nbsp;Qwen3.5&#8209;27B</h1>
+  <p class="dek">Five open mathematical-discovery problems, two advantage estimators, fifteen steps each.
+    Three head-to-heads finished. None of them separates the estimators — but the runs disagree
+    about almost everything else.</p>
+  <div class="mast-meta">
+    <span><b>32</b> groups &times; <b>16</b> rollouts</span>
+    <span>LoRA r<b>32</b> · lr <b>4e&#8209;5</b></span>
+    <span>KL <b>0</b> · ctx <b>18432</b></span>
+    <span>elite <b>2</b> · temp <b>1.0</b></span>
+    <span>PUCT pool, <b>5&nbsp;416</b> pool programs analysed</span>
+  </div>
+</header>
+
+<section id="verdict">
+  <h2><span class="qn">00</span> The verdict</h2>
+  <p class="sub">Each arm's champion in the problem's own units, with the direction of "better" spelled out.
+    The number that decides whether a difference is real is beside it: the mean absolute step-to-step
+    change in that run's <em>per-step best</em> — how much the run's output moves between two adjacent
+    steps for no reason other than sampling.</p>
+  <div class="verdicts" id="verdictTiles"></div>
+  <p class="note">Gap-to-swing is the champion gap divided by the two arms' mean step-to-step swing.
+    All three completed comparisons land between 0.13 and 0.46 — the gap is a fraction of what a single
+    step moves on its own. Nominally GRPO leads 2 of 3; that lead is inside the noise floor.</p>
+</section>
+
+<section id="runs">
+  <h2><span class="qn">01</span> What actually ran</h2>
+  <p class="sub">GCS is now the only source: the TPU slices are deleted. Gaps below are real gaps and are
+    drawn as breaks in every line — nothing is interpolated across them.</p>
+  <div class="tablewrap"><table id="runsTable"></table></div>
+  <p class="note">Both Erd&#337;s arms restarted during step&nbsp;0, so their pools contain no
+    generation&nbsp;0 — <code>puct/buffer_size</code> is still 32 at step&nbsp;1 in both. They therefore
+    have 14 productive generations against JSSP's 15. <code>ttd-erdos</code> is missing the
+    <em>metrics row</em> for step&nbsp;11 (slice preempted mid-step) but its pool entries for that
+    generation survived, so pool-derived series are continuous there while metric-derived series break.
+    <code>ttd-ud</code> lost its <code>metrics.jsonl</code> entirely; only its pool remains.</p>
+</section>
+
+<section id="trajectory">
+  <h2><span class="qn">02</span> Reward over time</h2>
+  <p class="sub">Champion (best-so-far) against per-step best and per-step mean, in each problem's native
+    metric. Scales are never mixed across problems — pick one problem at a time.</p>
+  <div class="controls" role="tablist" aria-label="Problem" id="trajTabs"></div>
+  <div class="grid3">
+    <div class="panel">
+      <div class="chart-head"><h3>Champion</h3><span class="chart-sub" id="ch1sub"></span></div>
+      <div id="chartChamp"></div>
+      <div class="legend" id="legChamp"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Best of the step</h3><span class="chart-sub">pool entries created this step</span></div>
+      <div id="chartStepBest"></div>
+      <div class="legend" id="legStep"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Mean reward</h3><span class="chart-sub">env/all/reward/mean</span></div>
+      <div id="chartReward"></div>
+      <div class="legend" id="legRew"></div>
+    </div>
+  </div>
+  <p class="note" id="trajNote"></p>
+</section>
+
+<section id="improve">
+  <h2><span class="qn">03</span> Improvement per step</h2>
+  <p class="sub">Every pool entry has a parent. &Delta; = child value &minus; parent value. The left panel is how
+    <em>often</em> a child beats its parent; the right is how <em>much</em>, as a percentage of the parent's
+    magnitude — raw deltas at the 1e&#8209;6 scale are unreadable, percentages are not.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-head"><h3>Improver rate</h3><span class="chart-sub">children with &Delta; &gt; 0</span></div>
+      <div id="chartImpRate"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Improvement size</h3><span class="chart-sub">mean &Delta; over improvers, % of |parent| · log scale</span></div>
+      <div id="chartMag"></div>
+    </div>
+  </div>
+  <div class="legend" id="legImp"></div>
+  <p class="note" id="impNote"></p>
+</section>
+
+<section id="headroom">
+  <h2><span class="qn">04</span> Improvement against the remaining headroom</h2>
+  <p class="sub">Raw improvement must shrink as a run approaches an optimum, so it is not evidence of
+    anything on its own. Two controls: <b>parent-relative headroom</b> divides each &Delta; by the distance
+    from that child's own parent to the known target — the honest control — and <b>fixed headroom</b>
+    divides by the distance the run faced at the very start, which keeps the denominator constant.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-head"><h3>Parent-relative headroom closed</h3><span class="chart-sub">&Delta; / (target &minus; parent), % · log</span></div>
+      <div id="chartHead"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Fixed headroom closed</h3><span class="chart-sub">&Delta; / (target &minus; best root), % · log</span></div>
+      <div id="chartHeadFix"></div>
+    </div>
+  </div>
+  <div class="legend" id="legHead"></div>
+  <p class="note" id="headNote"></p>
+</section>
+
+<section id="vsbest">
+  <h2><span class="qn">05</span> Improvement relative to the champion</h2>
+  <p class="sub">How much of each step's output is actually competitive with the best program the run has
+    already found.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-head"><h3>Children that beat the standing champion</h3><span class="chart-sub">fraction of the step's pool entries</span></div>
+      <div id="chartBeat"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Distance to the champion</h3><span class="chart-sub">median (champion &minus; child), value units · log</span></div>
+      <div id="chartGap"></div>
+    </div>
+  </div>
+  <div class="legend" id="legBeat"></div>
+  <p class="note" id="beatNote"></p>
+</section>
+
+<section id="variance">
+  <h2><span class="qn">06</span> Group variance — does the step produce a gradient at all?</h2>
+  <p class="sub">A step only trains if rewards inside a group differ. <code>frac_mixed</code> is the share of
+    groups with mixed rewards; in these runs it is binary — every step is either fully mixed or fully dead.
+    Only JSSP ever went dead, so the left panel shows JSSP alone; Erd&#337;s, AC1 and Circle sit at 1.0 on
+    every logged step. Advantage spread (max &minus; min) is what the estimator does with that variance.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-head"><h3>Reward variance, JSSP</h3><span class="chart-sub">frac_mixed · 0 = no gradient</span></div>
+      <div id="chartMixed"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Advantage spread</h3><span class="chart-sub">advantage/max &minus; advantage/min · log</span></div>
+      <div id="chartAdv"></div>
+    </div>
+  </div>
+  <div class="legend" id="legVar"></div>
+  <p class="note" id="varNote"></p>
+</section>
+
+<section id="tree">
+  <h2><span class="qn">07</span> The shape of the search</h2>
+  <p class="sub">Depth, width and diversity, derived from the pool's parent links rather than from any
+    logged summary.</p>
+  <div class="grid3">
+    <div class="panel">
+      <div class="chart-head"><h3>Surviving families</h3><span class="chart-sub">distinct seed ancestors alive at each step</span></div>
+      <div id="chartFam"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Branching factor</h3><span class="chart-sub">children per expanded parent</span></div>
+      <div id="chartBranch"></div>
+    </div>
+    <div class="panel">
+      <div class="chart-head"><h3>Pool size</h3><span class="chart-sub">cumulative entries incl. 32 seeds</span></div>
+      <div id="chartPool"></div>
+    </div>
+  </div>
+  <div class="legend" id="legTree"></div>
+  <p class="note" id="treeNote"></p>
+</section>
+
+<section id="programs">
+  <h2><span class="qn">08</span> The champion programs</h2>
+  <p class="sub">Extracted from each pool's maximum-value entry. Technique summaries are read off the
+    programs themselves.</p>
+  <div class="controls" role="tablist" aria-label="Problem for programs" id="progTabs"></div>
+  <div class="grid2" id="progCards"></div>
+</section>
+
+<section id="convergence">
+  <h2><span class="qn">09</span> Convergence</h2>
+  <p class="sub">A step "improves" only if it moves the champion by more than a relative 1e&#8209;9 — that
+    threshold discards two float-noise gains (4e&#8209;16 and 2e&#8209;16 in <code>grpo-acineq</code>, 4e&#8209;14 in
+    <code>ttd-circle</code>) that would otherwise be counted as progress.</p>
+  <div class="tablewrap"><table id="convTable"></table></div>
+  <p class="note" id="convNote"></p>
+</section>
+
+<section id="claims">
+  <h2><span class="qn">10</span> Prior expectations, retested</h2>
+  <p class="sub">Each expectation carried into this analysis was recomputed from the raw pools and metrics rather
+    than assumed. Two of them do not survive contact with the data in the form they were stated.</p>
+  <div id="findings"></div>
+</section>
+
+<section id="data">
+  <h2><span class="qn">11</span> The underlying numbers</h2>
+  <p class="sub">Every series charted above, per step. Pool-derived columns come from the final
+    <code>puct_sampler_step_*.json</code>; metric-derived columns from <code>metrics.jsonl</code>.</p>
+  <div class="controls" id="dataCtl"></div>
+  <div class="tablewrap" style="max-height: 620px; overflow-y: auto;"><table id="dataTable"></table></div>
+</section>
+
+<footer>
+  <p>Source: <code>gs://sk7524-tinker-tpu-us-east5/skyrl-runs/sweep1-{ttd,grpo}-{erdos,jssp,acineq,circle,ud}/</code>.
+  Pools are cumulative, so the final <code>puct_sampler_step_*.json</code> of each run carries every state
+  ever admitted, each tagged with the step that created it; all lineage statistics are recomputed from
+  those parent links. Aggregation scripts and the full derived series ship beside this page as
+  <code>analyze.py</code>, <code>export.py</code> and <code>sweep1_series.json</code>.</p>
+  <p>Colour is consistent throughout: <span style="color:var(--ttd)">&#9632;</span> ttd
+  (entropic_adaptive_beta, &beta;=2) &middot; <span style="color:var(--grpo)">&#9632;</span> grpo
+  (mean_baseline). Palette validated for colour-vision deficiency on both surfaces.</p>
+</footer>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script id="sweepdata" type="application/json">{"problems":{"erdos":{"label":"Erd\u0151s minimum-overlap","problem":"erdos_min_overlap","metric":"C5","direction":"lower","target":0.380875,"target_label":"authors' record C5 = 0.380875","note":"reward = 1/C5","status":"complete","sign":-1,"arms":{"ttd":{"run":"sweep1-ttd-erdos","champion":{"id":"b1564884-6dfc-48e1-943e-00ab833648aa","step":14,"depth":14,"value":-0.3809531388058148,"score":0.3809531388058148},"convergence":{"last_improving_step":14,"last_improving_step_any":14,"n_improving_steps":11,"n_improving_steps_any":11,"steps_since_last_improvement":0,"final_step":14,"improving_steps":[1,2,3,5,7,8,9,10,11,12,14],"improving_steps_any":[1,2,3,5,7,8,9,10,11,12,14],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":7.154510011511897e-05,"max_abs_step_to_step_change":0.0005641880694691737,"tail5_best_scores":[0.38095427049685443,0.38095389144520353,0.3809532987351163,0.380954380319555,0.3809531388058148],"tail5_std":5.009716454910568e-07,"tail5_range":1.2415137402022047e-06}},"tree":{"n_generated":748,"max_depth":14,"mean_branching":1.7725118483412323,"max_branching":2,"families_total":30,"n_parents_with_children":422,"leaf_frac":0.43582887700534756,"branching_hist":{"1":96,"2":326}},"root_best":0.4887220163161795,"pool":{"step":[1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_new":[58,58,53,53,58,52,48,51,56,55,47,55,56,48],"pool_size":[90,148,201,254,312,364,412,463,519,574,621,676,732,780],"champ_score":[0.3818631113461435,0.3812989232766743,0.3810440065354969,0.3810440065354969,0.38100132261655417,0.38100132261655417,0.38098752660544355,0.3809684242924738,0.38095503848585716,0.38095427049685443,0.38095389144520353,0.3809532987351163,0.3809532987351163,0.3809531388058148],"champ_improved_material":[true,true,true,false,true,false,true,true,true,true,true,true,false,true],"champ_gain_score":[-0.10685890497003603,-0.0005641880694691737,-0.00025491674117739116,0.0,-4.268391894274304e-05,0.0,-1.3796011110622786e-05,-1.9102312969754287e-05,-1.338580661663924e-05,-7.679890027256775e-07,-3.790516509005748e-07,-5.927100872327173e-07,0.0,-1.599293015241976e-07],"best_score_this_step":[0.3818631113461435,0.3812989232766743,0.3810440065354969,0.3810440065354969,0.38100132261655417,0.3810102979126994,0.38098752660544355,0.3809684242924738,0.38095503848585716,0.38095427049685443,0.38095389144520353,0.3809532987351163,0.380954380319555,0.3809531388058148],"n_children":[58,58,53,53,58,52,48,51,56,55,47,55,56,48],"frac_improve":[1.0,0.7068965517241379,0.7169811320754716,0.4528301886792453,0.6206896551724138,0.5,0.6666666666666666,0.5098039215686274,0.5357142857142857,0.5636363636363636,0.40425531914893614,0.45454545454545453,0.48214285714285715,0.4375],"frac_tie":[0.0,0.017241379310344827,0.0,0.03773584905660377,0.017241379310344827,0.0,0.041666666666666664,0.0392156862745098,0.017857142857142856,0.05454545454545454,0.1702127659574468,0.12727272727272726,0.10714285714285714,0.14583333333333334],"frac_tie_at_zero":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_worse":[0.0,0.27586206896551724,0.2830188679245283,0.5094339622641509,0.3620689655172414,0.5,0.2916666666666667,0.45098039215686275,0.44642857142857145,0.38181818181818183,0.425531914893617,0.41818181818181815,0.4107142857142857,0.4166666666666667],"frac_zero_value":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_beat_champ":[0.9827586206896551,0.08620689655172414,0.07547169811320754,0.0,0.05172413793103448,0.0,0.020833333333333332,0.0392156862745098,0.05357142857142857,0.03636363636363636,0.0425531914893617,0.01818181818181818,0.0,0.020833333333333332],"mean_delta":[0.09582338608049915,-0.007344785874609195,-0.004431000233592524,-0.009196362551650374,-0.00829987256599467,-0.014460330412342966,-0.0029286368077539814,-0.005826152389056625,-0.008040520964007133,-0.005987529869131556,-0.0005136857765238229,-0.006577811154267987,-0.004362527707994259,-0.012619115055296745],"mean_delta_improvers":[0.09582338608049915,0.0029901791509458716,0.0007750425415492826,0.00029637494551526766,0.00016214790973251446,6.087296355878005e-05,2.5023926999887328e-05,2.520168128535966e-05,1.575382045621206e-05,5.023563163406646e-06,3.3190366439292845e-06,3.0597377634022928e-06,1.4487529788527105e-06,1.3285008484330087e-06],"mean_pct":[18.92878726574689,-1.9090874755397902,-1.1590377378991814,-2.4076786509605195,-2.1749328639137935,-3.7918023844941233,-0.7682519642172382,-1.5284269767485998,-2.1099360510449827,-1.5714239734315398,-0.13482931740902843,-1.7265219240670926,-1.1450535978267202,-3.312334527666057],"mean_pct_improvers":[18.92878726574689,0.7570072638087897,0.2016718968797879,0.07747909974492549,0.042467191290754436,0.015961801484564036,0.006563651335832487,0.006612788877412845,0.00413415307672286,0.0013184787306813098,0.0008711125621555299,0.0008030975247798135,0.00038026509640045036,0.00034869387925827374],"median_pct_improvers":[21.280153376009388,0.26276742492627575,0.10850983646153423,0.021245330662770266,0.0202884230538201,0.005452960205014293,0.0016080125499675093,0.0019230733523171901,0.001089144382103889,0.0005196300584943519,0.0002339427939279766,5.503711365292692e-05,4.044807755957399e-06,7.510972981752296e-06],"mean_headroom_pct_improvers":[76.76580152995533,29.09178925994078,29.208629060527876,24.572932970649884,21.76031865201372,14.218215428998498,7.377399890469205,11.718169196188985,8.919921526801378,3.914402944124303,2.4811561316736714,2.688668774330736,1.3275457533734665,1.1469288822960424],"mean_fixed_headroom_pct_improvers":[88.85121661555276,2.772611846932734,0.7186499617913014,0.2748105192325146,0.15034992647097337,0.056443808682028154,0.023203170430347052,0.02336799120290437,0.01460756263300409,0.004658045567694579,0.0030775414631766256,0.0028371093312697087,0.0013433408065785912,0.0012318382963309698],"mean_gap_to_champ":[-0.0792716452614125,0.014023189862363606,0.006375319765958064,0.010090775330397561,0.008815768385789183,0.014721481358453786,0.0031004263631233286,0.005956196084189787,0.00812731342148549,0.006050812194464583,0.0005560631437882133,0.006616866021867391,0.004396196950916734,0.012643684066486546],"median_gap_to_champ":[-0.09141450140326832,0.0038273725788171287,0.0009741459951376763,0.000968632242254075,0.0005468520189867154,0.0002778877350420872,0.0002234908144644887,0.0001050366937953573,9.04072127855815e-05,6.372260841996935e-05,5.587856498667776e-05,5.4578174254027445e-05,4.897268496184548e-05,3.411009308720847e-05],"mean_depth":[1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,8.964285714285714,9.963636363636363,11.0,12.0,13.0,13.979166666666666],"max_depth":[1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_distinct_parents":[30,32,30,30,31,31,28,30,31,31,28,29,31,30],"mean_children_per_used_parent":[1.9333333333333333,1.8125,1.7666666666666666,1.7666666666666666,1.8709677419354838,1.6774193548387097,1.7142857142857142,1.7,1.8064516129032258,1.7741935483870968,1.6785714285714286,1.896551724137931,1.8064516129032258,1.6],"n_families":[30,25,19,14,10,6,5,5,4,4,3,3,3,2],"mean_parent_age":[null,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0357142857142858,1.0,1.0,1.0,1.0,1.0208333333333333],"frac_parent_from_prev_step":[null,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.9821428571428571,1.0,1.0,1.0,1.0,0.9791666666666666]},"metrics":{"steps":[0,1,2,3,4,5,6,7,8,9,10,12,13,14],"missing":[11],"dup":[0],"env/all/reward/mean":[0.40241771811150134,0.508235419984877,0.4717617977511316,0.48884666875557437,0.6434056748911187,0.6376472805107047,0.6563177409959549,0.6913049330373494,0.7232012425819193,0.7637944618236416,0.7709261052679133,0.6992936381685605,0.8107169740218626,0.7096483535104098],"env/all/reward/max":[2.620461189122484,2.6187393966581562,2.622614208244821,2.6243687254090315,2.6243687254090315,2.6246627357768744,2.624600907724337,2.6247577779312374,2.624889387114652,2.6249816191558484,2.624986911016628,2.624993607012659,2.624993607012659,2.6249947090205974],"env/all/format":[0.7842741935483871,0.8044354838709677,0.5625,0.5020161290322581,0.7375,0.732421875,0.72265625,0.6693548387096774,0.7096774193548387,0.75390625,0.74609375,0.6471774193548387,0.720703125,0.7421875],"env/all/correctness":[0.17540322580645162,0.21975806451612903,0.1875,0.19153225806451613,0.2520833333333333,0.25,0.2578125,0.26814516129032256,0.28024193548387094,0.298828125,0.30078125,0.27419354838709675,0.3125,0.27734375],"env/all/by_group/frac_mixed":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"advantage/mean":[0.2603800594806671,0.2155371606349945,0.3087145984172821,0.3113862872123718,0.21352386474609375,0.1996573954820633,0.19491183757781982,0.22059470415115356,0.19391955435276031,0.19947078824043274,0.1794690042734146,0.205793559551239,0.14849607646465302,0.18910275399684906],"advantage/max":[12.271917343139648,12.271912574768066,11.848739624023438,12.271910667419434,12.611040115356445,11.301286697387695,11.6123046875,12.611041069030762,12.271910667419434,11.937774658203125,12.611042976379395,11.937774658203125,10.768043518066406,11.301290512084961],"advantage/min":[-0.940867006778717,-0.9999447464942932,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0],"advantage/spread":[13.212784349918365,13.27185732126236,12.848739624023438,13.271910667419434,13.611040115356445,12.301286697387695,12.6123046875,13.611041069030762,13.271910667419434,12.937774658203125,13.611042976379395,12.937774658203125,11.768043518066406,12.301290512084961],"puct/buffer_size":[32,32,90,148,201,254,312,364,412,463,519,621,676,732],"puct/sampled_timestep/mean":[-1.0,-1.0,1.0,2.0,3.0,4.0,5.0,5.96875,6.9375,7.9375,9.0,11.0,12.0,12.9375],"puct/buffer_timestep/mean":[-1.0,-1.0,0.28888888888888886,0.9594594594594594,1.4975124378109452,2.0196850393700787,2.573717948717949,3.0631868131868134,3.5218446601941746,4.015118790496761,4.552986512524085,5.523349436392914,6.050295857988166,6.581967213114754],"puct/buffer_timestep/std":[0.0,0.0,0.9573626323794674,1.1203183571331132,1.316275380272294,1.5508463206419327,1.8172115924484755,2.065910319596985,2.316468792189943,2.596265039728257,2.899170325442434,3.443332709750238,3.7452711684851074,4.045520015479633],"puct/buffer_value/std":[0.009624922942469121,0.009624922942469121,0.05146763291372752,0.04922392318207658,0.04623247547349459,0.044056216370779784,0.04200827603743916,0.043185798140471736,0.041307612837323565,0.039813413032209526,0.03864644405645318,0.036481012487455645,0.03564890160155593,0.034618258380291284],"env/all/total_ac_tokens":[5422462,5133036,5719185,5687247,5394451,5648566,6024258,5899544,5937744,5817315,5522897,5911652,5835287,5870460],"time/total":[2176.314752817154,6023.001553058624,5507.726695299149,5380.836572170258,6187.908231019974,6033.075879096985,6423.146399497986,6118.884466648102,6080.017877340317,6364.345218420029,6249.071571350098,5903.1649758815765,6031.675265312195,6253.790330171585]}},"grpo":{"run":"sweep1-grpo-erdos","champion":{"id":"99ed9a42-f777-48da-8170-0c1d54241c76","step":10,"depth":10,"value":-0.3809847850698342,"score":0.3809847850698342},"convergence":{"last_improving_step":10,"last_improving_step_any":10,"n_improving_steps":8,"n_improving_steps_any":8,"steps_since_last_improvement":4,"final_step":14,"improving_steps":[1,2,4,5,7,8,9,10],"improving_steps_any":[1,2,4,5,7,8,9,10],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.00010893395089162095,"max_abs_step_to_step_change":0.0005704274149676003,"tail5_best_scores":[0.3809847850698342,0.381011955757132,0.38098478507022876,0.3810200543403319,0.38100454161189506],"tail5_std":1.4291505961083798e-05,"tail5_range":3.526927049773976e-05}},"tree":{"n_generated":663,"max_depth":14,"mean_branching":1.7265625,"max_branching":2,"families_total":31,"n_parents_with_children":384,"leaf_frac":0.420814479638009,"branching_hist":{"1":105,"2":279}},"root_best":0.4838008513381045,"pool":{"step":[1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_new":[58,60,53,51,51,43,39,49,49,38,43,46,39,44],"pool_size":[90,150,203,254,305,348,387,436,485,523,566,612,651,695],"champ_score":[0.3818594967860531,0.38172969740353146,0.38172969740353146,0.3816973512266615,0.3811269238116939,0.3811269238116939,0.3810559109078551,0.3810478450766267,0.38104557722137006,0.3809847850698342,0.3809847850698342,0.3809847850698342,0.3809847850698342,0.3809847850698342],"champ_improved_material":[true,true,false,true,true,false,true,true,true,true,false,false,false,false],"champ_gain_score":[-0.10194135455205144,-0.0001297993825216115,0.0,-3.234617686997954e-05,-0.0005704274149676003,0.0,-7.101290383876302e-05,-8.065831228420972e-06,-2.267855256643525e-06,-6.079215153587114e-05,0.0,0.0,0.0,0.0],"best_score_this_step":[0.3818594967860531,0.38172969740353146,0.3817661391191896,0.3816973512266615,0.3811269238116939,0.3813086352323513,0.3810559109078551,0.3810478450766267,0.38104557722137006,0.3809847850698342,0.381011955757132,0.38098478507022876,0.3810200543403319,0.38100454161189506],"n_children":[58,60,53,51,51,43,39,49,49,38,43,46,39,44],"frac_improve":[0.9482758620689655,0.7666666666666667,0.8113207547169812,0.7254901960784313,0.5686274509803921,0.5813953488372093,0.5897435897435898,0.6530612244897959,0.6122448979591837,0.5789473684210527,0.4883720930232558,0.41304347826086957,0.41025641025641024,0.5],"frac_tie":[0.0,0.0,0.018867924528301886,0.0,0.0,0.023255813953488372,0.02564102564102564,0.08163265306122448,0.02040816326530612,0.07894736842105263,0.11627906976744186,0.13043478260869565,0.10256410256410256,0.11363636363636363],"frac_tie_at_zero":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_worse":[0.05172413793103448,0.23333333333333334,0.16981132075471697,0.27450980392156865,0.43137254901960786,0.3953488372093023,0.38461538461538464,0.2653061224489796,0.3673469387755102,0.34210526315789475,0.3953488372093023,0.45652173913043476,0.48717948717948717,0.38636363636363635],"frac_zero_value":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_beat_champ":[0.8620689655172413,0.05,0.0,0.0196078431372549,0.0392156862745098,0.0,0.05128205128205128,0.04081632653061224,0.02040816326530612,0.05263157894736842,0.0,0.0,0.0,0.0],"mean_delta":[0.07315699614604357,-0.0006460544575900876,-0.003585495955385886,-0.014318645245983358,-0.02293343836032592,-0.005425864315324126,-0.0052099967473460155,-0.002826066077342979,-0.00019784431951003892,-0.014608912402172786,-0.00035955602101900037,-0.006266397659253673,-0.011829550274839744,-0.0011196243643943288],"mean_delta_improvers":[0.08839531235812612,0.005030366501637382,0.0005369142466763248,0.00032764471051489245,0.0002656658657536691,4.602420013102959e-05,0.00023205375413538716,6.631903340863568e-05,0.00010520422821301094,4.7666859819356366e-05,0.0001386439041544092,1.011712761422575e-05,4.712492603190996e-05,7.72051224327199e-06],"mean_pct":[14.36823232314534,-0.1778035529913555,-0.9232826420328846,-3.736481891167072,-5.9959688382915575,-1.4195728550155429,-1.3629526244269787,-0.7386413814017558,-0.0519009978110754,-3.8280604243269045,-0.09423239271755075,-1.6432571408545567,-3.10255885987052,-0.2938516471269825],"mean_pct_improvers":[17.39684901221482,1.2367041215669439,0.13918598037510185,0.08532296750157148,0.06932307548004692,0.012034013910330458,0.0606218104385904,0.01735741670359919,0.027540398193706097,0.012497475234495148,0.03631385308919616,0.002652193325231612,0.01235772199542582,0.0020252435637391868],"median_pct_improvers":[18.52429945761466,0.5502697160503256,0.0653092644641311,0.06444207384663256,0.02227430607595715,0.0012848817619454161,0.005266410555524629,0.0012975308083609197,0.0010033734086959281,0.0024114514710653163,0.00601516759932776,0.00017276228782279473,0.00019982023465174497,1.3836464459479978e-06],"mean_headroom_pct_improvers":[70.28425346968709,26.27432895031018,12.058338125872025,11.086461360202009,13.299452476201015,3.371430776405094,14.480335222408705,6.736061571512042,10.630964623504378,10.69630139198071,16.786204920755537,1.9921128475776873,10.556689385204885,2.575600677429098],"mean_fixed_headroom_pct_improvers":[85.88251756864607,4.8873693403933745,0.5216514993037051,0.318330823845801,0.25811383855448966,0.04471587995890672,0.22545721130166432,0.06443379631690596,0.10221360993888905,0.046311844108798225,0.13470270330723166,0.009829530174097533,0.0457853157581449,0.007501042879801526],"mean_gap_to_champ":[-0.0507943755646517,0.013716298273260891,0.006783479520432274,0.016005652903982107,0.02397523007891202,0.006771532991664947,0.006445168449757075,0.003948218811738058,0.0009530284164621377,0.015100093434970775,0.0008706172485451185,0.006644755819940309,0.012247871478353434,0.001491795039156566],"median_gap_to_champ":[-0.07080012817077536,0.006619439749284528,0.002797316047570886,0.0016906237927370449,0.0011886262697327066,0.0015765602779744814,0.0013934128200761564,0.0011505824931621889,0.0008166796667781195,0.0005625929057175016,0.0005559474845250878,0.0005462996197629633,0.0005559417657145516,0.0005462934108032003],"mean_depth":[1.0,2.0,3.0,4.0,4.921568627450981,5.906976744186046,6.6923076923076925,7.591836734693878,8.510204081632653,9.631578947368421,10.279069767441861,11.195652173913043,12.333333333333334,13.295454545454545],"max_depth":[1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_distinct_parents":[31,32,30,29,29,25,25,27,30,24,27,27,24,27],"mean_children_per_used_parent":[1.8709677419354838,1.875,1.7666666666666666,1.7586206896551724,1.7586206896551724,1.72,1.56,1.8148148148148149,1.6333333333333333,1.5833333333333333,1.5925925925925926,1.7037037037037037,1.625,1.6296296296296295],"n_families":[31,23,14,10,9,6,5,6,4,4,4,4,4,4],"mean_parent_age":[null,1.0,1.0,1.0,1.0784313725490196,1.0,1.0512820512820513,1.0816326530612246,1.0,1.0263157894736843,1.1627906976744187,1.0217391304347827,1.0,1.0909090909090908],"frac_parent_from_prev_step":[null,1.0,1.0,1.0,0.9607843137254902,1.0,0.9487179487179487,0.9183673469387755,1.0,0.9736842105263158,0.8372093023255814,0.9782608695652174,1.0,0.9545454545454546]},"metrics":{"steps":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],"missing":[],"dup":[0,1,2],"env/all/reward/mean":[0.3995778780981293,0.4353865853272458,0.6513741621456448,0.5886783257952078,0.6080607344891082,0.5905050116951684,0.5112785168497642,0.5094687652173663,0.5572003915347756,0.5056839708146569,0.4332661259379692,0.509285508652861,0.3807527456991306,0.3923054581654964,0.39703159037106206],"env/all/reward/max":[2.618013111257695,2.61876418480862,2.6196546420289133,2.6194045813312647,2.619876639404313,2.6237977725659167,2.6237977725659167,2.624286738853258,2.6243422884480094,2.6243579076512065,2.6247766654748017,2.624589487663043,2.6247766654720834,2.62453370200155,2.624640560773762],"env/all/format":[0.8060344827586207,0.8387096774193549,0.71875,0.57421875,0.4609375,0.34375,0.2629310344827586,0.12708333333333333,0.10991379310344827,0.07916666666666666,0.032327586206896554,0.04525862068965517,0.011160714285714286,0.022916666666666665,0.021551724137931036],"env/all/correctness":[0.17672413793103448,0.1935483870967742,0.263671875,0.23046875,0.23828125,0.23125,0.20043103448275862,0.19791666666666666,0.21982758620689655,0.19375,0.16810344827586207,0.1961206896551724,0.14732142857142858,0.15416666666666667,0.15301724137931033],"env/all/by_group/frac_mixed":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"advantage/mean":[3.8767247190207854e-09,-6.779675043588895e-09,-4.954152199587725e-09,-9.258974031922662e-09,9.099945796897657e-10,-1.7909377092450995e-08,4.4425823020333155e-09,3.75462327895093e-09,-1.5506898876083142e-08,1.1462431892539371e-08,-8.61753868264259e-09,-3.695488004495928e-08,3.5061555880844253e-09,-2.941527910138575e-08,0.0],"advantage/max":[2.308154344558716,2.400214433670044,2.4150500297546387,2.244983673095703,2.288623809814453,2.0947232246398926,2.182001829147339,1.5609755516052246,1.3730483055114746,1.3117265701293945,1.3099744319915771,1.3333332538604736,1.3102833032608032,0.8737446069717407,1.3109344244003296],"advantage/min":[-1.1406774520874023,-1.123645305633545,-1.8893654346466064,-2.0211522579193115,-1.7986806631088257,-2.0975308418273926,-1.9619536399841309,-2.2704875469207764,-2.1837575435638428,-2.180819272994995,-2.1222665309906006,-2.0995116233825684,-1.2986732721328735,-1.747489094734192,-1.3109344244003296],"advantage/spread":[3.448831796646118,3.523859739303589,4.304415464401245,4.266135931015015,4.087304472923279,4.192254066467285,4.14395546913147,3.831463098526001,3.5568058490753174,3.4925458431243896,3.4322409629821777,3.432844877243042,2.6089565753936768,2.6212337017059326,2.621868848800659],"puct/buffer_size":[32,32,90,150,204,255,305,350,387,436,485,523,567,613,652],"puct/sampled_timestep/mean":[-1.0,-1.0,1.0,2.0,2.96875,3.9375,5.0,5.96875,6.90625,8.0,8.96875,9.84375,10.96875,11.9375,12.875],"puct/buffer_timestep/mean":[-1.0,-1.0,0.28888888888888886,0.9733333333333334,1.5098039215686274,2.007843137254902,2.504918032786885,2.954285714285714,3.34625322997416,3.8692660550458715,4.387628865979382,4.795411089866157,5.27689594356261,5.781402936378466,6.21319018404908],"puct/buffer_timestep/std":[0.0,0.0,0.9573626323794674,1.1192060678097766,1.3116753098293776,1.5390145990790318,1.7963922158819816,2.044692482242446,2.2866888529126093,2.6080099645297126,2.9164042870206326,3.163821837091334,3.462453518584902,3.7717737623017786,4.038041225556043],"puct/buffer_value/std":[0.014844831677933558,0.014844831677933558,0.07857804571937244,0.06909039847280644,0.06303952854633292,0.06018630019837523,0.06663721868052638,0.06355985667303303,0.061099803617484426,0.05817398313429308,0.055652326894146516,0.05449384584922275,0.05281109298728651,0.05136678908433895,0.05056424811607062],"env/all/total_ac_tokens":[5440234,5411858,5313291,5678066,5995985,5824731,5921205,6531318,6570047,7023706,6701163,6840369,6639162,7117255,6759111],"time/total":[1968.1432645320892,6062.4813821315765,5839.514801025391,4952.35431933403,5066.309995174408,4551.17045044899,4353.979842424393,4166.209527015686,4317.172970294952,4341.286314249039,4234.790645360947,4294.609941244125,4131.273652791977,4134.6876475811005,4131.826373338699]}}}},"jssp":{"label":"Job-shop scheduling","problem":"frontier_algo #46 (JSSP)","metric":"reward","direction":"higher","target":0.16557,"target_label":"best observed across both arms (0.165570); reference solutions score 0.051\u20130.083","note":"env reward, higher is better","status":"complete","sign":1,"arms":{"ttd":{"run":"sweep1-ttd-jssp","champion":{"id":"21dc04bb-903f-4db3-aeb9-a998b8e3a407","step":10,"depth":3,"value":0.159193,"score":0.159193},"convergence":{"last_improving_step":10,"last_improving_step_any":10,"n_improving_steps":5,"n_improving_steps_any":5,"steps_since_last_improvement":4,"final_step":14,"improving_steps":[0,2,5,9,10],"improving_steps_any":[0,2,5,9,10],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.056784071428571434,"max_abs_step_to_step_change":0.13997,"tail5_best_scores":[0.159193,0.13997,0.0,0.04306,0.122764],"tail5_std":0.0610190026322948,"tail5_range":0.159193}},"tree":{"n_generated":889,"max_depth":14,"mean_branching":1.984375,"max_branching":2,"families_total":32,"n_parents_with_children":448,"leaf_frac":0.49606299212598426,"branching_hist":{"1":7,"2":441}},"root_best":0.0,"pool":{"step":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_new":[63,62,62,61,62,60,58,55,59,55,59,60,58,56,59],"pool_size":[95,157,219,280,342,402,460,515,574,629,688,748,806,862,921],"champ_score":[0.000591,0.000591,0.049986,0.049986,0.049986,0.096643,0.096643,0.096643,0.096643,0.123835,0.159193,0.159193,0.159193,0.159193,0.159193],"champ_improved_material":[true,false,true,false,false,true,false,false,false,true,true,false,false,false,false],"champ_gain_score":[0.000591,0.0,0.049395,0.0,0.0,0.046657000000000004,0.0,0.0,0.0,0.027191999999999994,0.035358,0.0,0.0,0.0,0.0],"best_score_this_step":[0.000591,0.0,0.049986,0.0,0.027401,0.096643,0.030896,0.060885,0.0,0.123835,0.159193,0.13997,0.0,0.04306,0.122764],"n_children":[63,62,62,61,62,60,58,55,59,55,59,60,58,56,59],"frac_improve":[0.015873015873015872,0.0,0.016129032258064516,0.0,0.016129032258064516,0.03333333333333333,0.06896551724137931,0.01818181818181818,0.0,0.01818181818181818,0.01694915254237288,0.03333333333333333,0.0,0.017857142857142856,0.06779661016949153],"frac_tie":[0.9841269841269841,1.0,0.9838709677419355,0.9672131147540983,0.967741935483871,0.9,0.9310344827586207,0.8909090909090909,0.864406779661017,0.9454545454545454,0.9322033898305084,0.9333333333333333,0.9310344827586207,0.9821428571428571,0.8983050847457628],"frac_tie_at_zero":[0.9841269841269841,1.0,0.9838709677419355,0.9672131147540983,0.9516129032258065,0.9,0.9310344827586207,0.8909090909090909,0.864406779661017,0.9454545454545454,0.9322033898305084,0.9333333333333333,0.9310344827586207,0.9821428571428571,0.8983050847457628],"frac_worse":[0.0,0.0,0.0,0.03278688524590164,0.016129032258064516,0.06666666666666667,0.0,0.09090909090909091,0.13559322033898305,0.03636363636363636,0.05084745762711865,0.03333333333333333,0.06896551724137931,0.0,0.03389830508474576],"frac_zero_value":[0.9841269841269841,1.0,0.9838709677419355,1.0,0.967741935483871,0.9666666666666667,0.9310344827586207,0.9454545454545454,1.0,0.9454545454545454,0.9830508474576272,0.95,1.0,0.9821428571428571,0.9322033898305084],"frac_beat_champ":[0.015873015873015872,0.0,0.016129032258064516,0.0,0.0,0.016666666666666666,0.0,0.0,0.0,0.01818181818181818,0.01694915254237288,0.0,0.0,0.0,0.0],"mean_delta":[9.380952380952381e-06,0.0,0.0007966935483870968,-0.0012686393442622951,-0.0005220161290322581,0.00012721666666666692,0.0011933448275862069,-3.829090909090903e-05,-0.004258440677966101,0.001166,-0.0016454406779661016,-0.0022558166666666666,-0.0014850689655172414,0.0007689285714285714,-0.00023294915254237303],"mean_delta_improvers":[0.000591,null,0.049395,null,0.017621,0.0488385,0.0173035,0.055807,null,0.123244,0.035358,0.0215335,null,0.04306,0.018094],"mean_pct":[null,null,8357.868020304568,-100.0,-50.0,-100.0,1607.3500967117989,125.72740716581309,-100.0,6911.2477373441,-67.86187265312714,-56.037639845973125,-100.0,null,98.59442288984249],"mean_pct_improvers":[null,null,8357.868020304568,null,null,null,1607.3500967117989,1098.9956675856636,null,20853.468697123517,28.55250938749142,null,null,null,297.188845779685],"median_pct_improvers":[null,null,8357.868020304568,null,null,null,1607.3500967117989,1098.9956675856636,null,20853.468697123517,28.55250938749142,null,null,null,297.18884577968504],"mean_headroom_pct_improvers":[0.356948722594673,null,29.9401742039896,null,10.642628495500395,29.497191520202936,10.482407958569752,34.77244971711986,null,74.70284096763831,84.72025877560802,13.00567735700912,null,26.007126894968895,16.59599870609786],"mean_fixed_headroom_pct_improvers":[0.356948722594673,null,29.833303134625837,null,10.642628495500395,29.497191520202936,10.450866702905115,33.70598538382558,null,74.4361901310624,21.355317992389928,13.00567735700912,null,26.007126894968895,10.928308268406111],"mean_gap_to_champ":[-9.380952380952381e-06,0.0005910000000000006,-0.0002152258064516118,0.04998600000000005,0.04925983870967747,0.04835805000000005,0.09541400000000003,0.09474329090909092,0.09664300000000002,0.09314736363636364,0.12113681355932193,0.15614238333333344,0.15919300000000008,0.15842407142857154,0.15624220338983058],"median_gap_to_champ":[0.0,0.000591,0.000591,0.049986,0.049986,0.049986,0.096643,0.096643,0.096643,0.096643,0.123835,0.159193,0.159193,0.159193,0.159193],"mean_depth":[1.0,2.0,2.0,3.0,3.967741935483871,4.966666666666667,6.0,7.0,8.0,8.781818181818181,9.59322033898305,10.3,11.413793103448276,12.285714285714286,13.338983050847459],"max_depth":[1,2,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_distinct_parents":[32,31,32,32,32,30,29,29,30,29,30,30,29,28,31],"mean_children_per_used_parent":[1.96875,2.0,1.9375,1.90625,1.9375,2.0,2.0,1.896551724137931,1.9666666666666666,1.896551724137931,1.9666666666666666,2.0,2.0,2.0,1.903225806451613],"n_families":[32,16,17,12,12,11,8,8,7,8,8,6,6,5,5],"mean_parent_age":[null,1.0,2.0,1.9672131147540983,1.032258064516129,1.0,1.0,1.0,1.0,1.2363636363636363,1.1016949152542372,1.0,1.0,1.0,1.2542372881355932],"frac_parent_from_prev_step":[null,1.0,0.0,0.03278688524590164,0.967741935483871,1.0,1.0,1.0,1.0,0.9454545454545454,0.8983050847457628,1.0,1.0,1.0,0.9661016949152542]},"metrics":{"steps":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],"missing":[],"dup":[],"env/all/reward/mean":[3.69375e-05,0.0,0.0065492499999999995,0.0,0.0014069375,0.00305240625,0.0022275625,0.002910458333333333,0.001425375,0.004005416666666667,0.0036900416666666666,0.0038132708333333334,0.0,0.00269125,0.002720265625],"env/all/reward/max":[0.000591,0.0,0.049986,0.0,0.027401,0.096643,0.030896,0.060885,0.022806,0.123835,0.159193,0.13997,0.0,0.04306,0.122764],"env/all/format":[0.6875,0.4375,0.6875,0.5,0.8125,0.65625,0.6875,0.625,0.75,0.8125,0.7083333333333334,0.6458333333333334,0.4375,0.75,0.609375],"env/all/correctness":[0.4375,0.25,0.5625,0.0625,0.375,0.34375,0.34375,0.2708333333333333,0.3125,0.4166666666666667,0.3541666666666667,0.3333333333333333,0.1875,0.5,0.28125],"env/all/by_group/frac_mixed":[1.0,0.0,1.0,0.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,1.0,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0],"advantage/mean":[0.5672092437744141,0.0,0.3422362208366394,0.0,0.4793875813484192,0.6062142252922058,0.540817379951477,0.5949932932853699,0.5177431106567383,0.47947579622268677,0.552709698677063,0.5898773670196533,0.0,0.5177432894706726,0.6304000020027161],"advantage/max":[11.6123046875,0.0,9.489864349365234,0.0,12.952802658081055,12.271910667419434,11.849015235900879,11.306118965148926,11.937774658203125,13.295572280883789,12.611040115356445,12.271910667419434,0.0,11.937774658203125,12.271912574768066],"advantage/min":[-0.5373004674911499,0.0,-0.6615862846374512,0.0,-0.5373003482818604,-0.6060342192649841,-0.6210399270057678,-0.5994510054588318,-0.5204416513442993,-0.5373004674911499,-0.556678295135498,-0.5792641639709473,0.0,-0.5204415321350098,-0.6785807609558105],"advantage/spread":[12.14960515499115,0.0,10.151450634002686,0.0,13.490103006362915,12.877944886684418,12.470055162906647,11.905569970607758,12.458216309547424,13.832872748374939,13.167718410491943,12.85117483139038,0.0,12.458216190338135,12.950493335723877],"puct/buffer_size":[32,95,159,220,282,343,403,462,520,579,631,690,750,808,864],"puct/sampled_timestep/mean":[-1.0,0.0,0.0,1.0625,2.9375,3.9375,4.8125,5.71875,6.71875,7.46875,8.6875,9.71875,10.625,11.53125,12.4375],"puct/buffer_timestep/mean":[-1.0,-0.3368421052631579,0.20125786163522014,0.7090909090909091,1.2127659574468086,1.7113702623906706,2.2009925558312653,2.686147186147186,3.167307692307692,3.6597582037996546,4.117274167987322,4.626086956521739,5.136,5.628712871287129,6.106481481481482],"puct/buffer_timestep/std":[0.0,0.4726304067503925,0.7505123969900025,1.034368094718655,1.317145584710883,1.603954348150972,1.8868222678397795,2.1709870388661887,2.455936383685469,2.7485189499471407,3.02795263597689,3.3361286326081805,3.6372385129380778,3.926713200772557,4.208705113350013],"puct/buffer_value/std":[0.0,6.031534306806422e-05,4.672172835330903e-05,0.003827012441689075,0.0033834190911176715,0.0035270594332551227,0.005794490789805672,0.005733566053299468,0.006224761195911099,0.005904090946896862,0.007827483646966605,0.009628473573686472,0.01059981154495083,0.010217420544932111,0.009987315591477293],"env/all/total_ac_tokens":[194517,186142,164074,187582,344678,388301,342104,551143,160094,525605,515121,527193,192462,160081,719023],"time/total":[2620.0728266239166,2447.6753239631653,2421.992612361908,2418.800959587097,2507.3814198970795,2448.229689359665,2437.7194225788116,2398.6703968048096,2330.531385421753,2480.333089351654,2470.515187740326,2441.507868528366,2356.116895675659,2451.550763607025,2556.309967517853]}},"grpo":{"run":"sweep1-grpo-jssp","champion":{"id":"71abb72d-6759-4537-949c-605394eb36a5","step":14,"depth":12,"value":0.16557,"score":0.16557},"convergence":{"last_improving_step":14,"last_improving_step_any":14,"n_improving_steps":7,"n_improving_steps_any":7,"steps_since_last_improvement":0,"final_step":14,"improving_steps":[3,4,9,10,11,12,14],"improving_steps_any":[3,4,9,10,11,12,14],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.043101,"max_abs_step_to_step_change":0.111023,"tail5_best_scores":[0.138676,0.143915,0.147993,0.101484,0.16557],"tail5_std":0.021057823236032728,"tail5_range":0.06408599999999999}},"tree":{"n_generated":794,"max_depth":14,"mean_branching":1.8770685579196218,"max_branching":2,"families_total":32,"n_parents_with_children":423,"leaf_frac":0.4672544080604534,"branching_hist":{"1":52,"2":371}},"root_best":0.0,"pool":{"step":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_new":[64,63,64,64,57,56,55,57,53,44,45,44,46,43,39],"pool_size":[96,159,223,287,344,400,455,512,565,609,654,698,744,787,826],"champ_score":[0.0,0.0,0.0,0.07457,0.120914,0.120914,0.120914,0.120914,0.120914,0.13826,0.138676,0.143915,0.147993,0.147993,0.16557],"champ_improved_material":[false,false,false,true,true,false,false,false,false,true,true,true,true,false,true],"champ_gain_score":[0.0,0.0,0.0,0.07457,0.046343999999999996,0.0,0.0,0.0,0.0,0.017346,0.0004159999999999997,0.005238999999999994,0.004078000000000026,0.0,0.01757699999999998],"best_score_this_step":[0.0,0.0,0.0,0.07457,0.120914,0.009891,0.118975,0.057585,0.11539,0.13826,0.138676,0.143915,0.147993,0.101484,0.16557],"n_children":[64,63,64,64,57,56,55,57,53,44,45,44,46,43,39],"frac_improve":[0.0,0.0,0.0,0.015625,0.03508771929824561,0.017857142857142856,0.03636363636363636,0.05263157894736842,0.05660377358490566,0.09090909090909091,0.06666666666666667,0.11363636363636363,0.15217391304347827,0.06976744186046512,0.28205128205128205],"frac_tie":[1.0,1.0,1.0,0.984375,0.9473684210526315,0.9642857142857143,0.9454545454545454,0.8771929824561403,0.8301886792452831,0.7272727272727273,0.7555555555555555,0.7954545454545454,0.717391304347826,0.6744186046511628,0.5641025641025641],"frac_tie_at_zero":[1.0,1.0,1.0,0.984375,0.9473684210526315,0.9642857142857143,0.9454545454545454,0.8771929824561403,0.8301886792452831,0.7272727272727273,0.7555555555555555,0.7954545454545454,0.717391304347826,0.6744186046511628,0.5641025641025641],"frac_worse":[0.0,0.0,0.0,0.0,0.017543859649122806,0.017857142857142856,0.01818181818181818,0.07017543859649122,0.11320754716981132,0.18181818181818182,0.17777777777777778,0.09090909090909091,0.13043478260869565,0.2558139534883721,0.15384615384615385],"frac_zero_value":[1.0,1.0,1.0,0.984375,0.9649122807017544,0.9821428571428571,0.9636363636363636,0.9473684210526315,0.9056603773584906,0.8863636363636364,0.9333333333333333,0.8863636363636364,0.8478260869565217,0.9069767441860465,0.6923076923076923],"frac_beat_champ":[0.0,0.0,0.0,0.015625,0.017543859649122806,0.0,0.0,0.0,0.0,0.022727272727272728,0.022222222222222223,0.022727272727272728,0.021739130434782608,0.0,0.02564102564102564],"mean_delta":[0.0,0.0,0.0,0.00116515625,0.0018781052631578947,-0.001154982142857143,0.002279945454545455,-0.0014261052631578952,-0.0030892452830188675,-0.011374840909090909,0.0010385555555555556,-0.0005655227272727274,0.001687565217391305,-0.023790581395348846,0.007836794871794872],"mean_delta_improvers":[null,null,null,0.07457,0.090811,0.009891,0.067644,0.022882333333333334,0.05226166666666667,0.032141,0.076234,0.07769859999999999,0.0984562857142857,0.057354666666666665,0.07533472727272728],"mean_pct":[null,null,null,null,-100.0,-100.0,-100.0,-67.16238582725434,-64.78254561746296,-68.62105151811025,-100.0,-61.937141727614154,-100.0,-70.28406595705528,-96.08583400919167],"mean_pct_improvers":[null,null,null,null,null,null,null,64.18807086372829,90.07379587533771,140.09724754710427,null,90.31429136192924,null,216.05107443164124,null],"median_pct_improvers":[null,null,null,null,null,null,null,64.18807086372829,90.07379587533771,140.09724754710427,null,90.31429136192924,null,216.05107443164124,null],"mean_headroom_pct_improvers":[null,null,null,45.038352358519056,54.84749652714864,5.973908316724045,40.85522739626744,14.050738835778487,37.93806781263617,25.908292112873646,46.04336534396328,50.76217922927542,59.46505146722577,38.001074463948505,45.50022786297473],"mean_fixed_headroom_pct_improvers":[null,null,null,45.038352358519056,54.84749652714864,5.973908316724045,40.85522739626744,13.820337822874514,31.56469569769081,19.412333152141088,46.04336534396328,46.927945883916166,59.46505146722577,34.64073604316402,45.50022786297473],"mean_gap_to_champ":[0.0,0.0,0.0,-0.00116515625,0.07138364912280704,0.12073737499999997,0.11845421818181816,0.11942347368421051,0.11552254716981131,0.11635949999999996,0.13317773333333324,0.12846688636363635,0.12893252173913033,0.1420536511627906,0.12600225641025636],"median_gap_to_champ":[0.0,0.0,0.0,0.0,0.07457,0.120914,0.120914,0.120914,0.120914,0.120914,0.13826,0.138676,0.143915,0.147993,0.147993],"mean_depth":[1.0,2.0,2.0,3.0,4.0,4.982142857142857,6.0,6.982456140350878,7.811320754716981,8.545454545454545,9.844444444444445,10.272727272727273,10.826086956521738,12.069767441860465,12.974358974358974],"max_depth":[1,2,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_distinct_parents":[32,32,32,32,31,30,29,30,31,25,25,27,26,26,22],"mean_children_per_used_parent":[2.0,1.96875,2.0,2.0,1.8387096774193548,1.8666666666666667,1.896551724137931,1.9,1.7096774193548387,1.76,1.8,1.6296296296296295,1.7692307692307692,1.6538461538461537,1.7727272727272727],"n_families":[32,16,16,13,10,9,7,7,7,6,6,5,5,5,4],"mean_parent_age":[null,1.0,2.0,2.0,1.0,1.0178571428571428,1.0,1.0175438596491229,1.1886792452830188,1.1818181818181819,1.0222222222222221,1.5909090909090908,1.565217391304348,1.069767441860465,1.205128205128205],"frac_parent_from_prev_step":[null,1.0,0.0,0.0,1.0,0.9821428571428571,1.0,0.9824561403508771,0.9245283018867925,0.8409090909090909,0.9777777777777777,0.7045454545454546,0.5434782608695652,0.9534883720930233,0.9230769230769231]},"metrics":{"steps":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],"missing":[],"dup":[],"env/all/reward/mean":[0.0,0.0,0.0,0.004660625,0.0056756875,0.00242328125,0.0052585,0.0017699999999999999,0.00912453125,0.0025049750000000004,0.004764625,0.007018765624999999,0.011400212500000001,0.0031294791666666663,0.006097755681818182],"env/all/reward/max":[0.0,0.0,0.0,0.07457,0.120914,0.067654,0.118975,0.057585,0.11539,0.13826,0.138676,0.143915,0.147993,0.101484,0.16557],"env/all/format":[0.3125,0.75,0.0625,0.375,0.375,0.375,0.53125,0.3541666666666667,0.484375,0.375,0.375,0.328125,0.3875,0.3125,0.3352272727272727],"env/all/correctness":[0.1875,0.375,0.125,0.3125,0.1875,0.1875,0.4375,0.2708333333333333,0.34375,0.2875,0.2916666666666667,0.28125,0.3125,0.22916666666666666,0.26704545454545453],"env/all/by_group/frac_mixed":[0.0,0.0,0.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"env/all/by_group/frac_all_bad":[1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"advantage/mean":[0.0,0.0,0.0,6.208817349140361e-10,3.326152131499782e-10,3.6864852837048545e-10,-1.9606791190618367e-10,0.0,8.765388970211063e-10,-7.337693230802245e-10,3.7252903539730653e-10,-5.731216057291988e-10,1.643510466609044e-10,4.515503526647535e-10,2.1913472425527658e-10],"advantage/max":[0.0,0.0,0.0,0.06214166805148125,0.10364057123661041,0.054123200476169586,0.10728584229946136,0.05038687586784363,0.08569163084030151,0.11060800403356552,0.11094079911708832,0.12792444229125977,0.09993083775043488,0.08118720352649689,0.1227981373667717],"advantage/min":[0.0,0.0,0.0,-0.012428333051502705,-0.017273427918553352,-0.013530800119042397,-0.01168915443122387,-0.007198125123977661,-0.030556749552488327,-0.02765200100839138,-0.02773519977927208,-0.02382916770875454,-0.05490177869796753,-0.020296800881624222,-0.055059000849723816],"advantage/spread":[0.0,0.0,0.0,0.07457000110298395,0.12091399915516376,0.06765400059521198,0.11897499673068523,0.05758500099182129,0.11624838039278984,0.1382600050419569,0.1386759988963604,0.1517536100000143,0.1548326164484024,0.10148400440812111,0.17785713821649551],"puct/buffer_size":[32,96,159,223,287,345,405,461,518,569,613,658,700,745,788],"puct/sampled_timestep/mean":[-1.0,0.0,0.0,1.0,3.0,3.96875,4.90625,5.90625,6.78125,7.65625,8.5,9.125,9.90625,11.0,11.4375],"puct/buffer_timestep/mean":[-1.0,-0.3333333333333333,0.1949685534591195,0.7130044843049327,1.2229965156794425,1.6898550724637682,2.180246913580247,2.644251626898048,3.1235521235521237,3.5817223198594026,3.970636215334421,4.382978723404255,4.7942857142857145,5.23758389261745,5.661167512690355],"puct/buffer_timestep/std":[0.0,0.47140452079103173,0.7479783017518746,1.0322866059148454,1.3169072402528466,1.5878291558827642,1.87895556443141,2.1584004616233674,2.4503142435350576,2.7440460909496,2.990870134748396,3.263384727703167,3.5460998984512435,3.850032275818116,4.137934531890712],"puct/buffer_value/std":[0.0,0.0,0.0,0.0,0.004394052716204557,0.008284103354474524,0.008354229188503301,0.009714322898795664,0.009567781895400597,0.011431521695566601,0.012457219555842784,0.013389095860151594,0.014954277105858308,0.01774939410690993,0.01797902800075145],"env/all/total_ac_tokens":[236914,189270,202279,201278,416554,410374,386046,581426,802534,996626,612179,834311,1014626,1257509,2298747],"time/total":[2640.930136203766,2470.2140645980835,2413.281970500946,2327.267286300659,2492.3892579078674,2470.10990357399,2464.690084218979,2443.606859445572,2642.1404032707214,2688.6201786994934,2663.7345626354218,2642.4853079319,2700.5538790225983,2652.7928779125214,2916.617171049118]}}}},"acineq":{"label":"Andrews\u2013Curtis inequality ac1","problem":"ac_inequalities ac1","metric":"value","direction":"lower","target":1.503,"target_label":"target value 1.5030","note":"reward = 1/value","status":"complete","sign":-1,"arms":{"ttd":{"run":"sweep1-ttd-acineq","champion":{"id":"17b464c9-9b9b-489f-ad58-668d18605eb2","step":5,"depth":5,"value":-1.5196580998414295,"score":1.5196580998414295},"convergence":{"last_improving_step":5,"last_improving_step_any":5,"n_improving_steps":4,"n_improving_steps_any":4,"steps_since_last_improvement":9,"final_step":14,"improving_steps":[0,2,3,5],"improving_steps_any":[0,2,3,5],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.007856869693064952,"max_abs_step_to_step_change":0.025293937621541307,"tail5_best_scores":[1.5265173749670415,1.521825706402271,1.5237578363577726,1.5205232696457054,1.5204352610282952],"tail5_std":0.0022927773200577396,"tail5_range":0.0060821139387463585}},"tree":{"n_generated":808,"max_depth":15,"mean_branching":1.8574712643678162,"max_branching":2,"families_total":29,"n_parents_with_children":435,"leaf_frac":0.4616336633663366,"branching_hist":{"1":62,"2":373}},"root_best":1.999999999999992,"pool":{"step":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_new":[36,53,53,59,59,59,55,55,53,54,48,51,55,58,60],"pool_size":[68,121,174,233,292,351,406,461,514,568,616,667,722,780,840],"champ_score":[1.5708120348403727,1.5708120348403727,1.5576759672343312,1.5383734757893994,1.5383734757893994,1.5196580998414295,1.5196580998414295,1.5196580998414295,1.5196580998414295,1.5196580998414295,1.5196580998414295,1.5196580998414295,1.5196580998414295,1.5196580998414295,1.5196580998414295],"champ_improved_material":[true,false,true,true,false,true,false,false,false,false,false,false,false,false,false],"champ_gain_score":[-0.4291879651596193,0.0,-0.013136067606041468,-0.01930249144493179,0.0,-0.018715375947969903,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"best_score_this_step":[1.5708120348403727,1.5708120348610433,1.5576759672343312,1.5383734757893994,1.5449520374629708,1.5196580998414295,1.5389152818602212,1.5244883736817794,1.52653020095866,1.5265173749670422,1.5265173749670415,1.521825706402271,1.5237578363577726,1.5205232696457054,1.5204352610282952],"n_children":[36,53,53,59,59,59,55,55,53,54,48,51,55,58,60],"frac_improve":[0.7777777777777778,0.8113207547169812,0.6981132075471698,0.576271186440678,0.4406779661016949,0.423728813559322,0.4727272727272727,0.41818181818181815,0.4716981132075472,0.4074074074074074,0.5416666666666666,0.5882352941176471,0.41818181818181815,0.603448275862069,0.55],"frac_tie":[0.0,0.0,0.018867924528301886,0.01694915254237288,0.01694915254237288,0.0,0.0,0.01818181818181818,0.018867924528301886,0.037037037037037035,0.0,0.09803921568627451,0.03636363636363636,0.05172413793103448,0.03333333333333333],"frac_tie_at_zero":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_worse":[0.2222222222222222,0.18867924528301888,0.2830188679245283,0.4067796610169492,0.5423728813559322,0.576271186440678,0.5272727272727272,0.5636363636363636,0.5094339622641509,0.5555555555555556,0.4583333333333333,0.3137254901960784,0.5454545454545454,0.3448275862068966,0.4166666666666667],"frac_zero_value":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_beat_champ":[0.6944444444444444,0.0,0.03773584905660377,0.01694915254237288,0.0,0.01694915254237288,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"mean_delta":[0.08179546265920333,0.04459136591772682,0.05294075318747734,-0.19562430187584706,-0.02075502787346968,-0.011405286490860684,-0.018228674155081413,-0.46613500501876315,-0.01311612984354281,-0.032764094437098185,-1.6015156275573699,-2.2293588762618737,-0.08235747436394399,-1.0092240040837284,-0.0767422039668047],"mean_delta_improvers":[0.10667753694430636,0.09124491312193415,0.08536382720906738,0.001990100605416235,0.00012298377873431167,0.00150556283520344,0.0006183857306252944,0.0010477530752912771,0.002324825504027439,0.0006106559646062791,0.003899595102557065,0.0013483509913245022,0.0012600805215726562,0.0010327861254820737,0.0003272150565342035],"mean_pct":[4.089773132960164,2.282454705152511,2.773534233478221,-12.450378539500546,-1.3218826849419592,-0.7302073618650212,-1.1604734089399122,-29.67513112380063,-0.8473587697591669,-2.10040790594155,-102.01060393456511,-143.97170828395318,-5.364779086368965,-65.69946715996842,-5.0168557812916434],"mean_pct_improvers":[5.333876847215313,4.636459338728123,4.50805546441596,0.12640953298063579,0.007825492868116495,0.09724697214353116,0.03994504006111124,0.06768861950731314,0.14986618674969154,0.039686793216740256,0.2504143785565664,0.08747771111878361,0.08198416050369578,0.06736706123440425,0.021424867467823207],"median_pct_improvers":[0.025532085973800592,0.04941950907847248,0.6604054991344966,0.015277279793956204,0.0015506185526375478,0.0008837016970872368,0.000624996430152113,0.00045643236874730417,0.0004642842072074483,0.0010223470782448592,0.031180853726998276,0.013932804232622728,0.012295105288208132,0.0007588318535104799,0.000185538117686341],"mean_headroom_pct_improvers":[21.46429314774768,19.857073197380274,24.614636335372722,2.797763457422354,0.179336815505565,3.493837483164886,1.3749600158934618,2.378531885007447,5.037036357591469,1.7321859941546207,7.475194754413939,3.571858256751765,3.7845222404778935,3.444288004281739,1.375599395207422],"mean_fixed_headroom_pct_improvers":[21.4642931477481,18.359137449081615,17.175820363997737,0.4004226570254058,0.024745227109519843,0.3029301479282624,0.12442368825458833,0.21081550810690017,0.46777173119265103,0.12286840334130558,0.7846267811986171,0.2712979861819967,0.2535373282842407,0.20780404939277466,0.06583803954410636],"mean_gap_to_champ":[-0.08179546265919573,0.2962074325888812,0.11967863027955356,0.20988714650919213,0.05194384341579371,0.04246356788356403,0.06683234980323631,0.5120093413566881,0.055302578262019744,0.06803729665352115,1.6297616866464901,2.2484374763516657,0.09687609907200083,1.0214113731420196,0.08659346948101808],"median_gap_to_champ":[-0.0001541698202990327,0.40327646229363356,0.0033138751943317946,0.013877522317517377,0.03274765729862672,0.03251872773040598,0.051177497352504986,0.05116277083782306,0.05115131697740871,0.051145150019133445,0.02879609738863309,0.017883703660926287,0.016369065144333117,0.013048591427855971,0.012379715007597158],"mean_depth":[1.0,1.849056603773585,2.9622641509433962,3.9322033898305087,4.898305084745763,5.8474576271186445,6.745454545454545,7.636363636363637,8.69811320754717,9.592592592592593,10.645833333333334,11.705882352941176,12.781818181818181,13.655172413793103,14.733333333333333],"max_depth":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],"n_distinct_parents":[26,31,30,30,31,31,30,29,28,28,29,27,30,31,31],"mean_children_per_used_parent":[1.3846153846153846,1.7096774193548387,1.7666666666666666,1.9666666666666666,1.903225806451613,1.903225806451613,1.8333333333333333,1.896551724137931,1.8928571428571428,1.9285714285714286,1.6551724137931034,1.8888888888888888,1.8333333333333333,1.8709677419354838,1.935483870967742],"n_families":[26,24,17,12,11,10,9,7,6,5,4,2,2,2,2],"mean_parent_age":[null,1.0,1.0188679245283019,1.0338983050847457,1.0,1.0169491525423728,1.0363636363636364,1.018181818181818,1.0,1.0,1.0,1.0,1.0,1.1379310344827587,1.0333333333333334],"frac_parent_from_prev_step":[null,1.0,0.9811320754716981,0.9661016949152542,1.0,0.9830508474576272,0.9636363636363636,0.9818181818181818,1.0,1.0,1.0,1.0,1.0,0.9655172413793104,0.9666666666666667]},"metrics":{"steps":[0,1,2,3,4,6,7,8,9,10,12,13,14],"missing":[5,11],"dup":[],"env/all/reward/mean":[0.09237429580731679,0.13936847090477622,0.1856025585514772,0.26894761842639536,0.25237652429625057,0.2324076046940021,0.21452655664329515,0.21045034147976963,0.2128512880683099,0.2128530904472958,0.22048363668239906,0.2199603662792542,0.21375768538906398],"env/all/reward/max":[0.6366134021474358,0.6366134021390585,0.6419820390216904,0.6500372043833432,0.6472692803910264,0.6580427489077436,0.6580427489077436,0.6550803861077866,0.6550858901758202,0.6550858901758205,0.6580427489077436,0.6576683260206371,0.6577063943825006],"env/all/format":[0.6583333333333333,0.51171875,0.421875,0.3790322580645161,0.390625,0.447265625,0.4495967741935484,0.4012096774193548,0.375,0.373046875,0.4921875,0.513671875,0.525390625],"env/all/correctness":[0.17708333333333334,0.259765625,0.3203125,0.4375,0.40625,0.373046875,0.3548387096774194,0.3407258064516129,0.345703125,0.34375,0.3671875,0.36328125,0.34765625],"env/all/by_group/frac_mixed":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"advantage/mean":[0.2888062000274658,0.335252046585083,0.30421075224876404,0.2579180598258972,0.23684050142765045,0.21679827570915222,0.22023417055606842,3802281472.0,0.2591778337955475,0.2927025854587555,0.23055194318294525,0.21993856132030487,0.23415438830852509],"advantage/max":[12.271912574768066,11.848739624023438,11.848739624023438,10.593700408935547,8.681706428527832,6.231170654296875,10.556020736694336,999999995904.0,9.590396881103516,10.811513900756836,10.593700408935547,8.823983192443848,11.396062850952148],"advantage/min":[-0.9881147146224976,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0],"advantage/spread":[13.260027289390564,12.848739624023438,12.848739624023438,11.593700408935547,9.681706428527832,7.231170654296875,11.556020736694336,999999995905.0,10.590396881103516,11.811513900756836,11.593700408935547,9.823983192443848,12.396062850952148],"puct/buffer_size":[32,70,122,174,233,351,408,462,515,569,668,724,780],"puct/sampled_timestep/mean":[-1.0,-0.1875,0.96875,1.96875,3.0,4.96875,5.96875,6.9375,7.90625,8.875,10.8125,11.75,12.71875],"puct/buffer_timestep/mean":[-1.0,-0.45714285714285713,0.18032786885245902,0.7298850574712644,1.3047210300429184,2.3789173789173788,2.8848039215686274,3.367965367965368,3.8446601941747574,4.333919156414763,5.25,5.780386740331492,6.301282051282051],"puct/buffer_timestep/std":[0.0,0.4981598792617912,0.8199999344524459,1.0835886463987647,1.3606436353554423,1.8951159212557733,2.160011905555496,2.425266481295226,2.693960456796727,2.9751623725183802,3.5213740003440988,3.840048035012765,4.146391498509109],"puct/buffer_value/std":[4.147206864307081e-15,0.1206432183398393,0.21262401827435337,0.22317033739165723,0.6789592416471062,0.566374576290235,0.5303631548880857,1.2654975446656191,1.2002040331982486,1.1431030355523777,4.452727883899248,4.278445455314112,4.551709415332906],"env/all/total_ac_tokens":[5441575,6424761,6591372,6634859,6787655,6561652,6509361,6369391,6657484,6702770,6468893,6434414,6444674],"time/total":[6046.409228801727,5647.959008693695,5529.083473920822,5740.316606521606,5902.0648012161255,6327.583873033524,5887.22581243515,5549.437050580978,5370.296885728836,5311.464418411255,5957.349272489548,5627.5600645542145,5766.684820652008]}},"grpo":{"run":"sweep1-grpo-acineq","champion":{"id":"cfb007d6-0c05-4909-b729-0eedaeb2995b","step":14,"depth":14,"value":-1.515966108145853,"score":1.515966108145853},"convergence":{"last_improving_step":14,"last_improving_step_any":14,"n_improving_steps":9,"n_improving_steps_any":11,"steps_since_last_improvement":0,"final_step":14,"improving_steps":[0,1,3,5,6,8,9,10,14],"improving_steps_any":[0,1,3,5,6,8,9,10,11,13,14],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.008155585861814878,"max_abs_step_to_step_change":0.035407228472492,"tail5_best_scores":[1.515966245266182,1.5159662452661815,1.5159662452661817,1.5159662452661813,1.515966108145853],"tail5_std":5.484813141443112e-08,"tail5_range":1.3712032886914471e-07}},"tree":{"n_generated":800,"max_depth":15,"mean_branching":1.8223234624145785,"max_branching":2,"families_total":24,"n_parents_with_children":439,"leaf_frac":0.45125000000000004,"branching_hist":{"1":78,"2":361}},"root_best":1.9999999999999878,"pool":{"step":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14],"n_new":[41,57,55,52,52,55,55,58,58,56,54,52,52,53,50],"pool_size":[73,130,185,237,289,344,399,457,515,571,625,677,729,782,832],"champ_score":[1.5708477819198092,1.5400553834689872,1.5400553834689872,1.5257732668997595,1.5257732668997595,1.5253364680243728,1.522148958422231,1.522148958422231,1.5201856221133527,1.5187800531760112,1.515966245266182,1.5159662452661815,1.5159662452661815,1.5159662452661813,1.515966108145853],"champ_improved_material":[true,true,false,true,false,true,true,false,true,true,true,false,false,false,true],"champ_gain_score":[-0.42915221808017856,-0.030792398450822045,0.0,-0.014282116569227732,0.0,-0.00043679887538661255,-0.003187509602141869,0.0,-0.0019633363088782385,-0.0014055689373415614,-0.0028138079098292135,-4.440892098500626e-16,0.0,-2.220446049250313e-16,-1.371203282030109e-07],"best_score_this_step":[1.5708477819198092,1.5400553834689872,1.5611804953722515,1.5257732668997595,1.5316610688788646,1.5253364680243728,1.522148958422231,1.5247843086855875,1.5201856221133527,1.5187800531760112,1.515966245266182,1.5159662452661815,1.5159662452661817,1.5159662452661813,1.515966108145853],"n_children":[41,57,55,52,52,55,55,58,58,56,54,52,52,53,50],"frac_improve":[0.9024390243902439,0.8947368421052632,0.7636363636363637,0.6923076923076923,0.46153846153846156,0.43636363636363634,0.4,0.43103448275862066,0.43103448275862066,0.44642857142857145,0.5555555555555556,0.4423076923076923,0.5961538461538461,0.5283018867924528,0.6],"frac_tie":[0.0,0.0,0.0,0.0,0.019230769230769232,0.0,0.01818181818181818,0.034482758620689655,0.017241379310344827,0.0,0.05555555555555555,0.019230769230769232,0.019230769230769232,0.018867924528301886,0.02],"frac_tie_at_zero":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_worse":[0.0975609756097561,0.10526315789473684,0.23636363636363636,0.3076923076923077,0.5192307692307693,0.5636363636363636,0.5818181818181818,0.5344827586206896,0.5517241379310345,0.5535714285714286,0.3888888888888889,0.5384615384615384,0.38461538461538464,0.4528301886792453,0.38],"frac_zero_value":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_beat_champ":[0.8536585365853658,0.10526315789473684,0.0,0.038461538461538464,0.0,0.01818181818181818,0.01818181818181818,0.0,0.034482758620689655,0.03571428571428571,0.037037037037037035,0.019230769230769232,0.0,0.018867924528301886,0.02],"mean_delta":[-1.5331223557047886,0.12673478221407736,-0.012226193188967116,-0.04939796531181172,-0.023343682811761333,-0.05893174318904753,-0.018823922326126577,-0.08416557881407144,-0.3146271469681926,-0.03760717029028498,-365.78636015337685,-0.07687874948247791,-0.08935521144606148,-0.14874057613007577,-0.08814692934755883],"mean_delta_improvers":[0.07912913454367564,0.15036474906625943,0.014636478505529146,0.0021793710823800514,0.000291089266947514,0.00042700847881780674,0.0005311139234384694,0.00033973352431117656,0.0003991402225684304,0.0019547605682058845,0.0002997295652934939,0.00021617594712747027,0.00022611392927966847,7.686190349684827e-05,0.00010982839887383467],"mean_pct":[-76.65611778523964,6.425032790111875,-0.7892663288743835,-3.1438962218520436,-1.509672787431447,-3.760862355501312,-1.2154404240293242,-5.3573977318582084,-20.04837534613645,-2.3987802652693055,-23286.613899932247,-5.036279468974798,-5.736634378847579,-9.744847926123912,-5.787604626294584],"mean_pct_improvers":[3.956456727183782,7.620414628503017,0.8294317796702833,0.13986171962294922,0.018707641794659318,0.027624117802211124,0.03461272172408235,0.022113651063067397,0.026109452570798795,0.12622700115288063,0.019686152524475822,0.014195205187483321,0.014850238634018582,0.005040546389795679,0.007205978606587738],"median_pct_improvers":[0.07535713427500045,1.6224959519830453,0.03811114713459257,0.023547421564648244,0.004310685843891106,0.004537020788599515,0.001553527266180743,0.0012499921865014036,0.0007167282825479371,0.0010416612407995,0.0006182774472359143,0.001283865188099092,0.001417630734250608,0.0002773740790840307,0.0008600487569117869],"mean_headroom_pct_improvers":[15.921355038968924,33.84958016952746,6.61942516647022,4.192098444190807,0.5842287822490602,1.0734310891828873,1.7518053263779008,1.1154001621154364,1.591304960476414,5.512814496825656,1.6029236900913744,1.1269380505593418,1.202008785229381,0.35508532452106073,0.5242271696607049],"mean_fixed_headroom_pct_improvers":[15.921355038969335,30.25447667329237,2.9449654940703223,0.43850524796380363,0.058569269003525375,0.0859171989573073,0.10686396849868855,0.06835684593786416,0.0803099039373119,0.39331198555451347,0.06030775961639864,0.04349616642403934,0.04549576041844546,0.015465171729748522,0.02209826939111415],"mean_gap_to_champ":[1.5331223557048002,0.2056123309311091,0.09425842055017022,0.07995852661134271,0.06567596299751884,0.1014958074267327,0.06146334081521176,0.12852861974297491,0.35335774130163444,0.07490821473054501,365.8158574751902,0.09928364339428032,0.10772169964423882,0.15777154562890613,0.09637720548231027],"median_gap_to_champ":[-0.0008492708779939129,0.1726167519815045,0.03494386579274522,0.031205718891660905,0.045506909692137554,0.0453290975686631,0.04579591374065406,0.048822624393310754,0.048779577492129134,0.05073155341875124,0.05202825788951526,0.054839899039347495,0.010203970599985457,0.009908328488697604,0.00931892867538453],"mean_depth":[1.0,2.0,3.0,3.9615384615384617,4.961538461538462,5.927272727272728,6.927272727272728,7.827586206896552,8.672413793103448,9.642857142857142,10.407407407407407,11.26923076923077,12.23076923076923,12.660377358490566,13.34],"max_depth":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],"n_distinct_parents":[24,32,28,28,29,30,29,31,30,30,30,29,29,31,30],"mean_children_per_used_parent":[1.7083333333333333,1.78125,1.9642857142857142,1.8571428571428572,1.793103448275862,1.8333333333333333,1.896551724137931,1.8709677419354838,1.9333333333333333,1.8666666666666667,1.8,1.793103448275862,1.793103448275862,1.7096774193548387,1.6666666666666667],"n_families":[24,22,16,12,10,8,7,7,7,6,5,3,2,1,1],"mean_parent_age":[null,1.0,1.0,1.0384615384615385,1.0,1.0363636363636364,1.0,1.0344827586206897,1.0344827586206897,1.0,1.0,1.0,1.0,1.0188679245283019,1.02],"frac_parent_from_prev_step":[null,1.0,1.0,0.9615384615384616,1.0,0.9636363636363636,1.0,0.9655172413793104,0.9655172413793104,1.0,1.0,1.0,1.0,0.9811320754716981,0.98]},"metrics":{"steps":[0,1,2,3,4,5,6,7,8,9,10,11,12,13],"missing":[],"dup":[],"env/all/reward/mean":[0.10135737165686061,0.16362549960302186,0.2047924809246102,0.1903072499856873,0.19564481045507198,0.18155968302322434,0.16721998935399662,0.19291220146071184,0.2142312046942614,0.21002011397377301,0.21722632111406995,0.1845698122880745,0.190171029873859,0.16636763275699334],"env/all/reward/max":[0.6563812001600512,0.6493272931874821,0.6493272931874821,0.6554053706012694,0.6554053706012694,0.6555930539963271,0.6569659216972308,0.6558304592626135,0.6578144003438621,0.6584231807131051,0.659645289943749,0.6596452899437493,0.6596452899437492,0.6596452899437493],"env/all/format":[0.66875,0.466796875,0.3515625,0.283203125,0.2734375,0.4475806451612903,0.431640625,0.5262096774193549,0.5,0.46875,0.4112903225806452,0.298828125,0.26814516129032256,0.140625],"env/all/correctness":[0.19791666666666666,0.30078125,0.34765625,0.310546875,0.326171875,0.29435483870967744,0.275390625,0.3185483870967742,0.3548387096774194,0.341796875,0.3588709677419355,0.296875,0.3064516129032258,0.26953125],"env/all/by_group/frac_mixed":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"advantage/mean":[-3.109807522605479e-09,6.123764828558365e-10,0.0,-4.334883119128108e-09,-2.022782163990655e-09,-1.841070074171114e-09,2.249231911832794e-09,-3.0103355364019535e-09,-4.5531325376657605e-09,3.8389433854035815e-09,-7.565205351056647e-09,-4.51978365845207e-09,-1.862645149230957e-09,-8.885164604066631e-09],"advantage/max":[0.5596926808357239,0.48239246010780334,0.4285714328289032,0.49658796191215515,0.5304142832756042,0.5072758793830872,0.530515193939209,0.5569789409637451,0.5302512645721436,0.5524014830589294,0.44438791275024414,0.43675726652145386,0.4392736554145813,0.4943796396255493],"advantage/min":[-0.30099982023239136,-0.5723682641983032,-0.5305086970329285,-0.5773693323135376,-0.5630623698234558,-0.5370745062828064,-0.5567851066589355,-0.5720939636230469,-0.5617949366569519,-0.5549337863922119,-0.5783042311668396,-0.5787341594696045,-0.5833957195281982,-0.6013427376747131],"advantage/spread":[0.8606925010681152,1.0547607243061066,0.9590801298618317,1.0739572942256927,1.09347665309906,1.0443503856658936,1.0873003005981445,1.129072904586792,1.0920462012290955,1.1073352694511414,1.0226921439170837,1.0154914259910583,1.0226693749427795,1.0957223773002625],"puct/buffer_size":[32,73,130,185,237,290,344,400,457,515,571,625,677,729],"puct/sampled_timestep/mean":[-1.0,0.0,1.0,1.96875,3.0,3.96875,5.0,5.96875,6.96875,8.0,8.96875,10.0,11.0,11.96875],"puct/buffer_timestep/mean":[-1.0,-0.4383561643835616,0.19230769230769232,0.7297297297297297,1.2278481012658229,1.7344827586206897,2.25,2.775,3.3041575492341355,3.833009708737864,4.339754816112084,4.8288,5.302806499261448,5.780521262002743],"puct/buffer_timestep/std":[0.0,0.49618548702122833,0.8047565694635084,1.0666605794810484,1.3307404152862201,1.6109059053556267,1.9005048288944606,2.190747589294577,2.482640870265844,2.7700334143130108,3.0466563354027123,3.3179949608159442,3.5866411972445253,3.862322556539661],"puct/buffer_value/std":[4.521007555157684e-15,7.647829934115251,5.757730639417787,4.839196380672019,4.282780972344026,3.875789453491417,3.561458651020186,3.3047726733161036,3.0955782603829314,3.0010518735366056,2.8519430580149985,789.3491890317714,758.4760669297931,730.9633837106053],"env/all/total_ac_tokens":[5587048,6320726,6832865,7012268,6804600,6277162,6633968,6282326,6439113,6598868,6380580,6742433,6631680,6898620],"time/total":[6047.950414896011,5674.288958787918,5521.788600206375,5251.317911624908,5342.052301168442,5766.434251785278,5668.199603557587,6374.32120680809,5864.06271982193,6055.725613594055,5390.727705955505,5148.895272493362,5018.597673177719,4781.193388462067]}}}},"circle":{"label":"Circle packing","problem":"circle_packing","metric":"sum of radii","direction":"higher","target":2.635983,"target_label":"best-known packing 2.635983","note":"retired early: ttd hit the best-known packing exactly","status":"partial","sign":1,"arms":{"ttd":{"run":"sweep1-ttd-circle","champion":{"id":"0c3eb824-40a8-489a-952c-ecc71d60bdfa","step":7,"depth":4,"value":2.635983084917653,"score":2.635983084917653},"convergence":{"last_improving_step":3,"last_improving_step_any":7,"n_improving_steps":4,"n_improving_steps_any":5,"steps_since_last_improvement":6,"final_step":9,"improving_steps":[0,1,2,3],"improving_steps_any":[0,1,2,3,7],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.011328737009679882,"max_abs_step_to_step_change":0.06898412662193154,"tail5_best_scores":[2.635983084917569,2.635931768194702,2.635983084917653,2.6359773947543785,2.6359830849174326],"tail5_std":2.0078979008704376e-05,"tail5_range":5.1316722951000315e-05}},"tree":{"n_generated":394,"max_depth":10,"mean_branching":1.6554621848739495,"max_branching":2,"families_total":23,"n_parents_with_children":238,"leaf_frac":0.3959390862944162,"branching_hist":{"1":82,"2":156}},"root_best":0.0,"pool":{"step":[0,1,2,3,4,5,6,7,8,9],"n_new":[24,31,23,39,41,50,41,56,47,42],"pool_size":[56,87,110,149,190,240,281,337,384,426],"champ_score":[2.54142135623731,2.6104054828592416,2.620867407855019,2.6359830849176094,2.6359830849176094,2.6359830849176094,2.6359830849176094,2.635983084917653,2.635983084917653,2.635983084917653],"champ_improved_material":[true,true,true,true,false,false,false,false,false,false],"champ_gain_score":[2.54142135623731,0.06898412662193154,0.010461924995777583,0.015115677062590205,0.0,0.0,0.0,4.3520742565306136e-14,0.0,0.0],"best_score_this_step":[2.54142135623731,2.6104054828592416,2.620867407855019,2.6359830849176094,2.6323416396002526,2.635983084917569,2.635931768194702,2.635983084917653,2.6359773947543785,2.6359830849174326],"n_children":[24,31,23,39,41,50,41,56,47,42],"frac_improve":[0.9166666666666666,0.7096774193548387,0.4782608695652174,0.5384615384615384,0.5609756097560976,0.32,0.4878048780487805,0.5357142857142857,0.3404255319148936,0.40476190476190477],"frac_tie":[0.08333333333333333,0.0,0.043478260869565216,0.02564102564102564,0.12195121951219512,0.18,0.024390243902439025,0.05357142857142857,0.0425531914893617,0.07142857142857142],"frac_tie_at_zero":[0.08333333333333333,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"frac_worse":[0.0,0.2903225806451613,0.4782608695652174,0.4358974358974359,0.3170731707317073,0.5,0.4878048780487805,0.4107142857142857,0.6170212765957447,0.5238095238095238],"frac_zero_value":[0.08333333333333333,0.03225806451612903,0.0,0.02564102564102564,0.0,0.02,0.04878048780487805,0.03571428571428571,0.0425531914893617,0.0],"frac_beat_champ":[0.9166666666666666,0.12903225806451613,0.043478260869565216,0.10256410256410256,0.0,0.0,0.0,0.017857142857142856,0.0,0.0],"mean_delta":[1.8257724854816606,0.6618748615963946,-0.16364753967975698,-0.0837499372801663,-0.11567073282100884,-0.2203975587500118,-0.17269476499283473,-0.09219970261835113,-0.13690310851079912,-0.007454132587421135],"mean_delta_improvers":[1.9917518023436296,1.0850800687376436,0.23924528779944423,0.21818622806707305,0.14040062813610757,0.012469882098202656,0.012561932887692029,0.01672327671196592,0.003296734656700495,0.00400605318209369],"mean_pct":[null,5.363642137046844,-6.74992735292581,-1.0825857681576905,-4.604442068751558,-8.697287418389145,-6.6897885312662115,-3.5161786322780446,-5.206436149613571,-0.28315668218200357],"mean_pct_improvers":[null,30.00021940355817,11.961309683637149,13.429546790012074,6.480388910503364,0.4882144412342348,0.48407635362802137,0.6489883801617615,0.12566690922246265,0.15259913672720693],"median_pct_improvers":[null,11.939183303175627,6.123518498652665,1.5874548461479043,2.781399814678947,0.3653412176786469,0.3250413644719513,0.2557378542323431,0.08036660600246108,0.11980773163683295],"mean_headroom_pct_improvers":[75.56011561317464,59.93936672601476,55.054718563040865,50.418970536858275,57.788762633471144,25.0340774838638,41.8653509683033,48.205880856594135,29.44479460697543,38.06459645001849],"mean_fixed_headroom_pct_improvers":[75.56011561317464,41.164152755827466,9.076131666988909,8.277224400425686,5.326310076207152,0.4730638284921661,0.47655591434740013,0.6344227831501917,0.12506661297514038,0.15197568353413848],"mean_gap_to_champ":[-1.8257724854816606,0.5319882206198601,0.618891002318253,0.3594396768694171,0.3009577578145475,0.2914306382191983,0.21761410525740837,0.118680195546134,0.14524126790079875,0.015023620944169817],"median_gap_to_champ":[-2.075486383900429,0.43483525444026494,0.24901307779595072,0.1119752416165003,0.09456172868030022,0.0891243310682861,0.022494948099260004,0.014770787423223464,0.009857600648910392,0.008481987629589849],"mean_depth":[1.0,1.8387096774193548,2.739130434782609,3.41025641025641,4.414634146341464,5.36,6.2926829268292686,7.142857142857143,7.872340425531915,8.761904761904763],"max_depth":[1,2,3,4,5,6,7,8,9,10],"n_distinct_parents":[19,22,15,23,25,28,25,30,28,26],"mean_children_per_used_parent":[1.263157894736842,1.4090909090909092,1.5333333333333334,1.6956521739130435,1.64,1.7857142857142858,1.64,1.8666666666666667,1.6785714285714286,1.6153846153846154],"n_families":[19,19,11,14,13,12,9,8,4,3],"mean_parent_age":[null,1.0,1.0434782608695652,1.4102564102564104,1.0,1.02,1.0,1.0892857142857142,1.0425531914893618,1.0952380952380953],"frac_parent_from_prev_step":[null,1.0,0.9565217391304348,0.5897435897435898,1.0,0.98,1.0,0.9464285714285714,0.9787234042553191,0.9523809523809523]},"metrics":{"steps":[1,2,3,4,5,6,7,8,9],"missing":[],"dup":[],"env/all/reward/mean":[0.20964885867129196,0.2157717658005339,0.32800586125441156,0.3416477776672538,0.40462740168660444,0.3926524230363061,0.5369411042683603,0.4350183936708419,0.4467533473767858],"env/all/reward/max":[2.6104054828592416,2.620867407855019,2.6359830849176094,2.6323416396002526,2.635983084917569,2.635931768194702,2.635983084917653,2.6359773947543785,2.6359830849174326],"env/all/format":[0.5357142857142857,0.4375,0.391304347826087,0.37740384615384615,0.45535714285714285,0.4837962962962963,0.5229166666666667,0.5439814814814815,0.5600961538461539],"env/all/correctness":[0.11011904761904762,0.12083333333333333,0.15760869565217392,0.15384615384615385,0.17857142857142858,0.16666666666666666,0.225,0.18055555555555555,0.17067307692307693],"env/all/by_group/frac_mixed":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"advantage/mean":[0.5743500590324402,0.6912462115287781,6289308160.0,0.7068460583686829,0.47544607520103455,0.5500514507293701,0.3035843074321747,0.4412674009799957,0.40950122475624084],"advantage/max":[11.937774658203125,12.914443969726562,999999995904.0,16.257190704345703,11.61230182647705,16.2572078704834,13.295572280883789,16.257190704345703,11.937775611877441],"advantage/min":[-0.9188580513000488,-0.985632598400116,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0,-1.0],"advantage/spread":[12.856632709503174,13.900076568126678,999999995905.0,17.257190704345703,12.61230182647705,17.2572078704834,14.295572280883789,17.257190704345703,12.937775611877441],"puct/buffer_size":[56,87,110,149,192,241,283,337,385],"puct/sampled_timestep/mean":[-0.25,0.875,1.4375,3.0,3.96875,4.9375,5.875,6.9375,7.875],"puct/buffer_timestep/mean":[-0.5714285714285714,-0.011494252873563218,0.4090909090909091,1.087248322147651,1.7395833333333333,2.4066390041493775,2.9469964664310955,3.602373887240356,4.150649350649351],"puct/buffer_timestep/std":[0.4948716593053935,0.8508853114170919,1.1143318792846604,1.487905991771501,1.7867847733817548,2.0694872554300474,2.303941120999721,2.58890471031298,2.824412288096221],"puct/buffer_value/std":[1.0428133782393332,1.0886166747574932,1.0773007436960156,1.0409299464575177,1.0142419131124711,0.9742664885423717,0.9462242826296992,0.9114021624934003,0.8854363461291374],"env/all/total_ac_tokens":[4393197,3152394,4833024,5488319,5946154,5676764,6253380,5623595,5390009],"time/total":[5167.768356323242,4803.017364025116,4881.089726686478,4982.822382450104,5251.107662677765,5300.365221500397,5483.5957136154175,5744.49586057663,6059.526912689209]}},"grpo":{"run":"sweep1-grpo-circle","champion":{"id":"cd78d4ff-c419-4085-9083-879152a25abf","step":3,"depth":2,"value":2.6234294915142833,"score":2.6234294915142833},"convergence":{"last_improving_step":3,"last_improving_step_any":3,"n_improving_steps":4,"n_improving_steps_any":4,"steps_since_last_improvement":0,"final_step":3,"improving_steps":[0,1,2,3],"improving_steps_any":[0,1,2,3],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.004640846006715845,"max_abs_step_to_step_change":0.006943257263082092,"tail5_best_scores":[2.6095069534941358,2.6105258608807085,2.616486234251201,2.6234294915142833],"tail5_std":0.005555538636889547,"tail5_range":0.013922538020147535}},"tree":{"n_generated":115,"max_depth":4,"mean_branching":1.5333333333333334,"max_branching":2,"families_total":22,"n_parents_with_children":75,"leaf_frac":0.34782608695652173,"branching_hist":{"1":35,"2":40}},"root_best":0.0,"pool":{"step":[0,1,2,3],"n_new":[20,32,30,33],"pool_size":[52,84,114,147],"champ_score":[2.6095069534941358,2.6105258608807085,2.616486234251201,2.6234294915142833],"champ_improved_material":[true,true,true,true],"champ_gain_score":[2.6095069534941358,0.0010189073865727316,0.005960373370492711,0.006943257263082092],"best_score_this_step":[2.6095069534941358,2.6105258608807085,2.616486234251201,2.6234294915142833],"n_children":[20,32,30,33],"frac_improve":[0.95,0.59375,0.5666666666666667,0.30303030303030304],"frac_tie":[0.05,0.03125,0.03333333333333333,0.030303030303030304],"frac_tie_at_zero":[0.05,0.0,0.0,0.0],"frac_worse":[0.0,0.375,0.4,0.6666666666666666],"frac_zero_value":[0.05,0.0,0.0,0.0],"frac_beat_champ":[0.95,0.03125,0.06666666666666667,0.030303030303030304],"mean_delta":[1.9175269706286495,0.5947293270476559,0.12049563637713472,-0.31961545123647317],"mean_delta_improvers":[2.0184494427669994,1.5004670192939615,0.3703075943611219,0.10515148495750726],"mean_pct":[null,-11.248855763208354,4.4417365394106305,-14.069154336072785],"mean_pct_improvers":[null,32.58988718922283,15.4526799616044,4.975003752951997],"median_pct_improvers":[null,22.395742089551284,4.631737500896225,2.2371709167219893],"mean_headroom_pct_improvers":[76.57293096226341,67.82037451091777,53.493952298164764,41.94934064614534],"mean_fixed_headroom_pct_improvers":[76.57293096226341,56.92248467816225,14.048178397247701,3.989080542534123],"mean_gap_to_champ":[-1.9175269706286495,0.6833485413639062,0.3411084030065422,0.5179268499603759],"median_gap_to_champ":[-2.0877439745648783,0.42391810624811366,0.2342572691661302,0.13832945971399946],"mean_depth":[1.0,1.71875,2.466666666666667,3.4242424242424243],"max_depth":[1,2,3,4],"n_distinct_parents":[16,19,20,21],"mean_children_per_used_parent":[1.25,1.6842105263157894,1.5,1.5714285714285714],"n_families":[16,17,13,11],"mean_parent_age":[null,1.0,1.0689655172413792,1.1515151515151516],"frac_parent_from_prev_step":[null,1.0,0.9310344827586207,0.8484848484848485]},"metrics":{"steps":[0,1,2,3],"missing":[],"dup":[],"env/all/reward/mean":[0.16727815664300622,0.23867454283804707,0.23843020039568374,0.23635679324984724],"env/all/reward/max":[2.6095069534941358,2.6105258608807085,2.616486234251201,2.6234294915142833],"env/all/format":[0.5069444444444444,0.625,0.4875,0.38095238095238093],"env/all/correctness":[0.08680555555555555,0.14144736842105263,0.109375,0.11607142857142858],"env/all/by_group/frac_mixed":[1.0,1.0,1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,0.0,0.0,0.0],"advantage/mean":[-1.0645974208734377e-17,9.156478553609538e-18,0.0,0.0],"advantage/max":[2.3195617364392316,2.302614094901148,2.3743794009383796,2.1989628171788427],"advantage/min":[-0.6616784772445298,-0.9862082133776899,-1.0773161774758475,-0.9821592003356544],"advantage/spread":[2.9812402136837615,3.2888223082788377,3.451695578414227,3.181122017514497],"puct/buffer_size":[32,52,84,114],"puct/sampled_timestep/mean":[-1.0,-0.375,0.78125,1.875],"puct/buffer_timestep/mean":[-1.0,-0.6153846153846154,0.0,0.5263157894736842],"puct/buffer_timestep/std":[0.0,0.4865042554105199,0.8728715609439694,1.156298740581339],"puct/buffer_value/std":[0.0,1.0218019572758643,1.0982592028913893,1.0682514074821838],"env/all/total_ac_tokens":[4137939,3932503,4250637,4500901],"time/total":[4954.775856494904,5220.630360364914,4948.963957309723,4819.784620046616]}}}},"ud":{"label":"Erd\u0151s unit-distance","problem":"frontier_erdos_ud (n=65536)","metric":"pairs per point","direction":"higher","target":11.3516845703125,"target_label":"best observed across both arms (11.3516846)","note":"stopped after 2\u20133 steps (~8 h/step vs ~1 h spot lifetimes)","status":"partial","sign":1,"arms":{"ttd":{"run":"sweep1-ttd-ud","champion":{"id":"19c7a2e9-22af-41a5-8460-532ffdd998fa","step":0,"depth":1,"value":11.3516845703125,"score":11.3516845703125},"convergence":{"last_improving_step":0,"last_improving_step_any":0,"n_improving_steps":1,"n_improving_steps_any":1,"steps_since_last_improvement":1,"final_step":1,"improving_steps":[0],"improving_steps_any":[0],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.382080078125,"max_abs_step_to_step_change":0.382080078125,"tail5_best_scores":[11.3516845703125,10.9696044921875],"tail5_std":0.1910400390625,"tail5_range":0.382080078125}},"tree":{"n_generated":88,"max_depth":2,"mean_branching":1.9555555555555555,"max_branching":2,"families_total":32,"n_parents_with_children":45,"leaf_frac":0.48863636363636365,"branching_hist":{"1":2,"2":43}},"root_best":0.0,"pool":{"step":[0,1],"n_new":[63,25],"pool_size":[95,120],"champ_score":[11.3516845703125,11.3516845703125],"champ_improved_material":[true,false],"champ_gain_score":[11.3516845703125,0.0],"best_score_this_step":[11.3516845703125,10.9696044921875],"n_children":[63,25],"frac_improve":[1.0,0.76],"frac_tie":[0.0,0.2],"frac_tie_at_zero":[0.0,0.0],"frac_worse":[0.0,0.04],"frac_zero_value":[0.0,0.0],"frac_beat_champ":[1.0,0.0],"mean_delta":[4.436875600663442,3.475855712890625],"mean_delta_improvers":[4.436875600663442,4.573495162160773],"mean_pct":[null,82.23551105723475],"mean_pct_improvers":[null,108.20464670327608],"median_pct_improvers":[null,88.7349274473738],"mean_headroom_pct_improvers":[39.08561388559882,78.38222488017995],"mean_fixed_headroom_pct_improvers":[39.08561388559882,40.28913183618235],"mean_gap_to_champ":[-4.436875600663442,2.66466552734375],"median_gap_to_champ":[-2.9864501953125,0.382080078125],"mean_depth":[1.0,2.0],"max_depth":[1,2],"n_distinct_parents":[32,13],"mean_children_per_used_parent":[1.96875,1.9230769230769231],"n_families":[32,11],"mean_parent_age":[null,1.0],"frac_parent_from_prev_step":[null,1.0]},"metrics":null},"grpo":{"run":"sweep1-grpo-ud","champion":{"id":"cdf743ca-b47e-49b5-b24c-ad1f02cc06bf","step":1,"depth":2,"value":11.3516845703125,"score":11.3516845703125},"convergence":{"last_improving_step":1,"last_improving_step_any":1,"n_improving_steps":2,"n_improving_steps_any":2,"steps_since_last_improvement":1,"final_step":2,"improving_steps":[0,1],"improving_steps_any":[0,1],"rel_eps":1e-09,"noise":{"mean_abs_step_to_step_change":0.1910400390625,"max_abs_step_to_step_change":0.382080078125,"tail5_best_scores":[10.9696044921875,11.3516845703125,11.3516845703125],"tail5_std":0.18011427613231556,"tail5_range":0.382080078125}},"tree":{"n_generated":117,"max_depth":3,"mean_branching":1.8870967741935485,"max_branching":2,"families_total":30,"n_parents_with_children":62,"leaf_frac":0.4700854700854701,"branching_hist":{"1":7,"2":55}},"root_best":0.0,"pool":{"step":[0,1,2],"n_new":[58,34,25],"pool_size":[90,124,149],"champ_score":[10.9696044921875,11.3516845703125,11.3516845703125],"champ_improved_material":[true,true,false],"champ_gain_score":[10.9696044921875,0.382080078125,0.0],"best_score_this_step":[10.9696044921875,11.3516845703125,11.3516845703125],"n_children":[58,34,25],"frac_improve":[1.0,0.6470588235294118,0.48],"frac_tie":[0.0,0.2647058823529412,0.48],"frac_tie_at_zero":[0.0,0.0,0.0],"frac_worse":[0.0,0.08823529411764706,0.04],"frac_zero_value":[0.0,0.0,0.0],"frac_beat_champ":[1.0,0.029411764705882353,0.0],"mean_delta":[4.307776089372306,2.4032126034007355,1.357060546875],"mean_delta_improvers":[4.307776089372306,4.316472140225497,2.8273798624674478],"mean_pct":[null,78.0899058765559,19.46259359750412],"mean_pct_improvers":[null,126.17615418419419,40.54862342995546],"median_pct_improvers":[null,94.51597962019453,42.653268565260184],"mean_headroom_pct_improvers":[37.94834205170059,66.99277956820067,76.37609095893082],"mean_fixed_headroom_pct_improvers":[37.94834205170059,38.024947869976536,24.90713906781514],"mean_gap_to_champ":[-4.307776089372306,3.2323015998391544,1.4414837646484375],"median_gap_to_champ":[-2.9864501953125,3.2799072265625,0.382080078125],"mean_depth":[1.0,2.0,2.92],"max_depth":[1,2,3],"n_distinct_parents":[30,18,14],"mean_children_per_used_parent":[1.9333333333333333,1.8888888888888888,1.7857142857142858],"n_families":[30,15,12],"mean_parent_age":[null,1.0,1.08],"frac_parent_from_prev_step":[null,1.0,0.92]},"metrics":{"steps":[0,1],"missing":[],"dup":[],"env/all/reward/mean":[1.2594964802265167,1.5382010671827528],"env/all/reward/max":[10.9696044921875,11.3516845703125],"env/all/format":[0.76171875,0.6909722222222222],"env/all/correctness":[0.388671875,0.2604166666666667],"env/all/by_group/frac_mixed":[1.0,1.0],"env/all/by_group/frac_all_bad":[0.0,0.0],"advantage/mean":[9.706608850024168e-09,-3.288532113288056e-08],"advantage/max":[9.207585334777832,10.05547046661377],"advantage/min":[-3.037109375,-5.342750549316406],"advantage/spread":[12.244694709777832,15.398221015930176],"puct/buffer_size":[32,90],"puct/sampled_timestep/mean":[-1.0,-0.03125],"puct/buffer_timestep/mean":[-1.0,-0.35555555555555557],"puct/buffer_timestep/std":[0.0,0.4786813161897337],"puct/buffer_value/std":[0.0,2.9523850173882047],"env/all/total_ac_tokens":[5820663,3803745],"time/total":[26644.120478630066,22116.563848257065]}}}}},"tech":{"ttd-erdos":{"title":"Symmetry-reduced smooth-max ladder","body":"Optimises the half-vector h[0..n/2] (mirror symmetry assumed), scores it with a log-sum-exp softening of max\u2096 (h \u22c6 (1\u2212h)) so the true max is differentiable, and walks a resolution ladder n = 192 \u2192 256 \u2192 384 \u2192 512, interpolating the previous winner into each new grid. Box+sum projection keeps the iterate feasible; SLSQP does the local work.","code":"import numpy as np\nimport scipy.optimize as sp_opt\nimport time\nimport warnings\nfrom math import isclose, floor, ceil, sin, cos, pi\n\nwarnings.filterwarnings('ignore')\n\ndef evaluate_erdos_cost_raw(h):\n    \"\"\"Compute the exact Erd\u0151s overlap value.\"\"\"\n    # Check if h is already valid (if passed directly) or needs to be constructed\n    # The function expects a vector h of length n_points\n    n = len(h)\n    dx = 2.0 / n\n    # Compute correlation of h and (1-h). \n    # The value to minimize is the max of this correlation * dx.\n    corr = np.correlate(h, 1.0 - h, mode='full')\n    return float(np.max(corr) * dx)\n\ndef evaluate_erdos_cost_smooth(h, alpha):\n    \"\"\"Compute smoothed max overlap to guide optimization.\"\"\"\n    n = len(h)\n    dx = 2.0 / n\n    corr = np.correlate(h, 1.0 - h, mode='full')\n    \n    # Smooth max"},"grpo-erdos":{"title":"Smooth-max with an explicit \u03b2 anneal","body":"Same symmetry reduction and box/sum projection (via a bisection on the shift t), but the sharpening is an explicit schedule \u03b2 = 5, 10, 20, 40, 80, 160, 320 with an SLSQP solve at each \u03b2 and an equality constraint on the sum. Single resolution rather than a ladder.","code":"import numpy as np\nimport time\nfrom scipy.optimize import minimize\n\ndef project_simplex_box(v, target_sum):\n    v = np.array(v)\n    n = len(v)\n    # We want sum(clip(v - t, 0, 1)) = target_sum\n    # Binary search for t\n    low = -2.0\n    high = 2.0\n    \n    # If the target sum is impossible with bounds [0,1], clamp it.\n    # Assuming target_sum is within [0, n].\n    \n    for _ in range(40):\n        mid = (low + high) / 2.0\n        clipped = np.clip(v - mid, 0.0, 1.0)\n        s = np.sum(clipped)\n        if s > target_sum:\n            low = mid # Need lower sum, so increase t -> clip(v-t) is smaller? No.\n                      # If t increases, v-t decreases. Clip decreases. Sum decreases.\n                      # Wait. If sum > target, we need to decrease sum. Increase t.\n            low = mid # No, if s > target, we need to decrease sum. Increase t.\n            # My range logic:\n            # If t is very small (neg), v-t large -> clip -> 1. Sum = n."},"ttd-jssp":{"title":"Allocation-free SA on the disjunctive graph","body":"C++ simulated annealing over machine permutations. The makespan evaluator is rewritten to do zero allocation in the inner loop: static buffers, precomputed job\u2194operation lookup tables, successors computed by O(1) index arithmetic, Kahn topological sort into a fixed queue. Adjacent-swap moves with an adaptive cooling schedule.","code":"/*\n * Job Shop Scheduling - Optimized Simulated Annealing\n *\n * Algorithm:\n * 1. Optimize Makespan Evaluation:\n *    - Avoids dynamic memory allocation inside the inner loop.\n *    - Uses precomputed lookup tables for job-op mapping.\n *    - Computes successors on-the-fly using O(1) lookups instead of adjacency lists.\n *    - Uses a static buffer for Topological Sort (Kahn's algorithm).\n * 2. Initialization:\n *    - Uses a simple heuristic (sort by operation index on each machine) to ensure\n *      an acyclic initial solution.\n * 3. Optimization:\n *    - Simulated Annealing with adjacent swaps.\n *    - Reinitializes specific arrays for each iteration without allocation overhead.\n *    - Handles cycle detection implicitly via topological sort.\n * 4. Search Strategy:\n *    - Focuses on high-probability moves by randomizing machine and position selection.\n *    - Uses an adaptive cooling schedule.\n */\n\n#include <iostream>\n#include <vector>\n#include <algorithm>\n#include <random>\n#include <chrono>"},"grpo-jssp":{"title":"Iterated local search with critical-path moves","body":"C++ ILS + SA seeded by a most-remaining-operations dispatch rule instead of SPT, with critical-path-guided swaps, explicit cycle rejection, cache-friendly static edge arrays, adaptive cooling and a light anti-oscillation memory. Restarts when a plateau is detected.","code":"// Algorithm: Iterated Local Search with Simulated Annealing & Critical Path Heuristics\n// Improvements:\n// 1. Robust Initialization: Uses \"Maximum Number of Remaining Operations\" (MRO) heuristic to prioritize\n//    that might cause bottlenecks later, often yielding better initial makespan than SPT.\n// 2. Multiple Restarts: If no improvement is found for a set time, run a quick random restart or heuris\n// 3. Faster Evaluation: Explicitly optimized disjunctive graph traversal with cache-friendly static arr\n// 4. Cycle Detection & Handling: Integrated robust cycle detection; if a swap creates a cycle, it is im\n// 5. Adaptive Cooling: Temperature decays slower initially to explore, faster later.\n// 6. Tabu-Like History: Uses a simplified \"anti-oscillation\" by tracking the last swapped indices.\n\n#include <iostream>\n#include <vector>\n#include <algorithm>\n#include <random>\n#include <chrono>\n#include <cmath>\n#include <cstring>\n#include <limits>\n\nusing namespace std;\n\n// --- Problem Data ---\nint J, M;\n// job_routes[j][k].first = machine index, .second = duration\nvector<vector<pair<int, int>>> job_routes; \n// step_on_mach[j][m] stores the step index k where job j visits machine m"},"ttd-acineq":{"title":"FFT autoconvolution + peak subgradient","body":"Evaluates 2n\u00b7max(a\u22c6a)/(\u03a3a)\u00b2 through an FFT autoconvolution (O(n log n)) so long sequences are affordable, then drives the active peak index with a subgradient step. Reached its final value at step 5 and never moved again.","code":"import numpy as np\nimport time\nimport random\nimport math\n\ndef fast_convolution_peak(a):\n    \"\"\"\n    Computes the peak value of the convolution using FFT.\n    This is O(N log N).\n    \"\"\"\n    n = len(a)\n    # Pad to next power of 2 for efficiency, roughly 2n.\n    size = 1\n    while size < 2 * n:\n        size *= 2\n    a_fft = np.fft.fft(a, size)\n    conv_fft = a_fft * a_fft\n    conv_full = np.fft.irfft(conv_fft)\n    # We only care about the peak, but irfft returns the full convolution sequence.\n    # Note: np.convolve returns a sequence of length 2n-1.\n    # irfft returns size length. The valid part is 2n-1.\n    # We just take the max of the valid part.\n    # The valid part indices are 0 to 2n-2.\n    return np.max(conv_full[:2 * n - 1])\n\ndef local_eval(seq):"},"grpo-acineq":{"title":"Linear-programming inner solve","body":"Replaces heuristic descent with an LP: build the (2n\u22121)\u00d7n convolution matrix of the current sequence f, then maximise \u03a3g subject to f\u22c6g \u2264 M, g \u2265 0 via HiGHS, and iterate that map with a decaying trust parameter. The only champion in the sweep still improving at step 14.","code":"import numpy as np\nimport time\nimport warnings\nfrom scipy.optimize import linprog\n\n# --- Helper Functions ---\n\n# Ignore warnings from scipy for cleaner logs\nwarnings.filterwarnings('ignore')\n\ndef evaluate_sequence(sequence: list[float]) -> float:\n    \"\"\"\n    Evaluates a sequence of coefficients with enhanced security checks.\n    Returns np.inf if the input is invalid.\n    \"\"\"\n    if not isinstance(sequence, list):\n        return float('inf')\n\n    if not sequence:\n        return float('inf')\n\n    for x in sequence:\n        if isinstance(x, bool) or not isinstance(x, (int, float)):\n            return float('inf')\n        if np.isnan(x) or np.isinf(x):\n            return float('inf')"},"ttd-circle":{"title":"Structured seed + SLSQP polish","body":"Seeds a corner/edge/interior decomposition (four large corner circles, four edge circles, a hexagonal interior patch) and polishes centres and radii jointly with SLSQP under explicit non-overlap and containment constraints. Matches the best-known sum of radii exactly.","code":"import numpy as np\nfrom scipy.optimize import minimize\n\ndef validate_packing(centers, radii):\n    \"\"\"\n    Validate that circles don't overlap and are inside the unit square\n    \"\"\"\n    n = centers.shape[0]\n\n    # Check for NaN values\n    if np.isnan(centers).any():\n        return False\n\n    if np.isnan(radii).any():\n        return False\n\n    # Check if radii are nonnegative and not nan\n    for i in range(n):\n        if radii[i] < 0:\n            return False\n        elif np.isnan(radii[i]):\n            return False\n\n    # Check if circles are inside the unit square\n    for i in range(n):\n        x, y = centers[i]"},"grpo-circle":{"title":"Same family, fewer steps","body":"Structured initial layout plus constrained local polish; the run was stopped at step 3 and never reached the best-known packing.","code":"import numpy as np\nfrom scipy.optimize import minimize\nimport math\nimport random\n\nCONSTANT_N = 26\n\n\ndef compute_objective(params):\n    \"\"\"Compute negative sum of radii (to minimize)\"\"\"\n    n = CONSTANT_N\n    return -np.sum(params[2*n:3*n])\n\n\ndef compute_boundary_constraints(params):\n    \"\"\"Compute all boundary constraints at once\"\"\"\n    n = CONSTANT_N\n    constraints = []\n    for i in range(n):\n        x = params[i]\n        y = params[n + i]\n        r = params[2*n + i]\n        constraints.append(x - r)           # left\n        constraints.append(1 - x - r)       # right\n        constraints.append(y - r)           # bottom\n        constraints.append(1 - y - r)       # top"},"ttd-ud":{"title":"Eisenstein lattice with a searched modulus","body":"Places 256\u00d7256 points on the triangular (Eisenstein) lattice and scales by 1/\u221ak so that lattice vectors of norm k become unit distance. Brute-forces k \u2264 10000 to maximise the number of representations of the form x\u00b2+xy+y\u00b2 = k. Found at the first generation.","code":"import math\n\ndef get_r_3_solutions(k):\n    \"\"\"\n    Returns the list of integer vectors (x, y) such that x^2 + x*y + y^2 = k.\n    This quadratic form corresponds to the Eisenstein integers (triangular lattice).\n    \"\"\"\n    solutions = []\n    # Bounds for x and y:\n    # Since x^2 + xy + y^2 = (x + y/2)^2 + 3/4 y^2 = k.\n    # x + y/2 approx sqrt(k). x approx sqrt(k).\n    limit = math.ceil(math.sqrt(k)) + 1\n    \n    # Iterate over reasonable bounds. \n    # x^2 + xy + y^2 = k >= 0.\n    for x in range(-limit, limit + 1):\n        for y in range(-limit, limit + 1):\n            if x == 0 and y == 0: continue\n            val = x*x + x*y + y*y\n            if val == k:\n                solutions.append((x, y))\n    return solutions\n\ndef get_r_2_solutions(k):\n    \"\"\"\n    Returns the list of integer vectors (x, y) such that x^2 + y^2 = k."},"grpo-ud":{"title":"Eisenstein lattice, k = 91 argued in closed form","body":"Same construction, but k = 7\u00b713 = 91 is chosen analytically: both primes are 1 mod 3, so r\u2032(91) = 6\u00b7(1+1)(1+1) = 24 representations, and the boundary strip is \u221a91 \u2248 9.5 wide instead of \u221a325 \u2248 18 for the square lattice. Same score as ttd, reached two steps later.","code":"\"\"\"\nUnit-distance construction using scaled triangular lattice (Eisenstein integers).\nWe utilize k = 91 = 7 * 13, which has r'_2(91) = 24 representations as x^2 - xy + y^2.\nThis lattice packing achieves a significantly higher density of points and lower boundary\neffects compared to the integer square lattice (k=325).\nThe boundary strip width is sqrt(91) ~ 9.5, compared to sqrt(325) ~ 18.\nWith N=65536 (256x256 grid equivalent), this maximizes the number of unit pairs.\n\"\"\"\n\nimport numpy as np\nimport math\n\ndef run_construction():\n    \"\"\"\n    Constructs points on a scaled triangular lattice (Eisenstein integers).\n    The lattice is defined by vectors u = (1, 0) and v = (1/2, sqrt(3)/2).\n    Points are at P = x*u + y*v for integers x, y.\n    The squared distance between P1 and P2 is d^2 = (dx)^2 - dx*dy + (dy)^2.\n    We scale the lattice by 1/sqrt(k) so that pairs with squared distance k become unit distance.\n    We choose k = 91 = 7 * 13, which has many representations.\n    \"\"\"\n    N = 65536\n    k = 91  # k = 7 * 13. Both primes are 1 mod 3.\n    \n    # Number of solutions to x^2 - xy + y^2 = k\n    # For prime p = 1 mod 3, r'_2(p) = 12."}}}</script>
+
+<script>
+(function () {
+"use strict";
+const DATA = JSON.parse(document.getElementById("sweepdata").textContent);
+const P = DATA.problems;
+const ORDER = ["erdos", "jssp", "acineq", "circle", "ud"];
+const SHORT = { erdos: "Erdős", jssp: "JSSP", acineq: "AC ineq.", circle: "Circle", ud: "Unit-dist." };
+const ARMS = ["ttd", "grpo"];
+const ARMLABEL = { ttd: "ttd · entropic", grpo: "grpo · mean baseline" };
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const armColor = (a) => css(a === "ttd" ? "--ttd" : "--grpo");
+const armVar = (a) => "var(--" + a + ")";
+const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/* ---------- formatting ---------- */
+function sig(v, n) {
+  if (v === null || v === undefined || !isFinite(v)) return "—";
+  if (v === 0) return "0";
+  const a = Math.abs(v);
+  if (a >= 1e5 || a < 1e-4) return v.toExponential(n === undefined ? 2 : n - 1).replace("e", "e");
+  return Number(v.toPrecision(n || 4)).toString();
+}
+const pct = (v, d) => (v === null || v === undefined) ? "—" : (100 * v).toFixed(d === undefined ? 0 : d) + "%";
+function fmtScore(pk, v) {
+  if (v === null || v === undefined) return "—";
+  const d = { erdos: 9, acineq: 8, jssp: 6, circle: 9, ud: 7 }[pk] || 6;
+  return v.toFixed(d);
+}
+
+/* ---------- tooltip ---------- */
+const tip = document.getElementById("tip");
+function showTip(html, ev) {
+  tip.innerHTML = html;
+  tip.style.opacity = "1";
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY - r.height - 12;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y < 8) y = ev.clientY + 18;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.opacity = "0"; };
+
+/* ---------- line chart ---------- */
+const SVGNS = "http://www.w3.org/2000/svg";
+const el = (n, a) => { const e = document.createElementNS(SVGNS, n); for (const k in (a || {})) e.setAttribute(k, a[k]); return e; };
+
+function niceTicks(lo, hi, n) {
+  if (lo === hi) { const p = Math.abs(lo) || 1; lo -= p * 0.1; hi += p * 0.1; }
+  const raw = (hi - lo) / (n || 5);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm >= 7.5 ? 10 : norm >= 3.5 ? 5 : norm >= 1.5 ? 2 : 1) * mag;
+  const out = []; let t = Math.ceil(lo / step) * step;
+  for (; t <= hi + step * 1e-9; t += step) out.push(+t.toFixed(12));
+  return out;
+}
+function logTicks(lo, hi) {
+  const out = [];
+  for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) {
+    const v = Math.pow(10, e);
+    if (v >= lo * 0.999 && v <= hi * 1.001) out.push(v);
+  }
+  return out.length >= 2 ? out : niceTicks(lo, hi, 4);
+}
+const expLabel = (v) => {
+  const e = Math.round(Math.log10(v));
+  if (e >= -2 && e <= 3) return String(+v.toPrecision(3));
+  return "1e" + e;
+};
+
+/* cfg: {series:[{key,label,color,pts:[[x,y|null]],dashed}], yLog, yFmt, xLabel, yLabel,
+        refs:[{y,label}], marks:[{x,arm}], bandsX:[{x,label}], h, tipFmt} */
+function lineChart(host, cfg) {
+  const render = () => {
+    host.innerHTML = "";
+    const W = Math.max(240, host.clientWidth || 320);
+    const H = cfg.h || 216;
+    const m = { t: 10, r: cfg.directLabels === false ? 14 : 34, b: 26, l: cfg.left || 50 };
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img" });
+    host.appendChild(svg);
+
+    const all = [];
+    cfg.series.forEach(s => s.pts.forEach(p => { if (p[1] !== null && p[1] !== undefined && isFinite(p[1])) all.push(p[1]); }));
+    (cfg.refs || []).forEach(r => all.push(r.y));
+    if (!all.length) return;
+    let ylo = Math.min.apply(null, all), yhi = Math.max.apply(null, all);
+    const xs = cfg.series.flatMap(s => s.pts.map(p => p[0]));
+    const xlo = cfg.xMin !== undefined ? cfg.xMin : Math.min.apply(null, xs);
+    const xhi = cfg.xMax !== undefined ? cfg.xMax : Math.max.apply(null, xs);
+
+    let yticks;
+    if (cfg.yLog) {
+      ylo = Math.max(ylo, 1e-12); yhi = Math.max(yhi, ylo * 10);
+      ylo = Math.pow(10, Math.floor(Math.log10(ylo)));
+      yhi = Math.pow(10, Math.ceil(Math.log10(yhi)));
+      yticks = logTicks(ylo, yhi);
+    } else {
+      const pad = (yhi - ylo) * 0.08 || Math.abs(yhi) * 0.05 || 1;
+      ylo -= pad; yhi += pad;
+      if (cfg.yZero) ylo = Math.min(0, ylo);
+      if (cfg.yMax !== undefined) yhi = cfg.yMax;
+      if (cfg.yMin !== undefined) ylo = cfg.yMin;
+      yticks = niceTicks(ylo, yhi, 4);
+    }
+    const X = (v) => m.l + (W - m.l - m.r) * (xhi === xlo ? 0.5 : (v - xlo) / (xhi - xlo));
+    const Y = cfg.yLog
+      ? (v) => m.t + (H - m.t - m.b) * (1 - (Math.log10(v) - Math.log10(ylo)) / (Math.log10(yhi) - Math.log10(ylo)))
+      : (v) => m.t + (H - m.t - m.b) * (1 - (v - ylo) / (yhi - ylo));
+
+    // grid + y labels
+    const g = el("g", { class: "tick" });
+    yticks.forEach(t => {
+      const y = Y(t);
+      if (y < m.t - 1 || y > H - m.b + 1) return;
+      g.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: y, y2: y }));
+      const tx = el("text", { x: m.l - 7, y: y + 3.5, "text-anchor": "end", "font-size": 9.5 });
+      tx.textContent = cfg.yLog ? expLabel(t) : (cfg.yFmt ? cfg.yFmt(t) : sig(t, 4));
+      g.appendChild(tx);
+    });
+    svg.appendChild(g);
+
+    // x axis
+    const ax = el("g", { class: "axis" });
+    ax.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b }));
+    const step = xhi - xlo > 10 ? Math.ceil((xhi - xlo) / 7) : 1;
+    for (let v = xlo; v <= xhi; v += step) {
+      const t = el("text", { x: X(v), y: H - m.b + 14, "text-anchor": "middle", "font-size": 9.5 });
+      t.textContent = v; ax.appendChild(t);
+    }
+    const xl = el("text", { x: W - m.r, y: H - 2, "text-anchor": "end", "font-size": 9 });
+    xl.textContent = cfg.xLabel || "step"; ax.appendChild(xl);
+    svg.appendChild(ax);
+
+    // dead-step bands
+    (cfg.bandsX || []).forEach(b => {
+      const w = Math.max(4, (X(xlo + 1) - X(xlo)) * 0.66);
+      svg.appendChild(el("rect", {
+        x: X(b.x) - w / 2, y: m.t, width: w, height: H - m.t - m.b,
+        fill: css("--ink-3"), opacity: 0.13
+      }));
+    });
+
+    // refs
+    (cfg.refs || []).forEach(r => {
+      const y = Y(r.y);
+      if (y < m.t || y > H - m.b) return;
+      svg.appendChild(el("line", {
+        x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: css("--ink-3"),
+        "stroke-width": 1.5, "stroke-dasharray": "4 4", opacity: 0.85
+      }));
+      const t = el("text", { x: W - m.r, y: y - 5, "text-anchor": "end", "font-size": 9.5, fill: css("--ink-3") });
+      t.textContent = r.label; svg.appendChild(t);
+    });
+
+    // series
+    cfg.series.forEach(s => {
+      let d = "", pen = false;
+      s.pts.forEach(p => {
+        const v = p[1];
+        if (v === null || v === undefined || !isFinite(v) || (cfg.yLog && v <= 0)) { pen = false; return; }
+        d += (pen ? "L" : "M") + X(p[0]).toFixed(2) + " " + Y(v).toFixed(2) + " ";
+        pen = true;
+      });
+      if (d) svg.appendChild(el("path", {
+        d, fill: "none", stroke: s.color, "stroke-width": 2,
+        "stroke-linejoin": "round", "stroke-linecap": "round",
+        "stroke-dasharray": s.dashed ? "3 3" : "none"
+      }));
+      s.pts.forEach(p => {
+        const v = p[1];
+        if (v === null || v === undefined || !isFinite(v) || (cfg.yLog && v <= 0)) return;
+        svg.appendChild(el("circle", {
+          cx: X(p[0]), cy: Y(v), r: 2.6, fill: s.color,
+          stroke: css("--card"), "stroke-width": 1.4
+        }));
+      });
+      // direct end label
+      const last = [...s.pts].reverse().find(p => p[1] !== null && p[1] !== undefined && isFinite(p[1]) && !(cfg.yLog && p[1] <= 0));
+      if (last && cfg.directLabels !== false) {
+        const t = el("text", {
+          x: X(last[0]) + 6, y: Y(last[1]) + 3.2, "font-size": 9.5,
+          fill: s.color, "font-weight": 600
+        });
+        t.textContent = s.key;
+        if (X(last[0]) + 26 < W) svg.appendChild(t);
+      }
+    });
+
+    // hover layer
+    const cross = el("line", { y1: m.t, y2: H - m.b, stroke: css("--ink-3"), "stroke-width": 1, opacity: 0 });
+    svg.appendChild(cross);
+    const hits = el("rect", { x: m.l, y: 0, width: W - m.l - m.r, height: H - m.b, fill: "transparent" });
+    svg.appendChild(hits);
+    const xset = [...new Set(xs)].sort((a, b) => a - b);
+    hits.addEventListener("mousemove", (ev) => {
+      const box = svg.getBoundingClientRect();
+      const px = (ev.clientX - box.left) * (W / box.width);
+      let best = xset[0], bd = Infinity;
+      xset.forEach(v => { const d = Math.abs(X(v) - px); if (d < bd) { bd = d; best = v; } });
+      cross.setAttribute("x1", X(best)); cross.setAttribute("x2", X(best));
+      cross.setAttribute("opacity", 0.4);
+      let html = '<div class="tip-x">' + (cfg.xLabel || "step") + " " + best + "</div>";
+      cfg.series.forEach(s => {
+        const p = s.pts.find(q => q[0] === best);
+        const v = p ? p[1] : null;
+        html += '<div class="tip-r"><em><span class="swatch" style="background:' + s.color + '"></span>' +
+          s.label + '</em><span>' + (v === null || v === undefined || !isFinite(v) ? "no data" : (cfg.tipFmt ? cfg.tipFmt(v) : sig(v, 5))) + "</span></div>";
+      });
+      if (cfg.tipExtra) { const x = cfg.tipExtra(best); if (x) html += x; }
+      showTip(html, ev);
+    });
+    hits.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("opacity", 0); });
+  };
+  render();
+  if (window.ResizeObserver) {
+    let t = null;
+    new ResizeObserver(() => { clearTimeout(t); t = setTimeout(render, 60); }).observe(host);
+  }
+  host.__render = render;
+}
+
+/* ---------- legend ---------- */
+function legend(host, items) {
+  host.innerHTML = items.map(i =>
+    '<span><i style="background:' + (i.dash ? "transparent" : i.color) + ';' +
+    (i.dash ? "border-top:2px dashed " + i.color + ";height:0" : "") + '"></i>' + i.label + "</span>"
+  ).join("");
+}
+const armLegend = () => [
+  { color: armVar("ttd"), label: "ttd — entropic_adaptive_beta" },
+  { color: armVar("grpo"), label: "grpo — mean_baseline" }
+];
+
+/* ---------- series helpers ---------- */
+function poolSeries(pk, field) {
+  return ARMS.filter(a => P[pk].arms[a]).map(a => {
+    const arm = P[pk].arms[a];
+    return {
+      key: a, label: a, color: armColor(a),
+      pts: arm.pool.step.map((s, i) => [s, arm.pool[field][i]])
+    };
+  });
+}
+function metricSeries(pk, field) {
+  return ARMS.filter(a => P[pk].arms[a] && P[pk].arms[a].metrics).map(a => {
+    const m = P[pk].arms[a].metrics;
+    const lo = m.steps[0], hi = m.steps[m.steps.length - 1];
+    const pts = [];
+    for (let s = lo; s <= hi; s++) {
+      const i = m.steps.indexOf(s);
+      pts.push([s, i === -1 ? null : m[field][i]]);
+    }
+    return { key: a, label: a, color: armColor(a), pts };
+  });
+}
+/* multi-problem, one arm-pair per problem, used for small multiples in one panel */
+function multiPool(pks, field, src) {
+  const out = [];
+  pks.forEach(pk => ARMS.forEach(a => {
+    if (!P[pk].arms[a]) return;
+    const arm = P[pk].arms[a];
+    const rows = src === "metrics" ? null : arm.pool;
+    if (!rows) return;
+    out.push({
+      key: SHORT[pk] + "/" + a, label: SHORT[pk] + " " + a, color: armColor(a),
+      dashed: pk !== "erdos", pts: rows.step.map((s, i) => [s, rows[field][i]])
+    });
+  }));
+  return out;
+}
+
+/* ================= 00 verdict ================= */
+(function () {
+  const host = document.getElementById("verdictTiles");
+  ORDER.forEach(pk => {
+    const p = P[pk];
+    const arms = ARMS.filter(a => p.arms[a]);
+    const scores = arms.map(a => p.arms[a].champion.score);
+    const better = p.direction === "lower" ? Math.min.apply(null, scores) : Math.max.apply(null, scores);
+    const gap = arms.length === 2 ? Math.abs(scores[0] - scores[1]) : null;
+    const swings = arms.map(a => P[pk].arms[a].convergence.noise.mean_abs_step_to_step_change).filter(v => v);
+    const swing = swings.length ? swings.reduce((x, y) => x + y, 0) / swings.length : null;
+    const ratio = (gap !== null && swing) ? gap / swing : null;
+    const d = document.createElement("div");
+    d.className = "vt";
+    let rows = arms.map(a => {
+      const s = p.arms[a].champion.score;
+      const win = s === better && arms.length === 2 && scores[0] !== scores[1];
+      return '<div class="vt-row"><span class="vt-arm"><span class="swatch ' + a + '"></span>' + a +
+        '</span><span class="vt-val" style="' + (win ? "color:" + armVar(a) : "") + '">' +
+        fmtScore(pk, s) + "</span></div>";
+    }).join("");
+    let foot;
+    if (p.status === "partial") {
+      foot = '<span class="pill partial">partial</span> <b>' + p.note + "</b>";
+    } else {
+      foot = '<span class="pill tie">tie</span> gap <b>' + sig(gap, 3) + "</b> · typical step swing <b>" +
+        sig(swing, 3) + "</b> · gap/swing <b>" + ratio.toFixed(2) + "</b>";
+    }
+    d.innerHTML = '<div class="vt-name">' + p.label + " · " + p.metric + " · " +
+      (p.direction === "lower" ? "lower" : "higher") + " is better</div>" + rows +
+      '<div class="vt-foot">' + foot + "</div>";
+    host.appendChild(d);
+  });
+})();
+
+/* ================= 01 runs table ================= */
+(function () {
+  const t = document.getElementById("runsTable");
+  let h = "<thead><tr><th>run</th><th>estimator</th><th>steps in pool</th><th>metric rows</th>" +
+    "<th>pool entries</th><th>gaps</th><th>status</th></tr></thead><tbody>";
+  ORDER.forEach(pk => ARMS.forEach(a => {
+    const arm = P[pk].arms[a]; if (!arm) return;
+    const m = arm.metrics;
+    const gaps = [];
+    if (!m) gaps.push("metrics.jsonl absent");
+    else {
+      if (m.missing.length) gaps.push("no metric row for step " + m.missing.join(", "));
+      if (m.dup.length) gaps.push("restart re-logged step " + m.dup.join(", "));
+      const last = arm.pool.step[arm.pool.step.length - 1];
+      if (m.steps[m.steps.length - 1] < last) gaps.push("metrics end at step " + m.steps[m.steps.length - 1]);
+      if (arm.pool.step[0] > 0) gaps.push("no generation 0 in pool");
+    }
+    h += "<tr><td>" + arm.run + '</td><td class="' + a + '">' + (a === "ttd" ? "entropic_adaptive_beta" : "mean_baseline") +
+      "</td><td>" + arm.pool.step[0] + "–" + arm.pool.step[arm.pool.step.length - 1] +
+      "</td><td>" + (m ? m.steps.length : 0) + "</td><td>" + arm.tree.n_generated +
+      '</td><td class="dim" style="text-align:left">' + (gaps.length ? gaps.join("; ") : "—") +
+      '</td><td>' + (P[pk].status === "partial" ? '<span class="pill partial">partial</span>' : '<span class="pill">complete</span>') +
+      "</td></tr>";
+  }));
+  t.innerHTML = h + "</tbody>";
+})();
+
+/* ================= 02 trajectory (tabbed) ================= */
+const trajCharts = {};
+(function () {
+  const tabs = document.getElementById("trajTabs");
+  tabs.innerHTML = '<span class="ctl-label">problem</span>' + ORDER.map((pk, i) =>
+    '<button class="tab" role="tab" data-pk="' + pk + '" aria-selected="' + (i === 0) + '">' +
+    P[pk].label + "</button>").join("");
+  const draw = (pk) => {
+    const p = P[pk];
+    const dir = p.direction === "lower" ? "lower is better" : "higher is better";
+    document.getElementById("ch1sub").textContent = p.metric + " · " + dir;
+    const REF_OK = { erdos: "authors' record 0.380875", acineq: "target 1.5030", circle: "best known 2.635983" };
+    const refs = REF_OK[pk] ? [{ y: p.target, label: REF_OK[pk] }] : [];
+    let xlo = Infinity, xhi = -Infinity;
+    ARMS.forEach(a => {
+      const arm = p.arms[a]; if (!arm) return;
+      xlo = Math.min(xlo, arm.pool.step[0], arm.metrics ? arm.metrics.steps[0] : Infinity);
+      xhi = Math.max(xhi, arm.pool.step[arm.pool.step.length - 1],
+        arm.metrics ? arm.metrics.steps[arm.metrics.steps.length - 1] : -Infinity);
+    });
+    lineChart(document.getElementById("chartChamp"), {
+      series: poolSeries(pk, "champ_score"), refs: refs, h: 226, xMin: xlo, xMax: xhi,
+      tipFmt: v => fmtScore(pk, v), yFmt: v => sig(v, 6), left: 62
+    });
+    lineChart(document.getElementById("chartStepBest"), {
+      series: poolSeries(pk, "best_score_this_step"), h: 226, xMin: xlo, xMax: xhi,
+      tipFmt: v => fmtScore(pk, v), yFmt: v => sig(v, 6), left: 62
+    });
+    const rewHost = document.getElementById("chartReward");
+    const hasMet = ARMS.some(a => p.arms[a] && p.arms[a].metrics);
+    if (hasMet) {
+      lineChart(rewHost, {
+        series: metricSeries(pk, "env/all/reward/mean"), h: 226, yZero: true,
+        xMin: xlo, xMax: xhi, tipFmt: v => sig(v, 4), left: 52
+      });
+    } else {
+      rewHost.innerHTML = '<div style="height:226px;display:flex;align-items:center;justify-content:center;' +
+        'font-family:var(--mono);font-size:12px;color:var(--ink-3);text-align:center;padding:0 20px">' +
+        "metrics.jsonl was never written for this run — pool data only</div>";
+    }
+    [["legChamp", 1], ["legStep", 1], ["legRew", 1]].forEach(([id]) => legend(document.getElementById(id), armLegend()));
+    const notes = {
+      erdos: "Both arms drop from C5 ≈ 0.49 (best seed) to ≈ 0.3819 in one generation, then spend fourteen steps recovering the fifth decimal. ttd is still moving at step 14; grpo froze after step 10. This is the one problem where ttd finishes ahead, by 3.2e−5. Neither reaches the authors' record — ttd ends 7.8e−5 short. ttd's mean-reward line breaks at step 11: the metrics row was lost to a preemption, but the pool entries for that generation survived, so the champion line is continuous.",
+      jssp: "The most volatile pair in the sweep. ttd's per-step best runs 0.159 → 0.140 → 0.000 → 0.043 → 0.123 across steps 10–14, and four of its steps (1, 3, 8, 12) left nothing but zero-scoring programs in the pool. Mean reward stays near 0.003 for both arms because 94–97% of admitted programs score exactly zero.",
+      acineq: "ttd found 1.51966 at step 5 and never improved again — nine dead steps. grpo climbed in nine separate increments and was still improving at step 14. Both remain well above the 1.5030 target.",
+      circle: "Retired early: ttd reached the best-known sum of radii, 2.635983084917653, at step 3 and had nowhere left to go — the remaining six steps only re-find it (the nominal champion is a step-7 duplicate 4e−14 higher, which is why the convergence table reports step 7). grpo was stopped at step 3 at 2.6234.",
+      ud: "Two to three steps only — a step here costs about eight hours against roughly one-hour spot lifetimes. Both arms converged to the identical value 11.3516845703125; ttd reached it in its very first generation, grpo at step 1 after starting from 10.9696."
+    };
+    document.getElementById("trajNote").textContent = notes[pk];
+  };
+  tabs.addEventListener("click", e => {
+    const b = e.target.closest("button[data-pk]"); if (!b) return;
+    [...tabs.querySelectorAll("button")].forEach(x => x.setAttribute("aria-selected", x === b));
+    draw(b.dataset.pk);
+  });
+  draw("erdos");
+})();
+
+/* ================= 03 improvement ================= */
+(function () {
+  const pks = ["erdos", "acineq", "jssp", "circle"];
+  lineChart(document.getElementById("chartImpRate"), {
+    series: multiPool(pks, "frac_improve"), h: 236, yMin: 0, yMax: 1.05,
+    yFmt: v => (100 * v).toFixed(0) + "%", tipFmt: v => pct(v, 1), left: 44, directLabels: false
+  });
+  lineChart(document.getElementById("chartMag"), {
+    series: multiPool(["erdos", "acineq", "circle"], "mean_pct_improvers"), h: 236, yLog: true,
+    tipFmt: v => sig(v, 3) + "%", left: 46, directLabels: false
+  });
+  legend(document.getElementById("legImp"), armLegend().concat([
+    { color: "var(--ink-3)", label: "solid = Erdős · dashed = AC1 / JSSP / Circle" }]));
+  document.getElementById("impNote").innerHTML =
+    "Improver rate does roughly halve on the two smooth problems: Erdős ttd 1.00 → 0.44, grpo 0.95 → 0.50; " +
+    "AC1 ttd 0.78 → 0.55, grpo 0.90 → 0.60. JSSP is a different regime entirely and sits near the floor the " +
+    "whole way (0–15%) because 94–97% of its pool entries score exactly zero — a child that fails is not an " +
+    "improvement, it is a tie at zero. Magnitude is shown only for the problems where a percentage of the " +
+    "parent is meaningful; JSSP's parents are usually 0, which makes the ratio undefined or unbounded.";
+})();
+
+/* ================= 04 headroom ================= */
+(function () {
+  const pks = ["erdos", "acineq", "circle"];
+  lineChart(document.getElementById("chartHead"), {
+    series: multiPool(pks, "mean_headroom_pct_improvers"), h: 236, yLog: true,
+    tipFmt: v => sig(v, 3) + "%", left: 46, directLabels: false
+  });
+  lineChart(document.getElementById("chartHeadFix"), {
+    series: multiPool(pks, "mean_fixed_headroom_pct_improvers"), h: 236, yLog: true,
+    tipFmt: v => sig(v, 3) + "%", left: 46, directLabels: false
+  });
+  legend(document.getElementById("legHead"), armLegend().concat([
+    { color: "var(--ink-3)", label: "solid = Erdős · dashed = AC1 / Circle" }]));
+  document.getElementById("headNote").innerHTML =
+    "This is where the expected story changes. On Erdős, ttd's raw improvement magnitude falls " +
+    "7.2e4× from step 1 to step 14 (0.0958 → 1.33e−6 in value units) — about 4.9 orders, not 5. Under " +
+    "<b>fixed</b> headroom the ratio is identical by construction (88.9% → 0.0012%), because the divisor " +
+    "never changes. Under <b>parent-relative</b> headroom — the control that actually accounts for " +
+    "proximity to the optimum — the decay is only <b>67×</b> (76.8% → 1.15%), not thousands. Most of the " +
+    "apparent collapse is the optimum getting closer, and a real but far smaller residual decay remains. " +
+    "grpo shows almost no monotone decay at all on either control (its parent-relative rate is still " +
+    "10–17% at steps 9–11) — but that is because grpo's champion had stalled, so its improvers were " +
+    "improving worse parents with more headroom each.";
+})();
+
+/* ================= 05 vs champion ================= */
+(function () {
+  const pks = ["erdos", "acineq", "jssp", "circle"];
+  lineChart(document.getElementById("chartBeat"), {
+    series: multiPool(pks, "frac_beat_champ"), h: 236, yMin: 0, yMax: 1.02,
+    yFmt: v => (100 * v).toFixed(0) + "%", tipFmt: v => pct(v, 1), left: 44, directLabels: false
+  });
+  lineChart(document.getElementById("chartGap"), {
+    series: multiPool(["erdos", "acineq", "circle"], "median_gap_to_champ"), h: 236, yLog: true,
+    tipFmt: v => sig(v, 3), left: 48, directLabels: false
+  });
+  legend(document.getElementById("legBeat"), armLegend());
+  document.getElementById("beatNote").innerHTML =
+    "After the first generation, essentially nothing beats the champion: the rate falls from 86–98% at " +
+    "step 1 to 0–5% for the rest of the run — one or two of roughly fifty entries per step. " +
+    "<code>ttd-acineq</code> produced <b>zero</b> champion-beating children in its last nine steps, which is " +
+    "the same fact as its stall, seen from the population instead of the maximum. The distance chart shows " +
+    "the median child sitting a fixed multiple below the champion rather than converging on it — the " +
+    "population never catches up with its own best program.";
+})();
+
+/* ================= 06 group variance ================= */
+(function () {
+  const series = [], bands = [];
+  ARMS.forEach(a => {
+    const m = P.jssp.arms[a].metrics;
+    series.push({
+      key: a, label: "JSSP " + a, color: armColor(a),
+      pts: m.steps.map((s, i) => [s, m["env/all/by_group/frac_mixed"][i]])
+    });
+  });
+  ["ttd", "grpo"].forEach(a => {
+    const m = P.jssp.arms[a].metrics;
+    m.steps.forEach((s, i) => { if (m["env/all/by_group/frac_all_bad"][i] === 1) bands.push({ x: s }); });
+  });
+  lineChart(document.getElementById("chartMixed"), {
+    series, h: 236, yMin: -0.06, yMax: 1.12, bandsX: bands,
+    yFmt: v => v.toFixed(1), tipFmt: v => v === 1 ? "1.0 — mixed" : v === 0 ? "0.0 — all bad" : sig(v, 3),
+    left: 40
+  });
+  const advs = [];
+  ["erdos", "jssp", "acineq", "circle"].forEach(pk => ARMS.forEach(a => {
+    const arm = P[pk].arms[a]; if (!arm || !arm.metrics) return;
+    const m = arm.metrics;
+    advs.push({
+      key: SHORT[pk] + "/" + a, label: SHORT[pk] + " " + a, color: armColor(a), dashed: pk !== "erdos",
+      pts: m.steps.map((s, i) => [s, m["advantage/spread"][i]])
+    });
+  }));
+  lineChart(document.getElementById("chartAdv"), {
+    series: advs, h: 236, yLog: true, tipFmt: v => sig(v, 4), left: 50, directLabels: false
+  });
+  legend(document.getElementById("legVar"), armLegend().concat([{ color: "var(--ink-3)", label: "shaded = JSSP step with zero reward variance · right chart: solid = Erdős, dashed = JSSP / AC1 / Circle" }]));
+  document.getElementById("varNote").innerHTML =
+    "<b>The claim that frac_mixed was 1.0 throughout is wrong for JSSP.</b> Six JSSP steps had " +
+    "<code>frac_all_bad = 1</code> and therefore produced literally no gradient: grpo's steps 0, 1 and 2, and " +
+    "ttd's steps 1, 3 and 12 — grpo's first three steps were pure waste. On Erdős, AC1 and Circle the metric " +
+    "is 1.0 at every step, so there the no-gradient-starvation reading holds. Note also that " +
+    "<code>frac_mixed</code> is binary in these logs — always exactly 0 or 1, never a fraction — so it " +
+    "reports whether the whole batch had reward variance, not how many groups did. " +
+    "The advantage spread separates the estimators completely: entropic runs a median spread of 11–15 with a " +
+    "hard floor at −1, mean_baseline runs 0.12–3.5. Two entropic steps saturate the 1e12 clip " +
+    "(<code>ttd-acineq</code> step 8, <code>ttd-circle</code> step 3).";
+})();
+
+/* ================= 07 tree ================= */
+(function () {
+  const pks = ["erdos", "acineq", "jssp"];
+  lineChart(document.getElementById("chartFam"), {
+    series: multiPool(pks, "n_families"), h: 220, yMin: 0, tipFmt: v => v + " families", left: 34, directLabels: false
+  });
+  lineChart(document.getElementById("chartBranch"), {
+    series: multiPool(pks, "mean_children_per_used_parent"), h: 220, yMin: 1, yMax: 2.05,
+    yFmt: v => v.toFixed(1), tipFmt: v => sig(v, 3), left: 34, directLabels: false
+  });
+  lineChart(document.getElementById("chartPool"), {
+    series: multiPool(pks, "pool_size"), h: 220, yMin: 0, tipFmt: v => v + " entries", left: 42, directLabels: false
+  });
+  legend(document.getElementById("legTree"), armLegend().concat([{ color: "var(--ink-3)", label: "solid = Erdős · dashed = AC1 / JSSP" }]));
+  document.getElementById("treeNote").innerHTML =
+    "The pool is not a tree in any interesting sense — it is a <b>binary forest advancing one level per " +
+    "step</b>. Across all ten runs the maximum branching factor is exactly <b>2</b>, mean depth equals the " +
+    "step index to two decimals, and the mean parent age is 1.00–1.16 steps: PUCT re-expands the newest " +
+    "frontier and essentially never backtracks. <code>puct/sampled_timestep/mean</code> agrees — it tracks " +
+    "step − 1 all the way down. What does change is diversity: distinct seed families collapse from 30 to " +
+    "<b>2</b> in <code>ttd-erdos</code>, 26 to 2 in <code>ttd-acineq</code>, and 24 to <b>1</b> in " +
+    "<code>grpo-acineq</code>. That last one is the counterexample worth keeping — grpo-acineq ran its final " +
+    "two steps on a single family and was still improving, while ttd-acineq held two families and was frozen. " +
+    "Family collapse does not by itself predict a stall.";
+})();
+
+/* ================= 08 programs ================= */
+(function () {
+  const tabs = document.getElementById("progTabs");
+  const cards = document.getElementById("progCards");
+  tabs.innerHTML = '<span class="ctl-label">problem</span>' + ORDER.map((pk, i) =>
+    '<button class="tab" role="tab" data-pk="' + pk + '" aria-selected="' + (i === 0) + '">' +
+    P[pk].label + "</button>").join("");
+  const draw = (pk) => {
+    cards.innerHTML = ARMS.filter(a => P[pk].arms[a]).map(a => {
+      const arm = P[pk].arms[a], t = DATA.tech[a + "-" + pk], c = arm.champion;
+      return '<div class="prog"><div class="prog-top"><span class="prog-arm" style="color:' + armVar(a) +
+        '"><span class="swatch ' + a + '"></span>' + a + '</span><span class="prog-score">' +
+        fmtScore(pk, c.score) + "</span></div><h4>" + t.title + "</h4><p>" + t.body +
+        '</p><details class="prog-code"><summary>first 26 lines of the program</summary><pre><code>' +
+        esc(t.code) + '</code></pre></details><div class="prog-meta">found at step ' + c.step +
+        " · lineage depth " + c.depth + " · pool id " + c.id.slice(0, 8) + "…</div></div>";
+    }).join("");
+  };
+  tabs.addEventListener("click", e => {
+    const b = e.target.closest("button[data-pk]"); if (!b) return;
+    [...tabs.querySelectorAll("button")].forEach(x => x.setAttribute("aria-selected", x === b));
+    draw(b.dataset.pk);
+  });
+  draw("erdos");
+})();
+
+/* ================= 09 convergence ================= */
+(function () {
+  const t = document.getElementById("convTable");
+  let h = "<thead><tr><th>run</th><th>champion</th><th>found at</th><th>lineage depth</th>" +
+    "<th>improving steps</th><th>last improvement</th><th>final step</th><th>idle steps</th>" +
+    "<th>mean |Δ| per-step best</th></tr></thead><tbody>";
+  ORDER.forEach(pk => ARMS.forEach(a => {
+    const arm = P[pk].arms[a]; if (!arm) return;
+    const c = arm.convergence, ch = arm.champion;
+    h += "<tr><td>" + arm.run + '</td><td class="' + a + '">' + fmtScore(pk, ch.score) +
+      "</td><td>" + ch.step + "</td><td>" + ch.depth + "</td><td>" + c.n_improving_steps +
+      "</td><td>" + c.last_improving_step + "</td><td>" + c.final_step +
+      '</td><td' + (c.steps_since_last_improvement >= 4 ? ' style="color:var(--warn)"' : "") + ">" +
+      c.steps_since_last_improvement + '</td><td class="dim">' +
+      sig(c.noise.mean_abs_step_to_step_change, 3) + "</td></tr>";
+  }));
+  t.innerHTML = h + "</tbody>";
+  document.getElementById("convNote").innerHTML =
+    "Stalling is not an estimator property — it is split down the middle. ttd stalls on AC1 (9 idle steps) " +
+    "and JSSP (4); grpo stalls on Erdős (4). Every arm that was still improving at its final step " +
+    "(<code>ttd-erdos</code>, <code>grpo-jssp</code>, <code>grpo-acineq</code>) was cut off by the 15-step " +
+    "budget, not by convergence — a longer budget would have kept moving all three. The two runs that did " +
+    "converge for a real reason are <code>ttd-circle</code>, which hit the best-known packing exactly, and " +
+    "both unit-distance arms, which hit the same lattice value from different directions.";
+})();
+
+/* ================= 10 findings ================= */
+(function () {
+  const F = [
+    {
+      v: "holds", cls: "holds", claim: "The three completed comparisons are ties within run-to-run noise.",
+      body: "<p>Confirmed on a consistent criterion. Champion gap versus the mean absolute step-to-step " +
+        "change of the same runs' per-step best: Erdős 3.16e−5 vs 9.0e−5 (ratio 0.35), JSSP 6.4e−3 vs " +
+        "5.0e−2 (0.13), AC1 3.7e−3 vs 8.0e−3 (0.46). All three gaps are a fraction of what one step moves " +
+        "on its own, so the nominal 2–1 lead for grpo carries no information. The JSSP swing quoted in the " +
+        "brief reproduces exactly: ttd's per-step max runs 0.159 → 0.140 → 0.000 → 0.043 → 0.123.</p>"
+    },
+    {
+      v: "holds", cls: "holds", claim: "Training health is decoupled from discovery.",
+      body: "<p>Confirmed, and the size of the decoupling is larger than stated. At step 14 on Erdős, ttd " +
+        "holds format 0.742 against grpo's 0.022 — a 34× gap — and correctness 0.277 against 0.153; " +
+        "averaged over the run it is 0.702 against 0.297. On JSSP the mean format gap is 0.654 against " +
+        "0.382. What that buys is nothing systematic: ttd takes Erdős by 3.2e−5 and loses JSSP and AC1, " +
+        "all three inside the noise. grpo's Erdős format decays " +
+        "steadily from 0.839 at step 1 to 0.022 at step 14 — the policy is visibly degenerating as a " +
+        "code writer while its search keeps producing the better program.</p>" +
+        "<p>One correction to the phrasing: the 74% figure is <em>format</em> adherence. Correctness — " +
+        "programs that run and score — peaks at 0.31 for ttd on Erdős, never 74%.</p>"
+    },
+    {
+      v: "partial", cls: "partial", claim: "Improvement ability decays: rate halves, magnitude collapses ~5 orders raw and ~4000× after headroom normalisation, ties climb 0% → 25%.",
+      body: "<p><b>Rate:</b> holds. Erdős 1.00 → 0.44 (ttd) and 0.95 → 0.50 (grpo); AC1 0.78 → 0.55 and " +
+        "0.90 → 0.60. Roughly a halving in every completed non-JSSP arm.</p>" +
+        "<p><b>Raw magnitude:</b> close. 7.2e4× on ttd-erdos (4.9 orders), 1.1e4× on grpo-erdos — not quite " +
+        "five orders, and grpo's decay is not monotone at all.</p>" +
+        "<p><b>Headroom-normalised:</b> this is the part that does not hold. Dividing each Δ by the distance " +
+        "from its own parent to the authors' record, the decay is <b>67×</b> (76.8% → 1.15%), not ~4000×. " +
+        "The ~4000×-scale number is only recoverable with a <em>fixed</em> denominator, which is arithmetically " +
+        "the same as the raw ratio and therefore not a control at all. Once you genuinely account for " +
+        "shrinking headroom, most of the collapse is explained by proximity to the optimum and a real but " +
+        "much smaller residual decay is left.</p>" +
+        "<p><b>Ties:</b> holds on Erdős (0% → 15–17%) and unit-distance (0% → 26–48%), not on AC1 (never " +
+        "above 10%). On JSSP the tie rate is 56–100% from the first step, but 836 of ttd's 837 ties are " +
+        "ties at zero — two failed programs, not a child reproducing its parent's answer. Those are " +
+        "different phenomena and should not be pooled.</p>"
+    },
+    {
+      v: "fails", cls: "fails", claim: "frac_mixed was 1.0 throughout, so this was not gradient starvation.",
+      body: "<p>False for JSSP. <code>frac_all_bad = 1</code> — no reward variance anywhere, hence no " +
+        "gradient — on six steps: grpo's steps 0, 1 and 2 and ttd's steps 1, 3 and 12. grpo-jssp spent its " +
+        "first three steps of fifteen training on nothing. The claim does hold on Erdős, AC1 and Circle, " +
+        "where frac_mixed is 1.0 at every logged step.</p>" +
+        "<p>Worth knowing about the metric itself: it is binary in these logs — always exactly 0 or 1, " +
+        "never an intermediate fraction — so it reports whether the batch as a whole had variance, not the " +
+        "share of the 32 groups that did.</p>"
+    }
+  ];
+  const host = document.getElementById("findings");
+  host.innerHTML = F.map(f =>
+    '<div class="finding"><div class="finding-head"><span class="verdict ' + f.cls + '">' +
+    (f.v === "holds" ? "confirmed" : f.v === "partial" ? "partly wrong" : "contradicted") +
+    '</span><span class="finding-claim">' + f.claim + "</span></div>" + f.body + "</div>"
+  ).join("") +
+    '<div class="finding"><div class="finding-head"><span class="verdict fails">corrected</span>' +
+    '<span class="finding-claim">Champion techniques described in the brief.</span></div>' +
+    "<p>Two of the described champions do not match the programs in the pools. The Erdős champions are " +
+    "<em>not</em> piecewise-constant step functions: both arms optimise a symmetry-reduced half-vector " +
+    "under a log-sum-exp softening of the max-overlap, ttd on a 192→512 resolution ladder and grpo on an " +
+    "explicit β = 5…320 anneal, each finished with SLSQP. And the unit-distance champions are " +
+    "<em>triangular (Eisenstein) lattices</em>, not a scaled integer square lattice: grpo's program picks " +
+    "k = 7·13 = 91 with 24 representations of x²−xy+y², and its own comment explicitly rejects the square " +
+    "lattice k = 325 because its boundary strip is √325 ≈ 18 wide against √91 ≈ 9.5. ttd reached the " +
+    "identical value by brute-forcing k ≤ 10000 for maximum representation count instead of arguing it.</p></div>" +
+    '<div class="finding"><div class="finding-head"><span class="verdict holds">new</span>' +
+    '<span class="finding-claim">The search never backtracks, and diversity collapses regardless.</span></div>' +
+    "<p>Recomputed from parent links: maximum branching factor is exactly 2 in all ten runs, depth advances " +
+    "exactly one level per step, and mean parent age is 1.00–1.16 steps. Nothing older than the previous " +
+    "generation is ever expanded, so the PUCT pool behaves as a width-≈1.8 beam over the frontier rather " +
+    "than a tree search. Meanwhile surviving seed families collapse from ~30 to 1–5 by the final step. " +
+    "The two facts together mean the run's late steps are exploring a single narrow lineage — but " +
+    "<code>grpo-acineq</code> improved twice while down to a single family, so collapse alone does not " +
+    "explain stalling.</p></div>";
+})();
+
+/* ================= 11 data table ================= */
+(function () {
+  const ctl = document.getElementById("dataCtl");
+  ctl.innerHTML = '<span class="ctl-label">problem</span>' +
+    ORDER.map((pk, i) => '<button class="tab" data-pk="' + pk + '" aria-selected="' + (i === 0) + '">' +
+      SHORT[pk] + "</button>").join("");
+  const COLS = [
+    ["step", r => r.step, ""],
+    ["arm", r => r.arm, "arm"],
+    ["new", r => r.n_new, ""],
+    ["pool", r => r.pool_size, ""],
+    ["champion", (r, pk) => fmtScore(pk, r.champ_score), ""],
+    ["best of step", (r, pk) => fmtScore(pk, r.best_score_this_step), ""],
+    ["improve", r => pct(r.frac_improve, 1), ""],
+    ["tie", r => pct(r.frac_tie, 1), ""],
+    ["tie@0", r => pct(r.frac_tie_at_zero, 1), ""],
+    ["beat champ", r => pct(r.frac_beat_champ, 1), ""],
+    ["mean Δ", r => sig(r.mean_delta, 3), ""],
+    ["mean Δ (improvers)", r => sig(r.mean_delta_improvers, 3), ""],
+    ["Δ % of |parent|", r => sig(r.mean_pct_improvers, 3), ""],
+    ["headroom % (parent)", r => sig(r.mean_headroom_pct_improvers, 3), ""],
+    ["headroom % (fixed)", r => sig(r.mean_fixed_headroom_pct_improvers, 3), ""],
+    ["families", r => r.n_families, ""],
+    ["branching", r => sig(r.mean_children_per_used_parent, 3), ""],
+    ["parent age", r => sig(r.mean_parent_age, 3), ""],
+    ["format", r => r.m_format === null ? "—" : pct(r.m_format, 1), ""],
+    ["correct", r => r.m_corr === null ? "—" : pct(r.m_corr, 1), ""],
+    ["frac_mixed", r => r.m_mixed === null ? "—" : r.m_mixed.toFixed(1), ""],
+    ["adv spread", r => r.m_adv === null ? "—" : sig(r.m_adv, 4), ""],
+    ["reward mean", r => r.m_rew === null ? "—" : sig(r.m_rew, 4), ""]
+  ];
+  const draw = (pk) => {
+    const rows = [];
+    ARMS.forEach(a => {
+      const arm = P[pk].arms[a]; if (!arm) return;
+      const m = arm.metrics;
+      arm.pool.step.forEach((s, i) => {
+        const mi = m ? m.steps.indexOf(s) : -1;
+        rows.push({
+          arm: a, step: s,
+          n_new: arm.pool.n_new[i], pool_size: arm.pool.pool_size[i],
+          champ_score: arm.pool.champ_score[i], best_score_this_step: arm.pool.best_score_this_step[i],
+          frac_improve: arm.pool.frac_improve[i], frac_tie: arm.pool.frac_tie[i],
+          frac_tie_at_zero: arm.pool.frac_tie_at_zero[i], frac_beat_champ: arm.pool.frac_beat_champ[i],
+          mean_delta: arm.pool.mean_delta[i], mean_delta_improvers: arm.pool.mean_delta_improvers[i],
+          mean_pct_improvers: arm.pool.mean_pct_improvers[i],
+          mean_headroom_pct_improvers: arm.pool.mean_headroom_pct_improvers[i],
+          mean_fixed_headroom_pct_improvers: arm.pool.mean_fixed_headroom_pct_improvers[i],
+          n_families: arm.pool.n_families[i],
+          mean_children_per_used_parent: arm.pool.mean_children_per_used_parent[i],
+          mean_parent_age: arm.pool.mean_parent_age[i],
+          m_format: mi === -1 ? null : m["env/all/format"][mi],
+          m_corr: mi === -1 ? null : m["env/all/correctness"][mi],
+          m_mixed: mi === -1 ? null : m["env/all/by_group/frac_mixed"][mi],
+          m_adv: mi === -1 ? null : m["advantage/spread"][mi],
+          m_rew: mi === -1 ? null : m["env/all/reward/mean"][mi]
+        });
+      });
+    });
+    rows.sort((a, b) => a.step - b.step || (a.arm < b.arm ? 1 : -1));
+    let h = "<thead><tr>" + COLS.map(c => "<th>" + c[0] + "</th>").join("") + "</tr></thead><tbody>";
+    rows.forEach(r => {
+      h += "<tr>" + COLS.map(c => '<td class="' + (c[2] === "arm" ? r.arm : "") + '">' + c[1](r, pk) + "</td>").join("") + "</tr>";
+    });
+    document.getElementById("dataTable").innerHTML = h + "</tbody>";
+  };
+  ctl.addEventListener("click", e => {
+    const b = e.target.closest("button[data-pk]"); if (!b) return;
+    [...ctl.querySelectorAll("button")].forEach(x => x.setAttribute("aria-selected", x === b));
+    draw(b.dataset.pk);
+  });
+  draw("erdos");
+})();
+
+/* redraw on theme change so chart colours follow tokens */
+const mo = new MutationObserver(() => {
+  document.querySelectorAll("[id^=chart]").forEach(h => { if (h.__render) h.__render(); });
+});
+mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+if (window.matchMedia) {
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const cb = () => document.querySelectorAll("[id^=chart]").forEach(h => { if (h.__render) h.__render(); });
+  if (mq.addEventListener) mq.addEventListener("change", cb);
+}
+})();
+</script>
