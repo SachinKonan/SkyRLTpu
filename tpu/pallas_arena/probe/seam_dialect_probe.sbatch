@@ -42,9 +42,9 @@
 #SBATCH -p all
 #SBATCH -N 1
 #SBATCH -n 1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=64G
-#SBATCH -t 5:00:00
+#SBATCH --cpus-per-task=12
+#SBATCH --mem=48G
+#SBATCH -t 3:20:00
 #SBATCH --job-name=sd-probe
 #SBATCH --signal=B:TERM@180
 #SBATCH --output=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/pallas_arena/sd-probe-%j.log
@@ -71,7 +71,7 @@ VLLM_PORT=${VLLM_PORT:-8001}
 GEMMA_LOCAL_PORT=${GEMMA_LOCAL_PORT:-8113}
 
 LAND_DEADLINE_S=${LAND_DEADLINE_S:-2700}   # 45 min, per the hard rules
-HARD_CAP_S=${HARD_CAP_S:-14400}            # 4 h from the first QR create
+HARD_CAP_S=${HARD_CAP_S:-10800}            # 3 h from the first QR create (cap is 4 h)
 SERVE_READY_S=${SERVE_READY_S:-3600}
 LEASE_TIMEOUT_S=${LEASE_TIMEOUT_S:-600}
 GRADE_BUDGET_S=${GRADE_BUDGET_S:-300}
@@ -430,7 +430,7 @@ uv_retry driver -- run "${UV_ENV_ARGS[@]}" \
   --boot-report "$boot_report" \
   --cells "$CELLS" \
   --rounds "$ROUNDS" --group-size "$GROUP_SIZE" --max-new-tokens "$MAX_NEW_TOKENS" \
-  --pregate-workers 14 --wall-s "$remain" --round-reserve-s "$ROUND_RESERVE_S"
+  --pregate-workers 10 --wall-s "$remain" --round-reserve-s "$ROUND_RESERVE_S"
 rc=$?
 
 # ---------------------------------------------------------------- artifacts
