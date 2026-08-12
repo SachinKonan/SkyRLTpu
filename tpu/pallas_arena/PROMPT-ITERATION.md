@@ -84,9 +84,59 @@ ignores it produces exactly the program it would have produced at P3, and a
 model that redefines a helper still wins (its definition comes later). This is
 what makes one control program valid for both rungs.
 
-## 3. Control before any chip — placeholder
+## 3. Control before any chip — GREEN
 
-*(filled in from `runs/pallas_arena/ladder-control-*.json`)*
+Three earlier runs in this arena produced confident all-zero grids from
+infrastructure faults (a token budget that 400'd every request; a
+signature-tuple bug that cost 14 of 32 candidates; unreachable engines). So
+nothing went to silicon until a known-good answer had been through the
+*identical* path. Job **3686829**, CPU only, `runs/pallas_arena/ladder-control-3686829.json`.
+
+**Prompt budget — all 15 fit, with room.** Pessimistic chars/3 against
+gemma's served 16384:
+
+| rung | tokens (worst kernel) | room left for the completion |
+|---|---|---|
+| P1 | 2829 (RPA) | 13299 |
+| P3 | 3920 (RPA) | 12208 |
+| P4 | 4497 (RPA) | **11631** |
+
+Every cell keeps ≥11631 tokens for generation against a 12000 request, and the
+driver additionally asks the server's own `/tokenize` per cell and clamps, so
+the failure mode that cost a whole cell last time (a 4.4k prompt + a 12000
+request against a 16384 window returning `HTTPError 400` sixteen times, read
+as sixteen model failures) cannot recur.
+
+**Whole-program control — 10/10 PASS.** Each task's verified known-good
+program, wrapped in a model-style response *with a decoy `raise
+NotImplementedError` block first*, through the real `extract_program`, the
+real `compose_ladder`, and the real sandbox AOT-export child at every declared
+probe shape, at rung p1 and rung p4:
+
+```
+splash_attention p1 PASS / p4 PASS      ragged_paged_attention p1 PASS / p4 PASS
+megablox_gmm     p1 PASS / p4 PASS      rg_lru                 p1 PASS / p4 PASS
+flce             p1 PASS / p4 PASS
+```
+
+The decoy was dropped in 10/10 (the extractor takes the last complete block),
+and the prelude was prepended in exactly the four p4 cells that have one and
+in none of the p1 cells.
+
+**Primitives — checked against their own semantics, not asserted:**
+
+| helper | check | result |
+|---|---|---|
+| `dot_f32` | vs `einsum`, default and `hi=True` | max err **0.0** both |
+| `online_softmax` | streamed in 3 blocks vs one dense masked softmax | max err **2.4e-07** |
+| `online_softmax` | a fully-masked row | **exactly 0.0**, all finite |
+| `chunk_scan` | vs a python loop over the recurrence | max err **2.4e-07**, layout `[B,T,D]` |
+| `fill_ref` | inside a real `pallas_call` body | every element set |
+
+**And one end-to-end P4 answer**: the plain rg_lru kernel a model would write
+under the primitives prompt (a chunk length, one `chunk_scan` call, a carry)
+— exports at every declared shape and lands **1.67e-07** from the fp32
+reference. If an answer that obvious could not pass, the rung would be wrong.
 
 ## 4. Results — placeholder
 
