@@ -9,6 +9,12 @@ actually serves and decodes on a TPU through vLLM + tpu-inference.
 Read `SPEC.md` first for the architecture contract. Where this file and the HF
 reference disagree, the reference wins.
 
+§1-§4 are the original run and all passed. §5 is a follow-up investigation of
+the hybrid KV-cache-group change, which was **reverted**; §6 records a
+follow-up slice that never landed, so the on-slice half of §5 and the long
+context / temperature / LoRA-training work are written but **unrun**. Anything
+marked unrun is not evidence.
+
 ---
 
 ## 1. Weight staging (done, do not re-download)
@@ -194,7 +200,8 @@ The slice reports 4 chips (`/dev/vfio/{0,1,2,3}`; note `ls /dev/accel*` returns
 KV layout came out as `num_kv_cache_groups=1` — vLLM allocated all 52 layers
 uniformly rather than giving the 39 sliding layers a smaller group. Correct, but
 it leaves memory on the table; a hybrid grouping would buy more KV for the same
-HBM.
+HBM. **§5 investigates exactly that and concludes it cannot be switched on
+without a change to `muse_glimmer.py` first.**
 
 ### Greedy decode vs the HF reference, token for token
 
@@ -266,7 +273,228 @@ re-verifies rather than trusting one call.
 
 ---
 
-## 5. What is still unproven
+## 5. The hybrid KV-cache-group change — **REVERTED, and here is why**
+
+`tpu_inference/runner/kv_cache_manager.py::get_kv_cache_spec` hardcodes
+`sliding_window = None` on the JAX path, so all 52 layers get a
+`FullAttentionSpec` and every layer is sized for the full context (the
+`num_kv_cache_groups=1` in §4). A candidate edit resolved the global and
+sliding KV geometries and emitted a `SlidingWindowSpec` for sliding layers
+whenever the two agree — which for Muse-Glimmer they do
+(`num_global_key_value_heads` and `global_head_dim` are both absent, so both
+sides fall back to `num_key_value_heads=2` / `head_dim=128`).
+
+**The edit has been reverted (`git checkout` in the submodule); the tree is
+back to the 1-group behaviour §4 measured.** It is not a bug in the edit's own
+logic — the gate fires precisely where it was meant to. It is that the served
+model cannot consume the layout the edit produces, and that was established
+before any slice time was spent on it.
+
+### 5.1 "Re-enable" in the TODO is a misnomer — verified
+
+The `TODO(kwang3939): Re-enable sliding_window ...` reads as if this path once
+worked. It did not. `git show 9a5dfeca2 -- tpu_inference/runner/kv_cache_manager.py`
+(*[JAX] Enable using different dims across layers in kv_cache_manager (#1860)*)
+shows the JAX branch **before** that commit calling
+
+```
+kv_cache_spec[f"layer.{i}"] = self._create_attention_spec(
+-       block_size, num_kv_heads, head_size)
+```
+
+with no `sliding_window` argument at all. `sliding_window = None` and the TODO
+arrived together, in the same commit that introduced per-layer dims. So
+`SlidingWindowSpec` has **never** been exercised on the JAX path, and this is an
+untested path rather than a restored one.
+
+### 5.2 What the change actually does — CPU A/B, no slice needed
+
+`kv_spec_probe.py` calls the real `KVCacheManager.get_kv_cache_spec` against a
+duck-typed runner (everything it touches is config, a mesh and a dtype) and
+hands the result to vLLM 0.23's own `get_kv_cache_groups` +
+`get_kv_cache_config_from_groups` — the functions that decide
+`num_kv_cache_groups`. Two copies of the tpu-inference tree, patched and
+`git show HEAD:` baseline, each first on `PYTHONPATH`. TP=4, block_size 256,
+300 GiB assumed available. `kvspec_probe.sbatch` job 3687246, `g4spec` job 3687309.
+
+| config | build | layer specs | groups | blocks | **KV tokens** | **`len(kv_cache_tensors)`** |
+|---|---|---|---|---|---|---|
+| Muse-Glimmer-30B (real `config.json`) | baseline | 52 × Full | **1** | 23 630 | 6 049 280 | **52** |
+| Muse-Glimmer-30B (real `config.json`) | **patched** | **39 × Sliding(2048) + 13 × Full** | **4** | 94 523 | **24 197 888** | **13** |
+| gemma-4-31b-it (real `config.json`) | baseline | 60 × Full | 1 | 1 396 | 357 376 | 60 |
+| gemma-4-31b-it (real `config.json`) | **patched** | 60 × Full | 1 | 1 396 | 357 376 | 60 |
+| gemma-4 E2B-shaped (global dims `None`) | baseline | 30 × Full | 1 | 10 240 | 2 621 440 | 30 |
+| gemma-4 E2B-shaped (global dims `None`) | **patched** | 25 × Sliding(512) + 5 × Full | **6** | 61 440 | 15 728 640 | **5** |
+
+The synthetic and the real-`config.json` runs for Muse-Glimmer agree exactly.
+**The prize is real: 4.00× the KV token capacity for the same memory.**
+
+### 5.3 Why it cannot be switched on yet
+
+vLLM does not produce *two* groups (sliding + full). Its
+`_get_kv_cache_groups_uniform_page_size` groups by the repeating layer pattern —
+its own docstring: *"A model with 10 full attention layers and 20 sliding window
+attention layers. There are 3 layers in the pattern (1 \* full, 2 \* sw), so there
+are 3 kv_cache_groups"*. Muse-Glimmer's pattern is `[S,S,S,F] × 13`, so it gets
+**4 groups of 13 layers**, and one `KVCacheTensor` per group-slot: **13 arrays,
+not 52**.
+
+`tpu_inference/models/jax/muse_glimmer.py:601` is written against the 1-group
+layout:
+
+```python
+kv_caches[i], x = layer(kv_caches[i], x, attention_metadata)
+```
+
+It indexes `kv_caches` by **absolute layer index over all 52 layers** and passes
+a single `attention_metadata` object down. Under the patched spec it would be
+handed 13 arrays (`IndexError` at `i = 13`) and a per-layer-name *dict* of
+metadata. `gemma4.py` — the structural template — already handles both
+(`gemma4.py:1007` `attention_metadata[layer_name]`, `:1012-1016`
+`cache_idx = layer_name_to_kv_cache[layer_name]`), which is why gemma-4 E2B/E4B
+would survive the same spec change and Muse-Glimmer would not.
+
+So the failure mode is a hard one at model-construction/forward time, not the
+subtle silent-corruption-past-position-2048 that the two-independent-windowing-
+mechanisms argument predicts. That argument still stands as the *second* hazard
+(the ragged-paged-attention kernel takes its window from the model config at
+`tpu_runner.py:1001`, while block retention would now come from the KV spec) —
+it simply is not the one that bites first.
+
+### 5.4 gemma-4 regression verdict — **no regression on the production path**
+
+`tpu/runs/gemma4-31b.env` runs `google/gemma-4-31B-it`, whose real config has
+
+```
+head_dim 256   global_head_dim 512
+num_key_value_heads 16   num_global_key_value_heads 4
+```
+
+Both global attributes are **set and different**, so `uniform_kv_dims` is false
+and the gate never fires. The probe confirms it end to end: the patched and
+baseline JSON outputs for the real gemma-4-31b config are **byte-identical**
+(`GEMMA4-31B-SPEC-IDENTICAL`, 60 × `FullAttentionSpec`, 1 group, 60 tensors).
+That is a stronger statement than a serving smoke could make — a smoke samples
+behaviour, spec-equality is exhaustive — and it is the reason no gemma-4
+serving smoke was run: with an identical KV cache spec there is nothing for a
+smoke to distinguish. (It is also not cheap to run: no gemma-4 weights are
+staged in this project's GCS cache; the only local copy is the 78 GB
+`gemma-4-31b-it` snapshot on the shared filesystem, which does not fit on a
+v5p-8 boot disk next to the 55.5 GiB Muse-Glimmer checkpoint.)
+
+Gemma-4 **E2B/E4B** *is* affected — `num_global_key_value_heads` is `None`
+there, which is the exact case the existing regression test
+`test_get_kv_cache_spec_without_compilation_cfg_none_text_config_attrs` was
+written for. Those variants go from 1 group to 6. They would probably survive it
+(gemma4.py is group-aware), but nothing here demonstrates that, and no E2B/E4B
+weights are staged.
+
+The repo's own `tests/runner/test_kv_cache_manager.py` gives **no** differential
+signal: all 34 tests error at *setup* in **both** builds with
+`RuntimeError: Failed to infer device type` — vLLM cannot pick a platform on a
+CPU-only node, which is exactly the artefact `vllm_dryrun.py::force_cpu_platform`
+exists to work around and which the probe therefore does not hit.
+
+### 5.5 What landing this properly would take
+
+1. Make `muse_glimmer.py` group-aware, following `gemma4.py` verbatim: accept
+   `_layer_name_to_kv_cache`, index `kv_caches[cache_idx]`, and unwrap
+   `attention_metadata[layer_name]` when it is a dict. ~15 lines.
+2. Only then re-apply the `uniform_kv_dims` gate — and consider narrowing it to
+   models known to be group-aware rather than widening it by config shape alone,
+   since the gate as written silently changes the KV layout of every JAX model
+   whose global head dims happen to be absent.
+3. Re-run the on-slice verification below, which is written and unrun.
+
+### 5.6 What was NOT verified — this is not a pass
+
+**Nothing in §5 was measured on a TPU.** The slice never landed (§6). Missing,
+and required before any claim about correctness:
+
+- the runner's own `Hybrid KV cache layout: num_kv_cache_groups=%d` line
+  (`kv_cache_manager.py` ~line 913) from a live engine;
+- KV token capacity and per-chip HBM against the §4 baseline of **3 025 664
+  tokens** and **13.06 / 95.74 GiB**;
+- the window-boundary sweep, and the shortest prefix length at which any token
+  diverges.
+
+The harness for all of it is written and ready: `mg_client2.py --phases
+boundary` fires a one-token greedy request from prefixes of the 3609-token
+`p4_long_sliding` prompt at **27 lengths** — 16, 64, 512, 1024, 1536, 2016,
+2032, 2040, 2044, 2046, 2047, **2048**, 2049, 2050, 2052, 2056, 2064, 2080,
+2100, 2176, 2304, 2560, 3072, 3456, 3584, 3608, 3609 — and compares each to
+HF's teacher-forced argmax at position `L-1`. Because attention is causal, that
+argmax *is* the greedy next token for the prefix of length `L`, so the reference
+is exact and costs no new HF compute; `make_ext_ref.py` extracted it from the
+existing `hf_ref.npz` (`mg_ext_ref.json`, 27 probes, **zero near-ties** — every
+probed position has a top1/top2 gap above 1e-3, so any disagreement would be a
+real one and not a tie artefact like `p3_mid` step 13). The sweep is dense
+across 2048 precisely so "first diverges at 2049" (indexing off-by-one) is
+distinguishable from "first diverges at 3600" (eviction).
+
+---
+
+## 6. Follow-up run (items 2-4): **no slice, 0 chip-hours**
+
+`followup_tpu.sbatch` → slurm 3687240 → `followup_tpu.sh`. One spot v5p-8 QR,
+`sk7524-museglimmer-followup`, us-east5-a.
+
+| t+ | event |
+|---|---|
+| 0 | QR created `21:19:48Z` |
+| 0-45m | `WAITING_FOR_RESOURCES`, continuously, never ACTIVE |
+| 45m03s | `NOT LANDED after 2703s (cap 2700s) -- giving up` |
+| 45m29s | `CLEANUP: QR ... is GONE (verified)` |
+
+No chips were ever allocated, so the run cost **0 chip-hours**. For contrast the
+§4 run landed in 15m22s; spot v5p-8 capacity in us-east5-a was simply not
+available in this window. Teardown was checked three ways: the script's own
+re-issue-and-verify loop, the sbatch wrapper's backstop, and an independent
+listing at `22:06:10Z` — **zero muse QRs and zero muse TPU VMs in us-east5-a,
+us-east5-b and us-east5-c.**
+
+Items 2 (context past 4096), 3 (temperature > 0) and the on-slice half of item 4
+(LoRA training smoke) are therefore **not run**. What exists is the harness and
+the offline prerequisites:
+
+- **`followup_tpu.sh`** — one QR, deleted on every exit path (the §4 lifecycle
+  verbatim). Boots vLLM patched and reverted at `max-model-len` 4096 for the
+  item-1 A/B, then walks 8192 → 16384 → 32768 reporting where it stops, then
+  frees the boot disk and runs the LoRA smoke. Every stage is independently
+  guarded, and the CPU-only training prep runs in the background during the
+  serving stages.
+- **`mg_client2.py`** — boundary sweep, decode-crossing, long context (with a
+  reference-free needle-recall fallback), and the temperature phases:
+  fixed-seed reproducibility including *concurrent* same-seed requests,
+  seed sensitivity, degeneration statistics, and the load-bearing one — the
+  returned logprobs against HF's own distribution. `mg_logit_rows.npz` holds
+  the full float32 final-position logit row for all five §4 prompts, so the
+  comparison can be made at any temperature against both `log_softmax(logits)`
+  and `log_softmax(logits / T)`. That is the check greedy structurally cannot
+  do: argmax is invariant to the `output_multiplier` (0.196) and to the
+  `T*tanh(logits/T)` softcap, and both reshape the sampled distribution.
+- **`hf_ext_ref.py`** — HF references for decode *across* the window and for 8k
+  / 16k teacher-forced argmax. Submitted (job 3687244) and cancelled: reading
+  the 30B off the shared filesystem in float32 was at 29% after 31 minutes, far
+  past the point where it could serve a slice that had already failed to land.
+- **Real-weight MaxText/orbax checkpoint — DONE.** `convert_real.sbatch` job
+  3687234 ran the exact converter argv the tunix backend shells out to, on the
+  real 55.5 GiB checkpoint, and pushed the result to
+  `gs://sk7524-tinker-tpu-us-east5/muse-glimmer/maxtext-orbax/0/items`:
+  **43 577 641 331 B (40.58 GiB)**, uploaded in 2m18s at 824.5 MiB/s. This
+  closes `MAXTEXT.md` §5 item 2 (real-weight conversion, previously only proven
+  on tiny weights) and removes the largest obstacle to the LoRA smoke: the
+  v5p-8 boot disk is 97 GB and the HF checkpoint already occupies 55.5 GiB of
+  it, so converting on the slice was never going to fit. The slice now only has
+  to download 40.58 GiB.
+- **`lora_smoke.py`** — asserts a **non-zero** LoRA adapter count and prints the
+  module paths the adapters landed on (a name mismatch yields zero adapters
+  silently; MaxText's attention attribute is `self_attention` for exactly this
+  reason), asserts the base params are really FSDP-sharded across the 4 chips
+  rather than replicated, and takes 3 optimizer steps on a math-RL-shaped batch
+  checking that grad_norm is finite and non-zero and that the loss moves.
+
+## 7. What is still unproven
 
 Deliberately out of scope, or simply not yet exercised. None of it is blocked by
 anything above; it is just not evidence we have.
@@ -279,15 +507,26 @@ anything above; it is just not evidence we have.
 - **Context beyond `max_model_len=4096`.** The model advertises 131072. The
   longest thing tested end-to-end is 3609 prompt tokens. Everything past the
   2048 window is exercised, so the sliding/full split is covered, but RoPE at
-  tens of thousands of positions is not.
+  tens of thousands of positions is not. Harness written (`followup_tpu.sh`
+  walks 8192 → 16384 → 32768; `mg_client2.py --phases longctx,longfallback`
+  plants a needle in the first ~30 tokens and asks for it at the end, so the 13
+  NoPE full-attention layers carry real long-range load), **unrun — no slice.**
 - **Sampling.** Only greedy (`temperature=0`) is compared. Nothing here says the
-  sampled distribution matches HF, only that the argmax path does.
+  sampled distribution matches HF, only that the argmax path does. Harness
+  written (`mg_client2.py --phases temp`, including the logprob-vs-HF check at
+  matched temperature), **unrun — no slice.**
+- **The hybrid KV-cache-group change.** Investigated on CPU and reverted; see
+  §5. The spec-level A/B is solid, the on-slice confirmation is missing, and
+  §5.3 says why the served model cannot consume the new layout as it stands.
 - **Quantization.** Served bf16 unquantized; no qwix/AWQ/FP8 path tried.
 - **Topology.** One host, TP=4, PP=1, DP=1. KV-head replication
   (`_load_kv_proj_replicated`) is specifically a TP-vs-`num_key_value_heads=2`
   concern and is only proven at TP=4; TP=8 and multi-host are untested.
 - **Training on real weights.** `MAXTEXT.md` covers the converter round-trip and
-  HF parity; no real-weight optimizer step has been run.
+  HF parity. The real 30B checkpoint has now been converted to orbax and staged
+  in GCS (§6), but **no real-weight optimizer step has been run** and no LoRA
+  adapter has been injected into the real model — that is the half of item 4
+  that needs a slice.
 - **`prompt_logprobs`.** Probed once, as a known EngineCore killer on this stack
   (see the tinker/qwen35 notes). It is not part of the pass criteria.
 - **Sustained serving.** No long-run stability, preemption/eviction-under-
@@ -312,7 +551,25 @@ sbatch tpu/muse_glimmer/vllm_dryrun.sbatch
 
 # 4. end-to-end on ONE spot v5p-8
 sbatch tpu/muse_glimmer/e2e_tpu.sbatch
+
+# 5. KV-cache-group A/B on CPU (patched vs `git show HEAD:` baseline), no slice
+sbatch tpu/muse_glimmer/kv_spec_probe.sbatch      # muse-glimmer + gemma-4 shapes
+sbatch tpu/muse_glimmer/gemma4_kvspec.sbatch      # the REAL gemma-4-31b config
+
+# 6. real-weight HF -> MaxText/orbax, pushed to GCS (~25 min CPU + 2 min upload)
+sbatch tpu/muse_glimmer/convert_real.sbatch
+
+# 7. extra HF references: decode across the 2048 window, 8k/16k teacher forcing
+sbatch tpu/muse_glimmer/hf_ext_ref.sbatch
+
+# 8. the follow-up slice: KV A/B, long context, temperature, LoRA smoke
+sbatch tpu/muse_glimmer/followup_tpu.sbatch
 ```
+
+`hf_ext_ref.sbatch` runs `make_ext_ref.py` first — that part needs no model and
+finishes in seconds, producing `mg_ext_ref.json` (the 27 window-boundary probes)
+and `mg_logit_rows.npz` (the HF distributions for the temperature check), so the
+slice is not blocked on the slow float32 forward behind it.
 
 The HF reference needs the unreleased transformers and therefore an isolated
 venv (`/n/fs/vision-mix/sk7524/caches/muse-parity/venv`, built by
@@ -320,6 +577,10 @@ venv (`/n/fs/vision-mix/sk7524/caches/muse-parity/venv`, built by
 pinned for the live RL sweep.
 
 ### QR hygiene
+
+`followup_tpu.sh` uses a distinct name, `sk7524-museglimmer-followup`, and the
+same lifecycle; its wrapper additionally audits **all three** zones
+(us-east5-a/b/c) for both queued resources and TPU VMs at exit.
 
 `e2e_tpu.sh` creates **exactly one** QR, `sk7524-museglimmer-e2e`, and deletes
 it on every exit path. `trap ... EXIT` is known not to fire on an untrapped
