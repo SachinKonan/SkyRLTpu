@@ -101,6 +101,32 @@ queue_pid=""; watchdog_pid=""; judge_pid=""; serve_pid=""; bootfetch_pid=""
 tunnel_pids=()
 t_first_qr=""
 
+# --------------------------------------------------------------- uv, retried
+# MEASURED (job 3686851): the grid never ran. Both slices were up, both engines
+# healthy, the judge had booted all five problems -- and `uv run --isolated`
+# died in 13 seconds resolving `causal-conv1d` from a GitHub release URL:
+#   http2 error: stream error received: refused stream ...
+# One transient HTTP fetch cost 31 minutes of bring-up on two spot slices and
+# produced zero candidates. The same flake had already hit the CPU control job
+# once. So: every uv invocation retries, and the driver's environment is BUILT
+# AND PROVEN BEFORE A SINGLE QR IS CREATED, where a failure costs nothing.
+UV_ENV_ARGS=(--isolated --extra dev --extra jax --with fastapi --with uvicorn --with flatbuffers)
+export UV_HTTP_TIMEOUT=${UV_HTTP_TIMEOUT:-120}
+
+uv_retry() {  # uv_retry <label> -- <uv args...>
+  local label=$1; shift; [ "${1:-}" = "--" ] && shift
+  local n=${UV_RETRIES:-4} i rc
+  for i in $(seq 1 "$n"); do
+    uv "$@"
+    rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    echo "[uv] ${label}: attempt ${i}/${n} failed rc=${rc}; retrying in $(( 10 * i ))s"
+    sleep $(( 10 * i ))
+  done
+  echo "[uv] ${label}: FAILED after ${n} attempts"
+  return 1
+}
+
 # ------------------------------------------------------------------ cleanup
 cleaned=""
 cleanup() {
@@ -169,9 +195,26 @@ cleanup() {
 trap cleanup EXIT
 trap 'echo "[trap] caught TERM/INT/HUP"; cleanup; exit 143' TERM INT HUP
 
+# ------------------------------------------------------- PRE-WARM (no chips)
+# Build and PROVE the exact environment the grid will run in, and import the
+# prompt/ladder modules, before anything is provisioned. A dependency-resolution
+# flake, a syntax error in a prompt module or a missing name is then a 60-second
+# failure at zero chip cost instead of a dead 31-minute bring-up.
+echo "=== pre-warming the driver environment $(date +%H:%M:%S) ==="
+uv_retry prewarm -- run "${UV_ENV_ARGS[@]}" python -c "
+import sys; sys.path.insert(0, '${repo_root}/tpu')
+from pallas_arena.probe.prompt_ladder import LADDER_PROMPTS, RUNGS, TASKS
+from pallas_arena.probe.ladder import PRELUDES, compose_ladder
+from pallas_arena.probe import configs as C
+n = {t: {r: len(LADDER_PROMPTS[t][r]) for r in RUNGS} for t in TASKS}
+assert len(n) == 5 and all(len(v) == 3 for v in n.values()), n
+cfgs = C.all_configs(models='${MODELS}'.split(','), variants='${VARIANTS}'.split(','))
+print('[prewarm] OK', len(cfgs), 'configurations;', sum(len(v) for v in n.values()), 'prompts')
+" || { echo "=== FATAL: could not build the driver environment; no QR was created. ==="; exit 6; }
+
 # -------------------------------------------------------------------- queue
 echo "=== ladder: queue on $(hostname):${QUEUE_PORT} $(date +%H:%M:%S) ==="
-uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with flatbuffers \
+uv run "${UV_ENV_ARGS[@]}" \
   python -m pallas_arena.judge.queue --port "$QUEUE_PORT" --host 127.0.0.1 \
   --lease-timeout "$LEASE_TIMEOUT_S" > "${out_dir}/ladder-queue-${SLURM_JOB_ID}.log" 2>&1 &
 queue_pid=$!
@@ -328,7 +371,7 @@ servers="gemma4-31b=http://127.0.0.1:${GEMMA_LOCAL_PORT}"
 
 # ------------------------------------------------- verify the chat rendering
 echo "=== verifying chat rendering $(date +%H:%M:%S) ==="
-uv run --isolated --extra dev python tpu/pallas_arena/probe/verify_render.py \
+uv_retry render -- run --isolated --extra dev python tpu/pallas_arena/probe/verify_render.py \
   --servers "$servers" --out "${out_dir}/ladder-render-${SLURM_JOB_ID}.json" 2>&1 | tail -30
 
 # -------------------------------------------------------- judge readiness
@@ -344,7 +387,7 @@ fi
 remain=$(( t_first_qr + HARD_CAP_S - $(date +%s) - 900 ))
 [ "$remain" -lt 600 ] && remain=600
 echo "=== running the ladder probe $(date +%H:%M:%S) (wall ${remain}s) ==="
-uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with flatbuffers \
+uv_retry driver -- run "${UV_ENV_ARGS[@]}" \
   python tpu/pallas_arena/probe/probe_driver.py \
   --servers "$servers" $queue_arg \
   --out "${out_dir}/ladder-results-${SLURM_JOB_ID}.json" \
