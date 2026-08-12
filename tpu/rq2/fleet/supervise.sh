@@ -249,6 +249,24 @@ e=json.loads(sys.argv[1]); e.append({'slice':sys.argv[2],'worker':int(sys.argv[3
   'url':'http://%s:%s'%(sys.argv[5],sys.argv[6]),'healthy':False,'served_model':None,
   'last_ok':None,'checked':None}); print(json.dumps(e))" "$ENTRIES" "$slice" "$w" "$key" "$ip" "$PORT")
     done
+
+    # INCREMENTAL publish: merge THIS slice's fresh entries in now (atomic tmp+rename). The
+    # end-of-cycle write can lag an hour behind QR grinding, and a recovered slice's NEW IPs
+    # are invisible until published -- the external reprobe can only re-check known entries.
+    # Measured: slice D served for 1h+ on new IPs while clients saw only its dead old ones.
+    $PY - "$REGISTRY" "$slice" "$ENTRIES" <<'PYEOF' 2>/dev/null || true
+import json, os, sys, time
+path, sl, cur = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+try:
+    old = json.load(open(path)).get("entries", [])
+except Exception:
+    old = []
+merged = [e for e in old if e.get("slice") != sl] + [e for e in cur if e.get("slice") == sl]
+tmp = path + ".tmp"
+json.dump({"updated": time.time(), "updated_str": time.strftime("%F %T"),
+           "entries": merged}, open(tmp, "w"))
+os.replace(tmp, path)
+PYEOF
   done
 
   # graders are part of recovery too: vLLM relaunch alone leaves the shim dead after a
