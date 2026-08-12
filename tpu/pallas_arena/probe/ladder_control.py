@@ -138,7 +138,12 @@ def check_prompt_budget(max_model_len: int, reserve: int, want_new: int) -> list
 def check_programs(timeout_s: float) -> list[dict]:
     out = []
     for task in prompt_ladder.TASKS:
-        sigs = probe_signatures(task, C.TASK_CASES[task])
+        # [0] and ONLY [0]: probe_signatures returns
+        # (sigs, case_sig, adv_sig, grad_sig) and the export child wants the
+        # first element. Passing the whole tuple made every candidate die at
+        # `aot_export` with "list indices must be integers" -- a harness fault
+        # wearing a candidate's clothes, and it cost 14 of 32 candidates once.
+        sigs = probe_signatures(task, C.TASK_CASES[task])[0]
         label, fill = CONTROL_FILLS[task][0]
         program = compose(task, fill)  # a complete, verified module
         text = _wrap(program)
@@ -256,7 +261,7 @@ def check_p4_program(timeout_s: float) -> dict:
     import numpy as np
 
     task = "rg_lru"
-    sigs = probe_signatures(task, C.TASK_CASES[task])
+    sigs = probe_signatures(task, C.TASK_CASES[task])[0]
     code, how = extract_program(_wrap(RGLRU_P4_PROGRAM.strip()))
     composed = ladder.compose_ladder(task, "p4", code)
     res = pregate_one(task, composed, sigs, timeout_s=timeout_s)
@@ -306,7 +311,15 @@ def main() -> int:
 
     budget_ok = all(r["ok"] for r in report["prompt_budget"])
     prog_ok = all(r["passed"] and r["decoy_dropped"] for r in report["programs"])
-    prel_ok = all(r["prelude_prepended"] for r in report["programs"] if r["rung"] == "p4")
+    # flce's P4 is a stated backward CONTRACT, not a prelude, so it is the one
+    # task where "nothing was prepended" is the correct outcome.
+    prel_ok = all(
+        r["prelude_prepended"]
+        for r in report["programs"]
+        if r["rung"] == "p4" and r["task"] != "flce"
+    ) and not any(
+        r["prelude_prepended"] for r in report["programs"] if r["rung"] == "p1"
+    )
     prim = report["primitives"]
     prim_ok = (
         prim["dot_f32"]["max_err"] < 1e-4
