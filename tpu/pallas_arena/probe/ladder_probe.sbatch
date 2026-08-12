@@ -123,7 +123,17 @@ uv_retry() {  # uv_retry <label> -- <uv args...>
     echo "[uv] ${label}: attempt ${i}/${n} failed rc=${rc}; retrying in $(( 10 * i ))s"
     sleep $(( 10 * i ))
   done
-  echo "[uv] ${label}: FAILED after ${n} attempts"
+  # OFFLINE FALLBACK. The failing dependency is `causal-conv1d`, pulled from a
+  # GitHub *release URL* by the `dev` extra -- nothing this run uses, and a host
+  # this run cannot influence (measured: http2 refused-stream, then a sustained
+  # 503). The local uv cache already holds it from the environments built
+  # earlier in this same job, so resolving from cache is both correct and the
+  # only thing that does not depend on github.com being healthy.
+  echo "[uv] ${label}: all ${n} attempts failed; retrying OFFLINE from the local uv cache"
+  UV_OFFLINE=1 uv "$@"
+  rc=$?
+  [ "$rc" -eq 0 ] && { echo "[uv] ${label}: OK offline"; return 0; }
+  echo "[uv] ${label}: FAILED after ${n} attempts and an offline retry"
   return 1
 }
 
