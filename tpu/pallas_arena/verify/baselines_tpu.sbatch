@@ -166,6 +166,13 @@ assert jax.__version__ == '0.10.2', 'ARENA JAX PIN MOVED: ' + jax.__version__
 ENTRY=${ENTRY:-pallas_arena.verify.tpu_baselines}
 ENTRY_ARGS=${ENTRY_ARGS:---tasks '${TASKS}'}
 
+# Optional payload file (e.g. a codes.json for regrade_winners); lands at
+# ~/payload.json on the judge, referenced from ENTRY_ARGS.
+if [ -n "${EXTRA_SCP:-}" ]; then
+  timeout 300 gcloud compute tpus tpu-vm scp "$EXTRA_SCP" "${QR}:~/payload.json" \
+    --zone="$ZONE" --project="$PROJECT" --worker=0 || { echo "FATAL: payload scp failed"; exit 1; }
+fi
+
 echo "=== [$(date +%H:%M:%S)] running ${ENTRY} on chip ==="
 timeout 6000 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
   --command="set -o pipefail; cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu PYTHONPATH=~/arena \
