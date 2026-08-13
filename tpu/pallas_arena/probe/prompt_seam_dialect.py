@@ -58,7 +58,7 @@ the slices are asserted at import so they cannot drift.
 from __future__ import annotations
 
 from pallas_arena.probe.prompt_ladder import DIALECT
-from pallas_arena.probe.prompt_seam import API_BLOCK, SEAM_PROMPTS, _OUTPUT
+from pallas_arena.probe.prompt_seam import _OUTPUT, API_BLOCK, SEAM_PROMPTS
 
 # ==========================================================================
 # 1. The dialect, scoped to a fill answer. Bullets 2-9 are sliced VERBATIM.
