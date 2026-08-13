@@ -33,6 +33,7 @@ import argparse
 import json
 import math
 import time
+import urllib.error
 import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -46,8 +47,19 @@ def post(url: str, payload: dict, timeout: int = 1800) -> dict:
                                  data=json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"},
                                  method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        # A bare "HTTPError 400: Bad Request" is useless -- vLLM puts the
+        # actual reason (unsupported sampling parameter, context overflow,
+        # logprobs above max_logprobs) in the response BODY.  A whole
+        # temperature phase was lost to this once; never again.
+        try:
+            body = exc.read().decode()[:600]
+        except Exception:  # noqa: BLE001
+            body = "<unreadable body>"
+        raise RuntimeError(f"HTTP {exc.code} from {url}: {body}") from None
 
 
 class Engine:
@@ -349,14 +361,41 @@ def phase_temp(eng: Engine, rows_npz: str, res: dict, temps: List[float],
     names = sorted({k.split("/")[0] for k in z.files})
     out: Dict[str, Any] = {"logprob_vs_hf": {}, "determinism": {},
                            "degeneration": {}}
+    # Published IMMEDIATELY: every sub-block below is independently guarded, so
+    # a server that rejects one sampling parameter costs only the block that
+    # needs it, not the whole phase.
+    res["temperature"] = out
+
+    # Not every build accepts every sampling parameter -- find a combination
+    # this server actually takes before measuring anything with it.
+    probe_ids = z[f"{names[0]}/ids"].astype(int).tolist()
+    lp_ok, seed_ok, probe_err = None, None, None
+    for lp_try, seed_try in ((16, 1234), (5, 1234), (16, None), (5, None),
+                             (None, 1234), (None, None)):
+        try:
+            eng.complete(probe_ids, 1, max(temps), logprobs=lp_try,
+                         seed=seed_try)
+            lp_ok, seed_ok = lp_try, seed_try
+            break
+        except Exception as exc:  # noqa: BLE001
+            probe_err = repr(exc)
+    out["accepted_sampling_params"] = {
+        "logprobs": lp_ok,
+        "seed": seed_ok,
+        "last_rejection": probe_err,
+    }
+    print(f"  sampling-param probe: logprobs={lp_ok} seed={seed_ok}"
+          f"{'' if lp_ok or seed_ok else ' -- server rejected everything'}"
+          f"{f' (last rejection: {probe_err})' if probe_err else ''}",
+          flush=True)
 
     # ---- (d) logprobs vs HF's distribution, the check greedy cannot do ----
-    for T in temps:
+    for T in (temps if lp_ok else []):
         per_prompt = {}
         for name in names:
             ids = z[f"{name}/ids"].astype(int).tolist()
             row = z[f"{name}/final_logits"].astype(np.float64)
-            r = eng.complete(ids, 1, T, logprobs=16, seed=1234)
+            r = eng.complete(ids, 1, T, logprobs=lp_ok, seed=seed_ok)
             tp = tops(r)
             if not tp:
                 per_prompt[name] = {"error": "no logprobs returned"}
@@ -390,8 +429,16 @@ def phase_temp(eng: Engine, rows_npz: str, res: dict, temps: List[float],
         out["logprob_vs_hf"][str(T)] = per_prompt
 
     # ---- (a)/(b) seed determinism and seed sensitivity --------------------
+    # Needs a server-side seed; without one, reproducibility is untestable and
+    # must be reported as untested rather than silently skipped.
     base_ids = z[f"{names[0]}/ids"].astype(int).tolist()
-    for T in temps:
+    if seed_ok is None:
+        out["determinism"] = {
+            "error": "server rejected the `seed` parameter; "
+                     "fixed-seed reproducibility could not be tested",
+            "last_rejection": probe_err,
+        }
+    for T in (temps if seed_ok is not None else []):
         same = [
             gen_ids(eng.complete(base_ids, 32, T, seed=4242)) for _ in range(3)
         ]
@@ -424,7 +471,13 @@ def phase_temp(eng: Engine, rows_npz: str, res: dict, temps: List[float],
 
     # ---- (c) degeneration -------------------------------------------------
     for T in temps:
-        r = eng.complete(base_ids, gen_tokens, T, seed=7, timeout=3600)
+        try:
+            r = eng.complete(base_ids, gen_tokens, T, seed=seed_ok,
+                             timeout=3600)
+        except Exception as exc:  # noqa: BLE001
+            out["degeneration"][str(T)] = {"error": repr(exc)}
+            print(f"  T={T} degeneration FAILED: {exc!r}", flush=True)
+            continue
         g = gen_ids(r)
         st = _degeneration(g)
         st["text_head"] = r["choices"][0]["text"][:400]

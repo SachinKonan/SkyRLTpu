@@ -58,6 +58,32 @@ SYNTHETIC = {
                        global_head_dim=512,
                        pattern=("sliding_attention", ) * 5 +
                        ("full_attention", )),
+    # GPT-OSS: `GptOssConfig.__post_init__` ALWAYS populates layer_types with
+    # alternating sliding/full and defaults sliding_window=128, and it has
+    # neither num_global_key_value_heads nor global_head_dim -- so the
+    # uniform-dims gate fires here too.  `models/jax/gpt_oss.py` indexes
+    # `kv_caches[i]` by absolute layer index and does not accept
+    # `_layer_name_to_kv_cache`, so it cannot consume the resulting layout.
+    # This is the regression that decides how wide the gate may be, and this
+    # repo serves gpt-oss-20b/120b today.
+    "gpt-oss-20b": dict(num_hidden_layers=24,
+                        num_attention_heads=64,
+                        num_key_value_heads=8,
+                        head_dim=64,
+                        hidden_size=2880,
+                        sliding_window=128,
+                        num_global_key_value_heads=None,
+                        global_head_dim=None,
+                        pattern=("sliding_attention", "full_attention")),
+    "gpt-oss-120b": dict(num_hidden_layers=36,
+                         num_attention_heads=64,
+                         num_key_value_heads=8,
+                         head_dim=64,
+                         hidden_size=2880,
+                         sliding_window=128,
+                         num_global_key_value_heads=None,
+                         global_head_dim=None,
+                         pattern=("sliding_attention", "full_attention")),
     # Muse-Glimmer-30B, from config.json, for a weightless cross-check.
     "muse-glimmer": dict(num_hidden_layers=52,
                          num_attention_heads=32,

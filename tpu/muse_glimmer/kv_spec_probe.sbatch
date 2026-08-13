@@ -59,7 +59,7 @@ for v in patched baseline; do
   echo "--- unit tests: tests/runner/test_kv_cache_manager.py ---"
   (cd "$WORK/$v" && timeout 1800 "${VENV}/bin/python" -m pytest -q \
       tests/runner/test_kv_cache_manager.py 2>&1 | tail -25)
-  for s in muse-glimmer gemma4-e2b gemma4-31b; do
+  for s in muse-glimmer gemma4-e2b gemma4-31b gpt-oss-20b gpt-oss-120b; do
     echo "--- probe (synthetic ${s}) ---"
     timeout 900 "${VENV}/bin/python" "${REPO}/tpu/muse_glimmer/kv_spec_probe.py" \
       --synthetic "$s" --tp 4 --out "${OUT}/kvspec-${v}-${s}.json" 2>&1 | tail -20

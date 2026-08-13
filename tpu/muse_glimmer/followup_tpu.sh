@@ -21,11 +21,26 @@ set -uo pipefail
 REPO=/n/fs/vision-mix/sk7524/SkyRLTpu
 GC=/n/fs/vision-mix/sk7524/google-cloud-sdk/bin/gcloud
 KEY="${SSH_KEY_FILE:-$HOME/.ssh/google_compute_engine}"
-SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=25"
+# ServerAlive* is load-bearing, not hygiene: a landed slice was lost when the
+# TPU VM dropped an idle SSH channel 2m30s into `uv pip install vllm-tpu`
+# ("Connection closed by remote host") and the venv preflight was scored as a
+# failure.  Long installs produce no traffic for minutes at a time.
+SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=25 -o ServerAliveInterval=30 -o ServerAliveCountMax=40 -o TCPKeepAlive=yes"
 USER_R=sk7524_princeton_edu
 
 ZONE="${ZONE:-us-east5-a}"
 Z="--project=vision-mix --zone=${ZONE}"
+# Spot v5p-8 capacity is bursty: the first e2e run landed in 15m22s, the next
+# attempt sat in WAITING_FOR_RESOURCES for the full 45min in the same zone.
+# So rotate rather than camp -- one QR alive at a time, deleted before the next
+# is created.  us-east5-b is NOT in the rotation: `accelerator-types list`
+# advertises v5p-8 there, but the QR create call itself fails with an API error
+# for this project, so a slot spent there is a slot wasted.  us-east5-a is the
+# only zone that has ever landed one; -c is the untried alternative, given a
+# short slot and revisited only after -a gets a second, longer look.
+ZONES="${ZONES:-us-east5-a us-east5-c us-east5-a}"
+ZONE_TRY_SEC="${ZONE_TRY_SEC:-900}"
+ALL_ZONES="us-east5-a us-east5-b us-east5-c"
 QR="${QR:-sk7524-museglimmer-followup}"
 ACC="${ACC:-v5p-8}"
 RUNTIME="${RUNTIME:-v2-alpha-tpuv5}"
@@ -53,41 +68,59 @@ QR_CREATED_AT=""
 
 log() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$PROG"; }
 
-qr_state() {
+qr_state_z() {   # $1 = zone
   local s
   for _ in 1 2 3; do
-    s=$(timeout 45 $GC alpha compute tpus queued-resources describe "$QR" $Z \
+    s=$(timeout 45 $GC alpha compute tpus queued-resources describe "$QR" \
+          --project=vision-mix --zone="$1" \
           --format="value(state.state)" 2>/dev/null | tail -1)
     [ -n "$s" ] && { echo "$s"; return; }
     sleep 4
   done
   echo ""
 }
+qr_state() { qr_state_z "$ZONE"; }
 
-CLEANED=""
-cleanup() {
-  local why="${1:-EXIT}"
-  [ -n "$CLEANED" ] && return 0
-  CLEANED=1
-  log "=== CLEANUP (${why}): deleting QR ${QR} in ${ZONE} ==="
-  setsid nohup $GC alpha compute tpus queued-resources delete "$QR" $Z --quiet --force \
+# Delete + verify in ONE zone.  Returns 0 only when the QR is provably gone.
+qr_kill_z() {   # $1 = zone  $2 = rounds
+  local z="$1" rounds="${2:-60}" i st
+  setsid nohup $GC alpha compute tpus queued-resources delete "$QR" \
+    --project=vision-mix --zone="$z" --quiet --force \
     >>"$LOGDIR/qr-delete.log" 2>&1 </dev/null &
   disown 2>/dev/null || true
   sleep 10
-  local st
-  for i in $(seq 1 60); do
-    st=$(qr_state)
-    if [ -z "$st" ]; then log "CLEANUP: QR ${QR} is GONE (verified)"; return 0; fi
-    [ $((i % 4)) -eq 1 ] && log "CLEANUP: QR state=${st}, re-issuing delete and waiting..."
+  for i in $(seq 1 "$rounds"); do
+    st=$(qr_state_z "$z")
+    if [ -z "$st" ]; then log "CLEANUP[${z}]: QR ${QR} is GONE (verified)"; return 0; fi
+    [ $((i % 4)) -eq 1 ] && log "CLEANUP[${z}]: QR state=${st}, re-issuing delete and waiting..."
     if [ $((i % 8)) -eq 0 ]; then
-      setsid nohup $GC alpha compute tpus queued-resources delete "$QR" $Z --quiet --force \
+      setsid nohup $GC alpha compute tpus queued-resources delete "$QR" \
+        --project=vision-mix --zone="$z" --quiet --force \
         >>"$LOGDIR/qr-delete.log" 2>&1 </dev/null &
       disown 2>/dev/null || true
     fi
     sleep 15
   done
-  log "CLEANUP: *** WARNING *** QR ${QR} still present after 15min of deletes"
+  log "CLEANUP[${z}]: *** WARNING *** QR ${QR} still present after $((rounds * 15))s of deletes"
   return 1
+}
+
+CLEANED=""
+cleanup() {
+  local why="${1:-EXIT}" z rc=0
+  [ -n "$CLEANED" ] && return 0
+  CLEANED=1
+  # Sweep EVERY zone, not just the current one: the landing phase rotates
+  # zones, and a QR that was created in a zone we have moved on from is
+  # exactly the leak this repo has been bitten by.  Deleting a name that does
+  # not exist there is a no-op.
+  log "=== CLEANUP (${why}): deleting QR ${QR} in ${ALL_ZONES} ==="
+  qr_kill_z "$ZONE" 60 || rc=1
+  for z in $ALL_ZONES; do
+    [ "$z" = "$ZONE" ] && continue
+    qr_kill_z "$z" 20 || rc=1
+  done
+  return $rc
 }
 trap 'cleanup EXIT' EXIT
 trap 'cleanup SIGTERM; exit 143' TERM
@@ -109,29 +142,75 @@ have_time() { [ $(( CAP_SEC - $(elapsed) )) -ge "$1" ]; }
 rsh() { timeout "${2:-120}" ssh $SSHO ${USER_R}@"$HOST" "$1" 2>&1 | grep -v "^Warning: Permanently"; }
 
 # --------------------------------------------------------------- 1. QR ------
-existing=$(qr_state)
-if [ -n "$existing" ]; then
-  log "QR ${QR} already exists (state=${existing}) -- deleting first to guarantee exactly one"
-  timeout 300 $GC alpha compute tpus queued-resources delete "$QR" $Z --quiet --force >/dev/null 2>&1
-  sleep 20
-fi
-
-log "creating spot ${ACC} QR ${QR} in ${ZONE}"
-QR_CREATED_AT=$(date +%s)
-timeout 180 $GC alpha compute tpus queued-resources create "$QR" --node-id="$QR" $Z \
-  --accelerator-type="$ACC" --runtime-version="$RUNTIME" --provisioning-model=SPOT \
-  2>&1 | tail -5 | tee -a "$PROG"
-
-while true; do
-  el=$(elapsed)
-  [ "$el" -ge "$LAND_SEC" ] && { log "NOT LANDED after ${el}s (cap ${LAND_SEC}s) -- giving up"; exit 2; }
-  st=$(qr_state)
-  log "  QR state=${st:-<empty>} (${el}s)"
-  [ "$st" = ACTIVE ] && break
-  if [ "$st" = FAILED ]; then log "QR FAILED"; exit 3; fi
-  sleep 30
+# Nothing of this name may pre-exist ANYWHERE, or "exactly one QR" is a lie.
+for z in $ALL_ZONES; do
+  existing=$(qr_state_z "$z")
+  if [ -n "$existing" ]; then
+    log "QR ${QR} already exists in ${z} (state=${existing}) -- deleting first"
+    qr_kill_z "$z" 20
+  fi
 done
-log "QR ACTIVE after $(elapsed)s"
+
+QR_CREATED_AT=$(date +%s)
+LANDED=""
+for zone_try in $ZONES; do
+  el=$(elapsed)
+  [ "$el" -ge "$LAND_SEC" ] && { log "landing budget ${LAND_SEC}s exhausted"; break; }
+  ZONE="$zone_try"; Z="--project=vision-mix --zone=${ZONE}"
+  # Never let a per-zone slot run past the overall land-or-abort deadline.
+  zone_deadline=$(( el + ZONE_TRY_SEC )); [ "$zone_deadline" -gt "$LAND_SEC" ] && zone_deadline=$LAND_SEC
+
+  log "creating spot ${ACC} QR ${QR} in ${ZONE} (zone slot until t+${zone_deadline}s)"
+  timeout 180 $GC alpha compute tpus queued-resources create "$QR" --node-id="$QR" $Z \
+    --accelerator-type="$ACC" --runtime-version="$RUNTIME" --provisioning-model=SPOT \
+    2>&1 | tail -12 | tee -a "$PROG"
+
+  # A zone can refuse the CREATE outright (us-east5-b returns an API error for
+  # v5p-8 spot on this project).  That is not the same as "queued, waiting for
+  # capacity": the QR simply does not exist, `describe` returns NOT_FOUND, and
+  # the wait loop below would otherwise spin on an empty state for the whole
+  # zone slot.  Confirm the QR exists before agreeing to wait for it.
+  created=""
+  for _ in 1 2 3; do
+    [ -n "$(qr_state)" ] && { created=1; break; }
+    sleep 20
+  done
+  if [ -z "$created" ]; then
+    log "CREATE FAILED in ${ZONE}: no QR exists 60s after create -- skipping this zone"
+    continue
+  fi
+
+  while true; do
+    el=$(elapsed)
+    st=$(qr_state)
+    log "  QR state=${st:-<empty>} zone=${ZONE} (${el}s)"
+    if [ "$st" = ACTIVE ]; then LANDED=1; break; fi
+    if [ "$st" = FAILED ]; then log "QR FAILED in ${ZONE} -- moving on"; break; fi
+    if [ "$el" -ge "$zone_deadline" ]; then
+      log "no capacity in ${ZONE} after $((el))s -- deleting and trying the next zone"
+      break
+    fi
+    sleep 30
+  done
+  [ -n "$LANDED" ] && break
+  # One QR at a time, and that is not negotiable: the previous one must be
+  # PROVABLY gone before another is created, or a zone rotation quietly becomes
+  # two live spot reservations.
+  if ! qr_kill_z "$ZONE" 20; then
+    log "could not confirm deletion in ${ZONE}; retrying rather than creating a second QR"
+    qr_kill_z "$ZONE" 40 || {
+      log "*** ${QR} still alive in ${ZONE} -- aborting instead of rotating zones"
+      exit 8
+    }
+  fi
+done
+
+if [ -z "$LANDED" ]; then
+  log "NOT LANDED after $(elapsed)s across zones [${ZONES}] (cap ${LAND_SEC}s) -- giving up"
+  exit 2
+fi
+ACTIVE_AT=$(date +%s)
+log "QR ACTIVE in ${ZONE} after $(elapsed)s"
 
 HOST=$(timeout 60 $GC compute tpus tpu-vm describe "$QR" $Z \
         --format="value(networkEndpoints[].accessConfig.externalIp)" 2>/dev/null \
@@ -176,13 +255,24 @@ timeout 120 scp $SSHO "$LOGDIR/kvm_baseline.py" "$LOGDIR/kvm_patched.py" \
   "$REPO/tpu/muse_glimmer/lora_smoke.py" \
   ${USER_R}@"$HOST":~/ >/dev/null 2>&1 || { log "scp of clients failed"; exit 7; }
 
-log "building vLLM venv"
-rsh "export PATH=\$HOME/.local/bin:\$PATH
+# Built DETACHED, in tmux, and polled -- exactly like the engine.  A previous
+# landed slice was thrown away because the SSH channel carrying this install
+# was dropped by the remote host after 2m30s; the install itself was fine.
+# Nothing that takes minutes and produces no output should ride on a foreground
+# ssh channel.
+log "building vLLM venv (detached, polled)"
+rsh "cat > ~/build_venv.sh <<'EOS'
+set -x
+export PATH=\$HOME/.local/bin:\$PATH
+# UV_NO_CONFIG is REQUIRED: with cwd inside the repo, uv applies
+# override-dependencies (transformers<=5.8.0) even to an explicit git spec with
+# --no-deps --force-reinstall, and 5.8.0 cannot parse model_type muse_glimmer.
 export UV_NO_CONFIG=1
-uv venv --python 3.12 ${VLLM_VENV} 2>&1 | tail -2
-uv pip install --python ${VLLM_VENV}/bin/python 'vllm-tpu==${VLLM_TPU_VERSION}' 2>&1 | tail -2
-uv pip install --python ${VLLM_VENV}/bin/python --no-deps --force-reinstall /home/${USER_R}/tpu-inference 2>&1 | tail -2
-uv pip install --python ${VLLM_VENV}/bin/python --no-deps --force-reinstall 'transformers @ git+https://github.com/huggingface/transformers@main' 2>&1 | tail -2
+uv venv --python 3.12 ${VLLM_VENV}
+uv pip install --python ${VLLM_VENV}/bin/python 'vllm-tpu==${VLLM_TPU_VERSION}'
+uv pip install --python ${VLLM_VENV}/bin/python --no-deps --force-reinstall /home/${USER_R}/tpu-inference
+# transformers goes LAST: any resolving install after it re-triggers the override.
+uv pip install --python ${VLLM_VENV}/bin/python --no-deps --force-reinstall 'transformers @ git+https://github.com/huggingface/transformers@main'
 ${VLLM_VENV}/bin/python - <<'PY'
 import transformers, vllm, tpu_inference, os
 print('transformers', transformers.__version__, '| vllm', vllm.__version__)
@@ -192,8 +282,28 @@ from vllm.model_executor.models.registry import ModelRegistry
 load_general_plugins()
 assert 'MuseGlimmerForConditionalGeneration' in set(ModelRegistry.get_supported_archs())
 print('ARCH-REGISTERED-OK')
-PY" 2400 | tail -12 | tee -a "$PROG"
-grep -q 'ARCH-REGISTERED-OK' "$PROG" || { log "venv/plugin preflight FAILED"; exit 7; }
+PY
+echo VENV-BUILD-EXIT-\$?
+EOS
+chmod +x ~/build_venv.sh
+tmux kill-session -t venv 2>/dev/null
+tmux new-session -d -s venv 'bash ~/build_venv.sh > ~/venv_build.log 2>&1'
+sleep 3; tmux has-session -t venv && echo venv-build-started" 300 | tail -3 | tee -a "$PROG"
+
+VENV_OK=""
+for i in $(seq 1 120); do          # up to 40 min, polled every 20s
+  deadline_check
+  r=$(rsh "grep -hE 'ARCH-REGISTERED-OK|TPU_INFERENCE_SITE|VENV-BUILD-EXIT' ~/venv_build.log 2>/dev/null; tmux has-session -t venv 2>/dev/null && echo VENV-TMUX-ALIVE || echo VENV-TMUX-GONE" 90)
+  echo "$r" | grep -q 'ARCH-REGISTERED-OK' && { VENV_OK=1; echo "$r" | tee -a "$PROG"; break; }
+  if echo "$r" | grep -q 'VENV-TMUX-GONE'; then
+    log "venv build exited without ARCH-REGISTERED-OK"
+    rsh "tail -n 60 ~/venv_build.log" 120 | tail -30 | tee -a "$PROG"
+    break
+  fi
+  [ $((i % 6)) -eq 0 ] && log "  venv build still running (${i}0s * 2)"
+  sleep 20
+done
+[ -n "$VENV_OK" ] || { log "venv/plugin preflight FAILED"; exit 7; }
 SITE=$(grep -m1 'TPU_INFERENCE_SITE' "$PROG" | awk '{print $2}')
 [ -n "$SITE" ] || { log "could not locate the installed tpu_inference"; exit 7; }
 KVM="${SITE}/runner/kv_cache_manager.py"
@@ -298,7 +408,10 @@ sleep 5; tmux has-session -t mg && echo tmux-UP || echo tmux-FAIL" 180 | tail -2
 kv_report() {   # $1 = tag
   local tag="$1"
   log "--- KV / HBM report [${tag}] ---"
-  rsh "grep -iE 'Hybrid KV cache layout|Init kv-cache|Memory statistics|KV cache size|maximum concurrency|kv_cache_groups' ~/skyrl-logs/mg-${tag}.log | tail -20" 120 | tee -a "$PROG" | tee "$LOGDIR/kv-${tag}.txt"
+  # `Init model | hbm=` carries the per-chip HBM after the weights land, which
+  # is half of what item 1 asks for; without it the report has groups and KV
+  # tokens but no memory.  Cut the enormous device lists off the worker line.
+  rsh "grep -iE 'Hybrid KV cache layout|Init kv-cache|Memory statistics|KV cache size|maximum concurrency|kv_cache_groups|Init model \| hbm=' ~/skyrl-logs/mg-${tag}.log | cut -c1-1200 | tail -30" 120 | tee -a "$PROG" | tee "$LOGDIR/kv-${tag}.txt"
   rsh "tail -n 500 ~/skyrl-logs/mg-${tag}.log" 180 > "$LOGDIR/vllm-${tag}-tail.log" 2>&1
 }
 
@@ -379,23 +492,124 @@ else
 fi
 deadline_check
 
+# ------------------------------------------------- item 1 verdict, in situ ---
+# Decided here rather than after the run, because it selects the code every
+# later stage runs on.  Three outcomes:
+#   NULL  the spec change did not take effect (still 1 group) -- identical
+#         outputs would prove nothing, so treat it as untrusted
+#   FAIL  something diverged -> later stages run on the reverted build
+#   PASS  group count > 1 AND the boundary sweep is clean AND the served ids
+#         are identical to the reverted build's, prompt for prompt
+KV_VARIANT=baseline
+python3 - "$LOGDIR" <<'PY' 2>&1 | tee -a "$PROG" | tee "$LOGDIR/item1_verdict.txt"
+import json, os, re, sys
+d = sys.argv[1]
+def J(n):
+    p = os.path.join(d, n)
+    try:
+        return json.load(open(p))
+    except Exception as e:
+        return {"_missing": repr(e)}
+def groups(tag):
+    try:
+        t = open(os.path.join(d, f"kv-{tag}.txt")).read()
+    except Exception:
+        return None
+    m = re.findall(r"num_kv_cache_groups=(\d+)", t)
+    return int(m[-1]) if m else None
+def kvtokens(tag):
+    try:
+        t = open(os.path.join(d, f"kv-{tag}.txt")).read()
+    except Exception:
+        return None
+    m = re.findall(r"KV cache size:\s*([\d,]+)\s*tokens", t)
+    return int(m[-1].replace(",", "")) if m else None
+
+pp, bp = J("res_patched_probe.json"), J("res_baseline_probe.json")
+pe, be = J("res_patched_e2e.json"), J("res_baseline_e2e.json")
+gp, gb = groups("patched"), groups("baseline")
+tp, tb = kvtokens("patched"), kvtokens("baseline")
+print(f"ITEM1 groups patched={gp} baseline={gb}; kv_tokens patched={tp} baseline={tb}")
+
+reasons = []
+b = pp.get("boundary") or {}
+short = b.get("shortest_diverging_prefix_len")
+print(f"ITEM1 boundary patched: {b.get('n_agree')}/{b.get('n_probes')} agree, "
+      f"shortest_diverging_prefix_len={short}")
+bb = bp.get("boundary") or {}
+print(f"ITEM1 boundary baseline: {bb.get('n_agree')}/{bb.get('n_probes')} agree, "
+      f"shortest_diverging_prefix_len={bb.get('shortest_diverging_prefix_len')}")
+if not b:
+    reasons.append("no boundary result on the patched build")
+elif short is not None:
+    reasons.append(f"boundary diverges at prefix_len={short}")
+
+dec = pp.get("decode_crossing") or {}
+bad = [k for k, v in dec.items() if not v.get("exact")]
+print(f"ITEM1 decode-crossing patched: {len(dec)} probes, non-exact={bad}")
+if bad:
+    reasons.append(f"decode across the window diverges at prefixes {bad}")
+
+names = sorted(set((pe.get("prompts") or {})) & set((be.get("prompts") or {})))
+mism = []
+for n in names:
+    a = (pe["prompts"][n] or {}).get("gen_ids")
+    c = (be["prompts"][n] or {}).get("gen_ids")
+    same = (a is not None and a == c)
+    print(f"ITEM1 e2e {n:18s} patched_exact_vs_hf={pe['prompts'][n].get('exact_match')} "
+          f"baseline_exact_vs_hf={be['prompts'][n].get('exact_match')} "
+          f"patched_ids==baseline_ids={same}")
+    if not same:
+        mism.append(n)
+if names and mism:
+    reasons.append(f"served ids differ from the reverted build on {mism}")
+if not names:
+    reasons.append("no e2e A/B available")
+
+conc = ((pe.get("phases") or {}).get("concurrent") or {})
+print(f"ITEM1 concurrency patched all_identical={conc.get('all_identical')}")
+if conc.get("all_identical") is False:
+    reasons.append("concurrent requests are not identical to the sequential run")
+
+if gp is None or gp <= 1:
+    print(f"ITEM1 VERDICT: NULL -- num_kv_cache_groups={gp}, the change did not "
+          "take effect; identical outputs prove nothing")
+elif reasons:
+    print("ITEM1 VERDICT: FAIL -- " + "; ".join(reasons))
+else:
+    print("ITEM1 VERDICT: PASS")
+PY
+if grep -q 'ITEM1 VERDICT: PASS' "$LOGDIR/item1_verdict.txt" 2>/dev/null; then
+  KV_VARIANT=patched
+  note "item 1 PASS -- hybrid KV cache verified; later stages run on the PATCHED build"
+else
+  note "item 1 NOT PASSED -- later stages run on the REVERTED build ($(grep -m1 'ITEM1 VERDICT' "$LOGDIR/item1_verdict.txt" 2>/dev/null))"
+fi
+deadline_check
+
 # ============================== 5. items 2+3: long context and sampling ======
-# The long-context stage is the one that genuinely needs the slow half of the
-# HF job (a 16384-token float32 forward).  Wait for it, but not past the budget.
-wait_for_ref hf_ext_ref.json 1800 '"8192"' \
-  && log "long-context reference ready" \
-  || log "*** hf_ext_ref long-context entries missing; long context will be coherence-only"
+# The 16k float32 HF forward was cancelled (it could not finish inside a slice
+# that had already failed to land), so `long` is empty in hf_ext_ref.json and
+# the long-context stage is needle-recall + determinism rather than
+# teacher-forced.  Glance for the entries in case a later job produced them,
+# but do not burn slice minutes waiting for something that is not coming.
+wait_for_ref hf_ext_ref.json 60 '"8192"' \
+  && log "long-context teacher-forced reference present" \
+  || log "hf_ext_ref long-context entries absent (expected); long context is needle-recall only"
 ship_refs
 
 LONG_OK=""
+TEMP_DONE=""
 for ML in ${LONG_LENS:-8192 16384 32768}; do
   have_time 1500 || { log "skipping maxlen ${ML}: not enough budget left"; break; }
-  if start_vllm "len${ML}" "$ML" baseline; then
+  if start_vllm "len${ML}" "$ML" "$KV_VARIANT"; then
     kv_report "len${ML}"
     LONG_OK="$ML"
     note "served at max_model_len=${ML} (boot ${VLLM_BOOT_SECONDS}s)"
+    # Item 3 runs at the FIRST long length that serves, not at a hardcoded
+    # one: if 8192 does not boot, the temperature work must not vanish with it.
     phases="longctx,longfallback"
-    [ "$ML" = "${TEMP_AT:-8192}" ] && phases="longctx,longfallback,temp"
+    [ -z "$TEMP_DONE" ] && { phases="longctx,longfallback,temp"; TEMP_DONE="$ML"; }
     rsh "${VLLM_VENV}/bin/python ~/mg_client2.py --ext-ref ~/mg_ext_ref.json --hf-ext ~/hf_ext_ref.json \
           --logit-rows ~/mg_logit_rows.npz --port ${VLLM_PORT} --out ~/res_len${ML}.json \
           --max-model-len ${ML} --phases ${phases} --temps 0.7,1.0 --degen-tokens 256 \
@@ -408,6 +622,25 @@ for ML in ${LONG_LENS:-8192 16384 32768}; do
   fi
   deadline_check
 done
+
+# Item 3 must not be collateral damage of item 2: if no long length served,
+# do the temperature work at 4096, where the engine is known to boot.
+if [ -z "$TEMP_DONE" ] && have_time 1500; then
+  log "no long context served -- running the temperature phase at 4096 instead"
+  if start_vllm temp4096 4096 "$KV_VARIANT"; then
+    TEMP_DONE=4096
+    rsh "${VLLM_VENV}/bin/python ~/mg_client2.py --ext-ref ~/mg_ext_ref.json \
+          --logit-rows ~/mg_logit_rows.npz --port ${VLLM_PORT} --out ~/res_len4096.json \
+          --max-model-len 4096 --phases temp --temps 0.7,1.0 --degen-tokens 256 \
+          --label temp-4096" 5400 2>/dev/null | tail -60 | tee -a "$PROG"
+    timeout 120 scp $SSHO ${USER_R}@"$HOST":~/res_len4096.json "$LOGDIR/res_len4096.json" >/dev/null 2>&1
+  fi
+fi
+[ -n "$LONG_OK" ] && note "max working context = ${LONG_OK} (kv_cache_manager=${KV_VARIANT})" \
+                  || note "no max_model_len above 4096 served"
+[ -n "$TEMP_DONE" ] && note "temperature phase ran at max_model_len=${TEMP_DONE}" \
+                    || note "temperature phase did NOT run"
+deadline_check
 
 # ============================================ 6. item 4: the LoRA smoke ======
 if have_time 3000; then
@@ -455,5 +688,6 @@ else
 fi
 
 log "=== ALL STAGES DONE at $(elapsed)s; tearing down ==="
+[ -n "${ACTIVE_AT:-}" ] && log "SLICE-ACTIVE-SECONDS $(( $(date +%s) - ACTIVE_AT )) (4 chips, ${ACC}, ${ZONE})"
 echo -e "$STAGES_OK" | tee -a "$PROG"
 exit 0

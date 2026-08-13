@@ -169,6 +169,10 @@ def main() -> int:
         rp = resp["choices"][0].get("prompt_token_ids")
         cmp_["prompt_ids_roundtrip_ok"] = (rp is None or list(rp) == list(pids))
         cmp_["text"] = resp["choices"][0]["text"]
+        # Record the raw ids so two runs of this client (e.g. the patched and
+        # the reverted KV-cache-manager builds) can be compared token-for-token
+        # against each OTHER, not only each against HF.
+        cmp_["gen_ids"] = got
 
         if cmp_["first_divergence"] is not None:
             k = cmp_["first_divergence"]
