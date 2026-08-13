@@ -137,13 +137,38 @@ class RGLRUProblem(Problem):
         the same trade splash_attention already makes.
         """
         try:
-            from recurrentgemma.jax import scan as rg_scan  # noqa: F401
+            if jax.default_backend() != "tpu":
+                raise BaselineUnavailable("recurrentgemma pallas scan requires TPU")
+            from recurrentgemma.jax.pallas import lru_pallas_scan
 
-            # Production judge path (TPU host with recurrentgemma installed):
-            # bound during Phase-2 bring-up; shapes/layout adapted there.
-            raise BaselineUnavailable("recurrentgemma pallas scan binding is a Phase-2 (TPU judge) step")
-        except (ImportError, BaselineUnavailable):
+            # Layout adapter. `lru_pallas_scan(x, a, h0)` runs the PLAIN LRU
+            # recurrence h_t = a_t * h_{t-1} + x_t on [b, t, d] -- the gating
+            # sqrt(1 - a^2) and the reset live OUTSIDE the kernel in Griffin
+            # (RGLRU module), exactly as they live outside here. Both wrapper
+            # steps are elementwise O(btd) prep against an O(btd)-serial scan,
+            # and the timed candidate does the same prep itself, so the
+            # comparison stays like-for-like.
+            #
+            # Tunables max_seq_block_size=256 / min_seq_block_size=16 are the
+            # LIBRARY DEFAULTS. Audited before trusting (the splash/megablox
+            # lesson): unlike those two, this default is a real recommendation
+            # -- Griffin's own training config uses the module as shipped --
+            # but the block sweep in verify/ still covers it before any reward
+            # against this denominator is reported.
+            x32 = x.astype(jnp.float32)
+            a32 = _apply_reset(a.astype(jnp.float32), reset)
+            gx = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a32), 0.0)) * x32
+            h, _last_carry = lru_pallas_scan(gx, a32)
+            type(self).baseline_impl = "recurrentgemma-pallas-lru"
+            return h.astype(jnp.float32)
+        except BaselineUnavailable:
             type(self).baseline_impl = "lax-associative-scan"
+            return rg_lru_associative(x, a, reset)
+        except ImportError:
+            type(self).baseline_impl = "lax-associative-scan (recurrentgemma not installed)"
+            return rg_lru_associative(x, a, reset)
+        except Exception:
+            type(self).baseline_impl = "lax-associative-scan-fallback"
             return rg_lru_associative(x, a, reset)
 
     def honest_variants(self):

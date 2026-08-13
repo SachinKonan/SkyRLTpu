@@ -328,11 +328,25 @@ def tokamax_probe(name, problem, case):
 
 
 def baseline_identity(name, problem, case):
+    """Which denominator binds here -- and does it AGREE with the fp32
+    reference. The agreement check is what catches a wrong layout adapter
+    (e.g. a transposed K/V interleave in the RPA binding) before a single
+    candidate is graded against it: an adapter bug produces garbage error,
+    not a subtle bias, so within-band agreement is decisive."""
     out = {"task": name, "case": case.name}
     try:
         inputs = problem.make_inputs(jax.random.PRNGKey(0), case)
         jax.block_until_ready(inputs)
         o = jax.block_until_ready(problem.baseline(*inputs))
+        try:
+            ref32 = problem.reference(*inputs)
+            tol = problem.calibrated_tolerance(inputs, ref32)
+            s = error_stats(o, ref32)
+            out["agrees_with_reference"] = bool(s["max"] <= tol["max"] and s["q99"] <= tol["q99"])
+            out["agreement_max_err"] = float(s["max"])
+            out["agreement_tol"] = float(tol["max"])
+        except Exception as e:  # noqa: BLE001
+            out["agreement_error"] = f"{type(e).__name__}: {str(e)[:150]}"
         # Tasks that can fall back record which denominator ran. FLCE defines
         # no fallback at all -- its baseline IS our production custom_vjp
         # kernel -- so a bare "?" there means something quite different from a

@@ -211,32 +211,64 @@ class RaggedPagedAttentionProblem(Problem):
     baseline_impl: str = "?"
 
     def baseline(self, *inputs):
-        """vLLM-TPU's Pallas v3 kernel when this judge host has it, otherwise a
-        batch-blocked XLA paged decode -- recorded, never hidden.
+        """Google's Pallas ragged-paged-attention kernel (shipped IN JAX at the
+        arena's own 0.10.2 pin -- `jax.experimental.pallas.ops.tpu.
+        ragged_paged_attention`), otherwise a batch-blocked XLA paged decode,
+        recorded, never hidden.
 
-        The v3 kernel needs `third_party/tpu-inference` on the judge and a
-        layout adapter; a judge that refuses to BOOT because of that has graded
-        nothing at all, which is strictly worse than scoring against a
-        slower-but-real denominator. Same trade splash_attention already makes.
-        A score here therefore means "versus a competent XLA paged decode",
-        NOT "versus vLLM's kernel", and must be reported that way.
+        HISTORY: this slot spent months as "vendor vLLM-TPU's v3 kernel +
+        adapter, someday" and always fell through to the XLA fallback. The
+        kernel was in our own jax install the whole time; nobody looked.
+
+        Layout adapter (validated by `kernel.static_validate_inputs`):
+          ours                          theirs
+          q          [b, qh, d]     ->  q [total_q_tokens, qh, d]  (decode:
+                                        1 token/seq, so total == b)
+          k_pages,v_pages
+            [np, ps, kvh, d] x2     ->  kv_pages [np, ps, 2*kvh, d], heads
+                                        INTERLEAVED k0 v0 k1 v1 ...
+          page_tables [b, maxp]     ->  page_indices (int32)
+          seq_lens    [b]           ->  kv_lens (int32)
+          (implicit)                ->  cu_q_lens = arange(b+1), num_seqs=[b]
+        sm_scale=1.0 because our make_inputs already folds 1/sqrt(d) into q.
+
+        The interleave order (k even, v odd) is asserted against the fp32
+        reference by the boot-check job before any reward is reported -- a
+        transposed adapter produces garbage agreement, not a subtle bias.
+
+        `num_kv_pages_per_block` / `num_queries_per_block` are left None here,
+        which selects the kernel's own shape-dependent choice, NOT a fixed
+        placeholder (unlike splash's all-128 BlockSizes) -- verified in
+        kernel.py, and covered by the design sweep before scores are trusted.
         """
         try:
             if jax.default_backend() != "tpu":
-                raise BaselineUnavailable("vLLM-TPU ragged_paged_attention v3 requires TPU")
-            import sys
-            from pathlib import Path
-
-            tpu_inf = Path(__file__).resolve().parents[4] / "third_party" / "tpu-inference"
-            if str(tpu_inf) not in sys.path:
-                sys.path.insert(0, str(tpu_inf))
-            from tpu_inference.kernels.ragged_paged_attention.v3.kernel import (  # noqa: F401
+                raise BaselineUnavailable("pallas ragged_paged_attention requires TPU")
+            from jax.experimental.pallas.ops.tpu.ragged_paged_attention import (
                 ragged_paged_attention,
             )
 
-            raise BaselineUnavailable("v3 kernel layout adapter is a Phase-2 (TPU judge) binding step")
-        except Exception:
+            q, k_pages, v_pages, page_tables, seq_lens = inputs
+            b = q.shape[0]
+            np_, ps, kvh, d = k_pages.shape
+            # [np, ps, kvh, 2, d] -> [np, ps, 2*kvh, d]: k_i at 2i, v_i at 2i+1
+            kv_pages = jnp.stack([k_pages, v_pages], axis=3).reshape(np_, ps, 2 * kvh, d)
+            out = ragged_paged_attention(
+                q,
+                kv_pages,
+                seq_lens.astype(jnp.int32),
+                page_tables.astype(jnp.int32),
+                jnp.arange(b + 1, dtype=jnp.int32),
+                jnp.array([b], jnp.int32),
+                sm_scale=1.0,
+            )
+            type(self).baseline_impl = "pallas-ragged-paged-attention"
+            return out.astype(jnp.float32)
+        except BaselineUnavailable:
             type(self).baseline_impl = "xla-paged-decode-fallback"
+            return _xla_paged_decode(*inputs)
+        except Exception:
+            type(self).baseline_impl = "xla-paged-decode-fallback (kernel raised)"
             return _xla_paged_decode(*inputs)
 
     def honest_variants(self):

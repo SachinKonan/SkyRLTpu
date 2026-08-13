@@ -18,6 +18,21 @@ fi
 "$HOME/arena-venv/bin/pip" install --quiet \
   "jax[tpu]==0.10.2" numpy fastapi uvicorn pydantic flatbuffers google-cloud-storage
 
+# Real GENERAL-mode denominators on top of the pin, never instead of it:
+#   recurrentgemma+flax -- DeepMind's Pallas LRU scan (rg_lru baseline)
+#   tokamax             -- linear_softmax_cross_entropy_loss mosaic_tpu (lsce)
+# Both declare jax floors that 0.10.2 satisfies; the assert below makes a
+# silent jax upgrade a hard provision failure, because it would invalidate
+# every timing this arena has recorded.
+"$HOME/arena-venv/bin/pip" install --quiet recurrentgemma flax tokamax
+"$HOME/arena-venv/bin/python" - <<'EOF'
+import jax
+assert jax.__version__ == "0.10.2", f"ARENA JAX PIN MOVED: {jax.__version__}"
+from recurrentgemma.jax.pallas import lru_pallas_scan  # noqa: F401
+import tokamax  # noqa: F401
+print("denominator deps: OK (jax pin intact)")
+EOF
+
 # TPU sanity: the chip must enumerate
 JAX_PLATFORMS=tpu "$HOME/arena-venv/bin/python" - <<'EOF'
 import jax
