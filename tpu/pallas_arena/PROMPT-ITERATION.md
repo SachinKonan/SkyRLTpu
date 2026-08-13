@@ -447,3 +447,21 @@ pass, as designed after job 3650988 lost both QRs to a `scancel` mid-delete.
    the model.
 5. **Give RPA a bigger shape or more timing pairs.** Its 0.2525 noise floor
    means a candidate must be >25% faster before the arena can see it at all.
+
+---
+
+## 11. Follow-up: the three dead kernels are alive (see `SEAM-DIALECT.md`)
+
+Item 2 of §10 was run on 2026-08-12 (job **3687904**, 224 candidates,
+`SEAM-DIALECT.md`). **Seam + the P1 dialect list produced the first working
+`splash_attention`, `megablox_gmm` and `ragged_paged_attention` kernels this
+arena has ever had** — 0/96 each at every rung above becomes 3, 25 and 1 PASS —
+and it did it by taking the Pallas-API/plumbing failure class from 87/96
+(splash), 56/96 (RPA) and 55/96 (GMM) to **exactly 0 out of 192**. Best scores:
+GMM **19.9181** and splash **3.2456**, both against the labelled fallback
+denominators of §6. Item 4 was also done first: the `Unsupported TPU device
+kind: cpu` contamination is a rank-1 `BlockSpec` meeting a CPU export host, and
+fixing it rescues 11 of the 17 affected GMM candidates outright.
+
+The diagnosis in §6 was right, and the lever named in §10 item 2 was the right
+one.
