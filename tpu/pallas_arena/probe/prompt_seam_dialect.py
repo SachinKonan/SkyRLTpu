@@ -33,8 +33,15 @@ The three measured facts these prompts are built from, and nothing else:
 What `sd2` still does NOT decide, because that is the `tailored` trap (16/16
 PASS with a reward spread of 0.0042 against noise floors of 0.0069/0.0158, i.e.
 no gradient at all): block and tile sizes, key/k chunking, which blocks or
-pages to skip, online vs two-pass softmax, accumulation dtype, and the matmul
-precision trade. Every `...` below is one of those.
+pages to skip, and online vs two-pass softmax. Every `...` below is one of
+those.
+
+Accumulation dtype used to be on that list, framed as a trade. It is not one.
+Measured across all five tasks, the production float32-accumulator path sits at
+0.4-0.7x of the calibrated tolerance and the default-dtype (bfloat16
+accumulator) path at 1.4-4.1x, i.e. the "choice" was between passing and
+failing correctness. It is now stated as a rule at the end of the dialect list,
+which is where the wall moved to once the API failure class went to 0 of 192.
 
 --------------------------------------------------------------------------
 TOKEN BUDGET -- why the seam's API block is replaced rather than appended to.
@@ -66,7 +73,7 @@ from pallas_arena.probe.prompt_seam import _OUTPUT, API_BLOCK, SEAM_PROMPTS
 
 _B2 = DIALECT.index("2. **Inside the kernel body")
 _B10 = DIALECT.index("10. **`jax.custom_vjp`")
-_CLOSER = DIALECT.index("One more, which is a real trade")
+_CLOSER = DIALECT.index("One more, and unlike the rest")
 
 _BULLETS_2_TO_9 = DIALECT[_B2:_B10]
 _PRECISION_TRADE = DIALECT[_CLOSER:]

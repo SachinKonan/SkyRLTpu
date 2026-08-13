@@ -150,3 +150,88 @@ def test_worker_cache_hit(worker, tmp_path):
         assert r2["reward"] == r1["reward"]
     finally:
         worker.cache = None
+
+
+# ---------------------------------------------------------------- judge fault
+# Phase 5: one candidate halted the TPU core at Mosaic compile time. The worker
+# SURVIVED it and reported the next 35 items as ordinary zero-reward verdicts in
+# ~1.1s each -- every one of them failing in fixture setup, which no candidate
+# can influence. Two independent defects, one test each.
+
+
+def test_fixture_failure_is_a_judge_fault_and_is_never_cached(worker, tmp_path, monkeypatch):
+    """A fixtures failure means THIS JUDGE is broken, so it must not be cached
+    against the candidate's hash (that would condemn an innocent candidate for
+    every future judge) and must be flagged for the poll loop."""
+    from pallas_arena.judge.cache import RewardCache
+
+    cache = RewardCache(str(tmp_path / "jf"))
+    worker.cache = cache
+    try:
+        # A halted core fails at block_until_ready, not at input construction --
+        # and unlike make_inputs (which abstract_inputs eval_shapes to build the
+        # export signatures, long before fixtures) `block` is untouched between
+        # boot and the fixtures loop, so this lands exactly where a dead chip
+        # would.
+        def dead_chip(*a, **kw):
+            raise RuntimeError("failed to connect to all addresses; TPU core halted")
+
+        monkeypatch.setattr(worker, "block", dead_chip, raising=True)
+        r = worker.grade_code(cand.HONEST_RMSNORM)
+
+        assert r["gate"] == "fixtures", r
+        assert r.get("judge_fault") is True, r
+        assert not r["passed"]
+
+        # and, critically, nothing was written to the cache for this candidate
+        monkeypatch.undo()
+        r2 = worker.grade_code(cand.HONEST_RMSNORM)
+        assert not r2.get("cache_hit"), "a judge fault poisoned the candidate's cache entry"
+        assert r2["passed"], r2
+    finally:
+        worker.cache = None
+
+
+def test_poll_loop_requeues_and_exits_on_a_judge_fault(monkeypatch):
+    """The verdict must NOT be posted (the item has to lapse back onto a live
+    judge) and the process must exit so the supervisor rebuilds it."""
+    import threading
+
+    from pallas_arena.judge import worker as worker_mod
+
+    posted, lock = [], threading.Lock()
+
+    def fake_http(url, payload=None, timeout=30.0):
+        with lock:
+            if "/work" in url:
+                if any(u == "issued" for u in posted):
+                    return None
+                posted.append("issued")
+                return {
+                    "lease_id": "L1",
+                    "work_id": "w000091",
+                    "payload": {"code": "x", "tag": "t"},
+                    "attempt": 1,
+                    "lease_timeout_s": 60.0,
+                }
+            posted.append(url)
+            return {"ok": True}
+
+    class _Exited(BaseException):
+        def __init__(self, code):
+            self.code = code
+
+    def fake_exit(code):
+        raise _Exited(code)
+
+    monkeypatch.setattr(worker_mod, "_http_json", fake_http)
+    monkeypatch.setattr(worker_mod.os, "_exit", fake_exit)
+
+    def grade_fn(_payload):
+        return {"ok": False, "passed": False, "gate": "fixtures", "reward": 0.0, "judge_fault": True, "violations": ["RuntimeError: TPU core halted"]}
+
+    with pytest.raises(_Exited) as ei:
+        worker_mod.poll_loop("http://q", grade_fn, worker_id="w-jf", poll_s=0.01, max_items=5)
+
+    assert ei.value.code == 18
+    assert not any("/result" in p for p in posted), f"a judge fault was posted as a verdict: {posted}"

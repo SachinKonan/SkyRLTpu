@@ -151,6 +151,46 @@ class FLCEProblem(Problem):
 
         return jax.grad(scalar)(hidden.astype(jnp.float32))
 
+    def honest_variants(self):
+        """FLCE's ``reference_bf16`` already models the bf16 matmul path (bf16
+        logits, fp32 LSE), which is STRICTLY more error than the production
+        fp32-accumulator path -- so unlike splash/RPA this band was never too
+        tight for a faithful kernel (measured ~0x). What it did not span is
+        reduction ORDER, which is the real design freedom here: tile width and
+        one-pass-vs-two-pass LSE are exactly the knobs a candidate tunes."""
+
+        def _tiled(tile):
+            def variant(hidden, w, targets):
+                return flce_target_logprobs(lambda ht: ht @ w, hidden, targets, min(tile, hidden.shape[0]))
+
+            return variant
+
+        def _online_lse(hidden, w, targets, chunk_v=256):
+            """Streaming max/sum over the VOCAB axis (running rescale) instead
+            of one logsumexp over the full row -- the online-softmax formulation
+            a real fused kernel uses, at fp32."""
+            logits = hidden.astype(jnp.float32) @ w.astype(jnp.float32)
+            logits = logits.astype(jnp.bfloat16).astype(jnp.float32)
+            v = logits.shape[1]
+            nb = -(-v // chunk_v)
+            pad = nb * chunk_v - v
+            lg = jnp.pad(logits, ((0, 0), (0, pad)), constant_values=-jnp.inf) if pad else logits
+            lg = lg.reshape(logits.shape[0], nb, chunk_v)
+
+            def body(carry, j):
+                run_m, run_l = carry
+                blk = lg[:, j, :]
+                new_m = jnp.maximum(run_m, jnp.max(blk, axis=-1))
+                new_l = run_l * jnp.exp(run_m - new_m) + jnp.sum(jnp.exp(blk - new_m[:, None]), axis=-1)
+                return (new_m, new_l), None
+
+            init = (jnp.full((logits.shape[0],), -jnp.inf), jnp.zeros((logits.shape[0],)))
+            (mx, ls), _ = jax.lax.scan(body, init, jnp.arange(nb))
+            tl = jnp.take_along_axis(logits, targets[:, None], axis=1)[:, 0]
+            return tl - (mx + jnp.log(ls))
+
+        return [_tiled(BASELINE_TILE_TOKENS // 4), _tiled(BASELINE_TILE_TOKENS * 2), _online_lse]
+
     def adversarial_cases(self):
         tiny = self.case_by_name(self.adversarial_case_name)
 

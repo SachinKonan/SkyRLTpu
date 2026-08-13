@@ -48,6 +48,37 @@ def gmm_loop_reference(lhs, rhs, group_sizes):
     return out
 
 
+def _honest_faithful_bf16(lhs, rhs, group_sizes):
+    """bf16 operands into the MXU, fp32 accumulator -- the production path.
+
+    NOTE: on CPU this is indistinguishable from the fp32 reference, because
+    ``preferred_element_type`` is a no-op inside a fused op there; it only
+    separates from ``reference_bf16`` on a real TPU. It is included so the TPU
+    calibration is right, and the CPU battery simply sees it as exact.
+    """
+    return jax.lax.ragged_dot(lhs, rhs, group_sizes, preferred_element_type=jnp.float32)
+
+
+def _honest_group_loop_bf16(lhs, rhs, group_sizes):
+    """Same math with a per-group reduction ORDER (one dot per expert instead
+    of one fused ragged dot), fp32 accumulators. A legal candidate strategy, so
+    it must not be punished for a different-but-valid accumulation order."""
+    m = lhs.shape[0]
+    n = rhs.shape[2]
+    rows = jnp.arange(m)
+    starts = jnp.concatenate([jnp.zeros((1,), group_sizes.dtype), jnp.cumsum(group_sizes)[:-1]])
+
+    def body(acc, g):
+        lo = starts[g]
+        hi = lo + group_sizes[g]
+        sel = (rows >= lo) & (rows < hi)
+        part = jnp.dot(lhs, rhs[g], preferred_element_type=jnp.float32)
+        return acc + jnp.where(sel[:, None], part, 0.0), None
+
+    acc, _ = jax.lax.scan(body, jnp.zeros((m, n), jnp.float32), jnp.arange(rhs.shape[0]))
+    return acc
+
+
 def _sample_group_sizes(key, num_groups, m, dist):
     if dist == "uniform":
         w = jnp.ones((num_groups,))
@@ -141,6 +172,9 @@ class MegabloxGmmProblem(Problem):
         except Exception:
             type(self).baseline_impl = "lax-ragged-dot-fallback"
             return jax.lax.ragged_dot(lhs, rhs, group_sizes).astype(jnp.float32)
+
+    def honest_variants(self):
+        return [_honest_faithful_bf16, _honest_group_loop_bf16]
 
     def adversarial_cases(self):
         # settable base case: a judge grading a non-default (e.g. probe) case

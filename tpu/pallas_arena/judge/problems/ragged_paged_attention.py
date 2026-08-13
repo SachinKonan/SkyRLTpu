@@ -55,6 +55,34 @@ def paged_decode_attention_reference(q, k_pages, v_pages, page_tables, seq_lens)
     return o.reshape(b, qh, d)
 
 
+def _honest_faithful_bf16(q, k_pages, v_pages, page_tables, seq_lens):
+    """The production numeric path: bf16 arrays are matmul INPUTS, every
+    accumulator is fp32 (``preferred_element_type``), softmax at fp32, probs
+    re-narrowed to bf16 only on the way into the PV matmul.
+
+    This variant is why the hook exists. On the ``tiny-holdout`` case it lands
+    at 1.15x of the reference-bf16-only band -- i.e. the band as previously
+    calibrated REJECTED the numeric path that vLLM-TPU itself uses. With it in
+    the calibration the band widens 1.73x and the end-to-end-bf16 path still
+    fails at 1.95x, so the sloppy/faithful discrimination survives.
+    """
+    b, qh, d = q.shape
+    _, ps, kvh, _ = k_pages.shape
+    group = qh // kvh
+    ml = page_tables.shape[1] * ps
+    k = k_pages[page_tables].reshape(b, ml, kvh, d)
+    v = v_pages[page_tables].reshape(b, ml, kvh, d)
+    qr = q.reshape(b, kvh, group, d)
+    logits = jnp.einsum("bhgd,bthd->bhgt", qr, k, preferred_element_type=jnp.float32)
+    live = jnp.arange(ml)[None, :] < seq_lens[:, None]
+    logits = jnp.where(live[:, None, None, :], logits, -0.7 * float(np.finfo(np.float32).max))
+    p = jnp.exp(logits - jnp.max(logits, axis=-1, keepdims=True))
+    p = jnp.where(live[:, None, None, :], p, 0.0)
+    p = p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30)
+    o = jnp.einsum("bhgt,bthd->bhgd", p.astype(jnp.bfloat16), v, preferred_element_type=jnp.float32)
+    return o.reshape(b, qh, d)
+
+
 def _xla_paged_decode(q, k_pages, v_pages, page_tables, seq_lens, block_b: int = 16):
     """Batch-blocked XLA paged decode -- the honest fallback baseline.
 
@@ -210,6 +238,12 @@ class RaggedPagedAttentionProblem(Problem):
         except Exception:
             type(self).baseline_impl = "xla-paged-decode-fallback"
             return _xla_paged_decode(*inputs)
+
+    def honest_variants(self):
+        """See ``_honest_faithful_bf16``: measured at 1.15x of the
+        reference-bf16-only band on tiny-holdout, so that band was rejecting
+        the production numeric path outright."""
+        return [_honest_faithful_bf16]
 
     def adversarial_cases(self):
         # settable base case: a judge grading a non-default (e.g. probe) case

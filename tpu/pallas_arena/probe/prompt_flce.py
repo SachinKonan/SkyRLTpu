@@ -41,6 +41,8 @@ THE POINT OF THE TASK: the full [n, v] logits array must NEVER be materialized -
 
 CONTRACT IS FORWARD **AND** BACKWARD: the judge differentiates your `kernel` with respect to `hidden` only (w is frozen -- LoRA-only training) and compares the gradient against the fp32 reference at a calibrated tolerance. A naive tiled forward whose residuals keep the per-tile logits defeats the entire purpose, so the backward must RECOMPUTE one tile's logits at a time. In JAX that means `jax.custom_vjp`.
 
+EXPLOIT THE FROZEN HEAD -- this is the main thing that makes this kernel different from a general fused-cross-entropy kernel. Because `w` never receives a gradient, you never form `dw`, which at the production size would be [h, v] = 2880 x 151936, about 437 million values that a general kernel must either hold or recompute per tile. You need only `d/d(hidden)`, which is [tile, h] per tile -- three orders of magnitude smaller. So a tile can be fully retired the moment its `d/d(hidden)` rows are written: nothing about it has to survive into the next tile. Tune for that. A kernel that carries per-tile state as though it still owed a weight gradient is leaving the whole advantage of this setup on the table.
+
 ## Declared shapes
 
 One implementation must trace and run at ALL of these:

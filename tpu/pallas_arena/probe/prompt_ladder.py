@@ -195,12 +195,34 @@ previous 160 attempts at these five kernels died on it.
     'def_fwd'`. And 3 candidates that got the API right still failed the
     gradient gate.
 
-One more, which is a real trade rather than a mistake: on TPU
-`jax.lax.dot_general` on float32 operands runs ONE bfloat16 pass at the
-default precision. `preferred_element_type=jnp.float32` gives an f32
-accumulator over bf16 inputs; `precision=jax.lax.Precision.HIGHEST` is
-accurate and about 6x the passes. A control kernel in this arena missed the
-calibrated tolerance by 18% for exactly this reason. The choice is yours.
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge's calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
 '''
 
 

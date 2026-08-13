@@ -146,6 +146,44 @@ class RGLRUProblem(Problem):
             type(self).baseline_impl = "lax-associative-scan"
             return rg_lru_associative(x, a, reset)
 
+    def honest_variants(self):
+        """rg_lru's band was never too tight for a faithful kernel (the fp32
+        associative scan measures ~0x against the sequential one). What matters
+        here is reduction ORDER: the parallel scan and a chunked scan are both
+        explicitly legal candidate strategies, so the band must span them."""
+
+        def _chunked_scan(x, a, reset, chunk=64):
+            """Sequential across chunks, associative within -- the blocking a
+            real Pallas kernel uses, at fp32."""
+            x32 = x.astype(jnp.float32)
+            a32 = _apply_reset(a.astype(jnp.float32), reset)
+            gx = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a32), 0.0)) * x32
+            b, t, d = x32.shape
+            nb = -(-t // chunk)
+            pad = nb * chunk - t
+            if pad:
+                a32 = jnp.pad(a32, ((0, 0), (0, pad), (0, 0)), constant_values=0.0)
+                gx = jnp.pad(gx, ((0, 0), (0, pad), (0, 0)))
+            ab = a32.reshape(b, nb, chunk, d)
+            gb = gx.reshape(b, nb, chunk, d)
+
+            def combine(left, right):
+                a_l, b_l = left
+                a_r, b_r = right
+                return a_l * a_r, b_l * a_r + b_r
+
+            def body(h, j):
+                a_j, g_j = ab[:, j], gb[:, j]
+                cum_a, cum_b = jax.lax.associative_scan(combine, (a_j, g_j), axis=1)
+                out = cum_a * h[:, None, :] + cum_b
+                return out[:, -1, :], out
+
+            _, chunks = jax.lax.scan(body, jnp.zeros((b, d), jnp.float32), jnp.arange(nb))
+            hs = jnp.moveaxis(chunks, 0, 1).reshape(b, nb * chunk, d)
+            return hs[:, :t, :]
+
+        return [rg_lru_associative, _chunked_scan]
+
     def adversarial_cases(self):
         # settable base case: a judge grading a non-default (e.g. probe) case
         # set must not silently force candidates to also trace at the tiny

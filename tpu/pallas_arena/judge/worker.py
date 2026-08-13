@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import secrets
 import tempfile
 import threading
@@ -301,7 +302,7 @@ class PersistentWorker:
                 hit["cache_hit"] = True
                 return hit
 
-        def fail(gate, why, terminal=False):
+        def fail(gate, why, terminal=False, judge_fault=False):
             result.update(passed=False, gate=gate, violations=[why], reward=0.0)
             observation.attach_observation(result)
             if terminal:
@@ -310,6 +311,21 @@ class PersistentWorker:
                 # hand it to anyone else and the cache must serve it to every
                 # future judge for free.
                 result["terminal"] = True
+            if judge_fault:
+                # The exact opposite: a property of the JUDGE, not the
+                # candidate. Phase-5 lesson -- one candidate halted the TPU
+                # core at Mosaic compile time and the worker survived it, then
+                # failed the next 35 items in fixture setup at ~1.1s each while
+                # still reporting them as ordinary verdicts. Two things went
+                # wrong and both are fixed here:
+                #   * the zero was CACHED against each candidate's hash, so a
+                #     dead chip permanently condemned 35 innocent candidates
+                #     for every future judge -> never store a judge fault;
+                #   * it was returned as a verdict, so the run looked healthy
+                #     -> the poll loop now requeues the item and exits, and the
+                #     supervisor brings the judge back on a fresh chip.
+                result["judge_fault"] = True
+                return result
             self._store(code, result)
             return result
 
@@ -393,7 +409,10 @@ class PersistentWorker:
                 block(inputs)
                 fixtures.append((f"adv:{adv.name}", adv_sig[adv.name], inputs))
         except Exception as e:
-            return fail("fixtures", f"{type(e).__name__}: {e}")
+            # Fixtures are built from the PROBLEM's own make_inputs and a
+            # block() -- no candidate code is consulted -- so a failure here
+            # can only mean this judge's chip is gone.
+            return fail("fixtures", f"{type(e).__name__}: {e}", judge_fault=True)
 
         # Compile-warm units: one per distinct exported signature, plus the
         # gradient functional. Built as thunks so the deadline can be checked
@@ -412,7 +431,7 @@ class PersistentWorker:
                     warm_units.append((sig_name, lambda s=sig_name, i=w_in: block(fns[s](*i))))
                     warmed.add(sig_name)
         except Exception as e:
-            return fail("fixtures", f"{type(e).__name__}: {e}")
+            return fail("fixtures", f"{type(e).__name__}: {e}", judge_fault=True)
         if grad_sig is not None and fixtures:
             warm_units.append(("grad", lambda: block(fns[grad_sig](*fixtures[0][2]))))
 
@@ -846,6 +865,24 @@ def poll_loop(
         # as opposed to warm_chip_s which is the steady-state chip slice only.
         if isinstance(result, dict):
             result["item_wall_s"] = time.time() - t_item
+
+        # ---- judge fault: this chip is gone, and NOTHING about that is the
+        # candidate's fault. Phase 5 had a candidate halt the TPU core at
+        # Mosaic compile time; the worker stayed alive and reported the next 35
+        # items as ordinary zero-reward verdicts in ~1.1s each. Never post the
+        # verdict (it would be a lie, and the queue would mark the item done);
+        # instead let the lease lapse so the item requeues onto a live judge,
+        # and exit so the supervisor rebuilds this one on a fresh chip.
+        if isinstance(result, dict) and result.get("judge_fault"):
+            stop.set()
+            print(
+                f"[worker {worker_id}] JUDGE FAULT on {item['work_id']} "
+                f"(gate={result.get('gate')}): {'; '.join(result.get('violations') or [])[:200]}\n"
+                f"[worker {worker_id}] chip presumed dead; NOT posting a verdict. "
+                f"Lease {lease_id} will lapse and requeue. Exiting for a clean restart.",
+                flush=True,
+            )
+            os._exit(18)
         print(
             f"[worker {worker_id}] done {item['work_id']} tag={tag} wall={time.time() - t_item:.1f}s "
             f"passed={result.get('passed')} gate={result.get('gate')} "

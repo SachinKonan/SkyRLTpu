@@ -55,6 +55,96 @@ def causal_segment_attention(q, k, v, segment_ids):
     return jnp.einsum("hqk,hkd->hqd", p, v32)
 
 
+def _honest_faithful_bf16(q, k, v, segment_ids, block_q: int = 512):
+    """The production numeric path, query-blocked: bf16 arrays enter the MXU as
+    matmul INPUTS, every accumulator is fp32 (``preferred_element_type``), the
+    softmax is fp32, and only the probabilities are re-narrowed to bf16 on the
+    way into the PV matmul. This is what Google's splash kernel, vLLM-TPU and
+    tokamax all do, so it defines the error an HONEST bf16 candidate incurs --
+    strictly more than ``reference_bf16`` (which does every intermediate at
+    fp32 and rounds only the output). Measured on the CPU battery it lands at
+    0.4-1.15x of the reference-bf16-only band, i.e. it FAILS that band on some
+    shapes; that is the phase-2 lesson, and why it belongs in the calibration.
+    """
+    h, s, d = q.shape
+    pad = (-s) % block_q
+    qp = jnp.pad(q, ((0, 0), (0, pad), (0, 0))) if pad else q
+    idx_k = jnp.arange(s)
+    seg_k = segment_ids
+    live_k = seg_k != 0
+
+    def block(_carry, i):
+        start = i * block_q
+        qb = jax.lax.dynamic_slice(qp, (0, start, 0), (h, block_q, d))
+        pos_q = start + jnp.arange(block_q)
+        seg_q = jnp.where(pos_q < s, seg_k[jnp.minimum(pos_q, s - 1)], 0)
+        live_q = (seg_q != 0) & (pos_q < s)
+        # bf16 inputs -> fp32 accumulator (the whole point)
+        logits = jnp.einsum("hqd,hkd->hqk", qb, k, preferred_element_type=jnp.float32)
+        m = (pos_q[:, None] >= idx_k[None, :]) & (seg_q[:, None] == seg_k[None, :]) & live_q[:, None] & live_k[None, :]
+        logits = jnp.where(m[None], logits, NEG_INF)
+        row_live = m.any(axis=-1)
+        mx = jnp.max(logits, axis=-1, keepdims=True)
+        p = jnp.where(m[None], jnp.exp(logits - mx), 0.0)
+        p = jnp.where(row_live[None, :, None], p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30), 0.0)
+        out = jnp.einsum("hqk,hkd->hqd", p.astype(jnp.bfloat16), v, preferred_element_type=jnp.float32)
+        return None, out
+
+    _, blocks = jax.lax.scan(block, None, jnp.arange((s + pad) // block_q))
+    out = jnp.transpose(blocks, (1, 0, 2, 3)).reshape(h, s + pad, d)
+    return out[:, :s, :]
+
+
+def _honest_online_softmax(q, k, v, segment_ids, block_k: int = 256):
+    """Flash-style streaming softmax: a DIFFERENT reduction order over the key
+    axis (running max + rescaled running sum) at fp32. Legal, and the shape a
+    real Pallas kernel takes; included so a candidate is never punished for
+    accumulating keys in blocks rather than all at once."""
+    h, s, d = q.shape
+    idx_k = jnp.arange(s)
+    live_k = segment_ids != 0
+    pos_q = jnp.arange(s)
+    live_q = segment_ids != 0
+    nb = -(-s // block_k)
+    pad = nb * block_k - s
+    kp = jnp.pad(k, ((0, 0), (0, pad), (0, 0))) if pad else k
+    vp = jnp.pad(v, ((0, 0), (0, pad), (0, 0))) if pad else v
+
+    def body(carry, j):
+        run_m, run_l, acc = carry
+        start = j * block_k
+        kb = jax.lax.dynamic_slice(kp, (0, start, 0), (h, block_k, d))
+        vb = jax.lax.dynamic_slice(vp, (0, start, 0), (h, block_k, d))
+        kpos = start + jnp.arange(block_k)
+        in_range = kpos < s
+        seg_kb = jnp.where(in_range, segment_ids[jnp.minimum(kpos, s - 1)], 0)
+        live_kb = (seg_kb != 0) & in_range
+        logits = jnp.einsum("hqd,hkd->hqk", q, kb, preferred_element_type=jnp.float32)
+        m = (
+            (pos_q[:, None] >= kpos[None, :])
+            & (segment_ids[:, None] == seg_kb[None, :])
+            & live_q[:, None]
+            & live_kb[None, :]
+        )
+        logits = jnp.where(m[None], logits, NEG_INF)
+        blk_m = jnp.max(logits, axis=-1, keepdims=True)
+        new_m = jnp.maximum(run_m, blk_m)
+        corr = jnp.exp(run_m - new_m)
+        p = jnp.where(m[None], jnp.exp(logits - new_m), 0.0)
+        new_l = run_l * corr + jnp.sum(p, axis=-1, keepdims=True)
+        new_acc = acc * corr + jnp.einsum("hqk,hkd->hqd", p.astype(jnp.bfloat16), vb, preferred_element_type=jnp.float32)
+        return (new_m, new_l, new_acc), None
+
+    init = (
+        jnp.full((h, s, 1), NEG_INF, jnp.float32),
+        jnp.zeros((h, s, 1), jnp.float32),
+        jnp.zeros((h, s, d), jnp.float32),
+    )
+    (_, run_l, acc), _ = jax.lax.scan(body, init, jnp.arange(nb))
+    row_live = ((idx_k[None, :] <= pos_q[:, None]) & (segment_ids[:, None] == segment_ids[None, :]) & live_q[:, None] & live_k[None, :]).any(-1)
+    return jnp.where(row_live[None, :, None], acc / jnp.maximum(run_l, 1e-30), 0.0)
+
+
 _FALLBACK_BLOCK_Q = 512
 
 
@@ -179,6 +269,15 @@ class SplashAttentionProblem(Problem):
         except Exception:
             type(self).baseline_impl = "xla-fallback"
             return _xla_masked_attention(q, k, v, segment_ids)
+
+    def honest_variants(self):
+        """Calibrate against what an honest bf16 kernel actually computes, not
+        against an fp32-intermediate idealization. See ``_honest_faithful_bf16``:
+        the reference-bf16-only band rejects the production numeric path on some
+        shapes (RPA's tiny-holdout measured 1.15x), which is precisely the
+        phase-2 failure this hook exists to prevent. The end-to-end-bf16 path
+        still fails by 1.7-2.2x with these in, so discrimination survives."""
+        return [_honest_faithful_bf16, _honest_online_softmax]
 
     def adversarial_cases(self):
         tiny = self.case_by_name(self.adversarial_case_name)

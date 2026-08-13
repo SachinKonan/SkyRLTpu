@@ -210,7 +210,7 @@ slot_supervisor() {
     while true; do
       t_s=$(date +%s)
       timeout 14400 gcloud compute tpus tpu-vm ssh "$name" --zone="$ZONE" --project="$PROJECT" --worker=0 \
-        --command="cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
+        --command="set -o pipefail; cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
           ~/arena-venv/bin/python -m pallas_arena.judge.worker \
           --problem rmsnorm --queue http://127.0.0.1:${PORT} --sim-mode real \
           --timing-pairs 20 --worker-id ${name} --compile-budget-s ${COMPILE_BUDGET_S} \
@@ -220,6 +220,15 @@ slot_supervisor() {
            -o ServerAliveInterval=30 -o ServerAliveCountMax=4 >> "$log" 2>&1
       rc=$?
       dur=$(( $(date +%s) - t_s ))
+      # `set -o pipefail` above is load-bearing: without it the remote `| tee`
+      # swallows the worker's status and every death reports rc=0, which is
+      # how a judge-fault cascade stays invisible in this log. 17 = compile
+      # budget watchdog (terminal verdict already posted), 18 = judge fault
+      # (chip dead, item deliberately left to requeue).
+      case "$rc" in
+        17) echo "[$name] worker exited on the COMPILE-BUDGET watchdog" >> "$log" ;;
+        18) echo "[$name] worker exited on a JUDGE FAULT (dead chip); item requeued" >> "$log" ;;
+      esac
       echo "[$name] worker ssh session ended rc=${rc} after ${dur}s $(date +%H:%M:%S)" >> "$log"
       if [ "$dur" -lt 60 ]; then fails=$(( fails + 1 )); else fails=0; fi
       if [ "$fails" -ge 3 ]; then

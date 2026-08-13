@@ -1,0 +1,1267 @@
+<title>Pallas Kernel Arena — the prompt-engineering journey</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --paper:#F3F4F9;
+    --surface:#FFFFFF;
+    --surface-2:#EDEFF6;
+    --ink:#15171F;
+    --ink-2:#3A3E4E;
+    --muted:#5F6478;
+    --rule:#D9DCE8;
+    --rule-soft:#E7E9F2;
+    --accent:#3F44C9;
+    --accent-soft:#E6E7FA;
+    --pass:#0B7A63;
+    --pass-soft:#DCF0EA;
+    --warn:#8A5A06;
+    --warn-soft:#F7ECD6;
+    --fail:#A93446;
+    --fail-soft:#F8E2E5;
+
+    --serif: ui-serif, "Iowan Old Style", "Charter", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --measure: 67ch;
+    --wide: 1140px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#0D0F16;
+      --surface:#141724;
+      --surface-2:#1A1E2E;
+      --ink:#E5E7F2;
+      --ink-2:#C2C6D8;
+      --muted:#9297AE;
+      --rule:#282D40;
+      --rule-soft:#1F2434;
+      --accent:#9095FF;
+      --accent-soft:#1E2140;
+      --pass:#45C4A8;
+      --pass-soft:#12302B;
+      --warn:#DDA842;
+      --warn-soft:#33280F;
+      --fail:#EC7B88;
+      --fail-soft:#3A1B21;
+    }
+  }
+  :root[data-theme="light"]{
+    --paper:#F3F4F9; --surface:#FFFFFF; --surface-2:#EDEFF6;
+    --ink:#15171F; --ink-2:#3A3E4E; --muted:#5F6478;
+    --rule:#D9DCE8; --rule-soft:#E7E9F2;
+    --accent:#3F44C9; --accent-soft:#E6E7FA;
+    --pass:#0B7A63; --pass-soft:#DCF0EA;
+    --warn:#8A5A06; --warn-soft:#F7ECD6;
+    --fail:#A93446; --fail-soft:#F8E2E5;
+  }
+  :root[data-theme="dark"]{
+    --paper:#0D0F16; --surface:#141724; --surface-2:#1A1E2E;
+    --ink:#E5E7F2; --ink-2:#C2C6D8; --muted:#9297AE;
+    --rule:#282D40; --rule-soft:#1F2434;
+    --accent:#9095FF; --accent-soft:#1E2140;
+    --pass:#45C4A8; --pass-soft:#12302B;
+    --warn:#DDA842; --warn-soft:#33280F;
+    --fail:#EC7B88; --fail-soft:#3A1B21;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--serif); font-size:17px; line-height:1.62;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:var(--wide); margin:0 auto; padding:0 28px 120px;}
+  .col{max-width:var(--measure);}
+  p{margin:0 0 1.05em;}
+  a{color:var(--accent); text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px;}
+  a:focus-visible, summary:focus-visible, button:focus-visible{
+    outline:2px solid var(--accent); outline-offset:3px; border-radius:2px;
+  }
+  strong{font-weight:700; color:var(--ink);}
+  code, .m{font-family:var(--mono); font-size:.86em; font-variant-ligatures:none;}
+  p code, li code, td code, th code{
+    background:var(--surface-2); border:1px solid var(--rule-soft);
+    padding:.05em .32em; border-radius:3px; white-space:nowrap;
+  }
+
+  /* ---------- masthead ---------- */
+  header.top{
+    border-bottom:1px solid var(--rule);
+    background:var(--surface);
+  }
+  header.top .wrap{padding-top:52px; padding-bottom:40px;}
+  .eyebrow{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted); margin:0 0 20px;
+  }
+  h1{
+    font-family:var(--serif); font-weight:600; font-size:clamp(34px,5.4vw,52px);
+    line-height:1.06; letter-spacing:-.022em; margin:0 0 18px;
+    text-wrap:balance; max-width:20ch;
+  }
+  .standfirst{
+    font-size:20px; line-height:1.5; color:var(--ink-2);
+    max-width:56ch; margin:0 0 28px;
+  }
+  .runbar{
+    display:flex; flex-wrap:wrap; gap:0; border-top:1px solid var(--rule-soft);
+    padding-top:18px; font-family:var(--mono); font-size:12px;
+  }
+  .runbar div{padding-right:34px;}
+  .runbar dt{color:var(--muted); letter-spacing:.08em; text-transform:uppercase; font-size:10.5px; margin-bottom:4px;}
+  .runbar dd{margin:0; color:var(--ink); font-variant-numeric:tabular-nums;}
+
+  /* ---------- nav ---------- */
+  nav.jump{
+    position:sticky; top:0; z-index:20;
+    background:color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter:saturate(1.4) blur(8px);
+    border-bottom:1px solid var(--rule);
+  }
+  nav.jump .wrap{padding-top:0; padding-bottom:0;}
+  nav.jump ol{
+    list-style:none; margin:0; padding:0; display:flex; gap:0;
+    overflow-x:auto; font-family:var(--mono); font-size:11.5px;
+    letter-spacing:.07em; text-transform:uppercase;
+  }
+  nav.jump a{
+    display:block; padding:12px 18px 11px; white-space:nowrap;
+    color:var(--muted); text-decoration:none; border-bottom:2px solid transparent;
+  }
+  nav.jump a:hover{color:var(--ink); border-bottom-color:var(--accent);}
+  nav.jump li:first-child a{padding-left:0;}
+
+  /* ---------- sections ---------- */
+  section{padding-top:64px;}
+  .part{
+    font-family:var(--mono); font-size:11px; letter-spacing:.2em;
+    text-transform:uppercase; color:var(--accent);
+    padding-bottom:10px; margin-bottom:26px; border-bottom:1px solid var(--rule);
+  }
+  h2{
+    font-family:var(--serif); font-weight:600; font-size:clamp(26px,3.4vw,34px);
+    line-height:1.16; letter-spacing:-.016em; margin:0 0 14px; text-wrap:balance;
+    max-width:24ch;
+  }
+  h3{
+    font-family:var(--serif); font-weight:600; font-size:21px; line-height:1.25;
+    letter-spacing:-.01em; margin:38px 0 10px; text-wrap:balance;
+  }
+  h4{
+    font-family:var(--mono); font-weight:600; font-size:12px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--muted); margin:26px 0 8px;
+  }
+  ul,ol{margin:0 0 1.05em; padding-left:1.25em;}
+  li{margin-bottom:.4em;}
+
+  /* ---------- stage (journey entry) ---------- */
+  .stage{
+    display:grid; grid-template-columns:170px minmax(0,1fr); gap:0 34px;
+    padding:30px 0; border-top:1px solid var(--rule-soft);
+  }
+  .stage:first-of-type{border-top:1px solid var(--rule);}
+  .stage-meta{font-family:var(--mono); font-size:11.5px; line-height:1.55; color:var(--muted);}
+  .stage-meta .job{color:var(--ink); font-weight:600; letter-spacing:.02em;}
+  .stage-meta .date{display:block; margin-top:3px;}
+  .stage-meta .n{display:block; margin-top:9px; font-variant-numeric:tabular-nums;}
+  .stage-body{max-width:var(--measure);}
+  .stage-body h3{margin-top:0;}
+  @media (max-width:760px){
+    .stage{grid-template-columns:1fr; gap:12px;}
+    .stage-meta{display:flex; gap:16px; flex-wrap:wrap;}
+    .stage-meta .date, .stage-meta .n{display:inline; margin:0;}
+  }
+
+  /* ---------- panels ---------- */
+  .panel{
+    background:var(--surface); border:1px solid var(--rule);
+    border-left:3px solid var(--accent);
+    padding:22px 26px; margin:0 0 28px; border-radius:2px;
+  }
+  .panel.warn{border-left-color:var(--warn); background:var(--warn-soft);}
+  .panel.warn strong{color:var(--ink);}
+  .panel h3{margin-top:0;}
+  .panel p:last-child{margin-bottom:0;}
+  .panel .kicker{
+    font-family:var(--mono); font-size:11px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--warn); margin:0 0 10px;
+  }
+  .panel.accent .kicker{color:var(--accent);}
+
+  .note{
+    font-size:15px; line-height:1.55; color:var(--muted);
+    border-left:2px solid var(--rule); padding-left:16px; margin:0 0 24px;
+    max-width:var(--measure);
+  }
+  .note em{font-style:italic;}
+
+  /* ---------- tables ---------- */
+  .scroll{
+    overflow-x:auto; margin:0 0 28px;
+    border:1px solid var(--rule); border-radius:2px; background:var(--surface);
+  }
+  table{border-collapse:collapse; width:100%; font-family:var(--mono); font-size:12.5px;}
+  caption{
+    caption-side:top; text-align:left; font-family:var(--mono); font-size:11px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+    padding:14px 16px 0;
+  }
+  th,td{
+    padding:8px 14px; text-align:left; border-bottom:1px solid var(--rule-soft);
+    vertical-align:top; white-space:nowrap;
+  }
+  th{
+    font-weight:600; color:var(--muted); font-size:11px; letter-spacing:.07em;
+    text-transform:uppercase; border-bottom:1px solid var(--rule);
+    background:var(--surface-2);
+  }
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  tbody tr:last-child td{border-bottom:none;}
+  td.wrap-cell{white-space:normal; min-width:22ch; font-family:var(--serif); font-size:14.5px; line-height:1.45;}
+  .good{color:var(--pass); font-weight:600;}
+  .bad{color:var(--fail); font-weight:600;}
+  .dim{color:var(--muted);}
+
+  /* ---------- pills ---------- */
+  .pill{
+    display:inline-block; font-family:var(--mono); font-size:10.5px;
+    letter-spacing:.09em; text-transform:uppercase; font-weight:600;
+    padding:2px 8px; border-radius:2px; border:1px solid;
+    white-space:nowrap;
+  }
+  .pill.solved{color:var(--pass); background:var(--pass-soft); border-color:color-mix(in srgb, var(--pass) 40%, transparent);}
+  .pill.working{color:var(--warn); background:var(--warn-soft); border-color:color-mix(in srgb, var(--warn) 40%, transparent);}
+  .pill.open{color:var(--fail); background:var(--fail-soft); border-color:color-mix(in srgb, var(--fail) 40%, transparent);}
+  .pill.plain{color:var(--muted); background:var(--surface-2); border-color:var(--rule);}
+
+  /* ---------- code ---------- */
+  pre{
+    margin:0; padding:16px 18px; overflow-x:auto;
+    background:var(--surface); border:1px solid var(--rule); border-radius:2px;
+    font-family:var(--mono); font-size:12.5px; line-height:1.55; color:var(--ink-2);
+    tab-size:4;
+  }
+  pre.term{background:var(--surface-2);}
+  .codeblock{margin:0 0 26px;}
+  .codeblock .cap{
+    font-family:var(--mono); font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--muted); margin-bottom:7px;
+  }
+  .err{
+    font-family:var(--mono); font-size:12.5px; color:var(--fail);
+    background:var(--fail-soft); border:1px solid color-mix(in srgb, var(--fail) 25%, transparent);
+    padding:2px 6px; border-radius:2px; display:inline-block; white-space:pre-wrap;
+  }
+
+  details{
+    border:1px solid var(--rule); background:var(--surface);
+    border-radius:2px; margin:0 0 22px;
+  }
+  details summary{
+    cursor:pointer; list-style:none; padding:12px 16px;
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink); user-select:none;
+    display:flex; justify-content:space-between; gap:14px; align-items:baseline;
+  }
+  details summary::-webkit-details-marker{display:none;}
+  details summary::after{content:"open ▸"; color:var(--muted); font-size:10.5px; letter-spacing:.1em;}
+  details[open] summary::after{content:"close ▾";}
+  details summary:hover{color:var(--accent);}
+  details .inner{
+    border-top:1px solid var(--rule); padding:0;
+    max-height:520px; overflow:auto;
+  }
+  details .inner pre{border:none; background:transparent; border-radius:0;}
+  details .inner .prose{padding:16px 18px; max-width:var(--measure);}
+
+  /* ---------- kernel cards ---------- */
+  .kernel{
+    border:1px solid var(--rule); background:var(--surface);
+    border-radius:2px; margin:0 0 32px; overflow:hidden;
+  }
+  .kernel > header{
+    display:flex; flex-wrap:wrap; align-items:baseline; gap:14px;
+    padding:18px 24px; border-bottom:1px solid var(--rule); background:var(--surface-2);
+  }
+  .kernel > header h3{
+    margin:0; font-family:var(--mono); font-size:16px; font-weight:600;
+    letter-spacing:-.01em;
+  }
+  .kernel > header .tag{
+    font-family:var(--mono); font-size:11px; color:var(--muted);
+    letter-spacing:.05em; margin-right:auto;
+  }
+  .kbody{padding:22px 24px 6px;}
+  .kbody h4:first-child{margin-top:0;}
+  .kbody p, .kbody ul{max-width:var(--measure);}
+  .kfoot{
+    border-top:1px solid var(--rule-soft); background:var(--surface-2);
+    padding:16px 24px; font-size:15px;
+  }
+  .kfoot p{margin:0; max-width:none;}
+  .kfoot .lbl{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;
+  }
+  .dl{display:grid; grid-template-columns:max-content minmax(0,1fr); gap:6px 18px; margin:0 0 20px;
+      font-family:var(--mono); font-size:12.5px;}
+  .dl dt{color:var(--muted); letter-spacing:.04em;}
+  .dl dd{margin:0; color:var(--ink-2); word-break:break-word;}
+
+  hr.sep{border:none; border-top:1px solid var(--rule); margin:56px 0 0;}
+
+  footer.src{margin-top:64px; padding-top:28px; border-top:1px solid var(--rule);
+             font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.7;}
+  footer.src a{color:var(--accent);}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important; transition:none !important; scroll-behavior:auto !important;}
+  }
+  html{scroll-behavior:smooth; scroll-padding-top:60px;}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Pallas kernel arena · <span class="m">tpu/pallas_arena</span> · gemma-4-31B-it · TPU v5p + v6e</p>
+    <h1>Teaching a model to write TPU kernels</h1>
+    <p class="standfirst">Four measured runs of prompt engineering against five production kernel tasks — what we started with, every failure the harness caused, every failure the prompt caused, and where the wall is now.</p>
+    <dl class="runbar">
+      <div><dt>Runs</dt><dd>3650240 · 3651278 · 3687041 · 3687904</dd></div>
+      <div><dt>Candidates graded</dt><dd>186 / 160 / 480 / 224</dd></div>
+      <div><dt>Kernels</dt><dd>5</dd></div>
+      <div><dt>Working code today</dt><dd>5 of 5</dd></div>
+      <div><dt>Wins over a production kernel</dt><dd>0</dd></div>
+    </dl>
+  </div>
+</header>
+
+<nav class="jump" aria-label="Section navigation">
+  <div class="wrap">
+    <ol>
+      <li><a href="#caveat">The caveat</a></li>
+      <li><a href="#journey">The journey</a></li>
+      <li><a href="#effect">What each change did</a></li>
+      <li><a href="#wall">Where the wall is</a></li>
+      <li><a href="#kernels">The five kernels</a></li>
+      <li><a href="#anatomy">Prompt anatomy</a></li>
+      <li><a href="#grading">How grading works</a></li>
+    </ol>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<!-- ============================================================ CAVEAT -->
+<section id="caveat">
+  <p class="part">Read this first</p>
+  <div class="panel warn">
+    <p class="kicker">The honesty invariant</p>
+    <h2 style="max-width:30ch">Four of the five baselines are labelled fallbacks, not production kernels.</h2>
+    <p>Every headline number on this page is a ratio against a denominator, and for four of the five tasks that denominator is an <em>honest fallback</em> the judge falls back to because the real production kernel refused our shapes or was never bound:</p>
+    <div class="scroll" style="margin-bottom:20px; background:transparent; border-color:color-mix(in srgb, var(--warn) 30%, transparent);">
+      <table>
+        <thead><tr><th>Task</th><th>Intended baseline</th><th>What the judge actually times against</th></tr></thead>
+        <tbody>
+          <tr><td>splash_attention</td><td class="dim">Google's Pallas splash MHA</td><td><code>xla-fallback</code> — a query-blocked XLA attention</td></tr>
+          <tr><td>megablox_gmm</td><td class="dim">MaxText's tuned Pallas gmm</td><td><code>lax-ragged-dot-fallback</code> — megablox refused these shapes</td></tr>
+          <tr><td>ragged_paged_attention</td><td class="dim">vLLM-TPU Pallas v3</td><td><code>xla-paged-decode-fallback</code> — batch-blocked XLA decode</td></tr>
+          <tr><td>rg_lru</td><td class="dim">recurrentgemma's Pallas scan</td><td><code>lax-associative-scan</code></td></tr>
+          <tr><td>flce</td><td class="good">our own <code>custom_vjp</code> tiled kernel</td><td class="good">the production kernel itself — the one real baseline</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>No verified win over any production kernel exists anywhere in this project.</strong> The 19.9× on GMM is 19.9× <code>jax.lax.ragged_dot</code>. The 4.6× on splash is 4.6× a competent XLA attention. And rg_lru's <strong>1.0000 is a tie, not a win</strong> — <code>gate_reward()</code> collapses any score inside <code>[1 − floor, 1 + floor]</code> to exactly 1.0, so a candidate that matches its baseline is pinned there by the noise floor. FLCE, the one task with a real production denominator, has never had a candidate exceed <strong>0.7008</strong> — every passing FLCE kernel is slower than the kernel it is trying to beat.</p>
+  </div>
+
+  <h3>The five kernels, as they stand</h3>
+  <div class="scroll">
+    <table>
+      <caption>Best measured result per kernel, with the denominator that number is against</caption>
+      <thead>
+        <tr><th>Kernel</th><th>Status</th><th>Best prompt</th><th class="num">PASS</th><th class="num">Best reward</th><th>Against</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>megablox_gmm</code></td>
+          <td><span class="pill solved">solved</span></td><td><code>sd2</code></td>
+          <td class="num good">16/16</td><td class="num">19.9181</td><td class="dim">lax.ragged_dot fallback</td>
+        </tr>
+        <tr>
+          <td><code>rg_lru</code></td>
+          <td><span class="pill solved">solved</span></td><td><code>p1</code></td>
+          <td class="num good">25/32</td><td class="num">1.0000 <span class="dim">(tie)</span></td><td class="dim">lax.associative_scan</td>
+        </tr>
+        <tr>
+          <td><code>splash_attention</code></td>
+          <td><span class="pill solved">solved</span></td><td><code>sd1</code></td>
+          <td class="num">3/32</td><td class="num">3.2456</td><td class="dim">XLA fallback</td>
+        </tr>
+        <tr>
+          <td><code>flce</code></td>
+          <td><span class="pill working">working</span></td><td><code>p4</code></td>
+          <td class="num">8/32</td><td class="num">0.4990 <span class="dim">(0.7008 all-time)</span></td><td class="good">production custom_vjp</td>
+        </tr>
+        <tr>
+          <td><code>ragged_paged_attention</code></td>
+          <td><span class="pill open">not solved</span></td><td><code>sd2</code></td>
+          <td class="num">1/32</td><td class="num bad">0.4947</td><td class="dim">XLA paged decode fallback</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">RPA is marked <em>not solved</em> despite having working code: its measured noise floor is <strong>0.2362</strong>, so a candidate must be a quarter faster before the arena can see it at all. That is a property of the timing protocol at this shape, not of any kernel — and it makes RPA untrainable until the timing is fixed, whatever the prompt says.</p>
+</section>
+
+<hr class="sep">
+
+<!-- ============================================================ JOURNEY -->
+<section id="journey">
+  <p class="part">Part I · The journey</p>
+  <h2>Where the prompts started, and every step that moved a number</h2>
+  <div class="col">
+    <p>The arena grades whole programs on real silicon: a candidate must trace at every declared shape, compile under a 90-second budget, be numerically correct on hidden seeds, be bitwise deterministic, and then be timed against a baseline. Nothing about the prompt matters until a candidate clears all of that.</p>
+    <p>The measurement that drives everything below is not the pass rate. ttt-discover normalizes advantage <em>within a group</em> of rollouts, so a cell where every candidate scores identically contributes exactly zero gradient however good it looks. The metric is the fraction of complete 16-candidate groups whose reward spread exceeds the judge's own measured noise floor. That distinction produced the first real finding, before any prompt was improved at all.</p>
+  </div>
+
+  <!-- Stage 0 -->
+  <div class="stage">
+    <div class="stage-meta">
+      <span class="job">Prologue</span>
+      <span class="date">3650240 / 3650988 / 3686851</span>
+      <span class="n">3 all-zero grids</span>
+    </div>
+    <div class="stage-body">
+      <h3>Three grids of zeros that had nothing to do with the model</h3>
+      <p>Before any prompt lesson is trustworthy, this one is: <strong>an all-zero grid is a harness alarm until proven otherwise.</strong> Three separate confident zero-grids in this arena were caused by infrastructure:</p>
+      <ul>
+        <li><strong>A token budget that truncated everything.</strong> At <code>MAX_NEW_TOKENS=6144</code> the first 48 generations across both models and both tasks came back <code>finish_reason="length"</code> — <strong>48 of 48</strong> — and <strong>0 of 48</strong> survived the pre-gate. The whole budget went into the thinking channel; the extractor picked up partial sketches quoted mid-thought, so the modal gate was <code>ast: syntax error: unexpected indent</code>. Median extracted program: 1,108 characters against ~17,000 characters of generation.</li>
+        <li><strong>A signature-tuple bug.</strong> <code>probe_signatures()</code> returns a 4-tuple; the driver handed the whole tuple to the export child, which then evaluated <code>sig["args"]</code> on a list. <strong>14 of 32</strong> candidates died with the byte-identical message <span class="err">TypeError: list indices must be integers or slices, not str</span> — and it destroyed exactly the candidates well-formed enough to <em>reach</em> export.</li>
+        <li><strong>Engines that were not serving.</strong> A spot preemption five minutes into generation left <strong>640 of 672</strong> rows as <code>error:URLError(ConnectionRefused)</code> with <code>gen_chars=0</code>. A later run lost a complete 31-minute bring-up to a transient GitHub fetch for <code>causal-conv1d</code>, a package nothing in the run uses.</li>
+      </ul>
+      <p>Each one produced a table that read like "no model can write a Pallas kernel". The guards that came out of them — a hard pre-flight completion per engine, mid-run liveness checks, a <code>no_code</code> alarm at 30% per config, and a pre-warm that builds the entire grid environment <em>before</em> a single chip is provisioned — are now the reason the later numbers can be read at all.</p>
+    </div>
+  </div>
+
+  <!-- Stage 1 -->
+  <div class="stage">
+    <div class="stage-meta">
+      <span class="job">Run 1 · cold start</span>
+      <span class="date">job 3650240 · 08-07</span>
+      <span class="n">186 candidates<br>2 tasks · 2 models</span>
+    </div>
+    <div class="stage-body">
+      <h3>Can a base model write a Pallas kernel at all?</h3>
+      <p>Three strictly-nested prompt variants per task, so any arm-to-arm difference is attributable to the added block alone:</p>
+      <ul>
+        <li><strong><code>minimal</code></strong> — task spec, signature, declared shapes, judge contract. Nothing else.</li>
+        <li><strong><code>reference</code></strong> — plus the public fp32 oracle inline (labelled as the correctness oracle <em>and</em> as an invalid answer), plus a ten-item Pallas/Mosaic gotcha list in prose.</li>
+        <li><strong><code>tailored</code></strong> — plus a working scaffold in which every structural decision is given and exactly one function is left blank.</li>
+      </ul>
+      <p>Two results defined everything after.</p>
+      <p><strong>Prose cannot teach a function signature.</strong> On splash, gemma finished 14–16 of 16 generations and wrote a genuine <code>pallas_call</code> — then invented its keyword arguments. The <code>reference</code> arm's ten-item gotcha list did not move that number by <em>a single candidate</em>: 0/16 export, twice.</p>
+      <div class="codeblock">
+        <div class="cap">The modal splash failure at every early rung</div>
+        <pre>pallas_call() got an unexpected keyword argument 'out_spec'
+pallas_call() got an unexpected keyword argument 'out_dtype' / 'out_dtypes'
+pallas_call() got an unexpected keyword argument 'out_shapes' / 'in_shapes'
+pallas_call() got an unexpected keyword argument 'block_shapes' / 'index_map'
+pallas_call() missing 1 required positional argument: 'out_shape'
+BlockSpec.__init__() got multiple values for argument 'block_shape'
+module 'jax' has no attribute 'Shape'
+module 'jax.experimental.pallas' has no attribute 'Ref'</pre>
+      </div>
+      <p><strong>And a prompt can be too good.</strong> <code>tailored | flce</code> passed <strong>16/16</strong> — the best-looking cell in the grid — with a within-group reward spread of <strong>0.0042</strong>, against the judge's own measured noise floors of <strong>0.0069 and 0.0158</strong> for those shapes. All sixteen candidates converged on essentially the same kernel and the arena could not tell them apart. The variance RL needs had been removed by the scaffold. Ranked by trainability the grid inverts:</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Cell</th><th class="num">PASS</th><th class="num">Spread</th><th class="num">vs noise floor</th><th>Usable signal?</th></tr></thead>
+          <tbody>
+            <tr><td><code>minimal | flce</code></td><td class="num">2/16</td><td class="num">0.2283</td><td class="num">14–33×</td><td class="good">yes</td></tr>
+            <tr><td><code>reference | flce</code></td><td class="num">5/16</td><td class="num">0.1978</td><td class="num">13–29×</td><td class="good">yes</td></tr>
+            <tr><td><code>tailored | flce</code></td><td class="num">16/16</td><td class="num">0.0042</td><td class="num bad">0.27–0.61×</td><td class="bad">no — under the noise</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Also from this run: Qwen3.5-27B finished <strong>3 of 80</strong> generations at 12,000 tokens. Every Qwen cell was zero. That is a statement about its thinking budget, not its kernel ability — reporting it as "cannot write kernels" would have been the fourth false negative.</p>
+    </div>
+  </div>
+
+  <!-- Stage 2 -->
+  <div class="stage">
+    <div class="stage-meta">
+      <span class="job">Run 2 · the seam</span>
+      <span class="date">job 3651278 · 08-07</span>
+      <span class="n">160 candidates<br>5 tasks · 2 models</span>
+    </div>
+    <div class="stage-body">
+      <h3>Give away the plumbing, keep the decisions</h3>
+      <p>If prose cannot teach a signature, hand the signature over. The <strong>seam</strong> prompt gives the model the entire <code>pallas_call</code> — grid, every <code>BlockSpec</code>, every index map, the padding and un-padding — verbatim, as the exact scaffold its answer will be pasted above. The model writes only named fill functions. What it does <em>not</em> give away is every choice that moves the number: block and tile sizes, key chunking, which blocks to skip, online versus two-pass softmax, accumulation dtype, matmul precision.</p>
+      <p>On its target failure it worked decisively.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Measure</th><th class="num"><code>reference</code></th><th class="num"><code>seam</code></th></tr></thead>
+          <tbody>
+            <tr><td>Candidates emitting an invented <code>pallas_call</code> kwarg</td><td class="num">8/80</td><td class="num good">1/80</td></tr>
+            <tr><td><code>no_code</code> rate</td><td class="num">18% <span class="dim">(28/155, prior run)</span></td><td class="num good">0% (0/160)</td></tr>
+            <tr><td>splash_attention export</td><td class="num bad">0/16</td><td class="num good">2/16 <span class="dim">(first ever)</span></td></tr>
+            <tr><td>flce PASS</td><td class="num good">2/16</td><td class="num bad">0/16</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>More important than the rates, the failure <em>modes</em> moved wholesale. <code>reference</code> fails at "I do not know this library's API". The seam fails at "I wrote the wrong thing into a Ref" — <code>'MemoryRef' object does not support item assignment</code>, <code>Invalid shape for swap. Ref shape: (8, 4, 128)</code>, <code>too many values to unpack (expected 2)</code>. Those are dense, specific, learnable errors about the actual kernel, and they are what the RL side would be fed as observations.</p>
+      <p>The seam also produced the first candidate in this arena ever to exceed its baseline: <code>gemma | seam | rg_lru</code> at <strong>1.1941</strong> — a chunked associative scan at <code>CHUNK = 256</code>, 1.74× on the long sequence and 0.825× on the short one. That is 1.19× <code>lax.associative_scan</code>, not 1.19× recurrentgemma.</p>
+      <p>Where it failed is equally informative: on GMM and RPA, <strong>the seam's own interface became the difficulty</strong>. An 8-argument <code>decode_block</code> with two persistent scratch Refs produced its own modal error, and both tasks stayed at 0/16.</p>
+    </div>
+  </div>
+
+  <!-- Stage 3 -->
+  <div class="stage">
+    <div class="stage-meta">
+      <span class="job">Run 3 · the ladder</span>
+      <span class="date">job 3687041 · 08-12</span>
+      <span class="n">480 candidates<br>5 kernels × 3 rungs × 32</span>
+    </div>
+    <div class="stage-body">
+      <h3>Four rungs, one variable each, on whole-program prompts</h3>
+      <p>A strict superset ladder over a fixed BASE (task spec, exact signature, declared shapes including the non-divisible holdout, judge contract, fp32 oracle):</p>
+      <ul>
+        <li><strong>P1 — the DIALECT list.</strong> Ten bullets, each carrying the verbatim error string it eliminates and the number of candidates in the previous run that died on it. Nothing general: <em>a bullet with no measured victims does not earn its tokens.</em></li>
+        <li><strong>P3 — typed skeleton + one complete worked example.</strong> The arena's own RMSNorm golden, which passes this judge on silicon. Pins the API by demonstration rather than description.</li>
+        <li><strong>P4 — primitives</strong> (<code>dot_f32</code>, <code>iota2</code>, <code>fill_ref</code>, <code>online_softmax</code>, <code>chunk_scan</code>), prepended and optional — except for FLCE, which instead gets the <strong>backward contract</strong> stated exactly, because its failure is mathematical rather than structural.</li>
+      </ul>
+      <p><strong>The dialect list was the big win.</strong> Across all 480 candidates <code>no_code</code> went to <strong>0/480</strong>, and it removed the in-kernel Ref-semantics class outright: <code>'MemoryRef' object does not support item assignment</code> 7 → <strong>0</strong>, <code>Invalid shape for swap</code> 7 → <strong>0</strong>, <code>custom_vjp def_fwd</code> 1 → <strong>0</strong>.</p>
+      <p><strong>The worked example backfired, measurably.</strong> It removed splash's invented <code>pallas_call</code> kwargs (10 → 0) — the example taught the real signature — and replaced them with a new failure in <strong>60 candidates</strong>:</p>
+      <div class="codeblock">
+        <div class="cap">The failure the worked example introduced</div>
+        <pre>Block shape for args[0] (= (Blocked(128), Blocked(128))) must have
+the same number of dimensions as the array shape (8, 4096, 128)</pre>
+      </div>
+      <p>The example was a fused RMSNorm over a <code>[rows, cols]</code> array, so it demonstrated a 2-D <code>BlockSpec</code>; models copied that <em>rank</em> onto splash's <code>[heads, seq, head_dim]</code>. <strong>A worked example transfers its shape assumptions along with its dialect.</strong> That is the single most useful negative result in the project.</p>
+      <p>Two kernels came out solved and three came out dead:</p>
+      <div class="scroll">
+        <table>
+          <caption>480 candidates, 15 cells, 32 each</caption>
+          <thead><tr><th>Kernel</th><th>Rung</th><th class="num">Export</th><th class="num">PASS</th><th class="num">Best</th><th class="num">PASS-only spread</th><th class="num">Floor</th><th>Verdict</th></tr></thead>
+          <tbody>
+            <tr><td><code>rg_lru</code></td><td>p1</td><td class="num">26</td><td class="num good">25</td><td class="num">1.0000</td><td class="num">0.7554 <span class="dim">(10.8×)</span></td><td class="num">0.0699</td><td class="good">SIGNAL</td></tr>
+            <tr><td><code>rg_lru</code></td><td>p3</td><td class="num">24</td><td class="num">20</td><td class="num">1.0000</td><td class="num">0.7526</td><td class="num">0.0699</td><td class="good">SIGNAL</td></tr>
+            <tr><td><code>rg_lru</code></td><td>p4</td><td class="num">25</td><td class="num">15</td><td class="num">1.0000</td><td class="num">0.4221</td><td class="num">0.0699</td><td class="good">SIGNAL</td></tr>
+            <tr><td><code>flce</code></td><td>p1</td><td class="num">18</td><td class="num">5</td><td class="num">0.4990</td><td class="num">0.2327</td><td class="num">0.0106</td><td class="good">SIGNAL</td></tr>
+            <tr><td><code>flce</code></td><td>p3</td><td class="num">18</td><td class="num">2</td><td class="num">0.2666</td><td class="num bad">0.0001</td><td class="num">0.0106</td><td class="dim">SIGNAL*</td></tr>
+            <tr><td><code>flce</code></td><td><strong>p4</strong></td><td class="num">24</td><td class="num good">8</td><td class="num">0.2666</td><td class="num">0.2000</td><td class="num">0.0106</td><td class="good">SIGNAL</td></tr>
+            <tr><td><code>splash_attention</code></td><td>p1/p3/p4</td><td class="num bad">0</td><td class="num bad">0/96</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">0.0312</td><td class="bad">NO CODE</td></tr>
+            <tr><td><code>ragged_paged_attention</code></td><td>p1/p3/p4</td><td class="num bad">0</td><td class="num bad">0/96</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">0.2525</td><td class="bad">NO CODE</td></tr>
+            <tr><td><code>megablox_gmm</code></td><td>p1/p3/p4</td><td class="num bad">0</td><td class="num bad">0/96</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">0.0013</td><td class="bad">NO CODE</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">* <code>flce | p3</code>'s two passing kernels are numerically identical — a PASS-only spread of 0.0001. Its whole-group spread of 0.2666 comes entirely from the 30 zeros beside them. That is exactly the distinction the PASS-only column exists to expose, and it is why P3 is not FLCE's rung despite being nominally "SIGNAL".</p>
+      <p>The general finding: <strong>adding context to a whole-program prompt helps exactly one class of problem — the one that is about mathematics you can state.</strong> FLCE's backward contract took export failures 14 → 7 and PASS 5 → <strong>8</strong>, an arena record. For the class that is about interface plumbing you must <em>write</em>, prose, worked examples and primitives all failed, and 288 candidates said so.</p>
+    </div>
+  </div>
+
+  <!-- Stage 4 -->
+  <div class="stage">
+    <div class="stage-meta">
+      <span class="job">Run 4 · seam + dialect</span>
+      <span class="date">job 3687904 · 08-12</span>
+      <span class="n">224 candidates<br>7 cells × 32</span>
+    </div>
+    <div class="stage-body">
+      <h3>The two things that ever worked, combined</h3>
+      <p>The seam is the only variant that has ever exported splash. The dialect list is the only prompt addition ever measured to remove a failure class cleanly — and two of the classes it removes are the seam's <em>own</em> modal failures. So: seam plus dialect, no more prose. Two arms, <code>sd1</code> (seam + dialect) and <code>sd2</code> (<code>sd1</code> plus a typed skeleton of the fill functions <em>at the task's own rank</em> — deliberately no foreign worked example, because rank transfer is what broke P3).</p>
+      <p>One measurement was cleaned up first. Seventeen of GMM's ladder failures were <code>ValueError: Unsupported TPU device kind: cpu</code>, which is not a statement about a kernel: every one of those candidates wrote a rank-1 <code>BlockSpec</code>, and Pallas's rank-1 block-shape check asks the <em>current device</em> for its sublane and lane geometry, which under <code>JAX_PLATFORMS=cpu</code> raises before the check can run. Pinning the device kind during export rescued <strong>11 of the 17</strong> outright; the other 6 now fail on a legible model error instead of on the harness's hostname.</p>
+      <p><strong>The result: the Pallas-API failure class went to exactly zero.</strong></p>
+      <div class="scroll">
+        <table>
+          <caption>Candidates failing at the Pallas interface — kwargs, BlockSpec rank, index-map arity, in_specs pytree, CompilerParams, device kind</caption>
+          <thead><tr><th>Task</th><th class="num">Ladder (96)</th><th class="num">Plain seam (16)</th><th class="num">Seam + dialect (64)</th></tr></thead>
+          <tbody>
+            <tr><td><code>splash_attention</code></td><td class="num bad">87</td><td class="num">2</td><td class="num good">0</td></tr>
+            <tr><td><code>ragged_paged_attention</code></td><td class="num bad">56</td><td class="num">0</td><td class="num good">0</td></tr>
+            <tr><td><code>megablox_gmm</code></td><td class="num bad">55</td><td class="num">2</td><td class="num good">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Not one of the 192 candidates in this run failed at the Pallas API. The hypothesis was confirmed exactly: those three kernels were never failing at attention or at grouped matmul — they were failing at a <code>pallas_call</code> signature. 288 ladder candidates produced no passing kernel among them; 192 seam+dialect candidates produced 29.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Cell</th><th class="num">Export</th><th class="num">PASS</th><th class="num">Best</th><th class="num">PASS-only spread</th><th class="num">vs floor</th></tr></thead>
+          <tbody>
+            <tr><td><code>splash_attention · sd1</code></td><td class="num">15</td><td class="num good">3</td><td class="num">3.2456</td><td class="num">0.0415</td><td class="num">1.4×</td></tr>
+            <tr><td><code>splash_attention · sd2</code></td><td class="num">10</td><td class="num bad">0</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td></tr>
+            <tr><td><code>ragged_paged_attention · sd1</code></td><td class="num">4</td><td class="num bad">0</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td></tr>
+            <tr><td><code>ragged_paged_attention · sd2</code></td><td class="num">23</td><td class="num">1</td><td class="num">0.4947</td><td class="num dim">—</td><td class="num">2.1×</td></tr>
+            <tr><td><code>megablox_gmm · sd1</code></td><td class="num">17</td><td class="num good">9</td><td class="num">17.1300</td><td class="num">5.3732</td><td class="num">—</td></tr>
+            <tr><td><code>megablox_gmm · sd2</code></td><td class="num good">32</td><td class="num good">16</td><td class="num good">19.9181</td><td class="num good">7.4886</td><td class="num good">4160×</td></tr>
+            <tr><td><code>rg_lru · p1</code> <span class="dim">(control)</span></td><td class="num">26</td><td class="num">13</td><td class="num">1.0000</td><td class="num">0.7510</td><td class="num">10.8×</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The in-grid control reproduced the ladder to the third decimal — 0.7510 versus 0.7554, both 10.8× the floor — which is what makes the negative results in the same grid readable.</p>
+      <p><strong>And the typed skeleton is not uniformly good.</strong> <code>sd2</code> is a strict superset of <code>sd1</code> and it is better on two kernels and worse on the third, by a lot in both directions. The variable that predicts it is the <em>width of the fill interface</em>: RPA's seven-argument, two-scratch-Ref signature needs its shapes spelled out (export 4 → 23), GMM's went to a clean sweep (17 → 32), but splash's fill is two small functions and there the skeleton cost 5 exports and all 3 passes — candidates followed its commented blocked outline and got the block bookkeeping wrong, where the <code>sd1</code> winner simply materialised one <code>[bq, kv_len]</code> score matrix and was done. <strong>A ladder that adds the same rung to every task will be wrong for some of them.</strong> Hence per-kernel defaults: <code>sd1</code> for splash, <code>sd2</code> for RPA and GMM.</p>
+      <p class="note">One group in this run is not model data. Work item <code>w000091</code> compiled for 4.5 s and halted the TPU core; from <code>w000092</code> onward every item failed in the worker's own fixture precomputation at ~1.1 s each, silently, as if they were model failures. The affected set is contiguous and complete — the last <strong>35</strong> rows of the file — and is excluded from every number above. GMM's true count is 25 PASS out of the 41 candidates that reached a healthy chip.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============================================================ EFFECT -->
+<section id="effect">
+  <p class="part">Part I.5 · The scoreboard</p>
+  <h2>What each prompt addition actually did</h2>
+  <p class="col">Every row is a measured before/after on the same tasks, same model, same judge. Nothing here is an impression of what helped.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Addition</th><th class="num">Cost</th><th>Measured effect</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>P1 DIALECT list</strong><br><span class="dim">10 bullets, verbatim errors + kill counts</span></td>
+          <td class="num">~1,300 tok</td>
+          <td class="wrap-cell"><span class="good">The big win.</span> <code>no_code</code> 0/480. <code>MemoryRef</code> item assignment 7 → 0. <code>Invalid shape for swap</code> 7 → 0. <code>custom_vjp def_fwd</code> 1 → 0. Removed the in-kernel Ref-semantics class outright. Residual: <code>pl.when</code> misuse 5 → 3.</td>
+        </tr>
+        <tr>
+          <td><strong>The seam</strong><br><span class="dim">harness owns the pallas_call</span></td>
+          <td class="num">~4,750 tok</td>
+          <td class="wrap-cell"><span class="good">The other win.</span> Invented <code>pallas_call</code> kwargs 8/80 → 1/80. Pallas-API failure class 87/56/55 → <strong>0 of 192</strong>. First-ever working splash, GMM and RPA kernels. Costs: on FLCE, whose plumbing is a <code>lax.scan</code>, the seam's return contract is a net negative (2 PASS → 0).</td>
+        </tr>
+        <tr>
+          <td><strong>P3 worked example</strong><br><span class="dim">a complete RMSNorm kernel</span></td>
+          <td class="num">~1,100 tok</td>
+          <td class="wrap-cell"><span class="bad">Backfired.</span> Removed invented kwargs (10 → 0) and <em>introduced</em> a 2-D <code>BlockSpec</code> against a 3-D operand in <strong>60 candidates</strong>. Net effect on PASS negative everywhere: flce 5 → 2, rg_lru 25 → 20.</td>
+        </tr>
+        <tr>
+          <td><strong>Typed skeleton</strong><br><span class="dim">of the fill functions, at the task's own rank</span></td>
+          <td class="num">~450 tok</td>
+          <td class="wrap-cell"><span class="warn" style="color:var(--warn);font-weight:600">Per-task.</span> Helps wide fill interfaces — RPA export 4 → 23, GMM 17 → 32 with PASS 9 → 16. Hurts narrow ones — splash 3 PASS → <strong>0</strong>. Use <code>sd2</code> for RPA and GMM, <code>sd1</code> for splash.</td>
+        </tr>
+        <tr>
+          <td><strong>P4 primitives</strong><br><span class="dim">tested helpers, prepended and optional</span></td>
+          <td class="num">~580 tok</td>
+          <td class="wrap-cell"><span class="dim">No effect</span> on the three dead kernels — they never reach the body where the helpers would be used. Slight negative on rg_lru (20 → 15).</td>
+        </tr>
+        <tr>
+          <td><strong>FLCE backward contract</strong><br><span class="dim">the recompute formula, stated</span></td>
+          <td class="num">~370 tok</td>
+          <td class="wrap-cell"><span class="good">Unambiguous win.</span> <code>aot_export</code> failures 14 → 7, PASS 5 → <strong>8</strong>, the most FLCE has ever produced. The <code>gradient</code> gate still claims 16 of 32 — stating the formula does not make everyone get it right — but it is now a minority failure among exporters rather than the wall.</td>
+        </tr>
+        <tr>
+          <td><strong>The <code>tailored</code> scaffold</strong><br><span class="dim">every decision given, one blank</span></td>
+          <td class="num">~3,840 tok</td>
+          <td class="wrap-cell"><span class="bad">The trap.</span> 16/16 PASS with a reward spread of <strong>0.0042</strong> against noise floors of 0.0069 / 0.0158. Working code, frozen answer, zero gradient. Retained only as a cautionary data point.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="panel accent">
+    <p class="kicker">The rule that came out of it</p>
+    <p>Prose helps exactly one class of problem: the one that is about <strong>mathematics you can state</strong>. For the class that is about <strong>interface plumbing you must write</strong>, prose, worked examples and primitives all fail — and a worked example can actively hurt by transferring its own shape assumptions. The lever that works on those kernels is structural: give the model the <code>pallas_call</code>, and tell it only the mistakes that have real victims.</p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============================================================ WALL -->
+<section id="wall">
+  <p class="part">Part II · The current frontier</p>
+  <h2>The wall moved from plumbing to arithmetic</h2>
+  <div class="col">
+    <p>With the API failure class at zero, the gate histogram of the most recent 224 candidates shows where candidates actually die now. Correctness has become the largest non-export bucket — and that is progress, because a candidate reaching the correctness gate has compiled, run on the chip and produced numbers.</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <caption>Gate histogram — job 3687904, all 224 candidates, recomputed from the raw jsonl</caption>
+      <thead><tr><th>Gate</th><th class="num">n</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td><code>aot_export</code></td><td class="num">95</td><td class="wrap-cell">Did not trace at every declared shape (CPU child, no device).</td></tr>
+        <tr><td><code>all</code> <span class="pill solved">pass</span></td><td class="num good">42</td><td class="wrap-cell">Cleared every gate and was scored.</td></tr>
+        <tr><td><code>correctness</code></td><td class="num">38</td><td class="wrap-cell">Ran on the chip; exceeded the calibrated tolerance on a hidden seed or an adversarial vector.</td></tr>
+        <tr><td><code>fixtures</code></td><td class="num dim">35</td><td class="wrap-cell">Not model data — the TPU core halt. Excluded from every reported number.</td></tr>
+        <tr><td><code>timed_output_correctness</code></td><td class="num">7</td><td class="wrap-cell">Correct on the seeded fixtures, wrong on an output produced by a <em>timed</em> invocation.</td></tr>
+        <tr><td><code>candidate_compile</code></td><td class="num">5</td><td class="wrap-cell">Mosaic compile failed or overran.</td></tr>
+        <tr><td><code>ast</code></td><td class="num">2</td><td class="wrap-cell">Static screen: banned import, banned call, or no <code>pallas_call</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>And the correctness failures are overwhelmingly near-misses</h3>
+  <p class="col">Taking the correctness family together — <code>correctness</code> plus <code>timed_output_correctness</code>, 45 candidates — and parsing the measured error against the tolerance it missed:</p>
+  <div class="scroll">
+    <table>
+      <caption>Ratio of measured error to calibrated tolerance, 45 correctness-family failures</caption>
+      <thead><tr><th>Band</th><th class="num">n</th><th>Reading</th></tr></thead>
+      <tbody>
+        <tr><td>within 1.25× of tolerance</td><td class="num good">29</td><td class="wrap-cell">A correct algorithm carrying slightly too much numerical error.</td></tr>
+        <tr><td>1.25× – 2×</td><td class="num">8</td><td class="wrap-cell">Close, but a real formulation error somewhere.</td></tr>
+        <tr><td>&gt; 2×</td><td class="num">6</td><td class="wrap-cell">Not near-misses at all: 12.4, 14.0, 14.2, 14.9, 264.9, 922.9.</td></tr>
+        <tr><td>non-finite (NaN/inf)</td><td class="num">2</td><td class="wrap-cell">Both <code>splash | sd1</code>: <code>non-finite or malformed output</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="col">Median ratio <strong>1.185×</strong>. Minimum <strong>1.0030×</strong>. The tolerance is not generous — it is 1.5× the <em>reference's own bf16 error</em> — and these candidates are landing just outside it:</p>
+  <div class="codeblock">
+    <div class="cap">Verbatim observations, closest three misses</div>
+    <pre>GATE timed_output_correctness | ragged_paged_attention
+max err 0.00408 vs tol 0.00351                                   1.162x
+
+GATE timed_output_correctness | ragged_paged_attention
+max err 0.00267 vs tol 0.00266                                   1.004x
+
+GATE correctness | ragged_paged_attention | probe-b16-len1024#seed0
+q99 err 0.000661 vs tol 0.000659                                 1.003x</pre>
+  </div>
+
+  <div class="panel accent">
+    <p class="kicker">Diagnosis · the change in flight</p>
+    <h3>bf16 in, float32 accumulate — as a directive, not a trade</h3>
+    <p>Every reference in the arena computes in float32. On TPU, <code>jax.lax.dot_general</code> on float32 operands runs <strong>one bfloat16 pass</strong> at the default precision — so a candidate that writes the obvious matmul is quietly computing at half the reference's precision and lands just outside a tolerance calibrated against float32. The dialect list already names this, but names it as a choice: <em>"The choice is yours."</em></p>
+    <p>The change in flight is to make <code>preferred_element_type=jnp.float32</code> — bf16 inputs, f32 accumulator — a <strong>directive</strong>, and to say explicitly that <code>Precision.HIGHEST</code> is <em>not</em> the answer. HIGHEST is roughly 6× the passes; teaching a model to win correctness by being slow would corrupt the only signal the arena has. bf16-in / f32-accumulate is also what every production kernel this arena benchmarks against actually does — Google's splash, vLLM's paged attention, MaxText's megablox, and our own FLCE.</p>
+    <p>Supporting evidence already in the record: the arena's own splash control kernel missed tolerance by 18% (max error 4.11e-3 against a 3.48e-3 budget) for exactly this reason and nothing else; the winning GMM and splash kernels both call <code>dot_general</code> with <code>preferred_element_type=jnp.float32</code>; and the one working RPA kernel uses <code>Precision.HIGHEST</code> throughout, which is very likely why it is correct and 2.6× <em>slower</em> than the fallback it is scored against. <span class="dim">This change has not yet been measured — it is a hypothesis with converging evidence, not a result.</span></p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============================================================ KERNELS -->
+<section id="kernels">
+  <p class="part">Part III · Per-kernel reference</p>
+  <h2>The five kernels: contract, golden truth, unit test, prompt</h2>
+  <p class="col">Each task module declares a signature contract in its docstring, an fp32 closed-form <code>reference()</code> that is the correctness oracle, a <code>baseline()</code> that is the score denominator, and an adversarial vector library — the cheater battery — designed so that every known way of faking correctness has a test it must fail.</p>
+
+  <div class="panel accent">
+    <p class="kicker">Shared by all five</p>
+    <p><strong>Tolerance is calibrated, never fixed.</strong> The judge runs the reference at bf16 working precision, measures the per-element error <code>|cand − ref| / (|ref| + 1)</code> on both the max and the 99th-percentile tail, and sets the candidate's budget at <code>TOL_MULTIPLIER = 1.5</code> times that, floored at <code>1e-6</code>. The mechanism (<code>calibrated_tolerance</code>) takes the <em>worst</em> spread across <code>reference_bf16</code> plus any <code>honest_variants()</code>, so an honest kernel with a different-but-valid numeric path is never rejected — but in practice <strong>none of the five arena kernels overrides <code>honest_variants()</code></strong> (only the RMSNorm warm-up does), so their tolerance is 1.5× <code>reference_bf16</code> alone. <code>rg_lru</code> and <code>flce</code> instead supply task-specific <code>reference_bf16</code> overrides, which is where their calibration nuance lives.</p>
+  </div>
+
+  <!-- splash -->
+  <article class="kernel" id="k-splash">
+    <header>
+      <h3>splash_attention</h3>
+      <span class="tag">Task 1 · train flagship · fwd only</span>
+      <span class="pill solved">solved · sd1</span>
+    </header>
+    <div class="kbody">
+      <h4>Contract</h4>
+      <dl class="dl">
+        <dt>q, k, v</dt><dd>[heads, seq, head_dim] bfloat16 &nbsp;— per-shard layout, MHA</dd>
+        <dt>segment_ids</dt><dd>[seq] int32; 0 = padding</dd>
+        <dt>o</dt><dd>[heads, seq, head_dim] float32</dd>
+        <dt>probe shapes</dt><dd>h8-s4096, h4-s2048, holdout h4-s2049 <span class="dim">(deliberately not block-divisible)</span></dd>
+      </dl>
+      <h4>Golden truth</h4>
+      <p><code>causal_segment_attention</code> upcasts q, k and v to float32, forms the full logits with an <code>einsum</code>, and masks to <em>causal AND equal-segment AND both-sides-live</em> using a large finite negative constant (<code>−0.7 × float32max</code>, never <code>−inf</code>, because <code>−inf − −inf</code> is NaN). It then does a max-shifted softmax and, critically, forces fully-masked rows to <strong>exactly 0.0</strong> rather than NaN. There is no <code>1/sqrt(head_dim)</code> scale — <code>make_inputs</code> pre-scales q, and this is stated in the prompt so the arm is not secretly measuring "did you guess the scaling convention".</p>
+      <h4>Cheater battery</h4>
+      <ul>
+        <li><code>softmax-saturating</code> — q × 300; output must stay finite.</li>
+        <li><code>fully-masked-rows</code> — every 5th row set to segment 0; those rows must be <strong>exactly 0</strong>, checked with <code>abs(out[:, dead, :]).max() == 0.0</code>.</li>
+        <li><code>outlier-value-rows</code> — one v row set to 3e4.</li>
+        <li><code>near-overflow-bf16-keys</code> — one k row set to 1e4.</li>
+        <li>Banned: <code>jax.nn.dot_product_attention</code>, <code>jax.nn.scaled_dot_product_attention</code>, and the whole <code>jax.experimental.pallas.ops</code> tree that holds the reference splash kernel.</li>
+      </ul>
+      <h4>Current best prompt</h4>
+      <p><strong><code>sd1</code></strong> — seam + dialect, no skeleton. 15,015 characters. The harness owns the entire <code>pallas_call</code>, including the padding of both the query and key axes; the model writes <code>choose_blocks(seq, head_dim) -&gt; (bq, bk)</code> and <code>attn_block(...)</code>. The typed skeleton took this cell from 3 PASS to 0, so it is deliberately not used here.</p>
+      <details>
+        <summary>The winning kernel · reward 3.2456 <span class="dim">first splash to PASS in this arena</span></summary>
+        <div class="inner">
+<pre>probe-h8-s4096:         cand 0.736ms vs ref 3.385ms (4.597x)
+probe-h4-s2048:         cand 0.234ms vs ref 0.529ms (2.264x)
+probe-holdout-h4-s2049: cand 0.261ms vs ref 0.297ms (1.137x)
+peak HBM 5.89GB</pre>
+<pre>def choose_blocks(seq, head_dim):
+    """bq=128 allows for efficient tiling on TPU sublanes and fits the score
+    matrix (128 x 4096 f32 = 2MB) well within the VMEM limit."""
+    return 128, 128
+
+def attn_block(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref, *, bq, bk, kv_len):
+    q_val = q_ref[0]                      # (bq, dp)
+    k_val = k_ref[0]                      # (kv_len, dp)
+    v_val = v_ref[0]                      # (kv_len, dp)
+    seg_q = sq_ref[:, 0]                  # (bq,)
+    seg_k = sk_ref[0, :]                  # (kv_len,)
+
+    logits = jax.lax.dot_general(
+        q_val, k_val, (((1,), (1,)), ((), ())),
+        preferred_element_type=jnp.float32)          # (bq, kv_len)
+
+    q_block_idx = pl.program_id(1)
+    global_q = q_block_idx * bq + jax.lax.broadcasted_iota(jnp.int32, (bq,), 0)
+    global_k = jax.lax.broadcasted_iota(jnp.int32, (kv_len,), 0)
+    causal_mask = global_q[:, None] &gt;= global_k[None, :]
+    seg_mask = (seg_q[:, None] == seg_k[None, :]) &amp; (seg_q[:, None] != 0)
+    mask = causal_mask &amp; seg_mask
+
+    NEG_INF = -1e30
+    masked_logits = jnp.where(mask, logits, NEG_INF)
+    row_max = jnp.max(masked_logits, axis=-1, keepdims=True)
+    p = jnp.exp(masked_logits - row_max)
+    p = jnp.where(mask, p, 0.0)
+    denom = jnp.sum(p, axis=-1, keepdims=True)
+    row_live = jnp.any(mask, axis=-1, keepdims=True)
+    p = jnp.where(row_live, p / jnp.maximum(denom, 1e-30), 0.0)
+
+    out = jax.lax.dot_general(
+        p, v_val, (((1,), (0,)), ((), ())),
+        preferred_element_type=jnp.float32)          # (bq, dp)
+    o_ref[...] = out[None, :, :]</pre>
+          <div class="prose">
+            <p>A two-pass, whole-key-axis softmax at <code>bq=128</code>. The model reasoned explicitly about the 2 MB score tile against the ~32 MB VMEM ceiling and concluded it did not need to block the key axis or skip anything — it ignores the <code>bk</code> it returned. That is exactly the kind of strategy decision the seam exists to leave open, and the trade is visible in the score: 4.6× at seq=4096, only 1.14× at the non-divisible holdout.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="kfoot">
+      <span class="lbl">Best result, with its caveat</span>
+      <p>3/32 PASS, 15/32 export, best reward <strong>3.2456</strong> — 4.6× the <code>xla-fallback</code> denominator, <strong>not</strong> Google's splash kernel, which refused these shapes. PASS-only spread 0.0415 against a 0.0300 floor: it clears, but on 3 passing candidates that is a weak measurement, and the 108× whole-group spread is mostly the 29 zeros.</p>
+    </div>
+  </article>
+
+  <!-- gmm -->
+  <article class="kernel" id="k-gmm">
+    <header>
+      <h3>megablox_gmm</h3>
+      <span class="tag">Task 3 · MoE grouped matmul · fwd only</span>
+      <span class="pill solved">solved · sd2</span>
+    </header>
+    <div class="kbody">
+      <h4>Contract</h4>
+      <dl class="dl">
+        <dt>lhs</dt><dd>[m, k] bfloat16 &nbsp;— tokens, grouped contiguously</dd>
+        <dt>rhs</dt><dd>[num_groups, k, n] bfloat16 &nbsp;— per-expert weights</dd>
+        <dt>group_sizes</dt><dd>[num_groups] int32, sum == m, <strong>zeros allowed</strong></dd>
+        <dt>out</dt><dd>[m, n] float32; out[rows of group g] = lhs @ rhs[g], fp32 accumulation</dd>
+        <dt>probe shapes</dt><dd>m4096-e4-uniform, m2048-e4-zipf, holdout m3000-e4-zipf</dd>
+      </dl>
+      <h4>Golden truth</h4>
+      <p><code>jax.lax.ragged_dot</code> with both operands cast to float32 — the design floor, itself cross-checked in the CPU battery against an independent numpy loop that walks the groups row by row. Crucially, <code>group_sizes</code> are re-sampled per grading from <strong>both</strong> a uniform and a Zipf-skewed distribution, so a kernel tuned for one imbalance profile cannot fake a win.</p>
+      <h4>Cheater battery</h4>
+      <ul>
+        <li><code>empty-expert-groups</code> — sizes <code>[0, m/2, 0, m−m/2]</code>; output must stay finite. Skipping a zero-size group must not shift the row offsets.</li>
+        <li><code>max-skew-single-expert</code> — all m rows in group 0, and the result is checked <em>exactly</em> against <code>lhs @ rhs[0]</code> at rtol/atol 2e-4.</li>
+      </ul>
+      <h4>Current best prompt</h4>
+      <p><strong><code>sd2</code></strong> — seam + dialect + typed skeleton, 14,999 characters. The harness owns the <code>pallas_call</code>, the group-aligned permutation and the un-permute; the model writes <code>choose_tiles(m, k, n, num_groups)</code> and <code>gmm_tile(...)</code>. The skeleton took export from 17/32 to a clean 32/32.</p>
+      <details>
+        <summary>The winning kernel · reward 19.9181 <span class="dim">best score in the arena</span></summary>
+        <div class="inner">
+<pre>probe-m4096-e4-uniform:      cand 2.424ms vs ref 49.346ms (20.359x)
+probe-m2048-e4-zipf:         cand 1.506ms vs ref 29.355ms (19.492x)
+probe-holdout-m3000-e4-zipf: cand 1.930ms vs ref  8.045ms  (4.168x)
+peak HBM 8.18GB</pre>
+<pre>def choose_tiles(m, k, n, num_groups):
+    """
+    Returns (bm, bk, bn).
+    bm: 512 allows high MXU utilization while remaining under the 32MB VMEM ceiling.
+    bn: 512 maintains a balance between grid size and memory footprint.
+    bk: 128 is provided as a standard contraction chunk, though the full k is resident.
+    """
+    return 512, 128, 512
+
+def gmm_tile(l_ref, r_ref, o_ref, *, bm, bk, bn, k):
+    """
+    Performs one grid step: [bm, k] @ [k, bn] -&gt; [bm, bn].
+    """
+    lhs = l_ref[...]          # (bm, k)
+    rhs = r_ref[0, ...]       # (k, bn)
+    res = jax.lax.dot_general(
+        lhs,
+        rhs,
+        (((1,), (0,)), ((), ())),
+        preferred_element_type=jnp.float32
+    )
+    o_ref[...] = res</pre>
+          <div class="prose">
+            <p>That is the model's entire contribution — a tile choice and one contraction. The 16 passing candidates in the clean group span five visible strategy clusters, from 19.92 down to 12.43, which is a factor of 1.6 between the best and worst tile choice and is precisely the gradient RL would learn from:</p>
+            <pre>19.9181 | 17.1551 17.0873 17.0249 17.0149 16.9735 16.9474 | 16.1616 16.1415
+        | 14.5077 | 12.5441 12.4730 12.4540 12.4478 12.4478 12.4295</pre>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="kfoot">
+      <span class="lbl">Best result, with its caveat</span>
+      <p>16/16 PASS in its clean group, best <strong>19.9181</strong>, PASS-only spread 7.4886 = <strong>4160×</strong> the 0.0018 noise floor. The caveats travel with the number: the denominator is <code>jax.lax.ragged_dot</code> at 49.3 ms — <em>megablox itself refused these shapes</em> — the harness owns the permutation and the <code>pallas_call</code>, and 24 of 64 candidates were lost to the chip fault. It is not 20× megablox and it is not 20× anything anyone ships.</p>
+    </div>
+  </article>
+
+  <!-- rpa -->
+  <article class="kernel" id="k-rpa">
+    <header>
+      <h3>ragged_paged_attention</h3>
+      <span class="tag">Task 2 · decode, GQA 8 KV heads · fwd only</span>
+      <span class="pill open">not solved · sd2</span>
+    </header>
+    <div class="kbody">
+      <h4>Contract</h4>
+      <dl class="dl">
+        <dt>q</dt><dd>[batch, q_heads, d] bfloat16 &nbsp;— one token per sequence</dd>
+        <dt>k_pages, v_pages</dt><dd>[num_pages, page_size, kv_heads, d] bfloat16</dd>
+        <dt>page_tables</dt><dd>[batch, max_pages_per_seq] int32 &nbsp;— page ids, padded 0</dd>
+        <dt>seq_lens</dt><dd>[batch] int32, ≥ 1</dd>
+        <dt>o</dt><dd>[batch, q_heads, d] float32; GQA — head g attends kv head <code>g // group</code></dd>
+        <dt>probe shapes</dt><dd>b16-len1024, b8-len512, holdout b17-len512 <span class="dim">(17 is prime, on purpose)</span></dd>
+      </dl>
+      <h4>Golden truth</h4>
+      <p><code>paged_decode_attention_reference</code> gathers the pages named by <code>page_tables</code> into a dense <code>[b, max_len, kv_heads, d]</code> tensor, upcasts to float32, and runs an ordinary masked attention per sequence — positions at or beyond <code>seq_len</code> are masked with <code>−0.7 × float32max</code>, then a max-shifted softmax. Simple and enormous, which is exactly why the task exists.</p>
+      <h4>Cheater battery</h4>
+      <ul>
+        <li><code>single-token-decode</code> — all <code>seq_lens = 1</code>, and the output is required to equal the v of the first cached token <em>exactly</em> (rtol 1e-4), repeated across the GQA group.</li>
+        <li><code>page-boundary-lengths</code> — lengths snapped to exact page multiples, where off-by-one page loops bite.</li>
+        <li><code>max-length</code> — every sequence at full <code>max_len</code>.</li>
+        <li><code>softmax-saturating</code> — q × 300.</li>
+      </ul>
+      <h4>Current best prompt</h4>
+      <p><strong><code>sd2</code></strong> — 17,167 characters, the largest prompt in the set. RPA's fill has seven arguments and two persistent scratch Refs (<code>m_ref</code>, <code>l_ref</code>) that survive across grid steps, and writing out the shape of every slice took export from 4/32 to <strong>23/32</strong>, a 5.75× jump, and produced RPA's only working kernel.</p>
+      <details>
+        <summary>Where RPA candidates now fail — and why it is progress</summary>
+        <div class="inner">
+          <div class="prose">
+            <p>The two new failure signatures introduced by this arm:</p>
+            <ul>
+              <li><strong>23 × <code>max err … vs tol …</code></strong> at the correctness gate. RPA candidates now compile, run on the chip and produce numbers; they get the online-softmax rescale or the ragged mask slightly wrong. The ladder never got a single RPA candidate far enough to be <em>wrong about arithmetic</em>.</li>
+              <li><strong>12 × <code>Incompatible shapes for broadcasting: [(N,N),(N,)]</code></strong> — the <code>[1, page_size]</code> mask against a <code>[group, page_size]</code> logit block. A real shape error inside the body, and the one thing the <code>sd2</code> skeleton spells out that <code>sd1</code> does not.</li>
+            </ul>
+            <p>The one passing kernel runs an online softmax across pages with <code>@pl.when(p == 0)</code> initialisation, <code>@pl.when(p * page_size &lt; sl_ref[b])</code> page skipping and a final normalisation at <code>p == num_pages − 1</code>, at <code>Precision.HIGHEST</code> throughout — which is very likely why it is 2.6× slower than a batch-blocked XLA decode.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="kfoot">
+      <span class="lbl">Best result, with its caveat</span>
+      <p>1/32 PASS, best <strong>0.4947</strong> — correct, and 2.6× <em>slower</em> than the fallback baseline. Reported only because a working RPA kernel has never existed here. The blocking problem is not the prompt: the measured noise floor is <strong>0.2362</strong>, so a candidate must be nearly a quarter faster before the arena can see it at all. <strong>Fix the timing protocol before the prompt.</strong></p>
+    </div>
+  </article>
+
+  <!-- rg_lru -->
+  <article class="kernel" id="k-rglru">
+    <header>
+      <h3>rg_lru</h3>
+      <span class="tag">Task 5 · gated diagonal linear scan (SSM)</span>
+      <span class="pill solved">solved · p1</span>
+    </header>
+    <div class="kbody">
+      <h4>Contract</h4>
+      <dl class="dl">
+        <dt>x</dt><dd>[b, t, d] bfloat16</dd>
+        <dt>a</dt><dd>[b, t, d] float32 in [0, 1) &nbsp;— gates precomputed as inputs</dd>
+        <dt>reset</dt><dd>[b, t] bool</dd>
+        <dt>h</dt><dd>[b, t, d] float32</dd>
+        <dt>recurrence</dt><dd><code>h_t = a_t · h_{t−1} + sqrt(1 − a_t²) · x_t</code>, with <code>a_t</code> forced to 0 at resets so no state crosses a segment boundary</dd>
+        <dt>probe shapes</dt><dd>4×2048×2560, 2×1024×2560, holdout 2×1500×2560 <span class="dim">(RecurrentGemma-2B width, unchanged)</span></dd>
+      </dl>
+      <h4>Golden truth</h4>
+      <p>A float32 sequential <code>lax.scan</code> — the plainest possible statement of the recurrence. This is the one task where <code>require_pallas = False</code>: <code>lax.associative_scan</code> is an explicitly <em>legal candidate strategy</em>, and only importing recurrentgemma is banned.</p>
+      <p>Its <code>reference_bf16</code> is overridden rather than defaulted, and the reason is a real trap: the gates stay float32 because they are float32 inputs by contract, and quantizing them would destroy the <code>a → 1</code> adversarial vector's calibration — bf16 rounds <code>1 − 1e-6</code> to exactly <code>1.0</code>, which zeroes <code>sqrt(1 − a²)</code> outright.</p>
+      <h4>Cheater battery</h4>
+      <ul>
+        <li><code>a-to-one-long-memory</code> — <code>a = 1 − 1e-6</code> everywhere: the long-horizon float32 drift test.</li>
+        <li><code>dense-reset-boundaries</code> — resets every 7th step; at every reset position <code>h_t</code> must equal <code>x_t</code>.</li>
+        <li><code>a-zero-passthrough</code> — <code>a = 0</code> everywhere, so <code>h_t = x_t</code> exactly (rtol 1e-5).</li>
+      </ul>
+      <h4>Current best prompt</h4>
+      <p><strong><code>p1</code></strong> — the lowest rung tried: BASE plus the dialect list, and nothing else. 11,860 characters. Adding rungs actively cost passes: 25 at P1, 20 at P3, 15 at P4.</p>
+      <details>
+        <summary>The bimodal reward — two real strategy clusters</summary>
+        <div class="inner">
+<pre>1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.6187, 0.5966, 0.5959, 0.5950, 0.5928, 0.5915, ...</pre>
+          <div class="prose">
+            <p>Two strategy clusters separated by about 0.41: a full-sequence <code>lax.associative_scan</code> that ties the baseline, and chunked or sequential formulations at around 0.6. That is a real, learnable gradient between two real kernel designs, not timing jitter — the PASS-only spread of 0.7554 is 10.8× the 0.0699 noise floor, and an independent later run reproduced it at 0.7510, also 10.8×.</p>
+            <p>The best rg_lru kernel ever measured came from the plain seam at <strong>1.1941</strong> (job 3651278) — a chunked associative scan at <code>CHUNK = 256</code>, 1.74× on the long sequence and 0.825× on the short one. That is a genuine beat of <code>lax.associative_scan</code>, and still not a beat of recurrentgemma's Pallas scan, which has never been bound.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="kfoot">
+      <span class="lbl">Best result, with its caveat</span>
+      <p>25/32 PASS, reward <strong>1.0000</strong> — and <strong>1.0000 is a tie</strong>. Noise-floor gating pins any candidate within <code>±floor</code> of its baseline to exactly 1.0, and that baseline is <code>lax.associative_scan</code>, not recurrentgemma's Pallas scan. rg_lru is the cleanest RL target after GMM and the cheapest to grade, but nothing here has beaten a production kernel.</p>
+    </div>
+  </article>
+
+  <!-- flce -->
+  <article class="kernel" id="k-flce">
+    <header>
+      <h3>flce</h3>
+      <span class="tag">Task 4 · fused linear cross-entropy · fwd + bwd</span>
+      <span class="pill working">working · p4</span>
+    </header>
+    <div class="kbody">
+      <h4>Contract</h4>
+      <dl class="dl">
+        <dt>hidden</dt><dd>[n, h] bfloat16 &nbsp;— flattened B·T token axis</dd>
+        <dt>w</dt><dd>[h, v] bfloat16 &nbsp;— frozen output head</dd>
+        <dt>targets</dt><dd>[n] int32</dd>
+        <dt>logprobs</dt><dd>[n] float32 = <code>logits[i, targets[i]] − LSE(logits[i])</code>, logits at fp32 accumulation</dd>
+        <dt>contract</dt><dd>fwd + bwd, <code>d/d(hidden)</code> only — w is frozen (LoRA-only training)</dd>
+        <dt>hard rule</dt><dd>the full [n, v] logits must <strong>never</strong> be materialized; the judge reports peak HBM, which exposes violators</dd>
+        <dt>probe shapes</dt><dd>4096×2880×151936, 2048×…, holdout 3000×… <span class="dim">(vocab and hidden width unchanged)</span></dd>
+      </dl>
+      <h4>Golden truth</h4>
+      <p>The oracle materializes the full float32 logits, takes the target column and subtracts the logsumexp — a formulation that needs 44.8 GB at production shape and is therefore explicitly labelled in the prompt as the correctness oracle <em>and</em> an invalid answer. The baseline is the interesting part: it is <strong>our own production <code>custom_vjp</code> tiled kernel, copied verbatim into the task module</strong> so the judge never imports skyrl. Its forward scans over token tiles and discards each tile's logits; its residual is the hidden tiles only, and its backward recomputes one tile's logits at a time.</p>
+      <p>Its <code>reference_bf16</code> is also overridden: logits materialized at bf16, LSE at float32 — matching what the production kernel actually computes, so an honest bf16 candidate is not held to fp32 bitness. The gradient is checked as <code>d/d(hidden)</code> of <code>sum(logprobs × cos(arange(n)))</code>, against the fp32 reference at its own calibrated tolerance.</p>
+      <h4>Cheater battery</h4>
+      <ul>
+        <li><code>label-in-tail</code> — every label placed in the last 8 vocab slots. A top-k or truncated-tail LSE approximator scores this catastrophically wrong while passing a global allclose on Gaussian inputs forever.</li>
+        <li><code>lse-saturation</code> — hidden × 80, giving ±80 logit offsets that under- and overflow <code>exp()</code> without a max-shifted or online LSE.</li>
+        <li><code>150k-vocab</code> — n=4, h=32, v=151936: LSE accumulation error across the full production vocab width.</li>
+        <li>All three additionally assert <code>logprobs ≤ 0</code> — a log-probability that comes out positive is not a rounding error.</li>
+      </ul>
+      <h4>Current best prompt</h4>
+      <p><strong><code>p4</code></strong> — BASE + dialect + skeleton/example + the <strong>backward contract stated exactly</strong>. FLCE is the exception to every other lesson on this page: it exports fine at every rung and dies at the <em>mathematics</em> of the recompute backward, which is a thing prose can fix. Stating the formula took export failures 14 → 7 and PASS 5 → 8.</p>
+      <details>
+        <summary>Why the seam is the wrong tool for this one kernel</summary>
+        <div class="inner">
+          <div class="prose">
+            <p>On FLCE the seam <em>lost</em>: <code>reference</code> gave 50% export and 2 PASS, the seam gave 31% export and <strong>0</strong>. The harness already owned the <code>custom_vjp</code> for this task, so the seam gave away less than it did elsewhere while adding a two-function return contract — <code>(logprobs, carry)</code> — that models got wrong 8 times with <code>too many values to unpack (expected 2)</code>.</p>
+            <p>On a task whose plumbing is a <code>lax.scan</code> rather than a <code>pallas_call</code>, the seam's interface is a net cost. That is the same lesson as the typed skeleton, one level up: the right amount of scaffolding is a property of the task's interface width, not a rung you can add uniformly.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="kfoot">
+      <span class="lbl">Best result, with its caveat</span>
+      <p>8/32 PASS at <code>p4</code> — an arena record for this task — with best rewards of 0.4990 (p1) and 0.2666 (p3/p4); the all-time best is <strong>0.7008</strong>, from the <code>tailored</code> scaffold that has no usable gradient. <strong>This is the one task scored against a real production kernel, and every passing candidate is slower than it.</strong> That gap is precisely what RL would be asked to close.</p>
+    </div>
+  </article>
+</section>
+
+<hr class="sep">
+
+<!-- ============================================================ ANATOMY -->
+<section id="anatomy">
+  <p class="part">Part IV · Prompt anatomy</p>
+  <h2>Inside the current best prompt</h2>
+  <div class="col">
+    <p>The current best prompt for splash is <code>prompt_seam_dialect.build("splash_attention", "sd1")</code> — <strong>15,015 characters</strong>. Its token cost depends on who counts: the repo's rough estimator (<code>chars // 4</code>) says <strong>3,753</strong>; gemma's own tokenizer, measured on this family of prompts at 3.07 characters per token, says <strong>4,890</strong>. The second number is the one the driver budgets against, because it is the one the serving engine enforces.</p>
+    <p>That budget is not academic. Over 480 generations on these tasks the median generation was ~8,100 tokens, so against a 16,384 context a prompt that leaves under ~11,000 tokens starts destroying candidates for reasons that have nothing to do with kernels. This is why the seam's ~1,400-token API block was <em>replaced</em> rather than appended to — only the in-body call list survives, sliced verbatim out of the original and asserted at import so it cannot drift.</p>
+  </div>
+  <div class="scroll">
+    <table>
+      <caption>Measured prompt sizes, gemma tokenizer at 3.07 chars/token</caption>
+      <thead><tr><th>Task</th><th class="num">sd1 chars</th><th class="num">sd1 tokens</th><th class="num">room left</th><th class="num">sd2 chars</th><th class="num">sd2 tokens</th><th class="num">room left</th></tr></thead>
+      <tbody>
+        <tr><td><code>splash_attention</code></td><td class="num">15,015</td><td class="num">4,890</td><td class="num">11,238</td><td class="num">16,716</td><td class="num">5,444</td><td class="num">10,684</td></tr>
+        <tr><td><code>ragged_paged_attention</code></td><td class="num">15,198</td><td class="num">4,950</td><td class="num">11,178</td><td class="num">17,167</td><td class="num">5,591</td><td class="num">10,537</td></tr>
+        <tr><td><code>megablox_gmm</code></td><td class="num">13,887</td><td class="num">4,523</td><td class="num">11,605</td><td class="num">14,999</td><td class="num">4,885</td><td class="num">11,243</td></tr>
+        <tr><td><code>flce</code></td><td class="num">13,030</td><td class="num">4,244</td><td class="num dim">—</td><td class="num">13,786</td><td class="num">4,490</td><td class="num dim">—</td></tr>
+        <tr><td><code>rg_lru</code></td><td class="num">11,860</td><td class="num">3,863</td><td class="num dim">—</td><td class="num">12,670</td><td class="num">4,127</td><td class="num dim">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">It held: all 224 generations in the seam+dialect run finished with <code>finish_reason=stop</code>. <strong>Zero truncations.</strong></p>
+
+  <h3>Section order</h3>
+  <p class="col">Eleven sections, in this order. The output contract is deliberately <em>last</em> — a model reads the final instruction best — and the dialect list sits immediately before it.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th class="num">#</th><th>Section</th><th>Job</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><code>## What you write, and what you do NOT write</code></td><td class="wrap-cell">Names the seam. "The harness owns the interface; you own the strategy."</td></tr>
+        <tr><td class="num">2</td><td><code>## The scaffold your code is appended to</code></td><td class="wrap-cell">The real scaffold, verbatim — interpolated from the harness's own source, never a retyped copy, and asserted byte-identical at import.</td></tr>
+        <tr><td class="num">3</td><td><code>## What you must define</code></td><td class="wrap-cell">The exact signatures, with the rank and dtype of every Ref documented in the docstring.</td></tr>
+        <tr><td class="num">4</td><td><code>## Where the real decisions are</code></td><td class="wrap-cell">The open questions, stated as questions: block sizes, skipping, softmax formulation, accumulation dtype and precision.</td></tr>
+        <tr><td class="num">5</td><td><code>## Task semantics</code></td><td class="wrap-cell">The maths, plus the fp32 oracle inline — labelled as the correctness oracle <em>and</em> as an invalid answer.</td></tr>
+        <tr><td class="num">6</td><td><code>## Declared shapes</code></td><td class="wrap-cell">Including the non-block-divisible holdout, and why it is there.</td></tr>
+        <tr><td class="num">7</td><td><code>## Judge contract</code></td><td class="wrap-cell">Every gate, the tolerance rule, the determinism count, the compile budget, the ban list.</td></tr>
+        <tr><td class="num">8</td><td><code>## How much to write</code></td><td class="wrap-cell">"300–1200 tokens of code." Added because seam fills were running 2–3× over budget.</td></tr>
+        <tr><td class="num">9</td><td><code>## The calls you make inside the function you write</code></td><td class="wrap-cell">Introspected from the pinned jax 0.10.2 with <code>inspect.signature</code>, not remembered.</td></tr>
+        <tr><td class="num">10</td><td><code>## Pallas dialect: the mistakes that actually killed candidates here</code></td><td class="wrap-cell">Ten bullets, each with a verbatim error string and a kill count.</td></tr>
+        <tr><td class="num">11</td><td><code>## Output format</code></td><td class="wrap-cell">One fenced block, definitions only, do not rewrite the scaffold.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The dialect list, verbatim</h3>
+  <p class="col">This is the block that produced the cleanest measured win in the project. Its design rule is stated in the source comment: <em>"Every bullet is a VERBATIM error string from job 3651278 with the count of candidates it killed. Nothing here is general advice; a bullet with no measured victims does not earn its tokens."</em></p>
+  <details open>
+    <summary>Three bullets, exactly as the model reads them</summary>
+    <div class="inner">
+<pre>3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `'MemoryRef' object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref's shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`'s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.</pre>
+    </div>
+  </details>
+  <details>
+    <summary>The closer — the precision trade, and the sentence that is about to change</summary>
+    <div class="inner">
+<pre>One more, which is a real trade rather than a mistake: on TPU
+`jax.lax.dot_general` on float32 operands runs ONE bfloat16 pass at the
+default precision. `preferred_element_type=jnp.float32` gives an f32
+accumulator over bf16 inputs; `precision=jax.lax.Precision.HIGHEST` is
+accurate and about 6x the passes. A control kernel in this arena missed the
+calibrated tolerance by 18% for exactly this reason. The choice is yours.</pre>
+      <div class="prose">
+        <p>"The choice is yours" is the line the near-miss histogram argues against. See <a href="#wall">the current frontier</a>.</p>
+      </div>
+    </div>
+  </details>
+
+  <h3>Two more excerpts, verbatim</h3>
+  <details>
+    <summary>§4 — Where the real decisions are <span class="dim">splash, sd1</span></summary>
+    <div class="inner">
+<pre>## Where the real decisions are
+
+* **`bq`, and your own key chunking.** The whole key axis is resident, so how
+  you consume it is entirely yours: `for j in range(kv_len // bk)` over
+  bk-wide slices `k_ref[0, j*bk:(j+1)*bk, :]` (Python ints, so it unrolls), or
+  one giant `[bq, kv_len]` score matrix if you think it fits. It probably does
+  not: the scoped VMEM ceiling is ~32 MB per `pallas_call` and a
+  `[512, 4096]` f32 score tile is 8 MB before you have made a single
+  temporary of it. Going over is a compile-time
+  `CompileTimeScopedVmemOom: Scoped allocation with size 36.25M and limit 32.00M`.
+* **Skipping work.** A key block strictly above the diagonal contributes
+  nothing to any query in this block -- `j*bk &gt; i*bq + bq - 1` -- and you know
+  both indices. Roughly half the blocks are skippable and `bq` is a Python int,
+  so you can skip them at TRACE time and not emit the code at all.
+* **The softmax formulation.** Online (running max, running sum, rescale the
+  accumulator each block) or two-pass (find the row max, then accumulate).
+  Online costs an extra `exp` and a multiply per block; two-pass reads the keys
+  twice.
+* **Accumulation dtype and matmul precision.** See the precision note at the end
+  of the dialect list -- it is the difference between passing and failing correctness.</pre>
+    </div>
+  </details>
+  <details>
+    <summary>§7 — Judge contract, and §11 — Output format <span class="dim">splash, sd1</span></summary>
+    <div class="inner">
+<pre>## Judge contract
+
+- The composed program is exec'd and `kernel` is serialized with `jax.export`
+  once per declared shape, with no data and no device.
+- The program MUST contain a real `pallas_call` -- the scaffold's counts.
+- Correctness on hidden seeds against the fp32 oracle: per-element
+  `|cand - ref| / (|ref| + 1)`, on BOTH the max and the 99th-percentile tail,
+  at 1.5x the reference's own bf16 error. Non-finite fails automatically.
+- Determinism: 5 runs, BITWISE identical.
+- Compile budget: 90 s for all shapes together. A `for` loop over key blocks
+  unrolls -- 8 blocks is fine, 512 is not.
+- Score: median wall-clock against the production baseline.
+- Banned: `jax.experimental.pallas.ops.*` (it holds the reference splash
+  kernel), `tpu_inference`, `MaxText`, `maxtext`, `skyrl`, `recurrentgemma`,
+  the arena's package, and calling `jax.nn.dot_product_attention` or
+  `jax.nn.scaled_dot_product_attention`.
+
+## Output format
+
+Output ONE ```python code block containing ONLY the definitions listed above,
+plus whatever imports and private helpers they need. No prose outside it. Do
+NOT define `kernel`, do NOT write a `pallas_call`, do NOT rewrite any part of
+the scaffold: your code is pasted directly ABOVE it, in the same module, and
+anything you redefine that the scaffold also defines will simply be replaced.</pre>
+    </div>
+  </details>
+  <details>
+    <summary>The <code>sd2</code> typed skeleton — every line is a shape, every <code>...</code> is a decision <span class="dim">RPA</span></summary>
+    <div class="inner">
+<pre>def decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                 *, kv_heads, group, page_size, head_dim, num_pages):
+    b, p = pl.program_id(0), pl.program_id(1)      # sequence, page
+    # o_ref/m_ref/l_ref PERSIST across p, so page 0 initialises them, and a
+    # store must already have the Ref's own shape:
+    # @pl.when(p == 0)
+    # def _init():
+    #     m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)  # [kv_heads,group,128]
+    #     l_ref[...] = jnp.zeros(l_ref.shape, l_ref.dtype)
+    #     o_ref[...] = jnp.zeros(o_ref.shape, o_ref.dtype)        # [1,kv_heads,group,d]
+    pos  = p * page_size + jax.lax.broadcasted_iota(jnp.int32, (1, page_size), 1)
+    live = pos &lt; sl_ref[b]                          # [1, page_size] bool
+    ...   # mask the tail, or skip whole pages with @pl.when -- YOUR choice
+    # kv_heads and group are PYTHON ints, so `for h in range(kv_heads)` unrolls:
+    #     q_h = q_ref[0, h]         # [group, d]      bf16
+    #     k_h = k_ref[0, :, h, :]   # [page_size, d]  bf16
+    #     v_h = v_ref[0, :, h, :]   # [page_size, d]  bf16
+    #     m_h = m_ref[h, :, :1]     # [group, 1] f32  (the 128 lanes hold copies)
+    #     o_h = o_ref[0, h]         # [group, d] f32
+    # and the stores back are whole slots:
+    #     m_ref[h]    = jnp.broadcast_to(m_new, (group, 128))
+    #     o_ref[0, h] = ...                              # EXACTLY [group, d] f32
+    # Doing all 32 query heads at once against the [page_size, kv_heads, d]
+    # block is equally legal and is not the same speed.
+    # @pl.when(p == num_pages - 1)  -&gt; where a running softmax gets normalised</pre>
+      <div class="prose">
+        <p>The skeleton is of the task's <em>own</em> function at the task's own rank, and it ships no foreign worked example — that is the direct correction of the P3 failure. A skeleton written against the real rank cannot transfer a wrong one. Note what is still <code>...</code>: whether to mask or skip, whether to loop over heads or do all 32 at once, and where to normalise. Those are the decisions the score measures.</p>
+      </div>
+    </div>
+  </details>
+</section>
+
+<hr class="sep">
+
+<!-- ============================================================ GRADING -->
+<section id="grading">
+  <p class="part">Part V · The machinery</p>
+  <h2>What a candidate has to survive</h2>
+  <p class="col">Every candidate is graded in a forked subprocess with a wall timeout, an <code>RLIMIT_AS</code> cap, and the hidden seed delivered over stdin only — never argv, never env, never config. Reference modules are replaced in the child's <code>sys.modules</code> by poison stubs that raise on any attribute access, which catches obfuscated imports no AST scan can see.</p>
+  <div class="scroll">
+    <table>
+      <caption>The gate ladder, in the order the judge applies it</caption>
+      <thead><tr><th class="num">#</th><th>Gate</th><th>Where</th><th>What it checks</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><code>ast</code></td><td class="dim">CPU child</td><td class="wrap-cell">Banned imports, banned dotted calls, and the per-task <code>pallas_call</code> requirement.</td></tr>
+        <tr><td class="num">2</td><td><code>poison_stub</code> / <code>exec</code></td><td class="dim">CPU child</td><td class="wrap-cell">The module must import and define the entrypoint <em>without executing the kernel</em>.</td></tr>
+        <tr><td class="num">3</td><td><code>aot_export</code></td><td class="dim">CPU child, no device</td><td class="wrap-cell">The <strong>same</strong> entrypoint must trace and serialize with <code>jax.export</code> at <em>every</em> declared shape — including the non-divisible holdout, and the adversarial shapes.</td></tr>
+        <tr><td class="num">4</td><td><code>candidate_compile</code></td><td class="dim">judge chip</td><td class="wrap-cell">Mosaic compile, under a <strong>90 s</strong> budget enforced both between compile units and by a watchdog thread inside one.</td></tr>
+        <tr><td class="num">5</td><td><code>correctness</code></td><td class="dim">judge chip</td><td class="wrap-cell">Fresh hidden seeds plus the adversarial vector library, against the fp32 oracle at the calibrated tolerance, on both max and q99 tail.</td></tr>
+        <tr><td class="num">6</td><td><code>determinism</code></td><td class="dim">judge chip</td><td class="wrap-cell">5 runs, <strong>bitwise</strong> identical.</td></tr>
+        <tr><td class="num">7</td><td><code>gradient</code></td><td class="dim">judge chip</td><td class="wrap-cell"><code>has_bwd</code> tasks only — the backward against the fp32 reference at its own calibrated tolerance.</td></tr>
+        <tr><td class="num">8</td><td><code>timed_output_correctness</code></td><td class="dim">judge chip</td><td class="wrap-cell">Inputs are regenerated on-device <em>per timed iteration</em>, and correctness is re-verified on an output produced <strong>by a timed invocation</strong> — this is what kills fast-garbage / slow-correct split-personality kernels and memoization.</td></tr>
+        <tr><td class="num">9</td><td><code>all</code></td><td class="dim">judge chip</td><td class="wrap-cell">Score = geomean of per-case median latency ratios over the declared cases, noise-floor gated; the holdout case is logged but unscored.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="col">Timing is <strong>counterbalanced and interleaved</strong>: R,C on even iterations and C,R on odd, so slow clock and thermal drift hits both legs of a pair equally and cancels in the ratio. That order alternation is not cosmetic — with a fixed R-first order, ref-vs-ref graded 1.019–1.053 and failed the arena's own 1.00 ± 2% invariant. The noise floor is the p95 of <code>|ratio − 1|</code> over ref-vs-ref pairs of the identical protocol, measured per chip at boot.</p>
+
+  <h3>The grading server was validated at fleet scale first</h3>
+  <p class="col">Phase 5, five spot v6e-1 judges polling one queue:</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Invariant</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Corpus</td><td>1,599 salted candidates across 20 variants + 100 deliberate duplicates = <strong>1,699 queue items</strong></td></tr>
+        <tr><td>Invariants</td><td class="good">15 / 15 GREEN, 0 hard failures</td></tr>
+        <tr><td>Every candidate at its correct gate</td><td class="good">1,599 / 1,599 verdicts correct, zero exceptions</td></tr>
+        <tr><td>Compile bomb rejected at its gate</td><td class="good">4 / 4 at <code>compile_budget</code>, terminated at <strong>90.02–90.05 s</strong> against a 90.0 s budget</td></tr>
+        <tr><td>Cross-judge score agreement</td><td class="good">worst <strong>0.794%</strong>, best 0.038%, against a 3% band</td></tr>
+        <tr><td>Chaos: kill a judge mid-lease</td><td class="good">requeued and completed on a survivor, <code>attempts=2</code></td></tr>
+        <tr><td>Lost or duplicated results</td><td class="good">1,699 submitted / 1,699 completed / <strong>0 duplicates</strong>; queue drained to depth 0</td></tr>
+        <tr><td>Cost</td><td>≈ <strong>3.8 chip-hours</strong>, ~52–65 candidates/min at N=5</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Open harness bugs worth carrying forward</h3>
+  <div class="panel warn">
+    <p class="kicker">Highest-value fix outstanding</p>
+    <p><strong>One model-written Pallas GMM kernel halted the TPU core at Mosaic compile time and permanently killed the judge worker.</strong> The worker then failed the next <strong>35</strong> candidates in its own fixture setup at ~1.1 s each — silently, as if they were model failures. The affected set was contiguous, localized to work item <code>w000091</code> onward, and is excluded from every number on this page. The worker has no liveness check on its device: it should detect a <code>RuntimeUnexpectedCoreHalt</code>, re-lease the item, and restart its jax context or exit so the supervisor replaces it. Until then, any grid can lose a whole group to one candidate — and in an RL loop that is a whole batch.</p>
+  </div>
+  <ul class="col">
+    <li><strong>RPA's timing protocol.</strong> A 0.2362 noise floor makes the task untrainable at this shape no matter how good the kernel is. Needs bigger shapes, more timing pairs, or a different score — before any further prompt work.</li>
+    <li><strong>Bind the real baselines, or keep saying "fallback" out loud.</strong> Four of five denominators are fallbacks. Every headline in this project is against one of them.</li>
+    <li><strong>Fix the worked example before reusing it.</strong> It must demonstrate a 3-D-operand <code>BlockSpec</code>, or it will keep teaching rank-2 to rank-3 tasks.</li>
+  </ul>
+</section>
+
+<footer class="src">
+  <p><strong>Sources.</strong> All numbers on this page come from files in <code>tpu/pallas_arena/</code> or were recomputed from the raw results.</p>
+  <p>
+    <code>PROBE-REPORT.md</code> (job 3650240) · <code>SEAM-REPORT.md</code> (job 3651278) · <code>PROMPT-ITERATION.md</code> (job 3687041) · <code>SEAM-DIALECT.md</code> (job 3687904) · <code>PHASE0/2/4/5-REPORT.md</code> · <code>DESIGN.md</code> · <code>PLAN.md</code><br>
+    <code>judge/problems/{splash_attention,ragged_paged_attention,megablox_gmm,rg_lru,flce}.py</code> · <code>judge/problems/base.py</code> · <code>judge/{gates,grader,timing,aot_gate,worker,child_runner,observation}.py</code><br>
+    <code>probe/{prompts,prompt_ladder,prompt_seam,prompt_seam_dialect}.py</code><br>
+    Gate histogram, correctness-ratio distribution and extraction counts recomputed from <code>runs/pallas_arena/sd-results-3687904.jsonl</code> (224 rows).
+  </p>
+  <p class="dim">gemma-4-31B-it only. Generation and grading, no RL. Prompt sizes rendered from the live modules.</p>
+</footer>
+
+</div>
