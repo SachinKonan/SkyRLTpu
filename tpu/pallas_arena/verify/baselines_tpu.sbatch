@@ -161,11 +161,16 @@ print('jax', jax.__version__, 'tokamax', getattr(tokamax,'__version__','?'))
 assert jax.__version__ == '0.10.2', 'ARENA JAX PIN MOVED: ' + jax.__version__
 \"" || { echo "FATAL: tokamax install broke the arena jax pin"; exit 1; }
 
-echo "=== [$(date +%H:%M:%S)] running tpu_baselines on chip ==="
+# ENTRY lets this same provisioned judge run a different on-chip measurement
+# without duplicating 120 lines of QR lifecycle. Default: the denominator probe.
+ENTRY=${ENTRY:-pallas_arena.verify.tpu_baselines}
+ENTRY_ARGS=${ENTRY_ARGS:---tasks '${TASKS}'}
+
+echo "=== [$(date +%H:%M:%S)] running ${ENTRY} on chip ==="
 timeout 6000 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
   --command="set -o pipefail; cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu PYTHONPATH=~/arena \
-    ~/arena-venv/bin/python -m pallas_arena.verify.tpu_baselines \
-      --out ~/baselines-tpu.json --tasks '${TASKS}' 2>&1 | tee \$HOME/baselines-tpu.log"
+    ~/arena-venv/bin/python -m ${ENTRY} \
+      --out ~/baselines-tpu.json ${ENTRY_ARGS} 2>&1 | tee \$HOME/baselines-tpu.log"
 rc=$?
 echo "=== [$(date +%H:%M:%S)] on-chip run rc=${rc} ==="
 

@@ -79,6 +79,34 @@ def _honest_group_loop_bf16(lhs, rhs, group_sizes):
     return acc
 
 
+def _megablox_tiling(m: int, k: int, n: int):
+    """Shape-aware (tile_m, tile_k, tile_n) for the megablox baseline.
+
+    `gmm` accepts a callable exactly so callers can supply a tuned choice; its
+    default (128, 128, 128) is a placeholder, not a recommendation. Measured
+    best-of-grid on v6e-1 (job 3691513) across tokamax's canonical specs and
+    ours: (1024, 1024, 1024) won 4 of 7 shapes, (512, 1024, 1024) won 2, and
+    (256, 1024, 2048) won 1 -- so 1024^3 clamped to the real dims is the right
+    default, and every tile must divide into its dimension or Mosaic rejects it.
+
+    KNOWN LIMIT: at our declared production `32k-e8` this still lost to XLA
+    (1.21x), so the 6-point grid behind this heuristic does not contain the
+    optimum everywhere. A boot-time search (the judge owns its chip and already
+    measures a noise floor at boot) would do better and would match tokamax's
+    own discipline, where an autotuning cache miss is a hard error rather than a
+    silent fallback. Tracked separately; this heuristic is 13-55x better than
+    what the arena was doing and does not pretend to be optimal.
+    """
+
+    def fit(want: int, dim: int) -> int:
+        t = min(want, dim)
+        while t > 128 and dim % t:
+            t //= 2
+        return max(128, t) if dim >= 128 else dim
+
+    return (fit(1024, m), fit(1024, k), fit(1024, n))
+
+
 def _sample_group_sizes(key, num_groups, m, dist):
     if dist == "uniform":
         w = jnp.ones((num_groups,))
@@ -159,6 +187,17 @@ class MegabloxGmmProblem(Problem):
         judge that dies at BOOT on that has graded nothing at all. Which one
         ran is recorded, because a score against `ragged_dot` is not a score
         against the production kernel.
+
+        The `tiling=` is LOAD-BEARING, and this docstring claimed "tuned" for a
+        long time while passing none. Measured on v6e-1 (job 3691513), the
+        library default (128, 128, 128) costs 13x to 55x against a tuned choice
+        -- at our own probe shape, 38.2x. Every megablox verdict this arena has
+        recorded was therefore scored against a baseline we had crippled, which
+        is why the 16 passes in sd-results-3687904 do not mean what they look
+        like. Properly tiled, megablox BEATS `lax.ragged_dot` at tokamax's
+        design shapes (0.24x at Mixtral 8x7b, i.e. 4.1x faster) and at our probe
+        shape (0.79x) -- so the right repair was to configure the denominator,
+        not to replace it.
         """
         if jax.default_backend() != "tpu":
             type(self).baseline_impl = "lax-ragged-dot"
@@ -166,7 +205,7 @@ class MegabloxGmmProblem(Problem):
         try:
             from jax.experimental.pallas.ops.tpu.megablox import gmm
 
-            out = gmm(lhs, rhs, group_sizes).astype(jnp.float32)
+            out = gmm(lhs, rhs, group_sizes, tiling=_megablox_tiling).astype(jnp.float32)
             type(self).baseline_impl = "pallas-megablox-gmm"
             return out
         except Exception:
@@ -174,7 +213,23 @@ class MegabloxGmmProblem(Problem):
             return jax.lax.ragged_dot(lhs, rhs, group_sizes).astype(jnp.float32)
 
     def honest_variants(self):
-        return [_honest_faithful_bf16, _honest_group_loop_bf16]
+        """Deliberately EMPTY, and measured rather than assumed (v5p-8, job
+        3689440). A GMM is a single reduction: the MXU accumulates in fp32
+        whatever you ask for, so the fp32-accumulator path is bit-identical to
+        the fp32 reference (error exactly 0.0) and contributes nothing to the
+        band, while the bf16 path costs exactly one output rounding -- measured
+        equal to reference_bf16 to 4 s.f. (3.101e-3 vs 3.101e-3), which
+        reference_bf16 already models and deliberately allows. There is no
+        accumulation chain here to widen the band for, unlike attention, FLCE
+        and rg_lru.
+
+        `_honest_group_loop_bf16` is kept below for reference but NOT returned:
+        it dots every row against every expert and masks, which is g times the
+        FLOPs -- harmless at the probe set's g=4, but 64x at the production
+        `32k-e64` cases, i.e. ~246 TFLOP burned per calibration to widen the
+        band by nothing.
+        """
+        return []
 
     def adversarial_cases(self):
         # settable base case: a judge grading a non-default (e.g. probe) case
