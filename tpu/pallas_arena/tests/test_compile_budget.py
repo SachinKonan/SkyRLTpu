@@ -65,12 +65,32 @@ def test_compile_budget_rejects_and_is_terminal():
 def test_honest_kernel_survives_the_production_budget():
     """The 90 s production budget must be nowhere near an honest kernel: the
     same candidate that the 0 s budget rejects passes untouched, and its
-    compile-warm is orders of magnitude inside the deadline."""
+    compile-warm sits well inside the deadline.
+
+    The bound is DELIBERATELY loose, because the tight one was measuring the
+    compute node rather than the kernel. `candidate_compile_s <
+    DEFAULT_COMPILE_BUDGET_S / 10` (9 s) measured 5.42 / 8.02 / 13.26 / 24.85 s
+    on identical code across four batteries -- a 4.6x swing that tracks node
+    load -- and failed 3 of them, which makes the whole suite useless as a
+    signal.
+
+    A relative bound against the judge's own boot was tried and was worse: I
+    keyed it on `calibration_warm_s`, which is ~0.017 s and is not a compile at
+    all, so `20x` of it failed an 8 s compile that the ORIGINAL bound would have
+    passed. Same mistake as the kernel measurements this session -- using a
+    number without checking what it represents.
+
+    So: one loose absolute bound at half the budget. It clears every observed
+    value with margin, and still fails a candidate that is genuinely near the
+    90 s deadline, which is the only claim this test needs to make. The tight
+    version of this belongs in a benchmark on a quiet node, not in a
+    correctness battery that must be green to be worth running.
+    """
     w = _worker(compile_budget_s=worker_mod.DEFAULT_COMPILE_BUDGET_S)
     assert w.boot()["ok"]
     r = w.grade_code(cand.HONEST_RMSNORM, tag="honest")
     assert r["passed"], r
-    assert r["candidate_compile_s"] < worker_mod.DEFAULT_COMPILE_BUDGET_S / 10
+    assert r["candidate_compile_s"] < worker_mod.DEFAULT_COMPILE_BUDGET_S / 2, r
 
 
 def test_compile_budget_verdict_is_cached_so_the_fleet_pays_once():

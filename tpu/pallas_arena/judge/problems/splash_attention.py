@@ -55,6 +55,39 @@ def causal_segment_attention(q, k, v, segment_ids):
     return jnp.einsum("hqk,hkd->hqd", p, v32)
 
 
+def _splash_block_sizes(sak, seq: int):
+    """Block sizes for the splash baseline. LOAD-BEARING -- see below.
+
+    `make_splash_mha(..., block_sizes=None)` falls back to
+    `BlockSizes.get_default()`, which is all-128 and carries JAX's own
+    admission that they are placeholders:
+
+        # TODO(apaszke,sharadmv): Select better parameters based on a heuristic.
+
+    This arena passed no `block_sizes` at all. Measured on v6e-1 (job 3691558)
+    across tokamax's canonical attention sweep and our own shapes, the default
+    makes splash 3.3x to 6.0x SLOWER THAN XLA at every shape, while 1024x1024
+    makes it FASTER than XLA at every shape (0.25x-0.88x). Tuning is worth
+    3.5x-14.7x; at our own probe-h8-s4096 it is 9.9x.
+
+    So every splash verdict this arena has recorded -- including the 3 passes in
+    sd-results-3687904 -- was scored against a bar roughly 10x too slow.
+
+    1024x1024 won UNANIMOUSLY across all 12 measured shapes (unlike megablox,
+    whose best tiling varied), so a fixed choice is right here; it is only
+    clamped down when the sequence cannot hold it. A shape splash then refuses
+    still falls back, and the fallback is still recorded.
+    """
+    b = min(1024, max(128, 1 << (int(seq).bit_length() - 1)))
+    while b > 128 and seq % b:
+        b //= 2
+    return sak.BlockSizes(
+        block_q=b, block_kv=b, block_kv_compute=b,
+        block_q_dkv=b, block_kv_dkv=b, block_kv_dkv_compute=b,
+        block_q_dq=b, block_kv_dq=b,
+    )
+
+
 def _honest_faithful_bf16(q, k, v, segment_ids, block_q: int = 512):
     """The production numeric path, query-blocked: bf16 arrays enter the MXU as
     matmul INPUTS, every accumulator is fp32 (``preferred_element_type``), the
@@ -261,7 +294,9 @@ class SplashAttentionProblem(Problem):
 
             h, seq, _d = q.shape
             mask = sam.MultiHeadMask([sam.CausalMask(shape=(seq, seq)) for _ in range(h)])
-            kernel = sak.make_splash_mha(mask=mask, head_shards=1, q_seq_shards=1)
+            kernel = sak.make_splash_mha(
+                mask=mask, block_sizes=_splash_block_sizes(sak, seq), head_shards=1, q_seq_shards=1
+            )
             segs = sak.SegmentIds(q=segment_ids, kv=segment_ids)
             out = kernel(q, k, v, segment_ids=segs)
             type(self).baseline_impl = "pallas-splash-mha"
