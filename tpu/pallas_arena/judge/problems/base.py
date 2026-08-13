@@ -301,6 +301,15 @@ class Problem(abc.ABC):
         alone — the phase-1 behavior)."""
         return []
 
+    # When True, the production baseline participates in tolerance calibration.
+    # Principle: a candidate must never be held to a TIGHTER standard than the
+    # production kernel itself. Set it ONLY where the baseline solves the exact
+    # contract -- measured necessity on ragged_paged_attention (job 3692058:
+    # Google's own kernel misses the reference_bf16-calibrated band at 1.05x),
+    # and measured harm on splash, whose kernel differs on the padding contract
+    # and would widen the band with a CONTRACT error rather than a numeric one.
+    baseline_calibrates: bool = False
+
     def calibrated_tolerance(self, inputs, ref32) -> dict:
         """Per-input tolerance: TOL_MULTIPLIER x the max error (max and q99
         tails) of ANY honest implementation vs the fp32 reference."""
@@ -311,6 +320,13 @@ class Problem(abc.ABC):
                 # a variant that goes non-finite on this input is NOT honest
                 # here; it must never widen the tolerance to infinity
                 stats.append(s)
+        if self.baseline_calibrates:
+            try:
+                s = error_stats(self.baseline(*inputs), ref32)
+                if s.get("finite"):
+                    stats.append(s)
+            except Exception:  # noqa: BLE001 -- baseline unavailable: calibrate without it
+                pass
         return {
             "max": TOL_MULTIPLIER * max(max(s["max"] for s in stats), ABS_FLOOR),
             "q99": TOL_MULTIPLIER * max(max(s["q99"] for s in stats), ABS_FLOOR),

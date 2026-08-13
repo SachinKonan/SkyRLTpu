@@ -299,6 +299,14 @@ class SplashAttentionProblem(Problem):
             )
             segs = sak.SegmentIds(q=segment_ids, kv=segment_ids)
             out = kernel(q, k, v, segment_ids=segs)
+            # Contract adapter: OUR contract zeroes padding (segment-0) query
+            # rows exactly; splash treats 0 as an ordinary segment and computes
+            # attention within it. Measured (job 3692058 agreement check):
+            # max_err 3.38 on ~6% of rows -- a contract difference, not a
+            # numerics one. Zeroing is O(bd) elementwise against O(b s^2 d)
+            # attention, and is what a real serving stack does with padded
+            # rows anyway, so the timed comparison stays honest.
+            out = out * (segment_ids != 0)[None, :, None]
             type(self).baseline_impl = "pallas-splash-mha"
             return out.astype(jnp.float32)
         except Exception:

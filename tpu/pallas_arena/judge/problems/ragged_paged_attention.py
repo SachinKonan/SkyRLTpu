@@ -131,6 +131,10 @@ class RaggedPagedAttentionProblem(Problem):
     require_pallas = True
     memory_bound = True  # decode attention is HBM-bandwidth bound
     banned_call_names = ("jax.nn.dot_product_attention",)
+    # Google's own kernel misses the reference_bf16-calibrated band at 1.05x
+    # (job 3692058), and it solves this EXACT contract -- so it participates in
+    # calibration: a candidate is never held tighter than the production kernel.
+    baseline_calibrates = True
 
     PAGE_SIZE = 64
     KV_HEADS = 8  # GQA 8 KV heads (our sampling config)

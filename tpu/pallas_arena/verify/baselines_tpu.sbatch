@@ -44,7 +44,15 @@ if [ -z "${SLURM_JOB_ID:-}" ]; then
 fi
 
 PROJECT=${PROJECT:-vision-mix}
-QR=${QR:-sk7524-arenabase-judge}
+# Job-unique name, NOT a fixed one: a fixed name races the PREVIOUS attempt's
+# detached teardown. Measured on job 3691912 -- its QR was created 3 minutes
+# after job 3691879's cleanup issued a `setsid nohup` delete (timeout 900) for
+# the same name, and that delete took the new QR with it (state=gone at the
+# landing check). The detached delete is load-bearing (it must survive a
+# scancel that kills the shell mid-teardown), so the name must change instead.
+# The cleanup sweep greps the "arenabase" prefix in both zones, so job-suffixed
+# names are still caught by the survivor check.
+QR=${QR:-sk7524-arenabase-judge-${SLURM_JOB_ID}}
 ZONE=${ZONE:-us-east5-a}
 OTHER_ZONE=${OTHER_ZONE:-us-east5-b}
 ACCEL=${ACCEL:-v5p-8}
@@ -164,7 +172,10 @@ assert jax.__version__ == '0.10.2', 'ARENA JAX PIN MOVED: ' + jax.__version__
 # ENTRY lets this same provisioned judge run a different on-chip measurement
 # without duplicating 120 lines of QR lifecycle. Default: the denominator probe.
 ENTRY=${ENTRY:-pallas_arena.verify.tpu_baselines}
-ENTRY_ARGS=${ENTRY_ARGS:---tasks '${TASKS}'}
+# NOTE the double quotes: single quotes inside a ${var:-default} suppress the
+# nested ${TASKS} expansion, so the remote shell got a literal ${TASKS} (empty
+# there) and argparse died on "--tasks: expected one argument" (job 3691879).
+ENTRY_ARGS=${ENTRY_ARGS:-"--tasks ${TASKS}"}
 
 # Optional payload file (e.g. a codes.json for regrade_winners); lands at
 # ~/payload.json on the judge, referenced from ENTRY_ARGS.

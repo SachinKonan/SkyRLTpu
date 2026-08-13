@@ -24,7 +24,20 @@ fi
 # Both declare jax floors that 0.10.2 satisfies; the assert below makes a
 # silent jax upgrade a hard provision failure, because it would invalidate
 # every timing this arena has recorded.
-"$HOME/arena-venv/bin/pip" install --quiet recurrentgemma flax tokamax
+# These two CANNOT be co-installed naively: recurrentgemma pins absl-py>=1,<2
+# while tokamax needs absl-py>=2.3.0 (measured: pip ResolutionImpossible, job
+# 3691851). The conflict is metadata-only -- recurrentgemma's absl<2 cap is a
+# stale upper bound, not a real API need -- so tokamax resolves absl freely and
+# recurrentgemma goes in --no-deps with its real runtime deps (flax, einops)
+# supplied explicitly. The import probe below is the actual compatibility test:
+# if absl 2.x truly broke recurrentgemma, lru_pallas_scan would fail to import
+# and provisioning would fail LOUDLY here rather than at grading time.
+# (sentencepiece + einshape: recurrentgemma's __init__ pulls its sampler in,
+# which imports them even though the pallas scan never uses either. Verified
+# locally: this exact sequence imports lru_pallas_scan + tokamax side by side
+# on absl 2.5 / jax 0.10.2.)
+"$HOME/arena-venv/bin/pip" install --quiet tokamax flax einops sentencepiece einshape
+"$HOME/arena-venv/bin/pip" install --quiet --no-deps recurrentgemma
 "$HOME/arena-venv/bin/python" - <<'EOF'
 import jax
 assert jax.__version__ == "0.10.2", f"ARENA JAX PIN MOVED: {jax.__version__}"
