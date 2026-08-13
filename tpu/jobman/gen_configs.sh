@@ -19,21 +19,33 @@ BUNDLE_URL=gs://sk7524-tinker-tpu-us-east5/code-bundles/stagea-league.tar.gz
 #          Measure-only KL pass explicitly OFF (18k seqs; Erdos lesson).
 PROBLEMS=("erdos" "jssp" "ac1")
 
+# Model dimension (Phase 2 slice of the plan): qwen = full Stage-A factorial;
+# gemma = N arms only (Stage A settled the regularizer question), cell prefix
+# g-, engine/client knobs resolved by the g-* cases in cell_worker/launch_cell.
+MODELS=("qwen" "gemma")
+
 # Generation-2 cells: contaminated by the frozen-weights era (Erdos trains
 # silently OOMed; grpo-k-j hit the same wall via penalty-pass + fat tiles).
 # A gen-2 name gives them a FRESH run dir, GCS path, wandb run and tree, while
 # the gen-1 dirs remain in place as the archive of the contaminated runs.
 RERUN2="grpo-n grpo-k grpo-r ttd-n ttd-k ttd-r grpo-n-j grpo-k-j grpo-r-j ttd-n-j ttd-k-j ttd-r-j"
 
+for model in "${MODELS[@]}"; do
 for prob in "${PROBLEMS[@]}"; do
 for row in "${STAGE_A_CELLS[@]}"; do
   IFS='|' read -r cell adv elite gpb gsz kl rr <<<"$row"
+  # gemma runs the objective comparison only: N arms, all three problems.
+  if [ "$model" = "gemma" ]; then
+    { [ "$kl" != "0" ] || [ "$rr" != "0" ]; } && continue
+    cell="g-${cell}"
+  fi
   if [ "$prob" = "jssp" ]; then
     cell="${cell}-j"
     prob_env_block="    TTD_ENV: frontier_algo
     TTD_PROBLEM_TYPE: \"46\"
     TTD_FCALGO_MAX_CASES: \"0\"
-    EVAL_TIMEOUT: \"180\""
+    EVAL_TIMEOUT: \"180\"
+    TTD_KL_MEASURE_EVERY: \"0\""
   elif [ "$prob" = "ac1" ]; then
     # Stage B: objective comparison only -- skip K and R rows.
     { [ "$kl" != "0" ] || [ "$rr" != "0" ]; } && continue
@@ -43,8 +55,19 @@ for row in "${STAGE_A_CELLS[@]}"; do
   else
     prob_env_block="    TTD_ENV: erdos_min_overlap"
   fi
+  # Keep the 12 original qwen erdos/jssp YAMLs byte-identical: their jssp
+  # block historically had no KLMEAS line and launch_cell defaults it to 1.
+  if [ "$model" = "qwen" ] && [ "$prob" = "jssp" ]; then
+    prob_env_block="    TTD_ENV: frontier_algo
+    TTD_PROBLEM_TYPE: \"46\"
+    TTD_FCALGO_MAX_CASES: \"0\"
+    EVAL_TIMEOUT: \"180\""
+  fi
   gen_env_block=""
-  if [ "$prob" = "ac1" ]; then
+  if [ "$model" = "gemma" ]; then
+    gen_env_block="    RUN_DIR_NAME: stageB-${cell}
+    EXPERIMENT_NAME: stageB-${cell}"
+  elif [ "$prob" = "ac1" ]; then
     gen_env_block="    RUN_DIR_NAME: stageB-${cell}
     EXPERIMENT_NAME: stageB-${cell}"
   else
@@ -189,5 +212,6 @@ command:
   workers: "all"
 YAML
   echo "wrote $OUT/stagea_${cell}.yaml"
+done
 done
 done

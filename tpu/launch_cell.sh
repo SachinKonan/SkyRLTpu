@@ -37,6 +37,21 @@ case "${TTD_ENV:-erdos_min_overlap}" in
   erdos*) KLMEAS=${TTD_KL_MEASURE_EVERY:-0} ;;
   *)      KLMEAS=${TTD_KL_MEASURE_EVERY:-1} ;;
 esac
+# ---- model (cell prefix g- = gemma-4-31B, else qwen3.5-27B) -----------------
+# Gemma member values are the league-validated ones (launch_league_run.sh M1):
+# context/train 10240, phase1 6656, member_gemma lineage dir.
+case "$CELL" in
+  g-*)
+    MODEL_HF=google/gemma-4-31B-it
+    MEMBER_SPEC='google/gemma-4-31B-it:gemma4:gemma'
+    MEMBER_DIR=member_gemma
+    CTX=10240; PHASE1=6656 ;;
+  *)
+    MODEL_HF=Qwen/Qwen3.5-27B
+    MEMBER_SPEC='Qwen/Qwen3.5-27B:qwen3:qwen'
+    MEMBER_DIR=member_qwen
+    CTX=18432; PHASE1=13824 ;;
+esac
 
 # ---- durable run state -----------------------------------------------------
 for _r in 1 2 3; do
@@ -62,9 +77,9 @@ tmux new-session -d -s cell-backup "bash ~/sidecar_$RUN.sh"
 # Must be here, not only in bring-up: a relaunch invokes THIS script directly.
 # Reads the LOCAL jsonl the restore just pulled down, so it does not depend on
 # gcloud auth. reregister_states.py is idempotent.
-_jsonl=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/member_qwen/checkpoints.jsonl 2>/dev/null | head -1)
+_jsonl=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/"$MEMBER_DIR"/checkpoints.jsonl 2>/dev/null | head -1)
 if [ -s "${_jsonl:-}" ]; then
-  python3 ~/ttd-client/tpu/reregister_states.py --base-model Qwen/Qwen3.5-27B --jsonl "$_jsonl" 2>&1 | tail -2
+  python3 ~/ttd-client/tpu/reregister_states.py --base-model "$MODEL_HF" --jsonl "$_jsonl" 2>&1 | tail -2
 else
   echo "reregister: no local checkpoints.jsonl (fresh lineage)"
 fi
@@ -74,10 +89,10 @@ tmux new-session -d -s cell "cd ~/ttd-client && \
   EXPERIMENT_NAME=$EXP \
   TTD_RUN_DIR=\$HOME/skyrl-runs/$RUN \
   TTD_ENV=$PROB_ENV TTD_PROBLEM_TYPE=$PROB_TYPE TTD_FCALGO_MAX_CASES=$FC_MAX_CASES \
-  TTD_ENSEMBLE_MODELS='Qwen/Qwen3.5-27B:qwen3:qwen' \
+  TTD_ENSEMBLE_MODELS=$MEMBER_SPEC \
   TTD_ALLOW_SINGLE_MEMBER=1 \
   TTD_M0_BASE_URL=http://127.0.0.1:8000 \
-  TTD_M0_CONTEXT_WINDOW=18432 TTD_M0_TRAIN_MAX_SEQ=18432 TTD_M0_PHASE1_MAX_TOKENS=13824 \
+  TTD_M0_CONTEXT_WINDOW=$CTX TTD_M0_TRAIN_MAX_SEQ=$CTX TTD_M0_PHASE1_MAX_TOKENS=$PHASE1 \
   TTD_QWEN_TWO_PHASE=1 TTD_DISABLE_WANDB_TABLES=1 \
   TTD_CROSS_WEIGHT=0 \
   TTD_ADV_ESTIMATOR=$OBJECTIVE \
@@ -91,7 +106,7 @@ tmux new-session -d -s cell "cd ~/ttd-client && \
   RAY_ADDRESS=${RAY_ADDRESS:-127.0.0.1:6379} NUM_CPUS_PER_TASK=1 \
   GROUPS_PER_BATCH=$GPB GROUP_SIZE=$GSZ NUM_EPOCHS=$STEPS \
   LEARNING_RATE=4e-5 LORA_RANK=32 KL_PENALTY_COEF=$KLC TEMPERATURE=1.0 \
-  CONTEXT_WINDOW=18432 EVAL_TIMEOUT=$EVALT SAVE_EVERY=1 \
+  CONTEXT_WINDOW=$CTX EVAL_TIMEOUT=$EVALT SAVE_EVERY=1 \
   WANDB_PROJECT=tpu-tinker-exps \
   third_party/discover/.venv-ttd-discover/bin/python tpu/run_ttd_ensemble.py \
   2>&1 | tee -a ~/skyrl-runs/$EXP.console.log"

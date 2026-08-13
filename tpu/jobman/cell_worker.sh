@@ -46,6 +46,43 @@ vllm_healthy() {
   done
   return 0
 }
+# --- model dimension (cell prefix g- = gemma-4-31B, else qwen3.5-27B) --------
+# Gemma values are the league-validated uniform-10240 config (bringup_v5p64
+# step 4b): tile 1024 / nvt 32 / budget 40960 / vLLM 16k with its own caches.
+# Qwen cells keep the Stage-A per-suffix tile logic below, byte-identical.
+PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+case "$CELL" in
+  g-*)
+    MODEL_NAME=google/gemma-4-31B-it; MAXTEXT_MODEL=gemma4-31b
+    MAXTGT=10240; BUDGET=40960; UNIFORM=10240
+    VLLM_LEN=16384
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k"
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"
+    ;;
+  *)
+    MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b
+    MAXTGT=22528; BUDGET=73728; UNIFORM=18432
+    VLLM_LEN=22528
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k"
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
+    ;;
+esac
+pick_tiles() {
+  if [ "$MAXTEXT_MODEL" = gemma4-31b ]; then
+    FLCE_TILE=1024; VOCAB_TILING=32
+  else
+    case "$CELL" in
+      *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
+      *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
+      *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
+    esac
+  fi
+  case "$CELL" in
+    grpo-k|ttd-k) SCORE_FIXED=18432 ;;
+    *)            SCORE_FIXED=0 ;;
+  esac
+}
+
 if engines_healthy; then
   echo "engines already healthy -- skipping bring-up"
 elif ! tinker_healthy && vllm_healthy; then
@@ -56,33 +93,21 @@ elif ! tinker_healthy && vllm_healthy; then
   # re-registers against the fresh registry at its next launch.
   echo "trainer down, vLLM healthy -- surgical tinker-only restart"
   tmux kill-session -t skyrl-tinker 2>/dev/null || true; sleep 3
-  PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
-  case "$CELL" in
-    *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
-    *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
-    *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
-  esac
-  # KL x Erdos cells: one fixed scorer bucket (see tunix_backend) -- exactly
-  # two pinned programs (fb + scorer), no per-bucket arena accumulation.
-  case "$CELL" in
-    grpo-k|ttd-k) SCORE_FIXED=18432 ;;
-    *)            SCORE_FIXED=0 ;;
-  esac
+  pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
-    MODEL_NAME=Qwen/Qwen3.5-27B TUNIX_MAXTEXT_MODEL_NAME=qwen3.5-27b TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
+    MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
-    TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
-    TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
+    TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
     READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/tinker-restart.log 2>&1 || true
   tinker_healthy || { echo "tinker-only restart FAILED"; tail -6 ~/tinker-restart.log; exit 1; }
   echo "trainer restarted (vLLM untouched)"
 else
-  echo "engine bring-up (uniform=18432 budget=73728)..."
-  PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+  echo "engine bring-up ($MAXTEXT_MODEL uniform=$UNIFORM budget=$BUDGET)..."
   # Erdos cells (long sequences, 18432-class fb buckets) OOM'd at compile with
   # the league tiles on these builds: HLO temporaries 111G vs 95.7G/chip, every
   # train step, silently caught by the ensemble guard -- the cells sampled
@@ -92,28 +117,18 @@ else
   # K arms get small tiles even on JSSP: the penalty pass pins its own ~16G
   # scoring arena beside the fb arena, and grpo-k-j proved 2048/8 + penalty
   # does not fit (1/9 steps trained). Non-K JSSP keeps the faster tiles.
-  case "$CELL" in
-    *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
-    *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
-    *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
-  esac
-  # KL x Erdos cells: one fixed scorer bucket (see tunix_backend) -- exactly
-  # two pinned programs (fb + scorer), no per-bucket arena accumulation.
-  case "$CELL" in
-    grpo-k|ttd-k) SCORE_FIXED=18432 ;;
-    *)            SCORE_FIXED=0 ;;
-  esac
+  pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
-    MODEL_NAME=Qwen/Qwen3.5-27B TUNIX_MAXTEXT_MODEL_NAME=qwen3.5-27b TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
+    MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
-    TUNIX_MAX_TARGET_LENGTH=22528 TUNIX_TRAIN_TOKEN_BUDGET=73728 TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
-    TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
+    TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
-    VLLM_MAX_MODEL_LEN=22528 VLLM_MAX_NUM_SEQS=128 VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
-    VLLM_XLA_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k" \
-    HF_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache" \
+    VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=128 VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
+    VLLM_XLA_CACHE_GCS="$XLA_GCS" \
+    HF_CACHE_GCS="$HF_GCS" \
     VLLM_EXTRA_ARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85" \
     READY_ATTEMPTS=900 SYNC_SKYRL=1 START_VLLM=1 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || true
