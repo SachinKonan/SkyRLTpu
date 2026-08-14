@@ -201,6 +201,18 @@ class RepairProbe:
             else:
                 cand = extract_program(g["text"])
                 how, missing = "fenced-program", []
+                # The base seam prompt inside the repair template says "you do
+                # NOT write the pallas_call" and the repair instruction says
+                # "output the COMPLETE program" -- and the model follows the
+                # seam (run 3695630: every seam-task repair turn returned fill
+                # functions only and died at ast on "no pallas_call found",
+                # including a turn AFTER one that scored 1.000). Accept
+                # whichever form the model chose: a fill answer is composed
+                # with the scaffold exactly as cold turn 1 composes it.
+                if task in SEAMS and "pallas_call" not in cand:
+                    fill, fhow, fmissing = extract_fill(g["text"], SEAMS[task].required)
+                    if fill.strip() and not fmissing:
+                        cand, how, missing = compose(task, fill), f"fill-composed({fhow})", fmissing
 
             rec = {
                 "chain": chain, "model": model, "task": task, "variant": variant,
