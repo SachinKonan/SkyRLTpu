@@ -51,6 +51,9 @@ vllm_healthy() {
 # step 4b): tile 1024 / nvt 32 / budget 40960 / vLLM 16k with its own caches.
 # Qwen cells keep the Stage-A per-suffix tile logic below, byte-identical.
 PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+VLLM_IMPL=vllm
+TPUINF_REF=skyrl/v0.23.0-lora
+VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 case "$CELL" in
   g-*)
     MODEL_NAME=google/gemma-4-31B-it; MAXTEXT_MODEL=gemma4-31b
@@ -58,6 +61,22 @@ case "$CELL" in
     VLLM_LEN=16384
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"
+    ;;
+  m-*)
+    # Muse-Glimmer-30B: MAXTEXT.md training recipe (fork @4f65ba509, remat full,
+    # FSDP-4, FLCE 2048) + rs-study serving shape (flax_nnx impl, TP=4, 16384,
+    # page 16 above 8k ctx). Serving model code lives on the muse branch of the
+    # tpu-inference fork (contains skyrl/v0.23.0-lora). Orbax pre-seeded at
+    # skyrl-maxtext-ckpts/muse-glimmer-30b; HF weights in the shared hf-cache.
+    MODEL_NAME=meta-models/Muse-Glimmer-30B; MAXTEXT_MODEL=muse-glimmer-30b
+    PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509"
+    MAXTGT=24576; BUDGET=65536; UNIFORM=16384
+    VLLM_LEN=16384
+    VLLM_IMPL=flax_nnx
+    TPUINF_REF=42e4d796f3da210c07218a92a26a9c2db840bb94
+    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85 --block-size 16"
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache"
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     ;;
   *)
     MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b
@@ -68,15 +87,21 @@ case "$CELL" in
     ;;
 esac
 pick_tiles() {
-  if [ "$MAXTEXT_MODEL" = gemma4-31b ]; then
-    FLCE_TILE=1024; VOCAB_TILING=32
-  else
-    case "$CELL" in
-      *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
-      *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
-      *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
-    esac
-  fi
+  case "$MAXTEXT_MODEL" in
+    gemma4-31b)
+      FLCE_TILE=1024; VOCAB_TILING=32
+      MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" ;;
+    muse-glimmer-30b)
+      FLCE_TILE=2048; VOCAB_TILING=32
+      MT_KWARGS="{\"remat_policy\": \"full\", \"ici_fsdp_parallelism\": 4, \"num_vocab_tiling\": $VOCAB_TILING}" ;;
+    *)
+      case "$CELL" in
+        *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
+        *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
+        *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
+      esac
+      MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" ;;
+  esac
   case "$CELL" in
     grpo-k|ttd-k) SCORE_FIXED=18432 ;;
     *)            SCORE_FIXED=0 ;;
@@ -97,8 +122,9 @@ elif ! tinker_healthy && vllm_healthy; then
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
-    TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
+    TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
@@ -121,15 +147,16 @@ else
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
-    TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" \
+    TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
     VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=128 VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
     VLLM_XLA_CACHE_GCS="$XLA_GCS" \
     HF_CACHE_GCS="$HF_GCS" \
-    VLLM_EXTRA_ARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85" \
+    VLLM_EXTRA_ARGS="$VLLM_XARGS" \
     READY_ATTEMPTS=900 SYNC_SKYRL=1 START_VLLM=1 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || true
   curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 \

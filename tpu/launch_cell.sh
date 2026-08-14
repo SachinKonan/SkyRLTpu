@@ -46,6 +46,13 @@ case "$CELL" in
     MEMBER_SPEC='google/gemma-4-31B-it:gemma4:gemma'
     MEMBER_DIR=member_gemma
     CTX=10240; PHASE1=6656 ;;
+  m-*)
+    # Muse-Glimmer-30B: rs-study serving shape (16384); high reasoning strength
+    # (template default; xhigh measured null on quality over 960 rollouts).
+    MODEL_HF=meta-models/Muse-Glimmer-30B
+    MEMBER_SPEC='meta-models/Muse-Glimmer-30B:muse_glimmer_high_reasoning:muse'
+    MEMBER_DIR=member_muse
+    CTX=16384; PHASE1=12288 ;;
   *)
     MODEL_HF=Qwen/Qwen3.5-27B
     MEMBER_SPEC='Qwen/Qwen3.5-27B:qwen3:qwen'

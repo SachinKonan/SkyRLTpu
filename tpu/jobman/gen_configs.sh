@@ -22,7 +22,7 @@ PROBLEMS=("erdos" "jssp" "ac1")
 # Model dimension (Phase 2 slice of the plan): qwen = full Stage-A factorial;
 # gemma = N arms only (Stage A settled the regularizer question), cell prefix
 # g-, engine/client knobs resolved by the g-* cases in cell_worker/launch_cell.
-MODELS=("qwen" "gemma")
+MODELS=("qwen" "gemma" "muse")
 
 # Generation-2 cells: contaminated by the frozen-weights era (Erdos trains
 # silently OOMed; grpo-k-j hit the same wall via penalty-pass + fat tiles).
@@ -38,6 +38,9 @@ for row in "${STAGE_A_CELLS[@]}"; do
   if [ "$model" = "gemma" ]; then
     { [ "$kl" != "0" ] || [ "$rr" != "0" ]; } && continue
     cell="g-${cell}"
+  elif [ "$model" = "muse" ]; then
+    { [ "$kl" != "0" ] || [ "$rr" != "0" ]; } && continue
+    cell="m-${cell}"
   fi
   if [ "$prob" = "jssp" ]; then
     cell="${cell}-j"
@@ -65,7 +68,7 @@ for row in "${STAGE_A_CELLS[@]}"; do
     EVAL_TIMEOUT: \"180\""
   fi
   gen_env_block=""
-  if [ "$model" = "gemma" ]; then
+  if [ "$model" != "qwen" ]; then
     gen_env_block="    RUN_DIR_NAME: stageB-${cell}
     EXPERIMENT_NAME: stageB-${cell}"
   elif [ "$prob" = "ac1" ]; then
