@@ -64,6 +64,10 @@ VLLM_RAY_PORT="${VLLM_RAY_PORT:-6379}"
 VLLM_RAY_DASHBOARD_PORT="${VLLM_RAY_DASHBOARD_PORT:-8265}"
 VLLM_VENV="${VLLM_VENV:-/home/${REMOTE_USER}/.venvs/vllm-tpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
+# Scope cache restore to THIS model's dir: the shared prefix holds several
+# models (qwen 4G + muse 55G); pulling everything doubles restore time and can
+# fill the boot disk.
+HF_MODEL_DIR="models--${MODEL_NAME//\//--}"
 # Optional shared HF weight cache on GCS: restored to the local HF hub dir
 # (REMOTE_HF_HOME/hub, vLLM's --download-dir) before serve so vLLM finds the
 # weights already on local SSD instead of re-downloading from HuggingFace. The
@@ -323,6 +327,7 @@ set -euo pipefail
 source "${VLLM_VENV}/bin/activate"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="${REMOTE_HF_HOME}/hub"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE}"
 export SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE}"
@@ -354,11 +359,11 @@ fi
 # dies with "Engine core initialization failed / No space left on device".
 # The bring-up then waits for that worker forever. So: retry, and if partials
 # survive, delete them so the fallback download starts from a clean disk.
-mkdir -p "${REMOTE_HF_HOME}/hub"
+mkdir -p "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}"
 if [[ -n "${HF_CACHE_GCS}" ]]; then
   hf_ok=0
   for _try in 1 2 3; do
-    if gsutil -m -q rsync -r "${HF_CACHE_GCS}" "${REMOTE_HF_HOME}/hub" 2>/dev/null; then
+    if gsutil -m -q rsync -r "${HF_CACHE_GCS}/${HF_MODEL_DIR}" "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}" 2>/dev/null; then
       hf_ok=1
     fi
     _partials="\$(find "${REMOTE_HF_HOME}/hub" -name '*_.gstmp' -o -name '*.incomplete' 2>/dev/null | head -1)"

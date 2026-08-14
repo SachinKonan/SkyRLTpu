@@ -54,6 +54,7 @@ PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense
 VLLM_IMPL=vllm
 TPUINF_REF=skyrl/v0.23.0-lora
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
+HF_OFFLINE=0
 case "$CELL" in
   g-*)
     MODEL_NAME=google/gemma-4-31B-it; MAXTEXT_MODEL=gemma4-31b
@@ -77,6 +78,10 @@ case "$CELL" in
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85 --block-size 16"
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
+    # meta-models/ is not on the HF hub: resolution must be cache-only, and the
+    # w0 cache (trainer AutoConfig/AutoTokenizer + client tokenizer) must be
+    # pre-staged -- RepoNotFound does NOT fall back to a populated cache.
+    HF_OFFLINE=1
     ;;
   *)
     MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b
@@ -108,6 +113,12 @@ pick_tiles() {
   esac
 }
 
+# w0-local HF cache for the trainer + client (scoped to this model's dir).
+HF_DIR="models--${MODEL_NAME//\//--}"
+mkdir -p "$HOME/.cache/huggingface/hub/$HF_DIR"
+gsutil -m -q rsync -r "$HF_GCS/$HF_DIR" "$HOME/.cache/huggingface/hub/$HF_DIR" 2>/dev/null \
+  && echo "w0 HF cache restored ($HF_DIR)" || echo "w0 HF cache restore failed (hub fallback for public models)"
+
 if engines_healthy; then
   echo "engines already healthy -- skipping bring-up"
 elif ! tinker_healthy && vllm_healthy; then
@@ -122,7 +133,7 @@ elif ! tinker_healthy && vllm_healthy; then
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
-    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" \
+    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -147,7 +158,7 @@ else
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
-    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" \
+    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
