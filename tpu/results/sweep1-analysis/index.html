@@ -934,7 +934,10 @@ const trajCharts = {};
       const icfg = typeof item === "string" ? cfg : Object.assign({}, cfg, item.cfg || {});
       const cell = document.createElement("div"); cell.className = "sm-cell";
       const h4 = document.createElement("h4");
-      h4.textContent = P[pk].label + (item.sub ? " — " + item.sub : ""); cell.appendChild(h4);
+      // NOTE: string items must not consult item.sub -- String.prototype.sub is a
+      // native method, so "erdos".sub is a FUNCTION and stringifies into the title.
+      const sub = typeof item === "object" && item.sub ? " — " + item.sub : "";
+      h4.textContent = P[pk].label + sub; cell.appendChild(h4);
       const c = document.createElement("div"); cell.appendChild(c); host.appendChild(cell);
       const series = multiPool([pk], fld).map(x => Object.assign(x, { dashed: false, label: x.label.split(" ").pop() }));
       lineChart(c, Object.assign({ series, h: 168, left: 44, directLabels: false }, icfg));
