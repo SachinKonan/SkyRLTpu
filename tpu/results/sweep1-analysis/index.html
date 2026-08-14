@@ -278,6 +278,67 @@ footer p { max-width: 78ch; }
     change in that run's <em>per-step best</em> — how much the run's output moves between two adjacent
     steps for no reason other than sampling.</p>
   <div class="verdicts" id="verdictTiles"></div>
+
+  <style>
+    .bc-wrap { display:flex; gap:14px; flex-wrap:wrap; margin:18px 0 6px }
+    .bc-panel { flex:1 1 150px; min-width:150px; border:1px solid var(--line,#3333); border-radius:6px; padding:10px 10px 8px }
+    .bc-partial { opacity:.75; border-style:dashed }
+    .bc-title { font-weight:600; font-size:.85rem }
+    .bc-unit { font-size:.72rem; opacity:.65; margin-bottom:8px }
+    .bc-bars { display:flex; gap:16px; align-items:flex-end; height:110px; justify-content:center }
+    .bc-col { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100% }
+    .bc-bar { width:34px; border-radius:3px 3px 0 0; background:#8a8a8a55 }
+    .bc-bar.bc-ttd { background:#4d79c7 } .bc-bar.bc-grpo { background:#c78a3b }
+    .bc-bar.bc-win { outline:2px solid currentColor }
+    .bc-val { font-size:.68rem; font-variant-numeric:tabular-nums; margin-top:4px }
+    .bc-arm { font-size:.7rem; opacity:.7 }
+    .bc-gap { font-size:.7rem; opacity:.75; margin-top:6px; text-align:center }
+  </style>
+  <h3>Final champions, side by side (true scale, from zero)</h3>
+  <p class="sub">Bars are drawn at true scale from zero — the near-equal heights <em>are</em> the finding.
+     Every completed gap is a fraction of one step's own sampling swing (0.13–0.46× step noise).
+     Outlined bar = nominal leader. Dashed panels are incomplete runs.</p>
+  <div class="bc-wrap">
+    <div class="bc-panel">
+      <div class="bc-title">Erdős min-overlap</div><div class="bc-unit">C5, lower is better</div>
+      <div class="bc-bars">
+        <div class="bc-col"><div class="bc-bar bc-ttd bc-win" style="height:99.99%"></div><div class="bc-val">0.380953</div><div class="bc-arm">ttd</div></div>
+        <div class="bc-col"><div class="bc-bar bc-grpo" style="height:100.00%"></div><div class="bc-val">0.380985</div><div class="bc-arm">grpo</div></div>
+      </div>
+      <div class="bc-gap">gap 0.00831%</div>
+    </div>
+    <div class="bc-panel">
+      <div class="bc-title">JSSP (frontier_algo 46)</div><div class="bc-unit">reward, higher is better</div>
+      <div class="bc-bars">
+        <div class="bc-col"><div class="bc-bar bc-ttd" style="height:96.15%"></div><div class="bc-val">0.159193</div><div class="bc-arm">ttd</div></div>
+        <div class="bc-col"><div class="bc-bar bc-grpo bc-win" style="height:100.00%"></div><div class="bc-val">0.16557</div><div class="bc-arm">grpo</div></div>
+      </div>
+      <div class="bc-gap">gap 3.85%</div>
+    </div>
+    <div class="bc-panel">
+      <div class="bc-title">Autocorr inequality ac1</div><div class="bc-unit">value, lower is better</div>
+      <div class="bc-bars">
+        <div class="bc-col"><div class="bc-bar bc-ttd" style="height:100.00%"></div><div class="bc-val">1.519658</div><div class="bc-arm">ttd</div></div>
+        <div class="bc-col"><div class="bc-bar bc-grpo bc-win" style="height:99.76%"></div><div class="bc-val">1.515966</div><div class="bc-arm">grpo</div></div>
+      </div>
+      <div class="bc-gap">gap 0.243%</div>
+    </div>
+    <div class="bc-panel bc-partial">
+      <div class="bc-title">Circle packing 26</div><div class="bc-unit">sum of radii, higher</div>
+      <div class="bc-bars">
+        <div class="bc-col"><div class="bc-bar bc-ttd bc-win" style="height:100.00%"></div><div class="bc-val">2.635983</div><div class="bc-arm">ttd</div></div>
+        <div class="bc-col"><div class="bc-bar bc-grpo" style="height:99.52%"></div><div class="bc-val">2.623429</div><div class="bc-arm">grpo</div></div>
+      </div>
+      <div class="bc-gap">gap 0.476% · partial — ttd hit the known ceiling 2.635983 at step 7; retired</div>
+    </div>
+    <div class="bc-panel bc-partial">
+      <div class="bc-title">Unit distance 65536</div><div class="bc-unit">pairs/point, higher</div>
+      <div class="bc-bars">
+        <div class="bc-col"><div class="bc-bar bc-ttd" style="height:100.00%"></div><div class="bc-val">11.3517</div><div class="bc-arm">ttd</div></div>
+        <div class="bc-col"><div class="bc-bar bc-grpo" style="height:100.00%"></div><div class="bc-val">11.3517</div><div class="bc-arm">grpo</div></div>
+      </div>
+      <div class="bc-gap">identical · terminated at 2/15 steps — champions IDENTICAL to 13 digits</div>
+    </div></div>
   <p class="note">Gap-to-swing is the champion gap divided by the two arms' mean step-to-step swing.
     All three completed comparisons land between 0.13 and 0.46 — the gap is a fraction of what a single
     step moves on its own. Nominally GRPO leads 2 of 3; that lead is inside the noise floor.</p>
