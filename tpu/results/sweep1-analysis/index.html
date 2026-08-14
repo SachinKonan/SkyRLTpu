@@ -109,6 +109,9 @@ h1 .sep { color: var(--ink-3); font-weight: 400; }
 }
 .mast-meta b { color: var(--ink-2); font-weight: 500; }
 
+/* ---------- small multiples ---------- */
+.sm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 14px; }
+.sm-cell h4 { margin: 0 0 2px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 /* ---------- sections ---------- */
 section { margin: 0 0 68px; scroll-margin-top: 20px; }
 h2 {
@@ -387,15 +390,13 @@ footer p { max-width: 78ch; }
   <p class="sub">Every pool entry has a parent. &Delta; = child value &minus; parent value. The left panel is how
     <em>often</em> a child beats its parent; the right is how <em>much</em>, as a percentage of the parent's
     magnitude — raw deltas at the 1e&#8209;6 scale are unreadable, percentages are not.</p>
-  <div class="grid2">
-    <div class="panel">
-      <div class="chart-head"><h3>Improver rate</h3><span class="chart-sub">children with &Delta; &gt; 0</span></div>
-      <div id="chartImpRate"></div>
-    </div>
-    <div class="panel">
-      <div class="chart-head"><h3>Improvement size</h3><span class="chart-sub">mean &Delta; over improvers, % of |parent| · log scale</span></div>
-      <div id="chartMag"></div>
-    </div>
+  <div class="panel">
+    <div class="chart-head"><h3>Improver rate</h3><span class="chart-sub">children with &Delta; &gt; 0 &middot; one panel per problem</span></div>
+    <div class="sm-grid" id="chartImpRate"></div>
+  </div>
+  <div class="panel">
+    <div class="chart-head"><h3>Improvement size</h3><span class="chart-sub">mean &Delta; over improvers, % of |parent| &middot; log scale &middot; one panel per problem</span></div>
+    <div class="sm-grid" id="chartMag"></div>
   </div>
   <div class="legend" id="legImp"></div>
   <p class="note" id="impNote"></p>
@@ -410,11 +411,11 @@ footer p { max-width: 78ch; }
   <div class="grid2">
     <div class="panel">
       <div class="chart-head"><h3>Parent-relative headroom closed</h3><span class="chart-sub">&Delta; / (target &minus; parent), % · log</span></div>
-      <div id="chartHead"></div>
+      <div class="sm-grid" id="chartHead"></div>
     </div>
     <div class="panel">
       <div class="chart-head"><h3>Fixed headroom closed</h3><span class="chart-sub">&Delta; / (target &minus; best root), % · log</span></div>
-      <div id="chartHeadFix"></div>
+      <div class="sm-grid" id="chartHeadFix"></div>
     </div>
   </div>
   <div class="legend" id="legHead"></div>
@@ -924,37 +925,39 @@ const trajCharts = {};
 /* ================= 03 improvement ================= */
 (function () {
   const pks = ["erdos", "acineq", "jssp", "circle"];
-  lineChart(document.getElementById("chartImpRate"), {
-    series: multiPool(pks, "frac_improve"), h: 236, yMin: 0, yMax: 1.05,
-    yFmt: v => (100 * v).toFixed(0) + "%", tipFmt: v => pct(v, 1), left: 44, directLabels: false
-  });
-  lineChart(document.getElementById("chartMag"), {
-    series: multiPool(["erdos", "acineq", "circle"], "mean_pct_improvers"), h: 236, yLog: true,
-    tipFmt: v => sig(v, 3) + "%", left: 46, directLabels: false
-  });
-  legend(document.getElementById("legImp"), armLegend().concat([
-    { color: "var(--ink-3)", label: "solid = Erdős · dashed = AC1 / JSSP / Circle" }]));
+  // one panel per problem, both arms SOLID in the arm colors -- no dash encoding.
+  function smallMultiples(hostId, list, field, cfg) {
+    const host = document.getElementById(hostId); host.innerHTML = "";
+    list.forEach(pk => {
+      const cell = document.createElement("div"); cell.className = "sm-cell";
+      const h4 = document.createElement("h4"); h4.textContent = P[pk].label; cell.appendChild(h4);
+      const c = document.createElement("div"); cell.appendChild(c); host.appendChild(cell);
+      const series = multiPool([pk], field).map(x => Object.assign(x, { dashed: false, label: x.label.split(" ").pop() }));
+      lineChart(c, Object.assign({ series, h: 168, left: 44, directLabels: false }, cfg));
+    });
+  }
+  smallMultiples("chartImpRate", pks, "frac_improve",
+    { yMin: 0, yMax: 1.05, yFmt: v => (100 * v).toFixed(0) + "%", tipFmt: v => pct(v, 1) });
+  smallMultiples("chartMag", ["erdos", "acineq", "circle"], "mean_pct_improvers",
+    { yLog: true, tipFmt: v => sig(v, 3) + "%" });
+  window.smallMultiples = smallMultiples;
+  legend(document.getElementById("legImp"), armLegend());
   document.getElementById("impNote").innerHTML =
     "Improver rate does roughly halve on the two smooth problems: Erdős ttd 1.00 → 0.44, grpo 0.95 → 0.50; " +
     "AC1 ttd 0.78 → 0.55, grpo 0.90 → 0.60. JSSP is a different regime entirely and sits near the floor the " +
     "whole way (0–15%) because 94–97% of its pool entries score exactly zero — a child that fails is not an " +
     "improvement, it is a tie at zero. Magnitude is shown only for the problems where a percentage of the " +
-    "parent is meaningful; JSSP's parents are usually 0, which makes the ratio undefined or unbounded.";
+    "parent is meaningful; JSSP's parents are usually 0, which makes the ratio undefined or unbounded. " + "<strong>Why the lines break:</strong> 'improvement size' is a mean over that step's IMPROVERS, and a step " + "where no child beat its parent has nothing to average — the value is undefined, not zero, and a log axis " + "could not draw zero anyway. The chart leaves a gap rather than inventing a point. JSSP is null on 9–10 of " + "15 steps for exactly this reason; circle's step 0 is null because seeds have no parents.";
 })();
 
 /* ================= 04 headroom ================= */
 (function () {
   const pks = ["erdos", "acineq", "circle"];
-  lineChart(document.getElementById("chartHead"), {
-    series: multiPool(pks, "mean_headroom_pct_improvers"), h: 236, yLog: true,
-    tipFmt: v => sig(v, 3) + "%", left: 46, directLabels: false
-  });
-  lineChart(document.getElementById("chartHeadFix"), {
-    series: multiPool(pks, "mean_fixed_headroom_pct_improvers"), h: 236, yLog: true,
-    tipFmt: v => sig(v, 3) + "%", left: 46, directLabels: false
-  });
-  legend(document.getElementById("legHead"), armLegend().concat([
-    { color: "var(--ink-3)", label: "solid = Erdős · dashed = AC1 / Circle" }]));
+  window.smallMultiples("chartHead", pks, "mean_headroom_pct_improvers",
+    { yLog: true, tipFmt: v => sig(v, 3) + "%" });
+  window.smallMultiples("chartHeadFix", pks, "mean_fixed_headroom_pct_improvers",
+    { yLog: true, tipFmt: v => sig(v, 3) + "%" });
+  legend(document.getElementById("legHead"), armLegend());
   document.getElementById("headNote").innerHTML =
     "This is where the expected story changes. On Erdős, ttd's raw improvement magnitude falls " +
     "7.2e4× from step 1 to step 14 (0.0958 → 1.33e−6 in value units) — about 4.9 orders, not 5. Under " +
