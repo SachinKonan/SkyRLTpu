@@ -122,7 +122,7 @@ class RepairProbe:
         self.lock = threading.Lock()
         self.t0 = time.time()
         servers = dict(kv.split("=", 1) for kv in args.servers.split(","))
-        self.samplers = {m: VllmSampler(url, C.MODELS[m].vllm_name) for m, url in servers.items()}
+        self.samplers = {m: VllmSampler(url, C.MODELS[m].hf_id) for m, url in servers.items()}
         self.queue = ArenaQueueClient(args.queue) if args.queue else None
         self.pool = ProcessPoolExecutor(max_workers=args.pregate_workers)
         self.sigs = {}
