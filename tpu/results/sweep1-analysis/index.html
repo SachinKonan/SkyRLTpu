@@ -928,18 +928,25 @@ const trajCharts = {};
   // one panel per problem, both arms SOLID in the arm colors -- no dash encoding.
   function smallMultiples(hostId, list, field, cfg) {
     const host = document.getElementById(hostId); host.innerHTML = "";
-    list.forEach(pk => {
+    list.forEach(item => {
+      const pk = typeof item === "string" ? item : item.pk;
+      const fld = typeof item === "string" ? field : (item.field || field);
+      const icfg = typeof item === "string" ? cfg : Object.assign({}, cfg, item.cfg || {});
       const cell = document.createElement("div"); cell.className = "sm-cell";
-      const h4 = document.createElement("h4"); h4.textContent = P[pk].label; cell.appendChild(h4);
+      const h4 = document.createElement("h4");
+      h4.textContent = P[pk].label + (item.sub ? " — " + item.sub : ""); cell.appendChild(h4);
       const c = document.createElement("div"); cell.appendChild(c); host.appendChild(cell);
-      const series = multiPool([pk], field).map(x => Object.assign(x, { dashed: false, label: x.label.split(" ").pop() }));
-      lineChart(c, Object.assign({ series, h: 168, left: 44, directLabels: false }, cfg));
+      const series = multiPool([pk], fld).map(x => Object.assign(x, { dashed: false, label: x.label.split(" ").pop() }));
+      lineChart(c, Object.assign({ series, h: 168, left: 44, directLabels: false }, icfg));
     });
   }
-  smallMultiples("chartImpRate", pks, "frac_improve",
+  smallMultiples("chartImpRate", ["erdos", "acineq", "jssp"], "frac_improve",
     { yMin: 0, yMax: 1.05, yFmt: v => (100 * v).toFixed(0) + "%", tipFmt: v => pct(v, 1) });
-  smallMultiples("chartMag", ["erdos", "acineq", "circle"], "mean_pct_improvers",
-    { yLog: true, tipFmt: v => sig(v, 3) + "%" });
+  smallMultiples("chartMag", [
+    "erdos", "acineq",
+    { pk: "jssp", field: "mean_delta_improvers", sub: "raw \u0394 (parents are 0)",
+      cfg: { tipFmt: v => sig(v, 3) } }
+  ], "mean_pct_improvers", { yLog: true, tipFmt: v => sig(v, 3) + "%" });
   window.smallMultiples = smallMultiples;
   legend(document.getElementById("legImp"), armLegend());
   document.getElementById("impNote").innerHTML =
@@ -947,12 +954,12 @@ const trajCharts = {};
     "AC1 ttd 0.78 → 0.55, grpo 0.90 → 0.60. JSSP is a different regime entirely and sits near the floor the " +
     "whole way (0–15%) because 94–97% of its pool entries score exactly zero — a child that fails is not an " +
     "improvement, it is a tie at zero. Magnitude is shown only for the problems where a percentage of the " +
-    "parent is meaningful; JSSP's parents are usually 0, which makes the ratio undefined or unbounded. " + "<strong>Why the lines break:</strong> 'improvement size' is a mean over that step's IMPROVERS, and a step " + "where no child beat its parent has nothing to average — the value is undefined, not zero, and a log axis " + "could not draw zero anyway. The chart leaves a gap rather than inventing a point. JSSP is null on 9–10 of " + "15 steps for exactly this reason; circle's step 0 is null because seeds have no parents.";
+    "parent is meaningful; JSSP's parents are usually 0, which makes the ratio undefined or unbounded. " + "<strong>Why the lines break:</strong> 'improvement size' is a mean over that step's IMPROVERS, and a step " + "where no child beat its parent has nothing to average — the value is undefined, not zero, and a log axis " + "could not draw zero anyway. The chart leaves a gap rather than inventing a point — on JSSP that is 9–10 of " + "15 steps, which is itself the finding. JSSP's size panel is in RAW reward units: its parents usually score " + "exactly 0, so '% of parent' is undefined there by construction. Circle packing is omitted — it was retired " + "at step 7 when ttd hit the known ceiling, so its improvement series carries no comparative signal.";
 })();
 
 /* ================= 04 headroom ================= */
 (function () {
-  const pks = ["erdos", "acineq", "circle"];
+  const pks = ["erdos", "acineq"];
   window.smallMultiples("chartHead", pks, "mean_headroom_pct_improvers",
     { yLog: true, tipFmt: v => sig(v, 3) + "%" });
   window.smallMultiples("chartHeadFix", pks, "mean_fixed_headroom_pct_improvers",
