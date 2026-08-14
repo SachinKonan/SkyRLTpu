@@ -27,6 +27,7 @@ from pallas_arena.probe.prompt_flce import PROMPTS as _FLCE
 from pallas_arena.probe.prompt_ladder import LADDER_PROMPTS as _LADDER
 from pallas_arena.probe.prompt_ref_extra import REFERENCE_PROMPTS as _REF_EXTRA
 from pallas_arena.probe.prompt_seam import SEAM_PROMPTS as _SEAM
+from pallas_arena.probe.prompt_ref_first import REF_FIRST_PROMPTS as _REF_FIRST
 from pallas_arena.probe.prompt_seam_dialect import SEAM_DIALECT_PROMPTS as _SEAM_D
 from pallas_arena.probe.prompt_splash import PROMPTS as _SPLASH
 
@@ -45,6 +46,12 @@ for _task, _rungs in _LADDER.items():
 # skeleton of the fill functions at the TASK'S OWN rank
 for _task, _rungs in _SEAM_D.items():
     PROMPTS.setdefault(_task, {}).update(_rungs)
+
+# rf1 / rf2: the reference-first restart -- semantics as editable starter code,
+# shapes stated plainly, three platform notes, no seam and no dialect list
+# (error knowledge lives in the repair loop's feedback turns instead).
+for _task, _rfs in _REF_FIRST.items():
+    PROMPTS.setdefault(_task, {}).update(_rfs)
 
 
 def get_prompt(task: str, variant: str) -> str:
