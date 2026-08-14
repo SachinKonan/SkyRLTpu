@@ -123,6 +123,11 @@ class RepairProbe:
         self.t0 = time.time()
         servers = dict(kv.split("=", 1) for kv in args.servers.split(","))
         self.samplers = {m: VllmSampler(url, C.MODELS[m].hf_id) for m, url in servers.items()}
+        # Set when the engine is found dead mid-run. Run 3695809's serving
+        # slice was preempted ~40 minutes in and the driver burned the rest of
+        # its wall recording 109 Connection-refused rows as "no_code" -- the
+        # exact failure probe_driver was hardened against after run 3650988.
+        self.engine_dead = threading.Event()
         self.queue = ArenaQueueClient(args.queue) if args.queue else None
         self.pool = ProcessPoolExecutor(max_workers=args.pregate_workers)
         self.sigs = {}
@@ -177,7 +182,7 @@ class RepairProbe:
         best_reward = None
 
         for turn in range(self.args.turns):
-            if self.time_left() < 300:
+            if self.time_left() < 300 or self.engine_dead.is_set():
                 return
             stage = f"turn{turn + 1}"
             if turn == 0 and program is None:
@@ -190,10 +195,40 @@ class RepairProbe:
 
             n_tok = self.samplers[model].count_tokens(prompt_text)
             budget = max(2048, min(C.MAX_NEW_TOKENS, (self.args.ctx - 64) - (n_tok or len(prompt_text) // 3)))
-            gens = self.samplers[model].sample_group(
-                prompt_text, 1, max_tokens=budget,
-                temperature=self.args.temperature, stop=R.STOPS[spec.renderer])
-            g = gens[0]
+            # A transport error is NOT a model reply: it must not become a
+            # "no_code" row, must not consume a repair turn, and if the engine
+            # is actually gone the whole run must stop rather than churn
+            # (run 3695809 burned 40 min recording 109 refused connections).
+            g = None
+            for _attempt in range(3):
+                gens = self.samplers[model].sample_group(
+                    prompt_text, 1, max_tokens=budget,
+                    temperature=self.args.temperature, stop=R.STOPS[spec.renderer])
+                g = gens[0]
+                if not str(g.get("finish_reason", "")).startswith("error:"):
+                    break
+                try:
+                    alive = self.samplers[model].ready()
+                except Exception:  # noqa: BLE001
+                    alive = False
+                if not alive:
+                    self.engine_dead.set()
+                    self.log({"chain": chain, "model": model, "task": task, "variant": variant,
+                              "cand": idx, "turn": turn + 1, "stage": "engine-dead",
+                              "gate": "transport", "reward": None, "passed": False,
+                              "observation": str(g.get("finish_reason"))[:200]})
+                    print(f"[repair] ENGINE DEAD ({model}); aborting all chains: "
+                          f"{str(g.get('finish_reason'))[:120]}", flush=True)
+                    return
+                time.sleep(10)  # transient blip with a live engine: retry this turn
+            if str(g.get("finish_reason", "")).startswith("error:"):
+                # three transient errors against a "ready" engine: give this
+                # chain up loudly rather than feed empty text to extraction
+                self.log({"chain": chain, "model": model, "task": task, "variant": variant,
+                          "cand": idx, "turn": turn + 1, "stage": "transport-flap",
+                          "gate": "transport", "reward": None, "passed": False,
+                          "observation": str(g.get("finish_reason"))[:200]})
+                return
 
             if turn == 0 and program is None and task in SEAMS:
                 fill, how, missing = extract_fill(g["text"], SEAMS[task].required)
