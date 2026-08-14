@@ -78,10 +78,9 @@ case "$CELL" in
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85 --block-size 16"
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
-    # meta-models/ is not on the HF hub: resolution must be cache-only, and the
-    # w0 cache (trainer AutoConfig/AutoTokenizer + client tokenizer) must be
-    # pre-staged -- RepoNotFound does NOT fall back to a populated cache.
-    HF_OFFLINE=1
+    # Hub repo is public (verified gated:false); cache is pre-staged for speed
+    # and the hub stays available as fallback, so offline mode is NOT forced.
+    HF_OFFLINE=0
     ;;
   *)
     MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b

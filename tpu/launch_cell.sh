@@ -50,12 +50,10 @@ case "$CELL" in
   m-*)
     # Muse-Glimmer-30B: rs-study serving shape (16384); high reasoning strength
     # (template default; xhigh measured null on quality over 960 rollouts).
-    # HF_OFFLINE: meta-models/ is not on the hub; tokenizer must resolve from
-    # the w0 cache cell_worker staged (RepoNotFound ignores a populated cache).
     MODEL_HF=meta-models/Muse-Glimmer-30B
     MEMBER_SPEC='meta-models/Muse-Glimmer-30B:muse_glimmer_high_reasoning:muse'
     MEMBER_DIR=member_muse
-    HF_OFFLINE=1
+    HF_OFFLINE=0
     CTX=16384; PHASE1=12288 ;;
   *)
     MODEL_HF=Qwen/Qwen3.5-27B
