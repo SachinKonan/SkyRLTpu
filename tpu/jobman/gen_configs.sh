@@ -51,6 +51,7 @@ for row in "${STAGE_A_CELLS[@]}"; do
     { [ "$kl" != "0" ] || [ "$rr" != "0" ]; } && continue
     cell="${cell}-a"
     prob_env_block="    TTD_ENV: ac_inequalities
+    TTD_PROBLEM_TYPE: \"ac1\"
     TTD_KL_MEASURE_EVERY: \"0\""
   else
     prob_env_block="    TTD_ENV: erdos_min_overlap"

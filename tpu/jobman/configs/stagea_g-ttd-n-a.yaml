@@ -66,6 +66,7 @@ resumable:
     RUN_DIR_NAME: stageB-g-ttd-n-a
     EXPERIMENT_NAME: stageB-g-ttd-n-a
     TTD_ENV: ac_inequalities
+    TTD_PROBLEM_TYPE: "ac1"
     TTD_KL_MEASURE_EVERY: "0"
     SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/stagea-league.tar.gz
   prepare:
