@@ -76,7 +76,11 @@ case "$CELL" in
     VLLM_IMPL=flax_nnx
     TPUINF_REF=42e4d796f3da210c07218a92a26a9c2db840bb94
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85 --block-size 16"
-    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache"
+    # Dedicated per-shape prefix (16384/TP4/b128/block16), like qwen's -22k and
+    # gemma's -16k. Starts empty: first muse node compiles cold (~40min) and the
+    # seed-back publishes it; the shared flat pool has NO muse entries (its
+    # newest objects predate the port) and restoring 6G of foreign entries is waste.
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-16k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     # Hub repo is public (verified gated:false); cache is pre-staged for speed
     # and the hub stays available as fallback, so offline mode is NOT forced.

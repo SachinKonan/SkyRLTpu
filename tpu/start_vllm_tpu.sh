@@ -349,6 +349,14 @@ mkdir -p "${VLLM_XLA_CACHE_PATH}"
 # effort: a miss or partial just means vLLM recompiles what's absent.
 if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
   gsutil -m -q rsync -r "${VLLM_XLA_CACHE_GCS}" "${VLLM_XLA_CACHE_PATH}" 2>/dev/null && echo "restored XLA cache from ${VLLM_XLA_CACHE_GCS}" || echo "XLA cache restore skipped/failed (will compile)"
+  # Seed-back: restore alone is ONE-WAY, so entries compiled on this node died
+  # with it (the muse rs-study run repopulated nothing). Delayed additive rsync
+  # (no -d, checksum-skips existing) publishes fresh compiles once the boot
+  # compile window has passed; near-free when the cache was already warm.
+  if [[ "${VLLM_XLA_SEED_BACK:-1}" == "1" ]]; then
+    ( sleep 3600; gsutil -m -q rsync -r "${VLLM_XLA_CACHE_PATH}" "${VLLM_XLA_CACHE_GCS}" 2>/dev/null \
+        && echo "XLA cache seeded back to ${VLLM_XLA_CACHE_GCS}" ) >> "\$HOME/xla-seedback.log" 2>&1 &
+  fi
 fi
 # Restore HF weights from the shared GCS cache onto local SSD so vLLM finds
 # them already present under --download-dir (below) instead of pulling from
