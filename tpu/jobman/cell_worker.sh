@@ -144,7 +144,20 @@ elif ! tinker_healthy && vllm_healthy; then
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
     READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/tinker-restart.log 2>&1 || true
-  tinker_healthy || { echo "tinker-only restart FAILED"; tail -6 ~/tinker-restart.log; exit 1; }
+  if ! tinker_healthy; then
+    # ESCALATE, do not just exit: the next attempt would see vLLM still healthy,
+    # take this same surgical branch, and fail identically -- an infinite loop
+    # (observed live: 96 retries on g-ttd-n-j, ~15h and six slices burned, zero
+    # rows). Tear down vLLM so the next attempt is forced through a FULL
+    # bring-up, which is the only path that rebuilds trainer state from scratch.
+    echo "tinker-only restart FAILED -- tearing down vLLM to force a full rebuild next attempt"
+    tail -6 ~/tinker-restart.log 2>/dev/null || true
+    for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
+      timeout 60 ssh $SSHO sk7524_princeton_edu@"$ip" \
+        "tmux kill-session -t skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
+    done
+    exit 1
+  fi
   echo "trainer restarted (vLLM untouched)"
 else
   echo "engine bring-up ($MAXTEXT_MODEL uniform=$UNIFORM budget=$BUDGET)..."
