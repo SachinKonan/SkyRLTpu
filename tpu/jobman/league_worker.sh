@@ -27,14 +27,23 @@ if [ ! -x "$REPO/third_party/discover/.venv-ttd-discover/bin/python" ]; then
 fi
 echo "client venv OK"
 
-# --- w0-local HF caches for both models (scoped) -----------------------------
-for spec in "Qwen/Qwen3.5-27B:gs://sk7524-tinker-tpu-us-east5/hf-cache" \
-            "google/gemma-4-31B-it:gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"; do
-  mn=${spec%%:*}; gcs=${spec#*:}
-  hd="models--${mn//\//--}"
-  mkdir -p "$HOME/.cache/huggingface/hub/$hd"
-  gsutil -m -q rsync -r "$gcs/$hd" "$HOME/.cache/huggingface/hub/$hd" 2>/dev/null || true
-done
+# --- w0-local HF cache: QWEN ONLY --------------------------------------------
+# w0 runs the qwen trainer + the client; the gemma trainer lives on w4 and
+# start_colocated_vllm_tinker.sh restores its cache there. Staging gemma here
+# too puts 71G of unused weights on a 97G boot disk -- observed live: the disk
+# hit 98% and the tinker server died with "No space left on device". The
+# client's gemma TOKENIZER (a few MB) comes from the hub on demand, which is
+# how the original league run worked.
+_qhd="models--Qwen--Qwen3.5-27B"
+mkdir -p "$HOME/.cache/huggingface/hub/$_qhd"
+gsutil -m -q rsync -r "gs://sk7524-tinker-tpu-us-east5/hf-cache/$_qhd" \
+  "$HOME/.cache/huggingface/hub/$_qhd" 2>/dev/null || true
+# Reclaim the disk if a previous attempt staged gemma weights here.
+if [ -d "$HOME/.cache/huggingface/hub/models--google--gemma-4-31B-it" ]; then
+  echo "removing stray gemma weight cache from w0 (belongs on w4)"
+  rm -rf "$HOME/.cache/huggingface/hub/models--google--gemma-4-31B-it"
+fi
+df -h / | tail -1
 
 qwen_tinker_healthy()  { curl -fsS -m6 "http://127.0.0.1:8000/api/v1/get_server_capabilities" >/dev/null 2>&1; }
 gemma_tinker_healthy() { curl -fsS -m6 "http://$W4INT:8000/api/v1/get_server_capabilities" >/dev/null 2>&1; }
