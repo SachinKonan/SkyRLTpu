@@ -160,18 +160,36 @@ class CaseTiming:
         return median([c for _, c in self.pairs])
 
 
-def final_reward(case_timings: list[CaseTiming], noise_floor: float) -> dict:
-    """Assemble the final reward: geomean over DECLARED (non-holdout) cases,
-    noise-floor gated; holdout cases logged-unscored (overfit detector)."""
+def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general: bool = False) -> dict:
+    """Assemble the final reward, noise-floor gated.
+
+    Two modes, because they want opposite things from the holdout:
+
+    OURS_SPECIFIC (``general=False``, the historical behaviour): geomean over
+    DECLARED cases only; holdout logged-unscored. Correct when the goal is a
+    kernel for OUR production shape -- hyper-specializing to it is the point,
+    and penalizing the holdout would penalize exactly that.
+
+    GENERAL_OPTIMIZATION (``general=True``): geomean over EVERY case, holdout
+    included, because generality IS the objective. Without this a kernel can
+    hardcode the two shapes it was shown, be broken at the deliberately
+    non-divisible holdout, and still collect full reward -- the evidence
+    sitting unused in the ``holdout`` field. The result is labelled
+    ``reward_kind`` so a general number is never mistaken for a historical one.
+    """
     declared = [t for t in case_timings if not t.holdout]
     holdout = [t for t in case_timings if t.holdout]
     if not declared:
         raise ValueError("no declared (non-holdout) case timings")
-    score = geomean([t.score for t in declared])
+    scored = case_timings if general else declared
+    score = geomean([t.score for t in scored])
     return {
         "score": score,
         "reward": gate_reward(score, noise_floor),
+        "reward_kind": "general" if general else "ours",
+        "n_scored_cases": len(scored),
         "noise_floor": noise_floor,
         "per_case": {t.case: t.score for t in declared},
         "holdout": {t.case: t.score for t in holdout},
+        "holdout_scored": bool(general and holdout),
     }

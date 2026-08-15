@@ -220,6 +220,7 @@ class SplashAttentionProblem(Problem):
     version = "1"
     has_bwd = False  # fwd-only contract in phase 1 of the task
     require_pallas = True
+    general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = False
     banned_call_names = (
         "jax.nn.dot_product_attention",
@@ -241,9 +242,18 @@ class SplashAttentionProblem(Problem):
             # is kept intact: the probe holdout is deliberately NOT block
             # divisible, so a kernel that assumes seq % block == 0 still
             # fails to trace.
+            # GENERAL sweep. tokamax's own attention arg_specs vary seq at a
+            # FIXED TOKEN BUDGET (batch = 16384 // seq) precisely so total work
+            # stays comparable while every blocking decision changes; heads
+            # here play the batch role. head_dim 64 and 128 both appear because
+            # a kernel tuned to one lane width often breaks at the other.
             ShapeCase("probe-h8-s4096", {"heads": 8, "seq": 4096, "d": 128}, probe=True),
             ShapeCase("probe-h4-s2048", {"heads": 4, "seq": 2048, "d": 128}, probe=True),
+            ShapeCase("probe-h16-s1024", {"heads": 16, "seq": 1024, "d": 128}, probe=True),
+            ShapeCase("probe-h2-s8192", {"heads": 2, "seq": 8192, "d": 128}, probe=True),
+            ShapeCase("probe-h8-s4096-d64", {"heads": 8, "seq": 4096, "d": 64}, probe=True),
             ShapeCase("probe-holdout-h4-s2049", {"heads": 4, "seq": 2049, "d": 128}, holdout=True, probe=True),
+            ShapeCase("probe-holdout-h3-s1535-d64", {"heads": 3, "seq": 1535, "d": 64}, holdout=True, probe=True),
             # CPU battery
             ShapeCase("tiny", {"heads": 2, "seq": 128, "d": 32}, smoke=True),
             ShapeCase("tiny-ragged", {"heads": 2, "seq": 67, "d": 32}, smoke=True),
@@ -312,6 +322,12 @@ class SplashAttentionProblem(Problem):
         except Exception:
             type(self).baseline_impl = "xla-fallback"
             return _xla_masked_attention(q, k, v, segment_ids)
+
+    def baseline_candidates(self):
+        """Production splash vs a competent query-blocked XLA attention. At the
+        smaller sweep shapes the XLA path is genuinely competitive, and GENERAL
+        mode must grade against whichever is actually faster there."""
+        return {"production": self.baseline, "xla-blocked": _xla_masked_attention}
 
     def honest_variants(self):
         """Calibrate against what an honest bf16 kernel actually computes, not

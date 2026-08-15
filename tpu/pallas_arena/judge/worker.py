@@ -203,6 +203,50 @@ class PersistentWorker:
             self.boot_report = {"ok": False, "error": f"baseline: {type(e).__name__}: {e}"}
             return self.boot_report
 
+        # GENERAL mode: pick the denominator per shape by MEASUREMENT. Every
+        # named candidate is timed here, at boot, off the candidate clock, and
+        # the fastest wins that case. This is the structural fix for the defect
+        # that invalidated every historical score: splash ran ~10x slow and
+        # megablox ~38x slow on library-default tuning, so "beat the baseline"
+        # meant "beat a crippled kernel". Which one won is recorded per case,
+        # so a score always says what it beat.
+        self._general_baselines = {}
+        if getattr(self.problem, "general_mode", False):
+            t_bl = self.perf()
+            cands = self.problem.baseline_candidates()
+            for case in self.scored_cases + self.holdout_cases:
+                w = self.problem.make_inputs(jax.random.PRNGKey(1), case)
+                self.block(w)
+                timings = {}
+                for nm, fn in cands.items():
+                    try:
+                        f = jax.jit(fn)
+                        for _ in range(2):
+                            self.block(f(*w))
+                        ts = []
+                        for _ in range(5):
+                            t = self.perf()
+                            self.block(f(*w))
+                            ts.append(self.perf() - t)
+                        ts.sort()
+                        timings[nm] = ts[len(ts) // 2]
+                    except Exception as e:  # noqa: BLE001 -- an unavailable candidate is not a boot failure
+                        timings[nm] = None
+                        print(f"[boot] baseline candidate {nm!r} unavailable at {case.name}: "
+                              f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+                live = {k: v for k, v in timings.items() if v}
+                if not live:
+                    self.boot_report = {"ok": False, "error": f"no usable baseline at {case.name}"}
+                    return self.boot_report
+                best = min(live, key=live.get)
+                self._general_baselines[case.name] = {
+                    "impl": best, "fn": jax.jit(cands[best]),
+                    "median_s": live[best], "all_s": live,
+                }
+                print(f"[boot] {case.name}: baseline={best} "
+                      f"({', '.join(f'{k}={v * 1e3:.2f}ms' for k, v in live.items())})", flush=True)
+            self.general_baseline_s = self.perf() - t_bl
+
         # Warm the CALIBRATION path too, not just the baseline. Every
         # correctness check runs the fp32 reference, the three honest
         # variants and the fused error-stats kernel — one XLA compile per
@@ -503,7 +547,7 @@ class PersistentWorker:
 
             # ---- 6. counterbalanced interleaved timing, fresh inputs per
             # ---- iteration, correctness verified on TIMED outputs
-            case_timings, sol_fracs = [], {}
+            case_timings, sol_fracs, baseline_impls = [], {}, {}
             for case in self.scored_cases + self.holdout_cases:
                 if over_budget():
                     return budget_fail(f"timing ({case.name})")
@@ -511,11 +555,18 @@ class PersistentWorker:
                 check_iters = sorted({0, self.timing_pairs // 2, self.timing_pairs - 1})
                 checks = {}
                 cand_fn = fns[case_sig[case.name]]
+                # GENERAL mode grades against the fastest honest implementation
+                # AT THIS SHAPE, chosen by measurement at boot; otherwise the
+                # single named production kernel.
+                gb = self._general_baselines.get(case.name)
+                base_fn = gb["fn"] if gb else self._baseline_fn
+                if gb:
+                    baseline_impls[case.name] = gb["impl"]
                 for i in range(self.timing_warmup + self.timing_pairs):
                     inputs = problem.make_inputs(fold_in(fold_in(k_time, i), hash_stable(case.name)), case)
                     block(inputs)
                     pair, _r, c_out = timing_mod.counterbalanced_pair(
-                        i, lambda: self._baseline_fn(*inputs), lambda: cand_fn(*inputs), perf, block
+                        i, lambda: base_fn(*inputs), lambda: cand_fn(*inputs), perf, block
                     )
                     if i >= self.timing_warmup:
                         it = i - self.timing_warmup
@@ -544,7 +595,9 @@ class PersistentWorker:
             return fail("worker", f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=6)}")
 
         result["warm_chip_s"] = self.perf() - t_chip
-        reward_frame = timing_mod.final_reward(case_timings, self.noise_floor or 0.0)
+        reward_frame = timing_mod.final_reward(
+            case_timings, self.noise_floor or 0.0, general=getattr(problem, "general_mode", False)
+        )
         try:
             mem = self.device.memory_stats()
             result["peak_hbm_bytes"] = int(mem.get("peak_bytes_in_use", 0))
@@ -555,6 +608,7 @@ class PersistentWorker:
             gate="all",
             **reward_frame,
             speed_of_light_fracs=sol_fracs,
+            baseline_impl_per_case=baseline_impls,
             latencies={
                 t.case: {"ref_median_s": t.ref_median_s, "cand_median_s": t.cand_median_s} for t in case_timings
             },

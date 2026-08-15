@@ -73,6 +73,7 @@ class RGLRUProblem(Problem):
     version = "1"
     has_bwd = False  # kernel-vs-kernel forward scan
     require_pallas = False  # associative_scan is explicitly legal
+    general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = True
 
     def shape_cases(self):
@@ -87,6 +88,11 @@ class RGLRUProblem(Problem):
             # T is deliberately not a multiple of any reasonable chunk length.
             ShapeCase("probe-4x2048x2560", {"b": 4, "t": 2048, "d": 2560}, probe=True),
             ShapeCase("probe-2x1024x2560", {"b": 2, "t": 1024, "d": 2560}, probe=True),
+            # GENERAL sweep: sequence length is the axis a scan kernel must
+            # block over; width varies too since lane tiling depends on d.
+            ShapeCase("probe-8x512x2560", {"b": 8, "t": 512, "d": 2560}, probe=True),
+            ShapeCase("probe-2x4096x2560", {"b": 2, "t": 4096, "d": 2560}, probe=True),
+            ShapeCase("probe-4x2048x1024", {"b": 4, "t": 2048, "d": 1024}, probe=True),
             ShapeCase(
                 "probe-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, holdout=True, probe=True
             ),
@@ -170,6 +176,12 @@ class RGLRUProblem(Problem):
         except Exception:
             type(self).baseline_impl = "lax-associative-scan-fallback"
             return rg_lru_associative(x, a, reset)
+
+    def baseline_candidates(self):
+        """DeepMind's Pallas LRU scan vs `lax.associative_scan`. The parallel
+        scan is an explicitly legal candidate strategy, so it is also a fair
+        denominator wherever it happens to be the faster of the two."""
+        return {"production": self.baseline, "lax-associative-scan": rg_lru_associative}
 
     def honest_variants(self):
         """rg_lru's band was never too tight for a faithful kernel (the fp32

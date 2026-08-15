@@ -129,6 +129,7 @@ class MegabloxGmmProblem(Problem):
     version = "1"
     has_bwd = False
     require_pallas = True
+    general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = False
 
     def shape_cases(self):
@@ -152,6 +153,12 @@ class MegabloxGmmProblem(Problem):
             # reasonable row tile.
             ShapeCase("probe-m4096-e4-uniform", {"m": 4096, "g": 4, "k": 4096, "n": 14336, "dist": "uniform"}, probe=True),
             ShapeCase("probe-m2048-e4-zipf", {"m": 2048, "g": 4, "k": 4096, "n": 14336, "dist": "zipf"}, probe=True),
+            # GENERAL sweep: tokens and expert COUNT both vary, and the 8x7b
+            # orientation (k=14336, n=4096 -- the transpose of ours) is the one
+            # tokamax actually benchmarks, where tuned megablox beats XLA 4.1x.
+            ShapeCase("probe-m8192-e8-uniform", {"m": 8192, "g": 8, "k": 4096, "n": 4096, "dist": "uniform"}, probe=True),
+            ShapeCase("probe-m8192-e8-8x7b", {"m": 8192, "g": 8, "k": 14336, "n": 4096, "dist": "zipf"}, probe=True),
+            ShapeCase("probe-m4096-e16-zipf", {"m": 4096, "g": 16, "k": 4096, "n": 4096, "dist": "zipf"}, probe=True),
             ShapeCase(
                 "probe-holdout-m3000-e4-zipf",
                 {"m": 3000, "g": 4, "k": 4096, "n": 14336, "dist": "zipf"},
@@ -211,6 +218,17 @@ class MegabloxGmmProblem(Problem):
         except Exception:
             type(self).baseline_impl = "lax-ragged-dot-fallback"
             return jax.lax.ragged_dot(lhs, rhs, group_sizes).astype(jnp.float32)
+
+    def baseline_candidates(self):
+        """Tuned Pallas megablox vs XLA `ragged_dot`. MEASURED (job 3691513):
+        megablox wins 4.1x at the 8x7b orientation but LOSES to XLA at some
+        probe shapes -- so the denominator has to be chosen per shape, or a
+        candidate gets credit for beating whichever one we guessed."""
+        return {
+            "production": self.baseline,
+            "xla-ragged-dot": lambda lhs, rhs, gs: jax.lax.ragged_dot(
+                lhs, rhs, gs, preferred_element_type=jnp.float32),
+        }
 
     def honest_variants(self):
         """Deliberately EMPTY, and measured rather than assumed (v5p-8, job

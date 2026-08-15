@@ -129,6 +129,7 @@ class RaggedPagedAttentionProblem(Problem):
     version = "1"
     has_bwd = False
     require_pallas = True
+    general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = True  # decode attention is HBM-bandwidth bound
     banned_call_names = ("jax.nn.dot_product_attention",)
     # Google's own kernel misses the reference_bf16-calibrated band at 1.05x
@@ -157,6 +158,11 @@ class RaggedPagedAttentionProblem(Problem):
             # its block size still fails to trace.
             ShapeCase("probe-b16-len1024", {**d, "batch": 16, "max_len": 1024, "num_pages": 16 * 16 + 8}, probe=True),
             ShapeCase("probe-b8-len512", {**d, "batch": 8, "max_len": 512, "num_pages": 8 * 8 + 8}, probe=True),
+            # GENERAL sweep: decode batch is THE axis for paged attention, and
+            # tiny batches are exactly where the Pallas kernel loses to XLA.
+            ShapeCase("probe-b64-len1024", {**d, "batch": 64, "max_len": 1024, "num_pages": 64 * 16 + 8}, probe=True),
+            ShapeCase("probe-b32-len2048", {**d, "batch": 32, "max_len": 2048, "num_pages": 32 * 32 + 8}, probe=True),
+            ShapeCase("probe-b128-len512", {**d, "batch": 128, "max_len": 512, "num_pages": 128 * 8 + 8}, probe=True),
             ShapeCase(
                 "probe-holdout-b17-len512",
                 {**d, "batch": 17, "max_len": 512, "num_pages": 17 * 8 + 8},
@@ -274,6 +280,13 @@ class RaggedPagedAttentionProblem(Problem):
         except Exception:
             type(self).baseline_impl = "xla-paged-decode-fallback (kernel raised)"
             return _xla_paged_decode(*inputs)
+
+    def baseline_candidates(self):
+        """jax's Pallas RPA vs the blocked XLA paged decode. MEASURED (job
+        3692058): at probe batch sizes the XLA path is 0.21ms against the
+        Pallas kernel's 0.51ms -- so grading against "the production kernel"
+        alone hands out credit for beating the slower of the two."""
+        return {"production": self.baseline, "xla-paged-decode": _xla_paged_decode}
 
     def honest_variants(self):
         """See ``_honest_faithful_bf16``: measured at 1.15x of the

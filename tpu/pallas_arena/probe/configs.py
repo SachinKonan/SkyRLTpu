@@ -26,12 +26,28 @@ from dataclasses import dataclass
 # sequence / batch axis, so one 32 GB judge can hold the fp32 REFERENCE. Every
 # holdout is deliberately non-block-divisible (n=3000, seq=2049, batch=17,
 # m=3000, t=1500) so the explicit-padding lesson survives the shrink.
+# GENERAL-mode case sets: a SWEEP, not two shapes plus an ignored holdout.
+# Every case here is scored (see Problem.general_mode -> timing.final_reward),
+# so a kernel cannot hardcode the shapes it was shown and still collect reward.
+# flce stays OURS_SPECIFIC (LoRA dx-only contract) and keeps its 2+1 set.
 TASK_CASES = {
-    "splash_attention": ["probe-h8-s4096", "probe-h4-s2048", "probe-holdout-h4-s2049"],
+    "splash_attention": [
+        "probe-h8-s4096", "probe-h4-s2048", "probe-h16-s1024", "probe-h2-s8192",
+        "probe-h8-s4096-d64", "probe-holdout-h4-s2049", "probe-holdout-h3-s1535-d64",
+    ],
     "flce": ["probe-4096x2880x151936", "probe-2048x2880x151936", "probe-holdout-3000x2880x151936"],
-    "ragged_paged_attention": ["probe-b16-len1024", "probe-b8-len512", "probe-holdout-b17-len512"],
-    "megablox_gmm": ["probe-m4096-e4-uniform", "probe-m2048-e4-zipf", "probe-holdout-m3000-e4-zipf"],
-    "rg_lru": ["probe-4x2048x2560", "probe-2x1024x2560", "probe-holdout-2x1500x2560"],
+    "ragged_paged_attention": [
+        "probe-b16-len1024", "probe-b8-len512", "probe-b64-len1024",
+        "probe-b32-len2048", "probe-b128-len512", "probe-holdout-b17-len512",
+    ],
+    "megablox_gmm": [
+        "probe-m4096-e4-uniform", "probe-m2048-e4-zipf", "probe-m8192-e8-uniform",
+        "probe-m8192-e8-8x7b", "probe-m4096-e16-zipf", "probe-holdout-m3000-e4-zipf",
+    ],
+    "rg_lru": [
+        "probe-4x2048x2560", "probe-2x1024x2560", "probe-8x512x2560",
+        "probe-2x4096x2560", "probe-4x2048x1024", "probe-holdout-2x1500x2560",
+    ],
 }
 TASKS = tuple(TASK_CASES)
 # The PROMPT LADDER rungs (prompt_ladder.py). Each is a strict superset of the

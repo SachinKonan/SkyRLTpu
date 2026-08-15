@@ -272,9 +272,33 @@ class Problem(abc.ABC):
             return tuple(_round(o) for o in out)
         return _round(out)
 
+    # GENERAL_OPTIMIZATION mode. Two consequences, both about making a reward
+    # above 1.0 MEAN something beyond the shape it was measured at:
+    #   * final_reward scores the holdout too (see timing.final_reward), so a
+    #     kernel cannot hardcode the shapes it was shown;
+    #   * the denominator is the FASTEST honest implementation at each shape
+    #     (see baseline_candidates), not one named kernel -- otherwise a win can
+    #     come from a mistuned denominator, which is exactly what megablox
+    #     (38x untuned) and splash (10x untuned) did to every historical score.
+    general_mode: bool = False
+
     @abc.abstractmethod
     def baseline(self, *inputs):
         """The production baseline-to-beat. May raise BaselineUnavailable."""
+
+    def baseline_candidates(self) -> dict[str, Callable]:
+        """Named honest implementations of this task, for GENERAL mode's
+        best-known denominator. The judge times every one of them at boot,
+        per shape, and grades against the FASTEST -- so "beat the baseline"
+        means "beat the best implementation we know of at this shape", not
+        "beat the one we happened to name".
+
+        Default: just ``baseline`` (the production kernel, whatever it binds).
+        Tasks with a competitive alternative override -- e.g. megablox at probe
+        shapes, where XLA `ragged_dot` is 38x faster than the Pallas kernel we
+        would otherwise have scored against.
+        """
+        return {"production": self.baseline}
 
     def baseline_available(self) -> tuple[bool, str]:
         try:
