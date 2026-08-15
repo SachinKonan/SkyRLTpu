@@ -7,6 +7,21 @@ Read `SPEC.md` first for the architecture contract. Where this file and the HF
 reference disagree, the reference wins. `E2E.md` is the JAX path's record; this
 file does not replace it and does not claim its results.
 
+## Status in one paragraph
+
+The torch model is written, registered, and **proven on CPU**: 3949/3949
+teacher-forced positions agree on argmax with the HF reference on the real 30B
+weights, all 471 parameters load from the real checkpoint, and vLLM's LoRA
+manager wraps **5 modules per layer including the attention gate** — which is
+the whole point, since the JAX path can wrap none. The JAX path is provably
+untouched: both dispatch branches still resolve to their own implementation and
+`MODEL_IMPL_TYPE=auto` still means `flax_nnx`. **It has never run on a TPU**:
+two QR hunts found no spot capacity (v5p quota exhausted project-wide, v6e-8
+available only in us-east5-b and cycling through preemption), so zero
+chip-hours were spent and the entire on-slice half — serving, greedy decode,
+the LoRA smoke, the weight-sync round trip — is outstanding. Section 8 is the
+list.
+
 ---
 
 ## 1. The blocker
@@ -347,46 +362,113 @@ against raw HF module names — where the attention gate *is* `self_attn.gate_pr
 shape. Adapters produced by this stack use `attn_gate_proj` and are fine.
 `make_lora_adapter.py` emits that layout.
 
-### 6.2 On-slice LoRA smoke
+### 6.2 On-slice LoRA smoke — **NOT RUN** (no slice; see section 7)
 
-<!-- LORA_SLICE -->
+`mg_lora_client.py` + `make_lora_adapter.py` are written, syntax-checked and
+wired into `vllm_impl_tpu.sh`. What they would assert:
 
-## 7. On-slice results
+1. `POST /v1/load_lora_adapter` returns 200 and the adapter appears in
+   `/v1/models`;
+2. greedy output **changes** on all three probe prompts — a server that accepts
+   the upload, lists the adapter and then emits the base model's tokens has
+   injected zero adapters, which is the failure mode that matters;
+3. unloading it **restores** the base ids exactly;
+4. a second, different adapter loads after the first is unloaded and produces
+   ids distinct from both the first adapter and the base — which is literally
+   an RL weight-sync step (`tpu/vllm_tpu_server.py:138-145`:
+   `unload_lora_adapter(previous)` then `load_lora_adapter(new)`).
 
-<!-- SLICE_RESULTS -->
+`make_lora_adapter.py` writes `lora_B` non-zero on purpose. A PEFT-standard
+zero-`B` init makes the adapted model numerically identical to the base, i.e.
+indistinguishable from an adapter that was silently dropped.
+
+## 7. On-slice results — **NOT LANDED: no spot capacity**
+
+Two QR hunts, **zero chip-hours** — neither slice ever reached ACTIVE, so no
+chips were ever attached.
+
+| attempt | shape | zones tried | outcome |
+|---|---|---|---|
+| job 3697955 | v5p-8 spot | a, c, a | **quota**: `TPUV5PPreemptiblePerProjectPerZoneForTPUAPI` exhausted, limit **1536 in us-east5-a** (fully consumed by the live llama-farm fleet and the other running jobs, none of which are ours to disturb) and limit **0 in us-east5-c**. `CREATE` refused; the QR never existed. Gave up after 472 s. |
+| job 3698113 | v6e-8 spot | b | `WAITING_FOR_RESOURCES` -> `PROVISIONING` in 132 s, then **cycled**: the TPU VM appears in `CREATING`, disappears, reappears. 45 min, never ACTIVE. Aborted at the deadline. |
+| job 3698315 | v6e-8 spot | a, c, b | `TPUV6EPreemptiblePerProjectPerZoneForTPUAPI` limit **0 in us-east5-c**, `CREATE` refused in **us-east5-a**; only **us-east5-b** accepts the request at all. Same cycle there. Land-or-abort at 2400 s. |
+
+v6e-8 was tried because v5p has no quota left at all; it would have served at
+**TP=8**, which is a *stronger* test of the 2-KV-head replication path
+(2 -> 8, replication factor 4) than the TP=4 the JAX path was proven on. That
+test is simply not available right now.
+
+Both teardowns verified, in all three zones:
+
+```
+FINAL[us-east5-a] muse QRs: ''   muse VMs: ''
+FINAL[us-east5-b] muse QRs: ''   muse VMs: ''
+FINAL[us-east5-c] muse QRs: ''   muse VMs: ''
+```
+
+Consequently **everything in section 8 that is marked on-slice-only is
+unproven**, including the greedy token-for-token comparison and the LoRA smoke.
+The CPU evidence is strong — 3949/3949 argmax on real weights, 20 LoRA-wrapped
+modules with the attention gate among them — but it is not the same claim.
+
+### 7.1 Two operational findings, paid for in wall clock
+
+**`PROVISIONING` is not a promise.** `followup_tpu.sh` learned that abandoning a
+`PROVISIONING` QR on the zone deadline throws away a granted slice, and this
+script inherited the fix. But the v6e-8 spot pool in us-east5-b sits in
+`PROVISIONING` *indefinitely* while its VM is created and preempted in a loop —
+so a wait loop that treats `PROVISIONING` as "never abandon" never exits, and
+the only thing that ends the run is slurm's pre-timeout signal hours later. The
+loop now has a second test: `LAND_SEC` is a hard land-or-abort deadline and it
+applies to `PROVISIONING` too.
+
+**`scancel --signal=TERM <jobid>` does not signal the batch shell.** It goes to
+the job steps, so the script's `trap ... TERM` never fires and the QR is left
+behind. `scancel --batch --signal=TERM <jobid>` is the one that reaches it. The
+sbatch's own `#SBATCH --signal=B:TERM@600` is already correct (the `B:` prefix
+targets the batch shell); it is the manual abort that needs `--batch`.
 
 ## 8. What remains unproven
 
-Ranked by how much it would cost to be wrong.
+**Everything that needs a TPU.** No slice landed, so the entire on-slice half
+of the plan is outstanding. Ranked by how much it would cost to be wrong:
 
-1. **KV-head replication at TP=4 on real weights.** 2 KV heads under TP=4 goes
-   through `VllmQKVParallelLinear`'s `repeat_interleave` inflation. Nothing on
-   CPU exercises it (torch TP=1, no mesh), and tiny random weights could not
-   catch a `tile`-vs-`repeat_interleave` swap even if they did — this is
-   exactly the trap the JAX port hit. Only the on-slice greedy comparison in
-   section 7 tests it, and only at TP=4.
-2. **TP != 4.** Untested, as on the JAX side. The 2x TP=2 split that E2E.md
-   section 7 recommends for throughput is untested on this model.
-3. **Concurrency.** The JAX path's most expensive lesson (E2E.md section 5.6)
-   is that single-stream boundary testing cannot catch paged-KV bugs: five
-   prompts fired *concurrently* broke one sequence that was byte-exact at batch
-   1. The torch path uses the same uniform KV spec and the same kernel, so
-   there is no specific reason to expect a difference, but "no reason to
-   expect" is not a measurement.
-4. **Context past what was decoded here.** The JAX path serves 32768. Nothing
-   here probes the torch path past the lengths in section 7.
-5. **LoRA under load, and LoRA correctness.** The smoke proves an adapter
-   attaches, changes the output, swaps, and detaches. It does not prove the
-   numerics of the adapted forward against a reference, nor multi-adapter
-   serving (`--max-loras 1`), nor `attn_gate_proj` adapters specifically
-   producing the *right* delta.
-6. **Throughput and memory relative to the JAX path.** Not measured. The torch
-   path runs the same kernels through torchax but with vLLM's linear layers
-   and an extra `attn_gate_proj` matmul that the JAX model also has; whether it
-   costs tokens/s is an open question, and it matters because the JAX path
-   remains the default.
-7. **Quantization, multi-host, speculative decoding, vision.** Out of scope,
-   as on the JAX side.
+1. **It has never run on a TPU.** Not once. The model has never been through
+   `vllm serve`, torchax has never traced it, the Pallas ragged-paged-attention
+   kernel has never seen its q/k/v, and no weight has ever been sharded onto a
+   mesh. Everything below is downstream of this.
+2. **KV-head replication when TP > num_key_value_heads.** 2 KV heads under
+   TP=4 (or 8) goes through `VllmQKVParallelLinear`'s `repeat_interleave`
+   inflation, and the model reads its split sizes back off the layer to match.
+   Nothing on CPU exercises it — torch TP is 1 and there is no mesh — and tiny
+   random weights could not catch a `tile`-for-`repeat_interleave` swap even if
+   they did. This is precisely the trap the JAX port hit.
+3. **The attention gate under TP.** The claim that a plain
+   `ColumnParallelLinear` shards identically to the attention output is read
+   off `quantization/configs.py` and the sharding-axis names, not measured. If
+   it is wrong, the gate multiplies the wrong heads — and would still produce
+   fluent text.
+4. **Greedy decode vs the recorded E2E ids.** The CPU gate proves the *logits*
+   match HF at 3949/3949 teacher-forced positions. It does not prove the served
+   decode loop, the KV cache, or block-table bookkeeping.
+5. **LoRA end to end.** The adapter *count* is proven (section 6.1) and it is
+   non-zero, which is the assertion that matters most. But an adapter has never
+   been uploaded to a running engine, so `--enable-lora` has never actually
+   booted, and no RL weight-sync round trip has happened.
+6. **Concurrency.** The JAX path's most expensive lesson (E2E.md section 5.6):
+   single-stream testing cannot catch paged-KV bugs — five prompts fired
+   *concurrently* broke one sequence that was byte-exact at batch 1. The torch
+   path uses the same uniform KV spec and the same kernel, so there is no
+   specific reason to expect a difference, but that is not a measurement.
+7. **Context length, throughput, memory** relative to the JAX path. Unmeasured.
+   The JAX path serves 32768 and remains the default for good reason.
+8. **Quantization, multi-host, speculative decoding, vision.** Out of scope, as
+   on the JAX side.
+
+The honest summary: **the arithmetic is proven and the LoRA plumbing is proven;
+the serving integration is not.** Re-run `vllm_impl_tpu.sbatch` when v5p or v6e
+spot capacity returns — it is written, and the two operational fixes in section
+7.1 are already in it.
 
 ## Reproducing
 

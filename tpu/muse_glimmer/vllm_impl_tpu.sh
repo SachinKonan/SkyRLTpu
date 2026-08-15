@@ -186,6 +186,17 @@ for zone_try in $ZONES; do
     # PROVISIONING means capacity is already committed; abandoning it throws
     # away a slice that has been granted (this cost ~9 minutes on the TP run).
     # Only a still-queued QR may be abandoned on the zone deadline.
+    #
+    # But PROVISIONING is NOT a guarantee: a contended v6e-8 spot pool has been
+    # observed cycling (VM reaches CREATING, disappears, is retried) while the
+    # QR reports PROVISIONING indefinitely. Without the second test below this
+    # loop never exits, and the only thing that ends the run is slurm's
+    # pre-timeout signal hours later. LAND_SEC is the hard land-or-abort
+    # deadline and applies to PROVISIONING too.
+    if [ "$el" -ge "$LAND_SEC" ]; then
+      log "land-or-abort deadline ${LAND_SEC}s reached with state=${st} -- giving up on ${ZONE}"
+      break
+    fi
     if [ "$el" -ge "$zone_deadline" ] && [ "$st" != PROVISIONING ]; then
       log "no capacity in ${ZONE} after ${el}s -- deleting and trying the next zone"
       break

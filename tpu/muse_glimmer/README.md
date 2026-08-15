@@ -9,7 +9,8 @@ Start here, then follow the document that matches what you are doing.
 | document | what it holds |
 |---|---|
 | [`SPEC.md`](SPEC.md) | The contract: exact forward pass and 12 parity traps. **Corrected three times — if code and spec disagree, the HF reference wins.** |
-| [`E2E.md`](E2E.md) | Real-weight results: parity, greedy decode, long context, sampling, LoRA, TP head-to-head. |
+| [`E2E.md`](E2E.md) | Real-weight results for the **JAX** path: parity, greedy decode, long context, sampling, LoRA, TP head-to-head. |
+| [`VLLM-IMPL.md`](VLLM-IMPL.md) | The **torch/vLLM** model, which exists so `--enable-lora` works. CPU-proven (3949/3949 argmax, 5 LoRA modules per layer); never yet run on a TPU. |
 | [`MAXTEXT.md`](MAXTEXT.md) | The training half: fork, converter, launch spec. |
 | [`REASONING-STRENGTH.md`](REASONING-STRENGTH.md) | `high` vs `xhigh`, 960 rollouts across three problems. |
 
@@ -39,6 +40,19 @@ muse_glimmer / qwen3 / gemma4 / gpt_oss families. 57 tests. Lives in the `discov
 submodule (`ttt_discover/tinker_utils/`).
 
 **Not proven:** vision, quantization, TP ≠ 4 / multi-host, sustained serving.
+
+## Two implementations, and which one to use
+
+| | JAX (`flax_nnx`) | torch (`vllm`) |
+|---|---|---|
+| file | `models/jax/muse_glimmer.py` | `models/vllm/muse_glimmer.py` |
+| selected by | `MODEL_IMPL_TYPE=flax_nnx`, and `auto` | `MODEL_IMPL_TYPE=vllm` only |
+| serving | **proven end to end** (this file) | CPU-proven; **never run on a TPU** |
+| `--enable-lora` | **impossible** — `get_flax_model` returns `lora_manager=None` | 5 LoRA modules per layer, gate included |
+
+`auto` still resolves to `flax_nnx`, so the default is unchanged. Use the torch
+model when the RL loop needs to upload adapters; see
+[`VLLM-IMPL.md`](VLLM-IMPL.md), including what is still unproven about it.
 
 ## Serving configuration: prefer 2×TP=2 for throughput
 
