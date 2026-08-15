@@ -33,7 +33,7 @@ from dataclasses import dataclass
 TASK_CASES = {
     "splash_attention": [
         "probe-h8-s4096", "probe-h4-s2048", "probe-h16-s1024", "probe-h2-s8192",
-        "probe-h8-s4096-d64", "probe-holdout-h4-s2049", "probe-holdout-h3-s1535-d64",
+        "probe-h8-s4096-d64", "probe-holdout-h4-s2049", "probe-holdout-h4-s1535-d64",
     ],
     "flce": ["probe-4096x2880x151936", "probe-2048x2880x151936", "probe-holdout-3000x2880x151936"],
     "ragged_paged_attention": [

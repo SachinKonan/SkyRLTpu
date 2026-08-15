@@ -441,6 +441,7 @@ def main() -> None:
         faithful, sloppy, extra = VARIANTS[name]
 
         for case in cases:
+            print(f"  [band] {case.name} ...", flush=True)
             try:
                 row = band_check(problem, case, faithful, sloppy, extra)
                 row["task"] = name
