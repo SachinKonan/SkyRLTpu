@@ -163,6 +163,11 @@ class RaggedPagedAttentionProblem(Problem):
             ShapeCase("probe-b64-len1024", {**d, "batch": 64, "max_len": 1024, "num_pages": 64 * 16 + 8}, probe=True),
             ShapeCase("probe-b32-len2048", {**d, "batch": 32, "max_len": 2048, "num_pages": 32 * 32 + 8}, probe=True),
             ShapeCase("probe-b128-len512", {**d, "batch": 128, "max_len": 512, "num_pages": 128 * 8 + 8}, probe=True),
+            # TENSOR PARALLEL (v6e-8): KV heads sharded 8 ways -- with
+            # KV_HEADS=8 that is exactly one KV head (and its 4 query
+            # heads) per device, the standard serving split.
+            ShapeCase("tp8-b64-len1024", {**d, "batch": 64, "max_len": 1024, "num_pages": 64 * 16 + 8}, probe=True, tp=8),
+            ShapeCase("tp8-holdout-b17-len512", {**d, "batch": 17, "max_len": 512, "num_pages": 17 * 8 + 8}, probe=True, tp=8, holdout=True),
             ShapeCase(
                 "probe-holdout-b17-len512",
                 {**d, "batch": 17, "max_len": 512, "num_pages": 17 * 8 + 8},
@@ -287,6 +292,16 @@ class RaggedPagedAttentionProblem(Problem):
         Pallas kernel's 0.51ms -- so grading against "the production kernel"
         alone hands out credit for beating the slower of the two."""
         return {"production": self.baseline, "xla-paged-decode": _xla_paged_decode}
+
+    def tp_specs(self):
+        """Shard KV HEADS, with the query heads that map to them -- how a
+        paged-attention decode is sharded in a real serving stack. Page tables
+        and sequence lengths replicate; each device owns whole KV heads, so
+        there is no cross-device gather."""
+        from jax.sharding import PartitionSpec as P
+
+        return ((P(None, "tp", None), P(None, None, "tp", None), P(None, None, "tp", None), P(), P()),
+                P(None, "tp", None))
 
     def honest_variants(self):
         """See ``_honest_faithful_bf16``: measured at 1.15x of the

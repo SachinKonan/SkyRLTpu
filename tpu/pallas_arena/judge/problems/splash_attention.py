@@ -258,6 +258,11 @@ class SplashAttentionProblem(Problem):
             # are still swept via s4096 vs s1024 at fixed token budget; testing
             # 8192 needs a memory-lean reference, not a bigger sweep.
             ShapeCase("probe-h8-s4096-d64", {"heads": 8, "seq": 4096, "d": 64}, probe=True),
+            # TENSOR PARALLEL (v6e-8): heads sharded 8 ways, which is how
+            # splash is sharded in production (`head_shards`). Per shard the
+            # kernel sees heads=4, i.e. an ordinary attention problem.
+            ShapeCase("tp8-h32-s4096", {"heads": 32, "seq": 4096, "d": 128}, probe=True, tp=8),
+            ShapeCase("tp8-holdout-h32-s2049", {"heads": 32, "seq": 2049, "d": 128}, probe=True, tp=8, holdout=True),
             ShapeCase("probe-holdout-h4-s2049", {"heads": 4, "seq": 2049, "d": 128}, holdout=True, probe=True),
             # DROPPED: a non-divisible sequence AT d=64 segfaults the TPU
             # runtime (rc=139, jobs 3697756/3697854) -- and only in
@@ -340,6 +345,14 @@ class SplashAttentionProblem(Problem):
         smaller sweep shapes the XLA path is genuinely competitive, and GENERAL
         mode must grade against whichever is actually faster there."""
         return {"production": self.baseline, "xla-blocked": _xla_masked_attention}
+
+    def tp_specs(self):
+        """Shard HEADS -- exactly what splash's own `head_shards` argument
+        exists for. Each device owns a head slice, attends within it, and needs
+        no collective; segment_ids is replicated because every head reads it."""
+        from jax.sharding import PartitionSpec as P
+
+        return ((P("tp", None, None), P("tp", None, None), P("tp", None, None), P()), P("tp", None, None))
 
     def honest_variants(self):
         """Calibrate against what an honest bf16 kernel actually computes, not

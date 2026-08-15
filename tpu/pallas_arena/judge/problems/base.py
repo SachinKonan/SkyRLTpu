@@ -38,6 +38,20 @@ class ShapeCase:
     dims: dict[str, Any]
     holdout: bool = False  # logged-unscored (declared-set overfit detector)
     smoke: bool = False  # tiny CPU-battery case, never scored in prod
+    # TENSOR-PARALLEL case: the DECLARED mesh width (0 = not a TP case).
+    # Graded on a real device mesh under shard_map with the elected baseline
+    # sharded identically -- a kernel that only works unsharded on one chip is
+    # not a candidate for upstreaming, so sharded behaviour belongs IN the
+    # reward rather than after it.
+    #
+    # DECLARED, not discovered, and that is load-bearing: build_signatures is
+    # module-level precisely so the CPU pre-gate exports the exact signature
+    # set the judge will demand. The pre-gate sees 1 device and the judge sees
+    # 8, so a width derived from available devices would make them disagree and
+    # the pre-gate would stop being a pre-gate. A judge with fewer devices than
+    # the declared width must SKIP the case and say so, never silently grade it
+    # at a different width.
+    tp: int = 0
     # PROBE cases exist so a task can be graded end-to-end on ONE chip. The
     # production shape sets are deliberately full-size, and for two tasks the
     # fp32 REFERENCE cannot run there at all on a 32 GB judge: splash's
@@ -286,6 +300,20 @@ class Problem(abc.ABC):
     def baseline(self, *inputs):
         """The production baseline-to-beat. May raise BaselineUnavailable."""
 
+    def tp_specs(self):
+        """PartitionSpecs for tensor-parallel grading: (in_specs, out_spec).
+
+        Returns None when the task declares no TP axis. Each task shards along
+        the axis it is ACTUALLY sharded on in production, chosen so no
+        collective is needed inside the kernel -- the candidate sees a
+        per-device shard and writes an ordinary kernel for it, which is exactly
+        how splash (`head_shards`) and megablox (`group_offset`) are used for
+        real. What TP grading then measures is whether the kernel still works
+        at per-shard shapes and whether it SCALES, not whether the model can
+        write collectives.
+        """
+        return None
+
     def baseline_candidates(self) -> dict[str, Callable]:
         """Named honest implementations of this task, for GENERAL mode's
         best-known denominator. The judge times every one of them at boot,
@@ -381,6 +409,53 @@ class Problem(abc.ABC):
             lambda k: self.make_inputs(k, case),
             jax.ShapeDtypeStruct((2,), np.dtype("uint32")),
         )
+
+    def tp_declared_width(self, case: ShapeCase) -> int:
+        """The case's declared mesh width, validated against its own shapes.
+
+        Returns 0 when the case is not TP or the task declares no TP axis.
+        Raises if a declared width does not divide every sharded axis -- that
+        is a task-definition bug and must fail loudly at import/boot rather
+        than as an IndivisibleError in the middle of a grade (the failure the
+        8-device CPU check surfaced for splash heads=2 and RPA kv_heads=4)."""
+        w = int(getattr(case, "tp", 0) or 0)
+        specs = self.tp_specs()
+        if w < 2 or specs is None:
+            return 0
+        in_specs, _ = specs
+        for a, spec in zip(self.abstract_inputs(case), in_specs):
+            for ax, part in enumerate(spec):
+                if part == "tp" and a.shape[ax] % w:
+                    raise ValueError(
+                        f"{self.name}/{case.name}: declared tp width {w} does not divide "
+                        f"axis {ax} of size {a.shape[ax]}"
+                    )
+        return w
+
+    def abstract_inputs_tp(self, case: ShapeCase, width: int):
+        """Per-SHARD ShapeDtypeStructs: what the candidate is exported at for a
+        TP case.
+
+        Under shard_map the kernel is handed one device's slice, so its input
+        signature is the full shape with each sharded axis divided by the mesh
+        width -- which is exactly the shape a production caller's kernel sees
+        inside its own shard_map. Exporting at the full shape would produce an
+        artifact that shard_map can never call.
+        """
+        import jax
+
+        specs = self.tp_specs()
+        if specs is None or int(width or 0) < 2:
+            return self.abstract_inputs(case)
+        in_specs, _ = specs
+        out = []
+        for a, spec in zip(self.abstract_inputs(case), in_specs):
+            shape = list(a.shape)
+            for ax, part in enumerate(spec):
+                if part == "tp":
+                    shape[ax] = shape[ax] // width
+            out.append(jax.ShapeDtypeStruct(tuple(shape), a.dtype))
+        return tuple(out)
 
     def scored_cases(self, smoke: bool = False) -> list[ShapeCase]:
         return [c for c in self.shape_cases() if not c.holdout and c.smoke == smoke and not c.probe]

@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+import numpy as np
+
 # Peak HBM bandwidth per chip generation, bytes/s (QuACK-style yardstick for
 # memory-bound tasks; DESIGN.md "Reward frame").
 SPEED_OF_LIGHT_BYTES_PER_S = {
@@ -168,6 +170,62 @@ def counterbalanced_pair_device(i, ref_fn, cand_fn, args, dev_timer):
     if not r or not c or r <= 0 or c <= 0:
         return None
     return (r, c)
+
+
+def tp_width(shard_dim: int, n_devices: int) -> int:
+    """Largest power-of-two mesh width that DIVIDES the sharded axis.
+
+    The TP axis must divide by the device count or device_put raises
+    IndivisibleError -- measured on the 8-simulated-device CPU check, where
+    splash's heads=2 and RPA's kv_heads=4 cases both failed against a width-8
+    mesh. Sizing the mesh to the case (rather than assuming all 8 chips) keeps
+    every shape gradeable and reports the width actually used, which is the
+    honest thing to report anyway: "4-way sharded" is a different claim from
+    "8-way sharded"."""
+    w = min(n_devices, shard_dim)
+    while w > 1 and (shard_dim % w or n_devices % w):
+        w -= 1
+    return max(1, w)
+
+
+def make_mesh(n_devices: int | None = None):
+    """Single-axis 'tp' mesh over the judge's local devices, or None if there
+    is only one. v6e-8 is a SINGLE host (8 chips, 1 TensorCore each), so this
+    never touches the multi-host rendezvous that requires every host to join."""
+    import jax
+    from jax.sharding import Mesh
+
+    devs = jax.local_devices()
+    if n_devices:
+        devs = devs[: int(n_devices)]
+    if len(devs) < 2:
+        return None
+    return Mesh(devs, ("tp",))
+
+
+def shard_mapped(fn, mesh, in_specs, out_spec):
+    """Wrap ``fn`` so each device runs it on its own shard.
+
+    shard_map rather than plain jit+shardings on purpose: the candidate wrote a
+    Pallas kernel, and under shard_map it receives a per-device shard and runs
+    unchanged -- which is how splash (`head_shards`) and megablox
+    (`group_offset`) are used in production. GSPMD auto-partitioning of a
+    hand-written pallas_call is not what any real caller does, so grading it
+    that way would measure the wrong thing.
+    """
+    from jax.experimental.shard_map import shard_map
+
+    return shard_map(fn, mesh=mesh, in_specs=in_specs, out_specs=out_spec, check_rep=False)
+
+
+def shard_inputs(inputs, mesh, in_specs):
+    """Place inputs on the mesh with the task's declared specs."""
+    import jax
+    from jax.sharding import NamedSharding
+
+    return tuple(
+        jax.device_put(x, NamedSharding(mesh, spec)) for x, spec in zip(inputs, in_specs)
+    )
 
 
 def counterbalanced_pair(i, run_ref, run_cand, perf, block):

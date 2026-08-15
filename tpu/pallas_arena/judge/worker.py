@@ -97,7 +97,13 @@ def build_signatures(problem, scored_cases, holdout_cases, adv_cases):
 
     case_sig = {}
     for case in list(scored_cases) + list(holdout_cases):
-        case_sig[case.name] = sig_of(problem.abstract_inputs(case), "fwd", case.name)
+        # A TP case exports at PER-SHARD shapes: under shard_map the kernel is
+        # handed one device's slice, so an artifact exported at the full shape
+        # could never be called. The width is DECLARED on the case, so the CPU
+        # pre-gate (1 device) and the judge (8) derive identical signatures.
+        w = problem.tp_declared_width(case)
+        abstract = problem.abstract_inputs_tp(case, w) if w else problem.abstract_inputs(case)
+        case_sig[case.name] = sig_of(abstract, "fwd", case.name)
     adv_sig = {}
     for adv in adv_cases:
         abstract = jax.eval_shape(adv.make_inputs, jax.ShapeDtypeStruct((2,), "uint32"))
@@ -260,6 +266,16 @@ class PersistentWorker:
                 import gc
 
                 gc.collect()
+            # Every LOSING candidate left a compiled executable in jax's global
+            # cache -- 2 candidates x N shapes of dead programs held on a 32 GB
+            # chip. Boot segfaults right after this loop with a 6-shape sweep
+            # (rc=139, jobs 3699910/3699504), so drop them before calibration
+            # warm allocates its fixtures. The winners recompile on first use,
+            # which is off the candidate clock.
+            self.jax.clear_caches()
+            import gc as _gc
+
+            _gc.collect()
             self.general_baseline_s = self.perf() - t_bl
 
         # Warm the CALIBRATION path too, not just the baseline. Every

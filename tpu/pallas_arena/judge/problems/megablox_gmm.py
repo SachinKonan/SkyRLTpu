@@ -159,6 +159,10 @@ class MegabloxGmmProblem(Problem):
             ShapeCase("probe-m8192-e8-uniform", {"m": 8192, "g": 8, "k": 4096, "n": 4096, "dist": "uniform"}, probe=True),
             ShapeCase("probe-m8192-e8-8x7b", {"m": 8192, "g": 8, "k": 14336, "n": 4096, "dist": "zipf"}, probe=True),
             ShapeCase("probe-m4096-e16-zipf", {"m": 4096, "g": 16, "k": 4096, "n": 4096, "dist": "zipf"}, probe=True),
+            # TENSOR PARALLEL (v6e-8): the output feature axis n sharded 8
+            # ways -- the classic MoE up-projection split. Per shard n=512.
+            ShapeCase("tp8-m4096-e8-uniform", {"m": 4096, "g": 8, "k": 4096, "n": 4096, "dist": "uniform"}, probe=True, tp=8),
+            ShapeCase("tp8-holdout-m3000-e8-zipf", {"m": 3000, "g": 8, "k": 4096, "n": 4096, "dist": "zipf"}, probe=True, tp=8, holdout=True),
             ShapeCase(
                 "probe-holdout-m3000-e4-zipf",
                 {"m": 3000, "g": 4, "k": 4096, "n": 14336, "dist": "zipf"},
@@ -229,6 +233,15 @@ class MegabloxGmmProblem(Problem):
             "xla-ragged-dot": lambda lhs, rhs, gs: jax.lax.ragged_dot(
                 lhs, rhs, gs, preferred_element_type=jnp.float32),
         }
+
+    def tp_specs(self):
+        """Shard the OUTPUT feature axis n -- the classic MoE up-projection
+        split. rhs [g, k, n] is sharded on n, lhs is replicated, out [m, n] is
+        sharded on n, and no collective is needed. group_sizes is replicated
+        because every shard sees the same row grouping."""
+        from jax.sharding import PartitionSpec as P
+
+        return ((P(), P(None, None, "tp"), P()), P(None, "tp"))
 
     def honest_variants(self):
         """Deliberately EMPTY, and measured rather than assumed (v5p-8, job

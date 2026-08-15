@@ -38,29 +38,47 @@ def main() -> None:
     ap.add_argument("--codes", required=True, help="json {task: {name: source}}")
     ap.add_argument("--out", required=True)
     ap.add_argument("--timing-pairs", type=int, default=20)
+    ap.add_argument("--cases-json", default=None,
+                    help="JSON {task: [case,...]} overriding the swept sets. The full sweep "
+                         "makes boot exceed a 32 GB chip; a smaller set still exercises the NEW "
+                         "reward (holdout scored, denominator elected per shape, device timing).")
     args = ap.parse_args()
 
     from pallas_arena.judge.worker import PersistentWorker
 
     codes = json.load(open(args.codes))
+    cases_by_task = dict(CASES)
+    if args.cases_json:
+        cases_by_task.update(json.loads(args.cases_json))
     report = {"tasks": {}}
     for task, entries in codes.items():
-        if task not in CASES:
+        if task not in cases_by_task:
             report["tasks"][task] = {"error": f"no case set for {task}"}
             continue
         print(f"\n{'=' * 70}\n{task}: boot ({len(entries)} winners)", flush=True)
         w = PersistentWorker(
             task,
-            cases=list(CASES[task]),
+            cases=list(cases_by_task[task]),
             use_adversarial=False,  # match the original run's conditions
             timing_pairs=args.timing_pairs,
             worker_id="regrade",
         )
         boot = w.boot()
+        # GOLDEN TRUTH: what the reference implementations themselves achieve
+        # at every graded shape -- the elected winner AND every candidate's
+        # time. This is the number a candidate is measured against, so it
+        # belongs in the report rather than only in the boot log.
+        golden = {
+            case: {"elected": g["impl"], "elected_s": g["median_s"], "all_s": g["all_s"]}
+            for case, g in getattr(w, "_general_baselines", {}).items()
+        }
         trow = {
             "boot_ok": boot.get("ok"),
             "baseline_impl": getattr(type(w.problem), "baseline_impl", "?"),
             "noise_floor": boot.get("noise_floor"),
+            "noise_floors": boot.get("noise_floors"),
+            "device_timing": boot.get("device_timing"),
+            "golden_truth": golden,
             "results": {},
         }
         print(f"  baseline_impl={trow['baseline_impl']} noise_floor={trow['noise_floor']}", flush=True)

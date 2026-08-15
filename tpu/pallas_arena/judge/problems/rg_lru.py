@@ -93,6 +93,11 @@ class RGLRUProblem(Problem):
             ShapeCase("probe-8x512x2560", {"b": 8, "t": 512, "d": 2560}, probe=True),
             ShapeCase("probe-2x4096x2560", {"b": 2, "t": 4096, "d": 2560}, probe=True),
             ShapeCase("probe-4x2048x1024", {"b": 4, "t": 2048, "d": 1024}, probe=True),
+            # TENSOR PARALLEL (v6e-8): the feature axis d sharded 8 ways.
+            # The recurrence is independent per feature, so each device
+            # runs a complete scan over d/8 with no collective.
+            ShapeCase("tp8-4x2048x2560", {"b": 4, "t": 2048, "d": 2560}, probe=True, tp=8),
+            ShapeCase("tp8-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, probe=True, tp=8, holdout=True),
             ShapeCase(
                 "probe-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, holdout=True, probe=True
             ),
@@ -182,6 +187,14 @@ class RGLRUProblem(Problem):
         scan is an explicitly legal candidate strategy, so it is also a fair
         denominator wherever it happens to be the faster of the two."""
         return {"production": self.baseline, "lax-associative-scan": rg_lru_associative}
+
+    def tp_specs(self):
+        """Shard the FEATURE axis d. The recurrence is independent per feature,
+        so each device runs a complete scan over its own slice with no
+        collective; `reset` is replicated because it is per (batch, time)."""
+        from jax.sharding import PartitionSpec as P
+
+        return ((P(None, None, "tp"), P(None, None, "tp"), P()), P(None, None, "tp"))
 
     def honest_variants(self):
         """rg_lru's band was never too tight for a faithful kernel (the fp32
