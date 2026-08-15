@@ -103,6 +103,10 @@ GEMMA_EXTRA_PIP=${GEMMA_EXTRA_PIP:-transformers==5.14.0}
 # strips only the outer whitespace of a spec, so `a : b` becomes the problem
 # name `'a '` and a KeyError that kills the whole worker before any problem
 # boots. Mirrors probe/configs.py:TASK_CASES exactly.
+# SPOT_FLAG: "--spot" (default) or "" for on-demand. The v5p-8 serve slice is
+# the contended one; on-demand lands against quota headroom instead of waiting
+# for a physically idle machine, and cannot be preempted mid-run.
+SPOT_FLAG=${SPOT_FLAG---spot}
 PROBLEM_ARG=${PROBLEM_ARG:-'splash_attention:probe-h8-s4096,probe-h4-s2048,probe-holdout-h4-s2049;ragged_paged_attention:probe-b16-len1024,probe-b8-len512,probe-holdout-b17-len512;megablox_gmm:probe-m4096-e4-uniform,probe-m2048-e4-zipf,probe-holdout-m3000-e4-zipf;rg_lru:probe-4x2048x2560,probe-2x1024x2560,probe-holdout-2x1500x2560'}
 
 repo_root=/n/fs/vision-mix/sk7524/SkyRLTpu
@@ -264,10 +268,10 @@ curl -sf "http://127.0.0.1:${QUEUE_PORT}/status" >/dev/null || { echo "queue fai
 echo "=== creating 2 spot QRs $(date +%H:%M:%S) ==="
 create_pids=()
 ( timeout 600 gcloud compute tpus queued-resources create "$SERVE_QR" --node-id="$SERVE_QR" \
-    --accelerator-type="$SERVE_ACCEL" --runtime-version="$SERVE_RUNTIME" --spot \
+    --accelerator-type="$SERVE_ACCEL" --runtime-version="$SERVE_RUNTIME" $SPOT_FLAG \
     --zone="$SERVE_ZONE" --project="$PROJECT" 2>&1 | tail -1 ) & create_pids+=($!)
 ( timeout 600 gcloud compute tpus queued-resources create "$JUDGE_QR" --node-id="$JUDGE_QR" \
-    --accelerator-type="$JUDGE_ACCEL" --runtime-version="$JUDGE_RUNTIME" --spot \
+    --accelerator-type="$JUDGE_ACCEL" --runtime-version="$JUDGE_RUNTIME" $SPOT_FLAG \
     --zone="$JUDGE_ZONE" --project="$PROJECT" 2>&1 | tail -1 ) & create_pids+=($!)
 wait "${create_pids[@]}" 2>/dev/null
 t_first_qr=$(date +%s)

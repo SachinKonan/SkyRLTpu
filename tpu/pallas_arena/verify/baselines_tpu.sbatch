@@ -59,6 +59,10 @@ ACCEL=${ACCEL:-v5p-8}
 RUNTIME=${RUNTIME:-v2-alpha-tpuv5}
 LAND_DEADLINE_S=${LAND_DEADLINE_S:-2400}
 HARD_CAP_S=${HARD_CAP_S:-7200}
+# SPOT_FLAG: "--spot" (default, cheap, preemptible) or "" for on-demand.
+# Spot is granted only from physically idle machines REGARDLESS of quota, which
+# is why jobs kept dying seconds after landing while quota had headroom.
+SPOT_FLAG=${SPOT_FLAG---spot}
 TASKS=${TASKS:-splash_attention,megablox_gmm,ragged_paged_attention,flce,rg_lru}
 TAG=arenabase
 
@@ -93,8 +97,14 @@ cleanup() {
   wait "$del_pid" 2>/dev/null
 
   for z in "$ZONE" "$OTHER_ZONE"; do
+    # SCOPED TO THIS JOB'S OWN QR, deliberately. A prefix sweep here force
+    # deletes any sibling's QR too: job 3699692's cleanup killed job 3699690's
+    # QR while it was mid-provision ("SURVIVORS ... 3699690 -- deleting again"),
+    # so racing concurrent attempts destroyed the one that had landed. Orphans
+    # from jobs that died without cleanup need a separate sweep, not one that
+    # every concurrent job runs against every other.
     left=$(timeout 300 gcloud compute tpus queued-resources list --zone="$z" --project="$PROJECT" \
-             --format='value(name)' 2>/dev/null | grep -E "${TAG}" || true)
+             --format='value(name)' 2>/dev/null | grep -E "^${QR}$" || true)
     if [ -n "$left" ]; then
       echo "[cleanup] SURVIVORS in $z: $left -- deleting again"
       for name in $left; do
@@ -105,19 +115,19 @@ cleanup() {
       timeout 300 gcloud compute tpus queued-resources list --zone="$z" --project="$PROJECT" \
         --format='value(name,state.state)' 2>/dev/null | grep -E "${TAG}" \
         && echo "[cleanup] QRs STILL PRESENT in $z -- MANUAL ACTION NEEDED" \
-        || echo "[cleanup] verified empty of ${TAG} QRs in $z"
+        || echo "[cleanup] verified ${QR} gone from $z"
     else
-      echo "[cleanup] verified empty of ${TAG} QRs in $z"
+      echo "[cleanup] verified ${QR} gone from $z"
     fi
     nodes=$(timeout 300 gcloud compute tpus tpu-vm list --zone="$z" --project="$PROJECT" \
-              --format='value(name)' 2>/dev/null | grep -E "${TAG}" || true)
+              --format='value(name)' 2>/dev/null | grep -E "^${QR}$" || true)
     if [ -n "$nodes" ]; then
       echo "[cleanup] ORPHAN NODES in $z: $nodes -- deleting"
       for n in $nodes; do
         timeout 600 gcloud compute tpus tpu-vm delete "$n" --zone="$z" --project="$PROJECT" --quiet >/dev/null 2>&1
       done
     else
-      echo "[cleanup] verified empty of ${TAG} nodes in $z"
+      echo "[cleanup] verified ${QR} node gone from $z"
     fi
   done
   [ -n "$t_qr" ] && echo "[cleanup] QR lifetime $(( $(date +%s) - t_qr ))s"
@@ -127,7 +137,7 @@ trap 'echo "[trap] caught TERM/INT/HUP"; cleanup; exit 143' TERM INT HUP
 
 echo "=== creating 1 spot QR ${QR} (${ACCEL}, ${ZONE}) $(date +%H:%M:%S) ==="
 timeout 600 gcloud compute tpus queued-resources create "$QR" --node-id="$QR" \
-  --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot \
+  --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" $SPOT_FLAG \
   --zone="$ZONE" --project="$PROJECT" 2>&1 | tail -2
 t_qr=$(date +%s)
 echo "=== QR created at $(date +%H:%M:%S); HARD CAP at $(date -d "@$(( t_qr + HARD_CAP_S ))" +%H:%M:%S) ==="
