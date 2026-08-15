@@ -28,12 +28,9 @@ import json
 
 # The exact case sets the sd run graded on (seam_dialect_probe.sbatch
 # PROBLEM_ARG), holdouts included.
-CASES = {
-    "splash_attention": ["probe-h8-s4096", "probe-h4-s2048", "probe-holdout-h4-s2049"],
-    "ragged_paged_attention": ["probe-b16-len1024", "probe-b8-len512", "probe-holdout-b17-len512"],
-    "megablox_gmm": ["probe-m4096-e4-uniform", "probe-m2048-e4-zipf", "probe-holdout-m3000-e4-zipf"],
-    "rg_lru": ["probe-4x2048x2560", "probe-2x1024x2560", "probe-holdout-2x1500x2560"],
-}
+# GENERAL-mode sweep sets: single source of truth, so the regrade cannot drift
+# from what the judge and prompts declare.
+from pallas_arena.probe.configs import TASK_CASES as CASES  # noqa: E402
 
 
 def main() -> None:
@@ -54,7 +51,7 @@ def main() -> None:
         print(f"\n{'=' * 70}\n{task}: boot ({len(entries)} winners)", flush=True)
         w = PersistentWorker(
             task,
-            cases=CASES[task],
+            cases=list(CASES[task]),
             use_adversarial=False,  # match the original run's conditions
             timing_pairs=args.timing_pairs,
             worker_id="regrade",
@@ -80,6 +77,13 @@ def main() -> None:
                 trow["results"][name] = {
                     "old_reward": old_reward,
                     "new_reward": r.get("reward"),
+                    "reward_kind": r.get("reward_kind"),
+                    "n_scored_cases": r.get("n_scored_cases"),
+                    "holdout_scored": r.get("holdout_scored"),
+                    "per_case": r.get("per_case"),
+                    "holdout": r.get("holdout"),
+                    "baseline_impl_per_case": r.get("baseline_impl_per_case"),
+                    "timer": r.get("timer"),
                     "new_score": r.get("score"),
                     "passed": r.get("passed"),
                     "gate": r.get("gate"),
