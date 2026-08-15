@@ -12,6 +12,7 @@ VLLM_WORKERS="${VLLM_WORKERS:-$VLLM_WORKER}"
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-4B}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL_NAME}"
 VLLM_TPU_VERSION="${VLLM_TPU_VERSION:-0.23.0}"
+VLLM_TRANSFORMERS_VERSION="${VLLM_TRANSFORMERS_VERSION:-5.8.0}"
 VLLM_MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE:-vllm}"
 VLLM_TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE:-torchax}"
 VLLM_DISABLE_SHARDY="${VLLM_DISABLE_SHARDY:-auto}"
@@ -278,6 +279,13 @@ if [ ! -x "${VLLM_VENV}/bin/vllm" ]; then
 fi
 
 uv pip install --python "${VLLM_VENV}/bin/python" "vllm-tpu==${VLLM_TPU_VERSION}"
+# Pin transformers to the ONE version both sides accept: tpu-inference requires
+# >=5.8.0, and gemma-4's heterogeneous config (per-layer head_dim) breaks on
+# newer releases -- 5.15.0 raised AmbiguousGlobalPerLayerAttributeError at model
+# load and killed every gemma vLLM worker (verified live 2026-08-15; 5.8.0 loads
+# Gemma4Config fine). vllm-tpu leaves transformers unpinned, so a fresh venv
+# silently drifts to whatever is latest.
+uv pip install --python "${VLLM_VENV}/bin/python" "transformers==${VLLM_TRANSFORMERS_VERSION}"
 # Overlay the forked tpu-inference (runtime LoRA forwarders + Ray env
 # allowlist). vllm-tpu is a meta-package depending on tpu-inference, so a
 # --no-deps force-reinstall cleanly swaps in the fork at the pinned ref.
