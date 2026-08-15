@@ -253,7 +253,13 @@ class SplashAttentionProblem(Problem):
             ShapeCase("probe-h2-s8192", {"heads": 2, "seq": 8192, "d": 128}, probe=True),
             ShapeCase("probe-h8-s4096-d64", {"heads": 8, "seq": 4096, "d": 64}, probe=True),
             ShapeCase("probe-holdout-h4-s2049", {"heads": 4, "seq": 2049, "d": 128}, holdout=True, probe=True),
-            ShapeCase("probe-holdout-h4-s1535-d64", {"heads": 4, "seq": 1535, "d": 64}, holdout=True, probe=True),
+            # DROPPED: a non-divisible sequence AT d=64 segfaults the TPU
+            # runtime (rc=139, jobs 3697756/3697854) -- and only in
+            # combination: probe-h8-s4096-d64 (d=64, divisible) and
+            # probe-holdout-h4-s2049 (non-divisible, d=128) both pass. Each
+            # property is covered separately; the intersection is a runtime bug
+            # we are not here to find, and a shape that kills the judge would
+            # fail every candidate for reasons that are not about kernels.
             # CPU battery
             ShapeCase("tiny", {"heads": 2, "seq": 128, "d": 32}, smoke=True),
             ShapeCase("tiny-ragged", {"heads": 2, "seq": 67, "d": 32}, smoke=True),
