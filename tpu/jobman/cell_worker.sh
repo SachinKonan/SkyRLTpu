@@ -110,10 +110,12 @@ pick_tiles() {
       esac
       MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" ;;
   esac
-  case "$CELL" in
-    grpo-k|ttd-k) SCORE_FIXED=18432 ;;
-    *)            SCORE_FIXED=0 ;;
-  esac
+  # ONE compiled shape, always. The scorer is pinned to the same uniform length
+  # the fb path uses (TUNIX_UNIFORM_SEQ_LEN), so a run ever holds exactly two
+  # pinned programs -- fb + scorer -- instead of growing a new jit_fwd per
+  # 8192-bucket as sequences lengthen. Not cell-specific: any cell that scores
+  # (KL penalty OR the measure-only pass) must never build a bucket ladder.
+  SCORE_FIXED=$UNIFORM
 }
 
 # NO w0 HF weight staging. w0 runs the trainer (which loads MaxText/orbax, not
