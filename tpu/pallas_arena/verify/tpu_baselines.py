@@ -411,35 +411,18 @@ def dispatch_overhead_probe(name, problem, case):
     return out
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--tasks", default="splash_attention,megablox_gmm,ragged_paged_attention,flce,rg_lru")
-    ap.add_argument("--probe-cases", action="store_true", default=True,
-                    help="use the one-chip PROBE cases (the fp32 reference cannot run at production shapes)")
-    args = ap.parse_args()
-
-    report = {"jax": jax.__version__, "devices": [str(d) for d in jax.devices()],
-              "backend": jax.default_backend(), "bands": [], "baselines": [], "tokamax": []}
+def _run_one_task(name: str, out_path: str) -> None:
+    """One task, one process. See main(): the probe segfaults the TPU runtime
+    somewhere inside splash's sweep, at a case that MOVES between runs (case 7,
+    7, then 3 across jobs 3697756/3697854/3697915) -- so it is accumulated
+    device state, not a bad shape. A segfault cannot be caught in Python, so
+    isolation is the only way to stop one task from destroying the other four's
+    measurements."""
+    report = {"task": name, "bands": [], "baselines": [], "tokamax": [], "dispatch": []}
     try:
-        report["tokamax_version"] = getattr(_import_tokamax(), "__version__", "?")
-    except Exception as e:  # noqa: BLE001
-        report["tokamax_version"] = f"IMPORT FAILED: {type(e).__name__}: {e}"
-
-    for name in args.tasks.split(","):
-        name = name.strip()
-        if not name:
-            continue
-        print(f"\n{'=' * 72}\n{name}", flush=True)
-        try:
-            problem = get_problem(name)
-        except Exception as e:  # noqa: BLE001
-            report["bands"].append({"task": name, "error": f"get_problem: {e}"})
-            continue
-
+        problem = get_problem(name)
         cases = [c for c in problem.shape_cases() if c.probe] or [c for c in problem.shape_cases() if c.smoke]
         faithful, sloppy, extra = VARIANTS[name]
-
         for case in cases:
             print(f"  [band] {case.name} ...", flush=True)
             try:
@@ -449,29 +432,63 @@ def main() -> None:
                 print(f"  band {case.name}: {row['verdict']}", flush=True)
             except Exception:
                 report["bands"].append({"task": name, "case": case.name, "error": traceback.format_exc()[-400:]})
-                print(f"  band {case.name}: EXCEPTION", flush=True)
+        for case in cases:
+            report["baselines"].append(baseline_identity(name, problem, case))
+        report["tokamax"].append(tokamax_probe(name, problem, cases[0]))
+        report["dispatch"].append(dispatch_overhead_probe(name, problem, cases[0]))
+    except Exception:
+        report["fatal"] = traceback.format_exc()[-600:]
+    with open(out_path, "w") as f:
+        json.dump(report, f)
 
-        # GENERAL mode elects a denominator PER SHAPE at boot; report the
-        # election for every case, not just the first, since the whole point is
-        # that the winner differs by shape.
-        for probe_case in cases:
-            b = baseline_identity(name, problem, probe_case)
-            report["baselines"].append(b)
-        probe_case = cases[0]
-        b = report["baselines"][-len(cases)]
-        print(f"  baseline: {b.get('baseline_impl', b.get('error'))} {b.get('median_s')}", flush=True)
 
-        t = tokamax_probe(name, problem, probe_case)
-        report["tokamax"].append(t)
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--tasks", default="splash_attention,megablox_gmm,ragged_paged_attention,flce,rg_lru")
+    ap.add_argument("--one-task", default=None, help="internal: run exactly this task in-process")
+    ap.add_argument("--sub-out", default=None, help="internal: where the isolated subprocess writes")
+    ap.add_argument("--probe-cases", action="store_true", default=True,
+                    help="use the one-chip PROBE cases (the fp32 reference cannot run at production shapes)")
+    args = ap.parse_args()
+    if args.one_task:
+        _run_one_task(args.one_task, args.sub_out)
+        return
 
-        do = dispatch_overhead_probe(name, problem, probe_case)
-        report.setdefault("dispatch", []).append(do)
-        if "error" not in do:
-            print(f"  dispatch: k1={do['k1_s'] * 1e3:.3f}ms per-call@k8={do['per_call_k8_s'] * 1e3:.3f}ms "
-                  f"overhead={do['dispatch_overhead_s'] * 1e3:.3f}ms "
-                  f"({(do['overhead_frac_of_k1'] or 0) * 100:.0f}%) -> a true 1.5x reads as "
-                  f"{do['true_1.5x_measures_as']:.3f}", flush=True)
-        print(f"  tokamax: {json.dumps({k: v for k, v in t.items() if k != 'case'})[:300]}", flush=True)
+    report = {"jax": jax.__version__, "devices": [str(d) for d in jax.devices()],
+              "backend": jax.default_backend(), "bands": [], "baselines": [], "tokamax": []}
+    try:
+        report["tokamax_version"] = getattr(_import_tokamax(), "__version__", "?")
+    except Exception as e:  # noqa: BLE001
+        report["tokamax_version"] = f"IMPORT FAILED: {type(e).__name__}: {e}"
+
+    import subprocess
+    import sys as _sys
+    import tempfile as _tf
+
+    for name in args.tasks.split(","):
+        name = name.strip()
+        if not name:
+            continue
+        # ISOLATED: a segfault here kills only this task's subprocess.
+        with _tf.NamedTemporaryFile(suffix=".json", delete=False) as tf:
+            sub_out = tf.name
+        rc = subprocess.call([_sys.executable, "-m", "pallas_arena.verify.tpu_baselines",
+                              "--out", args.out, "--one-task", name, "--sub-out", sub_out])
+        try:
+            with open(sub_out) as f:
+                sub = json.load(f)
+        except Exception:
+            sub = {"task": name, "fatal": f"subprocess died rc={rc} with no report"}
+        if rc != 0:
+            sub["subprocess_rc"] = rc
+            print(f"  !! {name}: subprocess exited rc={rc}"
+                  f"{' (SIGSEGV)' if rc in (-11, 139) else ''} -- partial results kept", flush=True)
+        for k in ("bands", "baselines", "tokamax", "dispatch"):
+            report.setdefault(k, []).extend(sub.get(k, []))
+        if "fatal" in sub:
+            report.setdefault("fatal", {})[name] = sub["fatal"]
+        continue
 
     with open(args.out, "w") as f:
         json.dump(report, f, indent=1)
