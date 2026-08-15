@@ -364,6 +364,53 @@ def baseline_identity(name, problem, case):
     return out
 
 
+def dispatch_overhead_probe(name, problem, case):
+    """How much of our wallclock timing is Python dispatch, not kernel?
+
+    Our reward is a RATIO measured with perf_counter + block_until_ready, so a
+    constant per-call overhead c turns a true a/b into (a+c)/(b+c) -- every
+    score compressed toward 1.0. tokamax defaults to device-level profiling on
+    TPU for exactly this reason (wallclock is only their fallback).
+
+    Measure it directly: time the baseline at k=1 and at k=8 chained calls
+    (barrier-separated so XLA cannot collapse them). If per-call time falls as
+    k rises, the difference IS the dispatch overhead, and the ratio distortion
+    follows from it.
+    """
+    from pallas_arena.judge import timing as T
+
+    out = {"task": name, "case": case.name}
+    try:
+        inputs = problem.make_inputs(jax.random.PRNGKey(0), case)
+        jax.block_until_ready(inputs)
+
+        def med(fn, n=7):
+            f = jax.jit(fn)
+            for _ in range(2):
+                jax.block_until_ready(f(*inputs))
+            ts = []
+            for _ in range(n):
+                t0 = time.perf_counter()
+                jax.block_until_ready(f(*inputs))
+                ts.append(time.perf_counter() - t0)
+            return float(np.median(ts))
+
+        t1 = med(problem.baseline)
+        k = 8
+        tk = med(T.amortized_call(problem.baseline, inputs, k))
+        per_call_k = tk / k
+        overhead = max(0.0, t1 - per_call_k)
+        out.update(k1_s=t1, k8_total_s=tk, per_call_k8_s=per_call_k,
+                   dispatch_overhead_s=overhead,
+                   overhead_frac_of_k1=overhead / t1 if t1 else None)
+        # what that overhead does to a TRUE 1.5x speedup measured our way
+        a, b = per_call_k, per_call_k / 1.5
+        out["true_1.5x_measures_as"] = (a + overhead) / (b + overhead)
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -403,13 +450,26 @@ def main() -> None:
                 report["bands"].append({"task": name, "case": case.name, "error": traceback.format_exc()[-400:]})
                 print(f"  band {case.name}: EXCEPTION", flush=True)
 
+        # GENERAL mode elects a denominator PER SHAPE at boot; report the
+        # election for every case, not just the first, since the whole point is
+        # that the winner differs by shape.
+        for probe_case in cases:
+            b = baseline_identity(name, problem, probe_case)
+            report["baselines"].append(b)
         probe_case = cases[0]
-        b = baseline_identity(name, problem, probe_case)
-        report["baselines"].append(b)
+        b = report["baselines"][-len(cases)]
         print(f"  baseline: {b.get('baseline_impl', b.get('error'))} {b.get('median_s')}", flush=True)
 
         t = tokamax_probe(name, problem, probe_case)
         report["tokamax"].append(t)
+
+        do = dispatch_overhead_probe(name, problem, probe_case)
+        report.setdefault("dispatch", []).append(do)
+        if "error" not in do:
+            print(f"  dispatch: k1={do['k1_s'] * 1e3:.3f}ms per-call@k8={do['per_call_k8_s'] * 1e3:.3f}ms "
+                  f"overhead={do['dispatch_overhead_s'] * 1e3:.3f}ms "
+                  f"({(do['overhead_frac_of_k1'] or 0) * 100:.0f}%) -> a true 1.5x reads as "
+                  f"{do['true_1.5x_measures_as']:.3f}", flush=True)
         print(f"  tokamax: {json.dumps({k: v for k, v in t.items() if k != 'case'})[:300]}", flush=True)
 
     with open(args.out, "w") as f:

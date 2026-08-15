@@ -210,6 +210,13 @@ class PersistentWorker:
         # megablox ~38x slow on library-default tuning, so "beat the baseline"
         # meant "beat a crippled kernel". Which one won is recorded per case,
         # so a score always says what it beat.
+        # Can this judge device-time (tokamax's TPU default) or must it fall
+        # back to the Python stopwatch? Probed once, here, so a whole run's
+        # numbers are labelled with how they were measured.
+        self.device_timing = timing_mod.device_timing_available()
+        print(f"[boot] device timing (xprof DIU): "
+              f"{'AVAILABLE' if self.device_timing else 'unavailable -> wallclock'}", flush=True)
+
         self._general_baselines = {}
         if getattr(self.problem, "general_mode", False):
             t_bl = self.perf()
@@ -302,6 +309,7 @@ class PersistentWorker:
             "ref_vs_ref_scores": ref_scores,
             "noise_floor": self.noise_floor,
             "calibration_warm_s": cal_warm_s,
+            "device_timing": self.device_timing,
             "calibration_warm_error": cal_warm_err,
             "boot_s": self.perf() - t0,
             "baseline_impl": getattr(self.problem, "baseline_impl", None),
@@ -547,7 +555,7 @@ class PersistentWorker:
 
             # ---- 6. counterbalanced interleaved timing, fresh inputs per
             # ---- iteration, correctness verified on TIMED outputs
-            case_timings, sol_fracs, baseline_impls = [], {}, {}
+            case_timings, sol_fracs, baseline_impls, timer_used = [], {}, {}, {}
             for case in self.scored_cases + self.holdout_cases:
                 if over_budget():
                     return budget_fail(f"timing ({case.name})")
@@ -568,6 +576,22 @@ class PersistentWorker:
                     pair, _r, c_out = timing_mod.counterbalanced_pair(
                         i, lambda: base_fn(*inputs), lambda: cand_fn(*inputs), perf, block
                     )
+                    # Prefer DEVICE time (tokamax's TPU default) when this judge
+                    # can profile: the wallclock pair above already produced the
+                    # outputs the correctness checks need, and the device pair
+                    # replaces only the two latencies -- so a ratio is not
+                    # squashed toward 1.0 by dispatch overhead common to both.
+                    if self.device_timing:
+                        dp = timing_mod.counterbalanced_pair_device(
+                            i, base_fn, cand_fn, inputs, timing_mod.device_timer
+                        )
+                        if dp is not None:
+                            pair = dp
+                            timer_used["device"] = timer_used.get("device", 0) + 1
+                        else:
+                            timer_used["wallclock"] = timer_used.get("wallclock", 0) + 1
+                    else:
+                        timer_used["wallclock"] = timer_used.get("wallclock", 0) + 1
                     if i >= self.timing_warmup:
                         it = i - self.timing_warmup
                         pairs.append(pair)
@@ -609,6 +633,7 @@ class PersistentWorker:
             **reward_frame,
             speed_of_light_fracs=sol_fracs,
             baseline_impl_per_case=baseline_impls,
+            timer=timer_used,
             latencies={
                 t.case: {"ref_median_s": t.ref_median_s, "cand_median_s": t.cand_median_s} for t in case_timings
             },

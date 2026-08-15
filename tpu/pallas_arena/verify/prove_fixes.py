@@ -38,27 +38,44 @@ def numerics(task: str, code: str, cases: list[str]) -> dict:
     from pallas_arena.judge.problems import get_problem
     from pallas_arena.judge.problems.base import check_tolerance, error_stats
 
+    import jax.experimental.pallas as pl_mod
+
     problem = get_problem(task)
     ns: dict = {}
-    src = code.replace("_pl.pallas_call(", "_pl.pallas_call(interpret=True, ") if "_pl.pallas_call(" in code else code
+    # Force interpret mode by patching the MODULE attribute, not by string
+    # surgery: `pallas_call(kernel, out_shape=...)` takes the kernel
+    # positionally, so splicing `interpret=True,` in after the open paren is a
+    # SyntaxError ("positional argument follows keyword argument") for exactly
+    # the scaffolds we care about. `_pl.pallas_call` is resolved at call time,
+    # so the patch is seen by already-compiled code.
+    _orig_pallas_call = pl_mod.pallas_call
+
+    def _interpreted(*a, **kw):
+        kw.setdefault("interpret", True)
+        return _orig_pallas_call(*a, **kw)
+
+    pl_mod.pallas_call = _interpreted
     try:
-        exec(compile(src, "<proposed>", "exec"), ns)  # noqa: S102
-    except Exception as e:
-        return {"error": f"exec: {type(e).__name__}: {e}"}
-    kernel = ns["kernel"]
-    out = {}
-    for name in cases:
-        case = problem.case_by_name(name)
         try:
-            inputs = problem.make_inputs(jax.random.PRNGKey(11), case)
-            ref = problem.reference(*inputs)
-            got = kernel(*inputs)
-            jax.block_until_ready(got)
-            ok, why = check_tolerance(error_stats(got, ref), problem.calibrated_tolerance(inputs, ref))
-            out[name] = {"verdict": "PASS" if ok else f"FAIL: {why}"}
+            exec(compile(code, "<proposed>", "exec"), ns)  # noqa: S102
         except Exception as e:
-            out[name] = {"error": f"{type(e).__name__}: {str(e)[:250]}"}
-    return out
+            return {"error": f"exec: {type(e).__name__}: {e}"}
+        kernel = ns["kernel"]
+        out = {}
+        for name in cases:
+            case = problem.case_by_name(name)
+            try:
+                inputs = problem.make_inputs(jax.random.PRNGKey(11), case)
+                ref = problem.reference(*inputs)
+                got = kernel(*inputs)
+                jax.block_until_ready(got)
+                ok, why = check_tolerance(error_stats(got, ref), problem.calibrated_tolerance(inputs, ref))
+                out[name] = {"verdict": "PASS" if ok else f"FAIL: {why}"}
+            except Exception as e:
+                out[name] = {"error": f"{type(e).__name__}: {str(e)[:250]}"}
+        return out
+    finally:
+        pl_mod.pallas_call = _orig_pallas_call
 
 
 def main() -> int:
@@ -73,7 +90,7 @@ def main() -> int:
 
     # ---- 1. plausible model answers under the improved prompt, current seams
     for task, fills in proposed.PROPOSED_FILLS.items():
-        sigs = pregate.probe_signatures(task, configs.TASK_CASES[task])
+        sigs = pregate.probe_signatures(task, configs.TASK_CASES[task])[0]
         for label, fill in fills:
             code = seam.compose(task, fill)
             r = _pregate(task, code, sigs, args.timeout_s)
@@ -85,7 +102,7 @@ def main() -> int:
 
     # ---- 2. the narrowed seams: a NEW scaffold, so compose by hand
     for task, (required, scaffold, fill) in proposed.NARROWED.items():
-        sigs = pregate.probe_signatures(task, configs.TASK_CASES[task])
+        sigs = pregate.probe_signatures(task, configs.TASK_CASES[task])[0]
         code = fill.rstrip() + "\n\n" + scaffold.strip() + "\n"
         assert f"def {required}" in fill, f"{task}: the narrowed fill must define {required}"
         r = _pregate(task, code, sigs, args.timeout_s)

@@ -1,0 +1,3205 @@
+<title>Pallas arena — the prompts, verbatim</title>
+<style>
+:root {
+  --bg:#f7f6f3; --ink:#22211d; --mut:#6d6a60; --line:#dedbd2;
+  --code-bg:#26251f; --code-ink:#e8e6dd; --accent:#b4590a; --chip:#ece9e0;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg:#191813; --ink:#e8e6dd; --mut:#9b978a; --line:#33312a;
+  --code-bg:#211f19; --code-ink:#ddd9cc; --accent:#e08d3c; --chip:#2b2922;
+} }
+:root[data-theme="dark"] { --bg:#191813; --ink:#e8e6dd; --mut:#9b978a; --line:#33312a; --code-bg:#211f19; --code-ink:#ddd9cc; --accent:#e08d3c; --chip:#2b2922; }
+:root[data-theme="light"] { --bg:#f7f6f3; --ink:#22211d; --mut:#6d6a60; --line:#dedbd2; --code-bg:#26251f; --code-ink:#e8e6dd; --accent:#b4590a; --chip:#ece9e0; }
+* { box-sizing:border-box }
+body { background:var(--bg); color:var(--ink); font:16px/1.55 Georgia,'Times New Roman',serif;
+  max-width:60rem; margin:0 auto; padding:2.5rem 1.25rem 6rem }
+h1 { font-size:1.9rem; line-height:1.2; margin:0 0 .4rem; text-wrap:balance }
+h2 { font-size:1.25rem; margin:0 0 .3rem; color:var(--accent) }
+.sub { color:var(--mut); margin:0 0 2.2rem; max-width:46rem }
+.task { border-top:1px solid var(--line); padding-top:1.4rem; margin-top:1.8rem }
+.meta { color:var(--mut); font-size:.92rem; margin:.2rem 0 1rem }
+.chip { background:var(--chip); border-radius:3px; padding:.1rem .45rem; font:0.8rem ui-monospace,Menlo,monospace; color:var(--ink) }
+code { font:.85em ui-monospace,Menlo,monospace }
+details { margin:.6rem 0; border:1px solid var(--line); border-radius:4px }
+summary { cursor:pointer; padding:.55rem .8rem; font-weight:bold; font-size:.95rem }
+summary:hover { color:var(--accent) }
+summary:focus-visible { outline:2px solid var(--accent) }
+.len { float:right; font-weight:normal; color:var(--mut); font:.8rem ui-monospace,Menlo,monospace }
+pre { background:var(--code-bg); color:var(--code-ink); margin:0; padding:1rem;
+  font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace; overflow-x:auto; white-space:pre-wrap; word-break:break-word;
+  border-top:1px solid var(--line); max-height:70vh; overflow-y:auto }
+.note { background:var(--chip); border-radius:4px; padding: .8rem 1rem; font-size:.92rem; max-width:48rem }
+</style>
+<h1>The prompts, verbatim</h1>
+<p class="sub">Every prompt the repair probe (job 3695727) sends, per task: the <strong>cold-start</strong> prompt
+(byte-identical to the sd baseline run, so turn-1 numbers stay comparable) and the <strong>improve/repair</strong>
+prompt (the cold prompt + the seed program + its measured reward against the real production kernel + the
+error-signature block). Repair turns after a failure reuse the improve template with the failing program and the
+judge&rsquo;s verdict in place of the seed. Rendered through each model&rsquo;s chat template at send time.</p>
+<p class="note">Reading order inside each prompt: what you write / what you don&rsquo;t &rarr; harness scaffold
+(verbatim) &rarr; required definitions &rarr; the open decisions &rarr; task semantics &rarr; declared shapes &rarr;
+judge contract &rarr; API signatures &rarr; the dialect list (measured mistakes with kill counts, ending in the
+float32-accumulator rule) &rarr; output format. The improve prompt appends: your current program &rarr; judge verdict
+&rarr; error signatures &rarr; instructions.</p>
+
+<section class="task">
+  <h2>splash attention</h2>
+  <p class="meta"><span class="chip">sd1</span> Causal segment-masked MHA. Seam prompt, no typed skeleton (skeleton measured harmful here). Seed for improve mode: <code>gemma4-31b-sd1-i15-r3.2456</code> at <strong>0.647</strong> of production speed.</p>
+  <details>
+    <summary>Cold-start prompt <span class="len">16,212 chars ≈ 4,053+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write the inner block of a causal, segment-masked multi-head attention Pallas kernel for TPU.
+
+## What you write, and what you do NOT write
+
+This is a fill-in task with a real seam in it. **The harness owns the
+interface; you own the strategy.** The harness has already written the ENTIRE `pallas_call` -- the grid, every `BlockSpec` and `index_map`, the `out_shape`, the explicit padding of both the query and the key axis, and the final un-pad slice. That
+code is fixed, it is shown to you verbatim below, and your job is only to
+supply the named functions it calls.
+
+Your code is pasted ABOVE the scaffold into one module and submitted as a
+single program, so the entrypoint, the shapes and the judge contract are
+already satisfied before you write a line. What is NOT decided is every choice
+that changes the number the judge measures.
+
+## The scaffold your code is appended to (verbatim, exactly as submitted)
+
+```python
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the ENTIRE pallas_call -- grid, every BlockSpec and index_map, the
+# out_shape, the explicit padding of both the query axis and the key axis, and
+# the final un-pad slice. You never write a pallas_call yourself.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+_LANES = 128
+_SUBLANES = 8
+
+
+def _ru(x, m):
+    return ((x + m - 1) // m) * m
+
+
+def _blocks(seq, head_dim):
+    bq, bk = choose_blocks(int(seq), int(head_dim))
+    # sanitized to the TPU native tiling so an unlucky choice is a slow kernel,
+    # never a compile error: bq to 8 sublanes, bk to 128 lanes, both clamped.
+    bq = min(max(_ru(int(bq), _SUBLANES), _SUBLANES), 2048)
+    bk = min(max(_ru(int(bk), _LANES), _LANES), 4096)
+    return bq, bk
+
+
+def kernel(q, k, v, segment_ids):
+    h, s, d = q.shape
+    bq, bk = _blocks(s, d)
+    dp = _ru(d, _LANES)
+    sq = _ru(s, bq)          # padded QUERY-axis length (a multiple of bq)
+    sk = _ru(s, bk)          # padded KEY-axis length   (a multiple of bk)
+
+    def _pad(x, ts):
+        return _jnp.pad(x, ((0, 0), (0, ts - x.shape[1]), (0, dp - d)))
+
+    qp = _pad(q, sq)
+    kp = _pad(k, sk)
+    vp = _pad(v, sk)
+    # padded positions get segment id 0 == PADDING, so the mask kills them free
+    sgq = _jnp.pad(segment_ids, (0, sq - s))
+    sgk = _jnp.pad(segment_ids, (0, sk - s))
+    seg_q = _jnp.broadcast_to(sgq[:, None], (sq, _LANES))
+    seg_k = _jnp.broadcast_to(sgk[None, :], (_SUBLANES, sk))
+
+    def _body(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref):
+        attn_block(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref,
+                   bq=bq, bk=bk, kv_len=sk)
+
+    out = _pl.pallas_call(
+        _body,
+        grid=(h, sq // bq),
+        in_specs=[
+            _pl.BlockSpec((1, bq, dp), lambda hh, i: (hh, i, 0)),   # q  block
+            _pl.BlockSpec((1, sk, dp), lambda hh, i: (hh, 0, 0)),   # ALL keys
+            _pl.BlockSpec((1, sk, dp), lambda hh, i: (hh, 0, 0)),   # ALL values
+            _pl.BlockSpec((bq, _LANES), lambda hh, i: (i, 0)),      # seg_q
+            _pl.BlockSpec((_SUBLANES, sk), lambda hh, i: (0, 0)),   # seg_k
+        ],
+        out_specs=_pl.BlockSpec((1, bq, dp), lambda hh, i: (hh, i, 0)),
+        out_shape=_jax.ShapeDtypeStruct((h, sq, dp), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(qp, kp, vp, seg_q, seg_k)
+    return out[:, :s, :d]
+```
+
+## What you must define
+
+```python
+def choose_blocks(seq, head_dim):
+    &quot;&quot;&quot;seq, head_dim: PYTHON INTS (the real, unpadded ones).
+    returns (bq, bk): the query-block rows per grid step, and the key-block
+    width you want to work in. The harness rounds bq up to a multiple of 8 and
+    bk up to a multiple of 128 (the TPU sublane/lane tiles) and clamps them, so
+    an unlucky choice costs you speed, never a compile error. It then pads the
+    query axis to a multiple of bq and the key axis to a multiple of bk.&quot;&quot;&quot;
+
+def attn_block(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref, *, bq, bk, kv_len):
+    &quot;&quot;&quot;ONE grid step: one head, one query block, ALL of the keys.
+       q_ref  [1, bq, dp]      bfloat16  queries, global rows i*bq + 0..bq-1
+       k_ref  [1, kv_len, dp]  bfloat16  EVERY key   (already in VMEM)
+       v_ref  [1, kv_len, dp]  bfloat16  EVERY value (already in VMEM)
+       sq_ref [bq, 128]        int32     segment id of each QUERY row,
+                                         broadcast over the 128 lanes;
+                                         sq_ref[:, :1] is the [bq, 1] column
+       sk_ref [8, kv_len]      int32     segment id of each KEY column,
+                                         broadcast over the 8 sublanes;
+                                         sk_ref[:1, :] is the [1, kv_len] row
+       o_ref  [1, bq, dp]      float32   THE OUTPUT. You must write it.
+       bq, bk, kv_len          Python ints. dp is head_dim padded to 128.
+    `pl.program_id(0)` is the head; `pl.program_id(1)` is the query-block index
+    i, so this block&#x27;s global query rows are i*bq + 0..bq-1. Nothing persists
+    between grid steps: everything you need is in this call.&quot;&quot;&quot;
+```
+
+## Where the real decisions are
+
+* **`bq`, and your own key chunking.** The whole key axis is resident, so how
+  you consume it is entirely yours: `for j in range(kv_len // bk)` over
+  bk-wide slices `k_ref[0, j*bk:(j+1)*bk, :]` (Python ints, so it unrolls), or
+  one giant `[bq, kv_len]` score matrix if you think it fits. It probably does
+  not: the scoped VMEM ceiling is ~32 MB per `pallas_call` and a
+  `[512, 4096]` f32 score tile is 8 MB before you have made a single
+  temporary of it. Going over is a compile-time
+  `CompileTimeScopedVmemOom: Scoped allocation with size 36.25M and limit 32.00M`.
+* **Skipping work.** A key block strictly above the diagonal contributes
+  nothing to any query in this block -- `j*bk &gt; i*bq + bq - 1` -- and you know
+  both indices. Roughly half the blocks are skippable and `bq` is a Python int,
+  so you can skip them at TRACE time and not emit the code at all.
+* **The softmax formulation.** Online (running max, running sum, rescale the
+  accumulator each block) or two-pass (find the row max, then accumulate).
+  Online costs an extra `exp` and a multiply per block; two-pass reads the keys
+  twice.
+* **Accumulation dtype and matmul precision.** See the precision note at the end
+  of the dialect list -- it is the difference between passing and failing correctness.
+
+## Task semantics
+
+Causal (query i attends to key j only if j &lt;= i) AND restricted to equal
+segment ids. A query whose segment id is 0 is PADDING and must produce
+EXACTLY 0.0, never NaN -- and so must any query with no visible key at all.
+There is NO 1/sqrt(head_dim) scale: the logits are the raw dot products
+(`make_inputs` pre-scales q). Softmax at float32. Forward only -- no backward.
+
+The fp32 oracle, verbatim. NOT a valid answer -- it materializes
+[heads, seq, seq] (2.1 GB at heads=8, seq=4096) and contains no `pallas_call`:
+
+```python
+NEG_INF = -0.7 * float(np.finfo(np.float32).max)
+
+def causal_segment_attention(q, k, v, segment_ids):
+    q32, k32, v32 = q.astype(jnp.float32), k.astype(jnp.float32), v.astype(jnp.float32)
+    seq = q.shape[1]
+    logits = jnp.einsum(&quot;hqd,hkd-&gt;hqk&quot;, q32, k32)
+    idx = jnp.arange(seq)
+    causal = idx[:, None] &gt;= idx[None, :]
+    same_seg = segment_ids[:, None] == segment_ids[None, :]
+    live = segment_ids != 0
+    mask = causal &amp; same_seg &amp; live[:, None] &amp; live[None, :]
+    logits = jnp.where(mask[None, :, :], logits, NEG_INF)
+    row_live = mask.any(axis=-1)
+    m = jnp.max(logits, axis=-1, keepdims=True)
+    p = jnp.exp(logits - m)
+    p = jnp.where(mask[None, :, :], p, 0.0)
+    denom = jnp.sum(p, axis=-1, keepdims=True)
+    p = jnp.where(row_live[None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
+    return jnp.einsum(&quot;hqk,hkd-&gt;hqd&quot;, p, v32)
+```
+
+Do not initialize a running max to `-jnp.inf`: `-inf - -inf` is NaN and a
+fully-masked row will poison the output. Use a large finite negative constant.
+
+## Declared shapes
+
+    heads=8, seq=4096, head_dim=128   (scored)
+    heads=4, seq=2048, head_dim=128   (scored)
+    heads=4, seq=2049, head_dim=128   (HOLDOUT: logged, not scored, but it MUST
+                                       still trace and be correct -- seq=2049 is
+                                       deliberately not a multiple of any
+                                       reasonable block. The harness pads; your
+                                       masking has to be right at the seam.)
+
+## Judge contract
+
+- The composed program is exec&#x27;d and `kernel` is serialized with `jax.export`
+  once per declared shape, with no data and no device.
+- The program MUST contain a real `pallas_call` -- the scaffold&#x27;s counts.
+- Correctness on hidden seeds against the fp32 oracle: per-element
+  `|cand - ref| / (|ref| + 1)`, on BOTH the max and the 99th-percentile tail,
+  at 1.5x the reference&#x27;s own bf16 error. Non-finite fails automatically.
+- Determinism: 5 runs, BITWISE identical.
+- Compile budget: 90 s for all shapes together. A `for` loop over key blocks
+  unrolls -- 8 blocks is fine, 512 is not.
+- Score: median wall-clock against the production baseline.
+- Banned: `jax.experimental.pallas.ops.*` (it holds the reference splash
+  kernel), `tpu_inference`, `MaxText`, `maxtext`, `skyrl`, `recurrentgemma`,
+  the arena&#x27;s package, and calling `jax.nn.dot_product_attention` or
+  `jax.nn.scaled_dot_product_attention`.
+
+## How much to write
+
+Write **300-1200 tokens of code**. If you are past ~2000 you have started
+rewriting the scaffold instead of choosing a strategy -- stop and delete it.
+Do not restate the scaffold; the harness already has it.
+
+## The calls you make inside the function you write
+
+(introspected from the pinned jax 0.10.2, not remembered)
+
+```python
+# --- YOU CALL these, inside the function you are asked to write.
+pl.program_id(axis: int) -&gt; jax.Array          # index of THIS grid step
+pl.num_programs(axis: int) -&gt; int | jax.Array
+pl.when(condition)                             # a DECORATOR, not a context mgr:
+#     @pl.when(j == 0)
+#     def _():
+#         acc_ref[...] = jnp.zeros_like(acc_ref)
+pl.ds(start, size=None, stride=None)           # == pl.dslice; dynamic slice
+pl.cdiv(a, b)          pl.multiple_of(x, values)      pl.next_power_of_2(x)
+jax.lax.broadcasted_iota(dtype, shape, dimension)   # position indices in-kernel
+jax.lax.dot_general(lhs, rhs, dimension_numbers, precision=None,
+                    preferred_element_type=None)
+jax.lax.fori_loop / jax.lax.scan                    # both work inside a kernel
+```
+
+## Pallas dialect: the mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous attempts at these five kernels died on it.
+
+1. **Names that DO NOT EXIST at this pin**, every one of them invented by a
+   model on these exact tasks: `pl.load`, `pl.store`, `pl.swap`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`. A Ref is read and
+   written by INDEXING, not by a load/store function. (The `pallas_call`
+   keyword arguments that killed 4 more are the harness&#x27;s problem here, not
+   yours -- you do not write one.)
+
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **You return VALUES, not Refs, and exactly the arity the scaffold
+    unpacks.** Killed 5: `too many values to unpack (expected 2)`, and 3 more
+    on `not enough values to unpack`. Read the scaffold above for what it does
+    with your return.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+## Output format
+
+Output ONE ```python code block containing ONLY the definitions listed above,
+plus whatever imports and private helpers they need. No prose outside it. Do
+NOT define `kernel`, do NOT write a `pallas_call`, do NOT rewrite any part of
+the scaffold: your code is pasted directly ABOVE it, in the same module, and
+anything you redefine that the scaffold also defines will simply be replaced.
+</pre>
+  </details>
+  <details>
+    <summary>Improve / repair prompt <span class="len">23,760 chars ≈ 5,940+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write the inner block of a causal, segment-masked multi-head attention Pallas kernel for TPU.
+
+## What you write, and what you do NOT write
+
+This is a fill-in task with a real seam in it. **The harness owns the
+interface; you own the strategy.** The harness has already written the ENTIRE `pallas_call` -- the grid, every `BlockSpec` and `index_map`, the `out_shape`, the explicit padding of both the query and the key axis, and the final un-pad slice. That
+code is fixed, it is shown to you verbatim below, and your job is only to
+supply the named functions it calls.
+
+Your code is pasted ABOVE the scaffold into one module and submitted as a
+single program, so the entrypoint, the shapes and the judge contract are
+already satisfied before you write a line. What is NOT decided is every choice
+that changes the number the judge measures.
+
+## The scaffold your code is appended to (verbatim, exactly as submitted)
+
+```python
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the ENTIRE pallas_call -- grid, every BlockSpec and index_map, the
+# out_shape, the explicit padding of both the query axis and the key axis, and
+# the final un-pad slice. You never write a pallas_call yourself.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+_LANES = 128
+_SUBLANES = 8
+
+
+def _ru(x, m):
+    return ((x + m - 1) // m) * m
+
+
+def _blocks(seq, head_dim):
+    bq, bk = choose_blocks(int(seq), int(head_dim))
+    # sanitized to the TPU native tiling so an unlucky choice is a slow kernel,
+    # never a compile error: bq to 8 sublanes, bk to 128 lanes, both clamped.
+    bq = min(max(_ru(int(bq), _SUBLANES), _SUBLANES), 2048)
+    bk = min(max(_ru(int(bk), _LANES), _LANES), 4096)
+    return bq, bk
+
+
+def kernel(q, k, v, segment_ids):
+    h, s, d = q.shape
+    bq, bk = _blocks(s, d)
+    dp = _ru(d, _LANES)
+    sq = _ru(s, bq)          # padded QUERY-axis length (a multiple of bq)
+    sk = _ru(s, bk)          # padded KEY-axis length   (a multiple of bk)
+
+    def _pad(x, ts):
+        return _jnp.pad(x, ((0, 0), (0, ts - x.shape[1]), (0, dp - d)))
+
+    qp = _pad(q, sq)
+    kp = _pad(k, sk)
+    vp = _pad(v, sk)
+    # padded positions get segment id 0 == PADDING, so the mask kills them free
+    sgq = _jnp.pad(segment_ids, (0, sq - s))
+    sgk = _jnp.pad(segment_ids, (0, sk - s))
+    seg_q = _jnp.broadcast_to(sgq[:, None], (sq, _LANES))
+    seg_k = _jnp.broadcast_to(sgk[None, :], (_SUBLANES, sk))
+
+    def _body(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref):
+        attn_block(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref,
+                   bq=bq, bk=bk, kv_len=sk)
+
+    out = _pl.pallas_call(
+        _body,
+        grid=(h, sq // bq),
+        in_specs=[
+            _pl.BlockSpec((1, bq, dp), lambda hh, i: (hh, i, 0)),   # q  block
+            _pl.BlockSpec((1, sk, dp), lambda hh, i: (hh, 0, 0)),   # ALL keys
+            _pl.BlockSpec((1, sk, dp), lambda hh, i: (hh, 0, 0)),   # ALL values
+            _pl.BlockSpec((bq, _LANES), lambda hh, i: (i, 0)),      # seg_q
+            _pl.BlockSpec((_SUBLANES, sk), lambda hh, i: (0, 0)),   # seg_k
+        ],
+        out_specs=_pl.BlockSpec((1, bq, dp), lambda hh, i: (hh, i, 0)),
+        out_shape=_jax.ShapeDtypeStruct((h, sq, dp), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(qp, kp, vp, seg_q, seg_k)
+    return out[:, :s, :d]
+```
+
+## What you must define
+
+```python
+def choose_blocks(seq, head_dim):
+    &quot;&quot;&quot;seq, head_dim: PYTHON INTS (the real, unpadded ones).
+    returns (bq, bk): the query-block rows per grid step, and the key-block
+    width you want to work in. The harness rounds bq up to a multiple of 8 and
+    bk up to a multiple of 128 (the TPU sublane/lane tiles) and clamps them, so
+    an unlucky choice costs you speed, never a compile error. It then pads the
+    query axis to a multiple of bq and the key axis to a multiple of bk.&quot;&quot;&quot;
+
+def attn_block(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref, *, bq, bk, kv_len):
+    &quot;&quot;&quot;ONE grid step: one head, one query block, ALL of the keys.
+       q_ref  [1, bq, dp]      bfloat16  queries, global rows i*bq + 0..bq-1
+       k_ref  [1, kv_len, dp]  bfloat16  EVERY key   (already in VMEM)
+       v_ref  [1, kv_len, dp]  bfloat16  EVERY value (already in VMEM)
+       sq_ref [bq, 128]        int32     segment id of each QUERY row,
+                                         broadcast over the 128 lanes;
+                                         sq_ref[:, :1] is the [bq, 1] column
+       sk_ref [8, kv_len]      int32     segment id of each KEY column,
+                                         broadcast over the 8 sublanes;
+                                         sk_ref[:1, :] is the [1, kv_len] row
+       o_ref  [1, bq, dp]      float32   THE OUTPUT. You must write it.
+       bq, bk, kv_len          Python ints. dp is head_dim padded to 128.
+    `pl.program_id(0)` is the head; `pl.program_id(1)` is the query-block index
+    i, so this block&#x27;s global query rows are i*bq + 0..bq-1. Nothing persists
+    between grid steps: everything you need is in this call.&quot;&quot;&quot;
+```
+
+## Where the real decisions are
+
+* **`bq`, and your own key chunking.** The whole key axis is resident, so how
+  you consume it is entirely yours: `for j in range(kv_len // bk)` over
+  bk-wide slices `k_ref[0, j*bk:(j+1)*bk, :]` (Python ints, so it unrolls), or
+  one giant `[bq, kv_len]` score matrix if you think it fits. It probably does
+  not: the scoped VMEM ceiling is ~32 MB per `pallas_call` and a
+  `[512, 4096]` f32 score tile is 8 MB before you have made a single
+  temporary of it. Going over is a compile-time
+  `CompileTimeScopedVmemOom: Scoped allocation with size 36.25M and limit 32.00M`.
+* **Skipping work.** A key block strictly above the diagonal contributes
+  nothing to any query in this block -- `j*bk &gt; i*bq + bq - 1` -- and you know
+  both indices. Roughly half the blocks are skippable and `bq` is a Python int,
+  so you can skip them at TRACE time and not emit the code at all.
+* **The softmax formulation.** Online (running max, running sum, rescale the
+  accumulator each block) or two-pass (find the row max, then accumulate).
+  Online costs an extra `exp` and a multiply per block; two-pass reads the keys
+  twice.
+* **Accumulation dtype and matmul precision.** See the precision note at the end
+  of the dialect list -- it is the difference between passing and failing correctness.
+
+## Task semantics
+
+Causal (query i attends to key j only if j &lt;= i) AND restricted to equal
+segment ids. A query whose segment id is 0 is PADDING and must produce
+EXACTLY 0.0, never NaN -- and so must any query with no visible key at all.
+There is NO 1/sqrt(head_dim) scale: the logits are the raw dot products
+(`make_inputs` pre-scales q). Softmax at float32. Forward only -- no backward.
+
+The fp32 oracle, verbatim. NOT a valid answer -- it materializes
+[heads, seq, seq] (2.1 GB at heads=8, seq=4096) and contains no `pallas_call`:
+
+```python
+NEG_INF = -0.7 * float(np.finfo(np.float32).max)
+
+def causal_segment_attention(q, k, v, segment_ids):
+    q32, k32, v32 = q.astype(jnp.float32), k.astype(jnp.float32), v.astype(jnp.float32)
+    seq = q.shape[1]
+    logits = jnp.einsum(&quot;hqd,hkd-&gt;hqk&quot;, q32, k32)
+    idx = jnp.arange(seq)
+    causal = idx[:, None] &gt;= idx[None, :]
+    same_seg = segment_ids[:, None] == segment_ids[None, :]
+    live = segment_ids != 0
+    mask = causal &amp; same_seg &amp; live[:, None] &amp; live[None, :]
+    logits = jnp.where(mask[None, :, :], logits, NEG_INF)
+    row_live = mask.any(axis=-1)
+    m = jnp.max(logits, axis=-1, keepdims=True)
+    p = jnp.exp(logits - m)
+    p = jnp.where(mask[None, :, :], p, 0.0)
+    denom = jnp.sum(p, axis=-1, keepdims=True)
+    p = jnp.where(row_live[None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
+    return jnp.einsum(&quot;hqk,hkd-&gt;hqd&quot;, p, v32)
+```
+
+Do not initialize a running max to `-jnp.inf`: `-inf - -inf` is NaN and a
+fully-masked row will poison the output. Use a large finite negative constant.
+
+## Declared shapes
+
+    heads=8, seq=4096, head_dim=128   (scored)
+    heads=4, seq=2048, head_dim=128   (scored)
+    heads=4, seq=2049, head_dim=128   (HOLDOUT: logged, not scored, but it MUST
+                                       still trace and be correct -- seq=2049 is
+                                       deliberately not a multiple of any
+                                       reasonable block. The harness pads; your
+                                       masking has to be right at the seam.)
+
+## Judge contract
+
+- The composed program is exec&#x27;d and `kernel` is serialized with `jax.export`
+  once per declared shape, with no data and no device.
+- The program MUST contain a real `pallas_call` -- the scaffold&#x27;s counts.
+- Correctness on hidden seeds against the fp32 oracle: per-element
+  `|cand - ref| / (|ref| + 1)`, on BOTH the max and the 99th-percentile tail,
+  at 1.5x the reference&#x27;s own bf16 error. Non-finite fails automatically.
+- Determinism: 5 runs, BITWISE identical.
+- Compile budget: 90 s for all shapes together. A `for` loop over key blocks
+  unrolls -- 8 blocks is fine, 512 is not.
+- Score: median wall-clock against the production baseline.
+- Banned: `jax.experimental.pallas.ops.*` (it holds the reference splash
+  kernel), `tpu_inference`, `MaxText`, `maxtext`, `skyrl`, `recurrentgemma`,
+  the arena&#x27;s package, and calling `jax.nn.dot_product_attention` or
+  `jax.nn.scaled_dot_product_attention`.
+
+## How much to write
+
+Write **300-1200 tokens of code**. If you are past ~2000 you have started
+rewriting the scaffold instead of choosing a strategy -- stop and delete it.
+Do not restate the scaffold; the harness already has it.
+
+## The calls you make inside the function you write
+
+(introspected from the pinned jax 0.10.2, not remembered)
+
+```python
+# --- YOU CALL these, inside the function you are asked to write.
+pl.program_id(axis: int) -&gt; jax.Array          # index of THIS grid step
+pl.num_programs(axis: int) -&gt; int | jax.Array
+pl.when(condition)                             # a DECORATOR, not a context mgr:
+#     @pl.when(j == 0)
+#     def _():
+#         acc_ref[...] = jnp.zeros_like(acc_ref)
+pl.ds(start, size=None, stride=None)           # == pl.dslice; dynamic slice
+pl.cdiv(a, b)          pl.multiple_of(x, values)      pl.next_power_of_2(x)
+jax.lax.broadcasted_iota(dtype, shape, dimension)   # position indices in-kernel
+jax.lax.dot_general(lhs, rhs, dimension_numbers, precision=None,
+                    preferred_element_type=None)
+jax.lax.fori_loop / jax.lax.scan                    # both work inside a kernel
+```
+
+## Pallas dialect: the mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous attempts at these five kernels died on it.
+
+1. **Names that DO NOT EXIST at this pin**, every one of them invented by a
+   model on these exact tasks: `pl.load`, `pl.store`, `pl.swap`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`. A Ref is read and
+   written by INDEXING, not by a load/store function. (The `pallas_call`
+   keyword arguments that killed 4 more are the harness&#x27;s problem here, not
+   yours -- you do not write one.)
+
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **You return VALUES, not Refs, and exactly the arity the scaffold
+    unpacks.** Killed 5: `too many values to unpack (expected 2)`, and 3 more
+    on `not enough values to unpack`. Read the scaffold above for what it does
+    with your return.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+## Output format
+
+Output ONE ```python code block containing ONLY the definitions listed above,
+plus whatever imports and private helpers they need. No prose outside it. Do
+NOT define `kernel`, do NOT write a `pallas_call`, do NOT rewrite any part of
+the scaffold: your code is pasted directly ABOVE it, in the same module, and
+anything you redefine that the scaffold also defines will simply be replaced.
+
+
+--------------------------------------------------------------------------
+## Your current program
+
+The complete program below was submitted to the judge. You may change ANY part
+of it -- including the harness scaffolding, grid, and BlockSpecs -- as long as
+it still defines `kernel(*inputs)` with the contract above.
+
+```python
+import jax
+import jax.numpy as jnp
+from jax.experimental import pallas as pl
+
+def choose_blocks(seq, head_dim):
+    &quot;&quot;&quot;
+    Returns block sizes for query and key axes.
+    bq=128 allows for efficient tiling on TPU sublanes and fits the score matrix 
+    (128 x 4096 f32 = 2MB) well within the VMEM limit.
+    &quot;&quot;&quot;
+    return 128, 128
+
+def attn_block(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref, *, bq, bk, kv_len):
+    &quot;&quot;&quot;
+    Causal, segment-masked attention kernel block.
+    &quot;&quot;&quot;
+    # 1. Extract data from Refs
+    # q_ref: (1, bq, dp), k_ref: (1, kv_len, dp), v_ref: (1, kv_len, dp)
+    q_val = q_ref[0]  # (bq, dp)
+    k_val = k_ref[0]  # (kv_len, dp)
+    v_val = v_ref[0]  # (kv_len, dp)
+    
+    # sq_ref: (bq, 128) -&gt; segment id for each query row
+    # sk_ref: (8, kv_len) -&gt; segment id for each key column
+    seg_q = sq_ref[:, 0]  # (bq,)
+    seg_k = sk_ref[0, :]  # (kv_len,)
+
+    # 2. Compute raw logits (q @ k.T)
+    # Using preferred_element_type=float32 for f32 accumulation over bf16 inputs
+    logits = jax.lax.dot_general(
+        q_val, k_val, 
+        (((1,), (1,)), ((), ())), 
+        preferred_element_type=jnp.float32
+    ) # (bq, kv_len)
+
+    # 3. Construct Masks
+    # Global indices for causality
+    # pl.program_id(1) is the query-block index &#x27;i&#x27;
+    q_block_idx = pl.program_id(1)
+    global_q_start = q_block_idx * bq
+    
+    # Create indices for broadcasting
+    iota_q = jax.lax.broadcasted_iota(jnp.int32, (bq,), 0)
+    global_q = global_q_start + iota_q
+    
+    iota_k = jax.lax.broadcasted_iota(jnp.int32, (kv_len,), 0)
+    global_k = iota_k
+
+    # Causal mask: j &lt;= i
+    causal_mask = global_q[:, None] &gt;= global_k[None, :]
+    # Segment mask: seg_id[i] == seg_id[j] AND seg_id[i] != 0 (Padding)
+    # If seg_q[i] == seg_k[j] and seg_q[i] != 0, then seg_k[j] is naturally != 0.
+    seg_mask = (seg_q[:, None] == seg_k[None, :]) &amp; (seg_q[:, None] != 0)
+    
+    mask = causal_mask &amp; seg_mask
+
+    # 4. Safe Softmax (Float32)
+    # Use a large finite negative constant instead of -inf to avoid NaNs
+    NEG_INF = -1e30
+    masked_logits = jnp.where(mask, logits, NEG_INF)
+    
+    row_max = jnp.max(masked_logits, axis=-1, keepdims=True)
+    p = jnp.exp(masked_logits - row_max)
+    
+    # Zero out masked entries again after exp
+    p = jnp.where(mask, p, 0.0)
+    
+    denom = jnp.sum(p, axis=-1, keepdims=True)
+    # Handle rows with no visible keys (mask.any is False)
+    row_live = jnp.any(mask, axis=-1, keepdims=True)
+    
+    # Scale by denom, guarding against divide-by-zero
+    p = jnp.where(row_live, p / jnp.maximum(denom, 1e-30), 0.0)
+
+    # 5. Weight the values (p @ v)
+    # p: (bq, kv_len), v_val: (kv_len, dp)
+    out = jax.lax.dot_general(
+        p, v_val, 
+        (((1,), (0,)), ((), ())), 
+        preferred_element_type=jnp.float32
+    ) # (bq, dp)
+
+    # 6. Write to output Ref
+    # o_ref shape is (1, bq, dp)
+    o_ref[...] = out[None, :, :]
+
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the ENTIRE pallas_call -- grid, every BlockSpec and index_map, the
+# out_shape, the explicit padding of both the query axis and the key axis, and
+# the final un-pad slice. You never write a pallas_call yourself.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+_LANES = 128
+_SUBLANES = 8
+
+
+def _ru(x, m):
+    return ((x + m - 1) // m) * m
+
+
+def _blocks(seq, head_dim):
+    bq, bk = choose_blocks(int(seq), int(head_dim))
+    # sanitized to the TPU native tiling so an unlucky choice is a slow kernel,
+    # never a compile error: bq to 8 sublanes, bk to 128 lanes, both clamped.
+    bq = min(max(_ru(int(bq), _SUBLANES), _SUBLANES), 2048)
+    bk = min(max(_ru(int(bk), _LANES), _LANES), 4096)
+    return bq, bk
+
+
+def kernel(q, k, v, segment_ids):
+    h, s, d = q.shape
+    bq, bk = _blocks(s, d)
+    dp = _ru(d, _LANES)
+    sq = _ru(s, bq)          # padded QUERY-axis length (a multiple of bq)
+    sk = _ru(s, bk)          # padded KEY-axis length   (a multiple of bk)
+
+    def _pad(x, ts):
+        return _jnp.pad(x, ((0, 0), (0, ts - x.shape[1]), (0, dp - d)))
+
+    qp = _pad(q, sq)
+    kp = _pad(k, sk)
+    vp = _pad(v, sk)
+    # padded positions get segment id 0 == PADDING, so the mask kills them free
+    sgq = _jnp.pad(segment_ids, (0, sq - s))
+    sgk = _jnp.pad(segment_ids, (0, sk - s))
+    seg_q = _jnp.broadcast_to(sgq[:, None], (sq, _LANES))
+    seg_k = _jnp.broadcast_to(sgk[None, :], (_SUBLANES, sk))
+
+    def _body(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref):
+        attn_block(q_ref, k_ref, v_ref, sq_ref, sk_ref, o_ref,
+                   bq=bq, bk=bk, kv_len=sk)
+
+    out = _pl.pallas_call(
+        _body,
+        grid=(h, sq // bq),
+        in_specs=[
+            _pl.BlockSpec((1, bq, dp), lambda hh, i: (hh, i, 0)),   # q  block
+            _pl.BlockSpec((1, sk, dp), lambda hh, i: (hh, 0, 0)),   # ALL keys
+            _pl.BlockSpec((1, sk, dp), lambda hh, i: (hh, 0, 0)),   # ALL values
+            _pl.BlockSpec((bq, _LANES), lambda hh, i: (i, 0)),      # seg_q
+            _pl.BlockSpec((_SUBLANES, sk), lambda hh, i: (0, 0)),   # seg_k
+        ],
+        out_specs=_pl.BlockSpec((1, bq, dp), lambda hh, i: (hh, i, 0)),
+        out_shape=_jax.ShapeDtypeStruct((h, sq, dp), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(qp, kp, vp, seg_q, seg_k)
+    return out[:, :s, :d]
+
+```
+
+## Judge verdict
+
+PASSED all correctness gates. Reward 0.647 -- your kernel runs at
+65% of the speed of the production kernel on the same inputs
+(reward = production_time / your_time; 1.0 means parity, above 1.0 beats it).
+The remaining gap is structural, not a constant to tweak: consider the grid
+and block sizes, VMEM working-set, online vs two-pass softmax, and whether
+work can be skipped entirely (masked blocks, empty pages).
+
+## Error signatures measured on previous attempts at these exact tasks
+
+* Attention, max err ~0.05: your fully-masked rows are producing UNIFORM
+  attention. With a finite mask value (-1e30) and a max-shifted softmax, a row
+  whose every key is masked gets exp(0)=1 everywhere -- the mean of V, not 0.
+  The contract requires exactly 0: keep a `row_live` mask and end with
+  `out = jnp.where(row_live[..., None], out, 0.0)`.
+* max err within ~1.5x of tol: precision, not logic. Keep every accumulator
+  float32 -- `preferred_element_type=jnp.float32` on every matmul, float32
+  running max/sum/output; bfloat16 only as matmul INPUTS.
+* non-finite output (NaN/inf): mask-value arithmetic in the online-softmax
+  rescale (inf - inf, or exp of a huge positive). Initialize the running max
+  to a large FINITE negative and mask before exponentiating.
+* O(1) error (max err &gt; 1.0): a term is missing outright -- a dropped
+  recurrence carry, a wrong head-group mapping. Re-derive the update rule
+  against the task statement before touching anything else.
+
+## What to do
+
+Fix the program. Think briefly about WHICH failure signature above matches the
+verdict, change what needs to change, and keep what already works. Output the
+COMPLETE corrected program in ONE ```python fenced block. No prose after it.
+</pre>
+  </details>
+</section>
+<section class="task">
+  <h2>ragged paged attention</h2>
+  <p class="meta"><span class="chip">sd2</span> Paged decode attention (vLLM layout). Seam + typed skeleton (wide fill interface). Seed for improve mode: <code>gemma4-31b-sd2-i9-r0.4947</code> at <strong>0.790</strong> of production speed.</p>
+  <details>
+    <summary>Cold-start prompt <span class="len">18,364 chars ≈ 4,591+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write the inner block of a ragged paged-attention DECODE kernel (GQA, one query token per sequence, KV read from a paged cache).
+
+## What you write, and what you do NOT write
+
+This is a fill-in task with a real seam in it. **The harness owns the
+interface; you own the strategy.** The harness has already written the `pallas_call`, the grid over (sequence, page), every `BlockSpec`, and the page-id -&gt; page-slice helper: the scalar-prefetched `page_tables` in the k/v index maps means a grid step is handed its physical page already resident in VMEM. That
+code is fixed, it is shown to you verbatim below, and your job is only to
+supply the named functions it calls.
+
+Your code is pasted ABOVE the scaffold into one module and submitted as a
+single program, so the entrypoint, the shapes and the judge contract are
+already satisfied before you write a line. What is NOT decided is every choice
+that changes the number the judge measures.
+
+## The scaffold your code is appended to (verbatim, exactly as submitted)
+
+```python
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the pallas_call, the grid (sequence, page), every BlockSpec, and the
+# page-id -&gt; page-slice helper -- the scalar-prefetched `page_tables` in the k/v
+# index maps IS that helper, so a grid step is handed the physical page already
+# resident in VMEM and you never gather a page yourself.
+#
+# The kv-head axis is deliberately NOT in the grid. Mosaic requires a block&#x27;s
+# second-minor dimension to be a multiple of 8 or equal to the array&#x27;s, and
+# k_pages is [num_pages, page_size, kv_heads, head_dim] -- so a per-head block
+# of [1, ps, 1, d] is rejected at compile time (measured: `block shape are
+# divisible by 8 and 128 respectively, or be equal to the respective dimensions
+# of the overall array`). One grid step therefore holds ALL kv heads of one
+# page, which is also 8x fewer grid steps.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+
+def kernel(q, k_pages, v_pages, page_tables, seq_lens):
+    b, qh, d = q.shape
+    npg, ps, kvh, _d = k_pages.shape
+    mp = page_tables.shape[1]
+    grp = qh // kvh
+    qg = q.reshape(b, kvh, grp, d)
+
+    def _body(pt_ref, sl_ref, q_ref, k_ref, v_ref, o_ref, m_ref, l_ref):
+        decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                     kv_heads=kvh, group=grp, page_size=ps, head_dim=d,
+                     num_pages=mp)
+
+    out = _pl.pallas_call(
+        _body,
+        grid_spec=_pltpu.PrefetchScalarGridSpec(
+            num_scalar_prefetch=2,
+            grid=(b, mp),
+            in_specs=[
+                # every query head of this sequence: [1, kv_heads, group, d]
+                _pl.BlockSpec((1, kvh, grp, d), lambda bb, p, pt, sl: (bb, 0, 0, 0)),
+                # ONE physical page of K, chosen by the page table, all heads
+                _pl.BlockSpec((1, ps, kvh, d), lambda bb, p, pt, sl: (pt[bb, p], 0, 0, 0)),
+                _pl.BlockSpec((1, ps, kvh, d), lambda bb, p, pt, sl: (pt[bb, p], 0, 0, 0)),
+            ],
+            out_specs=_pl.BlockSpec((1, kvh, grp, d), lambda bb, p, pt, sl: (bb, 0, 0, 0)),
+            scratch_shapes=[
+                _pltpu.VMEM((kvh, grp, 128), _jnp.float32),  # running row max
+                _pltpu.VMEM((kvh, grp, 128), _jnp.float32),  # running row sum
+            ],
+        ),
+        out_shape=_jax.ShapeDtypeStruct((b, kvh, grp, d), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(page_tables.astype(_jnp.int32), seq_lens.astype(_jnp.int32), qg, k_pages, v_pages)
+    return out.reshape(b, qh, d)
+```
+
+## What you must define
+
+```python
+def decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                 *, kv_heads, group, page_size, head_dim, num_pages):
+    &quot;&quot;&quot;ONE grid step: one sequence b, ONE page p of its KV cache, ALL heads.
+       q_ref  [1, kv_heads, group, d]      bfloat16  every query head of this
+                                                     sequence, grouped by the
+                                                     kv head it attends
+       k_ref  [1, page_size, kv_heads, d]  bfloat16  physical page p of K,
+                                                     already gathered for you
+       v_ref  [1, page_size, kv_heads, d]  bfloat16  the same page of V
+       o_ref  [1, kv_heads, group, d]      float32   THE OUTPUT. Its index_map
+                                                     ignores p, so it PERSISTS
+                                                     across the page axis and
+                                                     you accumulate into it.
+       m_ref  [kv_heads, group, 128]       float32   scratch, persists too
+       l_ref  [kv_heads, group, 128]       float32   scratch, persists too
+       sl_ref [batch]                      int32     SMEM: sl_ref[b] is
+                                                     sequence b&#x27;s length
+       kv_heads, group, page_size, head_dim, num_pages : Python ints.
+    `pl.program_id(0)` = b, `pl.program_id(1)` = p. Page p covers cached
+    positions p*page_size + 0 .. p*page_size + page_size-1. `k_ref[0, :, h, :]`
+    is head h&#x27;s [page_size, d] slice (h a Python int).&quot;&quot;&quot;
+```
+
+`m_ref` and `l_ref` are 128 lanes wide only because 128 is the minimum TPU lane
+tile; every lane can hold the same per-row scalar, so read `m_ref[h, :, :1]`
+and store a full-width broadcast back. You do not have to use them at all.
+
+The kv-head axis is not in the grid on purpose: Mosaic requires a block&#x27;s
+second-minor dimension to be a multiple of 8 or equal to the array&#x27;s, and
+`k_pages` is `[num_pages, page_size, kv_heads, head_dim]`, so a per-head block
+of `[1, page_size, 1, d]` is rejected at compile time. One step holds all
+8 heads, which is also 8x fewer grid steps.
+
+## Where the real decisions are
+
+* **The ragged tail: mask, or bound the loop.** Positions &gt;= `sl_ref[b]` must
+  not contribute. You can mask them inside every page (`pos &lt; sl_ref[b]`,
+  cheap, uniform) or skip whole pages with `@pl.when(p * page_size &lt; sl_ref[b])`
+  and do no work at all for them. Sequence lengths are random per sequence, so
+  the second one wins on average and costs a branch.
+* **Online vs two-pass.** With `m_ref`/`l_ref` you can run a running-max online
+  softmax across pages. You could instead accumulate unnormalized sums with a
+  fixed shift and normalize at the end -- fewer `exp`s, more overflow risk.
+* **GQA grouping, and how you sweep the 8 kv heads.** All `group` queries of a
+  head share that head&#x27;s K and V, so head h is one `[group, page_size]` score
+  matrix, not `group` separate ones. `group` is 4, below the 8-sublane tile, so
+  a per-head `[4, 64]` tile wastes half the sublanes -- you can pay that 8
+  times in an unrolled `for h in range(kv_heads)`, or reshape and do all 32
+  query heads at once against a `[page_size, kv_heads, d]` block. Both are
+  legal and they are not the same speed.
+* **Accumulation dtype and matmul precision.** As always.
+* **The first and last page.** `@pl.when(p == 0)` to initialize,
+  `@pl.when(p == num_pages - 1)` to normalize. Both are yours to place.
+
+## Task semantics
+
+For each sequence b and query head h (attending kv head `h // group`), attend
+over cached positions `0 .. seq_lens[b]-1`, softmax at fp32, output the
+value-weighted sum. Position t lives in physical page `page_tables[b, t //
+page_size]` at slot `t % page_size`. The fp32 oracle:
+
+```python
+k = k_pages[page_tables].reshape(b, max_len, kvh, d).astype(jnp.float32)
+v = v_pages[page_tables].reshape(b, max_len, kvh, d).astype(jnp.float32)
+q32 = q.astype(jnp.float32).reshape(b, kvh, group, d)
+logits = jnp.einsum(&quot;bhgd,bthd-&gt;bhgt&quot;, q32, k)
+live = jnp.arange(max_len)[None, :] &lt; seq_lens[:, None]
+logits = jnp.where(live[:, None, None, :], logits, NEG_INF)
+m = jnp.max(logits, axis=-1, keepdims=True)
+p = jnp.where(live[:, None, None, :], jnp.exp(logits - m), 0.0)
+p = p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30)
+o = jnp.einsum(&quot;bhgt,bthd-&gt;bhgd&quot;, p, v).reshape(b, qh, d)
+```
+
+There is no causal mask and no scale -- one query token, `make_inputs`
+pre-scales q. `seq_lens[b] &gt;= 1` always, so no row is ever fully masked.
+
+## Declared shapes
+
+page_size=64, kv_heads=8, q_heads=32 (so group=4), head_dim=128 throughout.
+
+    batch=16, max_len=1024, num_pages=264   (scored)
+    batch=8,  max_len=512,  num_pages=72    (scored)
+    batch=17, max_len=512,  num_pages=144   (HOLDOUT: logged, not scored, but
+                                             it MUST still trace -- 17 is prime,
+                                             so nothing about the batch tiles)
+
+`max_pages_per_seq = max_len // page_size`, i.e. 16, 8 and 8.
+
+## Judge contract
+
+- Exec&#x27;d, then `jax.export`ed once per declared shape, no data, no device.
+- MUST contain a real `pallas_call` -- the scaffold&#x27;s counts.
+- Correctness on hidden seeds against the fp32 oracle (max and q99 tail, 1.5x
+  the reference&#x27;s own bf16 error). Non-finite fails automatically.
+- Determinism: 5 runs, BITWISE identical. Compile budget 90 s for all shapes.
+- This task is **memory-bandwidth bound**; the judge also reports what fraction
+  of the chip&#x27;s peak HBM bandwidth you reached.
+- Score: median wall-clock against the baseline. NOTE: this judge&#x27;s baseline is
+  a competent batch-blocked XLA paged decode, not vLLM&#x27;s production Pallas
+  kernel, and it is labelled as such in the run&#x27;s boot report.
+- Banned: `jax.experimental.pallas.ops.*`, `tpu_inference`, `MaxText`,
+  `maxtext`, `skyrl`, `recurrentgemma`, the arena&#x27;s package, and
+  `jax.nn.dot_product_attention`.
+
+## How much to write
+
+Write **300-1200 tokens of code**. If you are past ~2000 you have started
+rewriting the scaffold instead of choosing a strategy -- stop and delete it.
+Do not restate the scaffold; the harness already has it.
+
+## The calls you make inside the function you write
+
+(introspected from the pinned jax 0.10.2, not remembered)
+
+```python
+# --- YOU CALL these, inside the function you are asked to write.
+pl.program_id(axis: int) -&gt; jax.Array          # index of THIS grid step
+pl.num_programs(axis: int) -&gt; int | jax.Array
+pl.when(condition)                             # a DECORATOR, not a context mgr:
+#     @pl.when(j == 0)
+#     def _():
+#         acc_ref[...] = jnp.zeros_like(acc_ref)
+pl.ds(start, size=None, stride=None)           # == pl.dslice; dynamic slice
+pl.cdiv(a, b)          pl.multiple_of(x, values)      pl.next_power_of_2(x)
+jax.lax.broadcasted_iota(dtype, shape, dimension)   # position indices in-kernel
+jax.lax.dot_general(lhs, rhs, dimension_numbers, precision=None,
+                    preferred_element_type=None)
+jax.lax.fori_loop / jax.lax.scan                    # both work inside a kernel
+```
+
+## Pallas dialect: the mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous attempts at these five kernels died on it.
+
+1. **Names that DO NOT EXIST at this pin**, every one of them invented by a
+   model on these exact tasks: `pl.load`, `pl.store`, `pl.swap`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`. A Ref is read and
+   written by INDEXING, not by a load/store function. (The `pallas_call`
+   keyword arguments that killed 4 more are the harness&#x27;s problem here, not
+   yours -- you do not write one.)
+
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **You return VALUES, not Refs, and exactly the arity the scaffold
+    unpacks.** Killed 5: `too many values to unpack (expected 2)`, and 3 more
+    on `not enough values to unpack`. Read the scaffold above for what it does
+    with your return.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+## A typed skeleton of exactly the functions you must write
+
+Every shape below is the real one at this seam. Every `...` is a decision that
+is yours and that moves the number the judge measures; none is filled in.
+
+```python
+import jax, jax.numpy as jnp
+from jax.experimental import pallas as pl   # you must import what you use
+
+def decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                 *, kv_heads, group, page_size, head_dim, num_pages):
+    b, p = pl.program_id(0), pl.program_id(1)      # sequence, page
+    # o_ref/m_ref/l_ref PERSIST across p, so page 0 initialises them, and a
+    # store must already have the Ref&#x27;s own shape:
+    # @pl.when(p == 0)
+    # def _init():
+    #     m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)  # [kv_heads,group,128]
+    #     l_ref[...] = jnp.zeros(l_ref.shape, l_ref.dtype)
+    #     o_ref[...] = jnp.zeros(o_ref.shape, o_ref.dtype)        # [1,kv_heads,group,d]
+    pos  = p * page_size + jax.lax.broadcasted_iota(jnp.int32, (1, page_size), 1)
+    live = pos &lt; sl_ref[b]                          # [1, page_size] bool
+    ...   # mask the tail, or skip whole pages with @pl.when -- YOUR choice
+    # kv_heads and group are PYTHON ints, so `for h in range(kv_heads)` unrolls:
+    #     q_h = q_ref[0, h]         # [group, d]      bf16
+    #     k_h = k_ref[0, :, h, :]   # [page_size, d]  bf16
+    #     v_h = v_ref[0, :, h, :]   # [page_size, d]  bf16
+    #     m_h = m_ref[h, :, :1]     # [group, 1] f32  (the 128 lanes hold copies)
+    #     o_h = o_ref[0, h]         # [group, d] f32
+    # and the stores back are whole slots:
+    #     m_ref[h]    = jnp.broadcast_to(m_new, (group, 128))
+    #     o_ref[0, h] = ...                              # EXACTLY [group, d] f32
+    # Doing all 32 query heads at once against the [page_size, kv_heads, d]
+    # block is equally legal and is not the same speed.
+    # @pl.when(p == num_pages - 1)  -&gt; where a running softmax gets normalised
+```
+
+## Output format
+
+Output ONE ```python code block containing ONLY the definitions listed above,
+plus whatever imports and private helpers they need. No prose outside it. Do
+NOT define `kernel`, do NOT write a `pallas_call`, do NOT rewrite any part of
+the scaffold: your code is pasted directly ABOVE it, in the same module, and
+anything you redefine that the scaffold also defines will simply be replaced.
+</pre>
+  </details>
+  <details>
+    <summary>Improve / repair prompt <span class="len">26,980 chars ≈ 6,745+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write the inner block of a ragged paged-attention DECODE kernel (GQA, one query token per sequence, KV read from a paged cache).
+
+## What you write, and what you do NOT write
+
+This is a fill-in task with a real seam in it. **The harness owns the
+interface; you own the strategy.** The harness has already written the `pallas_call`, the grid over (sequence, page), every `BlockSpec`, and the page-id -&gt; page-slice helper: the scalar-prefetched `page_tables` in the k/v index maps means a grid step is handed its physical page already resident in VMEM. That
+code is fixed, it is shown to you verbatim below, and your job is only to
+supply the named functions it calls.
+
+Your code is pasted ABOVE the scaffold into one module and submitted as a
+single program, so the entrypoint, the shapes and the judge contract are
+already satisfied before you write a line. What is NOT decided is every choice
+that changes the number the judge measures.
+
+## The scaffold your code is appended to (verbatim, exactly as submitted)
+
+```python
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the pallas_call, the grid (sequence, page), every BlockSpec, and the
+# page-id -&gt; page-slice helper -- the scalar-prefetched `page_tables` in the k/v
+# index maps IS that helper, so a grid step is handed the physical page already
+# resident in VMEM and you never gather a page yourself.
+#
+# The kv-head axis is deliberately NOT in the grid. Mosaic requires a block&#x27;s
+# second-minor dimension to be a multiple of 8 or equal to the array&#x27;s, and
+# k_pages is [num_pages, page_size, kv_heads, head_dim] -- so a per-head block
+# of [1, ps, 1, d] is rejected at compile time (measured: `block shape are
+# divisible by 8 and 128 respectively, or be equal to the respective dimensions
+# of the overall array`). One grid step therefore holds ALL kv heads of one
+# page, which is also 8x fewer grid steps.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+
+def kernel(q, k_pages, v_pages, page_tables, seq_lens):
+    b, qh, d = q.shape
+    npg, ps, kvh, _d = k_pages.shape
+    mp = page_tables.shape[1]
+    grp = qh // kvh
+    qg = q.reshape(b, kvh, grp, d)
+
+    def _body(pt_ref, sl_ref, q_ref, k_ref, v_ref, o_ref, m_ref, l_ref):
+        decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                     kv_heads=kvh, group=grp, page_size=ps, head_dim=d,
+                     num_pages=mp)
+
+    out = _pl.pallas_call(
+        _body,
+        grid_spec=_pltpu.PrefetchScalarGridSpec(
+            num_scalar_prefetch=2,
+            grid=(b, mp),
+            in_specs=[
+                # every query head of this sequence: [1, kv_heads, group, d]
+                _pl.BlockSpec((1, kvh, grp, d), lambda bb, p, pt, sl: (bb, 0, 0, 0)),
+                # ONE physical page of K, chosen by the page table, all heads
+                _pl.BlockSpec((1, ps, kvh, d), lambda bb, p, pt, sl: (pt[bb, p], 0, 0, 0)),
+                _pl.BlockSpec((1, ps, kvh, d), lambda bb, p, pt, sl: (pt[bb, p], 0, 0, 0)),
+            ],
+            out_specs=_pl.BlockSpec((1, kvh, grp, d), lambda bb, p, pt, sl: (bb, 0, 0, 0)),
+            scratch_shapes=[
+                _pltpu.VMEM((kvh, grp, 128), _jnp.float32),  # running row max
+                _pltpu.VMEM((kvh, grp, 128), _jnp.float32),  # running row sum
+            ],
+        ),
+        out_shape=_jax.ShapeDtypeStruct((b, kvh, grp, d), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(page_tables.astype(_jnp.int32), seq_lens.astype(_jnp.int32), qg, k_pages, v_pages)
+    return out.reshape(b, qh, d)
+```
+
+## What you must define
+
+```python
+def decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                 *, kv_heads, group, page_size, head_dim, num_pages):
+    &quot;&quot;&quot;ONE grid step: one sequence b, ONE page p of its KV cache, ALL heads.
+       q_ref  [1, kv_heads, group, d]      bfloat16  every query head of this
+                                                     sequence, grouped by the
+                                                     kv head it attends
+       k_ref  [1, page_size, kv_heads, d]  bfloat16  physical page p of K,
+                                                     already gathered for you
+       v_ref  [1, page_size, kv_heads, d]  bfloat16  the same page of V
+       o_ref  [1, kv_heads, group, d]      float32   THE OUTPUT. Its index_map
+                                                     ignores p, so it PERSISTS
+                                                     across the page axis and
+                                                     you accumulate into it.
+       m_ref  [kv_heads, group, 128]       float32   scratch, persists too
+       l_ref  [kv_heads, group, 128]       float32   scratch, persists too
+       sl_ref [batch]                      int32     SMEM: sl_ref[b] is
+                                                     sequence b&#x27;s length
+       kv_heads, group, page_size, head_dim, num_pages : Python ints.
+    `pl.program_id(0)` = b, `pl.program_id(1)` = p. Page p covers cached
+    positions p*page_size + 0 .. p*page_size + page_size-1. `k_ref[0, :, h, :]`
+    is head h&#x27;s [page_size, d] slice (h a Python int).&quot;&quot;&quot;
+```
+
+`m_ref` and `l_ref` are 128 lanes wide only because 128 is the minimum TPU lane
+tile; every lane can hold the same per-row scalar, so read `m_ref[h, :, :1]`
+and store a full-width broadcast back. You do not have to use them at all.
+
+The kv-head axis is not in the grid on purpose: Mosaic requires a block&#x27;s
+second-minor dimension to be a multiple of 8 or equal to the array&#x27;s, and
+`k_pages` is `[num_pages, page_size, kv_heads, head_dim]`, so a per-head block
+of `[1, page_size, 1, d]` is rejected at compile time. One step holds all
+8 heads, which is also 8x fewer grid steps.
+
+## Where the real decisions are
+
+* **The ragged tail: mask, or bound the loop.** Positions &gt;= `sl_ref[b]` must
+  not contribute. You can mask them inside every page (`pos &lt; sl_ref[b]`,
+  cheap, uniform) or skip whole pages with `@pl.when(p * page_size &lt; sl_ref[b])`
+  and do no work at all for them. Sequence lengths are random per sequence, so
+  the second one wins on average and costs a branch.
+* **Online vs two-pass.** With `m_ref`/`l_ref` you can run a running-max online
+  softmax across pages. You could instead accumulate unnormalized sums with a
+  fixed shift and normalize at the end -- fewer `exp`s, more overflow risk.
+* **GQA grouping, and how you sweep the 8 kv heads.** All `group` queries of a
+  head share that head&#x27;s K and V, so head h is one `[group, page_size]` score
+  matrix, not `group` separate ones. `group` is 4, below the 8-sublane tile, so
+  a per-head `[4, 64]` tile wastes half the sublanes -- you can pay that 8
+  times in an unrolled `for h in range(kv_heads)`, or reshape and do all 32
+  query heads at once against a `[page_size, kv_heads, d]` block. Both are
+  legal and they are not the same speed.
+* **Accumulation dtype and matmul precision.** As always.
+* **The first and last page.** `@pl.when(p == 0)` to initialize,
+  `@pl.when(p == num_pages - 1)` to normalize. Both are yours to place.
+
+## Task semantics
+
+For each sequence b and query head h (attending kv head `h // group`), attend
+over cached positions `0 .. seq_lens[b]-1`, softmax at fp32, output the
+value-weighted sum. Position t lives in physical page `page_tables[b, t //
+page_size]` at slot `t % page_size`. The fp32 oracle:
+
+```python
+k = k_pages[page_tables].reshape(b, max_len, kvh, d).astype(jnp.float32)
+v = v_pages[page_tables].reshape(b, max_len, kvh, d).astype(jnp.float32)
+q32 = q.astype(jnp.float32).reshape(b, kvh, group, d)
+logits = jnp.einsum(&quot;bhgd,bthd-&gt;bhgt&quot;, q32, k)
+live = jnp.arange(max_len)[None, :] &lt; seq_lens[:, None]
+logits = jnp.where(live[:, None, None, :], logits, NEG_INF)
+m = jnp.max(logits, axis=-1, keepdims=True)
+p = jnp.where(live[:, None, None, :], jnp.exp(logits - m), 0.0)
+p = p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30)
+o = jnp.einsum(&quot;bhgt,bthd-&gt;bhgd&quot;, p, v).reshape(b, qh, d)
+```
+
+There is no causal mask and no scale -- one query token, `make_inputs`
+pre-scales q. `seq_lens[b] &gt;= 1` always, so no row is ever fully masked.
+
+## Declared shapes
+
+page_size=64, kv_heads=8, q_heads=32 (so group=4), head_dim=128 throughout.
+
+    batch=16, max_len=1024, num_pages=264   (scored)
+    batch=8,  max_len=512,  num_pages=72    (scored)
+    batch=17, max_len=512,  num_pages=144   (HOLDOUT: logged, not scored, but
+                                             it MUST still trace -- 17 is prime,
+                                             so nothing about the batch tiles)
+
+`max_pages_per_seq = max_len // page_size`, i.e. 16, 8 and 8.
+
+## Judge contract
+
+- Exec&#x27;d, then `jax.export`ed once per declared shape, no data, no device.
+- MUST contain a real `pallas_call` -- the scaffold&#x27;s counts.
+- Correctness on hidden seeds against the fp32 oracle (max and q99 tail, 1.5x
+  the reference&#x27;s own bf16 error). Non-finite fails automatically.
+- Determinism: 5 runs, BITWISE identical. Compile budget 90 s for all shapes.
+- This task is **memory-bandwidth bound**; the judge also reports what fraction
+  of the chip&#x27;s peak HBM bandwidth you reached.
+- Score: median wall-clock against the baseline. NOTE: this judge&#x27;s baseline is
+  a competent batch-blocked XLA paged decode, not vLLM&#x27;s production Pallas
+  kernel, and it is labelled as such in the run&#x27;s boot report.
+- Banned: `jax.experimental.pallas.ops.*`, `tpu_inference`, `MaxText`,
+  `maxtext`, `skyrl`, `recurrentgemma`, the arena&#x27;s package, and
+  `jax.nn.dot_product_attention`.
+
+## How much to write
+
+Write **300-1200 tokens of code**. If you are past ~2000 you have started
+rewriting the scaffold instead of choosing a strategy -- stop and delete it.
+Do not restate the scaffold; the harness already has it.
+
+## The calls you make inside the function you write
+
+(introspected from the pinned jax 0.10.2, not remembered)
+
+```python
+# --- YOU CALL these, inside the function you are asked to write.
+pl.program_id(axis: int) -&gt; jax.Array          # index of THIS grid step
+pl.num_programs(axis: int) -&gt; int | jax.Array
+pl.when(condition)                             # a DECORATOR, not a context mgr:
+#     @pl.when(j == 0)
+#     def _():
+#         acc_ref[...] = jnp.zeros_like(acc_ref)
+pl.ds(start, size=None, stride=None)           # == pl.dslice; dynamic slice
+pl.cdiv(a, b)          pl.multiple_of(x, values)      pl.next_power_of_2(x)
+jax.lax.broadcasted_iota(dtype, shape, dimension)   # position indices in-kernel
+jax.lax.dot_general(lhs, rhs, dimension_numbers, precision=None,
+                    preferred_element_type=None)
+jax.lax.fori_loop / jax.lax.scan                    # both work inside a kernel
+```
+
+## Pallas dialect: the mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous attempts at these five kernels died on it.
+
+1. **Names that DO NOT EXIST at this pin**, every one of them invented by a
+   model on these exact tasks: `pl.load`, `pl.store`, `pl.swap`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`. A Ref is read and
+   written by INDEXING, not by a load/store function. (The `pallas_call`
+   keyword arguments that killed 4 more are the harness&#x27;s problem here, not
+   yours -- you do not write one.)
+
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **You return VALUES, not Refs, and exactly the arity the scaffold
+    unpacks.** Killed 5: `too many values to unpack (expected 2)`, and 3 more
+    on `not enough values to unpack`. Read the scaffold above for what it does
+    with your return.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+## A typed skeleton of exactly the functions you must write
+
+Every shape below is the real one at this seam. Every `...` is a decision that
+is yours and that moves the number the judge measures; none is filled in.
+
+```python
+import jax, jax.numpy as jnp
+from jax.experimental import pallas as pl   # you must import what you use
+
+def decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                 *, kv_heads, group, page_size, head_dim, num_pages):
+    b, p = pl.program_id(0), pl.program_id(1)      # sequence, page
+    # o_ref/m_ref/l_ref PERSIST across p, so page 0 initialises them, and a
+    # store must already have the Ref&#x27;s own shape:
+    # @pl.when(p == 0)
+    # def _init():
+    #     m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)  # [kv_heads,group,128]
+    #     l_ref[...] = jnp.zeros(l_ref.shape, l_ref.dtype)
+    #     o_ref[...] = jnp.zeros(o_ref.shape, o_ref.dtype)        # [1,kv_heads,group,d]
+    pos  = p * page_size + jax.lax.broadcasted_iota(jnp.int32, (1, page_size), 1)
+    live = pos &lt; sl_ref[b]                          # [1, page_size] bool
+    ...   # mask the tail, or skip whole pages with @pl.when -- YOUR choice
+    # kv_heads and group are PYTHON ints, so `for h in range(kv_heads)` unrolls:
+    #     q_h = q_ref[0, h]         # [group, d]      bf16
+    #     k_h = k_ref[0, :, h, :]   # [page_size, d]  bf16
+    #     v_h = v_ref[0, :, h, :]   # [page_size, d]  bf16
+    #     m_h = m_ref[h, :, :1]     # [group, 1] f32  (the 128 lanes hold copies)
+    #     o_h = o_ref[0, h]         # [group, d] f32
+    # and the stores back are whole slots:
+    #     m_ref[h]    = jnp.broadcast_to(m_new, (group, 128))
+    #     o_ref[0, h] = ...                              # EXACTLY [group, d] f32
+    # Doing all 32 query heads at once against the [page_size, kv_heads, d]
+    # block is equally legal and is not the same speed.
+    # @pl.when(p == num_pages - 1)  -&gt; where a running softmax gets normalised
+```
+
+## Output format
+
+Output ONE ```python code block containing ONLY the definitions listed above,
+plus whatever imports and private helpers they need. No prose outside it. Do
+NOT define `kernel`, do NOT write a `pallas_call`, do NOT rewrite any part of
+the scaffold: your code is pasted directly ABOVE it, in the same module, and
+anything you redefine that the scaffold also defines will simply be replaced.
+
+
+--------------------------------------------------------------------------
+## Your current program
+
+The complete program below was submitted to the judge. You may change ANY part
+of it -- including the harness scaffolding, grid, and BlockSpecs -- as long as
+it still defines `kernel(*inputs)` with the contract above.
+
+```python
+import jax
+import jax.numpy as jnp
+from jax.experimental import pallas as pl
+
+def decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                 *, kv_heads, group, page_size, head_dim, num_pages):
+    &quot;&quot;&quot;ONE grid step: one sequence b, ONE page p of its KV cache, ALL heads.&quot;&quot;&quot;
+    b, p = pl.program_id(0), pl.program_id(1)
+    
+    # 1. Initialization at the first page
+    @pl.when(p == 0)
+    def _init():
+        # m_ref: [kv_heads, group, 128]
+        m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)
+        l_ref[...] = jnp.zeros(l_ref.shape, l_ref.dtype)
+        # o_ref: [1, kv_heads, group, d]
+        o_ref[...] = jnp.zeros(o_ref.shape, o_ref.dtype)
+
+    # 2. Skip totally empty pages for efficiency
+    @pl.when(p * page_size &lt; sl_ref[b])
+    def _compute():
+        # Calculate the mask for the current page
+        # pos: [1, page_size]
+        pos = p * page_size + jax.lax.broadcasted_iota(jnp.int32, (1, page_size), 1)
+        mask = (pos &lt; sl_ref[b]).astype(jnp.float32) # [1, page_size]
+        
+        # We iterate over KV heads. Since kv_heads=8, this unrolls.
+        for h in range(kv_heads):
+            # q_h: [group, d] (bf16), k_h: [page_size, d] (bf16), v_h: [page_size, d] (bf16)
+            q_h = q_ref[0, h].astype(jnp.float32)
+            k_h = k_ref[0, :, h, :].astype(jnp.float32)
+            v_h = v_ref[0, :, h, :].astype(jnp.float32)
+
+            # Compute logits: [group, d] @ [d, page_size] -&gt; [group, page_size]
+            logits = jax.lax.dot_general(
+                q_h, k_h, 
+                (((1,), (1,)), ((), ())), 
+                precision=jax.lax.Precision.HIGHEST
+            )
+            
+            # Mask the ragged tail: positions &gt;= sl_ref[b] get -inf
+            # mask[0] is [page_size]
+            logits = jnp.where(mask[0], logits, -1e30)
+
+            # Online Softmax: m_h is [group, 1]
+            m_old = m_ref[h, :, :1]
+            l_old = l_ref[h, :, :1]
+            
+            # current max per query head in group
+            m_curr = jnp.max(logits, axis=1, keepdims=True)
+            m_new = jnp.maximum(m_old, m_curr)
+            
+            # Scaling factors
+            alpha = jnp.exp(m_old - m_new)
+            weights = jnp.exp(logits - m_new) # [group, page_size]
+            
+            # Update running sum: l_new = l_old * exp(m_old - m_new) + sum(exp(logits - m_new))
+            l_new = l_old * alpha + jnp.sum(weights, axis=1, keepdims=True)
+            
+            # Update weighted sum: o_new = o_old * exp(m_old - m_new) + weights @ v_h
+            # o_h_old: [group, d]
+            o_h_old = o_ref[0, h]
+            
+            # weighted_v: [group, page_size] @ [page_size, d] -&gt; [group, d]
+            weighted_v = jax.lax.dot_general(
+                weights, v_h,
+                (((1,), (0,)), ((), ())),
+                precision=jax.lax.Precision.HIGHEST
+            )
+            
+            o_h_new = o_h_old * alpha + weighted_v
+            
+            # Write back to a Ref. 
+            # m_ref[h] is [group, 128], so broadcast m_new [group, 1]
+            m_ref[h] = jnp.broadcast_to(m_new, (group, 128))
+            l_ref[h] = jnp.broadcast_to(l_new, (group, 128))
+            o_ref[0, h] = o_h_new
+
+    # 3. Final normalization at the very last page of the grid
+    @pl.when(p == num_pages - 1)
+    def _normalize():
+        # o_ref: [1, kv_heads, group, d]
+        # l_ref: [kv_heads, group, 128]. Use first lane.
+        l_vals = l_ref[:, :, :1] # [kv_heads, group, 1]
+        
+        # Prepare divisor to match o_ref shape [1, kv_heads, group, d]
+        # Expand l_vals to [1, kv_heads, group, 1] then broadcast to d
+        divisor = l_vals[None, ...] 
+        divisor = jnp.maximum(divisor, 1e-30)
+        
+        # Final output is o_ref / l_ref
+        o_ref[...] = o_ref[...] / divisor
+
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the pallas_call, the grid (sequence, page), every BlockSpec, and the
+# page-id -&gt; page-slice helper -- the scalar-prefetched `page_tables` in the k/v
+# index maps IS that helper, so a grid step is handed the physical page already
+# resident in VMEM and you never gather a page yourself.
+#
+# The kv-head axis is deliberately NOT in the grid. Mosaic requires a block&#x27;s
+# second-minor dimension to be a multiple of 8 or equal to the array&#x27;s, and
+# k_pages is [num_pages, page_size, kv_heads, head_dim] -- so a per-head block
+# of [1, ps, 1, d] is rejected at compile time (measured: `block shape are
+# divisible by 8 and 128 respectively, or be equal to the respective dimensions
+# of the overall array`). One grid step therefore holds ALL kv heads of one
+# page, which is also 8x fewer grid steps.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+
+def kernel(q, k_pages, v_pages, page_tables, seq_lens):
+    b, qh, d = q.shape
+    npg, ps, kvh, _d = k_pages.shape
+    mp = page_tables.shape[1]
+    grp = qh // kvh
+    qg = q.reshape(b, kvh, grp, d)
+
+    def _body(pt_ref, sl_ref, q_ref, k_ref, v_ref, o_ref, m_ref, l_ref):
+        decode_block(q_ref, k_ref, v_ref, o_ref, m_ref, l_ref, sl_ref,
+                     kv_heads=kvh, group=grp, page_size=ps, head_dim=d,
+                     num_pages=mp)
+
+    out = _pl.pallas_call(
+        _body,
+        grid_spec=_pltpu.PrefetchScalarGridSpec(
+            num_scalar_prefetch=2,
+            grid=(b, mp),
+            in_specs=[
+                # every query head of this sequence: [1, kv_heads, group, d]
+                _pl.BlockSpec((1, kvh, grp, d), lambda bb, p, pt, sl: (bb, 0, 0, 0)),
+                # ONE physical page of K, chosen by the page table, all heads
+                _pl.BlockSpec((1, ps, kvh, d), lambda bb, p, pt, sl: (pt[bb, p], 0, 0, 0)),
+                _pl.BlockSpec((1, ps, kvh, d), lambda bb, p, pt, sl: (pt[bb, p], 0, 0, 0)),
+            ],
+            out_specs=_pl.BlockSpec((1, kvh, grp, d), lambda bb, p, pt, sl: (bb, 0, 0, 0)),
+            scratch_shapes=[
+                _pltpu.VMEM((kvh, grp, 128), _jnp.float32),  # running row max
+                _pltpu.VMEM((kvh, grp, 128), _jnp.float32),  # running row sum
+            ],
+        ),
+        out_shape=_jax.ShapeDtypeStruct((b, kvh, grp, d), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(page_tables.astype(_jnp.int32), seq_lens.astype(_jnp.int32), qg, k_pages, v_pages)
+    return out.reshape(b, qh, d)
+
+```
+
+## Judge verdict
+
+PASSED all correctness gates. Reward 0.790 -- your kernel runs at
+79% of the speed of the production kernel on the same inputs
+(reward = production_time / your_time; 1.0 means parity, above 1.0 beats it).
+The remaining gap is structural, not a constant to tweak: consider the grid
+and block sizes, VMEM working-set, online vs two-pass softmax, and whether
+work can be skipped entirely (masked blocks, empty pages).
+
+## Error signatures measured on previous attempts at these exact tasks
+
+* Attention, max err ~0.05: your fully-masked rows are producing UNIFORM
+  attention. With a finite mask value (-1e30) and a max-shifted softmax, a row
+  whose every key is masked gets exp(0)=1 everywhere -- the mean of V, not 0.
+  The contract requires exactly 0: keep a `row_live` mask and end with
+  `out = jnp.where(row_live[..., None], out, 0.0)`.
+* max err within ~1.5x of tol: precision, not logic. Keep every accumulator
+  float32 -- `preferred_element_type=jnp.float32` on every matmul, float32
+  running max/sum/output; bfloat16 only as matmul INPUTS.
+* non-finite output (NaN/inf): mask-value arithmetic in the online-softmax
+  rescale (inf - inf, or exp of a huge positive). Initialize the running max
+  to a large FINITE negative and mask before exponentiating.
+* O(1) error (max err &gt; 1.0): a term is missing outright -- a dropped
+  recurrence carry, a wrong head-group mapping. Re-derive the update rule
+  against the task statement before touching anything else.
+
+## What to do
+
+Fix the program. Think briefly about WHICH failure signature above matches the
+verdict, change what needs to change, and keep what already works. Output the
+COMPLETE corrected program in ONE ```python fenced block. No prose after it.
+</pre>
+  </details>
+</section>
+<section class="task">
+  <h2>megablox gmm</h2>
+  <p class="meta"><span class="chip">sd2</span> Grouped matmul (MoE expert dispatch). Seam + typed skeleton. Seed for improve mode: <code>gemma4-31b-sd2-i8-r19.9181</code> at <strong>0.589</strong> of production speed.</p>
+  <details>
+    <summary>Cold-start prompt <span class="len">16,196 chars ≈ 4,049+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write the inner tile of a grouped matmul (MoE `gmm`) Pallas kernel for TPU.
+
+## What you write, and what you do NOT write
+
+This is a fill-in task with a real seam in it. **The harness owns the
+interface; you own the strategy.** The harness has already written the exclusive scan of `group_sizes` to row offsets, the group-ALIGNED row permutation (so no row tile ever straddles two experts -- the zero-size-group and boundary-tile correctness traps are the harness&#x27;s), the `pallas_call` with scalar-prefetched per-tile expert ids, every `BlockSpec`, and the un-permute of the result. That
+code is fixed, it is shown to you verbatim below, and your job is only to
+supply the named functions it calls.
+
+Your code is pasted ABOVE the scaffold into one module and submitted as a
+single program, so the entrypoint, the shapes and the judge contract are
+already satisfied before you write a line. What is NOT decided is every choice
+that changes the number the judge measures.
+
+## The scaffold your code is appended to (verbatim, exactly as submitted)
+
+```python
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the exclusive scan of group_sizes to row offsets, the group-ALIGNED row
+# permutation (so no row tile ever straddles two experts -- the zero-size-group
+# and boundary-tile correctness traps are the harness&#x27;s, not yours), the
+# pallas_call with scalar-prefetched per-tile expert ids, every BlockSpec, and
+# the un-permute of the result.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+
+def _ru(x, m):
+    return ((x + m - 1) // m) * m
+
+
+def _tiles(m, k, n, g):
+    bm, bk, bn = choose_tiles(int(m), int(k), int(n), int(g))
+    bm = min(max(_ru(int(bm), 8), 8), 1024)
+    bk = min(max(_ru(int(bk), 128), 128), int(_ru(k, 128)))
+    bn = min(max(_ru(int(bn), 128), 128), 2048)
+    return bm, bk, bn
+
+
+def kernel(lhs, rhs, group_sizes):
+    m, k = lhs.shape
+    g, _k, n = rhs.shape
+    bm, bk, bn = _tiles(m, k, n, g)
+    np_ = _ru(n, bn)
+    # static upper bound on the group-aligned row count: every expert wastes at
+    # most bm-1 rows, and a zero-size expert wastes none.
+    mp = _ru(m, bm) + g * bm
+    n_row_tiles = mp // bm
+
+    sizes = group_sizes.astype(_jnp.int32)
+    starts = _jnp.concatenate([_jnp.zeros((1,), _jnp.int32), _jnp.cumsum(sizes)[:-1]])
+    psizes = ((sizes + bm - 1) // bm) * bm                      # aligned sizes
+    pstarts = _jnp.concatenate([_jnp.zeros((1,), _jnp.int32), _jnp.cumsum(psizes)[:-1]])
+
+    # per PADDED row: which expert owns it, and which source row it is
+    prow = _jnp.arange(mp, dtype=_jnp.int32)
+    grp = _jnp.sum(prow[:, None] &gt;= pstarts[None, :], axis=1) - 1   # [mp]
+    grp = _jnp.clip(grp, 0, g - 1)
+    off = prow - pstarts[grp]
+    live = (off &lt; sizes[grp]) &amp; (prow &lt; _jnp.sum(psizes))
+    src = _jnp.where(live, _jnp.clip(starts[grp] + off, 0, m - 1), 0)
+
+    lhs_p = _jnp.where(live[:, None], _jnp.take(lhs, src, axis=0), 0).astype(lhs.dtype)
+    rhs_p = _jnp.pad(rhs, ((0, 0), (0, 0), (0, np_ - n))) if np_ != n else rhs
+    # expert id of each ROW TILE: constant within a tile, by construction
+    tile_grp = grp[::bm].astype(_jnp.int32)                     # [n_row_tiles]
+
+    def _body(tg_ref, l_ref, r_ref, o_ref):
+        gmm_tile(l_ref, r_ref, o_ref, bm=bm, bk=bk, bn=bn, k=k)
+
+    out_p = _pl.pallas_call(
+        _body,
+        grid_spec=_pltpu.PrefetchScalarGridSpec(
+            num_scalar_prefetch=1,
+            grid=(n_row_tiles, np_ // bn),
+            in_specs=[
+                _pl.BlockSpec((bm, k), lambda i, j, tg: (i, 0)),          # lhs tile
+                _pl.BlockSpec((1, k, bn), lambda i, j, tg: (tg[i], 0, j)),  # expert
+            ],
+            out_specs=_pl.BlockSpec((bm, bn), lambda i, j, tg: (i, j)),
+        ),
+        out_shape=_jax.ShapeDtypeStruct((mp, np_), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(tile_grp, lhs_p, rhs_p)
+
+    # un-permute: original row r lives at padded row pstarts[grp_of_r] + (r - starts)
+    row = _jnp.arange(m, dtype=_jnp.int32)
+    rg = _jnp.sum(row[:, None] &gt;= starts[None, :], axis=1) - 1
+    rg = _jnp.clip(rg, 0, g - 1)
+    dst = _jnp.clip(pstarts[rg] + (row - starts[rg]), 0, mp - 1)
+    return _jnp.take(out_p[:, :n], dst, axis=0)
+```
+
+## What you must define
+
+```python
+def choose_tiles(m, k, n, num_groups):
+    &quot;&quot;&quot;All PYTHON INTS. returns (bm, bk, bn):
+       bm : rows of `lhs` per grid step   -&gt; rounded up to a multiple of 8
+       bk : YOUR contraction chunk        -&gt; rounded to a multiple of 128
+       bn : output columns per grid step  -&gt; rounded to a multiple of 128
+    bm and bn shape the grid and the VMEM footprint; bk is entirely internal to
+    gmm_tile and does not touch the BlockSpecs.&quot;&quot;&quot;
+
+def gmm_tile(l_ref, r_ref, o_ref, *, bm, bk, bn, k):
+    &quot;&quot;&quot;ONE grid step: one row tile x one column tile, for ONE expert.
+       l_ref [bm, k]     bfloat16  this tile&#x27;s rows of lhs, the FULL k axis
+       r_ref [1, k, bn]  bfloat16  this expert&#x27;s weights, the FULL k axis,
+                                   columns j*bn .. j*bn+bn-1
+       o_ref [bm, bn]    float32   THE OUTPUT. You must write it.
+       bm, bk, bn, k : Python ints.
+    Every row in this tile belongs to the SAME expert -- the harness guarantees
+    it -- and rows past the expert&#x27;s true size are already zeroed, so you never
+    check a boundary. `pl.program_id(0)` is the row tile, `pl.program_id(1)` the
+    column tile.&quot;&quot;&quot;
+```
+
+## Where the real decisions are
+
+* **`bm` and `bn` are the VMEM budget.** `l_ref` is `[bm, 4096]` bf16 and
+  `r_ref` is `[1, 4096, bn]` bf16, and Pallas double-buffers both: at
+  bm=512, bn=1024 that is 8 MB + 16 MB before the accumulator, against a ~32 MB
+  scoped ceiling. Too big is `CompileTimeScopedVmemOom` at compile time; too
+  small wastes the MXU. This is the main thing you are choosing.
+* **`bm` also sets the padding waste.** The harness aligns every expert to a
+  multiple of `bm`, so a large `bm` with many small experts pads a lot of dead
+  rows -- and those dead rows are multiplied anyway.
+* **The k loop.** `k=4096` is fully resident. One `[bm, 4096] x [4096, bn]`
+  `dot_general`, or a loop over `bk`-wide chunks accumulating into an f32
+  register. The MXU wants big contractions; the register file does not.
+* **Accumulation dtype and matmul precision.** `preferred_element_type=
+  jnp.float32` over bf16 operands is the standard grouped-matmul choice.
+* **Loop order.** You control only what is inside one tile, but within it the
+  order of the k chunks and where you keep the accumulator are yours.
+
+## Task semantics
+
+`out[rows of group g] = lhs[rows of group g] @ rhs[g]`, at fp32 accumulation.
+`group_sizes` sums to `m` and **zero-size groups are legal and do occur** (the
+harness handles them; you never see one). The fp32 oracle is
+`jax.lax.ragged_dot(lhs.astype(f32), rhs.astype(f32), group_sizes)`.
+
+## Declared shapes
+
+Expert widths are the real ones: k=4096, n=14336, num_groups=4.
+
+    m=4096, num_groups=4, k=4096, n=14336, uniform group sizes  (scored)
+    m=2048, num_groups=4, k=4096, n=14336, Zipf-skewed          (scored)
+    m=3000, num_groups=4, k=4096, n=14336, Zipf-skewed          (HOLDOUT:
+        logged, not scored, but it MUST still trace -- 3000 is deliberately not
+        a multiple of any reasonable row tile)
+
+Group sizes are freshly sampled from BOTH uniform and Zipf-skewed
+distributions on every grading, so a kernel tuned for one balance cannot fake
+a win on the other.
+
+## Judge contract
+
+- Exec&#x27;d, then `jax.export`ed once per declared shape, no data, no device.
+- MUST contain a real `pallas_call` -- the scaffold&#x27;s counts.
+- Correctness on hidden seeds against the fp32 oracle (max and q99 tail, 1.5x
+  the reference&#x27;s own bf16 error). Non-finite fails automatically.
+- Determinism: 5 runs, BITWISE identical. Compile budget 90 s for all shapes.
+- Score: median wall-clock against the tuned Pallas megablox `gmm` that MaxText
+  vendors. Note that the harness&#x27;s group-aligned permutation costs a gather and
+  a scatter that the baseline does not pay, so this denominator is harsh.
+- Banned: `jax.experimental.pallas.ops.*` (it holds the megablox kernel),
+  `tpu_inference`, `MaxText`, `maxtext`, `skyrl`, `recurrentgemma`, the arena&#x27;s
+  package.
+
+## How much to write
+
+Write **300-1200 tokens of code**. If you are past ~2000 you have started
+rewriting the scaffold instead of choosing a strategy -- stop and delete it.
+Do not restate the scaffold; the harness already has it.
+
+## The calls you make inside the function you write
+
+(introspected from the pinned jax 0.10.2, not remembered)
+
+```python
+# --- YOU CALL these, inside the function you are asked to write.
+pl.program_id(axis: int) -&gt; jax.Array          # index of THIS grid step
+pl.num_programs(axis: int) -&gt; int | jax.Array
+pl.when(condition)                             # a DECORATOR, not a context mgr:
+#     @pl.when(j == 0)
+#     def _():
+#         acc_ref[...] = jnp.zeros_like(acc_ref)
+pl.ds(start, size=None, stride=None)           # == pl.dslice; dynamic slice
+pl.cdiv(a, b)          pl.multiple_of(x, values)      pl.next_power_of_2(x)
+jax.lax.broadcasted_iota(dtype, shape, dimension)   # position indices in-kernel
+jax.lax.dot_general(lhs, rhs, dimension_numbers, precision=None,
+                    preferred_element_type=None)
+jax.lax.fori_loop / jax.lax.scan                    # both work inside a kernel
+```
+
+## Pallas dialect: the mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous attempts at these five kernels died on it.
+
+1. **Names that DO NOT EXIST at this pin**, every one of them invented by a
+   model on these exact tasks: `pl.load`, `pl.store`, `pl.swap`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`. A Ref is read and
+   written by INDEXING, not by a load/store function. (The `pallas_call`
+   keyword arguments that killed 4 more are the harness&#x27;s problem here, not
+   yours -- you do not write one.)
+
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **You return VALUES, not Refs, and exactly the arity the scaffold
+    unpacks.** Killed 5: `too many values to unpack (expected 2)`, and 3 more
+    on `not enough values to unpack`. Read the scaffold above for what it does
+    with your return.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+## A typed skeleton of exactly the functions you must write
+
+Every shape below is the real one at this seam. Every `...` is a decision that
+is yours and that moves the number the judge measures; none is filled in.
+
+```python
+import jax, jax.numpy as jnp                # you must import what you use
+
+def choose_tiles(m, k, n, num_groups):
+    return ..., ..., ...      # (bm, bk, bn). bm/bn set the grid and the VMEM;
+                              # bk is internal to gmm_tile only.
+
+def gmm_tile(l_ref, r_ref, o_ref, *, bm, bk, bn, k):
+    # l_ref [bm, k] bf16   r_ref [1, k, bn] bf16   o_ref [bm, bn] f32
+    # bm, bk, bn, k are PYTHON ints, so any loop over them unrolls.
+    ...
+    # One [bm, k] x [k, bn] contraction, or bk-wide chunks accumulated in f32:
+    # acc = jnp.zeros((bm, bn), jnp.float32)
+    # for kk in range(0, k, bk):
+    #     a = l_ref[:, kk:min(kk + bk, k)]        # mind the tail
+    #     w = r_ref[0, kk:min(kk + bk, k), :]     # [&lt;=bk, bn]
+    #     ...                                     # YOUR numerics and precision
+    o_ref[...] = ...          # EXACTLY [bm, bn] float32
+```
+
+## Output format
+
+Output ONE ```python code block containing ONLY the definitions listed above,
+plus whatever imports and private helpers they need. No prose outside it. Do
+NOT define `kernel`, do NOT write a `pallas_call`, do NOT rewrite any part of
+the scaffold: your code is pasted directly ABOVE it, in the same module, and
+anything you redefine that the scaffold also defines will simply be replaced.
+</pre>
+  </details>
+  <details>
+    <summary>Improve / repair prompt <span class="len">22,812 chars ≈ 5,703+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write the inner tile of a grouped matmul (MoE `gmm`) Pallas kernel for TPU.
+
+## What you write, and what you do NOT write
+
+This is a fill-in task with a real seam in it. **The harness owns the
+interface; you own the strategy.** The harness has already written the exclusive scan of `group_sizes` to row offsets, the group-ALIGNED row permutation (so no row tile ever straddles two experts -- the zero-size-group and boundary-tile correctness traps are the harness&#x27;s), the `pallas_call` with scalar-prefetched per-tile expert ids, every `BlockSpec`, and the un-permute of the result. That
+code is fixed, it is shown to you verbatim below, and your job is only to
+supply the named functions it calls.
+
+Your code is pasted ABOVE the scaffold into one module and submitted as a
+single program, so the entrypoint, the shapes and the judge contract are
+already satisfied before you write a line. What is NOT decided is every choice
+that changes the number the judge measures.
+
+## The scaffold your code is appended to (verbatim, exactly as submitted)
+
+```python
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the exclusive scan of group_sizes to row offsets, the group-ALIGNED row
+# permutation (so no row tile ever straddles two experts -- the zero-size-group
+# and boundary-tile correctness traps are the harness&#x27;s, not yours), the
+# pallas_call with scalar-prefetched per-tile expert ids, every BlockSpec, and
+# the un-permute of the result.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+
+def _ru(x, m):
+    return ((x + m - 1) // m) * m
+
+
+def _tiles(m, k, n, g):
+    bm, bk, bn = choose_tiles(int(m), int(k), int(n), int(g))
+    bm = min(max(_ru(int(bm), 8), 8), 1024)
+    bk = min(max(_ru(int(bk), 128), 128), int(_ru(k, 128)))
+    bn = min(max(_ru(int(bn), 128), 128), 2048)
+    return bm, bk, bn
+
+
+def kernel(lhs, rhs, group_sizes):
+    m, k = lhs.shape
+    g, _k, n = rhs.shape
+    bm, bk, bn = _tiles(m, k, n, g)
+    np_ = _ru(n, bn)
+    # static upper bound on the group-aligned row count: every expert wastes at
+    # most bm-1 rows, and a zero-size expert wastes none.
+    mp = _ru(m, bm) + g * bm
+    n_row_tiles = mp // bm
+
+    sizes = group_sizes.astype(_jnp.int32)
+    starts = _jnp.concatenate([_jnp.zeros((1,), _jnp.int32), _jnp.cumsum(sizes)[:-1]])
+    psizes = ((sizes + bm - 1) // bm) * bm                      # aligned sizes
+    pstarts = _jnp.concatenate([_jnp.zeros((1,), _jnp.int32), _jnp.cumsum(psizes)[:-1]])
+
+    # per PADDED row: which expert owns it, and which source row it is
+    prow = _jnp.arange(mp, dtype=_jnp.int32)
+    grp = _jnp.sum(prow[:, None] &gt;= pstarts[None, :], axis=1) - 1   # [mp]
+    grp = _jnp.clip(grp, 0, g - 1)
+    off = prow - pstarts[grp]
+    live = (off &lt; sizes[grp]) &amp; (prow &lt; _jnp.sum(psizes))
+    src = _jnp.where(live, _jnp.clip(starts[grp] + off, 0, m - 1), 0)
+
+    lhs_p = _jnp.where(live[:, None], _jnp.take(lhs, src, axis=0), 0).astype(lhs.dtype)
+    rhs_p = _jnp.pad(rhs, ((0, 0), (0, 0), (0, np_ - n))) if np_ != n else rhs
+    # expert id of each ROW TILE: constant within a tile, by construction
+    tile_grp = grp[::bm].astype(_jnp.int32)                     # [n_row_tiles]
+
+    def _body(tg_ref, l_ref, r_ref, o_ref):
+        gmm_tile(l_ref, r_ref, o_ref, bm=bm, bk=bk, bn=bn, k=k)
+
+    out_p = _pl.pallas_call(
+        _body,
+        grid_spec=_pltpu.PrefetchScalarGridSpec(
+            num_scalar_prefetch=1,
+            grid=(n_row_tiles, np_ // bn),
+            in_specs=[
+                _pl.BlockSpec((bm, k), lambda i, j, tg: (i, 0)),          # lhs tile
+                _pl.BlockSpec((1, k, bn), lambda i, j, tg: (tg[i], 0, j)),  # expert
+            ],
+            out_specs=_pl.BlockSpec((bm, bn), lambda i, j, tg: (i, j)),
+        ),
+        out_shape=_jax.ShapeDtypeStruct((mp, np_), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(tile_grp, lhs_p, rhs_p)
+
+    # un-permute: original row r lives at padded row pstarts[grp_of_r] + (r - starts)
+    row = _jnp.arange(m, dtype=_jnp.int32)
+    rg = _jnp.sum(row[:, None] &gt;= starts[None, :], axis=1) - 1
+    rg = _jnp.clip(rg, 0, g - 1)
+    dst = _jnp.clip(pstarts[rg] + (row - starts[rg]), 0, mp - 1)
+    return _jnp.take(out_p[:, :n], dst, axis=0)
+```
+
+## What you must define
+
+```python
+def choose_tiles(m, k, n, num_groups):
+    &quot;&quot;&quot;All PYTHON INTS. returns (bm, bk, bn):
+       bm : rows of `lhs` per grid step   -&gt; rounded up to a multiple of 8
+       bk : YOUR contraction chunk        -&gt; rounded to a multiple of 128
+       bn : output columns per grid step  -&gt; rounded to a multiple of 128
+    bm and bn shape the grid and the VMEM footprint; bk is entirely internal to
+    gmm_tile and does not touch the BlockSpecs.&quot;&quot;&quot;
+
+def gmm_tile(l_ref, r_ref, o_ref, *, bm, bk, bn, k):
+    &quot;&quot;&quot;ONE grid step: one row tile x one column tile, for ONE expert.
+       l_ref [bm, k]     bfloat16  this tile&#x27;s rows of lhs, the FULL k axis
+       r_ref [1, k, bn]  bfloat16  this expert&#x27;s weights, the FULL k axis,
+                                   columns j*bn .. j*bn+bn-1
+       o_ref [bm, bn]    float32   THE OUTPUT. You must write it.
+       bm, bk, bn, k : Python ints.
+    Every row in this tile belongs to the SAME expert -- the harness guarantees
+    it -- and rows past the expert&#x27;s true size are already zeroed, so you never
+    check a boundary. `pl.program_id(0)` is the row tile, `pl.program_id(1)` the
+    column tile.&quot;&quot;&quot;
+```
+
+## Where the real decisions are
+
+* **`bm` and `bn` are the VMEM budget.** `l_ref` is `[bm, 4096]` bf16 and
+  `r_ref` is `[1, 4096, bn]` bf16, and Pallas double-buffers both: at
+  bm=512, bn=1024 that is 8 MB + 16 MB before the accumulator, against a ~32 MB
+  scoped ceiling. Too big is `CompileTimeScopedVmemOom` at compile time; too
+  small wastes the MXU. This is the main thing you are choosing.
+* **`bm` also sets the padding waste.** The harness aligns every expert to a
+  multiple of `bm`, so a large `bm` with many small experts pads a lot of dead
+  rows -- and those dead rows are multiplied anyway.
+* **The k loop.** `k=4096` is fully resident. One `[bm, 4096] x [4096, bn]`
+  `dot_general`, or a loop over `bk`-wide chunks accumulating into an f32
+  register. The MXU wants big contractions; the register file does not.
+* **Accumulation dtype and matmul precision.** `preferred_element_type=
+  jnp.float32` over bf16 operands is the standard grouped-matmul choice.
+* **Loop order.** You control only what is inside one tile, but within it the
+  order of the k chunks and where you keep the accumulator are yours.
+
+## Task semantics
+
+`out[rows of group g] = lhs[rows of group g] @ rhs[g]`, at fp32 accumulation.
+`group_sizes` sums to `m` and **zero-size groups are legal and do occur** (the
+harness handles them; you never see one). The fp32 oracle is
+`jax.lax.ragged_dot(lhs.astype(f32), rhs.astype(f32), group_sizes)`.
+
+## Declared shapes
+
+Expert widths are the real ones: k=4096, n=14336, num_groups=4.
+
+    m=4096, num_groups=4, k=4096, n=14336, uniform group sizes  (scored)
+    m=2048, num_groups=4, k=4096, n=14336, Zipf-skewed          (scored)
+    m=3000, num_groups=4, k=4096, n=14336, Zipf-skewed          (HOLDOUT:
+        logged, not scored, but it MUST still trace -- 3000 is deliberately not
+        a multiple of any reasonable row tile)
+
+Group sizes are freshly sampled from BOTH uniform and Zipf-skewed
+distributions on every grading, so a kernel tuned for one balance cannot fake
+a win on the other.
+
+## Judge contract
+
+- Exec&#x27;d, then `jax.export`ed once per declared shape, no data, no device.
+- MUST contain a real `pallas_call` -- the scaffold&#x27;s counts.
+- Correctness on hidden seeds against the fp32 oracle (max and q99 tail, 1.5x
+  the reference&#x27;s own bf16 error). Non-finite fails automatically.
+- Determinism: 5 runs, BITWISE identical. Compile budget 90 s for all shapes.
+- Score: median wall-clock against the tuned Pallas megablox `gmm` that MaxText
+  vendors. Note that the harness&#x27;s group-aligned permutation costs a gather and
+  a scatter that the baseline does not pay, so this denominator is harsh.
+- Banned: `jax.experimental.pallas.ops.*` (it holds the megablox kernel),
+  `tpu_inference`, `MaxText`, `maxtext`, `skyrl`, `recurrentgemma`, the arena&#x27;s
+  package.
+
+## How much to write
+
+Write **300-1200 tokens of code**. If you are past ~2000 you have started
+rewriting the scaffold instead of choosing a strategy -- stop and delete it.
+Do not restate the scaffold; the harness already has it.
+
+## The calls you make inside the function you write
+
+(introspected from the pinned jax 0.10.2, not remembered)
+
+```python
+# --- YOU CALL these, inside the function you are asked to write.
+pl.program_id(axis: int) -&gt; jax.Array          # index of THIS grid step
+pl.num_programs(axis: int) -&gt; int | jax.Array
+pl.when(condition)                             # a DECORATOR, not a context mgr:
+#     @pl.when(j == 0)
+#     def _():
+#         acc_ref[...] = jnp.zeros_like(acc_ref)
+pl.ds(start, size=None, stride=None)           # == pl.dslice; dynamic slice
+pl.cdiv(a, b)          pl.multiple_of(x, values)      pl.next_power_of_2(x)
+jax.lax.broadcasted_iota(dtype, shape, dimension)   # position indices in-kernel
+jax.lax.dot_general(lhs, rhs, dimension_numbers, precision=None,
+                    preferred_element_type=None)
+jax.lax.fori_loop / jax.lax.scan                    # both work inside a kernel
+```
+
+## Pallas dialect: the mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous attempts at these five kernels died on it.
+
+1. **Names that DO NOT EXIST at this pin**, every one of them invented by a
+   model on these exact tasks: `pl.load`, `pl.store`, `pl.swap`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`. A Ref is read and
+   written by INDEXING, not by a load/store function. (The `pallas_call`
+   keyword arguments that killed 4 more are the harness&#x27;s problem here, not
+   yours -- you do not write one.)
+
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **You return VALUES, not Refs, and exactly the arity the scaffold
+    unpacks.** Killed 5: `too many values to unpack (expected 2)`, and 3 more
+    on `not enough values to unpack`. Read the scaffold above for what it does
+    with your return.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+## A typed skeleton of exactly the functions you must write
+
+Every shape below is the real one at this seam. Every `...` is a decision that
+is yours and that moves the number the judge measures; none is filled in.
+
+```python
+import jax, jax.numpy as jnp                # you must import what you use
+
+def choose_tiles(m, k, n, num_groups):
+    return ..., ..., ...      # (bm, bk, bn). bm/bn set the grid and the VMEM;
+                              # bk is internal to gmm_tile only.
+
+def gmm_tile(l_ref, r_ref, o_ref, *, bm, bk, bn, k):
+    # l_ref [bm, k] bf16   r_ref [1, k, bn] bf16   o_ref [bm, bn] f32
+    # bm, bk, bn, k are PYTHON ints, so any loop over them unrolls.
+    ...
+    # One [bm, k] x [k, bn] contraction, or bk-wide chunks accumulated in f32:
+    # acc = jnp.zeros((bm, bn), jnp.float32)
+    # for kk in range(0, k, bk):
+    #     a = l_ref[:, kk:min(kk + bk, k)]        # mind the tail
+    #     w = r_ref[0, kk:min(kk + bk, k), :]     # [&lt;=bk, bn]
+    #     ...                                     # YOUR numerics and precision
+    o_ref[...] = ...          # EXACTLY [bm, bn] float32
+```
+
+## Output format
+
+Output ONE ```python code block containing ONLY the definitions listed above,
+plus whatever imports and private helpers they need. No prose outside it. Do
+NOT define `kernel`, do NOT write a `pallas_call`, do NOT rewrite any part of
+the scaffold: your code is pasted directly ABOVE it, in the same module, and
+anything you redefine that the scaffold also defines will simply be replaced.
+
+
+--------------------------------------------------------------------------
+## Your current program
+
+The complete program below was submitted to the judge. You may change ANY part
+of it -- including the harness scaffolding, grid, and BlockSpecs -- as long as
+it still defines `kernel(*inputs)` with the contract above.
+
+```python
+import jax
+import jax.numpy as jnp
+
+def choose_tiles(m, k, n, num_groups):
+    &quot;&quot;&quot;
+    Returns (bm, bk, bn).
+    bm: 512 allows high MXU utilization while remaining under the 32MB VMEM ceiling.
+    bn: 512 maintains a balance between grid size and memory footprint.
+    bk: 128 is provided as a standard contraction chunk, though the full k is resident.
+    &quot;&quot;&quot;
+    return 512, 128, 512
+
+def gmm_tile(l_ref, r_ref, o_ref, *, bm, bk, bn, k):
+    &quot;&quot;&quot;
+    Performs one grid step: [bm, k] @ [k, bn] -&gt; [bm, bn].
+    
+    l_ref: [bm, k] in bf16
+    r_ref: [1, k, bn] in bf16
+    o_ref: [bm, bn] in f32
+    &quot;&quot;&quot;
+    # Read the resident tiles from MemoryRefs.
+    # lhs: (bm, k)
+    lhs = l_ref[...]
+    
+    # rhs: (k, bn)
+    # The harness provides r_ref as [1, k, bn] to match the expert-prefeteched BlockSpec.
+    rhs = r_ref[0, ...]
+    
+    # contract axis 1 of lhs (k) with axis 0 of rhs (k).
+    # preferred_element_type=jnp.float32 ensures the accumulator is f32 for bf16 inputs.
+    res = jax.lax.dot_general(
+        lhs, 
+        rhs, 
+        (((1,), (0,)), ((), ())), 
+        preferred_element_type=jnp.float32
+    )
+    
+    # Store the f32 result back into the output Ref.
+    o_ref[...] = res
+
+# ===================== HARNESS SCAFFOLD -- appended verbatim =================
+# Owns: the exclusive scan of group_sizes to row offsets, the group-ALIGNED row
+# permutation (so no row tile ever straddles two experts -- the zero-size-group
+# and boundary-tile correctness traps are the harness&#x27;s, not yours), the
+# pallas_call with scalar-prefetched per-tile expert ids, every BlockSpec, and
+# the un-permute of the result.
+import jax as _jax
+import jax.numpy as _jnp
+from jax.experimental import pallas as _pl
+from jax.experimental.pallas import tpu as _pltpu
+
+
+def _ru(x, m):
+    return ((x + m - 1) // m) * m
+
+
+def _tiles(m, k, n, g):
+    bm, bk, bn = choose_tiles(int(m), int(k), int(n), int(g))
+    bm = min(max(_ru(int(bm), 8), 8), 1024)
+    bk = min(max(_ru(int(bk), 128), 128), int(_ru(k, 128)))
+    bn = min(max(_ru(int(bn), 128), 128), 2048)
+    return bm, bk, bn
+
+
+def kernel(lhs, rhs, group_sizes):
+    m, k = lhs.shape
+    g, _k, n = rhs.shape
+    bm, bk, bn = _tiles(m, k, n, g)
+    np_ = _ru(n, bn)
+    # static upper bound on the group-aligned row count: every expert wastes at
+    # most bm-1 rows, and a zero-size expert wastes none.
+    mp = _ru(m, bm) + g * bm
+    n_row_tiles = mp // bm
+
+    sizes = group_sizes.astype(_jnp.int32)
+    starts = _jnp.concatenate([_jnp.zeros((1,), _jnp.int32), _jnp.cumsum(sizes)[:-1]])
+    psizes = ((sizes + bm - 1) // bm) * bm                      # aligned sizes
+    pstarts = _jnp.concatenate([_jnp.zeros((1,), _jnp.int32), _jnp.cumsum(psizes)[:-1]])
+
+    # per PADDED row: which expert owns it, and which source row it is
+    prow = _jnp.arange(mp, dtype=_jnp.int32)
+    grp = _jnp.sum(prow[:, None] &gt;= pstarts[None, :], axis=1) - 1   # [mp]
+    grp = _jnp.clip(grp, 0, g - 1)
+    off = prow - pstarts[grp]
+    live = (off &lt; sizes[grp]) &amp; (prow &lt; _jnp.sum(psizes))
+    src = _jnp.where(live, _jnp.clip(starts[grp] + off, 0, m - 1), 0)
+
+    lhs_p = _jnp.where(live[:, None], _jnp.take(lhs, src, axis=0), 0).astype(lhs.dtype)
+    rhs_p = _jnp.pad(rhs, ((0, 0), (0, 0), (0, np_ - n))) if np_ != n else rhs
+    # expert id of each ROW TILE: constant within a tile, by construction
+    tile_grp = grp[::bm].astype(_jnp.int32)                     # [n_row_tiles]
+
+    def _body(tg_ref, l_ref, r_ref, o_ref):
+        gmm_tile(l_ref, r_ref, o_ref, bm=bm, bk=bk, bn=bn, k=k)
+
+    out_p = _pl.pallas_call(
+        _body,
+        grid_spec=_pltpu.PrefetchScalarGridSpec(
+            num_scalar_prefetch=1,
+            grid=(n_row_tiles, np_ // bn),
+            in_specs=[
+                _pl.BlockSpec((bm, k), lambda i, j, tg: (i, 0)),          # lhs tile
+                _pl.BlockSpec((1, k, bn), lambda i, j, tg: (tg[i], 0, j)),  # expert
+            ],
+            out_specs=_pl.BlockSpec((bm, bn), lambda i, j, tg: (i, j)),
+        ),
+        out_shape=_jax.ShapeDtypeStruct((mp, np_), _jnp.float32),
+        compiler_params=_pltpu.CompilerParams(
+            dimension_semantics=(&quot;arbitrary&quot;, &quot;arbitrary&quot;),
+        ),
+    )(tile_grp, lhs_p, rhs_p)
+
+    # un-permute: original row r lives at padded row pstarts[grp_of_r] + (r - starts)
+    row = _jnp.arange(m, dtype=_jnp.int32)
+    rg = _jnp.sum(row[:, None] &gt;= starts[None, :], axis=1) - 1
+    rg = _jnp.clip(rg, 0, g - 1)
+    dst = _jnp.clip(pstarts[rg] + (row - starts[rg]), 0, mp - 1)
+    return _jnp.take(out_p[:, :n], dst, axis=0)
+
+```
+
+## Judge verdict
+
+PASSED all correctness gates. Reward 0.589 -- your kernel runs at
+59% of the speed of the production kernel on the same inputs
+(reward = production_time / your_time; 1.0 means parity, above 1.0 beats it).
+The remaining gap is structural, not a constant to tweak: consider the grid
+and block sizes, VMEM working-set, online vs two-pass softmax, and whether
+work can be skipped entirely (masked blocks, empty pages).
+
+## Error signatures measured on previous attempts at these exact tasks
+
+* Attention, max err ~0.05: your fully-masked rows are producing UNIFORM
+  attention. With a finite mask value (-1e30) and a max-shifted softmax, a row
+  whose every key is masked gets exp(0)=1 everywhere -- the mean of V, not 0.
+  The contract requires exactly 0: keep a `row_live` mask and end with
+  `out = jnp.where(row_live[..., None], out, 0.0)`.
+* max err within ~1.5x of tol: precision, not logic. Keep every accumulator
+  float32 -- `preferred_element_type=jnp.float32` on every matmul, float32
+  running max/sum/output; bfloat16 only as matmul INPUTS.
+* non-finite output (NaN/inf): mask-value arithmetic in the online-softmax
+  rescale (inf - inf, or exp of a huge positive). Initialize the running max
+  to a large FINITE negative and mask before exponentiating.
+* O(1) error (max err &gt; 1.0): a term is missing outright -- a dropped
+  recurrence carry, a wrong head-group mapping. Re-derive the update rule
+  against the task statement before touching anything else.
+
+## What to do
+
+Fix the program. Think briefly about WHICH failure signature above matches the
+verdict, change what needs to change, and keep what already works. Output the
+COMPLETE corrected program in ONE ```python fenced block. No prose after it.
+</pre>
+  </details>
+</section>
+<section class="task">
+  <h2>rg lru</h2>
+  <p class="meta"><span class="chip">p1</span> Gated linear recurrence (Griffin). Whole-program prompt at ladder rung P1 (best measured cell, 25/32). Seed for improve mode: <code>gemma4-31b-p1-i15-r1.0000</code> at <strong>0.702</strong> of production speed.</p>
+  <details>
+    <summary>Cold-start prompt <span class="len">8,992 chars ≈ 2,248+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write a fast RG-LRU gated diagonal linear scan (the RecurrentGemma SSM recurrence) in JAX for TPU.
+
+## Task
+
+Entrypoint (exact): a module-level function named `kernel`:
+
+    def kernel(x, a, reset):  -&gt;  h
+
+  x      : [b, t, d]  bfloat16
+  a      : [b, t, d]  float32, in [0, 1)   (gates, precomputed)
+  reset  : [b, t]     bool
+  h      : [b, t, d]  float32
+
+The recurrence, along the time axis, per batch element and per channel:
+
+    h_t = a_t * h_{t-1} + sqrt(max(1 - a_t^2, 0)) * x_t
+
+with `h_{-1} = 0`, and `a_t` forced to 0 wherever `reset_t` is True, so no state crosses a segment boundary (at a reset, `h_t = x_t` exactly). The gates are concentrated near 1 (long memory), so `sqrt(1 - a^2)` is small and float32 drift over long T is the difficulty this task exists for. Forward pass only.
+
+## Declared shapes
+
+Width is the real RecurrentGemma-2B one: d=2560. One implementation must trace and run at ALL of these:
+
+    b=4, t=2048, d=2560   (scored)
+    b=2, t=1024, d=2560   (scored)
+    b=2, t=1500, d=2560   (HOLDOUT: logged, not scored, but the kernel MUST still trace and be correct here -- t=1500 is deliberately not a multiple of any reasonable chunk)
+
+## Judge contract
+
+- Your program is exec&#x27;d, then `kernel` is serialized with `jax.export` once per declared shape, with NO concrete data and NO device. It must trace at every declared shape.
+- Banned: importing `recurrentgemma`, `jax.experimental.pallas.ops.*`, `tpu_inference`, `MaxText`, `maxtext`, `skyrl`, and the arena&#x27;s own package. Enforced by a static AST screen AND runtime module poisoning.
+- A `pallas_call` is ALLOWED but NOT required for this task -- `jax.lax.associative_scan` is an explicitly legal strategy.
+- Correctness: per-element error `|cand - ref| / (|ref| + 1)` against an fp32 closed-form reference on hidden random seeds, checked on BOTH the max and the 99th-percentile tail, at a tolerance calibrated to 1.5x the reference&#x27;s own drift. Non-finite output is an automatic failure.
+- Determinism: 5 repeated runs on the same input must be BITWISE identical.
+- Compile budget: all shapes together must trace+compile within 90 seconds.
+- This task is memory-bandwidth bound; the judge also reports what fraction of the chip&#x27;s peak HBM bandwidth you reached.
+- Score: median wall-clock speed versus the judge&#x27;s baseline, measured interleaved with fresh inputs per iteration; correctness is re-verified on an output from a TIMED invocation. NOTE: this judge&#x27;s baseline is `jax.lax.associative_scan`, not DeepMind&#x27;s recurrentgemma Pallas scan.
+
+## Environment
+
+jax 0.10.2, TPU (v6e). If you use Pallas: `from jax.experimental import pallas as pl`, `from jax.experimental.pallas import tpu as pltpu`.
+
+## Output format
+
+Output ONLY a single self-contained Python program in one ```python code block. No prose outside it. It must define `kernel` at module level and import everything it uses.
+
+## The correctness oracle
+
+The exact fp32 closed form you are graded against. It is a sequential
+`lax.scan`; a chunked or associative reformulation of the SAME recurrence is
+an entirely legal (and much faster) answer.
+
+```python
+a32 = a.astype(jnp.float32) * (1.0 - reset[..., None].astype(jnp.float32))  # reset first
+gx  = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a32), 0.0)) * x.astype(jnp.float32)
+
+def step(h, xs):          # h: [b, d] float32, starts at zeros
+    a_t, gx_t = xs
+    h = a_t * h + gx_t
+    return h, h
+# scanned over the TIME axis; output h is [b, t, d] float32
+```
+
+## Pallas dialect: the ten mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous 160 attempts at these five kernels died on it.
+
+1. **`pallas_call` kwargs are plural.** `out_specs=`, `in_specs=`,
+   `out_shape=jax.ShapeDtypeStruct(shape, dtype)`, `grid=`, `scratch_shapes=`,
+   `compiler_params=pltpu.CompilerParams(...)`.
+   Killed 4: `pallas_call() got an unexpected keyword argument &#x27;out_spec&#x27;`.
+   These names DO NOT EXIST: `out_spec`, `out_dtype`, `out_shapes`,
+   `in_shapes`, `block_shapes`, `index_map=`, `pl.load`, `pl.store`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`.
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **`jax.custom_vjp` registers with `.defvjp(fwd, bwd)`**; `fwd` returns
+    `(out, residuals)` and `bwd` returns a TUPLE of cotangents, one per
+    primal argument. Killed 1: `&#x27;custom_vjp&#x27; object has no attribute
+    &#x27;def_fwd&#x27;`. And 3 candidates that got the API right still failed the
+    gradient gate.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+Restated, because it is the one thing that cannot be recovered from: output
+ONE ```python code block containing a single self-contained program that
+defines `kernel` at module level and imports everything it uses. No prose
+outside the block.
+</pre>
+  </details>
+  <details>
+    <summary>Improve / repair prompt <span class="len">13,225 chars ≈ 3,306+ tokens</span></summary>
+    <pre>You are an expert JAX/TPU kernel engineer. Write a fast RG-LRU gated diagonal linear scan (the RecurrentGemma SSM recurrence) in JAX for TPU.
+
+## Task
+
+Entrypoint (exact): a module-level function named `kernel`:
+
+    def kernel(x, a, reset):  -&gt;  h
+
+  x      : [b, t, d]  bfloat16
+  a      : [b, t, d]  float32, in [0, 1)   (gates, precomputed)
+  reset  : [b, t]     bool
+  h      : [b, t, d]  float32
+
+The recurrence, along the time axis, per batch element and per channel:
+
+    h_t = a_t * h_{t-1} + sqrt(max(1 - a_t^2, 0)) * x_t
+
+with `h_{-1} = 0`, and `a_t` forced to 0 wherever `reset_t` is True, so no state crosses a segment boundary (at a reset, `h_t = x_t` exactly). The gates are concentrated near 1 (long memory), so `sqrt(1 - a^2)` is small and float32 drift over long T is the difficulty this task exists for. Forward pass only.
+
+## Declared shapes
+
+Width is the real RecurrentGemma-2B one: d=2560. One implementation must trace and run at ALL of these:
+
+    b=4, t=2048, d=2560   (scored)
+    b=2, t=1024, d=2560   (scored)
+    b=2, t=1500, d=2560   (HOLDOUT: logged, not scored, but the kernel MUST still trace and be correct here -- t=1500 is deliberately not a multiple of any reasonable chunk)
+
+## Judge contract
+
+- Your program is exec&#x27;d, then `kernel` is serialized with `jax.export` once per declared shape, with NO concrete data and NO device. It must trace at every declared shape.
+- Banned: importing `recurrentgemma`, `jax.experimental.pallas.ops.*`, `tpu_inference`, `MaxText`, `maxtext`, `skyrl`, and the arena&#x27;s own package. Enforced by a static AST screen AND runtime module poisoning.
+- A `pallas_call` is ALLOWED but NOT required for this task -- `jax.lax.associative_scan` is an explicitly legal strategy.
+- Correctness: per-element error `|cand - ref| / (|ref| + 1)` against an fp32 closed-form reference on hidden random seeds, checked on BOTH the max and the 99th-percentile tail, at a tolerance calibrated to 1.5x the reference&#x27;s own drift. Non-finite output is an automatic failure.
+- Determinism: 5 repeated runs on the same input must be BITWISE identical.
+- Compile budget: all shapes together must trace+compile within 90 seconds.
+- This task is memory-bandwidth bound; the judge also reports what fraction of the chip&#x27;s peak HBM bandwidth you reached.
+- Score: median wall-clock speed versus the judge&#x27;s baseline, measured interleaved with fresh inputs per iteration; correctness is re-verified on an output from a TIMED invocation. NOTE: this judge&#x27;s baseline is `jax.lax.associative_scan`, not DeepMind&#x27;s recurrentgemma Pallas scan.
+
+## Environment
+
+jax 0.10.2, TPU (v6e). If you use Pallas: `from jax.experimental import pallas as pl`, `from jax.experimental.pallas import tpu as pltpu`.
+
+## Output format
+
+Output ONLY a single self-contained Python program in one ```python code block. No prose outside it. It must define `kernel` at module level and import everything it uses.
+
+## The correctness oracle
+
+The exact fp32 closed form you are graded against. It is a sequential
+`lax.scan`; a chunked or associative reformulation of the SAME recurrence is
+an entirely legal (and much faster) answer.
+
+```python
+a32 = a.astype(jnp.float32) * (1.0 - reset[..., None].astype(jnp.float32))  # reset first
+gx  = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a32), 0.0)) * x.astype(jnp.float32)
+
+def step(h, xs):          # h: [b, d] float32, starts at zeros
+    a_t, gx_t = xs
+    h = a_t * h + gx_t
+    return h, h
+# scanned over the TIME axis; output h is [b, t, d] float32
+```
+
+## Pallas dialect: the ten mistakes that actually killed candidates here
+
+These are measured. Each line is the verbatim error and how many of the
+previous 160 attempts at these five kernels died on it.
+
+1. **`pallas_call` kwargs are plural.** `out_specs=`, `in_specs=`,
+   `out_shape=jax.ShapeDtypeStruct(shape, dtype)`, `grid=`, `scratch_shapes=`,
+   `compiler_params=pltpu.CompilerParams(...)`.
+   Killed 4: `pallas_call() got an unexpected keyword argument &#x27;out_spec&#x27;`.
+   These names DO NOT EXIST: `out_spec`, `out_dtype`, `out_shapes`,
+   `in_shapes`, `block_shapes`, `index_map=`, `pl.load`, `pl.store`, `pl.Ref`,
+   `pltpu.ANY`, `pltpu.TPUCompilerParams`, `jax.Shape`.
+2. **Inside the kernel body you are handed Refs; a Ref is not an array.**
+   Read `q_ref[...]`, `q_ref[0]`, `q_ref[:, :1]`; write `o_ref[...] = value`
+   or `o_ref[0] = value`. A Ref has `.shape` and `.dtype` and NO `.astype` --
+   read first, then cast.
+3. **`pltpu.VMEM(shape, dtype)` is a SPECIFICATION, legal only inside
+   `scratch_shapes=`.** Calling it in a kernel body returns a `MemoryRef`.
+   Killed 9: `&#x27;MemoryRef&#x27; object does not support item assignment`. To
+   accumulate inside a body use an ordinary value: `acc = jnp.zeros(...)`,
+   `acc = acc + block`.
+4. **A store into a Ref is not a broadcast** -- the right-hand side must
+   already have the Ref&#x27;s shape. Killed 6:
+   `` Invalid shape for `swap`. Ref shape: (8, 4, 128) ... Value shape: () ``.
+   Write `m_ref[...] = jnp.full(m_ref.shape, -1e30, m_ref.dtype)`, not
+   `m_ref[...] = -1e30`.
+5. **`dot_general`&#x27;s `dimension_numbers` is a PAIR OF PAIRS**, never flat.
+   Killed 5 (`too many values to unpack (expected 2)`) plus several
+   `dot_general requires ...`:
+   `jax.lax.dot_general(x, y, (((1,), (1,)), ((), ())), preferred_element_type=jnp.float32)`
+   -- that contracts axis 1 of x with axis 1 of y. WRONG: `((1,), (1,))`,
+   `((1,), (1,), (0, 0))`.
+6. **`@pl.when(cond)` is a DECORATOR that consumes the function and returns
+   `None`.** Decorate and stop. Killed 2 (`&#x27;function&#x27; object is not iterable`,
+   `&#x27;NoneType&#x27; object is not callable`). Never `with pl.when(...):`, never
+   call the decorated name.
+7. **Everything read out of a Ref is a TRACER.** `if`, `while`, `bool()`,
+   `int()`, python `min`/`max` on one raise `TracerBoolConversionError`
+   (killed 3). Use `jnp.where` for values and `@pl.when` for whole blocks.
+   Python control flow on the STATIC ints (block sizes, page_size, head
+   counts) is fine and unrolls at trace time.
+8. **Mosaic tiling.** A block&#x27;s last dim must be a multiple of 128 (or the
+   whole dim) and its second-minor a multiple of 8 (or the whole dim). Killed
+   1: `block shape are divisible by 8 and 128 respectively, or be equal to the
+   respective dimensions of the overall array`. A `BlockSpec` block must also
+   tile the operand: pad with `jnp.pad`, run the grid over the padded shape,
+   slice the result back down. The HOLDOUT shape is in the declared set to
+   force exactly this.
+9. **`kernel` returns ONE array of the declared output shape and dtype**, not
+   a tuple, not a Ref. Killed 2 (`function ... returned wrong type from jit`)
+   and 2 more on layout (`cannot reshape array of shape (256, 4, 2560) into
+   shape (4, 2560)`). If you scanned over time, `jnp.moveaxis` back before
+   returning.
+10. **`jax.custom_vjp` registers with `.defvjp(fwd, bwd)`**; `fwd` returns
+    `(out, residuals)` and `bwd` returns a TUPLE of cotangents, one per
+    primal argument. Killed 1: `&#x27;custom_vjp&#x27; object has no attribute
+    &#x27;def_fwd&#x27;`. And 3 candidates that got the API right still failed the
+    gradient gate.
+
+One more, and unlike the rest it is not an API error -- it is the single
+biggest cause of wrong ANSWERS here, so treat it as a rule.
+
+**Keep every accumulator in float32. Pass `preferred_element_type=jnp.float32`
+on every matmul.**
+
+Your inputs are bfloat16 by contract. The MXU takes bfloat16 operands and sums
+them in a wider float32 register -- but `jnp.dot`/`jnp.einsum` on two bfloat16
+arrays RETURNS bfloat16, so that float32 accumulator is rounded away at the end
+of every matmul unless you ask for it. bfloat16 carries about 3 decimal digits;
+these kernels reduce over thousands of keys, pages, vocabulary entries or
+timesteps, and the rounding compounds.
+
+What a production TPU kernel does -- splash, vLLM-TPU, megablox, tokamax, all
+of them -- is use bfloat16 ONLY as the matmul input format, because that is
+what makes the MXU fast, and hold everything between matmuls at float32:
+float32 logits, float32 softmax/LSE, float32 output accumulator. Narrow back to
+bfloat16 only where a value is about to re-enter the MXU as an operand.
+
+MEASURED against this judge&#x27;s calibrated tolerance, across all five tasks: the
+production path above lands at 0.4-0.7x of the budget, comfortably inside. The
+same kernel written with the default dtypes -- bfloat16 logits, bfloat16
+softmax, bfloat16 accumulator -- lands at 1.4x to 4.1x, i.e. it FAILS on
+correctness while looking completely reasonable.
+
+Do NOT reach for `precision=jax.lax.Precision.HIGHEST` instead. It is about 6x
+the passes, no production kernel uses it for bfloat16 inputs, and buying
+correctness with it just loses you the speed you are being scored on.
+
+Restated, because it is the one thing that cannot be recovered from: output
+ONE ```python code block containing a single self-contained program that
+defines `kernel` at module level and imports everything it uses. No prose
+outside the block.
+
+
+--------------------------------------------------------------------------
+## Your current program
+
+The complete program below was submitted to the judge. You may change ANY part
+of it -- including the harness scaffolding, grid, and BlockSpecs -- as long as
+it still defines `kernel(*inputs)` with the contract above.
+
+```python
+import jax
+import jax.numpy as jnp
+from jax import lax
+
+def kernel(x, a, reset):
+    &quot;&quot;&quot;
+    Performs a gated linear recurrence scan over the time axis.
+    
+    Recurrence: h_t = a_t * h_{t-1} + gx_t
+    where gx_t = sqrt(max(1 - a_t^2, 0)) * x_t
+    and a_t is forced to 0 if reset[t] is True.
+    
+    Args:
+        x: [b, t, d] bfloat16
+        a: [b, t, d] float32
+        reset: [b, t] bool
+        
+    Returns:
+        h: [b, t, d] float32
+    &quot;&quot;&quot;
+    # Precompute the effective gates by applying the reset mask.
+    # reset is [b, t], a is [b, t, d]. We broadcast the mask over d.
+    # reset_mask = 0.0 if reset is True, else 1.0
+    reset_mask = (1.0 - reset[..., None].astype(jnp.float32))
+    a_eff = a * reset_mask
+    
+    # Compute the input term gx.
+    # gx = sqrt(max(1 - a_eff^2, 0)) * x.
+    # x is cast to float32 to maintain precision during the recurrence.
+    gx = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a_eff), 0.0)) * x.astype(jnp.float32)
+    
+    # The recurrence h_t = a_t * h_{t-1} + gx_t is a linear scan.
+    # We can solve this using an associative scan.
+    # We define the operator for an element i as (a_i, gx_i).
+    # The combination of two operators (a_prev, h_prev) and (a_curr, gx_curr) is:
+    # a_new = a_curr * a_prev
+    # h_new = a_curr * h_prev + gx_curr
+    #
+    # h_0 = gx_0
+    # h_1 = a_1 * h_0 + gx_1 = a_1 * gx_0 + gx_1
+    # h_2 = a_2 * h_1 + gx_2 = a_2 * (a_1 * gx_0 + gx_1) + gx_2 = a_2 * a_1 * gx_0 + a_2 * gx_1 + gx_2
+    # This matches the associative operator derived above.
+    
+    def scan_op(lhs, rhs):
+        # lhs: accumulated (a_prefix, h_prefix)
+        # rhs: current element (a_curr, gx_curr)
+        a_prev, h_prev = lhs
+        a_curr, gx_curr = rhs
+        return (a_curr * a_prev, a_curr * h_prev + gx_curr)
+    
+    # Use jax.lax.associative_scan over the time axis (axis=1).
+    # The input to the scan is a tuple of (a_eff, gx), both shaped [b, t, d].
+    # The scan returns a tuple of (A_results, H_results).
+    res = lax.associative_scan(scan_op, (a_eff, gx), axis=1)
+    
+    # The hidden state h_t at each time step is the second component of the scan result.
+    return res[1]
+```
+
+## Judge verdict
+
+PASSED all correctness gates. Reward 0.702 -- your kernel runs at
+70% of the speed of the production kernel on the same inputs
+(reward = production_time / your_time; 1.0 means parity, above 1.0 beats it).
+The remaining gap is structural, not a constant to tweak: consider the grid
+and block sizes, VMEM working-set, online vs two-pass softmax, and whether
+work can be skipped entirely (masked blocks, empty pages).
+
+## Error signatures measured on previous attempts at these exact tasks
+
+* Attention, max err ~0.05: your fully-masked rows are producing UNIFORM
+  attention. With a finite mask value (-1e30) and a max-shifted softmax, a row
+  whose every key is masked gets exp(0)=1 everywhere -- the mean of V, not 0.
+  The contract requires exactly 0: keep a `row_live` mask and end with
+  `out = jnp.where(row_live[..., None], out, 0.0)`.
+* max err within ~1.5x of tol: precision, not logic. Keep every accumulator
+  float32 -- `preferred_element_type=jnp.float32` on every matmul, float32
+  running max/sum/output; bfloat16 only as matmul INPUTS.
+* non-finite output (NaN/inf): mask-value arithmetic in the online-softmax
+  rescale (inf - inf, or exp of a huge positive). Initialize the running max
+  to a large FINITE negative and mask before exponentiating.
+* O(1) error (max err &gt; 1.0): a term is missing outright -- a dropped
+  recurrence carry, a wrong head-group mapping. Re-derive the update rule
+  against the task statement before touching anything else.
+
+## What to do
+
+Fix the program. Think briefly about WHICH failure signature above matches the
+verdict, change what needs to change, and keep what already works. Output the
+COMPLETE corrected program in ONE ```python fenced block. No prose after it.
+</pre>
+  </details>
+</section>
+<section class="task">
+  <h2>triangle multiplication (TriMul) &mdash; the ttt-discover original</h2>
+  <p class="meta"><span class="chip">gpu_mode / Triton</span> The authors&rsquo; own prompt from
+  <code>third_party/discover/examples/gpu_mode/prompt.py</code> &mdash; the GPU MODE competition task
+  (AlphaFold3 triangle update), targeting <strong>Triton on NVIDIA</strong>, used verbatim by their
+  kernel-engineering results. Not part of job 3695727; shown for comparison, and as the source
+  contract for a future TPU/Pallas port of the env.</p>
+  <p class="note">Structurally it is a close cousin of ours: PyTorch reference module (their
+  &ldquo;task semantics&rdquo;) &rarr; entrypoint skeleton (their sd2) &rarr; an unrelated worked Triton
+  example to pin the dialect version (the pattern that <em>backfired</em> for us on Pallas &mdash; theirs
+  is annotated but still a foreign kernel) &rarr; four API tips (a 4-line dialect list; ours grew to ten
+  entries with kill counts) &rarr; test-case configs (their declared shapes). What it lacks vs ours: an
+  explicit judge contract (tolerance/adversarial-inputs text) and any statement of the baseline being
+  timed against. Notable: they inline the FULL reference implementation; we describe semantics in math
+  and ship the harness scaffold instead.</p>
+  <details>
+    <summary>TRIMUL_PROMPT, verbatim <span class="len">8,402 chars &asymp; 2,100+ tokens</span></summary>
+    <pre>You are an expert Triton engineer tasked with translating PyTorch code into highly optimized Triton kernel code.
+
+You will be implementing a Triangle Multiplicative Update (TriMul) module that is a core operation
+for AlphaFold3, Chai, Protenix, and other protein structure prediction models in BioML.
+
+The TriMul operator operates over a 4D tensor of shape [B, N, N, C]. 
+
+Your task:
+- Implement the &quot;outgoing&quot; version of the TriMul operator from the AlphaFold3 paper.
+- You will not have to compute or store gradients for this version. You will only need to implement the forward pass.
+
+Your function should be defined as &#x27;custom_kernel&#x27; with the following signature:
+Input:
+- `data`: Tuple of (input: torch.Tensor, weights: Dict[str, torch.Tensor], config: Dict)
+    - input: Input tensor of shape [bs, seq_len, seq_len, dim]
+    - mask: Mask tensor of shape [bs, seq_len, seq_len]
+    - weights: Dictionary containing model weights
+    - config: Dictionary containing model configuration parameters
+
+Output:
+- output: Processed tensor [bs, seq_len, seq_len, dim]
+
+**Problem Constraints:**
+- B ∈ {1,2}, N ∈ {128,256,512,1024}, c ∈ {128}, c_z ∈ {128,384,768}
+- The input distribution will be sampled from a standard Normal distribution, or a heavy-tailed Cauchy distribution (gamma = 2).
+- There will either be no mask, or a randomly sampled mask over the inputs.
+
+**Remarks.** So why is this problem so annoying? Because you have to choose whether to load / deal with either the channel dimensions c,c_z that the LayerNorms require (otherwise you have to do a synchronize to compute the statistics like mean / variance) or the sequence dimension N. 
+The sequence dimension is particularly annoying because it&#x27;s quite large, but also because we compute pair-wise operations at the last operation that sum over another sequence dimension (this is N^3!). 
+However, I really like this kernel because it only consists of “simple” operations, and is really easy to understand. It is a true test of “fusions” that torch.compile() doesn&#x27;t do that well.
+
+Here is a pytorch implementation of the TriMul module. You will want to implement a kernel for the operations in the forward call:
+
+```python
+import torch
+from torch import nn, einsum
+import math
+
+# Reference code in PyTorch
+class TriMul(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        hidden_dim: int,
+    ):
+        super().__init__()
+
+        self.norm = nn.LayerNorm(dim)
+
+        self.left_proj = nn.Linear(dim, hidden_dim, bias=False)
+        self.right_proj = nn.Linear(dim, hidden_dim, bias=False)
+
+        self.left_gate = nn.Linear(dim, hidden_dim, bias=False)
+        self.right_gate = nn.Linear(dim, hidden_dim, bias=False)
+        self.out_gate = nn.Linear(dim, hidden_dim, bias=False)
+
+        self.to_out_norm = nn.LayerNorm(hidden_dim)
+        self.to_out = nn.Linear(hidden_dim, dim, bias=False)
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -&gt; torch.Tensor:
+        &quot;&quot;&quot;
+        x: [bs, seq_len, seq_len, dim]
+        mask: [bs, seq_len, seq_len]
+
+        Returns:
+            output: [bs, seq_len, seq_len, dim]
+        &quot;&quot;&quot;
+        batch_size, seq_len, _, dim = x.shape
+
+        x = self.norm(x)
+
+        left = self.left_proj(x)
+        right = self.right_proj(x)
+
+        mask = mask.unsqueeze(-1)
+        left = left * mask
+        right = right * mask
+
+        left_gate = self.left_gate(x).sigmoid()
+        right_gate = self.right_gate(x).sigmoid()
+        out_gate = self.out_gate(x).sigmoid()
+
+        left = left * left_gate
+        right = right * right_gate
+
+        out = einsum(&#x27;... i k d, ... j k d -&gt; ... i j d&#x27;, left, right)
+        # This einsum is the same as the following:
+        # out = torch.zeros(batch_size, seq_len, seq_len, dim, device=x.device)
+        
+        # # Compute using nested loops
+        # for b in range(batch_size):
+        #     for i in range(seq_len):
+        #         for j in range(seq_len):
+        #             # Compute each output element
+        #             for k in range(seq_len):
+        #                 out[b, i, j] += left[b, i, k, :] * right[b, j, k, :]
+
+        out = self.to_out_norm(out)
+        out = out * out_gate
+        return self.to_out(out)
+```
+
+Here is some example skeleton code of the entrypoint function you will create:
+```python
+def custom_kernel(data)
+    input_tensor, mask, weights, config = data
+    dim, hidden_dim = config[&quot;dim&quot;], config[&quot;hidden_dim&quot;]
+
+    # Access the given weights of the model
+    norm_weight = weights[&quot;norm.weight&quot;]
+    norm_bias = weights[&quot;norm.bias&quot;]
+    left_proj_weight = weights[&quot;left_proj.weight&quot;]
+    right_proj_weight = weights[&quot;right_proj.weight&quot;]
+    left_gate_weight = weights[&quot;left_gate.weight&quot;]
+    right_gate_weight = weights[&quot;right_gate.weight&quot;]
+    out_gate_weight = weights[&quot;out_gate.weight&quot;]
+    to_out_norm_weight = weights[&quot;to_out_norm.weight&quot;]
+    to_out_norm_bias = weights[&quot;to_out_norm.bias&quot;]
+    to_out_weight = weights[&quot;to_out.weight&quot;]
+
+    # Perform TriMul
+
+    return out
+```
+
+To help you understand which triton version we are using, here is some example triton code for an unrelated task:
+```python
+import triton
+import triton.language as tl
+
+@triton.jit
+def matmul_persistent_ws_kernel(
+   a_ptr, b_ptr, c_ptr, M, N, K,
+   stride_am, stride_ak, stride_bk, stride_bn, stride_cm, stride_cn,
+   BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+):
+   pid = tl.program_id(axis=0) # async_task 0, 1, 2
+   num_pid_m = tl.cdiv(M, BLOCK_M) # async_task 0, 1, 2
+   num_pid_n = tl.cdiv(N, BLOCK_N) # async_task 0, 1, 2
+   pid_m = pid // num_pid_m # async_task 0, 1, 2
+   pid_n = pid % num_pid_n # async_task 0, 1, 2
+   offs_m_1 = pid_m * BLOCK_M + tl.arange(0, BLOCK_M // 2) # async_task 0, 1, 2
+   offs_m_2 = pid_m * BLOCK_M + tl.arange(BLOCK_M // 2, BLOCK_M) # async_task 0, 1, 2
+   offs_n = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_N) # async_task 0, 1, 2
+   offs_k = tl.arange(0, BLOCK_K) # async_task 0
+   a_ptrs_1 = a_ptr + (offs_m_1[:, None] * stride_am + offs_k[None, :] * stride_ak) # async_task 0
+   a_ptrs_2 = a_ptr + (offs_m_2[:, None] * stride_am + offs_k[None, :] * stride_ak) # async_task 0
+   b_ptrs = b_ptr + (offs_k[:, None] * stride_bk + offs_n[None, :] * stride_bn) # async_task 0
+   acc_1 = tl.zeros((BLOCK_M // 2, BLOCK_N), dtype=tl.float32) # async_task 1
+   acc_1 = tl.zeros((BLOCK_M // 2, BLOCK_N), dtype=tl.float32) # async_task 2
+   for k in range(0, tl.cdiv(K, BLOCK_K)): # async_task 0, 1, 2
+       a_1 = tl.load(a_ptrs_1)   # async_task 0
+       a_2 = tl.load(a_ptrs_2)   # async_task 0
+       b = tl.load(b_ptrs)   # async_task 0
+       acc_1 += tl.dot(a_1, b)   # async_task 1
+       acc_2 += tl.dot(a_2, b)   # async_task 2
+       a_ptrs_1 += BLOCK_K * stride_ak # async_task 0
+       a_ptrs_2 += BLOCK_K * stride_ak # async_task 0
+       b_ptrs += BLOCK_K * stride_bk # async_task 0
+   c_1 = acc_1.to(tl.float16) # async_task 1
+   c_2 = acc_2.to(tl.float16) # async_task 2
+   c_ptrs_1 = c_ptr_1 + stride_cm * offs_m_1[:, None] + stride_cn * offs_n[None, :] # async_task 1
+   c_ptrs_2 = c_ptr_2 + stride_cm * offs_m_2[:, None] + stride_cn * offs_n[None, :] # async_task 2
+   tl.store(c_ptrs_1, c_1) # async_task 1
+   tl.store(c_ptrs_2, c_2) # async_task 2
+```
+
+A few general triton tips:
+- tl.arange only takes in constexpr arguments (static or tl.constexpr)
+- You cannot use continue in your kernel code
+- tl.dot can only take in two input tensors
+- There is no tl.mean
+
+Here are the different configs that your kernel will be tested on (&quot;nomask&quot; sets whether there will be no mask, or a randomly sampled mask over the inputs):
+
+Test Cases for correctness and runtime (optimize runtime for these):
+  - {&quot;seqlen&quot;: 256, &quot;bs&quot;: 2, &quot;dim&quot;: 128, &quot;hidden_dim&quot;: 128, &quot;nomask&quot;: True, &quot;distribution&quot;: &quot;normal&quot;}
+  - {&quot;seqlen&quot;: 768, &quot;bs&quot;: 1, &quot;dim&quot;: 128, &quot;hidden_dim&quot;: 128, &quot;nomask&quot;: True, &quot;distribution&quot;: &quot;cauchy&quot;}
+  - {&quot;seqlen&quot;: 256, &quot;bs&quot;: 2, &quot;dim&quot;: 384, &quot;hidden_dim&quot;: 128, &quot;nomask&quot;: False, &quot;distribution&quot;: &quot;normal&quot;}
+  - {&quot;seqlen&quot;: 512, &quot;bs&quot;: 1, &quot;dim&quot;: 128, &quot;hidden_dim&quot;: 128, &quot;nomask&quot;: True, &quot;distribution&quot;: &quot;normal&quot;}
+  - {&quot;seqlen&quot;: 1024, &quot;bs&quot;: 1, &quot;dim&quot;: 128, &quot;hidden_dim&quot;: 128, &quot;nomask&quot;: True, &quot;distribution&quot;: &quot;cauchy&quot;}
+  - {&quot;seqlen&quot;: 768, &quot;bs&quot;: 1, &quot;dim&quot;: 384, &quot;hidden_dim&quot;: 128, &quot;nomask&quot;: False, &quot;distribution&quot;: &quot;normal&quot;}
+  - {&quot;seqlen&quot;: 1024, &quot;bs&quot;: 1, &quot;dim&quot;: 384, &quot;hidden_dim&quot;: 128, &quot;nomask&quot;: True, &quot;distribution&quot;: &quot;normal&quot;}
+</pre>
+  </details>
+</section>

@@ -36,13 +36,22 @@ fi
 # which imports them even though the pallas scan never uses either. Verified
 # locally: this exact sequence imports lru_pallas_scan + tokamax side by side
 # on absl 2.5 / jax 0.10.2.)
-"$HOME/arena-venv/bin/pip" install --quiet tokamax flax einops sentencepiece einshape
+# xprof: the judge's DEVICE timer. tokamax's TPU default is hermetic_xprof
+# (Disjoint Interval Union of XLA op intervals = active device time); our
+# wallclock fallback adds Python dispatch to BOTH legs of every ratio, which
+# compresses scores toward 1.0. Listed in tokamax's own `bench` extra.
+"$HOME/arena-venv/bin/pip" install --quiet tokamax flax einops sentencepiece einshape xprof
 "$HOME/arena-venv/bin/pip" install --quiet --no-deps recurrentgemma
 "$HOME/arena-venv/bin/python" - <<'EOF'
 import jax
 assert jax.__version__ == "0.10.2", f"ARENA JAX PIN MOVED: {jax.__version__}"
 from recurrentgemma.jax.pallas import lru_pallas_scan  # noqa: F401
 import tokamax  # noqa: F401
+try:
+    from tokamax._src.benchmarking import XprofProfileSession  # noqa: F401
+    print("device timing: xprof import OK")
+except Exception as e:
+    print(f"device timing: UNAVAILABLE ({type(e).__name__}: {e}) -- judge will use wallclock")
 print("denominator deps: OK (jax pin intact)")
 EOF
 

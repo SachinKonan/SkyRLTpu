@@ -40,6 +40,20 @@ run taxonomy -m pallas_arena.verify.taxonomy \
   --results "$RESULTS" --out "${out_dir}/verify-taxonomy-${J}.json"
 run repair   -m pallas_arena.verify.repair_fills \
   --results "$RESULTS" --out "${out_dir}/verify-repair-${J}.json"
+run prove    -m pallas_arena.verify.prove_fixes \
+  --out "${out_dir}/verify-prove-${J}.json"
+
+# Can the REAL recurrentgemma scan be bound as the rg_lru denominator? Needs the
+# package, which is NOT an arena dependency -- hence its own uv invocation.
+case ",$STAGES," in *,rgbind,*)
+  echo; echo "=== rgbind $(date +%H:%M:%S) ==="
+  uv run --isolated --extra dev --extra jax --with flatbuffers \
+    --with 'recurrentgemma==1.0.1' python -m pallas_arena.verify.rg_baseline_probe \
+    --out "${out_dir}/verify-rgbind-${J}.json" 2>&1 | tail -120
+  echo "rgbind rc=${PIPESTATUS[0]}"
+  ;;
+*) echo "== skip rgbind" ;;
+esac
 
 echo; echo "=== verify-cpu done rc=${rc} $(date +%H:%M:%S) ==="
 exit "$rc"

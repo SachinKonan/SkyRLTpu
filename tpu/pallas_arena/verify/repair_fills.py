@@ -230,7 +230,7 @@ def main() -> int:
 
     tasks = args.tasks.split(",")
     rows = [json.loads(l) for l in open(args.results)]
-    sigs = {t: pregate.probe_signatures(t, configs.TASK_CASES[t]) for t in tasks}
+    sigs = {t: pregate.probe_signatures(t, configs.TASK_CASES[t])[0] for t in tasks}
 
     out = {"per_candidate": [], "summary": {}}
     tally = collections.defaultdict(lambda: collections.Counter())

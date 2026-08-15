@@ -70,6 +70,106 @@ def interleaved_score(pairs: list[tuple[float, float]]) -> float:
     return median(pair_ratios(pairs))
 
 
+def amortized_call(fn, args, repeats: int):
+    """Call ``fn(*args)`` ``repeats`` times inside ONE jit, chained through
+    ``jax.lax.optimization_barrier`` so XLA cannot collapse the repeats.
+
+    WHY. Our per-pair timing is wallclock (`perf_counter` + `block_until_ready`),
+    which includes Python dispatch. With overhead `c` and true times `a`/`b` the
+    measured ratio is (a+c)/(b+c), NOT a/b -- so every reward is compressed
+    TOWARD 1.0, understating real speedups and overstating real slowdowns. The
+    counterbalanced alternation cancels drift and first-position penalty; it
+    cannot cancel a constant added to both legs.
+
+    tokamax's harness sidesteps this by defaulting to device-level profiling on
+    TPU (`hermetic_xprof`; wallclock is only its fallback). Rather than take a
+    profiling dependency into the judge, amortize: k chained calls per dispatch
+    divides the overhead by k. The barrier is load-bearing -- without it XLA
+    CSEs the identical calls into one and the timing silently measures 1/k of
+    the work.
+    """
+    import jax
+
+    def body(*a):
+        out = fn(*a)
+        for _ in range(repeats - 1):
+            a = jax.lax.optimization_barrier(a)
+            out = fn(*a)
+        return out
+
+    return body
+
+
+def device_timer(fn, args):
+    """Device-time one call of ``fn(*args)`` in milliseconds, or None.
+
+    Copies tokamax's TPU default (`hermetic_xprof`): profile the call and take
+    the DISJOINT INTERVAL UNION of XLA op intervals -- total active device
+    time, overlapping ops merged -- instead of a Python stopwatch. On TPU the
+    instrumentation is added at compile time with near-zero overhead, so this
+    measures the kernel rather than the kernel plus dispatch.
+
+    Why we want it: our reward is a RATIO. A Python stopwatch adds the same
+    dispatch cost `c` to both legs, so a true a/b is measured as (a+c)/(b+c)
+    and every score is compressed TOWARD 1.0 -- real speedups understated,
+    real slowdowns overstated, worst at our fastest shapes (RPA's baseline is
+    0.21 ms, where c is not small).
+
+    Returns None when profiling is unavailable (CPU, missing xprof, any
+    failure) so the caller falls back to wallclock rather than failing a grade.
+    """
+    try:
+        import jax
+
+        if jax.default_backend() == "cpu":
+            return None
+        from tokamax._src.benchmarking import XprofProfileSession
+    except Exception:  # noqa: BLE001 -- no tokamax/xprof on this host
+        return None
+    try:
+        import datetime
+
+        import jax
+
+        jax.block_until_ready(fn(*args))  # warm; never timed
+        with XprofProfileSession(hermetic=True, use_jax_profiler=True) as prof:
+            jax.block_until_ready(fn(*args))
+        return prof.total_op_time / datetime.timedelta(milliseconds=1)
+    except Exception:  # noqa: BLE001 -- profiling must never fail a grade
+        return None
+
+
+def device_timing_available() -> bool:
+    """Probe once at boot: can this judge device-time at all?"""
+    try:
+        import jax
+        import jax.numpy as jnp
+
+        if jax.default_backend() == "cpu":
+            return False
+        x = jnp.ones((256, 256), jnp.float32)
+        return device_timer(lambda a: a @ a, (x,)) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def counterbalanced_pair_device(i, ref_fn, cand_fn, args, dev_timer):
+    """Device-timed counterbalanced pair: same alternation as the wallclock
+    version (so the first-position penalty still cancels), but each leg's
+    latency comes from the profiler's active-device time rather than a Python
+    stopwatch. Returns None if either leg fails to profile, so the caller can
+    fall back for that pair instead of dropping the case."""
+    if i % 2 == 0:
+        r = dev_timer(ref_fn, args)
+        c = dev_timer(cand_fn, args)
+    else:
+        c = dev_timer(cand_fn, args)
+        r = dev_timer(ref_fn, args)
+    if not r or not c or r <= 0 or c <= 0:
+        return None
+    return (r, c)
+
+
 def counterbalanced_pair(i, run_ref, run_cand, perf, block):
     """Run ONE timed pair with alternating position order: R,C on even i,
     C,R on odd i.
