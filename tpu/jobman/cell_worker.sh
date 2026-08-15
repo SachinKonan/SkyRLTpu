@@ -116,11 +116,12 @@ pick_tiles() {
   esac
 }
 
-# w0-local HF cache for the trainer + client (scoped to this model's dir).
-HF_DIR="models--${MODEL_NAME//\//--}"
-mkdir -p "$HOME/.cache/huggingface/hub/$HF_DIR"
-gsutil -m -q rsync -r "$HF_GCS/$HF_DIR" "$HOME/.cache/huggingface/hub/$HF_DIR" 2>/dev/null \
-  && echo "w0 HF cache restored ($HF_DIR)" || echo "w0 HF cache restore failed (hub fallback for public models)"
+# NO w0 HF weight staging. w0 runs the trainer (which loads MaxText/orbax, not
+# safetensors) plus the client (which needs only tokenizer/config). Rsyncing the
+# whole model dir here put 71G of gemma-4 safetensors on a 97G boot disk and left
+# no room for the tunix install -- `uv pip install ... aqtp` died with
+# "No space left on device", the trainer never started, and the cell looped.
+# Tokenizer/config resolve from the HF hub (all our models are public repos).
 
 if engines_healthy; then
   echo "engines already healthy -- skipping bring-up"
