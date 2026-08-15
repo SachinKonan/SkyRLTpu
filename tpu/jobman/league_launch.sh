@@ -37,6 +37,30 @@ chmod +x ~/sidecar_"$RUN".sh
 tmux kill-session -t cell-backup 2>/dev/null
 tmux new-session -d -s cell-backup "bash ~/sidecar_$RUN.sh"
 
+# ---- asymmetric-lineage guard ------------------------------------------------
+# A client death BETWEEN the two members' first checkpoint exports leaves one
+# member with a row and the other with none. Strict resume then refuses forever
+# ("members disagree on resume batch: [1, 0]") and the arm retry-loops. When
+# NOTHING has been banked (no metrics rows), the safe resolution is a coherent
+# cold start: clear the orphan rows so both members begin together. Guarded on
+# the metrics file being empty, so it can never discard real progress -- and we
+# do NOT cold-start weights onto a warm tree, which would be an unlogged
+# restart and would contaminate a no-restart arm.
+_ml=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/metrics.jsonl 2>/dev/null | head -1)
+_rows=0; [ -s "${_ml:-}" ] && _rows=$(wc -l < "$_ml")
+if [ "$_rows" -eq 0 ]; then
+  _nq=$(cat ~/skyrl-runs/"$RUN"/tinker_log/*/member_qwen/checkpoints.jsonl 2>/dev/null | wc -l)
+  _ng=$(cat ~/skyrl-runs/"$RUN"/tinker_log/*/member_gemma/checkpoints.jsonl 2>/dev/null | wc -l)
+  if [ "$_nq" != "$_ng" ]; then
+    echo "asymmetric lineage with 0 banked steps (qwen=$_nq gemma=$_ng) -- clearing both for a coherent cold start"
+    for _m in member_qwen member_gemma; do
+      for _f in ~/skyrl-runs/"$RUN"/tinker_log/*/"$_m"/checkpoints.jsonl; do
+        [ -e "$_f" ] && : > "$_f"
+      done
+    done
+  fi
+fi
+
 # ---- re-register BOTH members' durable checkpoints BEFORE the client starts -
 for _spec in "member_qwen:Qwen/Qwen3.5-27B" "member_gemma:google/gemma-4-31B-it"; do
   _md=${_spec%%:*}; _bm=${_spec##*:}
