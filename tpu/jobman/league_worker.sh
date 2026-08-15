@@ -27,22 +27,18 @@ if [ ! -x "$REPO/third_party/discover/.venv-ttd-discover/bin/python" ]; then
 fi
 echo "client venv OK"
 
-# --- w0-local HF cache: QWEN ONLY --------------------------------------------
-# w0 runs the qwen trainer + the client; the gemma trainer lives on w4 and
-# start_colocated_vllm_tinker.sh restores its cache there. Staging gemma here
-# too puts 71G of unused weights on a 97G boot disk -- observed live: the disk
-# hit 98% and the tinker server died with "No space left on device". The
-# client's gemma TOKENIZER (a few MB) comes from the hub on demand, which is
-# how the original league run worked.
-_qhd="models--Qwen--Qwen3.5-27B"
-mkdir -p "$HOME/.cache/huggingface/hub/$_qhd"
-gsutil -m -q rsync -r "gs://sk7524-tinker-tpu-us-east5/hf-cache/$_qhd" \
-  "$HOME/.cache/huggingface/hub/$_qhd" 2>/dev/null || true
-# Reclaim the disk if a previous attempt staged gemma weights here.
-if [ -d "$HOME/.cache/huggingface/hub/models--google--gemma-4-31B-it" ]; then
-  echo "removing stray gemma weight cache from w0 (belongs on w4)"
-  rm -rf "$HOME/.cache/huggingface/hub/models--google--gemma-4-31B-it"
-fi
+# --- NO w0 HF weight staging -------------------------------------------------
+# w0 runs the qwen trainer + the client. The trainer loads MaxText/orbax (the
+# skyrl-maxtext-ckpts mirror holds qwen3.5-27b and gemma4-31b), and the client
+# needs only tokenizer/config -- neither reads safetensors. Staging weights here
+# put 71G of gemma-4 on a 97G boot disk and the tinker server died with
+# "No space left on device". Only the vLLM hosts need HF weights, and
+# start_vllm_tpu.sh restores those on w1-3 / w5-7 via HF_CACHE_GCS.
+# Reclaim anything a previous attempt left behind.
+for _d in models--google--gemma-4-31B-it models--Qwen--Qwen3.5-27B; do
+  [ -d "$HOME/.cache/huggingface/hub/$_d" ] && {
+    echo "removing stray w0 weight cache: $_d"; rm -rf "$HOME/.cache/huggingface/hub/$_d"; }
+done
 df -h / | tail -1
 
 qwen_tinker_healthy()  { curl -fsS -m6 "http://127.0.0.1:8000/api/v1/get_server_capabilities" >/dev/null 2>&1; }
