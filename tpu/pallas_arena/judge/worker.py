@@ -252,6 +252,14 @@ class PersistentWorker:
                 }
                 print(f"[boot] {case.name}: baseline={best} "
                       f"({', '.join(f'{k}={v * 1e3:.2f}ms' for k, v in live.items())})", flush=True)
+                # Free this case's inputs before the next one allocates: with a
+                # 6-shape sweep these accumulate across boot and the judge
+                # segfaults (rc=139, job 3699504). The elected jitted fn is
+                # kept; only the fixtures are dropped.
+                del w
+                import gc
+
+                gc.collect()
             self.general_baseline_s = self.perf() - t_bl
 
         # Warm the CALIBRATION path too, not just the baseline. Every

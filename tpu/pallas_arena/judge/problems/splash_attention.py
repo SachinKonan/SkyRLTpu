@@ -250,7 +250,13 @@ class SplashAttentionProblem(Problem):
             ShapeCase("probe-h8-s4096", {"heads": 8, "seq": 4096, "d": 128}, probe=True),
             ShapeCase("probe-h4-s2048", {"heads": 4, "seq": 2048, "d": 128}, probe=True),
             ShapeCase("probe-h16-s1024", {"heads": 16, "seq": 1024, "d": 128}, probe=True),
-            ShapeCase("probe-h2-s8192", {"heads": 2, "seq": 8192, "d": 128}, probe=True),
+            # DROPPED probe-h2-s8192: the fp32 closed-form reference is
+            # [2, 8192, 8192] = 537 MB, and calibration runs it alongside two
+            # honest variants -- ~2 GB live for ONE case, on top of five other
+            # cases' warmed programs. Measured: the judge segfaults during boot
+            # (rc=139, job 3699504) once the sweep includes it. Long sequences
+            # are still swept via s4096 vs s1024 at fixed token budget; testing
+            # 8192 needs a memory-lean reference, not a bigger sweep.
             ShapeCase("probe-h8-s4096-d64", {"heads": 8, "seq": 4096, "d": 64}, probe=True),
             ShapeCase("probe-holdout-h4-s2049", {"heads": 4, "seq": 2049, "d": 128}, holdout=True, probe=True),
             # DROPPED: a non-divisible sequence AT d=64 segfaults the TPU
