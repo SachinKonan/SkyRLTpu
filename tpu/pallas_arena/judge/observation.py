@@ -283,11 +283,16 @@ def _pass_observation(result: dict, problem: str) -> str:
     reward = result.get("reward")
     parts = [f"GATE all | {problem} | PASS reward={reward:.4f}" if isinstance(reward, float) else f"GATE all | {problem} | PASS"]
     lat = result.get("latencies") or {}
+    impls = result.get("baseline_impl_per_case") or {}
     for case, d in list(lat.items())[:3]:
         try:
             c = float(d["cand_median_s"]) * 1e3
             r = float(d["ref_median_s"]) * 1e3
-            parts.append(f"{case}: cand {c:.3f}ms vs ref {r:.3f}ms ({r / c if c else 0:.3f}x)")
+            # NAME the thing being raced. "ref 0.22ms" is anonymous; knowing the
+            # bar is XLA rather than a tuned Pallas kernel changes what is worth
+            # trying, and it is the candidate's target rather than hidden state.
+            who = f" [{impls[case]}]" if case in impls else ""
+            parts.append(f"{case}: cand {c:.3f}ms vs ref{who} {r:.3f}ms ({r / c if c else 0:.3f}x)")
         except Exception:
             continue
     sol = result.get("speed_of_light_fracs") or {}

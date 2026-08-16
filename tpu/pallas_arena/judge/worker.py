@@ -253,7 +253,7 @@ class PersistentWorker:
                     return self.boot_report
                 best = min(live, key=live.get)
                 self._general_baselines[case.name] = {
-                    "impl": best, "fn": jax.jit(cands[best]),
+                    "impl": best, "fn": jax.jit(cands[best]), "raw": cands[best],
                     "median_s": live[best], "all_s": live,
                 }
                 print(f"[boot] {case.name}: baseline={best} "
@@ -580,6 +580,7 @@ class PersistentWorker:
             # ---- 6. counterbalanced interleaved timing, fresh inputs per
             # ---- iteration, correctness verified on TIMED outputs
             case_timings, sol_fracs, baseline_impls, timer_used = [], {}, {}, {}
+            skipped_tp, tp_widths = {}, {}
             for case in self.scored_cases + self.holdout_cases:
                 if over_budget():
                     return budget_fail(f"timing ({case.name})")
@@ -594,9 +595,35 @@ class PersistentWorker:
                 base_fn = gb["fn"] if gb else self._baseline_fn
                 if gb:
                     baseline_impls[case.name] = gb["impl"]
+
+                # TENSOR PARALLEL. The candidate was EXPORTED at per-shard
+                # shapes (build_signatures), so it can only be called through
+                # shard_map -- executing it on full-shape inputs would be a
+                # shape mismatch, and grading a TP case unsharded would report
+                # a number that looks comparable and is not. A judge with fewer
+                # devices than the declared width must skip and say so.
+                tp_w = problem.tp_declared_width(case)
+                tp_mesh = None
+                if tp_w:
+                    n_dev = len(self.jax.local_devices())
+                    if n_dev < tp_w:
+                        skipped_tp[case.name] = f"needs {tp_w} devices, judge has {n_dev}"
+                        continue
+                    specs = problem.tp_specs()
+                    if specs is None:
+                        skipped_tp[case.name] = "task declares no tp_specs"
+                        continue
+                    tp_in, tp_out = specs
+                    tp_mesh = timing_mod.make_mesh(tp_w)
+                    raw_base = gb["raw"] if gb and gb.get("raw") else problem.baseline
+                    cand_fn = self.jax.jit(timing_mod.shard_mapped(cand_fn, tp_mesh, tp_in, tp_out))
+                    base_fn = self.jax.jit(timing_mod.shard_mapped(raw_base, tp_mesh, tp_in, tp_out))
+                    tp_widths[case.name] = tp_w
                 for i in range(self.timing_warmup + self.timing_pairs):
                     inputs = problem.make_inputs(fold_in(fold_in(k_time, i), hash_stable(case.name)), case)
                     block(inputs)
+                    if tp_mesh is not None:
+                        inputs = timing_mod.shard_inputs(inputs, tp_mesh, problem.tp_specs()[0])
                     pair, _r, c_out = timing_mod.counterbalanced_pair(
                         i, lambda: base_fn(*inputs), lambda: cand_fn(*inputs), perf, block
                     )
@@ -658,6 +685,8 @@ class PersistentWorker:
             speed_of_light_fracs=sol_fracs,
             baseline_impl_per_case=baseline_impls,
             timer=timer_used,
+            tp_widths=tp_widths,
+            skipped_tp=skipped_tp,
             latencies={
                 t.case: {"ref_median_s": t.ref_median_s, "cand_median_s": t.cand_median_s} for t in case_timings
             },
