@@ -116,6 +116,14 @@ def main() -> None:
                 trow["results"][name] = {"old_reward": old_reward, "error": f"{type(e).__name__}: {str(e)[:200]}"}
                 print(f"  {name[:58]:58s} EXCEPTION {type(e).__name__}", flush=True)
         report["tasks"][task] = trow
+        # WRITE AFTER EVERY TASK. Both regrades (jobs 3699934, 3700088) were
+        # preempted mid-run having graded 29 and 21 candidates, and wrote
+        # nothing at all because the dump lived only at the end -- the results
+        # had to be scraped back out of stdout. On preemptible hardware a
+        # report that only exists at completion is a report you frequently
+        # do not get.
+        with open(args.out, "w") as f:
+            json.dump(report, f, indent=1)
 
     with open(args.out, "w") as f:
         json.dump(report, f, indent=1)
