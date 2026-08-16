@@ -32,11 +32,15 @@ USER_R=sk7524_princeton_edu
 
 ZONE="${ZONE:-us-east5-a}"
 Z="--project=vision-mix --zone=${ZONE}"
-# us-east5-b is NOT in the rotation: `accelerator-types list` advertises v5p-8
-# there but the QR create call fails with an API error for this project, so a
-# slot spent there is a slot wasted.  It IS in ALL_ZONES for cleanup.
-ZONES="${ZONES:-us-east5-a us-east5-c us-east5-a}"
+# us-east5-b is in the rotation but placed second on purpose: `accelerator-types
+# list` advertises v5p-8 there and the create call has previously failed with an
+# API error for this project, but a refused create costs ~2.5 min and the zone
+# is worth re-probing rather than assumed dead.  A zone that refuses CREATE is
+# skipped immediately, so the cost of including it is bounded.
+ZONES="${ZONES:-us-east5-a us-east5-b us-east5-c us-east5-a}"
 ZONE_TRY_SEC="${ZONE_TRY_SEC:-900}"
+# Pause between full rotations when every zone refused the CREATE outright.
+ROUND_SLEEP="${ROUND_SLEEP:-120}"
 ALL_ZONES="us-east5-a us-east5-b us-east5-c"
 QR="${QR:-sk7524-museglimmer-vllmimpl}"
 ACC="${ACC:-v5p-8}"
@@ -156,6 +160,20 @@ done
 
 QR_CREATED_AT=$(date +%s)
 LANDED=""
+# A CREATE refused for quota costs ~40 s and tells us nothing about the next
+# minute: the v5p spot pool in us-east5-a is sized by what the rest of the
+# project happens to be holding, and QRs there finish and free chips
+# continuously.  So the zone rotation is wrapped in a retry loop and the whole
+# thing is bounded by LAND_SEC, rather than exiting the moment every zone
+# happens to be full.  Waiting is acceptable; a different accelerator is not.
+ROUND=0
+while [ -z "$LANDED" ] && [ "$(elapsed)" -lt "$LAND_SEC" ]; do
+ROUND=$((ROUND + 1))
+if [ "$ROUND" -gt 1 ]; then
+  log "--- rotation round ${ROUND}: no ${ACC} yet ($(elapsed)s of ${LAND_SEC}s) -- re-probing in ${ROUND_SLEEP}s ---"
+  sleep "$ROUND_SLEEP"
+  [ "$(elapsed)" -ge "$LAND_SEC" ] && break
+fi
 for zone_try in $ZONES; do
   el=$(elapsed)
   [ "$el" -ge "$LAND_SEC" ] && { log "landing budget ${LAND_SEC}s exhausted"; break; }
@@ -212,6 +230,7 @@ for zone_try in $ZONES; do
     }
   fi
 done
+done   # rotation retry loop
 
 if [ -z "$LANDED" ]; then
   log "NOT LANDED after $(elapsed)s across zones [${ZONES}] (cap ${LAND_SEC}s) -- giving up"
@@ -427,7 +446,16 @@ ${VLLM_VENV}/bin/python ~/make_lora_adapter.py --model-dir ${REMOTE_MODEL} \
           --out ~/res_lora.json" 2400 | tail -50 | tee -a "$PROG"
     fetch res_lora.json
     # The adapter-count assertion, read out of the engine's own log.
-    rsh "grep -icE 'lora' ~/skyrl-logs/mg-lora.log" 60 | tee -a "$PROG"
+    # `replace_set_lora` counts every BaseLayerWithLoRA it wraps and logs
+    # LORA-WRAPPED-MODULES; on the real 52-layer model that must be 260
+    # (5 per layer: qkv_proj, o_proj, attn_gate_proj, gate_up_proj, down_proj).
+    LW=$(rsh "grep -hoE 'LORA-WRAPPED-MODULES total=[0-9]+ by_class=[^\"]*' ~/skyrl-logs/mg-lora.log | tail -1" 60 | tr -d '\r')
+    if [ -n "$LW" ]; then
+      note "ADAPTER COUNT on the real 52-layer model: ${LW}"
+    else
+      note "ADAPTER COUNT: LORA-WRAPPED-MODULES line absent from the engine log"
+      rsh "grep -icE 'lora' ~/skyrl-logs/mg-lora.log" 60 | tee -a "$PROG"
+    fi
     LORA_RESULT=$(grep -c 'LORA-CHANGED-OUTPUT' "$PROG" 2>/dev/null || echo 0)
   else
     note "--enable-lora FAILED to boot -- see crash-lora.log"

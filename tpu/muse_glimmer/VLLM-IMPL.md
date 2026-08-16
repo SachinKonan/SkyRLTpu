@@ -16,11 +16,12 @@ manager wraps **5 modules per layer including the attention gate** — which is
 the whole point, since the JAX path can wrap none. The JAX path is provably
 untouched: both dispatch branches still resolve to their own implementation and
 `MODEL_IMPL_TYPE=auto` still means `flax_nnx`. **It has never run on a TPU**:
-two QR hunts found no spot capacity (v5p quota exhausted project-wide, v6e-8
-available only in us-east5-b and cycling through preemption), so zero
-chip-hours were spent and the entire on-slice half — serving, greedy decode,
-the LoRA smoke, the weight-sync round trip — is outstanding. Section 8 is the
-list.
+four QR hunts found no spot capacity, so **zero chip-hours** were spent and the
+entire on-slice half — serving, greedy decode, the LoRA smoke, the weight-sync
+round trip — is outstanding. Section 8 is the list. The blocker is now purely
+**physical v5p spot capacity**, not quota and not the code: hunt 4's `CREATE`
+was accepted in us-east5-a and the QR sat in `WAITING_FOR_RESOURCES` for 27
+minutes without ever being granted chips.
 
 ---
 
@@ -384,19 +385,31 @@ indistinguishable from an adapter that was silently dropped.
 
 ## 7. On-slice results — **NOT LANDED: no spot capacity**
 
-Two QR hunts, **zero chip-hours** — neither slice ever reached ACTIVE, so no
-chips were ever attached.
+Four QR hunts, **zero chip-hours** — no slice ever reached ACTIVE, so no chips
+were ever attached.
 
 | attempt | shape | zones tried | outcome |
 |---|---|---|---|
 | job 3697955 | v5p-8 spot | a, c, a | **quota**: `TPUV5PPreemptiblePerProjectPerZoneForTPUAPI` exhausted, limit **1536 in us-east5-a** (fully consumed by the live llama-farm fleet and the other running jobs, none of which are ours to disturb) and limit **0 in us-east5-c**. `CREATE` refused; the QR never existed. Gave up after 472 s. |
 | job 3698113 | v6e-8 spot | b | `WAITING_FOR_RESOURCES` -> `PROVISIONING` in 132 s, then **cycled**: the TPU VM appears in `CREATING`, disappears, reappears. 45 min, never ACTIVE. Aborted at the deadline. |
 | job 3698315 | v6e-8 spot | a, c, b | `TPUV6EPreemptiblePerProjectPerZoneForTPUAPI` limit **0 in us-east5-c**, `CREATE` refused in **us-east5-a**; only **us-east5-b** accepts the request at all. Same cycle there. Land-or-abort at 2400 s. |
+| job 3699545 | v5p-8 spot | a, b, c, a ×2 | **quota again**: every one of 8 `CREATE` calls refused. us-east5-a reports limit **1536** (fully consumed), b and c report limit **0**. No QR ever existed. Gave up at 2829 s. |
+| job 3699755 | v5p-8 spot | a, b, c, a | **quota cleared, capacity did not.** After 288 tensorcores were reclaimed by deleting 9 dead `SUSPENDED` `stagea-*` QRs, `CREATE` in us-east5-a **succeeded** — twice. The QR reached `WAITING_FOR_RESOURCES` and held it for 15 min, then (after the zone rotation) 12 min more. It never reached `PROVISIONING`. Land-or-abort at 2746 s. |
 
-v6e-8 was tried because v5p has no quota left at all; it would have served at
-**TP=8**, which is a *stronger* test of the 2-KV-head replication path
-(2 -> 8, replication factor 4) than the TP=4 the JAX path was proven on. That
-test is simply not available right now.
+v6e-8 was tried on the earlier hunts because v5p had no quota left at all; it
+would have served at **TP=8**, a *stronger* test of the 2-KV-head replication
+path (2 -> 8, replication factor 4) than the TP=4 the JAX path was proven on.
+It is deliberately **not** used any more: every number in `E2E.md` was measured
+on v5p-8 at TP=4, v5p is the deployment target, and a result on hardware nobody
+deploys would carry a permanent caveat. Waiting is acceptable; substituting is
+not.
+
+**The failure mode changed between hunt 3 and hunt 4, and that is the useful
+signal.** Hunt 3 could not even place a request. Hunt 4 placed one and was
+queued — so the quota reclamation worked and the configuration is accepted by
+the API. What is missing now is only physical v5p spot capacity in us-east5-a,
+which is a matter of waiting for the pool to free chips, not of changing
+anything in this repo.
 
 Both teardowns verified, in all three zones:
 
@@ -411,7 +424,7 @@ unproven**, including the greedy token-for-token comparison and the LoRA smoke.
 The CPU evidence is strong — 3949/3949 argmax on real weights, 20 LoRA-wrapped
 modules with the attention gate among them — but it is not the same claim.
 
-### 7.1 Two operational findings, paid for in wall clock
+### 7.1 Three operational findings, paid for in wall clock
 
 **`PROVISIONING` is not a promise.** `followup_tpu.sh` learned that abandoning a
 `PROVISIONING` QR on the zone deadline throws away a granted slice, and this
@@ -428,10 +441,36 @@ behind. `scancel --batch --signal=TERM <jobid>` is the one that reaches it. The
 sbatch's own `#SBATCH --signal=B:TERM@600` is already correct (the `B:` prefix
 targets the batch shell); it is the manual abort that needs `--batch`.
 
+**Zone rotation destroys queue position, and that is a real cost once `CREATE`
+starts succeeding.** The rotation exists for the case where a zone *refuses*
+the request, which is cheap to discover and cheap to abandon. But a QR sitting
+in `WAITING_FOR_RESOURCES` is holding a place in line, and deleting it to probe
+another zone sends the next request to the back. Job 3699755 spent its 45-minute
+budget as **15 min queued in us-east5-a -> deleted at the zone deadline -> ~5
+min re-probing us-east5-b and us-east5-c (both of which have hard quota limit 0
+for v5p preemptible and refused instantly, as they had on every previous probe
+that day) -> 12 min queued in us-east5-a from the back of the line**. Two short
+waits, not one long one.
+
+So the rotation should be scoped to zones that can actually accept the request.
+When only one zone has non-zero quota for the shape, pin to it and let the
+single QR wait:
+
+```bash
+sbatch --export=ALL,ZONES=us-east5-a,ZONE_TRY_SEC=99999,LAND_SEC=5400 \
+       tpu/muse_glimmer/vllm_impl_tpu.sbatch
+```
+
+`ZONE_TRY_SEC` above `LAND_SEC` disables the intra-rotation abandon (the zone
+deadline is clamped to `LAND_SEC`), so the QR holds one continuous queue slot
+for the whole landing budget. Teardown still sweeps **all three** zones, which
+is what makes this safe.
+
 ## 8. What remains unproven
 
-**Everything that needs a TPU.** No slice landed, so the entire on-slice half
-of the plan is outstanding. Ranked by how much it would cost to be wrong:
+**Everything that needs a TPU.** No slice has landed in four hunts, so the
+entire on-slice half of the plan is outstanding — unchanged, and not narrowed
+by anything since. Ranked by how much it would cost to be wrong:
 
 1. **It has never run on a TPU.** Not once. The model has never been through
    `vllm serve`, torchax has never traced it, the Pallas ragged-paged-attention
@@ -466,9 +505,33 @@ of the plan is outstanding. Ranked by how much it would cost to be wrong:
    on the JAX side.
 
 The honest summary: **the arithmetic is proven and the LoRA plumbing is proven;
-the serving integration is not.** Re-run `vllm_impl_tpu.sbatch` when v5p or v6e
-spot capacity returns — it is written, and the two operational fixes in section
-7.1 are already in it.
+the serving integration is not.**
+
+### 8.1 The driver is preflighted — the only missing input is chips
+
+`vllm_impl_tpu.sh` runs all four outstanding questions in priority order and
+tears the QR down on every exit path. Everything it depends on was verified
+present *before* the last hunt, precisely so that a landed slice is never spent
+discovering a missing file:
+
+| dependency | checked | state |
+|---|---|---|
+| `runs/muse_glimmer/hf_greedy.json` (scp'd to the host; a missing file exits 7 *after* landing) | present, 5 prompts | p1 6 tok, p2 35, p3 267, **p4 3609**, p5 32 |
+| longest prompt fits `--max-model-len 4096` | 3609 + 32 = **3641** | fits, no truncation |
+| `mg_client.py` / `mg_lora_client.py` / `make_lora_adapter.py` flags match the driver's invocations | all three | match |
+| `LORA-WRAPPED-MODULES` instrumentation the adapter-count assertion greps for | `vllm_model_wrapper.py:811` | present |
+| submodule branch / commit | `agent/muse-glimmer-text` | `4f2f67942` |
+
+**Interpreting the greedy comparison when it does run.** `mg_client.py` compares
+against the HF reference, and the JAX path's own record (`E2E.md` §"greedy") is
+**4/5 token-exact, not 5/5**: `p3_mid` diverges from HF at step 13 on a genuine
+argmax tie — two candidates with bit-identical logprobs and a top-1/top-2 gap of
+exactly `0.0`. A torch-path divergence at `p3_mid` step 13 with a zero gap is
+therefore the *expected* result and not a defect; the diagnostic to read is the
+gap, not the divergence index. The other four prompts should be exact.
+
+Re-run `sbatch tpu/muse_glimmer/vllm_impl_tpu.sbatch` when v5p spot capacity
+returns, with the single-zone pin from section 7.1.
 
 ## Reproducing
 

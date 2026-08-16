@@ -47,12 +47,18 @@ submodule (`ttt_discover/tinker_utils/`).
 |---|---|---|
 | file | `models/jax/muse_glimmer.py` | `models/vllm/muse_glimmer.py` |
 | selected by | `MODEL_IMPL_TYPE=flax_nnx`, and `auto` | `MODEL_IMPL_TYPE=vllm` only |
-| serving | **proven end to end** (this file) | CPU-proven; **never run on a TPU** |
-| `--enable-lora` | **impossible** — `get_flax_model` returns `lora_manager=None` | 5 LoRA modules per layer, gate included |
+| serving | **proven end to end** (this file) | CPU-proven; **never run on a TPU** (4 QR hunts, no v5p spot capacity, 0 chip-hours) |
+| `--enable-lora` | **impossible** — `get_flax_model` returns `lora_manager=None` | 5 LoRA modules per layer, gate included — **counted on CPU, never on a slice** |
 
 `auto` still resolves to `flax_nnx`, so the default is unchanged. Use the torch
 model when the RL loop needs to upload adapters; see
 [`VLLM-IMPL.md`](VLLM-IMPL.md), including what is still unproven about it.
+
+The torch row is blocked on **capacity, not on the code**: the last hunt's
+`CREATE` was accepted in us-east5-a and the QR queued for 27 min without being
+granted chips. The driver (`vllm_impl_tpu.sbatch`) is written and preflighted;
+see `VLLM-IMPL.md` §7.1 for the single-zone pin and §8.1 for what it will
+answer.
 
 ## Serving configuration: prefer 2×TP=2 for throughput
 
