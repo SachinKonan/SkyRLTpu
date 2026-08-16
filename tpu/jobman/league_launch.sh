@@ -62,13 +62,29 @@ if [ "$_rows" -eq 0 ]; then
 fi
 
 # ---- re-register BOTH members' durable checkpoints BEFORE the client starts -
-for _spec in "member_qwen:Qwen/Qwen3.5-27B" "member_gemma:google/gemma-4-31B-it"; do
-  _md=${_spec%%:*}; _bm=${_spec##*:}
+# Each member's tinker server owns its OWN registry DB: qwen's is here on w0,
+# gemma's is on w4. Re-registering both locally leaves gemma's rows missing, so
+# create_training_client_from_state 404s for gemma after a node replacement and
+# strict resume aborts with "[3, None]" -- observed live on L-ctrl-x, which
+# crash-looped 16 times. Run each member's re-register ON ITS OWN TRAINER HOST,
+# the way bringup_v5p64_league.sh step 4z did.
+_KEY="$HOME/.ssh/jobman_tpu_ed25519"
+_SSHO="-i $_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+for _spec in "member_qwen:local:Qwen/Qwen3.5-27B" "member_gemma:$GEMMA_INT:google/gemma-4-31B-it"; do
+  _md=$(echo "$_spec" | cut -d: -f1); _host=$(echo "$_spec" | cut -d: -f2); _bm=$(echo "$_spec" | cut -d: -f3)
   _jsonl=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/"$_md"/checkpoints.jsonl 2>/dev/null | head -1)
-  if [ -s "${_jsonl:-}" ]; then
+  if [ ! -s "${_jsonl:-}" ]; then
+    echo "reregister $_md: no local checkpoints.jsonl (fresh lineage)"
+    continue
+  fi
+  if [ "$_host" = local ]; then
     python3 ~/ttd-client/tpu/reregister_states.py --base-model "$_bm" --jsonl "$_jsonl" 2>&1 | tail -2
   else
-    echo "reregister $_md: no local checkpoints.jsonl (fresh lineage)"
+    timeout 60 scp $_SSHO ~/ttd-client/tpu/reregister_states.py \
+      sk7524_princeton_edu@"$_host":~/reregister_states.py >/dev/null 2>&1
+    timeout 60 scp $_SSHO "$_jsonl" sk7524_princeton_edu@"$_host":~/rr_$_md.jsonl >/dev/null 2>&1
+    timeout 90 ssh $_SSHO sk7524_princeton_edu@"$_host" \
+      "python3 ~/reregister_states.py --base-model '$_bm' --jsonl ~/rr_$_md.jsonl" 2>/dev/null | tail -2
   fi
 done
 
