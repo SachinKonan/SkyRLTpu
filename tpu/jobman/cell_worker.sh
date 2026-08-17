@@ -84,7 +84,10 @@ case "$CELL" in
     MAXTGT=22528; BUDGET=45056; UNIFORM=22528
     VLLM_LEN=22528
     VLLM_IMPL=vllm
-    TPUINF_REF=skyrl/v0.23.0-lora
+    # The exact SHA run_muse_rl.sh pins: carries the torch muse model AND the
+    # stock-qkv-geometry fix (first-request empty-v crash) + width assert.
+    # skyrl/v0.23.0-lora predates all of it -- that ref has no torch muse model.
+    TPUINF_REF=afe0cb9e9bf259a072242c6f3279d92b702f9f2a
     TF_VERSION=""
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
     TP_SIZE=2; ENGINES_PER_HOST=2
