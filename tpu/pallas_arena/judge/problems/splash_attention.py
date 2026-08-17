@@ -218,7 +218,13 @@ def _xla_masked_attention(q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q
 class SplashAttentionProblem(Problem):
     name = "splash_attention"
     version = "1"
-    has_bwd = False  # fwd-only contract in phase 1 of the task
+    # BACKWARD IS PART OF THE CONTRACT. Google's splash kernel has one --
+    # BlockSizes carries block_q_dkv / block_kv_dkv / block_q_dq and a
+    # use_fused_bwd_kernel switch -- and tokamax ships tuned vjp configs for
+    # attention on tpu7x (dot_product_attention_vjp,
+    # pallas_mosaic_tpu_flash_attention_vjp). A forward-only attention kernel
+    # is not a candidate for upstreaming, so it must not be able to pass here.
+    has_bwd = True
     require_pallas = True
     general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = False
@@ -353,6 +359,31 @@ class SplashAttentionProblem(Problem):
         from jax.sharding import PartitionSpec as P
 
         return ((P("tp", None, None), P("tp", None, None), P("tp", None, None), P()), P("tp", None, None))
+
+    def grad_outputs(self, kernel_fn, q, k, v, segment_ids):
+        """d/d(q, k, v) of a fixed scalar functional of the output.
+
+        The probe is a deterministic non-symmetric cotangent (cos of a flat
+        iota), NOT a plain sum: summing the output makes many wrong backward
+        rules look right, because the errors cancel across the reduction. The
+        reference is differentiated the same way, so a candidate whose forward
+        is correct but whose backward is not is caught here rather than
+        shipping a kernel nobody can train through.
+
+        Cast to fp32 for the differentiated inputs: the gradient is compared
+        against the fp32 reference at the same calibrated tolerance the forward
+        uses, and differentiating through a bf16 cast adds a quantization step
+        the contract does not ask about.
+        """
+        probe = jnp.cos(jnp.arange(q.size, dtype=jnp.float32)).reshape(q.shape)
+
+        def scalar(q32, k32, v32):
+            out = kernel_fn(q32.astype(q.dtype), k32.astype(k.dtype), v32.astype(v.dtype), segment_ids)
+            return jnp.sum(out.astype(jnp.float32) * probe)
+
+        return jax.grad(scalar, argnums=(0, 1, 2))(
+            q.astype(jnp.float32), k.astype(jnp.float32), v.astype(jnp.float32)
+        )
 
     def honest_variants(self):
         """Calibrate against what an honest bf16 kernel actually computes, not

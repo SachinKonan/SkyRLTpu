@@ -71,7 +71,10 @@ def rg_lru_associative(x, a, reset):
 class RGLRUProblem(Problem):
     name = "rg_lru"
     version = "1"
-    has_bwd = False  # kernel-vs-kernel forward scan
+    # BACKWARD IS PART OF THE CONTRACT: recurrentgemma ships _lru_fwd AND
+    # _lru_bwd, so the production scan is differentiable and a forward-only
+    # candidate is not a replacement for it.
+    has_bwd = True
     require_pallas = False  # associative_scan is explicitly legal
     general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = True
@@ -195,6 +198,22 @@ class RGLRUProblem(Problem):
         from jax.sharding import PartitionSpec as P
 
         return ((P(None, None, "tp"), P(None, None, "tp"), P()), P(None, None, "tp"))
+
+    def grad_outputs(self, kernel_fn, x, a, reset):
+        """d/d(x, a) of a fixed scalar functional of the hidden states.
+
+        Both x and the gate a are differentiated: a scan's backward has to
+        carry the gradient BACK THROUGH THE RECURRENCE, and a kernel that
+        handles d/dx but drops the gate path would otherwise pass. The cos
+        probe is deliberately non-uniform in time so an incorrect carry cannot
+        cancel out across the sequence."""
+        probe = jnp.cos(jnp.arange(x.size, dtype=jnp.float32)).reshape(x.shape)
+
+        def scalar(x32, a32):
+            h = kernel_fn(x32.astype(x.dtype), a32, reset)
+            return jnp.sum(h.astype(jnp.float32) * probe)
+
+        return jax.grad(scalar, argnums=(0, 1))(x.astype(jnp.float32), a.astype(jnp.float32))
 
     def honest_variants(self):
         """rg_lru's band was never too tight for a faithful kernel (the fp32
