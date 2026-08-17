@@ -79,7 +79,9 @@ case "$CELL" in
     # tokenizers co-pin, per run_muse_rl.sh.
     MODEL_NAME=meta-models/Muse-Glimmer-30B; MAXTEXT_MODEL=muse-glimmer-30b
     PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509"
-    MAXTGT=24576; BUDGET=65536; UNIFORM=16384
+    # Sizing per run_muse_rl.sh (the validated RL spec), not the older
+    # MAXTEXT.md training-half doc: target 22528 = the serving ctx, budget 45056.
+    MAXTGT=22528; BUDGET=45056; UNIFORM=22528
     VLLM_LEN=22528
     VLLM_IMPL=vllm
     TPUINF_REF=skyrl/v0.23.0-lora
@@ -104,7 +106,7 @@ pick_tiles() {
       FLCE_TILE=1024; VOCAB_TILING=32
       MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" ;;
     muse-glimmer-30b)
-      FLCE_TILE=2048; VOCAB_TILING=32
+      FLCE_TILE=2048; VOCAB_TILING=8
       MT_KWARGS="{\"remat_policy\": \"full\", \"ici_fsdp_parallelism\": 4, \"num_vocab_tiling\": $VOCAB_TILING}" ;;
     *)
       case "$CELL" in
