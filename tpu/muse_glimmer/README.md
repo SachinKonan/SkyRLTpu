@@ -100,11 +100,12 @@ The end-to-end RL launch path is [`run_muse_rl.sh`](run_muse_rl.sh): a
 self-hosted SkyRL Tinker server on one existing v5p-32 (train worker 0 =
 tunix/MaxText fork `4f65ba509`, orbax restored from
 `gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts/muse-glimmer-30b`;
-serving workers 1,2 = **2 torch-path engines each at TP=2**, ports 8001/8002,
-per the benchmark verdict above), launched through
+serving workers 1,2,3 = **2 torch-path engines each at TP=2**, ports
+8001/8002, per the benchmark verdict above — 6 engines, ~7.7-8.2k tok/s
+aggregate at the RL profile since hosts are independent), launched through
 `tpu/start_colocated_vllm_tinker.sh`. The launcher gained a
 `VLLM_ENGINES_PER_HOST` knob for exactly this shape; the client consumes the
-resulting 4-URL CSV natively (`skyrl/backends/vllm_sampling.py:41` splits,
+resulting 6-URL CSV natively (`skyrl/backends/vllm_sampling.py:41` splits,
 `:116` round-robins, adapter loads broadcast to every server). The
 ttt-discover client runs on neuronic via the `run_ttd_qwen35_neuronic.sbatch`
 pattern with `RENDERER_NAME=muse_glimmer` and `CONTEXT_WINDOW=22528` — see

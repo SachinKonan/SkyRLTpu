@@ -13,9 +13,8 @@
 # ---------------------------------------------------------------------------
 # WORKER SPLIT (v5p-32 = 4 hosts x 4 chips)
 #
-#   worker 0      tunix/MaxText trainer + Tinker API   (4 chips, 4-way FSDP)
-#   workers 1,2   vLLM serving, 2 engines each, TP=2   (4 engines total)
-#   worker 3      idle by default
+#   worker 0       tunix/MaxText trainer + Tinker API   (4 chips, 4-way FSDP)
+#   workers 1,2,3  vLLM serving, 2 engines each, TP=2   (6 engines total)
 #
 # Why: this is the PRODUCTION v5p-32 cell structure. The live gemma/qwen
 # cells launch TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0
@@ -24,10 +23,14 @@
 # per-worker servers, URL-CSV round robin, never the ray/DP path. Muse keeps
 # that structure and adds VLLM_ENGINES_PER_HOST=2 on top; the tunix backend
 # supports a single train host (enforced by the launcher), so training stays
-# on worker 0. Serving defaults to workers 1,2 — two hosts x 2 engines is
-# the validated 4-engine shape with a 4-URL CSV — leaving worker 3
-# unassigned; grow to the cells' VLLM_WORKERS=1,2,3 (6 engines, 6-URL CSV)
-# once sustained serving is proven.
+# on worker 0 and every remaining host serves. Serving hosts are fully
+# independent, so throughput adds linearly: 3 hosts x ~2570-2736 tok/s
+# (TP-BENCHMARK-22K.md, per host at the RL profile) ~= 7.7-8.2k tok/s
+# aggregate, 6-URL CSV, ~666 seqs of pooled 22528-ctx capacity. NOT 12
+# engines: TP=1 was never validated (52 GB of bf16 weights per chip leaves a
+# thin KV pool and abandons the measured 2xTP=2 shape). Set
+# VLLM_WORKERS=1,2 for the exact 4-engine shape the benchmark drove
+# concurrently, if a spare host is ever needed.
 #
 # ---------------------------------------------------------------------------
 # WHY 2 ENGINES x TP=2 PER HOST (not 1 x TP=4)
@@ -104,7 +107,7 @@ export REMOTE_HF_HOME
 
 # --- worker split (see header) ----------------------------------------------
 export TRAIN_WORKERS="${TRAIN_WORKERS:-0}"
-export VLLM_WORKERS="${VLLM_WORKERS:-1,2}"
+export VLLM_WORKERS="${VLLM_WORKERS:-1,2,3}"
 # PRODUCTION BRANCH, set explicitly: the live gemma/qwen v5p-32 cells all
 # launch with TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0
 # VLLM_CLIENT_SIDE_ROUND_ROBIN=1 (league worktree tpu/jobman/
