@@ -791,7 +791,9 @@ Two caveats before anyone plans capacity on this row:
 The capacity and batch-1 rows are solid — analytic, reproduced, and
 direction-correct. The saturation row is a real observation that wants a
 repeat with precompilation on and a concurrency sweep before it is used for
-anything.
+anything. **That repeat has now been done** (torch path, 22528 ctx, warmed +
+differenced: `TP-BENCHMARK-22K.md`): the split's true saturated advantage is
+**~1.5-1.6×**, and the 6.687× figure is retired as compile-in-window.
 
 ### 7.3 What this says about TP=8, which was not measured
 

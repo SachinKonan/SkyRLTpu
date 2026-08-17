@@ -11,6 +11,7 @@ Start here, then follow the document that matches what you are doing.
 | [`SPEC.md`](SPEC.md) | The contract: exact forward pass and 12 parity traps. **Corrected three times — if code and spec disagree, the HF reference wins.** |
 | [`E2E.md`](E2E.md) | Real-weight results for the **JAX** path: parity, greedy decode, long context, sampling, LoRA, TP head-to-head. |
 | [`VLLM-IMPL.md`](VLLM-IMPL.md) | The **torch/vLLM** model, which exists so `--enable-lora` works. CPU-proven (3949/3949 argmax, 5 LoRA modules per layer); never yet run on a TPU. |
+| [`TP-BENCHMARK-22K.md`](TP-BENCHMARK-22K.md) | 1×TP=4 vs 2×TP=2 at 22k context, real erdos prompts, warmed + differenced. **Split wins the RL profile ~1.5-1.6×; the 6.687× figure is retired.** |
 | [`MAXTEXT.md`](MAXTEXT.md) | The training half: fork, converter, launch spec. |
 | [`REASONING-STRENGTH.md`](REASONING-STRENGTH.md) | `high` vs `xhigh`, 960 rollouts across three problems. |
 
@@ -49,7 +50,7 @@ VLLM-IMPL §10.)
 |---|---|---|
 | file | `models/jax/muse_glimmer.py` | `models/vllm/muse_glimmer.py` |
 | selected by | `MODEL_IMPL_TYPE=flax_nnx`, and `auto` | `MODEL_IMPL_TYPE=vllm` only |
-| serving | **proven end to end** (this file) | **TPU-proven at TP=2, the deployment shape** (VLLM-IMPL §10: greedy 4/5 exact + known tie, 2×TP=2 coexistence, 1.35 chip-hours). **TP=4 crashed** in tpu-inference's KV-replication width seam; root-caused and fixed in the submodule (VLLM-IMPL §9), fixed build not yet re-run on a slice |
+| serving | **proven end to end** (this file) | **TPU-proven at TP=2 AND TP=4** (VLLM-IMPL §10-§11: greedy 4/5 exact + known tie at both widths, 2×TP=2 coexistence). The pre-fix build crashed at TP=4 in tpu-inference's KV-replication width seam; root-caused, fixed (§9) and the fixed build regression-passed on hardware (§11) |
 | `--enable-lora` | **impossible** — `get_flax_model` returns `lora_manager=None` | **proven on-slice at TP=2**: boots, **260 wrapped modules** (5/layer, attn gate included), adapter load → output changes → RL-style swap → unload → base restored exactly |
 
 `auto` still resolves to `flax_nnx`, so the default is unchanged. Use the torch
@@ -83,12 +84,15 @@ prediction from measured constants matched to **0.013%**.
 **Split for throughput, stay wide for latency.** Batch-1 decode is 1.73× faster on the
 single wide engine, since weights shard further and decode is HBM-bandwidth bound.
 
-Two caveats. A saturated-throughput measurement came out 6.687× in favour of the split —
-**do not bank it**: the bandwidth model predicts the opposite sign, it is one unreplicated
-point, and `SKIP_JAX_PRECOMPILE=1` may have put XLA compilation inside the timed window.
-And this is **model-specific**: Qwen3.5-27B (4 KV heads) and gemma-4-31b (16, plus 4
-global) already sit at zero padding at TP=4, so splitting them buys nothing and costs a
-replica.
+The saturated-throughput question is now settled properly
+([`TP-BENCHMARK-22K.md`](TP-BENCHMARK-22K.md), torch path, 22528 ctx, real erdos prompts,
+every shape warmed untimed, steady-state by short/long differencing): **the split wins the
+RL serving profile ~1.5-1.6×** — 2570-2736 tok/s/host at 96-128 offered concurrency vs the
+wide engine's best 1620-1700 at 64-96. The earlier **6.687× figure is retired**: it paid
+wide-engine XLA compilation inside its timed window, exactly as the caveat here suspected.
+One caveat stands: this is **model-specific** — Qwen3.5-27B (4 KV heads) and gemma-4-31b
+(16, plus 4 global) already sit at zero padding at TP=4, so splitting them buys nothing
+and costs a replica.
 
 ## Things that cost real time
 

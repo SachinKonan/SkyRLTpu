@@ -24,8 +24,11 @@ its weight buffer whenever mesh TP > num_kv_heads (muse has 2) but its forward
 silently-clamping `split()` handed the attention kernel an empty `v`. At TP=2
 that predicate is false and the replication path is never entered — measured,
 not just argued: the identical build that dies at TP=4 passes everything at
-TP=2. The seam is **root-caused and fixed in the submodule** (§9, CPU gate
-green); the fixed build's TP=4 regression on a slice is the next run. Before
+TP=2. The seam is **root-caused, fixed, and the fixed build is now
+TPU-proven at TP=4 too** (§9 for the fix, §11 for the regression: boot,
+greedy to the same standard, LoRA 260 + round trip). Both serving shapes are
+benchmarked at 22k context in `TP-BENCHMARK-22K.md`: **2×TP=2 wins the RL
+profile ~1.5-1.6×** and the old 6.687× figure is retired. Before
 any of that, the model was proven on CPU: 3949/3949 teacher-forced argmax
 positions vs the HF reference on the real 30B weights, all 471 parameters
 loaded, LoRA wrap counted (§5-§6). The JAX path is provably untouched: both
@@ -483,10 +486,10 @@ is what makes this safe.
 Updated twice since first written: the TP=4 crash + root cause (§9) and the
 TP=2 validation (§10). Ranked by how much it would cost to be wrong:
 
-1. ~~It has never run on a TPU.~~ **Resolved (§10):** served, decoded,
-   LoRA-round-tripped and two-engine-deployed on a spot v5p-8 at TP=2. What
-   has NOT run on a TPU is the **fixed** TP=4 build — the §9 fix is CPU-gated
-   only; its on-slice regression is the next run.
+1. ~~It has never run on a TPU.~~ **Resolved (§10, §11):** served, decoded,
+   LoRA-round-tripped and two-engine-deployed at TP=2, and the **fixed TP=4
+   build passed its on-slice regression** (boot + greedy + LoRA round trip,
+   §11).
 2. **KV-head replication when TP > num_key_value_heads.** ~~2 KV heads under
    TP=4 (or 8) goes through `VllmQKVParallelLinear`'s `repeat_interleave`
    inflation, and the model reads its split sizes back off the layer to
@@ -499,8 +502,9 @@ TP=2 validation (§10). Ranked by how much it would cost to be wrong:
    `ColumnParallelLinear` shards identically to the attention output is read
    off `quantization/configs.py` and the sharding-axis names, not measured
    directly. TP=2 greedy matching HF on the strict 4/5-plus-bit-exact-tie
-   standard (§10) is strong *indirect* evidence at TP=2 — a wrong-heads gate
-   would corrupt logits — but TP=4 is unexercised and no direct probe exists.
+   standard (§10) is strong *indirect* evidence — a wrong-heads gate would
+   corrupt logits — and §11 extends the same evidence to TP=4. No direct
+   probe exists.
 4. ~~Greedy decode vs the recorded E2E ids.~~ **Resolved at TP=2 (§10.2):**
    4/5 token-exact, fifth is the known p3_mid step-13 argmax tie with gap
    exactly 0.0.
@@ -513,9 +517,11 @@ TP=2 validation (§10). Ranked by how much it would cost to be wrong:
 6. ~~Concurrency.~~ **Measured at TP=2 (§10.2):** the five mixed-length
    prompts fired concurrently are token-identical to sequential, twice (once
    per engine). Sustained load and eviction-under-pressure remain untested.
-7. **Context length, throughput, memory** relative to the JAX path. Still
-   unmeasured: the TP=2 slice ran `max_model_len=4096` only. The JAX path
-   serves 32768 and remains the default for good reason.
+7. **Context length, throughput, memory.** `max_model_len=22528` now serves
+   on the torch path in both shapes with the full ladder measured
+   (`TP-BENCHMARK-22K.md`). Still unmeasured: 32768 (the JAX path's proven
+   ceiling), cold prefill (the benchmark's probes hit the prefix cache), and
+   generations past 768 tokens per request.
 8. **Quantization, multi-host, speculative decoding, vision.** Out of scope, as
    on the JAX side.
 
@@ -757,6 +763,30 @@ FINAL[us-east5-c] muse QRs: ''   muse VMs: ''
 Driver exit 0. Artefacts: `res_torch_e2e.json`, `res_lora.json`,
 `res_torchB_e2e.json`, `res_torchA_again.json`, `report-torch.txt`,
 `report-lora.txt`, `report-torchB.txt`, log `vllmimpl-3714090.log`.
+
+## 11. TP=4 regression on the fixed build — **PASSED** (job 3714197, 2026-08-17)
+
+Same slice as the 22k benchmark (`TP-BENCHMARK-22K.md`; QR
+`sk7524-museglimmer-tp4fix`, landed in 226 s, 2521 s active = 2.80 chip-hours
+for both). Submodule: clean archive of **afe0cb9e9**, the §9 fix, previously
+proven only by the CPU gate.
+
+| check | result |
+|---|---|
+| boot, TP=4, whole host — where the pre-fix build died on its first forward | **answered in 97 s** (13.09 GiB/chip, KV pool 3,024,384 tokens) |
+| greedy vs the recorded E2E ids | **4/5 EXACT + the p3_mid step-13 tie** — the same standard as JAX TP=4 and torch TP=2, so the `repeat_interleave` replication is not merely non-crashing but argmax-correct on real weights |
+| `--enable-lora` at TP=4 | **boots; LORA-WRAPPED-MODULES total=260**, same class breakdown as TP=2 |
+| adapter round trip (targets incl. k/v and attn_gate) | **PASS** — 3/3 outputs change, swap works, base restored exactly on unload; the LoRA-bypass seam fix demonstrably returns stock width through the wrapped `apply` |
+| width assert | never fired (and §9 verified it fires on the pre-fix geometry, so silence is evidence) |
+
+§8 item 1 is thereby closed: the fixed TP=4 build is hardware-proven. The §9
+residual landmine (k/v adapter *deltas* landing on replicated head positions)
+is unchanged in scope — the round trip proves load/apply/unload mechanics, not
+that a k/v-targeting adapter's math is placement-correct under replication;
+q-only/MLP-only adapters remain the clean choice at TP=4, and TP=2 has no
+replication at all.
+
+Teardown verified: zero muse QRs and VMs in us-east5-a/b/c.
 
 ## Reproducing
 
