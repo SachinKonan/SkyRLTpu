@@ -476,12 +476,14 @@ by anything since. Ranked by how much it would cost to be wrong:
    `vllm serve`, torchax has never traced it, the Pallas ragged-paged-attention
    kernel has never seen its q/k/v, and no weight has ever been sharded onto a
    mesh. Everything below is downstream of this.
-2. **KV-head replication when TP > num_key_value_heads.** 2 KV heads under
+2. **KV-head replication when TP > num_key_value_heads.** ~~2 KV heads under
    TP=4 (or 8) goes through `VllmQKVParallelLinear`'s `repeat_interleave`
-   inflation, and the model reads its split sizes back off the layer to match.
-   Nothing on CPU exercises it — torch TP is 1 and there is no mesh — and tiny
-   random weights could not catch a `tile`-for-`repeat_interleave` swap even if
-   they did. This is precisely the trap the JAX port hit.
+   inflation, and the model reads its split sizes back off the layer to
+   match.~~ **This fired on the first TPU run and is root-caused and fixed —
+   see section 9.** "Reads its split sizes back off the layer" was exactly the
+   bug: the layer's forward returns STOCK widths, not the inflated ones its
+   attrs advertise. The width path is now covered on CPU by
+   `repro_qkv_width.py` (fake 4-device mesh, OOT layers kept).
 3. **The attention gate under TP.** The claim that a plain
    `ColumnParallelLinear` shards identically to the attention output is read
    off `quantization/configs.py` and the sharding-axis names, not measured. If
@@ -532,6 +534,106 @@ gap, not the divergence index. The other four prompts should be exact.
 
 Re-run `sbatch tpu/muse_glimmer/vllm_impl_tpu.sbatch` when v5p spot capacity
 returns, with the single-zone pin from section 7.1.
+
+## 9. Root cause of the 2026-08-17 TPU crash (empty `v`)
+
+**Symptom** (job 3710865, `runs/muse_glimmer/crash-torch.log`): first real
+request, `flash_attn.py:259`, `cannot reshape array of shape (0, 4, 128) into
+(16, 4, 128)` — `v` arrived with zero width while `q` and `k` looked full.
+Section 8's item 2 ("KV-head replication when TP > num_key_value_heads...
+nothing on CPU exercises it") was the right suspect for the wrong reason: the
+`repeat_interleave` tiling is correct; the *width contract* was not.
+
+### The collapse contract
+
+`VllmQKVParallelLinear` (tpu-inference, `layers/vllm/custom_ops/linear.py`)
+inflates its **weight buffer** to `mesh TP` KV heads (2 → 4 at TP=4) so each
+device can own a whole KV-head copy. But its `forward` then **collapses the
+replica sub-axis back out of the global view**: after the reorder/slice, k and
+v are passed through a `shard_map` whose `out_specs` omit the `replica`
+sub-axis —
+
+```python
+@shard_map(mesh=new_mesh,
+           in_specs=P(data_axis, in_head_axis),    # (..., (model, replica, ...))
+           out_specs=P(data_axis, head_axis),      # replica axis dropped
+           check_vma=False)
+def _mark_kv_head_replicated(t):
+    return t
+```
+
+— an identity per device, but dropping `replica` from `out_specs` **halves the
+global width** of k and v (the replicated copies become one logical block,
+physically present on each replica device group). The layer therefore returns
+the **stock** global widths, `q + 2 * total_num_kv_heads * head_dim` = 4608
+for the 30B — not the inflated `sum(output_sizes)` = 5120 that its own
+attributes advertise.
+
+That is deliberate: it makes the OOT layer *transparent to stock-written vLLM
+models* (which compute `kv_size` from the config at torch world_size=1 — as
+upstream vLLM's newly-merged `MuseGlimmerForCausalLM` does). The rest of the
+stack agrees with the stock convention: `runner/kv_cache_manager.py` pads the
+cache head count up to TP itself (`get_padded_num_heads`), and
+`sharded_ragged_paged_attention` (`layers/common/attention_interface.py:351`)
+`jnp.repeat`s k/v up to TP at kernel entry. **The model is supposed to speak
+stock geometry; the replication is weight-buffer plumbing.**
+
+### Why our model crashed
+
+Our model file did the opposite, on purpose — a comment block said "the
+layer's own `num_heads` / `num_kv_heads` are the only counts that describe the
+tensor it actually returns" and read the INFLATED attrs (`kv_size = 512`,
+`Attention(num_kv_heads=4)`). Splitting the collapsed 4608-wide tensor by
+`[4096, 512, 512]` under torchax — where `split` lowers to *clamped* JAX
+slicing that never raises — silently produced a garbage 512-wide "k" (actually
+k‖v) and a **zero-width v**, which died 200 frames away in the backend
+reshape. The CPU parity gate (section 5) missed it because it popped the OOT
+registrations; the repro (`repro_qkv_width.py`, job 3714108) reproduced the
+divergence on a fake 4-device CPU mesh: OOT forward width **384** (stock)
+against a declared 512 — the exact 4608-vs-5120 analogue.
+
+### The fix (submodule `agent/muse-glimmer-text`)
+
+1. `models/vllm/muse_glimmer.py`: stock geometry — `num_kv_heads` comes from
+   `qkv_proj.total_num_kv_heads` (the REAL checkpoint count, which the OOT
+   layer restores after its inflated super-init), so the split sizes and the
+   `Attention` head count match what the layer actually returns. Plus a
+   post-split width assert that names the actual runtime width (torchax's
+   clamped split means nothing else would ever fail loudly here). Verified to
+   FIRE on the pre-fix geometry (job 3714119).
+2. `layers/vllm/custom_ops/linear.py`: the collapse is factored into
+   `dedup_replicated_kv()` so other call sites can reuse it, and the forward's
+   docstring now states the width contract explicitly.
+3. **LoRA bypass (the second face of the seam bug)**: vLLM's LoRA wrappers
+   never call the base layer's `forward` — `ColumnParallelLinearWithLoRA
+   .forward` → `apply` → `_mcp_apply` → `base_layer.quant_method.apply`
+   directly — so the wrapped layer returned the INFLATED width (5120) while
+   the unwrapped one returned 4608: LoRA on/off silently changed the model's
+   input geometry. The crashed run had LoRA off and took the unwrapped
+   (collapsed) path. Fixed at the seam: `load_lora_model`
+   (`vllm_model_wrapper.py`) wraps `apply` on every LoRA-wrapped
+   `VllmQKVParallelLinear` with `num_kv_head_replicas > 1` to route the output
+   through the same `dedup_replicated_kv`, so both paths return stock width.
+
+**Known residual landmine (documented, not fixed): LoRA *adapters* on k/v
+under replication.** The vLLM wrapper's `lora_b_stacked` slots are sized from
+the inflated `num_kv_heads`, and `set_lora` copies a stock-width adapter into
+the front of the slot — the k/v LoRA deltas land on the wrong replicated head
+positions (h1's delta lands on h0's replica). The no-adapter path (what RL
+serving uses between syncs) is unaffected; actually *applying* an adapter that
+targets k_proj/v_proj on a replicated-KV model needs `_tile_kv`-style tiling
+of the k/v `lora_b` in `set_lora` first. q-only / MLP-only adapters are fine.
+
+### Repro / gate
+
+`tpu/muse_glimmer/repro_qkv_width.py` (sbatch `repro_qkv_width.sbatch`) is the
+CPU gate for all of this: production 6-axis mesh faked on 4 CPU devices, OOT
+registrations kept, stages construction → load → quant apply → OOT forward →
+no-LoRA self_attn → LoRA wrap → wrapped self_attn → full-model
+`functional_call` under `jax.jit`, exiting nonzero at the first width
+divergence. The torchax silent-clamp probe stays in as a canary: if torchax
+ever starts validating split sizes, the failure mode changes and the assert
+becomes redundant.
 
 ## Reproducing
 
