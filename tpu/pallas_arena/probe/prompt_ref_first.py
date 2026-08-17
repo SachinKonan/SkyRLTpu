@@ -116,8 +116,10 @@ make it fast on a TPU while producing the same numbers.
 
 {io}
 
-Do not import this problem's production kernel or any library attention/GMM/scan \
-entry point -- the point is your own Pallas kernel (`pl.pallas_call`).
+Your program must contain a real `pl.pallas_call` -- a submission without one \
+(e.g. pure `jax.numpy` / `lax.associative_scan` formulations) is rejected before \
+grading. Do not import this problem's production kernel or any library \
+attention/GMM/scan entry point; write the kernel yourself.
 
 ## Test shapes
 

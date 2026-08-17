@@ -75,7 +75,16 @@ class RGLRUProblem(Problem):
     # _lru_bwd, so the production scan is differentiable and a forward-only
     # candidate is not a replacement for it.
     has_bwd = True
-    require_pallas = False  # associative_scan is explicitly legal
+    # FLIPPED 2026-08-17 (was False, "associative_scan is explicitly legal").
+    # As a kernel-writing RL env the old setting made the task winnable
+    # without ever writing a kernel: all 16 sd-run winners were plain-XLA
+    # scans (pid=False, custom_vjp=False across the board -- the backward
+    # survey), which means the arena was paying kernel rewards for
+    # formulation choice. associative_scan remains the honest CALIBRATION
+    # floor (it stays a baseline candidate and the election still uses it);
+    # it is no longer an admissible CANDIDATE. Historical rg_lru winners are
+    # invalidated as candidates by this flip -- accepted, that is the point.
+    require_pallas = True
     general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = True
 
