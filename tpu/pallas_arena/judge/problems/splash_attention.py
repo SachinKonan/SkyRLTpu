@@ -168,6 +168,18 @@ def _splash_block_sizes(sak, seq: int):
 def _honest_faithful_bf16(
     q, k, v, segment_ids, block_q: int = 512, *, window=None, soft_cap=None, sinks=None
 ):
+    # COMPILER-BUG GUARD, measured not assumed (jobs 3714344/3714519/3714548):
+    # the bf16-input mixed-precision dot at EXACTLY (q-block 512 x kv 1024)
+    # stack-overflows the v6e XLA compiler's convolution cost model
+    # (FusedSpatialMajorConvolution::EstimateFusionCost recursion) and
+    # SIGSEGVs the process. The bisect matrix pinned the envelope: fp32 at the
+    # same geometry survives, blocks 256 and 1024 survive, kv 2048/4096
+    # survive, and head count is irrelevant (h8 and h16 both crash). A single
+    # block at short sequences sidesteps it and is the natural choice there
+    # anyway; the reduction order changes only within the calibrated band's
+    # own noise.
+    if q.shape[1] <= 1024:
+        block_q = q.shape[1]
     """The production numeric path, query-blocked: bf16 arrays enter the MXU as
     matmul INPUTS, every accumulator is fp32 (``preferred_element_type``), the
     softmax is fp32, and only the probabilities are re-narrowed to bf16 on the
