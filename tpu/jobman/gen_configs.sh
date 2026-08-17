@@ -191,6 +191,12 @@ ${prob_env_block}
         rm -rf "\$DEST.old"; [ -d "\$DEST" ] && mv "\$DEST" "\$DEST.old" || true
         mv "\$DEST.new" "\$DEST"
       fi
+      # Make the trainer's orbax checkpoint valid BEFORE any engine starts: a
+      # torn restore otherwise surfaces as DATA_LOSS inside the trainer, or as
+      # RESOURCE_EXHAUSTED when the backend silently falls back to converting
+      # from HF on a disk that cannot hold both. Worker 0 only; no-ops elsewhere.
+      TUNIX_MAXTEXT_MODEL_NAME="\${TUNIX_MAXTEXT_MODEL_NAME:-}" MODEL_NAME="\${MODEL_NAME:-}" \\
+        bash "\$DEST/tpu/jobman/ensure_orbax_ckpt.sh" || true
   monitor:
     workers: 0
     timeout: 0
