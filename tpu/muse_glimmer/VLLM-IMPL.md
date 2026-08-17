@@ -788,6 +788,23 @@ replication at all.
 
 Teardown verified: zero muse QRs and VMs in us-east5-a/b/c.
 
+## 12. Productionized: the launcher now speaks 2×TP=2
+
+The §10.5 coexistence pattern is no longer bench-script-only:
+`tpu/start_vllm_tpu.sh` gained **`VLLM_ENGINES_PER_HOST`** (default 1 =
+byte-identical remote scripts to before; verified by generate-and-diff). At
+2, each serving host runs two independent servers on `VLLM_PORT`/`+1`, chips
+`{0,1}`/`{2,3}` via `TPU_VISIBLE_CHIPS`, distinct libtpu coordination ports
+(base + first chip, the arm-B pattern), a shared XLA cache, and per-engine
+logs. It also gained **`VLLM_EXTRA_PIP_SPECS`** (default empty) so the muse
+venv's `transformers@main + tokenizers` overlay installs without editing the
+launcher. `tpu/start_colocated_vllm_tinker.sh` forwards both, forces the
+no-ray/DP=1 path at engines>1 (the independent servers are the data
+parallelism), and puts every engine URL into the client CSV
+(`base_urls_for_workers`), which `skyrl/backends/vllm_sampling.py` consumes
+natively. The muse RL launch path that uses this is
+`tpu/muse_glimmer/run_muse_rl.sh`.
+
 ## Reproducing
 
 ```bash

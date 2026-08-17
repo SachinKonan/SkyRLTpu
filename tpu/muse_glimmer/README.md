@@ -94,6 +94,25 @@ One caveat stands: this is **model-specific** — Qwen3.5-27B (4 KV heads) and g
 (16, plus 4 global) already sit at zero padding at TP=4, so splitting them buys nothing
 and costs a replica.
 
+## RL launch
+
+The end-to-end RL launch path is [`run_muse_rl.sh`](run_muse_rl.sh): a
+self-hosted SkyRL Tinker server on one existing v5p-32 (train worker 0 =
+tunix/MaxText fork `4f65ba509`, orbax restored from
+`gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts/muse-glimmer-30b`;
+serving workers 1,2 = **2 torch-path engines each at TP=2**, ports 8001/8002,
+per the benchmark verdict above), launched through
+`tpu/start_colocated_vllm_tinker.sh`. The launcher gained a
+`VLLM_ENGINES_PER_HOST` knob for exactly this shape; the client consumes the
+resulting 4-URL CSV natively (`skyrl/backends/vllm_sampling.py:41` splits,
+`:116` round-robins, adapter loads broadcast to every server). The
+ttt-discover client runs on neuronic via the `run_ttd_qwen35_neuronic.sbatch`
+pattern with `RENDERER_NAME=muse_glimmer` and `CONTEXT_WINDOW=22528` — see
+the CLIENT block at the bottom of `run_muse_rl.sh`. The script's header
+records every pinned value's source and what remains unproven; its preflight
+refuses to launch until the fixed `tpu-inference` commit (`afe0cb9e9`) is
+pushed to the fork remote.
+
 ## Things that cost real time
 
 - **`uv` applies this repo's `[tool.uv] override-dependencies` transformers≤5.8.0 pin even

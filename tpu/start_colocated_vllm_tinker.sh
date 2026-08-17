@@ -58,6 +58,17 @@ VLLM_TPU_PROCESS_PORT="${VLLM_TPU_PROCESS_PORT:-8476}"
 VLLM_TPU_VISIBLE_CHIPS="${VLLM_TPU_VISIBLE_CHIPS:-}"
 VLLM_RAY_EXECUTOR="${VLLM_RAY_EXECUTOR:-auto}"
 VLLM_USE_RAY_V2_EXECUTOR_BACKEND="${VLLM_USE_RAY_V2_EXECUTOR_BACKEND:-1}"
+# Independent vLLM servers per serving host (see start_vllm_tpu.sh, where the
+# per-engine chip/port isolation lives). 1 = historical behavior. N>1 forces
+# the no-ray / DP=1 path (the independent servers ARE the data parallelism),
+# splits each host into N engines of VLLM_TP_SIZE chips on HTTP ports
+# VLLM_PORT..VLLM_PORT+N-1, and puts every engine URL into the client CSV
+# (skyrl/backends/vllm_sampling.py splits on comma at :41, round-robins at
+# :116, and broadcasts adapter loads to every server at :167/:210/:218).
+VLLM_ENGINES_PER_HOST="${VLLM_ENGINES_PER_HOST:-1}"
+# Forwarded to start_vllm_tpu.sh: extra pip specs (shell-quoted, verbatim)
+# installed into the serving venv after the tpu-inference fork overlay.
+VLLM_EXTRA_PIP_SPECS="${VLLM_EXTRA_PIP_SPECS:-}"
 
 JAX_COORD_PORT="${JAX_COORD_PORT:-7777}"
 TRAIN_TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS:-auto}"
@@ -197,6 +208,24 @@ vllm_workers_csv="$(join_csv "${vllm_workers[@]}")"
 train_coord_worker="${train_workers[0]}"
 vllm_coord_worker="${vllm_workers[0]}"
 
+if ! [[ "$VLLM_ENGINES_PER_HOST" =~ ^[0-9]+$ ]] || (( VLLM_ENGINES_PER_HOST < 1 )); then
+  echo "VLLM_ENGINES_PER_HOST must be a positive integer, got '${VLLM_ENGINES_PER_HOST}'." >&2
+  exit 1
+fi
+if (( VLLM_ENGINES_PER_HOST > 1 )); then
+  # Independent per-host engines: no cross-host executor, no vLLM-level DP.
+  if [[ "$VLLM_RAY_EXECUTOR" == "auto" ]]; then
+    VLLM_RAY_EXECUTOR="0"
+  elif [[ "$VLLM_RAY_EXECUTOR" == "1" ]]; then
+    echo "VLLM_ENGINES_PER_HOST=${VLLM_ENGINES_PER_HOST} requires the no-ray path (VLLM_RAY_EXECUTOR=0/auto)." >&2
+    exit 1
+  fi
+  if [[ "$VLLM_CLIENT_SIDE_ROUND_ROBIN" != "1" && "$VLLM_CLIENT_SIDE_ROUND_ROBIN" != "true" ]]; then
+    echo "VLLM_ENGINES_PER_HOST=${VLLM_ENGINES_PER_HOST}: enabling VLLM_CLIENT_SIDE_ROUND_ROBIN so every engine URL is used."
+    VLLM_CLIENT_SIDE_ROUND_ROBIN=1
+  fi
+fi
+
 if [[ "$VLLM_RAY_EXECUTOR" == "auto" ]]; then
   if (( vllm_worker_count > 1 )); then
     VLLM_RAY_EXECUTOR="1"
@@ -273,11 +302,21 @@ if [[ "$FSDP_SIZE" == "auto" ]]; then
   FSDP_SIZE="$train_worker_count"
 fi
 if [[ "$VLLM_TP_SIZE" == "auto" ]]; then
-  if [[ "$VLLM_RAY_EXECUTOR" == "0" || "$VLLM_DATA_PARALLEL_SIZE" != "1" ]]; then
+  if (( VLLM_ENGINES_PER_HOST > 1 )); then
+    if (( chips_per_vllm_worker % VLLM_ENGINES_PER_HOST != 0 )); then
+      echo "VLLM_ENGINES_PER_HOST=${VLLM_ENGINES_PER_HOST} does not divide the ${chips_per_vllm_worker} chips per serving host." >&2
+      exit 1
+    fi
+    VLLM_TP_SIZE="$((chips_per_vllm_worker / VLLM_ENGINES_PER_HOST))"
+  elif [[ "$VLLM_RAY_EXECUTOR" == "0" || "$VLLM_DATA_PARALLEL_SIZE" != "1" ]]; then
     VLLM_TP_SIZE="$chips_per_vllm_worker"
   else
     VLLM_TP_SIZE="$((vllm_worker_count * chips_per_vllm_worker))"
   fi
+fi
+if (( VLLM_ENGINES_PER_HOST > 1 )) && (( VLLM_TP_SIZE * VLLM_ENGINES_PER_HOST != chips_per_vllm_worker )); then
+  echo "VLLM_TP_SIZE(${VLLM_TP_SIZE}) x VLLM_ENGINES_PER_HOST(${VLLM_ENGINES_PER_HOST}) must equal the ${chips_per_vllm_worker} chips per serving host." >&2
+  exit 1
 fi
 
 expected_train_devices="$((train_worker_count * $(product_csv "$TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS")))"
@@ -322,15 +361,20 @@ process_addresses_for_workers() {
 }
 
 base_urls_for_workers() {
+  # One URL per ENGINE, not per worker: with VLLM_ENGINES_PER_HOST=N every
+  # serving host contributes N consecutive ports starting at the base port.
+  # At N=1 the output is unchanged from the historical per-worker list.
   local port="$1"
   shift
   local urls=""
-  local worker
+  local worker engine
   for worker in "$@"; do
-    if [[ -n "$urls" ]]; then
-      urls+=","
-    fi
-    urls+="http://$(worker_internal_ip "$worker"):${port}"
+    for ((engine = 0; engine < VLLM_ENGINES_PER_HOST; engine++)); do
+      if [[ -n "$urls" ]]; then
+        urls+=","
+      fi
+      urls+="http://$(worker_internal_ip "$worker"):$((port + engine))"
+    done
   done
   echo "$urls"
 }
@@ -426,6 +470,8 @@ if [[ "$START_VLLM" == "1" ]]; then
     VLLM_TPU_PROCESS_ADDRESSES="$vllm_start_process_addresses" \
     VLLM_TPU_PROCESS_PORT="$VLLM_TPU_PROCESS_PORT" \
     VLLM_TPU_VISIBLE_CHIPS="$VLLM_TPU_VISIBLE_CHIPS" \
+    VLLM_ENGINES_PER_HOST="$VLLM_ENGINES_PER_HOST" \
+    VLLM_EXTRA_PIP_SPECS="$VLLM_EXTRA_PIP_SPECS" \
     VLLM_RAY_EXECUTOR="$VLLM_RAY_EXECUTOR" \
     VLLM_USE_RAY_V2_EXECUTOR_BACKEND="$VLLM_USE_RAY_V2_EXECUTOR_BACKEND" \
     REMOTE_HF_HOME="$REMOTE_HF_HOME" \
@@ -455,7 +501,13 @@ exit 1
 
 if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
   for vllm_worker in "${vllm_workers[@]}"; do
-    wait_from_worker "$train_coord_worker" "http://$(worker_internal_ip "$vllm_worker"):${VLLM_PORT}/v1/models" "vLLM worker ${vllm_worker}"
+    for ((engine = 0; engine < VLLM_ENGINES_PER_HOST; engine++)); do
+      engine_label="vLLM worker ${vllm_worker}"
+      if (( VLLM_ENGINES_PER_HOST > 1 )); then
+        engine_label+=" engine ${engine}"
+      fi
+      wait_from_worker "$train_coord_worker" "http://$(worker_internal_ip "$vllm_worker"):$((VLLM_PORT + engine))/v1/models" "$engine_label"
+    done
   done
 fi
 
@@ -532,11 +584,8 @@ if [[ "$EXTERNAL_SAMPLING" == "1" ]]; then
   # Round-robin sampling across every vLLM worker (the client splits this
   # comma-separated list). With one vLLM worker it's just the single URL.
   if [[ "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "1" || "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "true" ]]; then
-    external_inference_urls=""
-    for w in "${vllm_workers[@]}"; do
-      if [[ -n "$external_inference_urls" ]]; then external_inference_urls+=","; fi
-      external_inference_urls+="http://$(worker_internal_ip "$w"):${VLLM_PORT}"
-    done
+    # Same per-engine URL list the backend CSV uses.
+    external_inference_urls="$(base_urls_for_workers "$VLLM_PORT" "${vllm_workers[@]}")"
     external_inference_flag="--external-inference-url ${external_inference_urls}"
   else
     external_inference_flag="--external-inference-url http://$(worker_internal_ip "${vllm_workers[0]}"):${VLLM_PORT}"
@@ -723,7 +772,7 @@ fi
 echo "Colocated vLLM/Tinker split is up."
 echo "Train workers: ${train_workers_csv}; Tinker API: http://127.0.0.1:${API_PORT} on worker ${train_coord_worker}"
 echo "Train TPU_PROCESS_BOUNDS=${TRAIN_TPU_PROCESS_BOUNDS}; TRAIN_TPU_PROCESS_ADDRESSES=${train_process_addresses}; mesh fsdp=${FSDP_SIZE}, tp=${TP_SIZE}"
-echo "vLLM workers: ${vllm_workers_csv}; vLLM URL from train workers: ${vllm_base_url}; vLLM tp=${VLLM_TP_SIZE}"
+echo "vLLM workers: ${vllm_workers_csv}; vLLM URL from train workers: ${vllm_base_url}; vLLM tp=${VLLM_TP_SIZE}; engines/host=${VLLM_ENGINES_PER_HOST}"
 echo "vLLM data parallel: size=${VLLM_DATA_PARALLEL_SIZE}; backend=${VLLM_DATA_PARALLEL_BACKEND:-none}"
 echo "vLLM client-side round-robin: ${VLLM_CLIENT_SIDE_ROUND_ROBIN}"
 echo "vLLM TPU_PROCESS_BOUNDS=${VLLM_TPU_PROCESS_BOUNDS}; VLLM_TPU_PROCESS_ADDRESSES=${vllm_start_process_addresses}"

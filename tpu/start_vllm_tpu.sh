@@ -32,6 +32,26 @@ VLLM_DATA_PARALLEL_HYBRID_LB="${VLLM_DATA_PARALLEL_HYBRID_LB:-0}"
 VLLM_API_SERVER_COUNT="${VLLM_API_SERVER_COUNT:-}"
 VLLM_HEADLESS="${VLLM_HEADLESS:-0}"
 VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
+# Independent vLLM servers per serving host. 1 = one engine on the whole
+# host, exactly the historical behavior (the generated remote scripts are
+# byte-identical). N>1 = N fully independent servers per worker: engine e
+# serves HTTP on VLLM_PORT+e, sees only the chips
+# [e*VLLM_TP_SIZE, (e+1)*VLLM_TP_SIZE) via TPU_VISIBLE_CHIPS, and owns a
+# distinct libtpu coordination port (base + first chip); the XLA compile
+# cache is shared between siblings ON PURPOSE so the second engine boots off
+# the first one's compile (79s measured). Pattern hardware-validated for
+# Muse-Glimmer-30B 2xTP=2 on v5p in tpu/muse_glimmer/vllm_tp4_bench_tpu.sh
+# arm B + TP-BENCHMARK-22K.md. Independent servers ARE the data parallelism:
+# this requires the no-ray single-host-server path and DP size 1.
+VLLM_ENGINES_PER_HOST="${VLLM_ENGINES_PER_HOST:-1}"
+# Extra pip specs installed into the serving venv with --no-deps
+# --force-reinstall AFTER the tpu-inference fork overlay, in order and
+# verbatim. The value must be SHELL-QUOTED where a spec contains spaces,
+# because the quoting is preserved into the generated remote install line.
+# Needed when the served model requires an unreleased transformers, e.g.
+# muse_glimmer (see tpu/muse_glimmer/vllm_tp4_bench_tpu.sh). Empty = no
+# change to the historical install set.
+VLLM_EXTRA_PIP_SPECS="${VLLM_EXTRA_PIP_SPECS:-}"
 VLLM_TPU_PROCESS_BOUNDS="${VLLM_TPU_PROCESS_BOUNDS:-}"
 VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS="${VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS:-}"
 VLLM_TPU_PROCESS_ADDRESSES="${VLLM_TPU_PROCESS_ADDRESSES:-}"
@@ -112,11 +132,39 @@ mapfile -t vllm_workers < <(parse_worker_list "$VLLM_WORKERS")
 primary_vllm_worker="${vllm_workers[0]}"
 vllm_worker_count="${#vllm_workers[@]}"
 
+if ! [[ "$VLLM_ENGINES_PER_HOST" =~ ^[0-9]+$ ]] || (( VLLM_ENGINES_PER_HOST < 1 )); then
+  echo "VLLM_ENGINES_PER_HOST must be a positive integer, got '${VLLM_ENGINES_PER_HOST}'." >&2
+  exit 1
+fi
+if (( VLLM_ENGINES_PER_HOST > 1 )) && [[ "$VLLM_RAY_EXECUTOR" == "auto" ]]; then
+  # Per-host independent engines never coordinate across hosts.
+  VLLM_RAY_EXECUTOR="0"
+fi
+
 if [[ "$VLLM_RAY_EXECUTOR" == "auto" ]]; then
   if (( vllm_worker_count > 1 )); then
     VLLM_RAY_EXECUTOR="1"
   else
     VLLM_RAY_EXECUTOR="0"
+  fi
+fi
+
+if (( VLLM_ENGINES_PER_HOST > 1 )); then
+  if [[ "$VLLM_RAY_EXECUTOR" == "1" ]]; then
+    echo "VLLM_ENGINES_PER_HOST=${VLLM_ENGINES_PER_HOST} starts independent per-host servers and requires the no-ray path (VLLM_RAY_EXECUTOR=0/auto)." >&2
+    exit 1
+  fi
+  if [[ -n "$VLLM_DATA_PARALLEL_SIZE" && "$VLLM_DATA_PARALLEL_SIZE" != "1" ]]; then
+    echo "VLLM_ENGINES_PER_HOST=${VLLM_ENGINES_PER_HOST} requires VLLM_DATA_PARALLEL_SIZE=1: the independent servers ARE the data parallelism." >&2
+    exit 1
+  fi
+  if [[ -n "$VLLM_TPU_PROCESS_ADDRESSES" ]]; then
+    echo "VLLM_ENGINES_PER_HOST>1 is single-host-per-engine only; VLLM_TPU_PROCESS_ADDRESSES must be empty." >&2
+    exit 1
+  fi
+  if [[ -n "$VLLM_TPU_VISIBLE_CHIPS" ]]; then
+    echo "VLLM_ENGINES_PER_HOST>1 computes TPU_VISIBLE_CHIPS per engine from VLLM_TP_SIZE; leave VLLM_TPU_VISIBLE_CHIPS empty." >&2
+    exit 1
   fi
 fi
 
@@ -155,6 +203,56 @@ ray_head_address="${ray_head_ip}:${VLLM_RAY_PORT}"
 bootstrap_script="${tmpdir}/start_vllm_tpu_bootstrap.sh"
 runner_script="${tmpdir}/run_vllm_tpu_server.sh"
 
+# Multi-engine interpolation blocks. All four render EMPTY at
+# VLLM_ENGINES_PER_HOST=1 and are appended to the tail of existing generated
+# lines, so the single-engine remote scripts stay byte-identical to the
+# historical ones. The blocks land inside unquoted-EOF heredocs below: every
+# dollar that must survive to remote-eval time is backslash-escaped here, and
+# the generated comments deliberately contain no quotes, no backticks and no
+# command substitution.
+extra_engine_cleanup=""
+extra_engine_start=""
+engine_env_block=""
+extra_pip_block=""
+runner_http_port="$VLLM_PORT"
+runner_log_name="vllm-tpu.log"
+if (( VLLM_ENGINES_PER_HOST > 1 )); then
+  for ((engine = 1; engine < VLLM_ENGINES_PER_HOST; engine++)); do
+    extra_engine_cleanup+=$'\n'"  tmux kill-session -t vllm-tpu-e${engine} 2>/dev/null || true"
+    extra_engine_start+=$'\n'"  tmux new-session -d -s vllm-tpu-e${engine} \"VLLM_RELATIVE_WORKER_ID='\${VLLM_RELATIVE_WORKER_ID:-}' VLLM_ENGINE_INDEX=${engine} bash \$HOME/run_vllm_tpu_server.sh\""
+  done
+  engine_coord_base="${VLLM_TPU_PROCESS_PORT:-8476}"
+  engine_env_block+=$'\n'"# Per-engine isolation, VLLM_ENGINES_PER_HOST=${VLLM_ENGINES_PER_HOST}: each engine sees only"
+  engine_env_block+=$'\n'"# its own ${VLLM_TP_SIZE} chips, owns a distinct libtpu coordination port, and"
+  engine_env_block+=$'\n'"# shares the XLA cache with its siblings on purpose. Hardware-validated"
+  engine_env_block+=$'\n'"# pattern: tpu/muse_glimmer/vllm_tp4_bench_tpu.sh arm B."
+  engine_env_block+=$'\n'"engine_index=\"\${VLLM_ENGINE_INDEX:-0}\""
+  engine_env_block+=$'\n'"engine_port=\$(( ${VLLM_PORT} + engine_index ))"
+  engine_env_block+=$'\n'"engine_first_chip=\$(( engine_index * ${VLLM_TP_SIZE} ))"
+  engine_env_block+=$'\n'"engine_chips=\"\${engine_first_chip}\""
+  engine_env_block+=$'\n'"engine_chip_step=1"
+  engine_env_block+=$'\n'"while [ \"\${engine_chip_step}\" -lt ${VLLM_TP_SIZE} ]; do"
+  engine_env_block+=$'\n'"  engine_chips=\"\${engine_chips},\$(( engine_first_chip + engine_chip_step ))\""
+  engine_env_block+=$'\n'"  engine_chip_step=\$(( engine_chip_step + 1 ))"
+  engine_env_block+=$'\n'"done"
+  engine_env_block+=$'\n'"engine_log_suffix=\"\""
+  engine_env_block+=$'\n'"if [ \"\${engine_index}\" != \"0\" ]; then engine_log_suffix=\"-e\${engine_index}\"; fi"
+  engine_env_block+=$'\n'"export TPU_VISIBLE_CHIPS=\"\${engine_chips}\""
+  engine_env_block+=$'\n'"export TPU_CHIPS_PER_PROCESS_BOUNDS=\"1,${VLLM_TP_SIZE},1\""
+  engine_env_block+=$'\n'"export TPU_PROCESS_BOUNDS=\"1,1,1\""
+  engine_env_block+=$'\n'"export TPU_PROCESS_PORT=\$(( ${engine_coord_base} + engine_first_chip ))"
+  engine_env_block+=$'\n'"export TPU_PROCESS_ADDRESSES=\"localhost:\${TPU_PROCESS_PORT}\""
+  engine_env_block+=$'\n'"export CLOUD_TPU_TASK_ID=0"
+  engine_env_block+=$'\n'"export JAX_COMPILATION_CACHE_DIR=\"${VLLM_XLA_CACHE_PATH}\""
+  runner_http_port='${engine_port}'
+  runner_log_name='vllm-tpu${engine_log_suffix}.log'
+fi
+if [[ -n "$VLLM_EXTRA_PIP_SPECS" ]]; then
+  # UV_NO_CONFIG so no uv config on the host can re-resolve these; --no-deps
+  # --force-reinstall and last position mirror the proven muse venv recipe.
+  extra_pip_block+=$'\n'"UV_NO_CONFIG=1 uv pip install --python \"${VLLM_VENV}/bin/python\" --no-deps --force-reinstall ${VLLM_EXTRA_PIP_SPECS}"
+fi
+
 cat > "$bootstrap_script" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -180,7 +278,7 @@ uv pip install --python "${VLLM_VENV}/bin/python" "vllm-tpu==${VLLM_TPU_VERSION}
 # allowlist). vllm-tpu is a meta-package depending on tpu-inference, so a
 # --no-deps force-reinstall cleanly swaps in the fork at the pinned ref.
 uv pip install --python "${VLLM_VENV}/bin/python" --no-deps --force-reinstall \\
-  "tpu-inference @ git+${TPU_INFERENCE_FORK_URL}@${TPU_INFERENCE_FORK_REF}"
+  "tpu-inference @ git+${TPU_INFERENCE_FORK_URL}@${TPU_INFERENCE_FORK_REF}"${extra_pip_block}
 "${VLLM_VENV}/bin/python" - <<'PY'
 from tpu_inference.worker.tpu_worker import TPUWorker
 
@@ -190,7 +288,7 @@ print("tpu-inference fork overlay verified (runtime LoRA forwarders present)")
 PY
 
 if [[ "\${VLLM_CLEANUP:-1}" == "1" ]]; then
-  tmux kill-session -t vllm-tpu 2>/dev/null || true
+  tmux kill-session -t vllm-tpu 2>/dev/null || true${extra_engine_cleanup}
   pkill -TERM -u "\$USER" -f "[V]LLM::EngineCore|[v]llm serve|[a]pi_server" || true
   "${VLLM_VENV}/bin/ray" stop --force >/tmp/vllm-ray-stop.log 2>&1 || true
   sleep 5
@@ -215,7 +313,7 @@ if [[ "\${VLLM_USE_RAY_EXECUTOR:-0}" == "1" ]]; then
 fi
 
 if [[ "\${VLLM_START_SERVER:-1}" == "1" ]]; then
-  tmux new-session -d -s vllm-tpu "VLLM_RELATIVE_WORKER_ID='\${VLLM_RELATIVE_WORKER_ID:-}' bash \$HOME/run_vllm_tpu_server.sh"
+  tmux new-session -d -s vllm-tpu "VLLM_RELATIVE_WORKER_ID='\${VLLM_RELATIVE_WORKER_ID:-}' bash \$HOME/run_vllm_tpu_server.sh"${extra_engine_start}
 fi
 EOF
 
@@ -308,7 +406,7 @@ if [[ -n "${VLLM_TPU_VISIBLE_CHIPS}" ]]; then
   export TPU_VISIBLE_CHIPS="${VLLM_TPU_VISIBLE_CHIPS}"
 else
   unset TPU_VISIBLE_CHIPS
-fi
+fi${engine_env_block}
 if [[ "${VLLM_DISABLE_SHARDY}" == "1" || "${VLLM_DISABLE_SHARDY}" == "true" || \\
       ( "${VLLM_DISABLE_SHARDY}" == "auto" && "${MODEL_NAME}" == *"Qwen3.5-4B"* ) ]]; then
   export JAX_USE_SHARDY_PARTITIONER=false
@@ -342,7 +440,7 @@ fi
 exec "\${server_cmd[@]}" \\
   --served-model-name "${SERVED_MODEL_NAME}" \\
   --host 0.0.0.0 \\
-  --port "${VLLM_PORT}" \\
+  --port "${runner_http_port}" \\
   --tensor-parallel-size "${VLLM_TP_SIZE}" \\
   --max-model-len "${VLLM_MAX_MODEL_LEN}" \\
   --max-num-seqs "${VLLM_MAX_NUM_SEQS}" \\
@@ -353,7 +451,7 @@ exec "\${server_cmd[@]}" \\
   "\${ray_args[@]}" \\
   "\${dp_args[@]}" \\
   "\${extra_args[@]}" \\
-  2>&1 | tee "\$HOME/skyrl-logs/vllm-tpu.log"
+  2>&1 | tee "\$HOME/skyrl-logs/${runner_log_name}"
 EOF
 
 chmod +x "$bootstrap_script" "$runner_script"
@@ -405,5 +503,8 @@ else
 fi
 
 echo "vLLM TPU start command submitted on workers ${VLLM_WORKERS}."
+if (( VLLM_ENGINES_PER_HOST > 1 )); then
+  echo "Engines per host: ${VLLM_ENGINES_PER_HOST} (HTTP ports ${VLLM_PORT}..$((VLLM_PORT + VLLM_ENGINES_PER_HOST - 1)), TP=${VLLM_TP_SIZE} each, per-engine logs ~/skyrl-logs/vllm-tpu[-eN].log)"
+fi
 echo "Log: gcloud alpha compute tpus tpu-vm ssh ${REMOTE_USER}@${TPU_NAME} --project=${PROJECT} --zone=${ZONE} --worker=${primary_vllm_worker} --ssh-key-file=${SSH_KEY_FILE} --command 'tail -f ~/skyrl-logs/vllm-tpu.log'"
 echo "URL from worker ${primary_vllm_worker}: http://localhost:${VLLM_PORT}"
