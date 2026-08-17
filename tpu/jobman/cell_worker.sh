@@ -32,17 +32,21 @@ echo "client venv OK"
 # --- engines: skip when healthy ---------------------------------------------
 engines_healthy() {
   curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 || return 1
-  local ip
-  for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
-    curl -fsS -m6 "http://$ip:8001/v1/models" >/dev/null 2>&1 || return 1
-  done
-  return 0
+  vllm_healthy
 }
 tinker_healthy() { curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1; }
 vllm_healthy() {
-  local ip
+  # EVERY engine, not just the first: with ENGINES_PER_HOST=2 each host serves
+  # 8001 AND 8002 (engine e listens on VLLM_PORT+e). Probing only 8001 would
+  # call a host healthy with a dead second engine -- bring-up would be skipped
+  # and the client, which round-robins across all 6 URLs, would sample against
+  # a dead endpoint every other request.
+  local ip e port
   for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
-    curl -fsS -m6 "http://$ip:8001/v1/models" >/dev/null 2>&1 || return 1
+    for (( e=0; e<${ENGINES_PER_HOST:-1}; e++ )); do
+      port=$(( 8001 + e ))
+      curl -fsS -m6 "http://$ip:$port/v1/models" >/dev/null 2>&1 || return 1
+    done
   done
   return 0
 }
