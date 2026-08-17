@@ -17,13 +17,17 @@
 #   workers 1,2   vLLM serving, 2 engines each, TP=2   (4 engines total)
 #   worker 3      idle by default
 #
-# Why: the tunix backend supports a single train host (enforced by the
-# launcher's backend-config build), so training is worker 0 — the same
-# train/serve split qwen35-27b runs on its v5p-16 (train 0, vllm 1). Two
-# serving hosts x 2 engines gives the validated 4-engine shape and a 4-URL
-# CSV. Worker 3 is left unassigned on purpose: the 4-engine shape is what the
-# 22k benchmark validated; grow with VLLM_WORKERS=1,2,3 (6 engines) once
-# sustained serving is proven.
+# Why: this is the PRODUCTION v5p-32 cell structure. The live gemma/qwen
+# cells launch TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0
+# VLLM_CLIENT_SIDE_ROUND_ROBIN=1 (league worktree tpu/jobman/
+# cell_worker.sh:141,179, tpu/bringup_v5p32_cell.sh:90) — independent
+# per-worker servers, URL-CSV round robin, never the ray/DP path. Muse keeps
+# that structure and adds VLLM_ENGINES_PER_HOST=2 on top; the tunix backend
+# supports a single train host (enforced by the launcher), so training stays
+# on worker 0. Serving defaults to workers 1,2 — two hosts x 2 engines is
+# the validated 4-engine shape with a 4-URL CSV — leaving worker 3
+# unassigned; grow to the cells' VLLM_WORKERS=1,2,3 (6 engines, 6-URL CSV)
+# once sustained serving is proven.
 #
 # ---------------------------------------------------------------------------
 # WHY 2 ENGINES x TP=2 PER HOST (not 1 x TP=4)
@@ -75,11 +79,14 @@
 #      verify the first uploaded adapter actually loads AND changes outputs.
 #      (Exported targets are q/k/v/o_proj + gate/up/down_proj; the attention
 #      gate is NOT adapted by tunix — MAXTEXT.md "LoRA targeting".)
-#   5. Train-side sizing at 24576/vocab 202048: micro-batch and token budget
-#      below follow the qwen35-27b precedent, not muse measurements. The
-#      qwen35 deploy also found FLCE did NOT actually stop [N*S, V] logits
-#      from materializing on TPU (memory: ttd-qwen35-tpu-server); watch the
-#      first fb step's HBM before committing to a long run.
+#   5. Train-side sizing at 22528/vocab 202048: the batch shape below is the
+#      production q32 cell recipe (micro-batch 1 + token budget + length
+#      buckets), with the budget held at 45056 rather than the cell's 73728
+#      because muse's vocab is ~1.33x qwen's — precedent, not muse
+#      measurements. The qwen35 deploy also found FLCE did NOT actually stop
+#      [N*S, V] logits from materializing on TPU (memory:
+#      ttd-qwen35-tpu-server); watch the first fb step's HBM before
+#      committing to a long run.
 # =============================================================================
 set -euo pipefail
 
@@ -98,6 +105,16 @@ export REMOTE_HF_HOME
 # --- worker split (see header) ----------------------------------------------
 export TRAIN_WORKERS="${TRAIN_WORKERS:-0}"
 export VLLM_WORKERS="${VLLM_WORKERS:-1,2}"
+# PRODUCTION BRANCH, set explicitly: the live gemma/qwen v5p-32 cells all
+# launch with TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0
+# VLLM_CLIENT_SIDE_ROUND_ROBIN=1 (league worktree tpu/jobman/
+# cell_worker.sh:141,179 and tpu/bringup_v5p32_cell.sh:90) — independent
+# per-worker servers, client round-robin over the URL CSV. The ray/DP
+# auto-path is the road not taken in production. VLLM_ENGINES_PER_HOST=2
+# extends exactly this branch: same structure, two servers per serving
+# worker instead of one.
+export VLLM_RAY_EXECUTOR="${VLLM_RAY_EXECUTOR:-0}"
+export VLLM_CLIENT_SIDE_ROUND_ROBIN="${VLLM_CLIENT_SIDE_ROUND_ROBIN:-1}"
 
 # --- model -------------------------------------------------------------------
 # HF weights live in the shared GCS hub-format cache (refs/main -> a4e59da5,
@@ -154,12 +171,23 @@ export TUNIX_MAXTEXT_PIP_SPEC="${TUNIX_MAXTEXT_PIP_SPEC:-maxtext @ git+https://g
 # precedent. FLCE tile 2048 per MAXTEXT.md (the [B,S,V] f32 logits at
 # S=24576, V=202048 are the binding 18.50 GiB term).
 export TUNIX_MAXTEXT_KWARGS="${TUNIX_MAXTEXT_KWARGS:-{\"remat_policy\":\"full\",\"ici_fsdp_parallelism\":4,\"num_vocab_tiling\":8}}"
-export TUNIX_MAX_TARGET_LENGTH="${TUNIX_MAX_TARGET_LENGTH:-24576}"
+# Train ceiling = serving ceiling, as in the production q32 cell
+# (bringup_v5p32_cell.sh:90: TUNIX_MAX_TARGET_LENGTH=22528 alongside
+# VLLM_MAX_MODEL_LEN=22528; MAXTEXT.md sized the model at 24576, so 22528 is
+# inside the proven envelope).
+export TUNIX_MAX_TARGET_LENGTH="${TUNIX_MAX_TARGET_LENGTH:-22528}"
 export TUNIX_FLCE_TILE_SIZE="${TUNIX_FLCE_TILE_SIZE:-2048}"
-# Sizing precedent, NOT muse-measured (unproven item 5): micro-batch from
-# qwen35-27b.env; token budget = the qwen35 finish-line 45056 (2 x 22528).
-export TRAIN_MICRO_BATCH_SIZE="${TRAIN_MICRO_BATCH_SIZE:-8}"
+# Training batch shape = the production cell recipe (cell_worker.sh /
+# bringup_v5p32_cell.sh): micro-batch 1 with token-budget packing and the
+# cells' length-bucket ladder, minimal fb output. Budget is the one value NOT
+# copied verbatim: the q32 cell runs 73728 on qwen (V=152k); muse's V=202048
+# logits/FLCE arena is ~1.33x per token, so start at 45056 (2 x 22528, the
+# qwen35 v5p-16 finish-line value) and raise only after watching the first
+# fb step's HBM (unproven item 5).
+export TRAIN_MICRO_BATCH_SIZE="${TRAIN_MICRO_BATCH_SIZE:-1}"
 export TUNIX_TRAIN_TOKEN_BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-45056}"
+export TUNIX_SEQ_BUCKETS="${TUNIX_SEQ_BUCKETS:-4096,8192,12288,16384,20480}"
+export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-1}"
 # Converted orbax weights are already staged under the launcher's default
 # TUNIX_MAXTEXT_CKPT_CACHE_GCS prefix: gs://sk7524-tinker-tpu-us-east5/
 # skyrl-maxtext-ckpts/muse-glimmer-30b/0/items (verified). The launcher
