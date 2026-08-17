@@ -60,6 +60,8 @@ TPUINF_REF=skyrl/v0.23.0-lora
 TF_VERSION=5.8.0
 TP_SIZE=4; ENGINES_PER_HOST=1
 MAX_NUM_SEQS=128
+SKIP_PRECOMPILE=0
+EXTRA_PIP=""
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
 case "$CELL" in
@@ -101,6 +103,13 @@ case "$CELL" in
     # GRPO 16x32 = 512 rollouts => ~85/engine offered, so the scheduler stays
     # the limiter rather than the KV pool.
     MAX_NUM_SEQS=64
+    # Both from run_muse_rl.sh, and the first is load-bearing: with precompile
+    # ON, capture_model() -> maybe_select_dummy_loras -> _set_active_loras leaks
+    # a JAX tracer through torchax and every engine dies with
+    # UnexpectedTracerError (observed live, both engines, deterministic). The
+    # validated path never runs that code. Cost: first requests compile lazily.
+    SKIP_PRECOMPILE=1
+    EXTRA_PIP="'transformers @ git+https://github.com/huggingface/transformers@main' 'tokenizers>=0.23.1,<0.24.0'"
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-22k-tp2"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     HF_OFFLINE=0
@@ -159,7 +168,8 @@ elif ! tinker_healthy && vllm_healthy; then
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
-    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST" \
+    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
+    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -198,7 +208,8 @@ else
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
-    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST" \
+    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
+    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
