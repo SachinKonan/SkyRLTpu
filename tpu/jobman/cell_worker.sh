@@ -55,6 +55,7 @@ VLLM_IMPL=vllm
 TPUINF_REF=skyrl/v0.23.0-lora
 TF_VERSION=5.8.0
 TP_SIZE=4; ENGINES_PER_HOST=1
+MAX_NUM_SEQS=128
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
 case "$CELL" in
@@ -91,6 +92,11 @@ case "$CELL" in
     TF_VERSION=""
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
     TP_SIZE=2; ENGINES_PER_HOST=2
+    # 64/engine x 6 engines = 384 pooled scheduler slots, under the measured
+    # 222-sequence KV capacity per host pair and matched to the RL burst:
+    # GRPO 16x32 = 512 rollouts => ~85/engine offered, so the scheduler stays
+    # the limiter rather than the KV pool.
+    MAX_NUM_SEQS=64
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-22k-tp2"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     HF_OFFLINE=0
@@ -194,7 +200,7 @@ else
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
-    VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=128 VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
+    VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=$MAX_NUM_SEQS VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
     VLLM_XLA_CACHE_GCS="$XLA_GCS" \
     HF_CACHE_GCS="$HF_GCS" \
     VLLM_EXTRA_ARGS="$VLLM_XARGS" \
