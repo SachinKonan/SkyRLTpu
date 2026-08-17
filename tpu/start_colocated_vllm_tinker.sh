@@ -687,10 +687,28 @@ fi
 if [[ "${TINKER_BACKEND}" == "tunix" && -n "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}" && -n "${TUNIX_MAXTEXT_MODEL_NAME}" ]]; then
   export gsutil_bin="\$(command -v gsutil || echo "\$HOME/google-cloud-sdk/bin/gsutil")"
   mkdir -p "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}"
-  if "\$gsutil_bin" -m -q rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" 2>/dev/null; then
-    echo "restored MaxText ckpt cache from ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}"
-  else
-    echo "MaxText ckpt cache restore skipped/failed (will convert)"
+  # Retry + partial purge, same discipline as the HF-cache restore. An rsync cut
+  # short (preemption mid-bring-up is routine on spot) leaves *_.gstmp partials:
+  # every filename present, almost no bytes. The trainer then reads them and dies
+  # with "DATA_LOSS: Error reading shard entry" from TensorStore -- observed live
+  # on muse (132K local against a 40.58 GiB checkpoint). A partial cache is worse
+  # than none: absent, the backend just re-converts from HF.
+  _ck_dir="${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}"
+  _ck_ok=0
+  for _try in 1 2 3; do
+    "\$gsutil_bin" -m -q rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" "\$_ck_dir" 2>/dev/null && _ck_ok=1
+    _parts="\$(find "\$_ck_dir" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)"
+    if [ "\$_ck_ok" = "1" ] && [ -z "\$_parts" ]; then
+      echo "restored MaxText ckpt cache from ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME} (attempt \$_try)"
+      break
+    fi
+    echo "MaxText ckpt restore incomplete (attempt \$_try): partial=\${_parts:-none}"
+    _ck_ok=0
+    sleep 15
+  done
+  if [ "\$_ck_ok" != "1" ]; then
+    _n="\$(find "\$_ck_dir" -mindepth 1 -delete -print 2>/dev/null | wc -l)"
+    echo "MaxText ckpt cache restore FAILED after 3 tries; purged \$_n partial path(s) so the backend converts from HF instead of reading corrupt shards"
   fi
   nohup bash -c '
     for _try in \$(seq 1 240); do
