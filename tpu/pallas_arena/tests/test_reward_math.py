@@ -179,3 +179,45 @@ def test_case_timing_medians():
     t = tm.CaseTiming("x", [(1e-4, 2e-4), (3e-4, 4e-4), (5e-4, 6e-4)])
     assert t.ref_median_s == pytest.approx(3e-4)
     assert t.cand_median_s == pytest.approx(4e-4)
+
+
+# ------------------------------------------------------- blind validation set
+def test_blind_cases_are_never_scored_in_either_mode():
+    """A blind case is measured and reported but pays nothing, in BOTH reward
+    modes.
+
+    This is the whole reason `blind` exists. `general_mode` scores the holdout
+    on purpose -- otherwise a kernel hardcodes the shapes it was shown -- but
+    that leaves no case the model is not optimizing, and therefore no way to
+    tell a kernel that learned attention from one that learned our case list.
+    A blind case can only answer that question while it stays unrewarded.
+    """
+    from pallas_arena.judge.timing import CaseTiming, final_reward
+
+    fast = [(2.0, 1.0)] * 8   # candidate 2x faster than ref -> score ~2.0
+    slow = [(1.0, 4.0)] * 8   # candidate 4x slower          -> score ~0.25
+    timings = [
+        CaseTiming(case="declared", pairs=fast),
+        CaseTiming(case="holdout", pairs=fast, holdout=True),
+        CaseTiming(case="blind", pairs=slow, blind=True),
+    ]
+    for general in (False, True):
+        out = final_reward(timings, noise_floor=0.0, general=general)
+        # the catastrophic blind case must not drag the reward down at all
+        assert out["score"] > 1.5, (general, out)
+        assert out["n_blind_cases"] == 1
+        assert out["blind_score"] < 0.5, out
+        assert "blind" in out["blind_per_case"]
+        # and it is not counted among the scored cases
+        assert out["n_scored_cases"] == (2 if general else 1), out
+
+
+def test_blind_only_case_set_is_rejected():
+    """Scoring needs at least one declared case; an all-blind set is a
+    misconfiguration and must fail loudly rather than score vacuously."""
+    import pytest
+
+    from pallas_arena.judge.timing import CaseTiming, final_reward
+
+    with pytest.raises(ValueError):
+        final_reward([CaseTiming(case="b", pairs=[(1.0, 1.0)], blind=True)], noise_floor=0.0)

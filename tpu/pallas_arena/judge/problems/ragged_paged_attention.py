@@ -163,6 +163,34 @@ class RaggedPagedAttentionProblem(Problem):
             ShapeCase("probe-b64-len1024", {**d, "batch": 64, "max_len": 1024, "num_pages": 64 * 16 + 8}, probe=True),
             ShapeCase("probe-b32-len2048", {**d, "batch": 32, "max_len": 2048, "num_pages": 32 * 32 + 8}, probe=True),
             ShapeCase("probe-b128-len512", {**d, "batch": 128, "max_len": 512, "num_pages": 128 * 8 + 8}, probe=True),
+            # REGIME-FAITHFUL set. The probe cases above are OUTSIDE the
+            # regime paged attention exists for, and it shows: measured on
+            # v6e-1, jax's Pallas kernel LOSES to a blocked XLA decode at every
+            # one of them (0.50 vs 0.21 ms at b16-len1024), while both sit at
+            # 6-20% of HBM bandwidth and ~0.1% of compute peak -- fixed
+            # overhead dominates and the simpler implementation wins because it
+            # has less machinery to amortize.
+            #
+            # tokamax's own paged-decode specs (experimental/mla/arg_specs.py,
+            # project deepseek_v3) are 8192-token contexts at page_size 256,
+            # with both a 3-sequence and a 128-sequence case. Ours were <=1024
+            # at page_size 64: 8x short and 4x more page indirection per unit
+            # of work. Context length is what decode attention actually walks,
+            # so it moves first. (b64/b128 at 8192 next: the fp32 reference
+            # gathers b*ml*kvh*d*4*2 = 4.3 GB at b64 before variants, and boot
+            # has already segfaulted this judge at less.)
+            ShapeCase("tok-b8-len8192-ps256",
+                      {"page_size": 256, "kv_heads": self.KV_HEADS, "q_heads": self.Q_HEADS,
+                       "head_dim": self.HEAD_DIM, "batch": 8, "max_len": 8192,
+                       "num_pages": 8 * 32 + 8}, probe=True),
+            ShapeCase("tok-b32-len8192-ps256",
+                      {"page_size": 256, "kv_heads": self.KV_HEADS, "q_heads": self.Q_HEADS,
+                       "head_dim": self.HEAD_DIM, "batch": 32, "max_len": 8192,
+                       "num_pages": 32 * 32 + 8}, probe=True),
+            ShapeCase("tok-holdout-b17-len8192-ps256",
+                      {"page_size": 256, "kv_heads": self.KV_HEADS, "q_heads": self.Q_HEADS,
+                       "head_dim": self.HEAD_DIM, "batch": 17, "max_len": 8192,
+                       "num_pages": 17 * 32 + 8}, probe=True, holdout=True),
             # TENSOR PARALLEL (v6e-8): KV heads sharded 8 ways -- with
             # KV_HEADS=8 that is exactly one KV head (and its 4 query
             # heads) per device, the standard serving split.
@@ -293,7 +321,7 @@ class RaggedPagedAttentionProblem(Problem):
         alone hands out credit for beating the slower of the two."""
         return {"production": self.baseline, "xla-paged-decode": _xla_paged_decode}
 
-    def tp_specs(self):
+    def tp_specs(self, case=None):
         """Shard KV HEADS, with the query heads that map to them -- how a
         paged-attention decode is sharded in a real serving stack. Page tables
         and sequence lengths replicate; each device owns whole KV heads, so

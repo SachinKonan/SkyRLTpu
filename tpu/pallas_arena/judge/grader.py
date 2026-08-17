@@ -41,9 +41,25 @@ def normalize_code(code: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def cache_key(problem_name: str, problem_version: str, mode: str, code: str, smoke: bool) -> str:
+def cache_key(
+    problem_name: str,
+    problem_version: str,
+    mode: str,
+    code: str,
+    smoke: bool,
+    *,
+    contract: str = "",
+) -> str:
+    """`contract` distinguishes verdicts produced under DIFFERENT grading
+    contracts for the same code.
+
+    Without it, flipping ``Problem.bwd_gates`` would silently serve a cached
+    verdict graded under the other contract -- a fwd-only kernel zeroed while
+    the backward gated would keep reading as a zero after the backward became
+    merely scored, and the change would look like it had no effect.
+    """
     h = hashlib.sha256()
-    h.update(f"{problem_name}:{problem_version}:{mode}:{int(smoke)}:".encode())
+    h.update(f"{problem_name}:{problem_version}:{mode}:{int(smoke)}:{contract}:".encode())
     h.update(normalize_code(code).encode())
     return h.hexdigest()
 
@@ -94,7 +110,15 @@ def grade(
 
         problem_version = get_problem(problem_name).version
 
-    key = cache_key(problem_name, problem_version, mode, code, smoke)
+    # "full"/"gates" verdicts depend on whether the backward GATES or is merely
+    # scored, so that must be part of the identity of a cached verdict.
+    from pallas_arena.judge.problems import get_problem
+
+    p = get_problem(problem_name)
+    contract = ""
+    if mode in ("full", "gates") and p.has_bwd:
+        contract = f"bwdgate={int(p.bwd_gates)}"
+    key = cache_key(problem_name, problem_version, mode, code, smoke, contract=contract)
     if cache is not None and mode in ("full", "gates"):
         hit = cache.get(key)
         if hit is not None:
@@ -125,6 +149,13 @@ def grade(
         "determinism_runs": determinism_runs,
         "correctness_seeds": correctness_seeds,
         "fail_reward": fail_reward,
+        # The BACKWARD CONTRACT travels explicitly instead of being re-derived
+        # in the child. The child is a fresh process that re-imports the
+        # problem module, so a parent-side override (a test, a per-run judge
+        # setting) would otherwise never reach it: the parent would build an
+        # OPTIONAL grad signature while the child still gated on the gradient,
+        # and the two halves of one grade would disagree about the contract.
+        "bwd_gates": bool(p.bwd_gates) if p.has_bwd else False,
         # persistent-worker export path (mode="aot_export"):
         "signatures": export_signatures,
         "platforms": export_platforms,

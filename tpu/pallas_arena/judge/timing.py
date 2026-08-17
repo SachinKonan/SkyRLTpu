@@ -304,6 +304,9 @@ class CaseTiming:
     case: str
     pairs: list[tuple[float, float]] = field(default_factory=list)
     holdout: bool = False
+    # BLIND cases are measured and reported but NEVER scored, in either reward
+    # mode. See final_reward.
+    blind: bool = False
 
     @property
     def score(self) -> float:
@@ -335,11 +338,19 @@ def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general:
     sitting unused in the ``holdout`` field. The result is labelled
     ``reward_kind`` so a general number is never mistaken for a historical one.
     """
-    declared = [t for t in case_timings if not t.holdout]
-    holdout = [t for t in case_timings if t.holdout]
+    # BLIND cases are removed from BOTH candidate pools before anything is
+    # scored. They are the validation set, and a validation set the model is
+    # paid for stops measuring anything: general mode deliberately scores the
+    # holdout (so a kernel cannot hardcode the shapes it was shown), which is
+    # correct but leaves nothing unoptimized to check generalization against.
+    # `blind` is that third category -- measured, reported, never rewarded.
+    blind = [t for t in case_timings if t.blind]
+    pool = [t for t in case_timings if not t.blind]
+    declared = [t for t in pool if not t.holdout]
+    holdout = [t for t in pool if t.holdout]
     if not declared:
-        raise ValueError("no declared (non-holdout) case timings")
-    scored = case_timings if general else declared
+        raise ValueError("no declared (non-holdout, non-blind) case timings")
+    scored = pool if general else declared
     score = geomean([t.score for t in scored])
     return {
         "score": score,
@@ -350,4 +361,9 @@ def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general:
         "per_case": {t.case: t.score for t in declared},
         "holdout": {t.case: t.score for t in holdout},
         "holdout_scored": bool(general and holdout),
+        # The validation signal: what the BLIND cases scored, reported so a
+        # tier-1-vs-blind gap is visible without ever entering the reward.
+        "n_blind_cases": len(blind),
+        "blind_score": geomean([t.score for t in blind]) if blind else None,
+        "blind_per_case": {t.case: t.score for t in blind},
     }

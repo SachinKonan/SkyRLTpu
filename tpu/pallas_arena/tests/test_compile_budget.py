@@ -235,12 +235,7 @@ def test_pregate_still_accepts_honest_kernels_under_the_budget(capsys):
     assert ok, why
 
 
-def test_pregate_lowers_the_gradient_functional():
-    """The 569.5 s compile lived in the GRAD graph, so a fwd-only pre-gate
-    waves that whole attack class through. This candidate traces and lowers
-    perfectly forward and is undifferentiable in reverse mode — it must be
-    rejected, which is only possible if the pre-gate lowers the gradient."""
-    bad_grad = """
+_UNDIFFERENTIABLE = """
 import jax
 import jax.numpy as jnp
 
@@ -251,8 +246,46 @@ def kernel(x, g):
     _, y = jax.lax.while_loop(lambda c: c[0] < 2, lambda c: (c[0] + 1, c[1] * 1.0), (0, y))
     return y
 """
-    ok, why = aot_pregate("rmsnorm", bad_grad, smoke=True)
+
+
+def test_pregate_rejects_undifferentiable_when_the_backward_GATES():
+    """The 569.5 s compile lived in the GRAD graph, so a fwd-only pre-gate
+    waves that whole attack class through. This candidate lowers perfectly
+    forward and is undifferentiable in reverse mode; when the task GATES on
+    the backward it must be rejected, which is only possible if the pre-gate
+    lowers the gradient."""
+    from pallas_arena.judge.problems import get_problem
+
+    problem = type(get_problem("rmsnorm"))
+    prior = problem.bwd_gates
+    problem.bwd_gates = True
+    try:
+        ok, why = aot_pregate("rmsnorm", _UNDIFFERENTIABLE, smoke=True)
+    finally:
+        problem.bwd_gates = prior
     assert not ok and "pregate" in why, why
+
+
+def test_pregate_accepts_undifferentiable_when_the_backward_is_only_SCORED():
+    """With bwd_gates=False the judge does not reject a non-differentiable
+    kernel -- it forfeits the backward component and keeps its forward reward
+    (see Problem.bwd_gates). The pre-gate exists to PREDICT the judge, so
+    rejecting here would make it stricter than the contract it screens for and
+    would silently shrink the candidate pool before anything reached a chip.
+
+    The gradient is still LOWERED either way, so a grad-graph compile bomb is
+    still bounded by the budget; only the verdict on an honest-but-fwd-only
+    kernel changes."""
+    from pallas_arena.judge.problems import get_problem
+
+    problem = type(get_problem("rmsnorm"))
+    prior = problem.bwd_gates
+    problem.bwd_gates = False
+    try:
+        ok, why = aot_pregate("rmsnorm", _UNDIFFERENTIABLE, smoke=True)
+    finally:
+        problem.bwd_gates = prior
+    assert ok, f"scored-backward pre-gate must not reject a fwd-only kernel: {why}"
 
 
 # --------------------------------------------------------------- queue side

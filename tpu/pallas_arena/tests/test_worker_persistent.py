@@ -108,9 +108,27 @@ def test_obfuscated_import_dies_in_export_child(worker):
 
 
 def test_wrong_grad_caught_through_exported_grad(worker):
-    r = worker.grade_code(cand.WRONG_GRAD_RMSNORM)
-    assert not r["passed"]
-    assert r["gate"] == "gradient"
+    """Same contract as the child-side test, but exercised through the
+    EXPORTED grad artifact on the judge: gating fails the candidate, scoring
+    records grad_ok=False and pays no backward reward. Verified in both modes
+    here because the judge re-checks the gradient independently of the child,
+    and a divergence between the two would let a wrong backward through."""
+    from pallas_arena.judge.problems import get_problem
+
+    problem = type(get_problem("rmsnorm"))
+    prior = problem.bwd_gates
+    try:
+        problem.bwd_gates = True
+        r = worker.grade_code(cand.WRONG_GRAD_RMSNORM)
+        assert not r["passed"]
+        assert r["gate"] == "gradient"
+
+        problem.bwd_gates = False
+        r2 = worker.grade_code(cand.WRONG_GRAD_RMSNORM, tag="wrong-grad-scored")
+        assert r2.get("grad_ok") is False, r2
+        assert r2.get("grad_reward") is None, "a wrong gradient must never be timed into a reward"
+    finally:
+        problem.bwd_gates = prior
 
 
 def test_wrong_eps_still_caught_under_wider_calibration(worker):

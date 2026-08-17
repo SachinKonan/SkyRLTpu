@@ -22,7 +22,9 @@ import jax
 
 from pallas_arena.judge.problems import get_problem, problem_names
 
-ARENA_TASKS = ("splash_attention", "flce", "ragged_paged_attention", "megablox_gmm", "rg_lru")
+# The graded slate is defined ONCE, in the registry -- a second copy here
+# silently drifted (it still listed flce after the slate changed).
+from pallas_arena.judge.problems import ARENA_TASKS  # noqa: F401
 
 # Which shape case to call baseline() on per task: the smallest smoke case that
 # exists, so a CPU host can actually run it.

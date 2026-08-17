@@ -72,9 +72,29 @@ def test_split_personality_caught_on_timed_outputs(fast_grade_kwargs):
 
 
 def test_wrong_backward_caught_by_gradient_contract(fast_grade_kwargs):
-    r = _grade(cand.WRONG_GRAD_RMSNORM, **fast_grade_kwargs)
-    assert not r["passed"]
-    assert r["gate"] == "gradient"
+    """A wrong backward is CAUGHT in both modes -- what differs is the penalty.
+
+    Gating: the candidate fails outright at the gradient gate.
+    Scoring (the default, see Problem.bwd_gates): it keeps whatever its forward
+    earned but is recorded grad_ok=False and forfeits the backward component,
+    so a fast-but-wrong gradient can never be paid for.
+    """
+    from pallas_arena.judge.problems import get_problem
+
+    problem = type(get_problem("rmsnorm"))
+    prior = problem.bwd_gates
+    try:
+        problem.bwd_gates = True
+        r = _grade(cand.WRONG_GRAD_RMSNORM, **fast_grade_kwargs)
+        assert not r["passed"]
+        assert r["gate"] == "gradient"
+
+        problem.bwd_gates = False
+        r2 = _grade(cand.WRONG_GRAD_RMSNORM, **fast_grade_kwargs)
+        assert r2.get("grad_ok") is False, r2
+        assert r2.get("grad_reward") is None, "a wrong gradient must never be timed into a reward"
+    finally:
+        problem.bwd_gates = prior
 
 
 def test_nondeterministic_kernel_fails_bitwise_check(fast_grade_kwargs):

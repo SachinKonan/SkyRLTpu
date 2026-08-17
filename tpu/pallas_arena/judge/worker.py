@@ -45,6 +45,7 @@ import traceback
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 from pallas_arena.judge import grader
 from pallas_arena.judge import observation
@@ -85,13 +86,26 @@ def build_signatures(problem, scored_cases, holdout_cases, adv_cases):
 
     sigs, seen = [], {}
 
-    def sig_of(abstract, kind, label):
+    def sig_of(abstract, kind, label, optional=False, features=None):
         args = [{"shape": list(a.shape), "dtype": str(a.dtype)} for a in abstract]
-        key = (kind, json.dumps(args))
+        # Features are part of the signature IDENTITY, not just metadata: they
+        # are bound statically, so a windowed case and a plain case that happen
+        # to share shapes are DIFFERENT programs. Deduping on shapes alone
+        # would hand both cases one artifact and silently grade the windowed
+        # case against the plain kernel.
+        feats = dict(features or {})
+        key = (kind, json.dumps(args), json.dumps(feats, sort_keys=True))
         if key in seen:
             return seen[key]
         name = f"{kind}{len(sigs):02d}"
-        sigs.append({"name": name, "kind": kind, "args": args, "label": label})
+        entry = {"name": name, "kind": kind, "args": args, "label": label}
+        if feats:
+            entry["features"] = feats
+        if optional:
+            # An OPTIONAL signature that fails to export costs the candidate
+            # that component of the reward; it does not fail the export gate.
+            entry["optional"] = True
+        sigs.append(entry)
         seen[key] = name
         return name
 
@@ -103,15 +117,35 @@ def build_signatures(problem, scored_cases, holdout_cases, adv_cases):
         # pre-gate (1 device) and the judge (8) derive identical signatures.
         w = problem.tp_declared_width(case)
         abstract = problem.abstract_inputs_tp(case, w) if w else problem.abstract_inputs(case)
-        case_sig[case.name] = sig_of(abstract, "fwd", case.name)
+        case_sig[case.name] = sig_of(abstract, "fwd", case.name, features=case.feature_kwargs)
     adv_sig = {}
     for adv in adv_cases:
         abstract = jax.eval_shape(adv.make_inputs, jax.ShapeDtypeStruct((2,), "uint32"))
         adv_sig[adv.name] = sig_of(abstract, "fwd", f"adv:{adv.name}")
     grad_sig = None
     if problem.has_bwd and scored_cases:
-        grad_sig = sig_of(problem.abstract_inputs(scored_cases[0]), "grad", "grad")
+        grad_sig = sig_of(
+            problem.abstract_inputs(scored_cases[0]),
+            "grad",
+            "grad",
+            optional=not problem.bwd_gates,
+        )
     return sigs, case_sig, adv_sig, grad_sig
+
+
+class Fixture(NamedTuple):
+    """One correctness fixture, by NAME rather than by position.
+
+    Positional tuples cost three separate breakages in one change when this
+    grew a `case` field: the compile-warm loop, the correctness loop and the
+    determinism unpack each failed with `too many values to unpack`, one
+    battery run apart. Attribute access makes adding a field a non-event.
+    """
+
+    label: str
+    sig_name: str
+    inputs: tuple
+    case: object  # ShapeCase, or None for adversarial vectors (no features)
 
 
 class CompileBudgetExceeded(Exception):
@@ -226,8 +260,13 @@ class PersistentWorker:
         self._general_baselines = {}
         if getattr(self.problem, "general_mode", False):
             t_bl = self.perf()
-            cands = self.problem.baseline_candidates()
             for case in self.scored_cases + self.holdout_cases:
+                # Candidates are re-fetched PER CASE: with static features the
+                # set is case-dependent (each carries that case's window /
+                # soft-cap), so hoisting it out of the loop would elect a
+                # baseline computing a different function than the case asks
+                # for. Featureless cases return the same objects as before.
+                cands = self.problem.for_case(case).baseline_candidates()
                 w = self.problem.make_inputs(jax.random.PRNGKey(1), case)
                 self.block(w)
                 timings = {}
@@ -300,9 +339,15 @@ class PersistentWorker:
             for _what, make in probes:
                 inputs = make()
                 self.block(inputs)
-                ref32 = self.problem.reference(*inputs)
+                # Warm the SAME callables the graded path will use: a featured
+                # case compiles a different reference and different variants,
+                # and warming the unbound ones would leave that compile inside
+                # candidate #1's warm_chip_s -- the exact cost this block exists
+                # to hoist out.
+                pw = self.problem.for_case(_what) if hasattr(_what, "feature_kwargs") else self.problem
+                ref32 = pw.reference(*inputs)
                 self.block(ref32)
-                self.problem.calibrated_tolerance(inputs, ref32)
+                pw.calibrated_tolerance(inputs, ref32)
                 error_stats(ref32, ref32)
                 del inputs, ref32  # keep boot peak HBM to one fixture
         except Exception as e:  # never fatal: a warm-up is an optimization
@@ -371,7 +416,10 @@ class PersistentWorker:
         }
 
         if self.cache is not None:
-            key = grader.cache_key(self.problem_name, problem.version, "worker_full", code, self.smoke)
+            key = grader.cache_key(
+                self.problem_name, problem.version, "worker_full", code, self.smoke,
+                contract=self._contract_tag(),
+            )
             hit = self.cache.get(key)
             if hit is not None:
                 hit = dict(hit)
@@ -479,11 +527,12 @@ class PersistentWorker:
                 for g in range(self.correctness_seeds):
                     inputs = problem.make_inputs(fold_in(fold_in(k_corr, g), hash_stable(case.name)), case)
                     block(inputs)
-                    fixtures.append((f"{case.name}#seed{g}", case_sig[case.name], inputs))
+                    fixtures.append(Fixture(f"{case.name}#seed{g}", case_sig[case.name], inputs, case))
             for i, adv in enumerate(self.adversarial_cases()):
                 inputs = adv.make_inputs(fold_in(k_adv, i))
                 block(inputs)
-                fixtures.append((f"adv:{adv.name}", adv_sig[adv.name], inputs))
+                # adversarial vectors carry no features -> case is None
+                fixtures.append(Fixture(f"adv:{adv.name}", adv_sig[adv.name], inputs, None))
         except Exception as e:
             # Fixtures are built from the PROBLEM's own make_inputs and a
             # block() -- no candidate code is consulted -- so a failure here
@@ -494,10 +543,10 @@ class PersistentWorker:
         # gradient functional. Built as thunks so the deadline can be checked
         # BETWEEN them (see _compile_warm).
         warm_units, warmed = [], set()
-        for _label, sig_name, inputs in fixtures:
-            if sig_name not in warmed:
-                warm_units.append((sig_name, lambda s=sig_name, i=inputs: block(fns[s](*i))))
-                warmed.add(sig_name)
+        for f in fixtures:
+            if f.sig_name not in warmed:
+                warm_units.append((f.sig_name, lambda s=f.sig_name, i=f.inputs: block(fns[s](*i))))
+                warmed.add(f.sig_name)
         try:
             for case in self.holdout_cases:
                 sig_name = case_sig[case.name]
@@ -509,7 +558,7 @@ class PersistentWorker:
         except Exception as e:
             return fail("fixtures", f"{type(e).__name__}: {e}", judge_fault=True)
         if grad_sig is not None and fixtures:
-            warm_units.append(("grad", lambda: block(fns[grad_sig](*fixtures[0][2]))))
+            warm_units.append(("grad", lambda: block(fns[grad_sig](*fixtures[0].inputs))))
 
         t_warmc = self.perf()
         try:
@@ -530,11 +579,12 @@ class PersistentWorker:
             # ---- 3. correctness on fresh hidden seeds + adversarial vectors
             from pallas_arena.judge.problems.base import check_tolerance, error_stats
 
-            for label, sig_name, inputs in fixtures:
+            for label, sig_name, inputs, case in ((f.label, f.sig_name, f.inputs, f.case) for f in fixtures):
                 if over_budget():
                     return budget_fail(f"correctness ({label})")
-                ref32 = problem.reference(*inputs)
-                tol = problem.calibrated_tolerance(inputs, ref32)
+                pc = problem.for_case(case)
+                ref32 = pc.reference(*inputs)
+                tol = pc.calibrated_tolerance(inputs, ref32)
                 try:
                     out = fns[sig_name](*inputs)
                     block(out)
@@ -547,7 +597,7 @@ class PersistentWorker:
             # ---- 4. determinism: N bitwise-identical runs
             import numpy as np
 
-            _det_label, det_sig, det_inputs = fixtures[0]
+            det_sig, det_inputs = fixtures[0].sig_name, fixtures[0].inputs
             outs = []
             for _ in range(self.determinism_runs):
                 o = fns[det_sig](*det_inputs)
@@ -560,22 +610,97 @@ class PersistentWorker:
             # ---- 5. gradient contract via the exported grad artifact
             if over_budget():
                 return budget_fail("gradient")
+            # A non-differentiable candidate exports no grad artifact when the
+            # backward is scored rather than gated. That is a recorded outcome
+            # (grad_reward stays absent), not a judge fault.
+            if grad_sig is not None and grad_sig not in fns:
+                result["grad_ok"] = False
+                result["grad_error"] = (
+                    child.get(f"{grad_sig}_export_error") or "backward not exported"
+                )
+                grad_sig = None
             if grad_sig is not None:
                 from pallas_arena.judge.problems.base import tolerance_from_reference
 
-                g_inputs = problem.make_inputs(fold_in(k_corr, 999), self.scored_cases[0])
+                g_case = self.scored_cases[0]
+                pg = problem.for_case(g_case)
+                g_inputs = problem.make_inputs(fold_in(k_corr, 999), g_case)
                 block(g_inputs)
-                ref_g = problem.grad_outputs(lambda *i: problem.reference(*i), *g_inputs)
-                cal_g = problem.grad_outputs(lambda *i: problem.reference_bf16(*i), *g_inputs)
+                ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
+                cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
                 g_tol = tolerance_from_reference(ref_g, cal_g)
+                gates = problem.bwd_gates
                 try:
                     cand_g = fns[grad_sig](*g_inputs)
                     block(cand_g)
                 except Exception as e:
-                    return fail("gradient", f"grad failed: {type(e).__name__}: {e}")
-                okay, why = check_tolerance(error_stats(cand_g, ref_g), g_tol)
-                if not okay:
-                    return fail("gradient", why)
+                    why = f"grad failed: {type(e).__name__}: {e}"
+                    if gates:
+                        return fail("gradient", why)
+                    result["grad_ok"], result["grad_error"] = False, why[:400]
+                    grad_sig = None
+                if grad_sig is not None:
+                    okay, why = check_tolerance(error_stats(cand_g, ref_g), g_tol)
+                    if not okay and gates:
+                        return fail("gradient", why)
+                    result["grad_ok"] = bool(okay)
+                    if not okay:
+                        result["grad_error"] = why[:400]
+                        # Wrong gradients must not be TIMED into a reward --
+                        # a fast wrong backward is worth nothing.
+                        grad_sig = None
+
+                # ---- 5b. TIME the backward as its own benchmark.
+                # tokamax treats forward and forward+vjp as two separate
+                # benchmarks with separately tuned configs
+                # (dot_product_attention vs dot_product_attention_vjp are
+                # distinct autotuning cache entries), and for training the
+                # backward is often the more expensive half. Until now our
+                # backward was only a pass/fail gate and the reward timed the
+                # forward alone -- so a kernel with a correct but catastrophic
+                # backward scored exactly like one with a fast backward.
+                # Reported separately, never folded into the forward reward:
+                # they are different numbers about different things.
+                #
+                # Only timed when the backward exists AND is correct: a missing
+                # or wrong gradient has already cleared grad_sig, and timing a
+                # wrong backward would pay reward for the wrong thing.
+                if grad_sig is not None:
+                    try:
+                        _gb = self._general_baselines.get(self.scored_cases[0].name, {})
+                        base_grad_raw = _gb.get("raw") or problem.baseline
+                        # WHICH backward the grad_reward was measured against.
+                        # The forward already records `baseline_impl` for exactly
+                        # this reason -- a ratio against a fallback must never be
+                        # read as a ratio against the production kernel. The
+                        # backward had no such record, so a grad_reward could not
+                        # be interpreted at all: differentiating recurrentgemma's
+                        # Pallas scan and differentiating lax.associative_scan
+                        # are different bars, and only one of them is the claim
+                        # anyone cares about.
+                        result["grad_baseline_impl"] = _gb.get("impl") or getattr(
+                            problem, "baseline_impl", "?"
+                        )
+                        gb_fn = self.jax.jit(lambda *i: problem.grad_outputs(base_grad_raw, *i))
+                        gc_fn = self.jax.jit(lambda *i: fns[grad_sig](*i))
+                        gpairs = []
+                        for i in range(self.timing_warmup + self.timing_pairs):
+                            gi = problem.make_inputs(fold_in(fold_in(k_time, 7000 + i), 31), self.scored_cases[0])
+                            block(gi)
+                            gp, _, _ = timing_mod.counterbalanced_pair(
+                                i, lambda: gb_fn(*gi), lambda: gc_fn(*gi), perf, block
+                            )
+                            if i >= self.timing_warmup:
+                                gpairs.append(gp)
+                        if gpairs:
+                            gt = timing_mod.CaseTiming(case=f"grad:{self.scored_cases[0].name}", pairs=gpairs)
+                            result["grad_score"] = gt.score
+                            result["grad_reward"] = timing_mod.gate_reward(gt.score, self.noise_floor or 0.0)
+                            result["grad_latencies"] = {
+                                "ref_median_s": gt.ref_median_s, "cand_median_s": gt.cand_median_s
+                            }
+                    except Exception as e:  # noqa: BLE001 -- a backward TIMING failure must not fail a correct kernel
+                        result["grad_timing_error"] = f"{type(e).__name__}: {str(e)[:160]}"
 
             # ---- 6. counterbalanced interleaved timing, fresh inputs per
             # ---- iteration, correctness verified on TIMED outputs
@@ -609,7 +734,7 @@ class PersistentWorker:
                     if n_dev < tp_w:
                         skipped_tp[case.name] = f"needs {tp_w} devices, judge has {n_dev}"
                         continue
-                    specs = problem.tp_specs()
+                    specs = problem.tp_specs(case)
                     if specs is None:
                         skipped_tp[case.name] = "task declares no tp_specs"
                         continue
@@ -623,7 +748,7 @@ class PersistentWorker:
                     inputs = problem.make_inputs(fold_in(fold_in(k_time, i), hash_stable(case.name)), case)
                     block(inputs)
                     if tp_mesh is not None:
-                        inputs = timing_mod.shard_inputs(inputs, tp_mesh, problem.tp_specs()[0])
+                        inputs = timing_mod.shard_inputs(inputs, tp_mesh, problem.tp_specs(case)[0])
                     pair, _r, c_out = timing_mod.counterbalanced_pair(
                         i, lambda: base_fn(*inputs), lambda: cand_fn(*inputs), perf, block
                     )
@@ -649,12 +774,16 @@ class PersistentWorker:
                         if it in check_iters:
                             checks[it] = (inputs, c_out)
                 for it, (inputs, c_out) in checks.items():
-                    ref32 = problem.reference(*inputs)
-                    tol = problem.calibrated_tolerance(inputs, ref32)
+                    pcase = problem.for_case(case)
+                    ref32 = pcase.reference(*inputs)
+                    tol = pcase.calibrated_tolerance(inputs, ref32)
                     okay, why = check_tolerance(error_stats(c_out, ref32), tol)
                     if not okay:
                         return fail("timed_output_correctness", f"{case.name} timed iter {it}: {why}")
-                ct = timing_mod.CaseTiming(case=case.name, pairs=pairs, holdout=case.holdout)
+                ct = timing_mod.CaseTiming(
+                    case=case.name, pairs=pairs, holdout=case.holdout,
+                    blind=getattr(case, "blind", False),
+                )
                 case_timings.append(ct)
                 bm = problem.bytes_moved(case)
                 chip = (
@@ -800,11 +929,26 @@ class PersistentWorker:
         except Exception:
             pass
 
+    def _contract_tag(self) -> str:
+        """Identity of the GRADING CONTRACT, not of the code.
+
+        Cached verdicts are only interchangeable when the contract that
+        produced them matches. The backward is the part that moves: under
+        ``bwd_gates`` a non-differentiable kernel is zeroed, and without it the
+        same kernel keeps its forward reward. Sharing one cache across both
+        would replay the wrong verdict and make a contract change look like a
+        no-op.
+        """
+        return f"bwdgate={int(self.problem.bwd_gates)}" if self.problem.has_bwd else ""
+
     def _store(self, code: str, result: dict) -> None:
         if self.cache is None:
             return
         try:
-            key = grader.cache_key(self.problem_name, self.problem.version, "worker_full", code, self.smoke)
+            key = grader.cache_key(
+                self.problem_name, self.problem.version, "worker_full", code, self.smoke,
+                contract=self._contract_tag(),
+            )
             self.cache.put(key, {k: v for k, v in result.items() if k != "cache_hit"})
         except Exception:
             pass

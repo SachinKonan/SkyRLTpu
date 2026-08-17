@@ -191,7 +191,7 @@ class RGLRUProblem(Problem):
         denominator wherever it happens to be the faster of the two."""
         return {"production": self.baseline, "lax-associative-scan": rg_lru_associative}
 
-    def tp_specs(self):
+    def tp_specs(self, case=None):
         """Shard the FEATURE axis d. The recurrence is independent per feature,
         so each device runs a complete scan over its own slice with no
         collective; `reset` is replicated because it is per (batch, time)."""

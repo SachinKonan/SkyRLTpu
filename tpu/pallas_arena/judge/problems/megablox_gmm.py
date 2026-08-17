@@ -12,7 +12,11 @@ kernel(lhs, rhs, group_sizes) -> out
   rhs:         [num_groups, k, n]  bfloat16 (per-expert weights)
   group_sizes: [num_groups]        int32, sum == m (zeros allowed!)
   out:         [m, n]              float32, out[rows of group g] = lhs @ rhs[g]
-fp32 accumulation. Contract: fwd only.
+fp32 accumulation. Contract: fwd + bwd (d/d lhs, d/d rhs; `group_sizes` is an
+integer routing vector and is not differentiated). MoE training needs gradients
+into the expert weights, and megablox ships the backward for it -- `gmm` is a
+`jax.custom_vjp` whose `_gmm_bwd` computes the weight gradient with a TRANSPOSED
+grouped matmul (`tgmm`).
 """
 
 from __future__ import annotations
@@ -108,6 +112,17 @@ def _megablox_tiling(m: int, k: int, n: int):
 
 
 def _sample_group_sizes(key, num_groups, m, dist):
+    # The two DEGENERATE distributions are tokamax's own benchmark corners
+    # (ragged_dot/arg_specs.py SPEC_SHAPES): `compute_bound` routes every token
+    # to one expert, `memory_bound` gives each exactly one. Uniform/zipf
+    # sampling never reaches either, and both are real MoE states -- routing
+    # collapse, and a batch smaller than the expert count.
+    if dist == "one-hot":
+        return jnp.zeros((num_groups,), jnp.int32).at[0].set(m).astype(jnp.int32)
+    if dist == "one-each":
+        base = m // num_groups
+        counts = jnp.full((num_groups,), base, jnp.int32)
+        return counts.at[0].add(m - base * num_groups).astype(jnp.int32)
     if dist == "uniform":
         w = jnp.ones((num_groups,))
     elif dist == "zipf":
@@ -127,7 +142,31 @@ def _sample_group_sizes(key, num_groups, m, dist):
 class MegabloxGmmProblem(Problem):
     name = "megablox_gmm"
     version = "1"
-    has_bwd = False
+    # BACKWARD IS PART OF THE CONTRACT. A forward-only grouped matmul cannot
+    # train a mixture of experts -- the whole point of the op is the expert
+    # projections, and those need gradients flowing to the expert weights.
+    #
+    # This was False, which was simply wrong. VERIFIED in the arena's own jax
+    # pin (jax/experimental/pallas/ops/tpu/megablox/ops.py):
+    #
+    #     line  22:  gmm = jax.custom_vjp(
+    #     line  28:  def _gmm_fwd(
+    #     line  63:  def _gmm_bwd(
+    #     line  90:      grad_rhs = backend.tgmm(
+    #
+    # so megablox ships a hand-written backward whose weight gradient is a
+    # TRANSPOSED grouped matmul (`tgmm`, exported from megablox.backend rather
+    # than the package root, which is why a top-level export check misses it).
+    # tokamax tests the same thing (`test_vjp`, `test_tgmm_drhs_pipes`).
+    #
+    # The denominator therefore costs nothing to obtain: because `gmm` is a
+    # custom_vjp, differentiating the EXISTING baseline dispatches straight into
+    # `_gmm_bwd`/`tgmm`, so the backward is timed against the production
+    # backward rather than against autodiff-through-our-reference. That
+    # distinction is the whole reason this is safe to turn on -- inventing a
+    # weak backward bar is the mistuned-denominator mistake that invalidated
+    # every reward this arena produced before the per-shape election.
+    has_bwd = True
     require_pallas = True
     general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = False
@@ -157,7 +196,17 @@ class MegabloxGmmProblem(Problem):
             # orientation (k=14336, n=4096 -- the transpose of ours) is the one
             # tokamax actually benchmarks, where tuned megablox beats XLA 4.1x.
             ShapeCase("probe-m8192-e8-uniform", {"m": 8192, "g": 8, "k": 4096, "n": 4096, "dist": "uniform"}, probe=True),
-            ShapeCase("probe-m8192-e8-8x7b", {"m": 8192, "g": 8, "k": 14336, "n": 4096, "dist": "zipf"}, probe=True),
+            # PROVENANCE, tokamax naming: this IS their `8x7b` spec
+            # (mixtral, g=8 m=8192 k=14336 n=4096) rather than a shape we
+            # invented. Named so a result can be quoted against the same
+            # configuration they publish numbers for.
+            ShapeCase("mixtral-8x7b-g8-m8192", {"m": 8192, "g": 8, "k": 14336, "n": 4096, "dist": "zipf"}, probe=True),
+            # tokamax `compute_bound`: ONE expert takes every token, seven get
+            # zero -- group_sizes [4096] + [0]*7. A real MoE routing collapse,
+            # and a correctness trap our uniform/zipf sampling never produces.
+            ShapeCase("tokamax-compute-bound-g8", {"m": 4096, "g": 8, "k": 4096, "n": 4096, "dist": "one-hot"}, probe=True),
+            # tokamax `memory_bound`: one token per expert, [1]*8.
+            ShapeCase("tokamax-memory-bound-g8", {"m": 8, "g": 8, "k": 4096, "n": 4096, "dist": "one-each"}, probe=True),
             ShapeCase("probe-m4096-e16-zipf", {"m": 4096, "g": 16, "k": 4096, "n": 4096, "dist": "zipf"}, probe=True),
             # TENSOR PARALLEL (v6e-8): the output feature axis n sharded 8
             # ways -- the classic MoE up-projection split. Per shard n=512.
@@ -185,6 +234,33 @@ class MegabloxGmmProblem(Problem):
 
     def reference(self, lhs, rhs, group_sizes):
         return gmm_reference(lhs, rhs, group_sizes)
+
+    def grad_outputs(self, kernel_fn, lhs, rhs, group_sizes):
+        """d/d(lhs, rhs) of a fixed scalar functional of the output.
+
+        argnums=(0, 1) only: `group_sizes` is an integer routing vector, not a
+        differentiable input -- megablox's own `_gmm_bwd` likewise returns no
+        cotangent for it.
+
+        The cotangent is a deterministic NON-symmetric probe (cos of a flat
+        iota) rather than a plain sum. Summing the output makes a wrong backward
+        look right, because errors cancel across the reduction -- and the two
+        gradients here have very different structure (`grad_lhs` is a grouped
+        matmul against rhs^T, `grad_rhs` is the transposed grouped matmul), so a
+        candidate that gets one right and the other wrong must not average out.
+        """
+        out_shape = (lhs.shape[0], rhs.shape[-1])
+        probe = jnp.cos(
+            jnp.arange(int(np.prod(out_shape)), dtype=jnp.float32)
+        ).reshape(out_shape)
+
+        def scalar(l32, r32):
+            out = kernel_fn(l32.astype(lhs.dtype), r32.astype(rhs.dtype), group_sizes)
+            return jnp.sum(out.astype(jnp.float32) * probe)
+
+        return jax.grad(scalar, argnums=(0, 1))(
+            lhs.astype(jnp.float32), rhs.astype(jnp.float32)
+        )
 
     # Which baseline the last `baseline()` call actually used. Recorded (not
     # asserted) so a boot report says plainly what the score denominator IS.
@@ -234,7 +310,7 @@ class MegabloxGmmProblem(Problem):
                 lhs, rhs, gs, preferred_element_type=jnp.float32),
         }
 
-    def tp_specs(self):
+    def tp_specs(self, case=None):
         """Shard the OUTPUT feature axis n -- the classic MoE up-projection
         split. rhs [g, k, n] is sharded on n, lhs is replicated, out [m, n] is
         sharded on n, and no collective is needed. group_sizes is replicated

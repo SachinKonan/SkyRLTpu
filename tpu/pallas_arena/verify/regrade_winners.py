@@ -106,10 +106,25 @@ def main() -> None:
                     "passed": r.get("passed"),
                     "gate": r.get("gate"),
                     "violations": (r.get("violations") or [])[:1],
+                    # Backward is SCORED, not gated (see Problem.bwd_gates), so
+                    # its outcome lives here rather than in the gate field.
+                    # Without these the report cannot distinguish "no backward"
+                    # from "backward not applicable to this task".
+                    "grad_ok": r.get("grad_ok"),
+                    "grad_error": r.get("grad_error"),
+                    "grad_score": r.get("grad_score"),
+                    "grad_reward": r.get("grad_reward"),
+                    "grad_latencies": r.get("grad_latencies"),
+                    "grad_baseline_impl": r.get("grad_baseline_impl"),
                 }
+                gtxt = (
+                    "" if r.get("grad_ok") is None
+                    else f" grad={'ok' if r.get('grad_ok') else 'FAIL'}"
+                    + (f" gr={r['grad_reward']:.3f}" if r.get("grad_reward") is not None else "")
+                )
                 print(
                     f"  {name[:58]:58s} old={old_reward} -> new={r.get('reward')} "
-                    f"gate={r.get('gate')}",
+                    f"gate={r.get('gate')}{gtxt}",
                     flush=True,
                 )
             except Exception as e:  # noqa: BLE001

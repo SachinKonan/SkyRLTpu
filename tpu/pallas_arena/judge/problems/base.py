@@ -61,6 +61,38 @@ class ShapeCase:
     # selected explicitly by name (`--cases`), and are NEVER part of the
     # default scored/holdout sets, so nothing about a production run changes.
     probe: bool = False
+    # STATIC feature knobs bound into the kernel for this case (sliding-window
+    # size, logit soft-cap, ...). Empty = the plain op.
+    #
+    # STATIC, not traced, and that is the whole point. A sliding window passed
+    # as a traced value cannot be used to SKIP blocks -- the kernel would still
+    # visit every KV block and merely mask it -- which throws away the only
+    # reason sliding-window attention is fast. Binding it at export time is
+    # what lets a candidate specialize, exactly as the production kernels do:
+    # splash takes a `LocalMask` and an `attn_logits_soft_cap` float, both
+    # resolved before compilation.
+    #
+    # Consequence: each distinct feature combination is its own exported
+    # artifact, so features multiply signatures rather than widening one.
+    # BLIND: measured and reported, NEVER scored -- in either reward mode.
+    #
+    # This is the validation set. `general_mode` deliberately scores the holdout
+    # so a kernel cannot hardcode the shapes it was shown, which is right, but
+    # it leaves nothing the model is not optimizing -- so nothing that can tell
+    # us whether a high reward means "learned the op" or "learned our cases".
+    # A blind case answers that, and only stays able to answer it by paying
+    # nothing.
+    blind: bool = False
+    features: "tuple[tuple[str, Any], ...]" = ()
+
+    @property
+    def feature_kwargs(self) -> dict:
+        """Static kwargs to bind into kernel/reference/baseline for this case.
+
+        A tuple-of-pairs is stored rather than a dict because ShapeCase is a
+        frozen (hashable) dataclass and a dict field would break that.
+        """
+        return dict(self.features)
 
 
 @dataclass(frozen=True)
@@ -223,6 +255,28 @@ class Problem(abc.ABC):
     name: str = "?"
     version: str = "1"
     has_bwd: bool = False
+    # Does a failed backward ZERO the candidate, or just cost it the backward
+    # component of the reward?
+    #
+    # MEASURED (job 3707571, and reproduced on CPU): JAX's generic
+    # `_pallas_call_jvp_rule` re-traces the kernel body outside a grid context,
+    # so `pl.program_id` trips `assert env.grid_context is not None`. Any
+    # grid-based Pallas kernel is therefore NOT differentiable by generic
+    # autodiff -- the only way through is `jax.custom_vjp` plus a hand-written
+    # backward kernel, which is exactly what Google's splash does
+    # (`_splash_attention_bwd`, 2 custom_vjp registrations).
+    #
+    # That bar is the real upstreaming requirement, but as a hard gate it is
+    # indiscriminate: it zeroed 8/8 splash winners (program_id, no custom_vjp)
+    # while rg_lru's winners passed untouched (no program_id, so generic
+    # autodiff applies). One flag, two very different tasks -- and a reward
+    # surface where a correct 2x-faster kernel scores the same as one that does
+    # not compile carries NO learning signal at all.
+    #
+    # So the default is to SCORE it, not gate on it: the backward result is
+    # recorded per candidate either way, which means the hard-gate verdict
+    # stays fully derivable and this flips back by setting True.
+    bwd_gates: bool = False
     require_pallas: bool = False
     memory_bound: bool = False
     banned_import_prefixes: tuple[str, ...] = ()
@@ -266,6 +320,41 @@ class Problem(abc.ABC):
     def reference(self, *inputs):
         """fp32 closed-form reference (correctness oracle)."""
 
+    def for_case(self, case):
+        """A view of this problem with the case's STATIC features bound into
+        every implementation at once.
+
+        Bound as a family on purpose. The dangerous failure mode is PARTIAL
+        binding inside ``calibrated_tolerance``: if the reference is windowed
+        but the honest variants are not, the band widens to the difference
+        between windowed and full attention -- enormous, silent, and it would
+        admit almost any wrong kernel. Binding reference, baseline, variants
+        and candidates together makes that state unreachable rather than
+        merely avoided by discipline.
+
+        ``reference_bf16`` needs no binding: it delegates to ``self.reference``
+        and so follows the view automatically.
+
+        Returns self when the case has no features, so the common path keeps
+        its exact identity and cost.
+        """
+        feats = case.feature_kwargs if case is not None else {}
+        if not feats:
+            return self
+        import copy as _copy
+        import functools as _ft
+
+        view = _copy.copy(self)
+        view.reference = _ft.partial(self.reference, **feats)
+        view.baseline = _ft.partial(self.baseline, **feats)
+        view.honest_variants = lambda: [
+            _ft.partial(v, **feats) for v in self.honest_variants()
+        ]
+        view.baseline_candidates = lambda: {
+            k: _ft.partial(f, **feats) for k, f in self.baseline_candidates().items()
+        }
+        return view
+
     def reference_bf16(self, *inputs):
         """Same closed form at bf16 working precision (tolerance calibration).
         Default: cast float inputs to bf16, run reference, and round the
@@ -300,7 +389,7 @@ class Problem(abc.ABC):
     def baseline(self, *inputs):
         """The production baseline-to-beat. May raise BaselineUnavailable."""
 
-    def tp_specs(self):
+    def tp_specs(self, case=None):
         """PartitionSpecs for tensor-parallel grading: (in_specs, out_spec).
 
         Returns None when the task declares no TP axis. Each task shards along
@@ -367,7 +456,15 @@ class Problem(abc.ABC):
         tails) of ANY honest implementation vs the fp32 reference."""
         stats = [error_stats(self.reference_bf16(*inputs), ref32)]
         for variant in self.honest_variants():
-            s = error_stats(variant(*inputs), ref32)
+            try:
+                s = error_stats(variant(*inputs), ref32)
+            except Exception:  # noqa: BLE001
+                # A variant that cannot EXPRESS this shape simply does not
+                # constrain the band -- e.g. the square-MHA honest variants
+                # against deepseek2's d_v != d. Skipping keeps the tolerance
+                # defined by whatever honest implementations do apply, rather
+                # than failing calibration for the whole case.
+                continue
             if s.get("finite"):
                 # a variant that goes non-finite on this input is NOT honest
                 # here; it must never widen the tolerance to infinity
@@ -419,7 +516,7 @@ class Problem(abc.ABC):
         than as an IndivisibleError in the middle of a grade (the failure the
         8-device CPU check surfaced for splash heads=2 and RPA kv_heads=4)."""
         w = int(getattr(case, "tp", 0) or 0)
-        specs = self.tp_specs()
+        specs = self.tp_specs(case)
         if w < 2 or specs is None:
             return 0
         in_specs, _ = specs
@@ -444,7 +541,7 @@ class Problem(abc.ABC):
         """
         import jax
 
-        specs = self.tp_specs()
+        specs = self.tp_specs(case)
         if specs is None or int(width or 0) < 2:
             return self.abstract_inputs(case)
         in_specs, _ = specs

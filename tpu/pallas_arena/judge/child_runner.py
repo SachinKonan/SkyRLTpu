@@ -22,6 +22,7 @@ the candidate does in here can touch the judge's own state.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
@@ -253,13 +254,17 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
     corr_fixtures = []  # (label, inputs, ref32, tol)
     fixture_cases = [] if mode in ("pregate", "aot_export") else scored_cases
     for case in fixture_cases:
+        # Per-case view: reference, baseline, honest variants and candidates
+        # all carry this case's static features, or it IS `problem` when the
+        # case has none. Never mix the two -- see Problem.for_case.
+        pc = problem.for_case(case)
         for g in range(n_seeds):
             key = fold_in(fold_in(k_corr, g), case_salt(case.name))
             inputs = problem.make_inputs(key, case)
             block(inputs)
-            ref32 = problem.reference(*inputs)
-            tol = problem.calibrated_tolerance(inputs, ref32)
-            corr_fixtures.append((f"{case.name}#seed{g}", inputs, ref32, tol))
+            ref32 = pc.reference(*inputs)
+            tol = pc.calibrated_tolerance(inputs, ref32)
+            corr_fixtures.append((f"{case.name}#seed{g}", inputs, ref32, tol, case.feature_kwargs))
     adv_fixtures = []
     adv_list = [] if mode in ("pregate", "aot_export") else problem.adversarial_cases()
     for i, adv in enumerate(adv_list):
@@ -269,14 +274,17 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         if adv.expect is not None:
             adv.expect(ref32, inputs)  # reference sanity (also pytest-covered)
         tol = problem.calibrated_tolerance(inputs, ref32)
-        adv_fixtures.append((f"adv:{adv.name}", inputs, ref32, tol))
+        # Adversarial vectors are built on one plain shape case and carry no
+        # features, so they use the unbound problem.
+        adv_fixtures.append((f"adv:{adv.name}", inputs, ref32, tol, {}))
 
     grad_fixture = None
     if problem.has_bwd and corr_fixtures:
-        _, g_inputs, _, _ = corr_fixtures[0]
-        ref_g = problem.grad_outputs(lambda *i: problem.reference(*i), *g_inputs)
-        cal_g = problem.grad_outputs(lambda *i: problem.reference_bf16(*i), *g_inputs)
-        grad_fixture = (g_inputs, ref_g, tolerance_from_reference(ref_g, cal_g))
+        _, g_inputs, _, _, g_feats = corr_fixtures[0]
+        pg = problem.for_case(fixture_cases[0]) if fixture_cases else problem
+        ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
+        cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
+        grad_fixture = (g_inputs, ref_g, tolerance_from_reference(ref_g, cal_g), g_feats)
 
     # ---------------- 4. poison the reference modules; 5. exec candidate
     result["phase"] = "exec"
@@ -311,8 +319,10 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         )
         return 0
 
-    def _call(inputs):
-        return fn(*inputs)
+    def _call(inputs, feats=None):
+        # Static features are bound per fixture, matching what the judge
+        # exported for that case.
+        return fn(*inputs, **(feats or {}))
 
     def _fail(gate: str, why: str) -> int:
         result.update(ok=True, gate=gate, passed=False, violations=[why], reward=cfg.get("fail_reward", 0.0))
@@ -340,11 +350,30 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         try:
             for sig in cfg["signatures"]:
                 args = tuple(jax.ShapeDtypeStruct(tuple(a["shape"]), a["dtype"]) for a in sig["args"])
+                # Static features (sliding window, soft-cap) are bound BEFORE
+                # export so the candidate can specialize on them -- a window it
+                # cannot see at compile time is a window it cannot skip blocks
+                # with, which is the whole point of the feature.
+                feats = sig.get("features") or {}
+                bound = functools.partial(fn, **feats) if feats else fn
                 if sig.get("kind") == "grad":
-                    target = jax.jit(lambda *i: problem.grad_outputs(fn, *i))
+                    target = jax.jit(lambda *i: problem.grad_outputs(bound, *i))
                 else:
-                    target = jax.jit(fn)
-                exp = jax_export.export(target, platforms=platforms)(*args)
+                    target = jax.jit(bound)
+                if sig.get("optional"):
+                    # Non-differentiable candidate: record WHY and move on. The
+                    # forward reward still stands; the backward component is
+                    # forfeited. Recording the reason keeps "would this have
+                    # passed a hard gate?" answerable after the fact.
+                    try:
+                        exp = jax_export.export(target, platforms=platforms)(*args)
+                    except ArenaBannedImport:
+                        raise
+                    except Exception as e:
+                        result[f"{sig['name']}_export_error"] = f"{type(e).__name__}: {e}"[:400]
+                        continue
+                else:
+                    exp = jax_export.export(target, platforms=platforms)(*args)
                 path = os.path.join(artifact_dir, sig["name"] + ".jaxexport")
                 with open(path, "wb") as fh:
                     fh.write(bytes(exp.serialize()))
@@ -371,7 +400,16 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             result["lower_fwd_s"] = perf() - t0
             if problem.has_bwd:
                 t0 = perf()
-                jax.jit(lambda *i: problem.grad_outputs(fn, *i)).lower(*abstract)
+                try:
+                    jax.jit(lambda *i: problem.grad_outputs(fn, *i)).lower(*abstract)
+                except Exception as e:
+                    # The pre-gate must PREDICT the judge. If the judge only
+                    # scores the backward, a non-differentiable candidate is
+                    # not rejected there, so rejecting it here would make the
+                    # pre-gate stricter than the contract it screens for.
+                    if bool(cfg.get("bwd_gates", getattr(problem, "bwd_gates", True))):
+                        raise
+                    result["lower_grad_error"] = f"{type(e).__name__}: {e}"[:400]
                 result["lower_grad_s"] = perf() - t0
             # Backend compile too, when the client's backend can do it. On a
             # v5p training host that is a real Mosaic/XLA compile, so an
@@ -401,9 +439,9 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
     # ---------------- correctness gates on fresh hidden seeds
     result["phase"] = "correctness"
     t_first = perf()
-    for label, inputs, ref32, tol in corr_fixtures + adv_fixtures:
+    for label, inputs, ref32, tol, feats in corr_fixtures + adv_fixtures:
         try:
-            out = _call(inputs)
+            out = _call(inputs, feats)
             block(out)
         except ArenaBannedImport as e:
             return _fail("poison_stub", str(e))
@@ -417,10 +455,10 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
 
     # ---------------- determinism: N bitwise-identical runs on same inputs
     result["phase"] = "determinism"
-    _, det_inputs, _, _ = corr_fixtures[0]
+    _, det_inputs, _, _, det_feats = corr_fixtures[0]
     outs = []
     for _ in range(n_det):
-        o = _call(det_inputs)
+        o = _call(det_inputs, det_feats)
         block(o)
         leaves = o if isinstance(o, (tuple, list)) else (o,)
         outs.append(b"".join(np.asarray(x).tobytes() for x in leaves))
@@ -430,16 +468,31 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
     # ---------------- gradient contract
     if grad_fixture is not None:
         result["phase"] = "gradient"
-        g_inputs, ref_g, g_tol = grad_fixture
+        # From the CONFIG, not from our own import: the parent decides the
+        # contract and built the signatures around it (see grader.grade).
+        gates = bool(cfg.get("bwd_gates", getattr(problem, "bwd_gates", True)))
+        g_inputs, ref_g, g_tol, g_feats = grad_fixture
         try:
-            cand_g = problem.grad_outputs(fn, *g_inputs)
+            import functools as _ft
+            cand_g = problem.grad_outputs(
+                _ft.partial(fn, **g_feats) if g_feats else fn, *g_inputs
+            )
             block(cand_g)
         except Exception as e:
-            return _fail("gradient", f"grad failed: {type(e).__name__}: {e}")
-        stats = error_stats(cand_g, ref_g)
-        okay, why = check_tolerance(stats, g_tol)
-        if not okay:
-            return _fail("gradient", why)
+            why = f"grad failed: {type(e).__name__}: {e}"
+            if gates:
+                return _fail("gradient", why)
+            result["grad_ok"], result["grad_error"] = False, why[:400]
+        else:
+            stats = error_stats(cand_g, ref_g)
+            okay, why = check_tolerance(stats, g_tol)
+            if not okay and gates:
+                return _fail("gradient", why)
+            result["grad_ok"] = bool(okay)
+            if not okay:
+                # Differentiable but WRONG is a distinct outcome from
+                # non-differentiable, and worth separating in the histogram.
+                result["grad_error"] = why[:400]
 
     if mode == "gates":
         result.update(ok=True, gate="all", passed=True, peak_hbm_bytes=_mem_stats())
@@ -507,7 +560,10 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             okay, why = check_tolerance(stats, tol)
             if not okay:
                 return _fail("timed_output_correctness", f"{case.name} timed iter {it}: {why}")
-        ct = timing_mod.CaseTiming(case=case.name, pairs=pairs, holdout=case.holdout)
+        ct = timing_mod.CaseTiming(
+            case=case.name, pairs=pairs, holdout=case.holdout,
+            blind=getattr(case, "blind", False),
+        )
         case_timings.append(ct)
         bm = problem.bytes_moved(case)
         if problem.memory_bound and bm:

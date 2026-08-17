@@ -32,27 +32,86 @@ from pallas_arena.judge.problems.base import (
 NEG_INF = -0.7 * float(np.finfo(np.float32).max)
 
 
-def causal_segment_attention(q, k, v, segment_ids):
-    """fp32 masked-softmax closed form; fully-masked rows -> exactly 0."""
+def causal_segment_attention(q, k, v, segment_ids, *, window=None, soft_cap=None):
+    """fp32 masked-softmax closed form; fully-masked rows -> exactly 0.
+
+    ``window`` (int or None): SLIDING-WINDOW attention. A query at position i
+    may attend to keys in (i - window, i] -- i.e. the `window` most recent
+    positions including itself, which is the convention splash's
+    ``LocalMask(window_size=(window - 1, 0))`` implements for a causal left
+    window. Mistral/Ministral/Gemma-2 all ship this.
+
+    ``soft_cap`` (float or None): LOGIT SOFT-CAP, ``cap * tanh(logits / cap)``,
+    applied BEFORE masking and the softmax max-shift. Gemma-2/3 use it, and
+    splash takes it as ``attn_logits_soft_cap``. Order matters: capping after
+    the mask would squash the -inf sentinel into +-cap and silently unmask
+    every forbidden position.
+
+    GENERALIZED to the attention shapes real models actually use, because
+    MHA-with-equal-head-dims was a contract gap: tokamax benchmarks mixtral
+    8x7b as GQA (32 query heads over 8 KV heads) and deepseek2-16b with a
+    VALUE head dim that differs from q/k (192 vs 128). A kernel that only
+    handles square MHA is not a replacement for either.
+
+      q: [q_heads, seq, d]      k: [kv_heads, seq, d]     v: [kv_heads, seq, d_v]
+      out: [q_heads, seq, d_v]
+
+    MHA is exactly the group == 1 case and d_v == d, so every existing shape
+    keeps its meaning and its numbers.
+    """
     q32 = q.astype(jnp.float32)
     k32 = k.astype(jnp.float32)
     v32 = v.astype(jnp.float32)
-    seq = q.shape[1]
-    logits = jnp.einsum("hqd,hkd->hqk", q32, k32)
+    qh, seq, d = q32.shape
+    kvh = k32.shape[0]
+    dv = v32.shape[-1]
+    group = qh // kvh
+    qg = q32.reshape(kvh, group, seq, d)
+
+    logits = jnp.einsum("hgqd,hkd->hgqk", qg, k32)
+    if soft_cap is not None:
+        # BEFORE masking: see the docstring -- capping afterwards would pull
+        # the -inf sentinel back into [-cap, cap] and unmask everything.
+        logits = soft_cap * jnp.tanh(logits / soft_cap)
     idx = jnp.arange(seq)
     causal = idx[:, None] >= idx[None, :]
+    if window is not None:
+        causal = causal & (idx[:, None] - idx[None, :] < window)
     same_seg = segment_ids[:, None] == segment_ids[None, :]
     live = segment_ids != 0
     mask = causal & same_seg & live[:, None] & live[None, :]
-    logits = jnp.where(mask[None, :, :], logits, NEG_INF)
+    mask4 = mask[None, None, :, :]
+    logits = jnp.where(mask4, logits, NEG_INF)
     row_live = mask.any(axis=-1)  # [q] rows with at least one visible key
     # max-shifted softmax; fully-masked rows produce 0, never NaN
     m = jnp.max(logits, axis=-1, keepdims=True)
     p = jnp.exp(logits - m)
-    p = jnp.where(mask[None, :, :], p, 0.0)
+    p = jnp.where(mask4, p, 0.0)
     denom = jnp.sum(p, axis=-1, keepdims=True)
-    p = jnp.where(row_live[None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
-    return jnp.einsum("hqk,hkd->hqd", p, v32)
+    p = jnp.where(row_live[None, None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
+    out = jnp.einsum("hgqk,hkv->hgqv", p, v32)
+    return out.reshape(qh, seq, dv)
+
+
+def _match_kv(q, k, v):
+    """Repeat KV heads up to the query head count for implementations written
+    against square MHA.
+
+    Deliberately a REPEAT and not a regrouping: it is what a naive caller does,
+    it multiplies KV traffic by the group size, and it is therefore an honest
+    representation of "this implementation does not natively do GQA". A native
+    grouped XLA denominator is a follow-up; claiming one before it is written
+    would be the kind of unverified assertion this arena keeps getting caught
+    by. Also rejects the deepseek2-style asymmetric value head dim, which no
+    square-MHA formulation can express.
+    """
+    if v.shape[-1] != q.shape[-1]:
+        raise ValueError("d_v != d is not expressible in a square-MHA implementation")
+    if k.shape[0] != q.shape[0]:
+        rep = q.shape[0] // k.shape[0]
+        k = jnp.repeat(k, rep, axis=0)
+        v = jnp.repeat(v, rep, axis=0)
+    return k, v
 
 
 def _splash_block_sizes(sak, seq: int):
@@ -88,7 +147,9 @@ def _splash_block_sizes(sak, seq: int):
     )
 
 
-def _honest_faithful_bf16(q, k, v, segment_ids, block_q: int = 512):
+def _honest_faithful_bf16(
+    q, k, v, segment_ids, block_q: int = 512, *, window=None, soft_cap=None
+):
     """The production numeric path, query-blocked: bf16 arrays enter the MXU as
     matmul INPUTS, every accumulator is fp32 (``preferred_element_type``), the
     softmax is fp32, and only the probabilities are re-narrowed to bf16 on the
@@ -100,6 +161,7 @@ def _honest_faithful_bf16(q, k, v, segment_ids, block_q: int = 512):
     shapes; that is the phase-2 lesson, and why it belongs in the calibration.
     """
     h, s, d = q.shape
+    k, v = _match_kv(q, k, v)
     pad = (-s) % block_q
     qp = jnp.pad(q, ((0, 0), (0, pad), (0, 0))) if pad else q
     idx_k = jnp.arange(s)
@@ -114,7 +176,12 @@ def _honest_faithful_bf16(q, k, v, segment_ids, block_q: int = 512):
         live_q = (seg_q != 0) & (pos_q < s)
         # bf16 inputs -> fp32 accumulator (the whole point)
         logits = jnp.einsum("hqd,hkd->hqk", qb, k, preferred_element_type=jnp.float32)
-        m = (pos_q[:, None] >= idx_k[None, :]) & (seg_q[:, None] == seg_k[None, :]) & live_q[:, None] & live_k[None, :]
+        if soft_cap is not None:
+            logits = soft_cap * jnp.tanh(logits / soft_cap)
+        causal = pos_q[:, None] >= idx_k[None, :]
+        if window is not None:
+            causal = causal & (pos_q[:, None] - idx_k[None, :] < window)
+        m = causal & (seg_q[:, None] == seg_k[None, :]) & live_q[:, None] & live_k[None, :]
         logits = jnp.where(m[None], logits, NEG_INF)
         row_live = m.any(axis=-1)
         mx = jnp.max(logits, axis=-1, keepdims=True)
@@ -128,12 +195,15 @@ def _honest_faithful_bf16(q, k, v, segment_ids, block_q: int = 512):
     return out[:, :s, :]
 
 
-def _honest_online_softmax(q, k, v, segment_ids, block_k: int = 256):
+def _honest_online_softmax(
+    q, k, v, segment_ids, block_k: int = 256, *, window=None, soft_cap=None
+):
     """Flash-style streaming softmax: a DIFFERENT reduction order over the key
     axis (running max + rescaled running sum) at fp32. Legal, and the shape a
     real Pallas kernel takes; included so a candidate is never punished for
     accumulating keys in blocks rather than all at once."""
     h, s, d = q.shape
+    k, v = _match_kv(q, k, v)
     idx_k = jnp.arange(s)
     live_k = segment_ids != 0
     pos_q = jnp.arange(s)
@@ -153,8 +223,13 @@ def _honest_online_softmax(q, k, v, segment_ids, block_k: int = 256):
         seg_kb = jnp.where(in_range, segment_ids[jnp.minimum(kpos, s - 1)], 0)
         live_kb = (seg_kb != 0) & in_range
         logits = jnp.einsum("hqd,hkd->hqk", q, kb, preferred_element_type=jnp.float32)
+        if soft_cap is not None:
+            logits = soft_cap * jnp.tanh(logits / soft_cap)
+        causal = pos_q[:, None] >= kpos[None, :]
+        if window is not None:
+            causal = causal & (pos_q[:, None] - kpos[None, :] < window)
         m = (
-            (pos_q[:, None] >= kpos[None, :])
+            causal
             & (segment_ids[:, None] == seg_kb[None, :])
             & live_q[:, None]
             & live_kb[None, :]
@@ -181,12 +256,20 @@ def _honest_online_softmax(q, k, v, segment_ids, block_k: int = 256):
 _FALLBACK_BLOCK_Q = 512
 
 
-def _xla_masked_attention(q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q):
+def _xla_masked_attention(
+    q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q, *, window=None, soft_cap=None
+):
     """Query-blocked XLA attention: same math as ``causal_segment_attention``
     but never materializes more than [heads, block_q, seq] of logits, so it
-    runs at shapes where the closed form would not fit. Used only as the
-    baseline fallback when the production splash kernel refuses a shape."""
+    runs at shapes where the closed form would not fit.
+
+    Serves GQA by REPEATING KV (see _match_kv), exactly as the splash baseline
+    does, and cannot express d_v != d at all. ``_xla_grouped_attention`` is the
+    native-grouped counterpart; both are registered as baseline candidates so
+    the per-shape election picks whichever is actually faster.
+    """
     h, s, d = q.shape
+    k, v = _match_kv(q, k, v)
     pad = (-s) % block_q
     qp = jnp.pad(q, ((0, 0), (0, pad), (0, 0))) if pad else q
     idx_k = jnp.arange(s)
@@ -202,7 +285,12 @@ def _xla_masked_attention(q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q
         seg_q = jnp.where(pos_q < s, seg_k[jnp.minimum(pos_q, s - 1)], 0)
         live_q = (seg_q != 0) & (pos_q < s)
         logits = jnp.einsum("hqd,hkd->hqk", qb, k32)
-        m = (pos_q[:, None] >= idx_k[None, :]) & (seg_q[:, None] == seg_k[None, :]) & live_q[:, None] & live_k[None, :]
+        if soft_cap is not None:
+            logits = soft_cap * jnp.tanh(logits / soft_cap)
+        causal = pos_q[:, None] >= idx_k[None, :]
+        if window is not None:
+            causal = causal & (pos_q[:, None] - idx_k[None, :] < window)
+        m = causal & (seg_q[:, None] == seg_k[None, :]) & live_q[:, None] & live_k[None, :]
         logits = jnp.where(m[None], logits, NEG_INF)
         row_live = m.any(axis=-1)
         mx = jnp.max(logits, axis=-1, keepdims=True)
@@ -213,6 +301,75 @@ def _xla_masked_attention(q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q
     _, blocks = jax.lax.scan(block, None, jnp.arange((s + pad) // block_q))
     out = jnp.transpose(blocks, (1, 0, 2, 3)).reshape(h, s + pad, d)
     return out[:, :s, :]
+
+
+def _xla_grouped_attention(
+    q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q, *, window=None, soft_cap=None
+):
+    """Query-blocked XLA attention that is NATIVELY GROUPED: KV is read once per
+    KV head and shared across its query group, and the value head dim is free to
+    differ from the q/k head dim.
+
+    This exists because without it the GQA and deepseek2 shapes have no usable
+    denominator: splash refuses d_v != d outright, and both splash and
+    ``_xla_masked_attention`` serve GQA by repeating KV, which multiplies KV
+    traffic by the group size. Grading a grouped kernel against a bar that pays
+    a repeat the candidate is expected to avoid would hand out reward for
+    clearing a deliberately weak bar. So the repeat-paying and repeat-free
+    implementations are both registered, and the per-shape election takes the
+    faster one -- on MHA (group == 1) the two are the same computation.
+    """
+    qh, s, d = q.shape
+    kvh = k.shape[0]
+    dv = v.shape[-1]
+    if qh % kvh:
+        raise ValueError(f"q_heads {qh} not divisible by kv_heads {kvh}")
+    group = qh // kvh
+    qg = q.reshape(kvh, group, s, d)
+    pad = (-s) % block_q
+    qp = jnp.pad(qg, ((0, 0), (0, 0), (0, pad), (0, 0))) if pad else qg
+    idx_k = jnp.arange(s)
+    seg_k = segment_ids
+    live_k = seg_k != 0
+    k32 = k.astype(jnp.float32)
+    v32 = v.astype(jnp.float32)
+
+    def block(_carry, i):
+        start = i * block_q
+        qb = jax.lax.dynamic_slice(
+            qp, (0, 0, start, 0), (kvh, group, block_q, d)
+        ).astype(jnp.float32)
+        pos_q = start + jnp.arange(block_q)
+        seg_q = jnp.where(pos_q < s, seg_k[jnp.minimum(pos_q, s - 1)], 0)
+        live_q = (seg_q != 0) & (pos_q < s)
+        logits = jnp.einsum("hgqd,hkd->hgqk", qb, k32)
+        if soft_cap is not None:
+            logits = soft_cap * jnp.tanh(logits / soft_cap)
+        causal = pos_q[:, None] >= idx_k[None, :]
+        if window is not None:
+            causal = causal & (pos_q[:, None] - idx_k[None, :] < window)
+        m = (
+            causal
+            & (seg_q[:, None] == seg_k[None, :])
+            & live_q[:, None]
+            & live_k[None, :]
+        )
+        m4 = m[None, None]
+        logits = jnp.where(m4, logits, NEG_INF)
+        row_live = m.any(axis=-1)
+        mx = jnp.max(logits, axis=-1, keepdims=True)
+        p = jnp.where(m4, jnp.exp(logits - mx), 0.0)
+        p = jnp.where(
+            row_live[None, None, :, None],
+            p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30),
+            0.0,
+        )
+        return None, jnp.einsum("hgqk,hkv->hgqv", p, v32)
+
+    _, blocks = jax.lax.scan(block, None, jnp.arange((s + pad) // block_q))
+    # blocks: [nblocks, kv_heads, group, block_q, d_v]
+    out = jnp.transpose(blocks, (1, 2, 0, 3, 4)).reshape(kvh, group, s + pad, dv)
+    return out[:, :, :s, :].reshape(qh, s, dv)
 
 
 class SplashAttentionProblem(Problem):
@@ -264,10 +421,73 @@ class SplashAttentionProblem(Problem):
             # are still swept via s4096 vs s1024 at fixed token budget; testing
             # 8192 needs a memory-lean reference, not a bigger sweep.
             ShapeCase("probe-h8-s4096-d64", {"heads": 8, "seq": 4096, "d": 64}, probe=True),
+            # PROVENANCE, tokamax attention arg_specs. These are the shapes
+            # real models run, and both were previously inexpressible:
+            #   mixtral 8x7b -- GQA, 32 query heads over 8 KV heads
+            #   deepseek2 16b -- value head dim 128 against q/k 192
+            # MHA is the group==1, d_v==d special case, so every existing
+            # shape keeps its meaning.
+            ShapeCase("mixtral-8x7b-gqa32x8-s4096",
+                      {"heads": 32, "kv_heads": 8, "seq": 4096, "d": 128}, probe=True),
+            ShapeCase("deepseek2-16b-s1024-d192-dv128",
+                      {"heads": 16, "kv_heads": 16, "seq": 1024, "d": 192, "d_v": 128}, probe=True),
+            ShapeCase("mixtral-holdout-gqa32x8-s2049",
+                      {"heads": 32, "kv_heads": 8, "seq": 2049, "d": 128}, probe=True, holdout=True),
+            # MULTI-QUERY (kv_heads == 1) -- tokamax parameterizes its TPU
+            # attention test over num_kv_heads=[1, 2, 4], so MQA is a first-
+            # class case there, not an afterthought. It is the extreme of the
+            # grouping axis: ONE KV head feeding every query head, where a
+            # KV-repeat costs the full head count in wasted bandwidth and a
+            # native grouped kernel wins biggest. Free under the generalized
+            # contract (group == q_heads); verified against the grouped
+            # baseline at 1.6e-7, including with d_v != d.
+            ShapeCase("mqa-h32kv1-s4096",
+                      {"heads": 32, "kv_heads": 1, "seq": 4096, "d": 128}, probe=True),
+            ShapeCase("mqa-holdout-h16kv1-s2049",
+                      {"heads": 16, "kv_heads": 1, "seq": 2049, "d": 128}, probe=True, holdout=True),
+            # FEATURE CASES (static, see ShapeCase.features). Until these
+            # existed the arena graded only the plain causal path while using
+            # denominators that support the whole feature surface -- so a
+            # candidate got full credit for implementing strictly less than the
+            # kernel it was measured against.
+            #
+            # Sliding window: Mistral-7B's 4096 over a 4096 context, and a
+            # narrow 512 window where block-skipping is the dominant effect.
+            # The denominator is splash's own LocalMask, which skips KV blocks,
+            # so a candidate that merely masks a full attention loses on time
+            # rather than being flattered by a full-attention bar.
+            ShapeCase("mistral-7b-window4096-s4096",
+                      {"heads": 32, "kv_heads": 8, "seq": 4096, "d": 128},
+                      probe=True, features=(("window", 4096),)),
+            ShapeCase("window512-h8-s4096",
+                      {"heads": 8, "seq": 4096, "d": 128},
+                      probe=True, features=(("window", 512),)),
+            # Logit soft-cap: Gemma-2 caps attention logits at 50.0; tokamax
+            # parameterizes its TPU attention test over soft_cap=[None, 3.4].
+            ShapeCase("gemma2-softcap50-h8-s4096",
+                      {"heads": 8, "seq": 4096, "d": 128},
+                      probe=True, features=(("soft_cap", 50.0),)),
+            # Both at once, on a non-power-of-two sequence, held out: the
+            # combination is where an implementation that special-cases each
+            # feature separately breaks.
+            ShapeCase("holdout-window1024-softcap30-h8-s2049",
+                      {"heads": 8, "seq": 2049, "d": 128},
+                      probe=True, holdout=True,
+                      features=(("window", 1024), ("soft_cap", 30.0))),
             # TENSOR PARALLEL (v6e-8): heads sharded 8 ways, which is how
             # splash is sharded in production (`head_shards`). Per shard the
             # kernel sees heads=4, i.e. an ordinary attention problem.
             ShapeCase("tp8-h32-s4096", {"heads": 32, "seq": 4096, "d": 128}, probe=True, tp=8),
+            # GROUPED ATTENTION UNDER TP -- what mixtral on 8 chips actually
+            # is, and previously untested: every tp8 case was MHA, so the KV
+            # head axis was always 32 and the MHA-only sharding assumption
+            # never showed. At kv_heads=8 the KV shards exactly one head per
+            # device; at kv_heads=1 it cannot shard at all and is replicated
+            # (tokamax: test_broadcasted_multi_query_attention).
+            ShapeCase("tp8-gqa32x8-s4096",
+                      {"heads": 32, "kv_heads": 8, "seq": 4096, "d": 128}, probe=True, tp=8),
+            ShapeCase("tp8-mqa-h32kv1-s4096",
+                      {"heads": 32, "kv_heads": 1, "seq": 4096, "d": 128}, probe=True, tp=8),
             ShapeCase("tp8-holdout-h32-s2049", {"heads": 32, "seq": 2049, "d": 128}, probe=True, tp=8, holdout=True),
             ShapeCase("probe-holdout-h4-s2049", {"heads": 4, "seq": 2049, "d": 128}, holdout=True, probe=True),
             # DROPPED: a non-divisible sequence AT d=64 segfaults the TPU
@@ -285,11 +505,17 @@ class SplashAttentionProblem(Problem):
 
     def make_inputs(self, key, case):
         kq, kk, kv, ks = jax.random.split(key, 4)
+        # `heads` is the QUERY head count; `kv_heads` defaults to it (MHA) and
+        # `d_v` defaults to d (square). GQA and an asymmetric value head dim are
+        # what mixtral 8x7b and deepseek2-16b actually run, so they are shape
+        # dims here rather than a different task.
         h, s, d = case.dims["heads"], case.dims["seq"], case.dims["d"]
+        kvh = case.dims.get("kv_heads", h)
+        dv = case.dims.get("d_v", d)
         scale = 1.0 / np.sqrt(d)
         q = (jax.random.normal(kq, (h, s, d), jnp.float32) * scale).astype(jnp.bfloat16)
-        k = jax.random.normal(kk, (h, s, d), jnp.float32).astype(jnp.bfloat16)
-        v = jax.random.normal(kv, (h, s, d), jnp.float32).astype(jnp.bfloat16)
+        k = jax.random.normal(kk, (kvh, s, d), jnp.float32).astype(jnp.bfloat16)
+        v = jax.random.normal(kv, (kvh, s, dv), jnp.float32).astype(jnp.bfloat16)
         # two segments + a padded tail (~6%), mirroring packed fb batches
         n_pad = max(s // 16, 1)
         boundary = jax.random.randint(ks, (), s // 4, 3 * s // 4)
@@ -298,15 +524,17 @@ class SplashAttentionProblem(Problem):
         segment_ids = jnp.where(pos >= s - n_pad, 0, segment_ids)
         return (q, k, v, segment_ids)
 
-    def reference(self, q, k, v, segment_ids):
-        return causal_segment_attention(q, k, v, segment_ids)
+    def reference(self, q, k, v, segment_ids, *, window=None, soft_cap=None):
+        return causal_segment_attention(
+            q, k, v, segment_ids, window=window, soft_cap=soft_cap
+        )
 
     # Which baseline the last `baseline()` call actually used. Recorded (not
     # asserted) so a boot report says plainly whether the score denominator
     # is Google's production kernel or the XLA fallback.
     baseline_impl: str = "?"
 
-    def baseline(self, q, k, v, segment_ids):
+    def baseline(self, q, k, v, segment_ids, *, window=None, soft_cap=None):
         """Production Pallas splash MHA, with an honest XLA fallback.
 
         Splash refuses shapes it cannot tile and its block sizes are not
@@ -325,10 +553,44 @@ class SplashAttentionProblem(Problem):
                 splash_attention_mask as sam,
             )
 
+            # make_splash_mha wants matched head counts and a square head dim.
+            # GQA is served by REPEATING the KV heads, which is what a naive
+            # caller does and is deliberately not free -- it multiplies KV
+            # traffic by the group size, so on a GQA shape this denominator is
+            # weak and the per-shape election will usually hand the bar to XLA
+            # instead. That is the honest outcome, and it is recorded rather
+            # than hidden: a real GQA kernel avoids the repeat, which is
+            # exactly the headroom the task is meant to expose.
+            if k.shape[0] != q.shape[0]:
+                rep = q.shape[0] // k.shape[0]
+                k = jnp.repeat(k, rep, axis=0)
+                v = jnp.repeat(v, rep, axis=0)
+                type(self).baseline_impl = "pallas-splash-mha (kv-repeated for GQA)"
+            if v.shape[-1] != q.shape[-1]:
+                raise BaselineUnavailable("splash requires d_v == d; deepseek2-style asymmetry unsupported")
+
             h, seq, _d = q.shape
-            mask = sam.MultiHeadMask([sam.CausalMask(shape=(seq, seq)) for _ in range(h)])
+            # SLIDING WINDOW via splash's own LocalMask rather than a masked
+            # full attention: LocalMask lets splash skip whole KV blocks, which
+            # is the entire performance argument for a local kernel. Grading a
+            # windowed candidate against a full-attention denominator would
+            # hand it a free win for doing less work than the bar.
+            #
+            # window_size=(left, right) counts EXCLUSIVE neighbours, so our
+            # inclusive `window` (i-window, i] maps to left=window-1, right=0.
+            if window is not None:
+                per_head = sam.LocalMask(
+                    shape=(seq, seq), window_size=(window - 1, 0), offset=0
+                )
+            else:
+                per_head = sam.CausalMask(shape=(seq, seq))
+            mask = sam.MultiHeadMask([per_head for _ in range(h)])
             kernel = sak.make_splash_mha(
-                mask=mask, block_sizes=_splash_block_sizes(sak, seq), head_shards=1, q_seq_shards=1
+                mask=mask,
+                block_sizes=_splash_block_sizes(sak, seq),
+                head_shards=1,
+                q_seq_shards=1,
+                attn_logits_soft_cap=soft_cap,
             )
             segs = sak.SegmentIds(q=segment_ids, kv=segment_ids)
             out = kernel(q, k, v, segment_ids=segs)
@@ -344,21 +606,53 @@ class SplashAttentionProblem(Problem):
             return out.astype(jnp.float32)
         except Exception:
             type(self).baseline_impl = "xla-fallback"
-            return _xla_masked_attention(q, k, v, segment_ids)
+            return _xla_grouped_attention(
+                q, k, v, segment_ids, window=window, soft_cap=soft_cap
+            )
 
     def baseline_candidates(self):
-        """Production splash vs a competent query-blocked XLA attention. At the
-        smaller sweep shapes the XLA path is genuinely competitive, and GENERAL
-        mode must grade against whichever is actually faster there."""
-        return {"production": self.baseline, "xla-blocked": _xla_masked_attention}
+        """Production splash vs two query-blocked XLA attentions. At the smaller
+        sweep shapes the XLA path is genuinely competitive, and GENERAL mode
+        must grade against whichever is actually faster there.
 
-    def tp_specs(self):
+        ``xla-grouped`` is the only candidate that survives d_v != d, and the
+        only one that does not pay a KV repeat on GQA -- without it the mixtral
+        and deepseek2 shapes would be graded against a bar handicapped by
+        exactly the traffic a good grouped kernel eliminates.
+        """
+        return {
+            "production": self.baseline,
+            "xla-blocked": _xla_masked_attention,
+            "xla-grouped": _xla_grouped_attention,
+        }
+
+    def tp_specs(self, case=None):
         """Shard HEADS -- exactly what splash's own `head_shards` argument
         exists for. Each device owns a head slice, attends within it, and needs
-        no collective; segment_ids is replicated because every head reads it."""
+        no collective; segment_ids is replicated because every head reads it.
+
+        KV IS REPLICATED WHEN IT CANNOT BE SHARDED. Under GQA/MQA the KV head
+        count is smaller than the query head count, and at MQA it is 1 -- a
+        size-1 axis cannot be split across 8 devices. tokamax tests exactly
+        this (`test_broadcasted_multi_query_attention`: a single KV head run
+        under partitioning along batch / seq_q / heads), and the name is the
+        rule: the short axis BROADCASTS across the mesh rather than splitting.
+
+        Sharding q while replicating kv is also what production does -- it is
+        why GQA is cheap to serve tensor-parallel: each device holds all of a
+        small KV cache and its own slice of the queries.
+        """
         from jax.sharding import PartitionSpec as P
 
-        return ((P("tp", None, None), P("tp", None, None), P("tp", None, None), P()), P("tp", None, None))
+        shard, repl = P("tp", None, None), P(None, None, None)
+        kv = shard
+        if case is not None:
+            heads = case.dims.get("heads")
+            kv_heads = case.dims.get("kv_heads", heads)
+            width = case.tp or 1
+            if kv_heads is not None and kv_heads % width:
+                kv = repl
+        return ((shard, kv, kv, P()), shard)
 
     def grad_outputs(self, kernel_fn, q, k, v, segment_ids):
         """d/d(q, k, v) of a fixed scalar functional of the output.
@@ -375,7 +669,13 @@ class SplashAttentionProblem(Problem):
         uses, and differentiating through a bf16 cast adds a quantization step
         the contract does not ask about.
         """
-        probe = jnp.cos(jnp.arange(q.size, dtype=jnp.float32)).reshape(q.shape)
+        # Shaped from the OUTPUT, not from q: under the generalized contract the
+        # output is [q_heads, seq, d_v] and d_v need not equal the q/k head dim
+        # (deepseek2: 128 vs 192), so a q-shaped probe fails to broadcast there.
+        out_shape = (q.shape[0], q.shape[1], v.shape[-1])
+        probe = jnp.cos(
+            jnp.arange(int(np.prod(out_shape)), dtype=jnp.float32)
+        ).reshape(out_shape)
 
         def scalar(q32, k32, v32):
             out = kernel_fn(q32.astype(q.dtype), k32.astype(k.dtype), v32.astype(v.dtype), segment_ids)
