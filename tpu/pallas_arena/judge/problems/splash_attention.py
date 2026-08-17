@@ -32,7 +32,9 @@ from pallas_arena.judge.problems.base import (
 NEG_INF = -0.7 * float(np.finfo(np.float32).max)
 
 
-def causal_segment_attention(q, k, v, segment_ids, *, window=None, soft_cap=None):
+def causal_segment_attention(
+    q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None
+):
     """fp32 masked-softmax closed form; fully-masked rows -> exactly 0.
 
     ``window`` (int or None): SLIDING-WINDOW attention. A query at position i
@@ -46,6 +48,16 @@ def causal_segment_attention(q, k, v, segment_ids, *, window=None, soft_cap=None
     splash takes it as ``attn_logits_soft_cap``. Order matters: capping after
     the mask would squash the -inf sentinel into +-cap and silently unmask
     every forbidden position.
+
+    ``sinks`` (tuple of one float per q-head, or None): ATTENTION SINKS,
+    gpt-oss / streaming-LLM style, exactly tokamax's reference semantics
+    (experimental splash base.py): the sink joins the softmax max
+    (``m = max(row_max, sink)``) and adds ``exp(sink - m)`` to the
+    denominator, but contributes NO value row -- it absorbs probability mass.
+    Static per-case values (a learned parameter at train time; fixed for
+    grading, which changes neither the algorithm a kernel must implement nor
+    its cost). A fully-masked row keeps output exactly 0: every p_i is 0
+    regardless of the denominator.
 
     GENERALIZED to the attention shapes real models actually use, because
     MHA-with-equal-head-dims was a contract gap: tokamax benchmarks mixtral
@@ -85,9 +97,15 @@ def causal_segment_attention(q, k, v, segment_ids, *, window=None, soft_cap=None
     row_live = mask.any(axis=-1)  # [q] rows with at least one visible key
     # max-shifted softmax; fully-masked rows produce 0, never NaN
     m = jnp.max(logits, axis=-1, keepdims=True)
+    if sinks is not None:
+        # [q_heads] -> [kvh, group, 1, 1], joining the max-shift per q-head
+        sk = jnp.asarray(sinks, jnp.float32).reshape(kvh, group)[:, :, None, None]
+        m = jnp.maximum(m, sk)
     p = jnp.exp(logits - m)
     p = jnp.where(mask4, p, 0.0)
     denom = jnp.sum(p, axis=-1, keepdims=True)
+    if sinks is not None:
+        denom = denom + jnp.exp(sk - m)
     p = jnp.where(row_live[None, None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
     out = jnp.einsum("hgqk,hkv->hgqv", p, v32)
     return out.reshape(qh, seq, dv)
@@ -148,7 +166,7 @@ def _splash_block_sizes(sak, seq: int):
 
 
 def _honest_faithful_bf16(
-    q, k, v, segment_ids, block_q: int = 512, *, window=None, soft_cap=None
+    q, k, v, segment_ids, block_q: int = 512, *, window=None, soft_cap=None, sinks=None
 ):
     """The production numeric path, query-blocked: bf16 arrays enter the MXU as
     matmul INPUTS, every accumulator is fp32 (``preferred_element_type``), the
@@ -185,8 +203,13 @@ def _honest_faithful_bf16(
         logits = jnp.where(m[None], logits, NEG_INF)
         row_live = m.any(axis=-1)
         mx = jnp.max(logits, axis=-1, keepdims=True)
+        if sinks is not None:
+            mx = jnp.maximum(mx, jnp.asarray(sinks, jnp.float32)[:, None, None])
         p = jnp.where(m[None], jnp.exp(logits - mx), 0.0)
-        p = jnp.where(row_live[None, :, None], p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30), 0.0)
+        denom = jnp.sum(p, axis=-1, keepdims=True)
+        if sinks is not None:
+            denom = denom + jnp.exp(jnp.asarray(sinks, jnp.float32)[:, None, None] - mx)
+        p = jnp.where(row_live[None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
         out = jnp.einsum("hqk,hkd->hqd", p.astype(jnp.bfloat16), v, preferred_element_type=jnp.float32)
         return None, out
 
@@ -196,7 +219,7 @@ def _honest_faithful_bf16(
 
 
 def _honest_online_softmax(
-    q, k, v, segment_ids, block_k: int = 256, *, window=None, soft_cap=None
+    q, k, v, segment_ids, block_k: int = 256, *, window=None, soft_cap=None, sinks=None
 ):
     """Flash-style streaming softmax: a DIFFERENT reduction order over the key
     axis (running max + rescaled running sum) at fp32. Legal, and the shape a
@@ -248,7 +271,16 @@ def _honest_online_softmax(
         jnp.zeros((h, s, 1), jnp.float32),
         jnp.zeros((h, s, d), jnp.float32),
     )
-    (_, run_l, acc), _ = jax.lax.scan(body, init, jnp.arange(nb))
+    (run_m, run_l, acc), _ = jax.lax.scan(body, init, jnp.arange(nb))
+    if sinks is not None:
+        # The sink merges AFTER the streaming pass, exactly like folding in one
+        # more block containing a single logit and no value: rescale the
+        # running sum/accumulator to the new max and add the sink's mass.
+        sk = jnp.asarray(sinks, jnp.float32)[:, None, None]
+        new_m = jnp.maximum(run_m, sk)
+        corr = jnp.exp(run_m - new_m)
+        run_l = run_l * corr + jnp.exp(sk - new_m)
+        acc = acc * corr
     row_live = ((idx_k[None, :] <= pos_q[:, None]) & (segment_ids[:, None] == segment_ids[None, :]) & live_q[:, None] & live_k[None, :]).any(-1)
     return jnp.where(row_live[None, :, None], acc / jnp.maximum(run_l, 1e-30), 0.0)
 
@@ -257,7 +289,7 @@ _FALLBACK_BLOCK_Q = 512
 
 
 def _xla_masked_attention(
-    q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q, *, window=None, soft_cap=None
+    q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q, *, window=None, soft_cap=None, sinks=None
 ):
     """Query-blocked XLA attention: same math as ``causal_segment_attention``
     but never materializes more than [heads, block_q, seq] of logits, so it
@@ -294,8 +326,13 @@ def _xla_masked_attention(
         logits = jnp.where(m[None], logits, NEG_INF)
         row_live = m.any(axis=-1)
         mx = jnp.max(logits, axis=-1, keepdims=True)
+        if sinks is not None:
+            mx = jnp.maximum(mx, jnp.asarray(sinks, jnp.float32)[:, None, None])
         p = jnp.where(m[None], jnp.exp(logits - mx), 0.0)
-        p = jnp.where(row_live[None, :, None], p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30), 0.0)
+        denom = jnp.sum(p, axis=-1, keepdims=True)
+        if sinks is not None:
+            denom = denom + jnp.exp(jnp.asarray(sinks, jnp.float32)[:, None, None] - mx)
+        p = jnp.where(row_live[None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
         return None, jnp.einsum("hqk,hkd->hqd", p, v32)
 
     _, blocks = jax.lax.scan(block, None, jnp.arange((s + pad) // block_q))
@@ -304,7 +341,7 @@ def _xla_masked_attention(
 
 
 def _xla_grouped_attention(
-    q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q, *, window=None, soft_cap=None
+    q, k, v, segment_ids, block_q: int = _FALLBACK_BLOCK_Q, *, window=None, soft_cap=None, sinks=None
 ):
     """Query-blocked XLA attention that is NATIVELY GROUPED: KV is read once per
     KV head and shared across its query group, and the value head dim is free to
@@ -358,10 +395,16 @@ def _xla_grouped_attention(
         logits = jnp.where(m4, logits, NEG_INF)
         row_live = m.any(axis=-1)
         mx = jnp.max(logits, axis=-1, keepdims=True)
+        if sinks is not None:
+            sk = jnp.asarray(sinks, jnp.float32).reshape(kvh, group)[:, :, None, None]
+            mx = jnp.maximum(mx, sk)
         p = jnp.where(m4, jnp.exp(logits - mx), 0.0)
+        denom = jnp.sum(p, axis=-1, keepdims=True)
+        if sinks is not None:
+            denom = denom + jnp.exp(sk - mx)
         p = jnp.where(
             row_live[None, None, :, None],
-            p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30),
+            p / jnp.maximum(denom, 1e-30),
             0.0,
         )
         return None, jnp.einsum("hgqk,hkv->hgqv", p, v32)
@@ -443,6 +486,18 @@ class SplashAttentionProblem(Problem):
             # baseline at 1.6e-7, including with d_v != d.
             ShapeCase("mqa-h32kv1-s4096",
                       {"heads": 32, "kv_heads": 1, "seq": 4096, "d": 128}, probe=True),
+            # From tokamax's experimental splash property sweep, two structures
+            # our set did not span:
+            #   (64, 128): d_v LARGER than d_qk -- deepseek2 covers only the
+            #   shrinking direction, and an output-tiling bug that only trips
+            #   when the value dim GROWS would sail through it.
+            #   (6, 2): non-power-of-two head counts with group 3 -- head-count
+            #   assumptions (po2 grids, halving loops) break here, not at 32/8.
+            ShapeCase("dvgt-h8-s2048-d64-dv128",
+                      {"heads": 8, "seq": 2048, "d": 64, "d_v": 128}, probe=True),
+            ShapeCase("h6kv2-holdout-s2048",
+                      {"heads": 6, "kv_heads": 2, "seq": 2048, "d": 128},
+                      probe=True, holdout=True),
             ShapeCase("mqa-holdout-h16kv1-s2049",
                       {"heads": 16, "kv_heads": 1, "seq": 2049, "d": 128}, probe=True, holdout=True),
             # FEATURE CASES (static, see ShapeCase.features). Until these
@@ -474,6 +529,19 @@ class SplashAttentionProblem(Problem):
                       {"heads": 8, "seq": 2049, "d": 128},
                       probe=True, holdout=True,
                       features=(("window", 1024), ("soft_cap", 30.0))),
+            # ATTENTION SINKS -- gpt-oss ships them, tokamax's experimental
+            # splash tests them (use_sinks with dsinks gradients), and the
+            # jax-pin splash cannot express them, so the elected denominator
+            # here is the grouped XLA path (recorded via baseline_impl).
+            # Values vary per head (sign and magnitude) so a kernel that
+            # broadcasts one sink over all heads fails rather than passes.
+            ShapeCase("gptoss-sinks-h8-s2048",
+                      {"heads": 8, "seq": 2048, "d": 64}, probe=True,
+                      features=(("sinks", (0.5, -0.7, 1.9, -1.3, 2.6, 0.1, -2.2, 3.4)),)),
+            ShapeCase("sinks-holdout-window512-h8-s2049",
+                      {"heads": 8, "seq": 2049, "d": 128}, probe=True, holdout=True,
+                      features=(("window", 512),
+                                ("sinks", (1.1, -0.4, 2.3, -1.8, 0.9, 3.1, -2.6, 0.2)))),
             # TENSOR PARALLEL (v6e-8): heads sharded 8 ways, which is how
             # splash is sharded in production (`head_shards`). Per shard the
             # kernel sees heads=4, i.e. an ordinary attention problem.
@@ -524,9 +592,9 @@ class SplashAttentionProblem(Problem):
         segment_ids = jnp.where(pos >= s - n_pad, 0, segment_ids)
         return (q, k, v, segment_ids)
 
-    def reference(self, q, k, v, segment_ids, *, window=None, soft_cap=None):
+    def reference(self, q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None):
         return causal_segment_attention(
-            q, k, v, segment_ids, window=window, soft_cap=soft_cap
+            q, k, v, segment_ids, window=window, soft_cap=soft_cap, sinks=sinks
         )
 
     # Which baseline the last `baseline()` call actually used. Recorded (not
@@ -534,7 +602,7 @@ class SplashAttentionProblem(Problem):
     # is Google's production kernel or the XLA fallback.
     baseline_impl: str = "?"
 
-    def baseline(self, q, k, v, segment_ids, *, window=None, soft_cap=None):
+    def baseline(self, q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None):
         """Production Pallas splash MHA, with an honest XLA fallback.
 
         Splash refuses shapes it cannot tile and its block sizes are not
@@ -568,6 +636,13 @@ class SplashAttentionProblem(Problem):
                 type(self).baseline_impl = "pallas-splash-mha (kv-repeated for GQA)"
             if v.shape[-1] != q.shape[-1]:
                 raise BaselineUnavailable("splash requires d_v == d; deepseek2-style asymmetry unsupported")
+            if sinks is not None:
+                # Our jax pin's splash has NO attention-sinks parameter
+                # (tokamax's experimental fork does; the pin does not), so on
+                # sinks cases the production denominator is genuinely
+                # unavailable and the election falls to the grouped XLA path,
+                # recorded as such -- an honest weaker bar, not a fake one.
+                raise BaselineUnavailable("jax-pin splash has no attention sinks")
 
             h, seq, _d = q.shape
             # SLIDING WINDOW via splash's own LocalMask rather than a masked
@@ -607,7 +682,7 @@ class SplashAttentionProblem(Problem):
         except Exception:
             type(self).baseline_impl = "xla-fallback"
             return _xla_grouped_attention(
-                q, k, v, segment_ids, window=window, soft_cap=soft_cap
+                q, k, v, segment_ids, window=window, soft_cap=soft_cap, sinks=sinks
             )
 
     def baseline_candidates(self):

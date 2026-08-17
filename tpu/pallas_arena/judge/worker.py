@@ -146,6 +146,13 @@ class Fixture(NamedTuple):
     sig_name: str
     inputs: tuple
     case: object  # ShapeCase, or None for adversarial vectors (no features)
+    # The callable correctness/determinism/warm must invoke: fns[sig] for a
+    # plain case, the shard_map-WRAPPED artifact for a TP case. A TP artifact
+    # is exported at PER-SHARD shapes (build_signatures), so calling it with
+    # full-shape fixture inputs is a shape error -- every TP correctness
+    # check would have crashed the first time a TP case was selected on a
+    # multi-chip judge. Resolved once, at fixture-build time.
+    call: object
 
 
 class CompileBudgetExceeded(Exception):
@@ -523,16 +530,38 @@ class PersistentWorker:
         # warm_chip_s below is pure steady-state chip time)
         try:
             fixtures = []
+            skipped_tp_fixture = {}
+            n_dev = len(jax.local_devices())
             for case in self.scored_cases:
+                tp_w = problem.tp_declared_width(case)
+                call = fns[case_sig[case.name]]
+                if tp_w:
+                    if n_dev < tp_w:
+                        # The artifact is shard-shaped; without the mesh it
+                        # cannot be invoked AT ALL. Skip loudly rather than
+                        # crash into it or silently grade at another width.
+                        skipped_tp_fixture[case.name] = f"needs {tp_w} devices, judge has {n_dev}"
+                        continue
+                    tp_in, tp_out = problem.tp_specs(case)
+                    tp_mesh = timing_mod.make_mesh(tp_w)
+                    call = jax.jit(timing_mod.shard_mapped(call, tp_mesh, tp_in, tp_out))
                 for g in range(self.correctness_seeds):
                     inputs = problem.make_inputs(fold_in(fold_in(k_corr, g), hash_stable(case.name)), case)
                     block(inputs)
-                    fixtures.append(Fixture(f"{case.name}#seed{g}", case_sig[case.name], inputs, case))
+                    fixtures.append(Fixture(f"{case.name}#seed{g}", case_sig[case.name], inputs, case, call))
+            if skipped_tp_fixture:
+                result["skipped_tp_correctness"] = skipped_tp_fixture
+            if not fixtures and self.scored_cases:
+                return fail(
+                    "fixtures",
+                    f"every scored case is a TP case this judge cannot run: {skipped_tp_fixture}",
+                    judge_fault=True,
+                )
             for i, adv in enumerate(self.adversarial_cases()):
                 inputs = adv.make_inputs(fold_in(k_adv, i))
                 block(inputs)
                 # adversarial vectors carry no features -> case is None
-                fixtures.append(Fixture(f"adv:{adv.name}", adv_sig[adv.name], inputs, None))
+                fixtures.append(Fixture(f"adv:{adv.name}", adv_sig[adv.name], inputs, None, fns[adv_sig[adv.name]]))
         except Exception as e:
             # Fixtures are built from the PROBLEM's own make_inputs and a
             # block() -- no candidate code is consulted -- so a failure here
@@ -545,15 +574,28 @@ class PersistentWorker:
         warm_units, warmed = [], set()
         for f in fixtures:
             if f.sig_name not in warmed:
-                warm_units.append((f.sig_name, lambda s=f.sig_name, i=f.inputs: block(fns[s](*i))))
+                # warm the callable the fixture will actually run -- for a TP
+                # case that is the shard_map wrapper, whose compile is the one
+                # that must land off the timed path
+                warm_units.append((f.sig_name, lambda c=f.call, i=f.inputs: block(c(*i))))
                 warmed.add(f.sig_name)
         try:
             for case in self.holdout_cases:
                 sig_name = case_sig[case.name]
                 if sig_name not in warmed:
+                    # Same shard-shape rule as fixtures: a TP holdout's artifact
+                    # can only be invoked through shard_map, and a small judge
+                    # skips it (the timing loop will record skipped_tp).
+                    tp_w = problem.tp_declared_width(case)
+                    w_call = fns[sig_name]
+                    if tp_w:
+                        if len(jax.local_devices()) < tp_w:
+                            continue
+                        h_in, h_out = problem.tp_specs(case)
+                        w_call = jax.jit(timing_mod.shard_mapped(w_call, timing_mod.make_mesh(tp_w), h_in, h_out))
                     w_in = problem.make_inputs(fold_in(k_time, 10_000), case)
                     block(w_in)
-                    warm_units.append((sig_name, lambda s=sig_name, i=w_in: block(fns[s](*i))))
+                    warm_units.append((sig_name, lambda c=w_call, i=w_in: block(c(*i))))
                     warmed.add(sig_name)
         except Exception as e:
             return fail("fixtures", f"{type(e).__name__}: {e}", judge_fault=True)
@@ -579,14 +621,14 @@ class PersistentWorker:
             # ---- 3. correctness on fresh hidden seeds + adversarial vectors
             from pallas_arena.judge.problems.base import check_tolerance, error_stats
 
-            for label, sig_name, inputs, case in ((f.label, f.sig_name, f.inputs, f.case) for f in fixtures):
+            for label, sig_name, inputs, case, call in ((f.label, f.sig_name, f.inputs, f.case, f.call) for f in fixtures):
                 if over_budget():
                     return budget_fail(f"correctness ({label})")
                 pc = problem.for_case(case)
                 ref32 = pc.reference(*inputs)
                 tol = pc.calibrated_tolerance(inputs, ref32)
                 try:
-                    out = fns[sig_name](*inputs)
+                    out = call(*inputs)
                     block(out)
                 except Exception as e:
                     return fail("correctness", f"{label}: runtime error {type(e).__name__}: {e}")
@@ -597,10 +639,10 @@ class PersistentWorker:
             # ---- 4. determinism: N bitwise-identical runs
             import numpy as np
 
-            det_sig, det_inputs = fixtures[0].sig_name, fixtures[0].inputs
+            det_call, det_inputs = fixtures[0].call, fixtures[0].inputs
             outs = []
             for _ in range(self.determinism_runs):
-                o = fns[det_sig](*det_inputs)
+                o = det_call(*det_inputs)
                 block(o)
                 leaves = o if isinstance(o, (tuple, list)) else (o,)
                 outs.append(b"".join(np.asarray(x).tobytes() for x in leaves))
@@ -620,7 +662,8 @@ class PersistentWorker:
                 )
                 grad_sig = None
             if grad_sig is not None:
-                from pallas_arena.judge.problems.base import tolerance_from_reference
+                from pallas_arena.judge.problems.base import check_grad_tolerance as check_grad_tol
+                from pallas_arena.judge.problems.base import grad_leaf_tolerances as tolerance_from_reference_leaves
 
                 g_case = self.scored_cases[0]
                 pg = problem.for_case(g_case)
@@ -628,7 +671,7 @@ class PersistentWorker:
                 block(g_inputs)
                 ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
                 cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
-                g_tol = tolerance_from_reference(ref_g, cal_g)
+                g_tol = tolerance_from_reference_leaves(ref_g, cal_g)
                 gates = problem.bwd_gates
                 try:
                     cand_g = fns[grad_sig](*g_inputs)
@@ -640,7 +683,7 @@ class PersistentWorker:
                     result["grad_ok"], result["grad_error"] = False, why[:400]
                     grad_sig = None
                 if grad_sig is not None:
-                    okay, why = check_tolerance(error_stats(cand_g, ref_g), g_tol)
+                    okay, why = check_grad_tol(cand_g, ref_g, g_tol)
                     if not okay and gates:
                         return fail("gradient", why)
                     result["grad_ok"] = bool(okay)
@@ -740,10 +783,40 @@ class PersistentWorker:
                         continue
                     tp_in, tp_out = specs
                     tp_mesh = timing_mod.make_mesh(tp_w)
-                    raw_base = gb["raw"] if gb and gb.get("raw") else problem.baseline
+                    raw_base = gb["raw"] if gb and gb.get("raw") else problem.for_case(case).baseline
                     cand_fn = self.jax.jit(timing_mod.shard_mapped(cand_fn, tp_mesh, tp_in, tp_out))
                     base_fn = self.jax.jit(timing_mod.shard_mapped(raw_base, tp_mesh, tp_in, tp_out))
                     tp_widths[case.name] = tp_w
+
+                    # SHARDED == UNSHARDED, checked before anything is timed
+                    # (tokamax's api_sharding invariant; theirs is atol=0.0).
+                    # Our TP specs are collective-free, so the sharded baseline
+                    # must reproduce the unsharded result to calibrated
+                    # tolerance -- if it does not, the specs compute a
+                    # DIFFERENT function and any timing ratio would be a
+                    # comparison between two different problems. Skip + record,
+                    # never grade through a broken spec.
+                    chk_in = problem.make_inputs(fold_in(k_time, 90_000 + hash_stable(case.name) % 1000), case)
+                    block(chk_in)
+                    un_out = raw_base(*chk_in)
+                    block(un_out)
+                    sh_out = base_fn(*timing_mod.shard_inputs(chk_in, tp_mesh, tp_in))
+                    block(sh_out)
+                    from pallas_arena.judge.problems.base import check_tolerance as _ct
+                    from pallas_arena.judge.problems.base import error_stats as _es
+                    _pc = problem.for_case(case)
+                    _stats = _es(sh_out, un_out)
+                    _tol = _pc.calibrated_tolerance(chk_in, _pc.reference(*chk_in))
+                    result.setdefault("tp_agreement", {})[case.name] = {
+                        "max": _stats.get("max"), "q99": _stats.get("q99"),
+                        "bitwise": bool(_stats.get("max") == 0.0),
+                    }
+                    _ok, _why = _ct(_stats, _tol)
+                    if not _ok:
+                        skipped_tp[case.name] = f"sharded != unsharded baseline: {_why}"
+                        del chk_in, un_out, sh_out
+                        continue
+                    del chk_in, un_out, sh_out
                 for i in range(self.timing_warmup + self.timing_pairs):
                     inputs = problem.make_inputs(fold_in(fold_in(k_time, i), hash_stable(case.name)), case)
                     block(inputs)

@@ -230,6 +230,33 @@ def tolerance_from_reference(ref_fp32, ref_bf16) -> dict:
     }
 
 
+def grad_leaf_tolerances(ref_fp32, ref_bf16) -> list[dict]:
+    """PER-LEAF calibrated tolerances for a gradient pytree.
+
+    One pooled band over all leaves lets the noisiest gradient set the bar for
+    every other one: measured on attention, dq's honest bf16 error is roughly
+    an order of magnitude above dv's (tokamax's own splash test encodes the
+    same fact -- dq atol 1.5 vs dv 0.15), so under a pooled band a candidate
+    with a WRONG dv but a quiet dq passes. Calibrating each leaf against its
+    own reference-bf16 error makes each gradient answer for itself."""
+    return [
+        tolerance_from_reference(r, b)
+        for r, b in zip(_leaves(ref_fp32), _leaves(ref_bf16))
+    ]
+
+
+def check_grad_tolerance(cand_g, ref_g, tols: list[dict]) -> tuple[bool, str]:
+    """Leaf-wise gradient check; names the failing leaf (grad[i] = d/d inputs[i])."""
+    cl, rl = _leaves(cand_g), _leaves(ref_g)
+    if len(cl) != len(rl) or len(cl) != len(tols):
+        return False, f"gradient arity mismatch: cand {len(cl)} ref {len(rl)} tols {len(tols)}"
+    for i, (c, r, t) in enumerate(zip(cl, rl, tols)):
+        ok, why = check_tolerance(error_stats(c, r), t)
+        if not ok:
+            return False, f"grad[{i}] (d/d input {i}): {why}"
+    return True, "ok"
+
+
 def check_tolerance(stats: dict, tol: dict) -> tuple[bool, str]:
     if not stats.get("finite", False):
         return False, f"non-finite or malformed output ({stats.get('why', 'NaN/inf')})"

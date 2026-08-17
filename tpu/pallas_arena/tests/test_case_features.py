@@ -225,3 +225,69 @@ def test_features_change_the_exported_signature_identity():
     by_name = {s["name"]: s for s in sigs}
     assert by_name[case_sig["windowed"]]["features"] == {"window": 64}
     assert "features" not in by_name[case_sig["plain"]]
+
+
+# ------------------------------------------------------------ attention sinks
+def test_sink_at_minus_inf_is_a_noop(fixture):
+    """exp(sink - m) -> 0 as sink -> -inf, so a very negative sink must
+    reproduce the sink-free output exactly. Pins the denominator formula."""
+    _, _, ins = fixture
+    h = ins[0].shape[0]
+    plain = np.asarray(causal_segment_attention(*ins))
+    sunk = np.asarray(causal_segment_attention(*ins, sinks=(-1e9,) * h))
+    np.testing.assert_allclose(plain, sunk, atol=1e-6)
+
+
+def test_large_sink_absorbs_probability_mass(fixture):
+    """A sink far above every logit dominates the denominator, so outputs
+    shrink toward zero -- the defining behavior (it eats mass, emits no
+    value). Checked per head so a broadcast-one-sink bug cannot pass."""
+    _, _, ins = fixture
+    h = ins[0].shape[0]
+    plain = np.asarray(causal_segment_attention(*ins))
+    # huge sink on head 0 only; other heads untouched
+    sinks = (40.0,) + (-1e9,) * (h - 1)
+    sunk = np.asarray(causal_segment_attention(*ins, sinks=sinks))
+    live = np.abs(plain).max(axis=(1, 2)) > 0
+    assert np.abs(sunk[0]).max() < 1e-3 * max(np.abs(plain[0]).max(), 1e-9)
+    for i in range(1, h):
+        if live[i]:
+            np.testing.assert_allclose(plain[i], sunk[i], atol=1e-6)
+
+
+def test_masked_rows_stay_exactly_zero_with_sinks(fixture):
+    """Our contract zeroes padding rows; the sink adds denominator mass but no
+    numerator, so this must hold with sinks too (tokamax hp.assumes away
+    empty rows; we deliberately keep testing them)."""
+    _, _, ins = fixture
+    q, k, v, seg = ins
+    h = q.shape[0]
+    out = np.asarray(causal_segment_attention(q, k, v, seg, sinks=(2.0,) * h))
+    dead = np.asarray(seg) == 0
+    if dead.any():
+        assert np.all(out[:, dead, :] == 0.0)
+
+
+@pytest.mark.parametrize("extra", [{}, {"window": 64}])
+def test_grouped_baseline_agrees_under_sinks(fixture, extra):
+    p, _, ins = fixture
+    h = ins[0].shape[0]
+    feats = dict(extra, sinks=tuple(0.3 * ((-1) ** i) * (i + 1) for i in range(h)))
+    ref = causal_segment_attention(*ins, **feats)
+    got = _xla_grouped_attention(*ins, **feats)
+    assert error_stats(got, ref)["max"] < 1e-4
+
+
+def test_online_softmax_variant_agrees_under_sinks(fixture):
+    """The streaming variant merges the sink AFTER the scan (rescale + add);
+    a wrong merge order shows up as a per-row scale error here."""
+    from pallas_arena.judge.problems.splash_attention import _honest_online_softmax
+
+    p, _, ins = fixture
+    h = ins[0].shape[0]
+    sinks = tuple(0.5 * ((-1) ** i) for i in range(h))
+    ref = causal_segment_attention(*ins, sinks=sinks)
+    got = _honest_online_softmax(*ins, sinks=sinks)
+    # bf16 matmul path inside the variant -> compare within the honest band
+    tol = p.calibrated_tolerance(ins, ref)
+    assert error_stats(got, ref)["max"] <= tol["max"]

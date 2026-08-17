@@ -134,9 +134,10 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
     from pallas_arena.judge.problems import get_problem
     from pallas_arena.judge.problems.base import (
         BaselineUnavailable,
+        check_grad_tolerance,
         check_tolerance,
         error_stats,
-        tolerance_from_reference,
+        grad_leaf_tolerances,
     )
 
     perf = time.perf_counter  # held ref: candidate patches to
@@ -284,7 +285,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         pg = problem.for_case(fixture_cases[0]) if fixture_cases else problem
         ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
         cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
-        grad_fixture = (g_inputs, ref_g, tolerance_from_reference(ref_g, cal_g), g_feats)
+        grad_fixture = (g_inputs, ref_g, grad_leaf_tolerances(ref_g, cal_g), g_feats)
 
     # ---------------- 4. poison the reference modules; 5. exec candidate
     result["phase"] = "exec"
@@ -484,8 +485,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
                 return _fail("gradient", why)
             result["grad_ok"], result["grad_error"] = False, why[:400]
         else:
-            stats = error_stats(cand_g, ref_g)
-            okay, why = check_tolerance(stats, g_tol)
+            okay, why = check_grad_tolerance(cand_g, ref_g, g_tol)
             if not okay and gates:
                 return _fail("gradient", why)
             result["grad_ok"] = bool(okay)

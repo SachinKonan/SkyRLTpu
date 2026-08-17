@@ -42,6 +42,10 @@ def main() -> None:
                     help="JSON {task: [case,...]} overriding the swept sets. The full sweep "
                          "makes boot exceed a 32 GB chip; a smaller set still exercises the NEW "
                          "reward (holdout scored, denominator elected per shape, device timing).")
+    ap.add_argument("--include-tp", action="store_true",
+                    help="Append every task's declared tp cases to its case set. Exists so a "
+                         "multi-chip judge can exercise tensor-parallel grading without pushing "
+                         "a JSON case list through three layers of ssh quoting.")
     args = ap.parse_args()
 
     from pallas_arena.judge.worker import PersistentWorker
@@ -50,6 +54,13 @@ def main() -> None:
     cases_by_task = dict(CASES)
     if args.cases_json:
         cases_by_task.update(json.loads(args.cases_json))
+    if args.include_tp:
+        from pallas_arena.judge.problems import get_problem as _gp
+
+        for task in list(cases_by_task):
+            tp_names = [c.name for c in _gp(task).shape_cases() if c.tp and not c.smoke]
+            cases_by_task[task] = list(cases_by_task[task]) + [n for n in tp_names
+                                                              if n not in cases_by_task[task]]
     report = {"tasks": {}}
     for task, entries in codes.items():
         if task not in cases_by_task:
