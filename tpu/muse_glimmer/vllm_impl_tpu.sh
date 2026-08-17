@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 # Muse-Glimmer-30B on ONE spot v5p-8, served through the **torch/vLLM** model
 # (`MODEL_IMPL_TYPE=vllm`, tpu_inference/models/vllm/muse_glimmer.py) rather
-# than the JAX one.  Three questions, in priority order:
+# than the JAX one.  Now at **TP=2 on pinned chips**: at TP=4 the engine died
+# in tpu-inference's OOT VllmQKVParallelLinear KV-head replication path
+# (mesh TP > num_kv_heads=2 -> torchax split silently clamps and v comes back
+# empty; crash-torch.log).  At TP=2 that predicate is FALSE, the replication
+# path is never entered, and 2xTP=2 is also the measured throughput-optimal
+# serving shape (README, 1.656x concurrency).  Questions, in priority order:
 #
-#   1. does the torch model serve at all, and does it decode the five recorded
-#      E2E prompts token-for-token like the JAX path did?
-#   2. does `--enable-lora` come up, and does a real adapter LOAD and CHANGE
-#      the output?  (The blocker being removed: the JAX path returns
-#      lora_manager=None, so --enable-lora aborts with "LoRA is not enabled".)
-#   3. does the JAX path still serve from the same tree, unchanged?
+#   1. does the torch model serve at TP=2 on 2 of the 4 chips, and does it
+#      decode the five recorded E2E prompts token-for-token like the JAX path?
+#      (baseline ids were recorded at TP=4/JAX; ties may flip -- report the
+#      first-divergence index and the top1-top2 gap there)
+#   2. does `--enable-lora` come up with a NON-ZERO adapter count (260 = 5 per
+#      layer on 52 layers), and does a real adapter LOAD, CHANGE the output,
+#      and round-trip through the RL endpoints?  (The blocker being removed:
+#      the JAX path returns lora_manager=None, so --enable-lora aborts.)
+#   3. do TWO TP=2 engines coexist on chips {0,1} and {2,3} -- the deployment
+#      shape -- with engine A's ids unaffected while B serves?
 #
 # QR lifecycle is copied verbatim from followup_tpu.sh, deliberately: `trap ...
 # EXIT` is known not to fire on an untrapped SIGTERM here, a scancel has
@@ -51,7 +60,17 @@ REMOTE_MODEL=/home/${USER_R}/muse-glimmer-30b
 VLLM_VENV=/home/${USER_R}/.venvs/vllm-mg
 VLLM_TPU_VERSION="${VLLM_TPU_VERSION:-0.23.0}"
 VLLM_PORT="${VLLM_PORT:-8001}"
-TP="${TP:-4}"
+TP="${TP:-2}"
+# Chip pinning, tp_compare_tpu.sh arm-B pattern (which ran 2xTP=2 for the JAX
+# model on this exact host shape).  Empty CHIPS = whole host, no TPU_* pinning.
+# CHIPS2 non-empty enables the two-engine coexistence phase.
+CHIPS="${CHIPS:-0,1}"
+CHIPS2="${CHIPS2:-2,3}"
+VLLM_PORT2="${VLLM_PORT2:-8002}"
+# Ship a clean export of this committed tree, never the working tree: a second
+# agent is debugging the TP=4 crash on CPU and may have uncommitted edits in
+# third_party/tpu-inference at any moment.
+TPU_INF_SHA="${TPU_INF_SHA:-b945d0054bf5c3384174f0b5d7ff1a3de666bb85}"
 MAXSEQS="${MAXSEQS:-16}"
 MAXLEN="${MAXLEN:-4096}"
 LORA_RANK="${LORA_RANK:-8}"
@@ -270,11 +289,22 @@ rsh "test -s ${REMOTE_MODEL}/model-00001-of-00002.safetensors && test -s ${REMOT
 grep -q WEIGHTS-OK "$PROG" || { log "weights not staged on host"; exit 6; }
 deadline_check
 
-log "shipping tpu-inference + clients"
+# `git archive` of a commit contains only committed files by construction, so
+# whatever scratch the other agent has in the shared working tree cannot ship.
+STAGE=$(mktemp -d /tmp/tpuinf-stage.XXXXXX)
+if ! git -C "$REPO/third_party/tpu-inference" archive "$TPU_INF_SHA" | tar -x -C "$STAGE"; then
+  log "git archive of tpu-inference @ ${TPU_INF_SHA} FAILED"; rm -rf "$STAGE"; exit 7
+fi
+if [ ! -s "$STAGE/tpu_inference/models/vllm/muse_glimmer.py" ]; then
+  log "clean export lacks models/vllm/muse_glimmer.py -- wrong commit?"; rm -rf "$STAGE"; exit 7
+fi
+log "shipping tpu-inference (clean export of ${TPU_INF_SHA}) + clients"
+log "  export models/vllm: $(ls "$STAGE/tpu_inference/models/vllm" | tr '\n' ' ')"
 timeout 900 rsync -az --delete -e "ssh $SSHO" \
-  --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' --exclude 'tests' \
-  "$REPO/third_party/tpu-inference/" ${USER_R}@"$HOST":/home/${USER_R}/tpu-inference/ \
-  >/dev/null 2>&1 || { log "rsync of tpu-inference failed"; exit 7; }
+  --exclude '__pycache__' --exclude '*.pyc' --exclude 'tests' \
+  "$STAGE/" ${USER_R}@"$HOST":/home/${USER_R}/tpu-inference/ \
+  >/dev/null 2>&1 || { log "rsync of tpu-inference failed"; rm -rf "$STAGE"; exit 7; }
+rm -rf "$STAGE"
 timeout 120 scp $SSHO \
   "$REPO/tpu/muse_glimmer/mg_client.py" \
   "$REPO/tpu/muse_glimmer/make_lora_adapter.py" \
@@ -296,7 +326,19 @@ uv venv --python 3.12 ${VLLM_VENV}
 uv pip install --python ${VLLM_VENV}/bin/python 'vllm-tpu==${VLLM_TPU_VERSION}'
 uv pip install --python ${VLLM_VENV}/bin/python --no-deps --force-reinstall /home/${USER_R}/tpu-inference
 # transformers goes LAST: any resolving install after it re-triggers the override.
-uv pip install --python ${VLLM_VENV}/bin/python --no-deps --force-reinstall 'transformers @ git+https://github.com/huggingface/transformers@main'
+# tokenizers is pinned alongside it: @main is a moving target, and on 2026-08-16
+# it advanced to 5.16.0.dev0 which raised its floor to tokenizers>=0.23.1 while
+# --no-deps left tokenizers at 0.22.2 -- transformers then could not even be
+# imported, and the run died on a landed slice. --no-deps is itself required (a
+# resolving install re-triggers this repos override-dependencies
+# transformers<=5.8.0 pin), so a newer transformers deps are never satisfied
+# automatically and must be named here.
+# NOTE: this whole block is written through rsh cat > build_venv.sh <<EOS,
+# i.e. inside a DOUBLE-QUOTED string. Command substitution expands on the LOCAL
+# side and nested quoting breaks the argument -- even inside a comment, since the
+# local shell builds the string before anything here is ever parsed as shell.
+# Keep every line single-quoted, with no command substitution and no backticks.
+uv pip install --python ${VLLM_VENV}/bin/python --no-deps --force-reinstall 'transformers @ git+https://github.com/huggingface/transformers@main' 'tokenizers>=0.23.1,<0.24.0'
 ${VLLM_VENV}/bin/python - <<'PY'
 import transformers, vllm, tpu_inference, os
 print('transformers', transformers.__version__, '| vllm', vllm.__version__)
@@ -342,12 +384,35 @@ deadline_check
 
 # ------------------------------------------------------------- helpers ------
 VLLM_BOOT_SECONDS=""
-start_vllm() {   # $1 = tag  $2 = impl  $3 = extra serve flags
+start_vllm() {   # $1 tag  $2 impl  $3 extra flags  $4 chips (""=whole host)
+                 # $5 port  $6 tmux session  $7 "keep" = leave other engines up
   local tag="$1" impl="$2" extra="${3:-}"
-  log "--- booting vLLM [${tag}] MODEL_IMPL_TYPE=${impl} extra='${extra}' ---"
-  rsh "tmux kill-session -t mg 2>/dev/null; pkill -TERM -u \$USER -f '[V]LLM::EngineCore|[v]llm serve' 2>/dev/null; sleep 8; true" 120 >/dev/null
+  local chips="${4:-}" port="${5:-$VLLM_PORT}" sess="${6:-mg}" keep="${7:-}"
+  local tpsize chipenv="" nchips tpuport
+  if [ -n "$chips" ]; then
+    # tp_compare_tpu.sh arm-B pattern: libtpu sees exactly the chips named
+    # here, each engine gets its own coordination port, and the XLA cache is
+    # shared deliberately (identical shapes -> the second compile is cheap).
+    nchips=$(awk -F, '{print NF}' <<<"$chips")
+    tpuport=$(( 8476 + ${chips%%,*} ))
+    chipenv="export TPU_VISIBLE_CHIPS=${chips}
+export TPU_CHIPS_PER_PROCESS_BOUNDS=1,${nchips},1
+export TPU_PROCESS_BOUNDS=1,1,1
+export TPU_PROCESS_PORT=${tpuport}
+export TPU_PROCESS_ADDRESSES=localhost:${tpuport}
+export CLOUD_TPU_TASK_ID=0"
+    tpsize=$nchips
+  else
+    tpsize=$TP
+  fi
+  log "--- booting vLLM [${tag}] MODEL_IMPL_TYPE=${impl} TP=${tpsize} chips='${chips:-all}' port=${port} extra='${extra}' ---"
+  if [ -z "$keep" ]; then
+    rsh "tmux kill-session -t mg 2>/dev/null; tmux kill-session -t mg2 2>/dev/null; pkill -TERM -u \$USER -f '[V]LLM::EngineCore|[v]llm serve' 2>/dev/null; sleep 8; true" 120 >/dev/null
+  else
+    rsh "tmux kill-session -t ${sess} 2>/dev/null; sleep 2; true" 60 >/dev/null
+  fi
   rsh "mkdir -p ~/skyrl-logs ~/vllm-xla-cache-mg ~/loras
-cat > ~/run_mg.sh <<'EOS'
+cat > ~/run_${sess}.sh <<'EOS'
 #!/usr/bin/env bash
 source ${VLLM_VENV}/bin/activate
 export MODEL_IMPL_TYPE=${impl}
@@ -358,32 +423,33 @@ export HF_HUB_OFFLINE=1
 export VLLM_XLA_CACHE_PATH=/home/${USER_R}/vllm-xla-cache-mg
 export JAX_COMPILATION_CACHE_DIR=/home/${USER_R}/vllm-xla-cache-mg
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+${chipenv}
 unset VLLM_PLUGINS
 vllm serve ${REMOTE_MODEL} \
   --served-model-name muse-glimmer-30b \
-  --host 0.0.0.0 --port ${VLLM_PORT} \
-  --tensor-parallel-size ${TP} \
+  --host 0.0.0.0 --port ${port} \
+  --tensor-parallel-size ${tpsize} \
   --max-model-len ${MAXLEN} \
   --max-num-seqs ${MAXSEQS} \
   --max-num-batched-tokens ${MAXLEN} \
   --download-dir ${REMOTE_MODEL} ${extra} \
   2>&1 | tee /home/${USER_R}/skyrl-logs/mg-${tag}.log
 EOS
-chmod +x ~/run_mg.sh
-tmux new-session -d -s mg 'bash ~/run_mg.sh'
-sleep 5; tmux has-session -t mg && echo tmux-UP || echo tmux-FAIL" 180 | tail -2 | tee -a "$PROG"
+chmod +x ~/run_${sess}.sh
+tmux new-session -d -s ${sess} 'bash ~/run_${sess}.sh'
+sleep 5; tmux has-session -t ${sess} && echo tmux-UP || echo tmux-FAIL" 180 | tail -2 | tee -a "$PROG"
 
   local t0; t0=$(date +%s)
   local up=0
   for i in $(seq 1 180); do
     deadline_check
-    r=$(rsh "curl -fsS -m 25 -X POST http://127.0.0.1:${VLLM_PORT}/v1/completions -H 'Content-Type: application/json' -d '{\"model\":\"muse-glimmer-30b\",\"prompt\":\"The capital of France is\",\"max_tokens\":4,\"temperature\":0}' 2>/dev/null | head -c 300" 60)
+    r=$(rsh "curl -fsS -m 25 -X POST http://127.0.0.1:${port}/v1/completions -H 'Content-Type: application/json' -d '{\"model\":\"muse-glimmer-30b\",\"prompt\":\"The capital of France is\",\"max_tokens\":4,\"temperature\":0}' 2>/dev/null | head -c 300" 60)
     if echo "$r" | grep -q '"text"'; then
       VLLM_BOOT_SECONDS=$(( $(date +%s) - t0 ))
       log "ENGINE ANSWERED [${tag}] in ${VLLM_BOOT_SECONDS}s: $r"; up=1; break
     fi
     if [ $((i % 6)) -eq 0 ]; then
-      rsh "tmux has-session -t mg 2>/dev/null && echo ALIVE || echo DEAD" 30 > /tmp/mgstate.$$ 2>/dev/null
+      rsh "tmux has-session -t ${sess} 2>/dev/null && echo ALIVE || echo DEAD" 30 > /tmp/mgstate.$$ 2>/dev/null
       if grep -q DEAD /tmp/mgstate.$$; then
         log "engine process DIED [${tag}] after $(( $(date +%s) - t0 ))s"
         rsh "tail -n 150 ~/skyrl-logs/mg-${tag}.log" 150 | tee "$LOGDIR/crash-${tag}.log" | tail -50 | tee -a "$PROG"
@@ -411,9 +477,9 @@ fetch() { timeout 180 scp $SSHO ${USER_R}@"$HOST":~/"$1" "$LOGDIR/$1" >/dev/null
 
 # ================================= 3. torch model, plain serve ==============
 TORCH_BOOT=fail
-if start_vllm torch vllm ""; then
+if start_vllm torch vllm "" "$CHIPS" "$VLLM_PORT" mg; then
   TORCH_BOOT=ok
-  note "torch model (MODEL_IMPL_TYPE=vllm) BOOTED in ${VLLM_BOOT_SECONDS}s at maxlen ${MAXLEN}"
+  note "torch model (MODEL_IMPL_TYPE=vllm) BOOTED at TP=2 chips={${CHIPS}} in ${VLLM_BOOT_SECONDS}s at maxlen ${MAXLEN}"
   engine_report torch
   log "greedy decode: 5 recorded prompts, token for token"
   rsh "${VLLM_VENV}/bin/python ~/mg_client.py --ref ~/hf_greedy.json --port ${VLLM_PORT} \
@@ -436,8 +502,8 @@ if [ "$TORCH_BOOT" = ok ] && have_time 2400; then
 ${VLLM_VENV}/bin/python ~/make_lora_adapter.py --model-dir ${REMOTE_MODEL} \
         --out ~/loras/rl-smoke-2 --rank ${LORA_RANK} --seed 4242 --targets '${LORA_TARGETS}'" 900 | tail -6 | tee -a "$PROG"
 
-  if start_vllm lora vllm "--enable-lora --max-lora-rank ${LORA_RANK} --max-loras 1"; then
-    note "--enable-lora BOOTED under MODEL_IMPL_TYPE=vllm (this is the blocker that flax_nnx cannot clear)"
+  if start_vllm lora vllm "--enable-lora --max-lora-rank ${LORA_RANK} --max-loras 1" "$CHIPS" "$VLLM_PORT" mg; then
+    note "--enable-lora BOOTED at TP=2 under MODEL_IMPL_TYPE=vllm (this is the blocker that flax_nnx cannot clear)"
     engine_report lora
     rsh "${VLLM_VENV}/bin/python ~/mg_lora_client.py --port ${VLLM_PORT} \
           --base-model muse-glimmer-30b --lora-name rl-smoke \
@@ -465,20 +531,57 @@ else
 fi
 deadline_check
 
-# ================================= 5. JAX path still works ==================
-# The change is meant to be ADDITIVE. Prove it on the same tree, same slice.
-if have_time 1800; then
-  if start_vllm flax flax_nnx ""; then
-    note "JAX path (MODEL_IMPL_TYPE=flax_nnx) STILL SERVES from the same tree"
-    engine_report flax
+# ==================== 5. two TP=2 engines coexist (deployment shape) ========
+# The 2xTP=2 split is the measured throughput-optimal serving shape (README:
+# 1.656x concurrency).  tp_compare_tpu.sh proved it for the JAX model; this
+# proves the TORCH model serves it too, and that engine A's ids are unaffected
+# while engine B serves.  (The flax_nnx additivity check that used to live
+# here was re-proven on this same submodule commit on the previous slice --
+# report-flax.txt / res_flax_e2e.json -- and is not repeated.)
+COEXIST=skipped
+if [ "$TORCH_BOOT" = ok ] && [ -n "$CHIPS2" ] && have_time 1500; then
+  ENGINE_A=""
+  if rsh "curl -fsS -m 20 http://127.0.0.1:${VLLM_PORT}/health >/dev/null 2>&1 && echo A-ALIVE" 60 | grep -q A-ALIVE; then
+    ENGINE_A=running   # the phase-4 LoRA engine (or phase-3 plain engine)
+  elif start_vllm torchA vllm "" "$CHIPS" "$VLLM_PORT" mg; then
+    ENGINE_A=rebooted
+  fi
+  if [ -n "$ENGINE_A" ] && start_vllm torchB vllm "" "$CHIPS2" "$VLLM_PORT2" mg2 keep; then
+    note "second torch TP=2 engine BOOTED on chips {${CHIPS2}} in ${VLLM_BOOT_SECONDS}s while engine A (${ENGINE_A}) serves on {${CHIPS}}"
+    engine_report torchB
+    log "greedy decode on engine B (port ${VLLM_PORT2})"
+    rsh "${VLLM_VENV}/bin/python ~/mg_client.py --ref ~/hf_greedy.json --port ${VLLM_PORT2} \
+          --out ~/res_torchB_e2e.json --max-model-len ${MAXLEN}" 3600 | tail -30 | tee -a "$PROG"
+    fetch res_torchB_e2e.json
+    log "re-running greedy on engine A (port ${VLLM_PORT}) while B is alive"
     rsh "${VLLM_VENV}/bin/python ~/mg_client.py --ref ~/hf_greedy.json --port ${VLLM_PORT} \
-          --out ~/res_flax_e2e.json --max-model-len ${MAXLEN}" 3600 | tail -30 | tee -a "$PROG"
-    fetch res_flax_e2e.json
+          --out ~/res_torchA_again.json --max-model-len ${MAXLEN}" 3600 | tail -12 | tee -a "$PROG"
+    fetch res_torchA_again.json
+    rsh "${VLLM_VENV}/bin/python - <<'PY'
+import json
+a0 = json.load(open('/home/${USER_R}/res_torch_e2e.json'))
+a1 = json.load(open('/home/${USER_R}/res_torchA_again.json'))
+ok = True
+for name, r0 in a0['prompts'].items():
+    r1 = a1['prompts'].get(name) or {}
+    same = r0.get('gen_ids') == r1.get('gen_ids')
+    ok = ok and same
+    print(('A-STABLE ' if same else 'A-CHANGED ') + name)
+print('ENGINE-A-UNAFFECTED-BY-B' if ok else 'ENGINE-A-AFFECTED-BY-B')
+PY" 120 | tee -a "$PROG"
+    if grep -q 'ENGINE-A-UNAFFECTED-BY-B' "$PROG"; then
+      COEXIST=pass
+      note "COEXISTENCE: engine A ids identical before/while B serves; both TP=2 engines answered"
+    else
+      COEXIST=ids-moved
+      note "COEXISTENCE: both engines served but engine A ids CHANGED while B was up -- inspect res_torchA_again.json"
+    fi
   else
-    note "*** JAX path REGRESSED: flax_nnx no longer boots ***"
+    note "coexistence phase FAILED to get both engines up (engine A: ${ENGINE_A:-down})"
+    COEXIST=fail
   fi
 else
-  log "no time for the flax_nnx regression check"
+  log "skipping coexistence phase (torch boot ${TORCH_BOOT}, CHIPS2='${CHIPS2}', time left $(( CAP_SEC - $(elapsed) ))s)"
 fi
 
 log "=== SUMMARY ==="

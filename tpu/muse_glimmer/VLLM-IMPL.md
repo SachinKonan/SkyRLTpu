@@ -9,19 +9,29 @@ file does not replace it and does not claim its results.
 
 ## Status in one paragraph
 
-The torch model is written, registered, and **proven on CPU**: 3949/3949
-teacher-forced positions agree on argmax with the HF reference on the real 30B
-weights, all 471 parameters load from the real checkpoint, and vLLM's LoRA
-manager wraps **5 modules per layer including the attention gate** — which is
-the whole point, since the JAX path can wrap none. The JAX path is provably
-untouched: both dispatch branches still resolve to their own implementation and
-`MODEL_IMPL_TYPE=auto` still means `flax_nnx`. **It has never run on a TPU**:
-four QR hunts found no spot capacity, so **zero chip-hours** were spent and the
-entire on-slice half — serving, greedy decode, the LoRA smoke, the weight-sync
-round trip — is outstanding. Section 8 is the list. The blocker is now purely
-**physical v5p spot capacity**, not quota and not the code: hunt 4's `CREATE`
-was accepted in us-east5-a and the QR sat in `WAITING_FOR_RESOURCES` for 27
-minutes without ever being granted chips.
+The torch model is **TPU-proven at TP=2, the deployment shape** (§10, job
+3714090, 2026-08-17): it serves on a spot v5p-8 with two chips per engine,
+greedy-decodes the five recorded E2E prompts to the same 4/5-exact +
+genuine-tie standard the JAX path set, boots `--enable-lora` with **260
+LoRA-wrapped modules** on the real 52-layer model (5 per layer, attention gate
+included), round-trips a rank-8 adapter through the RL endpoints
+(load -> output changes -> swap -> unload -> base restored), and runs **two
+TP=2 engines side by side** on one host — the measured throughput-optimal
+serving configuration (README). At **TP=4 the first landed slice crashed**
+(§9, crash-torch.log): tpu-inference's OOT `VllmQKVParallelLinear` inflates
+its weight buffer whenever mesh TP > num_kv_heads (muse has 2) but its forward
+*returns stock widths*; the model read the inflated attrs, and torchax's
+silently-clamping `split()` handed the attention kernel an empty `v`. At TP=2
+that predicate is false and the replication path is never entered — measured,
+not just argued: the identical build that dies at TP=4 passes everything at
+TP=2. The seam is **root-caused and fixed in the submodule** (§9, CPU gate
+green); the fixed build's TP=4 regression on a slice is the next run. Before
+any of that, the model was proven on CPU: 3949/3949 teacher-forced argmax
+positions vs the HF reference on the real 30B weights, all 471 parameters
+loaded, LoRA wrap counted (§5-§6). The JAX path is provably untouched: both
+dispatch branches resolve to their own implementation, `MODEL_IMPL_TYPE=auto`
+still means `flax_nnx`, and the flax engine re-served from this same tree on
+the TP=4 slice. Section 8 is what remains unproven.
 
 ---
 
@@ -166,8 +176,11 @@ tensor with `repeat_interleave` — `[h0, h0, h1, h1]`, explicitly not `tile`'s
 The one thing the model must do is **not recompute the head counts**: it reads
 `self.qkv_proj.num_heads` / `.num_kv_heads` back off the layer after
 construction, because those are inflated and the naive
-`total_num_kv_heads // tp_size` would produce the wrong `split()` sizes. See
-section 8 — this remains the least-proven part.
+`total_num_kv_heads // tp_size` would produce the wrong `split()` sizes.
+**This seam fired on the first landed slice at TP=4** — and "reads them back
+off the layer" turned out to be exactly the bug, because the layer's forward
+returns *stock* widths (§9, root-caused and fixed). At TP=2 the inflation
+path is never entered and serving is proven end to end (§10).
 
 **Parameter-free qk-norm.** Local `MuseGlimmerRMSNormNoScale`, applied on the
 `[T, heads, head_dim]` view. Mirrors HF's `pow(m, -0.5)`.
@@ -419,10 +432,9 @@ FINAL[us-east5-b] muse QRs: ''   muse VMs: ''
 FINAL[us-east5-c] muse QRs: ''   muse VMs: ''
 ```
 
-Consequently **everything in section 8 that is marked on-slice-only is
-unproven**, including the greedy token-for-token comparison and the LoRA smoke.
-The CPU evidence is strong — 3949/3949 argmax on real weights, 20 LoRA-wrapped
-modules with the attention gate among them — but it is not the same claim.
+This section is now historical: later hunts (jobs 3703495 … 3710865) did land
+a slice on 2026-08-17, which crashed at TP=4 (§9), and the TP=2 validation
+slice (§10) then proved the on-slice half at the deployment shape.
 
 ### 7.1 Three operational findings, paid for in wall clock
 
@@ -468,14 +480,13 @@ is what makes this safe.
 
 ## 8. What remains unproven
 
-**Everything that needs a TPU.** No slice has landed in four hunts, so the
-entire on-slice half of the plan is outstanding — unchanged, and not narrowed
-by anything since. Ranked by how much it would cost to be wrong:
+Updated twice since first written: the TP=4 crash + root cause (§9) and the
+TP=2 validation (§10). Ranked by how much it would cost to be wrong:
 
-1. **It has never run on a TPU.** Not once. The model has never been through
-   `vllm serve`, torchax has never traced it, the Pallas ragged-paged-attention
-   kernel has never seen its q/k/v, and no weight has ever been sharded onto a
-   mesh. Everything below is downstream of this.
+1. ~~It has never run on a TPU.~~ **Resolved (§10):** served, decoded,
+   LoRA-round-tripped and two-engine-deployed on a spot v5p-8 at TP=2. What
+   has NOT run on a TPU is the **fixed** TP=4 build — the §9 fix is CPU-gated
+   only; its on-slice regression is the next run.
 2. **KV-head replication when TP > num_key_value_heads.** ~~2 KV heads under
    TP=4 (or 8) goes through `VllmQKVParallelLinear`'s `repeat_interleave`
    inflation, and the model reads its split sizes back off the layer to
@@ -486,28 +497,31 @@ by anything since. Ranked by how much it would cost to be wrong:
    `repro_qkv_width.py` (fake 4-device mesh, OOT layers kept).
 3. **The attention gate under TP.** The claim that a plain
    `ColumnParallelLinear` shards identically to the attention output is read
-   off `quantization/configs.py` and the sharding-axis names, not measured. If
-   it is wrong, the gate multiplies the wrong heads — and would still produce
-   fluent text.
-4. **Greedy decode vs the recorded E2E ids.** The CPU gate proves the *logits*
-   match HF at 3949/3949 teacher-forced positions. It does not prove the served
-   decode loop, the KV cache, or block-table bookkeeping.
-5. **LoRA end to end.** The adapter *count* is proven (section 6.1) and it is
-   non-zero, which is the assertion that matters most. But an adapter has never
-   been uploaded to a running engine, so `--enable-lora` has never actually
-   booted, and no RL weight-sync round trip has happened.
-6. **Concurrency.** The JAX path's most expensive lesson (E2E.md section 5.6):
-   single-stream testing cannot catch paged-KV bugs — five prompts fired
-   *concurrently* broke one sequence that was byte-exact at batch 1. The torch
-   path uses the same uniform KV spec and the same kernel, so there is no
-   specific reason to expect a difference, but that is not a measurement.
-7. **Context length, throughput, memory** relative to the JAX path. Unmeasured.
-   The JAX path serves 32768 and remains the default for good reason.
+   off `quantization/configs.py` and the sharding-axis names, not measured
+   directly. TP=2 greedy matching HF on the strict 4/5-plus-bit-exact-tie
+   standard (§10) is strong *indirect* evidence at TP=2 — a wrong-heads gate
+   would corrupt logits — but TP=4 is unexercised and no direct probe exists.
+4. ~~Greedy decode vs the recorded E2E ids.~~ **Resolved at TP=2 (§10.2):**
+   4/5 token-exact, fifth is the known p3_mid step-13 argmax tie with gap
+   exactly 0.0.
+5. ~~LoRA end to end.~~ **Resolved at TP=2 (§10.3-10.4):** `--enable-lora`
+   boots, 260 modules wrapped on the real model, adapter load/generate/swap/
+   unload round trip passes with outputs changing and restoring exactly. Not
+   yet exercised: an adapter *trained by a real RL step* (random-init only),
+   and the §9 residual landmine (k/v-targeting adapters under KV replication,
+   i.e. TP>2) is documented-not-fixed.
+6. ~~Concurrency.~~ **Measured at TP=2 (§10.2):** the five mixed-length
+   prompts fired concurrently are token-identical to sequential, twice (once
+   per engine). Sustained load and eviction-under-pressure remain untested.
+7. **Context length, throughput, memory** relative to the JAX path. Still
+   unmeasured: the TP=2 slice ran `max_model_len=4096` only. The JAX path
+   serves 32768 and remains the default for good reason.
 8. **Quantization, multi-host, speculative decoding, vision.** Out of scope, as
    on the JAX side.
 
-The honest summary: **the arithmetic is proven and the LoRA plumbing is proven;
-the serving integration is not.**
+The honest summary now inverts the original: **the serving integration is
+proven at the deployment shape (2×TP=2); what is not proven is the fixed TP=4
+build on hardware, long context, and adapters from a real RL loop.**
 
 ### 8.1 The driver is preflighted — the only missing input is chips
 
@@ -634,6 +648,115 @@ no-LoRA self_attn → LoRA wrap → wrapped self_attn → full-model
 divergence. The torchax silent-clamp probe stays in as a canary: if torchax
 ever starts validating split sizes, the failure mode changes and the assert
 becomes redundant.
+
+## 10. TP=2 validation — **PASSED end to end** (job 3714090, 2026-08-17)
+
+One spot v5p-8, QR `sk7524-museglimmer-vllmimpl`, us-east5-a, single-zone pin
+(`ZONES=us-east5-a ZONE_TRY_SEC=99999 LAND_SEC=7200`). Landed in **1353 s** of
+continuous queueing, first hunt, no rotation. **`SLICE-ACTIVE-SECONDS 1218`**
+on 4 chips = **1.35 chip-hours** for the entire validation. Submodule build:
+clean `git archive` of committed HEAD `b945d0054` (the *pre-fix* build — the
+same code that crashes at TP=4, which is what makes this a controlled test of
+the seam analysis). The driver ships that archive precisely so a concurrently
+edited working tree can never leak onto a slice.
+
+Engine shape: `TP=2` on chips `{0,1}` via `TPU_VISIBLE_CHIPS` (tp_compare's
+arm-B pattern), `max-model-len 4096`, `max-num-seqs 16`. Per-engine boot-log
+truth: **HBM 25.97 / 95.74 GiB per chip** (README predicted 25.94), **KV pool
+2,504,704 tokens** (9,784 × 256 blocks), **611.50× concurrency @ 4096**,
+`num_kv_cache_groups=1` — the `self.attn.sliding_window = None` uniform-cache
+trick (§4) holds in serving.
+
+### 10.1 Boot — the seam analysis is confirmed, not just sidestepped
+
+The engine answered a real completion **97 s** after `vllm serve` (weights
+already on SSD, cold XLA cache). Same build, same slice type, same driver:
+TP=4 dies on its first forward; TP=2 (where `mesh TP > num_kv_heads` is
+false, so `VllmQKVParallelLinear` never inflates) serves. Nothing observed
+contradicts §9's analysis; every observation supports it.
+
+### 10.2 Greedy decode vs the recorded E2E ids
+
+| prompt | prompt tok | gen | result |
+|---|---|---|---|
+| p1_tiny | 6 | 32 | **EXACT** |
+| p2_odd | 35 | 48 | **EXACT** |
+| p3_mid | 267 | 48 | diverges at 13 — gap **exactly 0.0** |
+| p4_long_sliding | **3609** | 32 | **EXACT** — beyond the 2048 window |
+| p5_code | 32 | 32 | **EXACT** |
+
+**4/5 token-exact — the same standard the JAX path set at TP=4**, and the
+fifth is the *same known tie at the same step*: at p3_mid step 13 the top two
+candidates carry bit-identical logprobs (−1.494320273399353 here vs the JAX
+run's −1.4882723093032837 — the values shift with TP width, the tie itself
+persists), `tpu_top1_top2_gap = 0.0`, HF's token tied for first. The five prompts fired **concurrently** returned ids
+identical to sequential, 5/5. (`res_torch_e2e.json`)
+
+### 10.3 `--enable-lora` boots; **260 wrapped modules** on the real model
+
+`vllm_model_wrapper.py:810`, engine log, real 52-layer model:
+
+```
+LORA-WRAPPED-MODULES total=260 by_class=ColumnParallelLinearWithLoRA=52,
+  MergedColumnParallelLinearWithLoRA=52, MergedQKVParallelLinearWithLoRA=52,
+  RowParallelLinearWithLoRA=104
+```
+
+Exactly 5 per layer — qkv_proj, o_proj, **attn_gate_proj** (the 52
+ColumnParallel), gate_up_proj, down_proj (o_proj + down_proj are the 104
+RowParallel) — matching §6.1's CPU count scaled to 52 layers. The engine
+answered 100 s after boot with LoRA enabled.
+
+### 10.4 Adapter round trip through the RL endpoints — **PASS**
+
+`mg_lora_client.py`, rank-8 random-init adapters targeting
+q/k/v/o/attn_gate_proj/gate/up/down (`res_lora.json`, verdict PASS):
+
+1. `POST /v1/load_lora_adapter` → 200, adapter listed in `/v1/models`;
+2. greedy output **changed on 3/3 probe prompts** (zero-injection ruled out);
+3. RL weight-sync step: unload adapter-1, load adapter-2 (seed 4242) → 200,
+   3/3 outputs distinct from both adapter-1 and base — literally what
+   `tpu/vllm_tpu_server.py:138-145` does every sync;
+4. final unload → base ids **restored exactly, 3/3**.
+
+Note §9's residual landmine does not bite here: at TP=2 there is no KV-head
+replication, so k/v-targeting adapters land on true head positions.
+
+### 10.5 Two TP=2 engines coexist — the deployment shape serves
+
+While engine A (the LoRA-enabled engine, chips `{0,1}`, port 8001) kept
+serving, engine B booted on chips `{2,3}` (port 8002, own libtpu coordination
+port, shared XLA cache) in **79 s** and produced the identical greedy result:
+4/5 EXACT plus the p3_mid tie. Engine A re-run while B was live: p1, p3, p4,
+p5 **byte-stable** against A's own earlier run.
+
+`p2_odd` flipped one token at generated step 45 — and the divergence detail
+shows why this is a tie-break, not interference: tokens 198 and 341 both at
+logprob **−1.348992109298706**, gap **exactly 0.0**, HF's token tied at rank
+1. Every divergence in this entire run (either engine, sequential or
+concurrent) sits on a bit-identical 0.0-gap argmax tie; greedy is chaotic
+after a tie, and which side wins can flip with batch composition. **Verdict:
+coexistence PASS.**
+
+Worth recording: E2E.md §5.6 reported `p2_odd` diverging "at generated token
+45" under concurrency on the hybrid-KV build. This run shows that step-45
+site is a genuine 0.0-gap tie — so single-token flips there are weaker
+evidence of corruption than §5.6 assumed (the §5.6 revert stands regardless,
+on the capacity regression alone).
+
+### 10.6 Teardown
+
+Verified in the job log: QR deleted (needed 2 re-issues, as usual), then
+
+```
+FINAL[us-east5-a] muse QRs: ''   muse VMs: ''
+FINAL[us-east5-b] muse QRs: ''   muse VMs: ''
+FINAL[us-east5-c] muse QRs: ''   muse VMs: ''
+```
+
+Driver exit 0. Artefacts: `res_torch_e2e.json`, `res_lora.json`,
+`res_torchB_e2e.json`, `res_torchA_again.json`, `report-torch.txt`,
+`report-lora.txt`, `report-torchB.txt`, log `vllmimpl-3714090.log`.
 
 ## Reproducing
 

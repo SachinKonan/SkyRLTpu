@@ -39,7 +39,9 @@ grad norms finite. Real weights converted to orbax and staged (40.58 GiB).
 muse_glimmer / qwen3 / gemma4 / gpt_oss families. 57 tests. Lives in the `discover`
 submodule (`ttt_discover/tinker_utils/`).
 
-**Not proven:** vision, quantization, TP ≠ 4 / multi-host, sustained serving.
+**Not proven:** vision, quantization, TP=8 / multi-host, sustained serving.
+(TP=2 is proven on both paths — JAX via the §7 head-to-head, torch via
+VLLM-IMPL §10.)
 
 ## Two implementations, and which one to use
 
@@ -47,18 +49,14 @@ submodule (`ttt_discover/tinker_utils/`).
 |---|---|---|
 | file | `models/jax/muse_glimmer.py` | `models/vllm/muse_glimmer.py` |
 | selected by | `MODEL_IMPL_TYPE=flax_nnx`, and `auto` | `MODEL_IMPL_TYPE=vllm` only |
-| serving | **proven end to end** (this file) | CPU-proven; **never run on a TPU** (4 QR hunts, no v5p spot capacity, 0 chip-hours) |
-| `--enable-lora` | **impossible** — `get_flax_model` returns `lora_manager=None` | 5 LoRA modules per layer, gate included — **counted on CPU, never on a slice** |
+| serving | **proven end to end** (this file) | **TPU-proven at TP=2, the deployment shape** (VLLM-IMPL §10: greedy 4/5 exact + known tie, 2×TP=2 coexistence, 1.35 chip-hours). **TP=4 crashed** in tpu-inference's KV-replication width seam; root-caused and fixed in the submodule (VLLM-IMPL §9), fixed build not yet re-run on a slice |
+| `--enable-lora` | **impossible** — `get_flax_model` returns `lora_manager=None` | **proven on-slice at TP=2**: boots, **260 wrapped modules** (5/layer, attn gate included), adapter load → output changes → RL-style swap → unload → base restored exactly |
 
 `auto` still resolves to `flax_nnx`, so the default is unchanged. Use the torch
-model when the RL loop needs to upload adapters; see
-[`VLLM-IMPL.md`](VLLM-IMPL.md), including what is still unproven about it.
-
-The torch row is blocked on **capacity, not on the code**: the last hunt's
-`CREATE` was accepted in us-east5-a and the QR queued for 27 min without being
-granted chips. The driver (`vllm_impl_tpu.sbatch`) is written and preflighted;
-see `VLLM-IMPL.md` §7.1 for the single-zone pin and §8.1 for what it will
-answer.
+model **at TP=2** when the RL loop needs to upload adapters; see
+[`VLLM-IMPL.md`](VLLM-IMPL.md) §8 for what is still unproven (chiefly: the
+fixed TP=4 build on hardware, context past 4096 on the torch path, and
+adapters trained by a real RL step).
 
 ## Serving configuration: prefer 2×TP=2 for throughput
 
