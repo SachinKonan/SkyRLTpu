@@ -12,7 +12,16 @@ VLLM_WORKERS="${VLLM_WORKERS:-$VLLM_WORKER}"
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-4B}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL_NAME}"
 VLLM_TPU_VERSION="${VLLM_TPU_VERSION:-0.23.0}"
-VLLM_TRANSFORMERS_VERSION="${VLLM_TRANSFORMERS_VERSION:-5.8.0}"
+# Serving-venv transformers, per model. EMPTY = do not pin: vllm-tpu 0.23.0
+# already pulls the released 5.15.0, which is the first version shipping
+# muse_glimmer's modeling/config code -- the checkpoint has no .py and there is
+# no trust_remote_code path, so downgrading here yields a transformers that
+# cannot parse the architecture. gemma-4 is the opposite case: 5.15.0 raises
+# AmbiguousGlobalPerLayerAttributeError on its per-layer head_dim, so it must be
+# held at 5.8.0. The repo-wide <=5.8.0 override (there for Megatron) is NOT
+# touched by any of this; the train side needs no HF muse code (MaxText carries
+# its own, and 5.8.0 tokenizes muse correctly).
+VLLM_TRANSFORMERS_VERSION="${VLLM_TRANSFORMERS_VERSION-5.8.0}"
 VLLM_MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE:-vllm}"
 VLLM_TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE:-torchax}"
 VLLM_DISABLE_SHARDY="${VLLM_DISABLE_SHARDY:-auto}"
@@ -285,7 +294,9 @@ uv pip install --python "${VLLM_VENV}/bin/python" "vllm-tpu==${VLLM_TPU_VERSION}
 # load and killed every gemma vLLM worker (verified live 2026-08-15; 5.8.0 loads
 # Gemma4Config fine). vllm-tpu leaves transformers unpinned, so a fresh venv
 # silently drifts to whatever is latest.
-uv pip install --python "${VLLM_VENV}/bin/python" "transformers==${VLLM_TRANSFORMERS_VERSION}"
+if [[ -n "${VLLM_TRANSFORMERS_VERSION}" ]]; then
+  uv pip install --python "${VLLM_VENV}/bin/python" "transformers==${VLLM_TRANSFORMERS_VERSION}"
+fi
 # Overlay the forked tpu-inference (runtime LoRA forwarders + Ray env
 # allowlist). vllm-tpu is a meta-package depending on tpu-inference, so a
 # --no-deps force-reinstall cleanly swaps in the fork at the pinned ref.

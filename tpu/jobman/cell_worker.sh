@@ -53,6 +53,8 @@ vllm_healthy() {
 PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
 VLLM_IMPL=vllm
 TPUINF_REF=skyrl/v0.23.0-lora
+TF_VERSION=5.8.0
+TP_SIZE=4; ENGINES_PER_HOST=1
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
 case "$CELL" in
@@ -64,26 +66,28 @@ case "$CELL" in
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"
     ;;
   m-*)
-    # Muse-Glimmer-30B: MAXTEXT.md training recipe (fork @4f65ba509, remat full,
-    # FSDP-4, FLCE 2048) + rs-study serving shape (flax_nnx impl, TP=4, 16384,
-    # page 16 above 8k ctx). Serving model code lives on the muse branch of the
-    # tpu-inference fork (contains skyrl/v0.23.0-lora). Orbax pre-seeded at
-    # skyrl-maxtext-ckpts/muse-glimmer-30b; HF weights in the shared hf-cache.
+    # Muse-Glimmer-30B. Serving = the TORCH implementation (tpu-inference vllm
+    # wrapper path), which is what makes RL possible at all: the JAX/flax_nnx
+    # path hardcodes lora_manager=None, so LoRA weight sync -- our whole
+    # train->sample loop -- cannot work there. Deployment shape is the validated
+    # 2xTP=2: muse has 2 KV heads, so TP=2 is the zero-padding point (TP=4 pads
+    # 2->4 and stores every KV twice), and each non-train host runs 2 engines =>
+    # 6 serving engines per v5p-32. See tpu/muse_glimmer/{VLLM-IMPL,README}.md.
+    # transformers: NOT pinned -- vllm-tpu 0.23.0 pulls 5.15.0, the first
+    # release carrying muse_glimmer's modeling code (no .py in the checkpoint,
+    # no trust_remote_code path). VLLM_EXTRA_PIP_SPECS overlays @main with the
+    # tokenizers co-pin, per run_muse_rl.sh.
     MODEL_NAME=meta-models/Muse-Glimmer-30B; MAXTEXT_MODEL=muse-glimmer-30b
     PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509"
     MAXTGT=24576; BUDGET=65536; UNIFORM=16384
-    VLLM_LEN=16384
-    VLLM_IMPL=flax_nnx
-    TPUINF_REF=42e4d796f3da210c07218a92a26a9c2db840bb94
-    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85 --block-size 16"
-    # Dedicated per-shape prefix (16384/TP4/b128/block16), like qwen's -22k and
-    # gemma's -16k. Starts empty: first muse node compiles cold (~40min) and the
-    # seed-back publishes it; the shared flat pool has NO muse entries (its
-    # newest objects predate the port) and restoring 6G of foreign entries is waste.
-    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-16k"
+    VLLM_LEN=22528
+    VLLM_IMPL=vllm
+    TPUINF_REF=skyrl/v0.23.0-lora
+    TF_VERSION=""
+    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
+    TP_SIZE=2; ENGINES_PER_HOST=2
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-22k-tp2"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
-    # Hub repo is public (verified gated:false); cache is pre-staged for speed
-    # and the hub stays available as fallback, so offline mode is NOT forced.
     HF_OFFLINE=0
     ;;
   *)
@@ -140,6 +144,7 @@ elif ! tinker_healthy && vllm_healthy; then
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
+    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -178,6 +183,7 @@ else
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
+    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
