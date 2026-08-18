@@ -110,6 +110,8 @@ class RGLRUProblem(Problem):
             # runs a complete scan over d/8 with no collective.
             ShapeCase("tp8-4x2048x2560", {"b": 4, "t": 2048, "d": 2560}, probe=True, tp=8),
             ShapeCase("tp8-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, probe=True, tp=8, holdout=True),
+            ShapeCase("tp4-4x2048x2560", {"b": 4, "t": 2048, "d": 2560}, probe=True, tp=4),
+            ShapeCase("tp4-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, probe=True, tp=4, holdout=True),
             ShapeCase(
                 "probe-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, holdout=True, probe=True
             ),

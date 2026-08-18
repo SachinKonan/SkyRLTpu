@@ -568,6 +568,18 @@ class SplashAttentionProblem(Problem):
                       {"heads": 32, "kv_heads": 8, "seq": 4096, "d": 128}, probe=True, tp=8),
             ShapeCase("tp8-mqa-h32kv1-s4096",
                       {"heads": 32, "kv_heads": 1, "seq": 4096, "d": 128}, probe=True, tp=8),
+            # WIDTH-4 mirrors of the same structures: a v5p-8 exposes 4 JAX
+            # devices (4 chips, megacore), so width-8 cases SKIP there by
+            # design. Same shapes at both widths make the v6e-8 vs v5p-8
+            # numbers directly comparable, and width-4 on a v6e-8 exercises
+            # a mesh narrower than the device count.
+            ShapeCase("tp4-h32-s4096", {"heads": 32, "seq": 4096, "d": 128}, probe=True, tp=4),
+            ShapeCase("tp4-gqa32x8-s4096",
+                      {"heads": 32, "kv_heads": 8, "seq": 4096, "d": 128}, probe=True, tp=4),
+            ShapeCase("tp4-mqa-h32kv1-s4096",
+                      {"heads": 32, "kv_heads": 1, "seq": 4096, "d": 128}, probe=True, tp=4),
+            ShapeCase("tp4-holdout-h32-s2049",
+                      {"heads": 32, "seq": 2049, "d": 128}, probe=True, tp=4, holdout=True),
             ShapeCase("tp8-holdout-h32-s2049", {"heads": 32, "seq": 2049, "d": 128}, probe=True, tp=8, holdout=True),
             ShapeCase("probe-holdout-h4-s2049", {"heads": 4, "seq": 2049, "d": 128}, holdout=True, probe=True),
             # DROPPED: a non-divisible sequence AT d=64 segfaults the TPU

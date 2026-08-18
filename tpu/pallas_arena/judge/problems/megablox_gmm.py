@@ -212,6 +212,8 @@ class MegabloxGmmProblem(Problem):
             # ways -- the classic MoE up-projection split. Per shard n=512.
             ShapeCase("tp8-m4096-e8-uniform", {"m": 4096, "g": 8, "k": 4096, "n": 4096, "dist": "uniform"}, probe=True, tp=8),
             ShapeCase("tp8-holdout-m3000-e8-zipf", {"m": 3000, "g": 8, "k": 4096, "n": 4096, "dist": "zipf"}, probe=True, tp=8, holdout=True),
+            ShapeCase("tp4-m4096-e8-uniform", {"m": 4096, "g": 8, "k": 4096, "n": 4096, "dist": "uniform"}, probe=True, tp=4),
+            ShapeCase("tp4-holdout-m3000-e8-zipf", {"m": 3000, "g": 8, "k": 4096, "n": 4096, "dist": "zipf"}, probe=True, tp=4, holdout=True),
             ShapeCase(
                 "probe-holdout-m3000-e4-zipf",
                 {"m": 3000, "g": 4, "k": 4096, "n": 14336, "dist": "zipf"},

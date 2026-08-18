@@ -196,6 +196,8 @@ class RaggedPagedAttentionProblem(Problem):
             # heads) per device, the standard serving split.
             ShapeCase("tp8-b64-len1024", {**d, "batch": 64, "max_len": 1024, "num_pages": 64 * 16 + 8}, probe=True, tp=8),
             ShapeCase("tp8-holdout-b17-len512", {**d, "batch": 17, "max_len": 512, "num_pages": 17 * 8 + 8}, probe=True, tp=8, holdout=True),
+            ShapeCase("tp4-b64-len1024", {**d, "batch": 64, "max_len": 1024, "num_pages": 64 * 16 + 8}, probe=True, tp=4),
+            ShapeCase("tp4-holdout-b17-len512", {**d, "batch": 17, "max_len": 512, "num_pages": 17 * 8 + 8}, probe=True, tp=4, holdout=True),
             ShapeCase(
                 "probe-holdout-b17-len512",
                 {**d, "batch": 17, "max_len": 512, "num_pages": 17 * 8 + 8},
