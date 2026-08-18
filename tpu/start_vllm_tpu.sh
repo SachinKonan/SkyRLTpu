@@ -373,8 +373,17 @@ if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
   # (no -d, checksum-skips existing) publishes fresh compiles once the boot
   # compile window has passed; near-free when the cache was already warm.
   if [[ "${VLLM_XLA_SEED_BACK:-1}" == "1" ]]; then
-    ( sleep 3600; gsutil -m -q rsync -r "${VLLM_XLA_CACHE_PATH}" "${VLLM_XLA_CACHE_GCS}" 2>/dev/null \
-        && echo "XLA cache seeded back to ${VLLM_XLA_CACHE_GCS}" ) >> "\$HOME/xla-seedback.log" 2>&1 &
+    # Publish EARLY and REPEATEDLY, not once-at-1h: on spot capacity nodes die
+    # well inside an hour, so a single delayed publish loses every compile the
+    # node paid for and the next node starts cold again (lived this on muse,
+    # four bring-ups with zero cache accumulation). Additive rsync (no -d,
+    # checksum-skips existing) is near-free once warm, so a 10-min cadence
+    # costs nothing and each cycle preserves whatever compiled since the last.
+    ( for _i in \$(seq 1 24); do
+        sleep 600
+        gcloud storage rsync -r "${VLLM_XLA_CACHE_PATH}" "${VLLM_XLA_CACHE_GCS}" >/dev/null 2>&1 \
+          && echo "\$(date -u +%H:%M) XLA cache seeded back (cycle \$_i)"
+      done ) >> "\$HOME/xla-seedback.log" 2>&1 &
   fi
 fi
 # Restore HF weights from the shared GCS cache onto local SSD so vLLM finds
