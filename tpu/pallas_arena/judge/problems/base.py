@@ -230,7 +230,7 @@ def tolerance_from_reference(ref_fp32, ref_bf16) -> dict:
     }
 
 
-def grad_leaf_tolerances(ref_fp32, ref_bf16) -> list[dict]:
+def grad_leaf_tolerances(ref_fp32, *cal_grads) -> list[dict]:
     """PER-LEAF calibrated tolerances for a gradient pytree.
 
     One pooled band over all leaves lets the noisiest gradient set the bar for
@@ -238,11 +238,34 @@ def grad_leaf_tolerances(ref_fp32, ref_bf16) -> list[dict]:
     an order of magnitude above dv's (tokamax's own splash test encodes the
     same fact -- dq atol 1.5 vs dv 0.15), so under a pooled band a candidate
     with a WRONG dv but a quiet dq passes. Calibrating each leaf against its
-    own reference-bf16 error makes each gradient answer for itself."""
-    return [
-        tolerance_from_reference(r, b)
-        for r, b in zip(_leaves(ref_fp32), _leaves(ref_bf16))
-    ]
+    own honest error makes each gradient answer for itself.
+
+    Takes MULTIPLE calibration gradients and bands each leaf at the max across
+    them, because reference_bf16 alone is not enough -- the v5p validation run
+    (job 3719578) proved it: reference_bf16's gradient came out numerically
+    equal to the fp32 reference's, the band collapsed to the 1.5e-6 absolute
+    floor, and an HONEST blocked implementation's autodiff backward (error
+    2.6e-3, ordinary bf16 scale from a different reduction order in reverse
+    mode) was rejected. That is the exact phase-2 forward-calibration mistake
+    -- the band must span what honest implementations DO, so the honest
+    variants' gradients belong in it, just as their forwards belong in the
+    forward band."""
+    ref_leaves = _leaves(ref_fp32)
+    cal_leaf_sets = [_leaves(g) for g in cal_grads if g is not None]
+    tols = []
+    for i, r in enumerate(ref_leaves):
+        per_cal = []
+        for cal in cal_leaf_sets:
+            s = error_stats(cal[i], r)
+            if s.get("finite"):
+                per_cal.append(s)
+        mx = max((s["max"] for s in per_cal), default=0.0)
+        q99 = max((s["q99"] for s in per_cal), default=0.0)
+        tols.append({
+            "max": TOL_MULTIPLIER * max(mx, ABS_FLOOR),
+            "q99": TOL_MULTIPLIER * max(q99, ABS_FLOOR),
+        })
+    return tols
 
 
 def check_grad_tolerance(cand_g, ref_g, tols: list[dict]) -> tuple[bool, str]:

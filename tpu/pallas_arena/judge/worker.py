@@ -240,15 +240,36 @@ class PersistentWorker:
     def boot(self) -> dict:
         jax = self.jax
         t0 = self.perf()
+        # Pre-election warm of the production baseline. For GENERAL-mode
+        # problems a per-case failure here is NOT fatal: electing around an
+        # unavailable production kernel is precisely what the election below
+        # is for, and the v5p validation run (job 3719578) proved the hard
+        # version wrong twice in one boot -- megablox and RPA's production
+        # kernels OOM VMEM on v5p with their v6e-tuned configs, which should
+        # have demoted them per shape (XLA was available and, per the v6e-8
+        # elections, often faster anyway) instead of failing the whole task.
+        # Non-general problems keep the hard warm: they have no election to
+        # fall through to.
+        baseline_warm_errors: dict[str, str] = {}
         try:
             self._baseline_fn = jax.jit(self.problem.baseline)
             for case in self.scored_cases + self.holdout_cases:
                 w = self.problem.make_inputs(jax.random.PRNGKey(0), case)
                 self.block(w)
-                self.block(self._baseline_fn(*w))
+                try:
+                    self.block(self._baseline_fn(*w))
+                except Exception as e:  # noqa: BLE001
+                    if not getattr(self.problem, "general_mode", False):
+                        raise
+                    baseline_warm_errors[case.name] = f"{type(e).__name__}: {str(e)[:200]}"
+                    print(f"[boot] production baseline unavailable at {case.name}: "
+                          f"{type(e).__name__} (election will decide)", flush=True)
+                del w
         except Exception as e:
             self.boot_report = {"ok": False, "error": f"baseline: {type(e).__name__}: {e}"}
             return self.boot_report
+        if baseline_warm_errors:
+            self.boot_report["baseline_warm_errors"] = baseline_warm_errors
 
         # GENERAL mode: pick the denominator per shape by MEASUREMENT. Every
         # named candidate is timed here, at boot, off the candidate clock, and
@@ -670,8 +691,13 @@ class PersistentWorker:
                 g_inputs = problem.make_inputs(fold_in(k_corr, 999), g_case)
                 block(g_inputs)
                 ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
-                cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
-                g_tol = tolerance_from_reference_leaves(ref_g, cal_g)
+                cal_grads = [pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)]
+                for _variant in pg.honest_variants():
+                    try:
+                        cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
+                    except Exception:  # noqa: BLE001
+                        continue
+                g_tol = tolerance_from_reference_leaves(ref_g, *cal_grads)
                 gates = problem.bwd_gates
                 try:
                     cand_g = fns[grad_sig](*g_inputs)

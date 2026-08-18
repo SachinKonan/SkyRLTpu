@@ -284,8 +284,16 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         _, g_inputs, _, _, g_feats = corr_fixtures[0]
         pg = problem.for_case(fixture_cases[0]) if fixture_cases else problem
         ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
-        cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
-        grad_fixture = (g_inputs, ref_g, grad_leaf_tolerances(ref_g, cal_g), g_feats)
+        cal_grads = [pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)]
+        # the honest variants' AUTODIFF backwards belong in the band (see
+        # grad_leaf_tolerances) -- a variant that cannot express this shape
+        # or cannot be differentiated simply does not constrain it
+        for _variant in pg.honest_variants():
+            try:
+                cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
+            except Exception:  # noqa: BLE001
+                continue
+        grad_fixture = (g_inputs, ref_g, grad_leaf_tolerances(ref_g, *cal_grads), g_feats)
 
     # ---------------- 4. poison the reference modules; 5. exec candidate
     result["phase"] = "exec"
