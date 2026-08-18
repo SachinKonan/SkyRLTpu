@@ -40,7 +40,13 @@ fi
 # (Disjoint Interval Union of XLA op intervals = active device time); our
 # wallclock fallback adds Python dispatch to BOTH legs of every ratio, which
 # compresses scores toward 1.0. Listed in tokamax's own `bench` extra.
-"$HOME/arena-venv/bin/pip" install --quiet tokamax flax einops sentencepiece einshape xprof
+# jax[tpu]==0.10.2 REPEATED here so this resolution cannot move the pin:
+# with jax unconstrained on this line, pip is free to upgrade it to satisfy
+# tokamax's open floor -- which it did the day jax 0.11.1 hit PyPI
+# (job 3721378: the pin assert below fired with 0.11.1 after the morning's
+# provision had resolved 0.10.2). The assert caught it; this makes the
+# resolution itself unable to drift.
+"$HOME/arena-venv/bin/pip" install --quiet "jax[tpu]==0.10.2" tokamax flax einops sentencepiece einshape xprof
 "$HOME/arena-venv/bin/pip" install --quiet --no-deps recurrentgemma
 "$HOME/arena-venv/bin/python" - <<'EOF'
 import jax
