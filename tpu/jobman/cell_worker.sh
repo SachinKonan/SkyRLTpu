@@ -62,6 +62,7 @@ TP_SIZE=4; ENGINES_PER_HOST=1
 MAX_NUM_SEQS=128
 SKIP_PRECOMPILE=0
 EXTRA_PIP=""
+LORA_RETRIES=3; LORA_RETRY_SLEEP=2
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
 case "$CELL" in
@@ -110,6 +111,14 @@ case "$CELL" in
     # UnexpectedTracerError (observed live, both engines, deterministic). The
     # validated path never runs that code. Cost: first requests compile lazily.
     SKIP_PRECOMPILE=1
+    # Skipping precompile moves compilation into the first requests, so an
+    # engine can be mid-compile (minutes) when the client pushes its LoRA
+    # adapter. The default 3 retries x 2s = ~4s of tolerance, so the upload
+    # fails, the client raises, and jobman relaunches it -- observed as a new
+    # adapter every ~3 min, 35 restarts, never reaching the first sampling
+    # burst. qwen/gemma never hit this because they precompile at boot and are
+    # responsive by the time their client connects.
+    LORA_RETRIES=20; LORA_RETRY_SLEEP=30
     EXTRA_PIP="'transformers @ git+https://github.com/huggingface/transformers@main' 'tokenizers>=0.23.1,<0.24.0'"
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-22k-tp2"
     JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-muse-22k"
@@ -188,7 +197,8 @@ elif ! tinker_healthy && vllm_healthy; then
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
-    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP" \
+    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
+    VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -228,7 +238,8 @@ else
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
-    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP" \
+    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
+    VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
