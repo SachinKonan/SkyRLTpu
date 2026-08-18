@@ -70,6 +70,7 @@ case "$CELL" in
     MAXTGT=10240; BUDGET=40960; UNIFORM=10240
     VLLM_LEN=16384
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-gemma4-10k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"
     ;;
   m-*)
@@ -111,6 +112,7 @@ case "$CELL" in
     SKIP_PRECOMPILE=1
     EXTRA_PIP="'transformers @ git+https://github.com/huggingface/transformers@main' 'tokenizers>=0.23.1,<0.24.0'"
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-22k-tp2"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-muse-22k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     HF_OFFLINE=0
     ;;
@@ -119,6 +121,7 @@ case "$CELL" in
     MAXTGT=22528; BUDGET=73728; UNIFORM=18432
     VLLM_LEN=22528
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-qwen35-18k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     ;;
 esac
@@ -152,6 +155,22 @@ pick_tiles() {
 # no room for the tunix install -- `uv pip install ... aqtp` died with
 # "No space left on device", the trainer never started, and the cell looped.
 # Tokenizer/config resolve from the HF hub (all our models are public repos).
+
+# Trainer JAX compile cache: restore before bring-up, then publish on a cadence
+# so a preempted node still leaves its compiles behind (same reasoning as the
+# vLLM cache seed-back; keyed by HLO hash, so a miss just recompiles).
+JAX_CACHE_LOCAL="$HOME/jax-compile-cache"
+mkdir -p "$JAX_CACHE_LOCAL"
+if [ -n "${JAX_CACHE_GCS:-}" ]; then
+  gcloud storage rsync -r "$JAX_CACHE_GCS" "$JAX_CACHE_LOCAL" >/dev/null 2>&1 \
+    && echo "trainer JAX cache restored from $JAX_CACHE_GCS" \
+    || echo "trainer JAX cache empty/miss (will compile)"
+  ( for _i in $(seq 1 24); do
+      sleep 600
+      gcloud storage rsync -r "$JAX_CACHE_LOCAL" "$JAX_CACHE_GCS" >/dev/null 2>&1
+    done ) >/dev/null 2>&1 &
+fi
+export JAX_COMPILATION_CACHE_DIR="$JAX_CACHE_LOCAL"
 
 if engines_healthy; then
   echo "engines already healthy -- skipping bring-up"

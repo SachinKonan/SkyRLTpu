@@ -620,6 +620,14 @@ export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export TINKER_API_KEY="${TINKER_API_KEY}"
+# Persist the TRAINER's JAX compiles (fb at the uniform length, optimizer
+# graphs). Without this every fresh node re-JITs them from scratch -- 10-20 min
+# of every bring-up, on every model, thrown away at each preemption. The vLLM
+# side has had a GCS-backed cache for a while; the trainer never did, though the
+# muse study scripts (rs_tpu.sh, e2e_tpu.sh) set exactly this. Cache misses are
+# free (JAX just compiles), so a stale or absent entry costs nothing.
+export JAX_COMPILATION_CACHE_DIR="${JAX_COMPILATION_CACHE_DIR:-\$HOME/jax-compile-cache}"
+mkdir -p "\$JAX_COMPILATION_CACHE_DIR"
 export TUNIX_UNIFORM_SEQ_LEN="${TUNIX_UNIFORM_SEQ_LEN:-0}"
 export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-0}"
 # Length-bucket ladder for training microbatches (see tunix_backend._bucket_len).
