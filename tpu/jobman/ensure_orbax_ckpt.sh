@@ -40,7 +40,14 @@ HF_MODEL="${MODEL_NAME:-$_HF}"
 MARGIN_GB="${CKPT_MARGIN_GB:-12}"      # venvs, logs, XLA cache, room to breathe
 
 [ -n "$MT_NAME" ] || { echo "ckpt: TUNIX_MAXTEXT_MODEL_NAME unset -- backend will derive/convert"; exit 0; }
+# gcloud storage, NOT gsutil. The checkpoint objects are composite (that is how
+# `gsutil cp -r` seeds them), and composite downloads force CRC32c validation;
+# without compiled crcmod on the node gsutil falls back to python hashing and
+# crawls -- measured 78 KiB in 90 s against 40 GB, i.e. never finishes. The same
+# transfer under `gcloud storage rsync` took 90 s flat. rs_tpu.sh already uses
+# gcloud storage for exactly this reason.
 GS="$(command -v gsutil || echo "$HOME/google-cloud-sdk/bin/gsutil")"
+GCS_CLI="$(command -v gcloud || echo "$HOME/google-cloud-sdk/bin/gcloud")"
 SRC="$CACHE_GCS/$MT_NAME"
 DST="$CACHE/$MT_NAME"
 
@@ -73,7 +80,7 @@ for try in 1 2 3; do
     fi
   fi
 
-  timeout 3600 "$GS" -m -q rsync -r "$SRC" "$DST" 2>/dev/null
+  timeout 3600 "$GCS_CLI" storage rsync -r "$SRC" "$DST" >/dev/null 2>>"$HOME/ckpt-prep-errors.log"
   have=$(du -sb "$DST" 2>/dev/null | awk '{print $1}'); have="${have:-0}"
   parts=$(find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)
   if [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ]; then
