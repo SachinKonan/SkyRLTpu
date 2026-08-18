@@ -153,7 +153,22 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   st=$(timeout 300 gcloud compute tpus queued-resources describe "$QR" --zone="$ZONE" \
          --project="$PROJECT" --format='value(state.state)' 2>/dev/null)
   [ "$st" = "ACTIVE" ] && break
-  case "$st" in FAILED) echo "[$QR] state=FAILED"; exit 1 ;; esac
+  case "$st" in
+    FAILED)
+      # Spot churn: GCP fails queued requests outright sometimes (two in a
+      # row overnight 2026-08-18, ~2h each). A failed request is not a failed
+      # HUNT -- delete it and re-create, inside the same landing deadline and
+      # under the same hard-cap watchdog. Without this every FAILED costs a
+      # whole Slurm resubmission.
+      echo "[$QR] state=FAILED at $(date +%H:%M:%S) -- deleting and re-creating"
+      timeout 600 gcloud compute tpus queued-resources delete "$QR" \
+        --zone="$ZONE" --project="$PROJECT" --force --quiet 2>/dev/null || true
+      sleep 60
+      timeout 600 gcloud compute tpus queued-resources create "$QR" --node-id="$QR" \
+        --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" $SPOT_FLAG \
+        --zone="$ZONE" --project="$PROJECT" 2>&1 | tail -1
+      ;;
+  esac
   sleep 25
 done
 [ "$st" = "ACTIVE" ] || { echo "FATAL: ${QR} not ACTIVE within ${LAND_DEADLINE_S}s (state=${st:-gone})"; exit 1; }
