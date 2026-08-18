@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 
 # The exact case sets the sd run graded on (seam_dialect_probe.sbatch
 # PROBLEM_ARG), holdouts included.
@@ -105,7 +106,13 @@ def main() -> None:
             continue
 
         for name, code in entries.items():
-            old_reward = float(name.rsplit("-r", 1)[1]) if "-r" in name else None
+            # STRICT trailing -r<float> only. The loose 'if "-r" in name' parse
+            # turned candidate NAMING into a crash surface: it ate a landed
+            # v6e-8 run (job 3718585) on float('agged-dot') from
+            # 'val-ragged-dot', after full boot elections, before grading
+            # anything.
+            m_r = re.search(r"-r([0-9]+(?:\.[0-9]+)?)$", name)
+            old_reward = float(m_r.group(1)) if m_r else None
             try:
                 r = w.grade_code(
                     code,
