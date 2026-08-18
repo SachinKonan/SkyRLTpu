@@ -42,6 +42,11 @@ def main() -> None:
                     help="JSON {task: [case,...]} overriding the swept sets. The full sweep "
                          "makes boot exceed a 32 GB chip; a smaller set still exercises the NEW "
                          "reward (holdout scored, denominator elected per shape, device timing).")
+    ap.add_argument("--no-enforce-pallas", action="store_true",
+                    help="Grade with the pallas AST requirement off. For VALIDATION runs whose "
+                         "candidates are deliberately plain-XLA (they cannot core-halt Mosaic and "
+                         "trace at every shape); never for RL grading, where the requirement is "
+                         "part of the contract.")
     ap.add_argument("--include-tp", action="store_true",
                     help="Append every task's declared tp cases to its case set. Exists so a "
                          "multi-chip judge can exercise tensor-parallel grading without pushing "
@@ -102,7 +107,11 @@ def main() -> None:
         for name, code in entries.items():
             old_reward = float(name.rsplit("-r", 1)[1]) if "-r" in name else None
             try:
-                r = w.grade_code(code, tag=f"regrade:{name}")
+                r = w.grade_code(
+                    code,
+                    tag=f"regrade:{name}",
+                    enforce_pallas=False if args.no_enforce_pallas else None,
+                )
                 trow["results"][name] = {
                     "old_reward": old_reward,
                     "new_reward": r.get("reward"),

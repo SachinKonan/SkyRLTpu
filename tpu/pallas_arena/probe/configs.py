@@ -42,7 +42,7 @@ TASK_CASES = {
     ],
     "megablox_gmm": [
         "probe-m4096-e4-uniform", "probe-m2048-e4-zipf", "probe-m8192-e8-uniform",
-        "probe-m8192-e8-8x7b", "probe-m4096-e16-zipf", "probe-holdout-m3000-e4-zipf",
+        "mixtral-8x7b-g8-m8192", "probe-m4096-e16-zipf", "probe-holdout-m3000-e4-zipf",
     ],
     "rg_lru": [
         "probe-4x2048x2560", "probe-2x1024x2560", "probe-8x512x2560",
