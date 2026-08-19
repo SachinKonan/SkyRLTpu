@@ -288,7 +288,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         # the honest variants' AUTODIFF backwards belong in the band (see
         # grad_leaf_tolerances) -- a variant that cannot express this shape
         # or cannot be differentiated simply does not constrain it
-        for _variant in pg.honest_variants():
+        for _variant in pg.grad_calibration_variants():
             try:
                 cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
             except Exception:  # noqa: BLE001

@@ -481,6 +481,18 @@ class Problem(abc.ABC):
             return False, "no smoke case to probe with"
 
     # ------------------------------------------------------------- calibration
+    def grad_calibration_variants(self) -> list[Callable]:
+        """Implementations whose AUTODIFF backwards calibrate the gradient
+        band. Defaults to ``honest_variants()`` -- but the two bands answer
+        different questions, so a task may override: megablox's forward band
+        is correctly reference_bf16-only (a GMM is one fp32-accumulated
+        reduction; measured, job 3689440), while its BACKWARD accumulates
+        bf16-cast gradients over m rows across differently-compiled programs
+        and drifts at ~3e-3 (v5p run 3722139: an fp32 ragged_dot candidate's
+        own gradient failed a floor-collapsed 1.5e-6 band). Forward
+        calibration stays untouched; the backward gets an honest source."""
+        return self.honest_variants()
+
     def honest_variants(self) -> list[Callable]:
         """Legitimate alternative implementations spanning the honest
         precision/reduction space (different output dtypes, reduction

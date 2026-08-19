@@ -710,7 +710,7 @@ class PersistentWorker:
                 block(g_inputs)
                 ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
                 cal_grads = [pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)]
-                for _variant in pg.honest_variants():
+                for _variant in pg.grad_calibration_variants():
                     try:
                         cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
                     except Exception:  # noqa: BLE001

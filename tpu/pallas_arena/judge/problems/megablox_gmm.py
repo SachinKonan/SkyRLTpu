@@ -321,6 +321,15 @@ class MegabloxGmmProblem(Problem):
 
         return ((P(), P(None, None, "tp"), P()), P(None, "tp"))
 
+    def grad_calibration_variants(self):
+        """The group-loop formulation (deliberately NOT a forward variant --
+        see honest_variants) is the honest source of BACKWARD spread: its
+        per-expert accumulation order differentiates to a genuinely different
+        reverse-mode reduction, exhibiting the ~3e-3 bf16-scale gradient
+        drift that a floor-collapsed band rejected on v5p (job 3722139).
+        Cost is g x FLOPs on ONE fixture at boot -- calibration only."""
+        return [_honest_group_loop_bf16]
+
     def honest_variants(self):
         """Deliberately EMPTY, and measured rather than assumed (v5p-8, job
         3689440). A GMM is a single reduction: the MXU accumulates in fp32
