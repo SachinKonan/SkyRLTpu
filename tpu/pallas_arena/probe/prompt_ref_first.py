@@ -40,11 +40,14 @@ _TASKS: dict[str, dict] = {
         "title": "causal segment-masked multi-head attention",
         "ref_fn": splash_attention.causal_segment_attention,
         "problem": splash_attention.PROBLEM,
-        "entry": "def kernel(q, k, v, segment_ids):  # -> o",
+        "entry": ("def kernel(q, k, v, segment_ids, *, window=None, soft_cap=None, "
+                  "sinks=None):  # -> o"),
         "io": (
-            "q, k, v: [heads, seq, head_dim] bfloat16 (q is pre-scaled by 1/sqrt(head_dim))\n"
+            "q: [q_heads, seq, d] bfloat16 (pre-scaled by 1/sqrt(d))\n"
+            "k: [kv_heads, seq, d] bfloat16; v: [kv_heads, seq, d_v] bfloat16\n"
+            "  (q_heads = kv_heads * group; kv_heads=1 is MQA; d_v may differ from d)\n"
             "segment_ids: [seq] int32; 0 marks padding\n"
-            "o: [heads, seq, head_dim] float32"
+            "o: [q_heads, seq, d_v] float32"
         ),
         "baseline": "Google's Pallas splash-attention kernel (tuned block sizes)",
         "shape_note": "seq=2049 is deliberately not divisible by any tile size; your kernel must still trace and run there.",
@@ -94,6 +97,72 @@ _TASKS: dict[str, dict] = {
         "shape_note": "t=1500 is deliberately not a multiple of any chunk size.",
         "example_shape": ("x", "[b, t, d]"),
     },
+}
+
+# rf3-only per-task fields (backward description; which tasks have one)
+_RF3_BWD = {
+    "splash_attention": {
+        "grad_inputs": "(q, k, v)",
+        "bwd_baseline": "the production splash kernel's own fused backward",
+    },
+    "rg_lru": {
+        "grad_inputs": "(x, a)  -- the gradient must flow BACK THROUGH the recurrence, including the gate path",
+        "bwd_baseline": "the differentiated production scan",
+    },
+}
+
+# rf3: the EVOLUTION-grade contract additions. Everything here states a fact
+# the judge already enforces; rf1/rf2 predate three contract changes and are
+# kept frozen as historical controls.
+#   1. BACKWARD IS SCORED: the judge differentiates the kernel and times the
+#      backward separately vs the production kernel's own backward. A raw
+#      pallas_call is NOT differentiable (generic autodiff cannot re-enter a
+#      Pallas grid), so without jax.custom_vjp the backward component is
+#      forfeited -- the forward reward is kept either way. The observation
+#      hint that used to teach this fired only on a gate that scored mode
+#      never reaches, so the PROMPT must say it.
+#   2. FEATURE KWARGS: featured cases bind window/soft_cap/sinks as STATIC
+#      kwargs at export; a kernel without those parameters TypeErrors at
+#      export on every featured case.
+#   3. THE PROMPT RENDERS FROM THE GRADED CASE LIST: prompt/contract drift
+#      (stale names, unstated shapes) has cost real judge runs; build3 takes
+#      the exact case names the driver grades.
+_BWD_SECTION = """
+## Backward pass (separately scored)
+
+Your kernel is also differentiated: the judge runs `jax.grad` through it and
+checks d/d{grad_inputs} against the reference's gradients (per-input
+tolerances), then times your backward against {bwd_baseline}. This is a
+SEPARATE reward component -- a forward-only kernel keeps its forward reward
+and simply earns 0 for the backward.
+
+A raw `pl.pallas_call` is NOT differentiable: generic autodiff cannot trace
+into a Pallas grid. To earn the backward component, wrap your kernel in
+`jax.custom_vjp` and write the backward as its own Pallas kernel (save what
+the backward needs -- e.g. row max/denominator statistics -- as residuals).
+"""
+
+_FEATURE_SECTION = """
+## Feature cases (static kwargs)
+
+Some graded cases bind extra STATIC keyword arguments into your kernel at
+compile time -- your `kernel` must accept them (defaults shown in the
+signature above), and because they are static Python values you can and
+should SPECIALIZE the kernel on them:
+
+{feature_lines}
+"""
+
+_FEATURE_DOCS = {
+    "window": ("window=W: sliding-window attention -- a query at position i "
+               "attends only to keys in (i-W, i]. A static window lets you "
+               "SKIP whole KV blocks, which is the entire speedup."),
+    "soft_cap": ("soft_cap=C: logit soft-cap -- apply C * tanh(logits / C) "
+                 "BEFORE masking and the softmax max-shift."),
+    "sinks": ("sinks=(s_0..s_{H-1}): attention sinks, one scalar per query "
+              "head -- the sink joins the softmax max (m = max(row_max, s_h)) "
+              "and adds exp(s_h - m) to the denominator, but contributes no "
+              "value row."),
 }
 
 _HEADER = """You are an expert JAX/Pallas TPU engineer. Below is a correct but slow \
@@ -213,6 +282,84 @@ def build(task: str, example: bool = False) -> str:
         head, _, tail = prompt.rpartition("## Output")
         prompt = head + _EXAMPLE.format(var=var, shape=shape) + "\n## Output" + tail
     return prompt
+
+
+def _shapes_table3(problem: Problem, case_names: list[str]) -> tuple[str, str]:
+    """Shapes rendered from the EXACT case list the driver grades.
+
+    Returns (plain_rows, feature_lines). TP cases render at the PER-SHARD
+    shape the kernel is actually traced at, stated as such -- a model
+    reasoning about tile sizes from the full shape designs for the wrong
+    problem."""
+    rows, feats_seen = [], {}
+    for name in case_names:
+        c = problem.case_by_name(name)
+        w = problem.tp_declared_width(c)
+        if w:
+            per_shard = ", ".join(
+                f"{tuple(a.shape)} {a.dtype}" for a in problem.abstract_inputs_tp(c, w)
+            )
+            rows.append(f"  * sharded over {w} devices -- your kernel sees per-shard inputs {per_shard}")
+        else:
+            dims = ", ".join(f"{k}={v}" for k, v in c.dims.items())
+            feat = dict(c.features)
+            if feat:
+                fstr = ", ".join(f"{k}={v}" for k, v in feat.items())
+                rows.append(f"  * {dims}   [static kwargs: {fstr}]")
+                for k in feat:
+                    feats_seen[k] = _FEATURE_DOCS[k]
+            else:
+                rows.append(f"  * {dims}")
+    feature_lines = "\n".join(f"  * {doc}" for doc in feats_seen.values())
+    return "\n".join(rows), feature_lines
+
+
+def build3(task: str, case_names: list[str], example: bool = False) -> str:
+    """The rf3 evolution prompt: rf1's register + the scored-backward section
+    + feature-kwarg docs, rendered from the graded case list."""
+    t = _TASKS[task]
+    ref_source = inspect.getsource(t["ref_fn"])
+    shapes, feature_lines = _shapes_table3(t["problem"], case_names)
+    prompt = _HEADER.format(
+        title=t["title"],
+        ref_source="import jax\nimport jax.numpy as jnp\n\n" + ref_source,
+        entry=t["entry"],
+        io=t["io"],
+        shapes=shapes,
+        shape_note=t["shape_note"],
+        baseline=t["baseline"],
+    )
+    inserts = ""
+    if task in _RF3_BWD:
+        inserts += _BWD_SECTION.format(**_RF3_BWD[task])
+    if feature_lines:
+        inserts += _FEATURE_SECTION.format(feature_lines=feature_lines)
+    if inserts:
+        head, _, tail = prompt.rpartition("## Output")
+        prompt = head + inserts + "\n## Output" + tail
+    if example:
+        var, shape = t["example_shape"]
+        head, _, tail = prompt.rpartition("## Output")
+        prompt = head + _EXAMPLE.format(var=var, shape=shape) + "\n## Output" + tail
+    return prompt
+
+
+IMPROVE_TEMPLATE = """{base}
+
+## Your previous attempt (reward: {reward})
+
+```python
+{program}
+```
+
+## Judge feedback
+
+{observation}
+
+Improve on your previous attempt: keep what works, fix what the feedback
+names, and make it faster. Output one fenced ```python block containing the
+complete improved program. No prose after it.
+"""
 
 
 REF_FIRST_PROMPTS: dict[str, dict[str, str]] = {
