@@ -166,6 +166,14 @@ def main() -> None:
         # do not get.
         with open(args.out, "w") as f:
             json.dump(report, f, indent=1)
+        # ...and STREAM it too: the file above lives on the judge VM, and a
+        # preemption takes the VM -- and the report -- with it (job 3724275:
+        # megablox graded on v6e-8 at 05:02, VM preempted 05:47, the scp at
+        # job end had no VM left to copy from; the only surviving data was
+        # tee'd stdout). The driver's stdout crosses to the login node LIVE,
+        # so a one-line JSON marker per task is preemption-proof by
+        # construction.
+        print(f"REPORT-JSON {task} " + json.dumps(trow, default=str), flush=True)
 
     with open(args.out, "w") as f:
         json.dump(report, f, indent=1)
