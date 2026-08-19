@@ -385,15 +385,33 @@ class PersistentWorker:
         floors, ref_scores = {}, {}
         k_floor = jax.random.PRNGKey(secrets.randbits(31))
         for case in self.scored_cases:
+            # The floor is measured with the ELECTED baseline for this case,
+            # not the raw production one: the reward denominator IS the
+            # elected fn, so its self-vs-self jitter is the floor that
+            # matters -- and on v5p the production megablox/RPA kernels OOM
+            # outright (job 3721687 died exactly here after the warm was
+            # made non-fatal: the floor loop re-invoked the kernel the
+            # election had just demoted).
+            gb = self._general_baselines.get(case.name)
+            floor_fn = (gb or {}).get("fn") or self._baseline_fn
             pairs = []
-            for i in range(self.timing_warmup + self.timing_pairs):
-                inputs = self.problem.make_inputs(jax.random.fold_in(k_floor, i), case)
-                self.block(inputs)
-                pair, _, _ = timing_mod.counterbalanced_pair(
-                    i, lambda: self._baseline_fn(*inputs), lambda: self._baseline_fn(*inputs), self.perf, self.block
-                )
-                if i >= self.timing_warmup:
-                    pairs.append(pair)
+            try:
+                for i in range(self.timing_warmup + self.timing_pairs):
+                    inputs = self.problem.make_inputs(jax.random.fold_in(k_floor, i), case)
+                    self.block(inputs)
+                    pair, _, _ = timing_mod.counterbalanced_pair(
+                        i, lambda: floor_fn(*inputs), lambda: floor_fn(*inputs), self.perf, self.block
+                    )
+                    if i >= self.timing_warmup:
+                        pairs.append(pair)
+            except Exception as e:  # noqa: BLE001
+                if not getattr(self.problem, "general_mode", False):
+                    raise
+                # No measurable floor at this case: record loudly. Grading
+                # will still gate on the WORST measured floor across cases.
+                print(f"[boot] noise floor unavailable at {case.name}: "
+                      f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+                continue
             floors[case.name] = timing_mod.noise_floor_from_ref_pairs(pairs)
             ref_scores[case.name] = timing_mod.interleaved_score(pairs)
         self.noise_floors = floors
