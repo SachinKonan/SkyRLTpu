@@ -14,13 +14,15 @@ BEST = 0.38086159053056806
 
 # Ordered by result, not by whose it is -- our gemma GRPO arm finishes behind two
 # published baselines, and grouping ours-first would bury that.
+# Colour = base model, hatch = objective, so both dimensions read off one bar.
 rows = [
-    ("GRPO-Qwen-\nthen-Gemma", 0.38086159053056806, SWAP,  "ours"),
-    ("GRPO-Qwen",              0.3808616312089098, QWEN,  "ours"),
-    ("SimpleTES",              0.3808686,          BASE,  "published"),
-    ("TTT-Discover",           0.380875,           BASE,  "published"),
-    ("GRPO-Gemma",             0.380917549842528,  GEMMA, "ours"),
-    ("AlphaEvolve",            0.380924,           BASE,  "published"),
+    ("GRPO-Qwen-\nthen-Gemma", 0.38086159053056806, SWAP,  "ours", ""),
+    ("GRPO-Qwen",              0.3808616312089098, QWEN,  "ours", ""),
+    ("TTD-Gemma",              0.380863196147110,  GEMMA, "ours", "//"),
+    ("SimpleTES",              0.3808686,          BASE,  "published", ""),
+    ("TTT-Discover",           0.380875,           BASE,  "published", ""),
+    ("GRPO-Gemma",             0.380917549842528,  GEMMA, "ours", ""),
+    ("AlphaEvolve",            0.380924,           BASE,  "published", ""),
 ]
 
 plt.rcParams.update({"font.size": 12})
@@ -33,9 +35,10 @@ fig.patch.set_facecolor("white")
 # floor height to stay visible as colour and are labelled at full precision.
 FLOOR = 0.075
 xs = range(len(rows))
-for x, (name, v, c, kind) in zip(xs, rows):
+for x, (name, v, c, kind, hatch) in zip(xs, rows):
     h = (v - BEST) * 1e5
-    axL.bar(x, max(h, FLOOR), width=0.66, color=c, zorder=3,
+    axL.bar(x, max(h, FLOOR), width=0.66, color=c, zorder=3, hatch=hatch,
+            edgecolor="white", linewidth=0.0,
             alpha=1.0 if kind == "ours" else 0.85)
     lab = f"{v:.10f}" if h < 0.5 else f"{v:.7f}".rstrip("0")
     if name == "GRPO-Gemma":
@@ -49,6 +52,8 @@ axL.legend(handles=[
     plt.Rectangle((0, 0), 1, 1, color=SWAP, label="ours — qwen's tree, gemma weights"),
     plt.Rectangle((0, 0), 1, 1, color=QWEN, label="ours — qwen"),
     plt.Rectangle((0, 0), 1, 1, color=GEMMA, label="ours — gemma"),
+    plt.Rectangle((0, 0), 1, 1, color="#d9d5cc", hatch="//", edgecolor="white",
+                  label="hatched = TTD-Discover objective (else GRPO)"),
     plt.Rectangle((0, 0), 1, 1, color=BASE, alpha=0.85, label="published baseline"),
 ], loc="upper left", frameon=False, fontsize=10)
 axL.set_xticks(list(xs))
@@ -61,7 +66,7 @@ axL.grid(axis="y", alpha=0.25, zorder=0); axL.margins(x=0.06)
 
 # ---- right: our two arms, x1e-8 -----------------------------------------
 sub = rows[:2]
-for x, (name, v, c, _) in zip(range(len(sub)), sub):
+for x, (name, v, c, _, _h) in zip(range(len(sub)), sub):
     h = (v - BEST) * 1e8
     axR.bar(x, max(h, 0.055), width=0.5, color=c, zorder=3)
     axR.text(x, max(h, 0.055) + 0.10, f"{v:.13f}", ha="center", fontsize=10)
@@ -75,14 +80,14 @@ axR.annotate("4.1×10⁻⁸", xy=(1, 4.07), xytext=(0.42, 4.9),
              fontsize=10.5, color="#333",
              arrowprops=dict(arrowstyle="->", color="#777", lw=1.1))
 
-fig.suptitle("Erdős C₅: our three arms and the three verified baselines, ordered by result",
+fig.suptitle("Erdős C₅: our four arms and the three verified baselines, ordered by result",
              fontsize=14.5, y=0.985)
 fig.text(0.5, 0.028,
          "Left panel: the two leading bars sit at 0 and 4×10⁻⁸ on a 10⁻⁵ axis, so they are drawn at a fixed "
          "minimum height to stay visible — their real heights are the right panel.",
          ha="center", fontsize=9.5, color="#555")
 fig.text(0.5, 0.006,
-         "All three of our values recomputed independently from the stored construction (sum(h)=n/2). "
+         "All four of our values recomputed independently from the stored construction (sum(h)=n/2). "
          "GRPO-Gemma is the corrected number. Baselines: SimpleTES / TTT-Discover = gpt-oss-120b at 50 steps; AlphaEvolve as published.",
          ha="center", fontsize=9.5, color="#555")
 fig.tight_layout(rect=[0, 0.055, 1, 0.955])
