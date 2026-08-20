@@ -81,8 +81,10 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   st=$(timeout 300 gcloud compute tpus queued-resources describe "$QR" --zone="$ZONE" \
          --project="$PROJECT" --format='value(state.state)' 2>/dev/null)
   [ "$st" = "ACTIVE" ] && break
-  if [ "$st" = "FAILED" ]; then
-    echo "[$QR] state=FAILED at $(date +%H:%M:%S) -- deleting and re-creating"
+  if [ "$st" = "FAILED" ] || [ -z "$st" ]; then
+    # empty state == the QR vanished (failed-and-purged between polls, job
+    # 3740157 idled 3h on it); treat exactly like FAILED
+    echo "[$QR] state=${st:-gone} at $(date +%H:%M:%S) -- deleting and re-creating"
     timeout 600 gcloud compute tpus queued-resources delete "$QR" \
       --zone="$ZONE" --project="$PROJECT" --force --quiet 2>/dev/null || true
     sleep 60
