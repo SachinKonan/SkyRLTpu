@@ -100,7 +100,27 @@ so sub-tolerance overclaims are recorded as truth. Measured here: tsw-n +5.67e-0
 (sum(h)=500.119 vs 500), g-grpo-n +8.93e-05. Confirmed bit-for-bit that the
 un-normalized correlate reproduces the logged value.
 
-**Fix for the next generation** (do not hot-patch running arms -- it changes the
-objective mid-flight): project h onto the capped simplex at search time, score
-and ARCHIVE the projected vector, and at certification reject infeasible vectors
-rather than silently rescaling, with an independent high-precision recompute.
+### FIXED, 2026-08-20 (discover ae0a9bb, parent 523736c7)
+
+`evaluate_erdos_solution` now returns `verify_c5_solution(...)` -- the
+measurement, never the claim -- and `get_reward` archives the *projected* h, so
+a stored construction always re-scores to its stored value. Scope is
+erdos_min_overlap only; ac_inequalities and frontier_algo already scored the
+recomputed value.
+
+`verify_erdos.py` was rewritten alongside it. It gates on `sum(h) == n/2`
+(1e-9 relative -- JSON round-trip is ~1e-16, the real smuggling was 2.4e-4) and
+reports a **signed delta** instead of a binary label, because a -5e-13
+round-trip difference and a +5.7e-5 constraint violation are not the same
+finding and the old exact-repr comparison called both INVALID.
+
+Shipping was sequenced deliberately: the one arm whose tree was contaminated at
+the top (`tsw-n`, 94/596 states) was killed *before* the bundle went out, so no
+running arm had its objective changed mid-life. The two survivors were checked
+first -- `lr-n` at 0 contaminated states, `g-tsw-n` clean at the top.
+
+**Re-scoring must ask for the best TRUE value over all states, not the re-score
+of the top claim.** They differ: g-grpo-n's best claim re-scores to 0.380999297,
+but a different legitimate state in the same tree holds 0.380917550, and that is
+the number the cell earned. Six of the seven completed Erdos cells were
+unaffected -- each carried 1-7 contaminated states, but never at the top.

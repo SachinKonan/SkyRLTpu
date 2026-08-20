@@ -18,7 +18,7 @@ when a step's gain falls below 1% of the life's peak.
 
 | cell | model x objective x arm | C5 |
 |---|---|---|
-| grpo-n | qwen GRPO N | **0.380861649** <- record, verified |
+| grpo-n | qwen GRPO N | **0.380861631** <- record, verified |
 | g-ttd-n | gemma TTD N | 0.380863196 |
 | ttd-n | qwen TTD N | 0.380867900 |
 | *SimpleTES* | *gpt-oss-120b, 50 steps, inference* | *0.380868561* |
@@ -26,7 +26,7 @@ when a step's gain falls below 1% of the life's peak.
 | *TTT-Discover* | *gpt-oss-120b, 50 steps, training* | *0.380875* |
 | ttd-k | qwen TTD K | 0.380891700 |
 | ttd-r | qwen TTD R | 0.380907260 (3 restarts) |
-| g-grpo-n | gemma GRPO N | 0.380909993 |
+| g-grpo-n | gemma GRPO N | 0.380917550 <- corrected, see below |
 | *AlphaEvolve* | *published* | *0.380924* |
 | grpo-k | qwen GRPO K | **did not complete** (see below) |
 
@@ -66,6 +66,35 @@ g-ttd-n-a -1.507314 (15/15) | grpo-n-a -1.513835 (11/15)
    narrow band for 13+ consecutive steps while improving (JSSP 5448+/-546,
    ac1 5035+/-317, Erdos 6026+/-353). Qwen climbs to its 13824-token thinking
    cap and saturates it.
+
+## Correction: g-grpo-n, 2026-08-20
+
+g-grpo-n was published at **0.380909993** and is actually **0.380917550**.
+
+The Erdos grader returned the program's self-reported `c5_bound` rather than
+the value it had just recomputed, guarded only by `np.isclose(atol=1e-4)` --
+wider than this problem's entire competitive span. A program could therefore
+build a density with slightly too much mass, evaluate the un-normalized
+correlate, and report that; the grader renormalized to `sum(h) == n/2` before
+measuring but returned the claim anyway, so the excess mass was scored and
+never paid for. Fixed in `third_party/discover` ae0a9bb (returns the
+recomputed score, archives the projected `h`).
+
+Every completed Erdos cell was then re-scored by **best true value over all
+states**, not by re-scoring the top claim -- those are different questions, and
+the distinction matters here. g-grpo-n's best-claimed state is contaminated and
+re-scores to 0.380999297, but a *different, legitimate* state in the same tree
+scores 0.380917550, and that is what the cell actually earned.
+
+Six of seven cells were unaffected: their headline was already the honest best.
+Contaminated states existed in all of them (1-7 per tree) but never at the top.
+The table ordering does not change -- g-grpo-n still sits between ttd-r and
+AlphaEvolve. `verify_erdos.py` now gates on `sum(h)` and reports a signed delta
+so this class is caught automatically.
+
+One tree was unusable rather than merely wrong: `tsw-n` (a Stage C tree-swap
+arm) had 94 of 596 states overclaiming ~5.7e-5. That cell was killed rather
+than corrected.
 
 ## Caveats
 
