@@ -1010,8 +1010,24 @@
   "model": "google/gemma-4-31B-it, v5p-32, GRPO mean_baseline elite 2, 16x32, LoRA r32",
   "seed_tree": "stageA2-grpo-n puct_sampler_step_000015.json (425 states, best 0.3808616312089098)",
   "found_at_timestep": 0,
-  "note": "gemma extended the frontier on its FIRST step from an inherited qwen tree, with fresh weights (no checkpoint restore) -- cross-model tree transfer",
+  "note": "[see correction] gemma extended the frontier on its FIRST step from an inherited qwen tree, with fresh weights (no checkpoint restore) -- cross-model tree transfer",
   "verified": "verify_erdos.py VALID, overclaim +0.000e+00, 2026-08-19",
-  "supersedes": "record_grpon_0380861631.json (0.3808616312089098, qwen grpo-n step 14)"
+  "supersedes": "[see correction] record_grpon_0380861631.json (0.3808616312089098, qwen grpo-n step 14)"
+ },
+ "correction": {
+  "STANDING": "NOT a world record. Corrected 2026-08-20 after the discover-repo discussion of the evaluator inconsistency.",
+  "true_state_of_the_art": {
+   "live_leaderboard": 0.38085857,
+   "public_exact_admissible": 0.3808594223653,
+   "public_exact_sub_ULP_repair": 0.3808590568145
+  },
+  "our_best_verified": 0.3808616082566059,
+  "gap_behind_state_of_the_art": "2.19e-06 (admissible exact) to 3.04e-06 (live leaderboard)",
+  "what_we_DO_beat": {
+   "TTT-Discover paper": 0.3808753,
+   "SimpleTES": 0.380868561,
+   "AlphaEvolve": 0.380924
+  },
+  "why_the_earlier_claim_was_wrong": "We compared only against baselines cited in the paper and our own prior runs, never against the live leaderboard or the public machine-verifiable bounds."
  }
 }

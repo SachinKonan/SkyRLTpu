@@ -62,3 +62,41 @@ Two notes on the failures:
 
 Large tree dumps (`tree_step*.json`, `record-tree-*.json`, 3–6 MB each) are deliberately
 **not** committed; they live in GCS under the run directories above.
+
+## CORRECTION 2026-08-20 — these are NOT world records
+
+Our best independently verified C5 is **0.3808616082566059** (g-tsw-n). The real
+state of the art is BETTER:
+
+| target | C5 | our gap |
+|---|---|---|
+| live leaderboard | 0.38085857 | we are 3.04e-06 behind |
+| public exact, sub-ULP repair | 0.3808590568145 | 2.55e-06 behind |
+| public exact, admissible | 0.3808594223653 | 2.19e-06 behind |
+| TTT-Discover (paper) | 0.3808753 | we are 1.37e-05 ahead |
+| SimpleTES | 0.380868561 | 6.95e-06 ahead |
+| AlphaEvolve | 0.380924 | 6.24e-05 ahead |
+
+We beat the published TTT-Discover value, SimpleTES and AlphaEvolve; we do NOT
+beat the live leaderboard or the machine-verifiable exact bounds. The earlier
+"NEW RECORD" language compared only against paper baselines and our own prior
+runs. Every artifact from 2026-08-19/20 carries a `correction` field.
+
+### The evaluator inconsistency behind the inflated numbers
+
+`examples/erdos_min_overlap/env.py`:
+- `verify_c5_solution` rescales a LOCAL copy of h when sum(h) != n/2;
+- it compares recomputed vs model-reported with `np.isclose(..., atol=1e-4)`;
+- `evaluate_erdos_solution` then returns the MODEL-REPORTED `c5_bound`, not the
+  recomputed value;
+- the archive keeps the original h, not the normalized h that was scored.
+
+atol=1e-4 is ~2x the entire span between the state of the art and AlphaEvolve,
+so sub-tolerance overclaims are recorded as truth. Measured here: tsw-n +5.67e-05
+(sum(h)=500.119 vs 500), g-grpo-n +8.93e-05. Confirmed bit-for-bit that the
+un-normalized correlate reproduces the logged value.
+
+**Fix for the next generation** (do not hot-patch running arms -- it changes the
+objective mid-flight): project h onto the capped simplex at search time, score
+and ARCHIVE the projected vector, and at certification reject infeasible vectors
+rather than silently rescaling, with an independent high-precision recompute.
