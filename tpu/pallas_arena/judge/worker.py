@@ -919,6 +919,17 @@ class PersistentWorker:
         reward_frame = timing_mod.final_reward(
             case_timings, self.noise_floor or 0.0, general=getattr(problem, "general_mode", False)
         )
+        if problem.has_bwd:
+            # THE training scalar for RL on has_bwd tasks: backward folded
+            # into the geomean as one more case, absence floored (see
+            # timing.fold_grad_reward). `reward` stays the forward-only
+            # number so nothing existing changes meaning.
+            reward_frame["reward_with_bwd"] = timing_mod.fold_grad_reward(
+                reward_frame,
+                result.get("grad_score") if result.get("grad_ok") else None,
+                self.noise_floor or 0.0,
+                reward_frame["n_scored_cases"],
+            )
         try:
             mem = self.device.memory_stats()
             result["peak_hbm_bytes"] = int(mem.get("peak_bytes_in_use", 0))

@@ -97,8 +97,12 @@ done
 timeout 900 gcloud compute tpus tpu-vm scp "${repo_root}/tpu/pallas_arena/probe/serve_vllm.sh" \
   "${QR}:~/serve_vllm.sh" --zone="$ZONE" --project="$PROJECT" --worker=0
 
+# MAX_NUM_SEQS=6: two consecutive engine crashes (~6.5 min in, all clients
+# RemoteDisconnected simultaneously) under 16 concurrent 16k-token
+# generations -- the probe fleet never saw this because its cap was 6144.
+# 16k caps ~triple peak concurrent KV; cap the ENGINE, not just the client.
 ( timeout 7200 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
-    --command="MODEL='${QWEN_MODEL}' PORT=${VLLM_PORT} MAX_MODEL_LEN=${QWEN_MAXLEN} \
+    --command="MODEL='${QWEN_MODEL}' PORT=${VLLM_PORT} MAX_MODEL_LEN=${QWEN_MAXLEN} MAX_NUM_SEQS=6 \
       HF_CACHE_GCS='${QWEN_HF_GCS}' XLA_CACHE_GCS='${QWEN_XLA_GCS}' bash ~/serve_vllm.sh" \
     ; echo "[serve] launcher rc=$?" ) &
 
@@ -119,10 +123,15 @@ while [ "$(date +%s)" -lt "$end" ]; do
 done
 [ "$ready" -eq 1 ] || { echo "FATAL: engine never became ready"; exit 1; }
 echo "=== engine ready $(date +%H:%M:%S) ==="
+# "the boot-log line is truth": pull the engine's KV-pool/max_num_seqs boot
+# lines to the login-side log NOW -- the serving-facts memory says to verify
+# the pool against max_num_seqs from this line, and the VM log dies with the
+# VM (two preempted/crashed attempts never surfaced it).
+timeout 300 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0   --command="grep -iE 'kv cache|num_seqs|blocks|memory' ~/vllm-probe.log | head -20" || true
 
 uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_smoke.py \
   --server "http://127.0.0.1:${LOCAL_PORT}" --model "$QWEN_MODEL" \
-  --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS"
+  --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS" --concurrency 6
 rc=$?
 echo "=== generation rc=${rc}; gens at ${GENS_OUT} ==="
 exit "$rc"

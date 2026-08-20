@@ -367,3 +367,24 @@ def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general:
         "blind_score": geomean([t.score for t in blind]) if blind else None,
         "blind_per_case": {t.case: t.score for t in blind},
     }
+
+
+# The BACKWARD-FOLDED total: the training scalar for RL on has_bwd tasks.
+#
+# The backward joins the geomean as ONE MORE CASE (weight 1/(n+1)) -- one
+# number, one domain, TriMul's one-scalar discipline -- with an ABSENCE
+# FLOOR instead of 0: a literal zero in a geomean zeroes the total, which
+# silently re-creates the hard gradient gate that flattened 8/8 splash
+# winners (flat reward = no RL signal). max(noise_floor, 0.05) preserves
+# the ordering that matters -- no backward (~25-35% haircut at our case
+# counts) < slow-but-correct backward < fast backward -- without a cliff.
+GRAD_ABSENT_FLOOR = 0.05
+
+
+def fold_grad_reward(reward_frame: dict, grad_score: float | None,
+                     noise_floor: float, n_scored: int) -> float:
+    """Fold the backward into the forward geomean as one more case."""
+    fwd = reward_frame["score"]
+    comp = grad_score if grad_score else max(noise_floor, GRAD_ABSENT_FLOOR)
+    total = (fwd ** n_scored * comp) ** (1.0 / (n_scored + 1))
+    return gate_reward(total, noise_floor)

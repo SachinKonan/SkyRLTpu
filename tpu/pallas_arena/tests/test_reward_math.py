@@ -221,3 +221,35 @@ def test_blind_only_case_set_is_rejected():
 
     with pytest.raises(ValueError):
         final_reward([CaseTiming(case="b", pairs=[(1.0, 1.0)], blind=True)], noise_floor=0.0)
+
+
+# ------------------------------------------------------ backward geomean fold
+def test_fold_grad_reward_orders_none_slow_fast():
+    """The fold's whole job: no-backward < slow-correct-backward <
+    fast-backward, with no zero cliff (a literal 0 in the geomean would
+    re-create the hard gradient gate that produced a flat, unlearnable
+    reward surface)."""
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    frame = {"score": 0.5}
+    none_ = fold_grad_reward(frame, None, noise_floor=0.02, n_scored=6)
+    slow = fold_grad_reward(frame, 0.2, noise_floor=0.02, n_scored=6)
+    fast = fold_grad_reward(frame, 0.9, noise_floor=0.02, n_scored=6)
+    assert 0 < none_ < slow < fast, (none_, slow, fast)
+    # absence is a haircut, not an execution
+    assert none_ > 0.2 * frame["score"], none_
+    # and a strong backward on a strong forward can still clear parity gating
+    assert fold_grad_reward({"score": 1.2}, 1.2, 0.02, 6) > 1.0
+
+
+def test_fold_grad_reward_weight_is_one_case():
+    """The backward carries exactly 1/(n+1) weight -- folding it as a case,
+    not as a separate weighted term."""
+    import math
+
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    n = 7
+    got = fold_grad_reward({"score": 0.4}, 0.8, noise_floor=0.0, n_scored=n)
+    want = math.exp((n * math.log(0.4) + math.log(0.8)) / (n + 1))
+    assert abs(got - want) < 1e-12
