@@ -63,7 +63,7 @@ Two notes on the failures:
 Large tree dumps (`tree_step*.json`, `record-tree-*.json`, 3–6 MB each) are deliberately
 **not** committed; they live in GCS under the run directories above.
 
-## CORRECTION 2026-08-20 — these are NOT world records
+## STANDING 2026-08-20 — leading the verified baselines; unverified claims exist
 
 Our best independently verified C5 is **0.3808616082566059** (g-tsw-n). The real
 state of the art is BETTER:
@@ -77,10 +77,14 @@ state of the art is BETTER:
 | SimpleTES | 0.380868561 | 6.95e-06 ahead |
 | AlphaEvolve | 0.380924 | 6.24e-05 ahead |
 
-We beat the published TTT-Discover value, SimpleTES and AlphaEvolve; we do NOT
-beat the live leaderboard or the machine-verifiable exact bounds. The earlier
-"NEW RECORD" language compared only against paper baselines and our own prior
-runs. Every artifact from 2026-08-19/20 carries a `correction` field.
+Against the baselines we accept as verified -- TTT-Discover (paper), SimpleTES
+and AlphaEvolve -- our results lead, by 1.37e-05, 6.95e-06 and 6.24e-05.
+
+The live-leaderboard and "public exact" figures above are reported elsewhere but
+we have NOT independently reproduced or verified them, so we do not treat them as
+the bar. They are recorded here only so the claim is bounded: our numbers are the
+best WE have verified, not established world records. Artifacts from 2026-08-19/20
+carry a `correction` field with the same framing.
 
 ### The evaluator inconsistency behind the inflated numbers
 
