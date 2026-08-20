@@ -9,7 +9,7 @@ from matplotlib.patches import Patch
 S = os.path.dirname(os.path.abspath(__file__))
 CN, CK, CR, CB = "#14867c", "#d99a26", "#8b5cf6", "#94a3b8"
 CG = "#c2410c"          # gemma
-RECORD = 0.3808616492829141
+RECORD = 0.3808616312089098
 
 plt.rcParams.update({"font.size": 12})
 fig, axes = plt.subplots(1, 3, figsize=(22, 7.2))
@@ -40,15 +40,15 @@ def group_plot(ax, groups, ylim, ylabel, title, fmt, label_dy, group_dy):
 erdos = [
     ("qwen GRPO", [("N", 0.0, CN, "0.3808616\n★ record"),
                    ("K", None, CK, ""),
-                   ("R", 0.879, CR, "0.3808704")]),
-    ("qwen TTD", [("N", 0.625, CN, "0.3808679"),
-                  ("K", 3.005, CK, "0.3808917"),
-                  ("R", 4.561, CR, "0.3809073")]),
-    ("gemma", [("GRPO-N", 4.835, CG, "0.3809100"),
-               ("TTD-N", 0.155, CG, "0.3808632\n2nd overall")]),
-    ("published", [("SimpleTES", 0.691, CB, "0.3808686"),
-                   ("TTT-Disc", 1.335, CB, "0.380875"),
-                   ("AlphaEvolve", 6.24, CB, "0.380924")]),
+                   ("R", 0.880, CR, "0.3808704")]),
+    ("qwen TTD", [("N", 0.627, CN, "0.3808679"),
+                  ("K", 3.007, CK, "0.3808917"),
+                  ("R", 4.563, CR, "0.3809073")]),
+    ("gemma", [("GRPO-N", 5.592, CG, "0.3809175\ncorrected"),
+               ("TTD-N", 0.156, CG, "0.3808632\n2nd overall")]),
+    ("published", [("SimpleTES", 0.697, CB, "0.3808686"),
+                   ("TTT-Disc", 1.337, CB, "0.380875"),
+                   ("AlphaEvolve", 6.237, CB, "0.380924")]),
 ]
 x = 0
 ticks, ticklabs, centers = [], [], []

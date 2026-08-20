@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 S = os.path.dirname(os.path.abspath(__file__))
 ARMS = {"ctrl": ("#14867c", "ctrl — shared tree only"),
         "main": ("#d97726", "ours — tree + cross-CE (λ=0.1)")}
-RECORD = 0.3808616492829141
+RECORD = 0.3808616312089098
 SIMPLETES = 0.380868561
 
 
