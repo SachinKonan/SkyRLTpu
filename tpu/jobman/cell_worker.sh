@@ -64,6 +64,7 @@ SKIP_PRECOMPILE=0
 EXTRA_PIP=""
 LORA_RETRIES=3; LORA_RETRY_SLEEP=2
 REQ_TIMEOUT=300
+TPU_BACKEND=torchax
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
 case "$CELL" in
@@ -99,6 +100,15 @@ case "$CELL" in
     # skyrl/v0.23.0-lora predates all of it -- that ref has no torch muse model.
     TPUINF_REF=afe0cb9e9bf259a072242c6f3279d92b702f9f2a
     TF_VERSION=""
+    # jax, NOT the torchax default (run_muse_rl.sh:134, the validated spec).
+    # Under torchax the plugin defers to vLLM's own model registry, which has
+    # no native muse -- it silently serves the generic transformers-backend
+    # fallback, which boots, lists models, even loads LoRA adapters, and then
+    # kills EngineCore on the FIRST generate (NonConcreteBooleanIndexError:
+    # modeling_muse_glimmer.py boolean-mask __setitem__ cannot trace). The
+    # fork's torch muse model (tpu_inference/models/vllm/muse_glimmer.py) is
+    # only reachable through the jax backend wrapper.
+    TPU_BACKEND=jax
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
     TP_SIZE=2; ENGINES_PER_HOST=2
     # 64/engine x 6 engines = 384 pooled scheduler slots, under the measured
@@ -207,7 +217,7 @@ elif ! tinker_healthy && vllm_healthy; then
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
-    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" \
+    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -249,7 +259,7 @@ else
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
-    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" \
+    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
