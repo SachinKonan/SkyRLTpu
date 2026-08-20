@@ -63,6 +63,7 @@ MAX_NUM_SEQS=128
 SKIP_PRECOMPILE=0
 EXTRA_PIP=""
 LORA_RETRIES=3; LORA_RETRY_SLEEP=2
+REQ_TIMEOUT=300
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
 case "$CELL" in
@@ -119,6 +120,13 @@ case "$CELL" in
     # burst. qwen/gemma never hit this because they precompile at boot and are
     # responsive by the time their client connects.
     LORA_RETRIES=20; LORA_RETRY_SLEEP=30
+    # The first adapter LOAD on an engine compiles the LoRA graphs (minutes).
+    # At the default 300s socket timeout the client hangs up first, the engine
+    # finishes and logs 200 to nobody, and every retry hits the extracted-dir
+    # path -- observed live: /v1/models listed all three "failed" adapters.
+    # 1800s lets the honest first attempt win; the /v1/models fallback in
+    # push_adapter covers anything longer.
+    REQ_TIMEOUT=1800
     EXTRA_PIP="'transformers @ git+https://github.com/huggingface/transformers@main' 'tokenizers>=0.23.1,<0.24.0'"
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-22k-tp2"
     JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-muse-22k"
@@ -199,6 +207,7 @@ elif ! tinker_healthy && vllm_healthy; then
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
+    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -240,6 +249,7 @@ else
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
+    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \

@@ -399,6 +399,22 @@ class VllmSamplingClient:
                     break
                 except Exception as e:  # noqa: BLE001
                     last_error = e
+                    # An upload is not failed until the server says the adapter
+                    # is absent. When the first load compiles (muse: first LoRA
+                    # load under VLLM_SKIP_JAX_PRECOMPILE=1 runs for minutes),
+                    # the server finishes AFTER our socket timeout and logs
+                    # 200 to nobody; retries then hit the extracted-dir skip
+                    # path and get their connection reset. Both look like
+                    # failures here while /v1/models already lists the
+                    # adapter — observed live on m-grpo-n: 3/3 "failed" pushes
+                    # all loaded, 206 client relaunches over a lost ACK.
+                    if self._adapter_is_loaded(server_url, lora_name):
+                        logger.info(
+                            "adapter %s upload to %s reported %r but the server lists it as loaded; treating as success",
+                            lora_name, server_url, e,
+                        )
+                        last_error = None
+                        break
                     if attempt < self.lora_load_retries:
                         time.sleep(self.lora_load_retry_sleep_sec)
             if last_error is not None:
@@ -406,6 +422,23 @@ class VllmSamplingClient:
 
         self._latest_lora_by_model[model_id] = lora_name
         return lora_name
+
+    def _adapter_is_loaded(self, server_url: str, lora_name: str) -> bool:
+        """True when the server's /v1/models already lists ``lora_name``.
+
+        The ground truth for whether a push worked. Kept deliberately cheap and
+        non-raising: it runs inside the upload retry loop, where the server may
+        be busy compiling — a probe failure just means "unknown", not "absent".
+        """
+        req = urllib.request.Request(
+            f"{server_url}/v1/models", headers={"Authorization": f"Bearer {self.api_key}"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return any(m.get("id") == lora_name for m in data.get("data", []))
+        except Exception:  # noqa: BLE001
+            return False
 
     def sample_groups(
         self,

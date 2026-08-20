@@ -65,12 +65,26 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             try:
                 with tarfile.open(tmp_path, "r:") as tar:
                     tar.extractall(staging, filter="data")
+            except tarfile.ReadError as exc:
+                # 0-byte or truncated body (health probes POST with no body).
+                # A 400 keeps the log clean; a raw ReadError is a 500 traceback
+                # that reads like an export bug — it cost a day of muse triage.
+                shutil.rmtree(staging, ignore_errors=True)
+                raise HTTPException(status_code=400, detail=f"unreadable tar body: {exc}") from exc
             finally:
                 tmp_path.unlink(missing_ok=True)
             if not (staging / "adapter_config.json").exists():
                 shutil.rmtree(staging, ignore_errors=True)
                 raise HTTPException(status_code=400, detail="tar does not contain adapter_config.json at its root")
             staging.replace(target)
+        else:
+            # The adapter is already extracted (a retry after a lost ACK), but
+            # the body must still be drained: responding with megabytes of
+            # request unread makes uvicorn close the socket mid-upload, the
+            # client sees ECONNRESET instead of our 200, and every retry
+            # repeats the cycle — the trainer never learns the push succeeded.
+            async for _ in request.stream():
+                pass
 
         # MoE LoRA sidecar (gpt-oss): merge expert/router deltas into the
         # base weights via a worker RPC. This must run on EVERY upload call —
