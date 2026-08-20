@@ -9,19 +9,22 @@ otherwise be a hairline.
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-QWEN, GEMMA, BASE = "#14867c", "#c2410c", "#94a3b8"
+QWEN, GEMMA, SWAP, BASE = "#14867c", "#c2410c", "#8b5cf6", "#94a3b8"
 BEST = 0.38086159053056806
 
+# Ordered by result, not by whose it is -- our gemma GRPO arm finishes behind two
+# published baselines, and grouping ours-first would bury that.
 rows = [
-    ("GRPO-Qwen-\nthen-Gemma", 0.38086159053056806, GEMMA, "ours"),
+    ("GRPO-Qwen-\nthen-Gemma", 0.38086159053056806, SWAP,  "ours"),
     ("GRPO-Qwen",              0.3808616312089098, QWEN,  "ours"),
     ("SimpleTES",              0.3808686,          BASE,  "published"),
     ("TTT-Discover",           0.380875,           BASE,  "published"),
+    ("GRPO-Gemma",             0.380917549842528,  GEMMA, "ours"),
     ("AlphaEvolve",            0.380924,           BASE,  "published"),
 ]
 
 plt.rcParams.update({"font.size": 12})
-fig, (axL, axR) = plt.subplots(1, 2, figsize=(15.5, 6.4),
+fig, (axL, axR) = plt.subplots(1, 2, figsize=(16.6, 6.4),
                                gridspec_kw={"width_ratios": [2.05, 1]})
 fig.patch.set_facecolor("white")
 
@@ -34,15 +37,18 @@ for x, (name, v, c, kind) in zip(xs, rows):
     h = (v - BEST) * 1e5
     axL.bar(x, max(h, FLOOR), width=0.66, color=c, zorder=3,
             alpha=1.0 if kind == "ours" else 0.85)
-    lab = f"{v:.10f}" if kind == "ours" else f"{v:.7f}".rstrip("0")
+    lab = f"{v:.10f}" if h < 0.5 else f"{v:.7f}".rstrip("0")
+    if name == "GRPO-Gemma":
+        lab += "\ncorrected"
     axL.text(x, max(h, FLOOR) + 0.12, lab, ha="center", fontsize=9.5)
 axL.annotate("", xy=(-0.32, 0.60), xytext=(1.32, 0.60),
              arrowprops=dict(arrowstyle="<->", color="#999", lw=1.1))
 axL.text(0.5, 0.68, "both ours — 4.1×10⁻⁸ apart, see right panel",
          ha="center", fontsize=9.5, style="italic", color="#555")
 axL.legend(handles=[
-    plt.Rectangle((0, 0), 1, 1, color=GEMMA, label="ours — tree swapped to gemma"),
-    plt.Rectangle((0, 0), 1, 1, color=QWEN, label="ours — qwen throughout"),
+    plt.Rectangle((0, 0), 1, 1, color=SWAP, label="ours — qwen's tree, gemma weights"),
+    plt.Rectangle((0, 0), 1, 1, color=QWEN, label="ours — qwen"),
+    plt.Rectangle((0, 0), 1, 1, color=GEMMA, label="ours — gemma"),
     plt.Rectangle((0, 0), 1, 1, color=BASE, alpha=0.85, label="published baseline"),
 ], loc="upper left", frameon=False, fontsize=10)
 axL.set_xticks(list(xs))
@@ -69,15 +75,17 @@ axR.annotate("4.1×10⁻⁸", xy=(1, 4.07), xytext=(0.42, 4.9),
              fontsize=10.5, color="#333",
              arrowprops=dict(arrowstyle="->", color="#777", lw=1.1))
 
-fig.suptitle("The best verified C₅ moved between two of our own arms — "
-             "the baseline standing did not change", fontsize=14.5, y=0.985)
-fig.text(0.5, 0.012,
-         "Left panel: our two bars sit at 0 and 4×10⁻⁸ on a 10⁻⁵ axis and are drawn at a fixed minimum "
-         "height so their colour is visible — their real heights are the right panel. "
-         "Both recomputed independently (sum(h)=n/2, agreement to ~1e-15). "
-         "Baselines: SimpleTES and TTT-Discover are gpt-oss-120b at 50 steps; AlphaEvolve as published.",
+fig.suptitle("Erdős C₅: our three arms and the three verified baselines, ordered by result",
+             fontsize=14.5, y=0.985)
+fig.text(0.5, 0.028,
+         "Left panel: the two leading bars sit at 0 and 4×10⁻⁸ on a 10⁻⁵ axis, so they are drawn at a fixed "
+         "minimum height to stay visible — their real heights are the right panel.",
          ha="center", fontsize=9.5, color="#555")
-fig.tight_layout(rect=[0, 0.035, 1, 0.955])
+fig.text(0.5, 0.006,
+         "All three of our values recomputed independently from the stored construction (sum(h)=n/2). "
+         "GRPO-Gemma is the corrected number. Baselines: SimpleTES / TTT-Discover = gpt-oss-120b at 50 steps; AlphaEvolve as published.",
+         ha="center", fontsize=9.5, color="#555")
+fig.tight_layout(rect=[0, 0.055, 1, 0.955])
 out = "/n/fs/vision-mix/sk7524/SkyRLTpu-league/results/erdos-records/record_standing.png"
 fig.savefig(out, dpi=140, facecolor="white")
 print("saved", out)
