@@ -23,11 +23,18 @@ RGLRU_P1 = [
 
 # (task, variant) -> (graded case names, include minimal pallas example)
 # rf3s (seam scaffold) is rendered via build3s, keyed by variant name below.
+#
+# ORDER IS PROTECTION: generation runs cells in insertion order and the spot
+# VM has been preempted mid-run three times -- run 1 delivered 36/128
+# completions, ALL from the first cell listed. So the cells we have no data
+# for go FIRST: the rf3s arms (the decision-critical experiment), then
+# rg_lru (zero data from run 1), then splash rf3e (n~4), and splash rf3
+# LAST (already has its n=32 answer: 0 valid, 94% truncated).
 CELLS = {
-    ("splash_attention", "rf3"): (SPLASH_P1, False),
-    ("splash_attention", "rf3e"): (SPLASH_P1, True),
+    ("rg_lru", "rf3s"): (RGLRU_P1, "scaffold"),
     ("splash_attention", "rf3s"): (SPLASH_P1, "scaffold"),
     ("rg_lru", "rf3"): (RGLRU_P1, False),
     ("rg_lru", "rf3e"): (RGLRU_P1, True),
-    ("rg_lru", "rf3s"): (RGLRU_P1, "scaffold"),
+    ("splash_attention", "rf3e"): (SPLASH_P1, True),
+    ("splash_attention", "rf3"): (SPLASH_P1, False),
 }
