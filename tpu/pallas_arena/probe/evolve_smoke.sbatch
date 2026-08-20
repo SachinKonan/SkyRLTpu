@@ -46,6 +46,12 @@ QR="sk7524-evsmoke-${SLURM_JOB_ID}"
 GENS_OUT="${out_dir}/evolve-smoke-gens-${SLURM_JOB_ID}.jsonl"
 
 cleanup() {
+  # engine post-mortem BEFORE the VM disappears: three attempts have died
+  # with the serve log unread because it only lived on the VM
+  timeout 240 gcloud compute tpus tpu-vm scp "${QR}:~/vllm-probe.log" \
+    "${out_dir}/evolve-smoke-engine-${SLURM_JOB_ID}.log" \
+    --zone="$ZONE" --project="$PROJECT" --worker=0 2>/dev/null \
+    && echo "[cleanup] engine log captured" || echo "[cleanup] engine log unreachable"
   echo "[cleanup] $(date +%H:%M:%S) tearing down ${QR}"
   timeout 600 gcloud compute tpus queued-resources delete "$QR" \
     --zone="$ZONE" --project="$PROJECT" --force --quiet 2>/dev/null || true
@@ -97,12 +103,14 @@ done
 timeout 900 gcloud compute tpus tpu-vm scp "${repo_root}/tpu/pallas_arena/probe/serve_vllm.sh" \
   "${QR}:~/serve_vllm.sh" --zone="$ZONE" --project="$PROJECT" --worker=0
 
-# MAX_NUM_SEQS=6: two consecutive engine crashes (~6.5 min in, all clients
-# RemoteDisconnected simultaneously) under 16 concurrent 16k-token
-# generations -- the probe fleet never saw this because its cap was 6144.
-# 16k caps ~triple peak concurrent KV; cap the ENGINE, not just the client.
+# Engine config must MATCH THE XLA CACHE exactly: attempt 3 set
+# MAX_NUM_SEQS=6 and the engine never became ready in 3600s -- the 22k cache
+# was compiled at max_num_seqs=16, so the changed batch config forced a full
+# TPU recompile. Keep the engine at its proven cached config; the crash
+# mitigation moves ENTIRELY client-side (concurrency 6): if the engine still
+# dies with only 6 requests in flight, concurrency was never the killer.
 ( timeout 7200 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
-    --command="MODEL='${QWEN_MODEL}' PORT=${VLLM_PORT} MAX_MODEL_LEN=${QWEN_MAXLEN} MAX_NUM_SEQS=6 \
+    --command="MODEL='${QWEN_MODEL}' PORT=${VLLM_PORT} MAX_MODEL_LEN=${QWEN_MAXLEN} \
       HF_CACHE_GCS='${QWEN_HF_GCS}' XLA_CACHE_GCS='${QWEN_XLA_GCS}' bash ~/serve_vllm.sh" \
     ; echo "[serve] launcher rc=$?" ) &
 
