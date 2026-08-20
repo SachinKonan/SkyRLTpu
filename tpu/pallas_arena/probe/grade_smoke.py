@@ -30,12 +30,38 @@ def main() -> None:
     args = ap.parse_args()
 
     sys.path.insert(0, "tpu")
+    import os
+
+    os.environ["PALLAS_INTERPRET"] = "1"  # scaffold candidates: CPU interpret
+    os.environ["ARENA_RLIMIT_GB"] = "64"  # Mosaic exports abort under the 16GB default
     import jax
 
-    from pallas_arena.judge.aot_gate import aot_pregate
+    from pallas_arena.judge import grader
     from pallas_arena.judge.problems import get_problem
     from pallas_arena.judge.problems.base import check_tolerance, error_stats
+    from pallas_arena.judge.worker import build_signatures
     from pallas_arena.probe.repair_driver import extract_program
+
+    # Validity = the judge's REAL gate: jax.export targeting TPU from a CPU
+    # child under the device-kind shim. NOT the CPU-backend pregate, which
+    # SIGABRTs on any real pallas_call -- with it, every VALID pallas
+    # candidate would have been scored as a crash and the validity metric
+    # would have been garbage.
+    _sig_cache: dict = {}
+
+    def validity(task: str, program: str):
+        if task not in _sig_cache:
+            pr = get_problem(task)
+            scored = [c for c in pr.shape_cases() if c.smoke and not c.holdout]
+            hold = [c for c in pr.shape_cases() if c.smoke and c.holdout]
+            _sig_cache[task] = build_signatures(pr, scored, hold, [])[0]
+        r = grader.grade(
+            task, program, mode="aot_export", smoke=True,
+            export_signatures=_sig_cache[task], export_platforms=["tpu"],
+            child_env={"JAX_PLATFORMS": "cpu", "PALLAS_INTERPRET": "0"},
+        )
+        why = "; ".join(str(v) for v in (r.get("violations") or [])) or r.get("gate", "?")
+        return bool(r.get("passed")), why
 
     cells: dict = collections.defaultdict(lambda: {
         "n": 0, "truncated": 0, "gen_error": 0, "no_program": 0,
@@ -63,7 +89,7 @@ def main() -> None:
             continue
         cell["program_hashes"].add(hashlib.sha256(program.encode()).hexdigest()[:12])
 
-        ok, why = aot_pregate(row["task"], program, smoke=True)
+        ok, why = validity(row["task"], program)
         if not ok:
             gate = why.split(":", 1)[0][:40]
             cell["gates"][gate] += 1

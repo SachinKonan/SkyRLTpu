@@ -22,9 +22,12 @@ RGLRU_P1 = [
 ]
 
 # (task, variant) -> (graded case names, include minimal pallas example)
+# rf3s (seam scaffold) is rendered via build3s, keyed by variant name below.
 CELLS = {
     ("splash_attention", "rf3"): (SPLASH_P1, False),
     ("splash_attention", "rf3e"): (SPLASH_P1, True),
+    ("splash_attention", "rf3s"): (SPLASH_P1, "scaffold"),
     ("rg_lru", "rf3"): (RGLRU_P1, False),
     ("rg_lru", "rf3e"): (RGLRU_P1, True),
+    ("rg_lru", "rf3s"): (RGLRU_P1, "scaffold"),
 }

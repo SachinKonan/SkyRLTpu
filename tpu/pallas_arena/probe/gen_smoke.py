@@ -55,12 +55,15 @@ def main() -> None:
     args = ap.parse_args()
 
     sys.path.insert(0, "tpu")
-    from pallas_arena.probe.prompt_ref_first import build3
+    from pallas_arena.probe.prompt_ref_first import build3, build3s
     from pallas_arena.probe.smoke_config import CELLS
 
     jobs = []
     for (task, variant), (cases, example) in CELLS.items():
-        prompt = build3(task, cases, example=example)
+        if example == "scaffold":
+            prompt = build3s(task, cases)
+        else:
+            prompt = build3(task, cases, example=example)
         ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
         for i in range(args.group_size):
             jobs.append((task, variant, i, prompt, ph))

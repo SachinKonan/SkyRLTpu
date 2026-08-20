@@ -344,6 +344,40 @@ def build3(task: str, case_names: list[str], example: bool = False) -> str:
     return prompt
 
 
+_SCAFFOLD_SECTION = """
+## Working scaffold (recommended starting point)
+
+The program below has ALL the plumbing written and verified: `pallas_call`
+grids, BlockSpecs (including the GQA head mapping and padding for
+non-divisible sequences), and the complete `jax.custom_vjp` wiring with the
+correct cotangent structure. The bodies marked `NotImplementedError` are
+yours: fill them (and tune the tile constants) or restructure anything --
+it is a starting point, not a cage. With only the forward body filled the
+kernel already grades; the backward bodies earn the separate backward
+reward.
+
+```python
+{scaffold}```
+"""
+
+
+def build3s(task: str, case_names: list[str]) -> str:
+    """rf3s: the rf3 contract prompt + the verified seam scaffold.
+
+    Measured poles this variant navigates (PROBE-REPORT): whole-program
+    splash exported 0/96 (the plumbing kills everyone), while the
+    fully-tailored scaffold passed 16/16 with within-group spread BELOW the
+    judge noise floor (nothing to rank). The scaffold hands over the
+    dialect; the bodies keep the algorithm -- and the spread -- open.
+    """
+    from pallas_arena.probe.seam_scaffolds import RGLRU_SCAFFOLD, SPLASH_SCAFFOLD
+
+    scaffold = {"splash_attention": SPLASH_SCAFFOLD, "rg_lru": RGLRU_SCAFFOLD}[task]
+    prompt = build3(task, case_names, example=False)
+    head, _, tail = prompt.rpartition("## Output")
+    return head + _SCAFFOLD_SECTION.format(scaffold=scaffold) + "\n## Output" + tail
+
+
 IMPROVE_TEMPLATE = """{base}
 
 ## Your previous attempt (reward: {reward})
