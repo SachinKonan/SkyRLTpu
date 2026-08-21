@@ -10,13 +10,13 @@ import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 QWEN, GEMMA, SWAP, BASE = "#14867c", "#c2410c", "#8b5cf6", "#94a3b8"
-BEST = 0.38086159053056806
+BEST = 0.380861585141174
 
 # Ordered by result, not by whose it is -- our gemma GRPO arm finishes behind two
 # published baselines, and grouping ours-first would bury that.
 # Colour = base model, hatch = objective, so both dimensions read off one bar.
 rows = [
-    ("GRPO-Qwen-\nthen-Gemma", 0.38086159053056806, SWAP,  "ours", ""),
+    ("GRPO-Qwen-\nthen-Gemma", 0.380861585141174,  SWAP,  "ours", ""),
     ("GRPO-Qwen",              0.3808616312089098, QWEN,  "ours", ""),
     ("TTD-Gemma",              0.380863196147110,  GEMMA, "ours", "//"),
     ("SimpleTES",              0.3808686,          BASE,  "published", ""),
@@ -76,7 +76,7 @@ axR.set_ylim(0, 5.6)
 axR.set_ylabel("distance above best, ×10⁻⁸")
 axR.set_title("the same two bars, 1000× finer", fontsize=13.5)
 axR.grid(axis="y", alpha=0.25, zorder=0); axR.margins(x=0.18)
-axR.annotate("4.1×10⁻⁸", xy=(1, 4.07), xytext=(0.42, 4.9),
+axR.annotate("4.6×10⁻⁸", xy=(1, 4.07), xytext=(0.42, 4.9),
              fontsize=10.5, color="#333",
              arrowprops=dict(arrowstyle="->", color="#777", lw=1.1))
 
