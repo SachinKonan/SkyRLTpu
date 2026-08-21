@@ -351,9 +351,22 @@ export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE}"
 export SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
-# Resolve unknown adapter names from the shared lora dir (external
-# inference path references adapters by name without an explicit load).
-export VLLM_PLUGINS="\${VLLM_PLUGINS:-lora_filesystem_resolver}"
+# VLLM_PLUGINS is an ALLOW-LIST: unset loads every installed general plugin,
+# set loads ONLY the named ones. Models that exist solely in the
+# tpu-inference fork (muse) NEED the fork's vllm.general_plugins entry point
+# (tpu_inference.layers.vllm:register_layers) -- it is what injects the OOT
+# architecture into vLLM's ModelRegistry. Pinning the list to the resolver
+# excluded it, and vLLM silently served the generic transformers fallback,
+# which passes every health check and kills EngineCore on the first
+# generate (NonConcreteBooleanIndexError). The validated muse smoke ran
+# with the variable UNSET, which also still loads the resolver below.
+$( if [[ "${VLLM_UNSET_PLUGINS:-0}" == "1" ]]; then
+     echo 'unset VLLM_PLUGINS'
+   else
+     # Resolve unknown adapter names from the shared lora dir (external
+     # inference path references adapters by name without an explicit load).
+     echo 'export VLLM_PLUGINS="${VLLM_PLUGINS:-lora_filesystem_resolver}"'
+   fi )
 if [[ "${VLLM_UPLOAD_SERVER}" == "1" ]]; then
   export VLLM_LORA_RESOLVER_CACHE_DIR="${VLLM_LOCAL_LORA_DIR}"
 else
