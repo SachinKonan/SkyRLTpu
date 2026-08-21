@@ -57,6 +57,19 @@ mkdir -p "$VLLM_XLA_CACHE_PATH"
 if [ -n "$XLA_CACHE_GCS" ]; then
   gsutil -m -q rsync -r "$XLA_CACHE_GCS" "$VLLM_XLA_CACHE_PATH" 2>/dev/null \
     && echo "XLA cache restored from ${XLA_CACHE_GCS}" || echo "XLA cache restore failed (will compile)"
+  # SAVE-BACK: the restore was one-way, so any config not already cached
+  # (e.g. the first 32k-context boot) recompiled EVERY run. Once the engine
+  # answers, rsync the compiled cache up -- first boot at a new config pays
+  # the compile once, every later boot restores it.
+  ( for _ in $(seq 1 360); do
+      curl -sf "http://127.0.0.1:${PORT}/v1/models" >/dev/null 2>&1 && break
+      sleep 20
+    done
+    if curl -sf "http://127.0.0.1:${PORT}/v1/models" >/dev/null 2>&1; then
+      sleep 60   # let warmup compilation finish writing
+      gsutil -m -q rsync -r "$VLLM_XLA_CACHE_PATH" "$XLA_CACHE_GCS" 2>/dev/null \
+        && echo "XLA cache saved back to ${XLA_CACHE_GCS}"
+    fi ) &
 fi
 
 export MODEL_IMPL_TYPE=vllm          # required for the Qwen3.5 arch on TPU

@@ -31,14 +31,18 @@ ACCEL=${ACCEL:-v5p-8}
 RUNTIME=${RUNTIME:-v2-alpha-tpuv5}
 LAND_DEADLINE_S=${LAND_DEADLINE_S:-10800}
 HARD_CAP_S=${HARD_CAP_S:-14400}
-SERVE_READY_S=${SERVE_READY_S:-3600}
+SERVE_READY_S=${SERVE_READY_S:-5400}   # fresh 32k compile on first boot
 GROUP_SIZE=${GROUP_SIZE:-32}
-MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-16384}
+MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-27648}
 QWEN_MODEL=${QWEN_MODEL:-Qwen/Qwen3.5-27B}
-QWEN_MAXLEN=${QWEN_MAXLEN:-22528}
+# 32k context, like the llamafarm serving: thinking stays ON and the
+# completion budget absorbs it instead of truncating. First boot at 32k
+# compiles fresh (the 22k cache cannot match) and saves back via
+# serve_vllm.sh; later boots restore.
+QWEN_MAXLEN=${QWEN_MAXLEN:-32768}
 BUCKET=gs://sk7524-tinker-tpu-us-east5
 QWEN_HF_GCS=${QWEN_HF_GCS:-${BUCKET}/hf-cache}
-QWEN_XLA_GCS=${QWEN_XLA_GCS:-${BUCKET}/vllm-xla-cache-22k}
+QWEN_XLA_GCS=${QWEN_XLA_GCS:-${BUCKET}/vllm-xla-cache-qwen35-32k}
 VLLM_PORT=8001
 LOCAL_PORT=18001
 
