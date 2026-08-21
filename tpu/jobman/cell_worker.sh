@@ -92,8 +92,14 @@ case "$CELL" in
     MODEL_NAME=meta-models/Muse-Glimmer-30B; MAXTEXT_MODEL=muse-glimmer-30b
     PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509"
     # Sizing per run_muse_rl.sh (the validated RL spec), not the older
-    # MAXTEXT.md training-half doc: target 22528 = the serving ctx, budget 45056.
-    MAXTGT=22528; BUDGET=45056; UNIFORM=22528
+    # MAXTEXT.md training-half doc: target 22528 = the serving ctx.
+    # BUDGET: the spec started at 45056 (2 x uniform) with the explicit note
+    # "raise only after watching the first fb step's HBM (unproven item 5)".
+    # The first real fb step (2026-08-21, attempt 8) answered it: the program
+    # asked to reserve 60.47G with 55.48G free -- over by 9%. One uniform seq
+    # per fb call halves the arena (~30G, fits with headroom); costs 2x fb
+    # calls per train step, changes nothing about what is trained.
+    MAXTGT=22528; BUDGET=22528; UNIFORM=22528
     VLLM_LEN=22528
     VLLM_IMPL=vllm
     # The exact SHA run_muse_rl.sh pins: carries the torch muse model AND the
