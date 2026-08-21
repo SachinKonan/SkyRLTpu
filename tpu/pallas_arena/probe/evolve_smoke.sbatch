@@ -154,6 +154,20 @@ echo "=== engine ready $(date +%H:%M:%S) ==="
 # VM (two preempted/crashed attempts never surfaced it).
 timeout 300 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0   --command="grep -iE 'kv cache|num_seqs|blocks|memory' ~/vllm-probe.log | head -20" || true
 
+# Engine-log snapshots to NFS while generating: 3 of the last 4 VM deaths
+# struck as SPLASH requests began, and every post-mortem was blind because
+# the engine log dies with the VM. A 5-min snapshot loop leaves the crash
+# trace on NFS.
+( while true; do
+    timeout 120 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" \
+      --worker=0 --command="tail -c 200000 ~/vllm-probe.log" \
+      > "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/pallas_arena/engine-snap-${SLURM_JOB_ID}.log" 2>/dev/null || true
+    sleep 300
+  done ) &
+# No trap here: the EXIT trap at the top owns teardown (re-trapping EXIT
+# would REPLACE it and leak the QR). Slurm reaps this loop at job end.
+ENGINE_SNAP_PID=$!
+
 uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_smoke.py \
   --server "http://127.0.0.1:${LOCAL_PORT}" --model "$QWEN_MODEL" \
   --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS" --concurrency 6 \
