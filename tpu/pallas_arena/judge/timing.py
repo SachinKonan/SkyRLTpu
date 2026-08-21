@@ -383,8 +383,16 @@ GRAD_ABSENT_FLOOR = 0.05
 
 def fold_grad_reward(reward_frame: dict, grad_score: float | None,
                      noise_floor: float, n_scored: int) -> float:
-    """Fold the backward into the forward geomean as one more case."""
+    """Fold the backward into the forward geomean as one more case.
+
+    A CORRECT backward is clamped UP to the floor as well: without the
+    clamp, a correct-but-very-slow backward (score < floor) totals WORSE
+    than shipping none -- a perverse incentive to delete a working
+    backward. With it, absent TIES the slowest correct backward and never
+    beats it; ordering is absent <= slow-correct < fast, with equality only
+    at the floor."""
     fwd = reward_frame["score"]
-    comp = grad_score if grad_score else max(noise_floor, GRAD_ABSENT_FLOOR)
+    floor = max(noise_floor, GRAD_ABSENT_FLOOR)
+    comp = max(grad_score, floor) if grad_score else floor
     total = (fwd ** n_scored * comp) ** (1.0 / (n_scored + 1))
     return gate_reward(total, noise_floor)

@@ -253,3 +253,15 @@ def test_fold_grad_reward_weight_is_one_case():
     got = fold_grad_reward({"score": 0.4}, 0.8, noise_floor=0.0, n_scored=n)
     want = math.exp((n * math.log(0.4) + math.log(0.8)) / (n + 1))
     assert abs(got - want) < 1e-12
+
+
+def test_fold_never_punishes_a_correct_backward_below_absence():
+    """A correct-but-glacial backward must never total WORSE than shipping
+    none -- otherwise the fold pays candidates to delete working backwards.
+    Boundary: it ties the absence floor, never dips under it."""
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    frame = {"score": 0.5}
+    absent = fold_grad_reward(frame, None, noise_floor=0.05, n_scored=6)
+    glacial = fold_grad_reward(frame, 0.01, noise_floor=0.05, n_scored=6)
+    assert glacial >= absent, (glacial, absent)
