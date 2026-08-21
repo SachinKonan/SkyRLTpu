@@ -37,7 +37,10 @@ GROUP_SIZE=${GROUP_SIZE:-32}
 # truncates, the client forces the answer with ANSWER_CAP more tokens
 # (rq2 pattern). Single-phase caps measured 53-97% truncation at any size.
 MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-13824}
-ANSWER_CAP=${ANSWER_CAP:-8192}
+# 12288: round-5 measured 40-78% of forced answers clipping at 8192 --
+# full fwd+bwd custom_vjp programs are ~7-10k tokens. 2.7k prompt +
+# 13.8k think + 12.3k answer = 28.8k < 32k ctx.
+ANSWER_CAP=${ANSWER_CAP:-12288}
 QWEN_MODEL=${QWEN_MODEL:-Qwen/Qwen3.5-27B}
 # 32k context, like the llamafarm serving: thinking stays ON and the
 # completion budget absorbs it instead of truncating. First boot at 32k

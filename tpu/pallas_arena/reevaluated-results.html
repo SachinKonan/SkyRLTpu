@@ -109,7 +109,7 @@ fully-tailored scaffold passed 16/16 with within-group spread <em>below the judg
 (nothing to rank). The scaffold owns the dialect; the bodies keep the algorithm &mdash; and the spread
 &mdash; open. Every scaffold passes the real export gate and correctness bands with reference fills
 before any model sees it; rg_lru&rsquo;s backward wiring is proven differentiable end-to-end.</p>
-<details><summary><strong>splash_attention &middot; rf3</strong> &mdash; starter prompt (~2101 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
+<details><summary><strong>splash_attention &middot; rf3</strong> &mdash; starter prompt (~2286 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -266,8 +266,21 @@ the backward needs -- e.g. row max/denominator statistics -- as residuals).
 ## Output
 
 One fenced ```python block containing the complete program. No prose after it.
+
+Rules that decide whether your program can be graded at all (each one below
+has killed real submissions):
+- The block must be COMPLETE and SELF-CONTAINED: all imports included
+  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
+  that assumes surrounding context dies with a NameError.
+- If starter/scaffold code was given, return the ENTIRE program with your
+  parts filled in -- never the filled parts alone.
+- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
+  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
+  does not exist).
+- Close every string, bracket, and the fence itself; a program cut mid-line
+  scores 0. Budget your reasoning so the code block finishes.
 </pre></details>
-<details><summary><strong>splash_attention &middot; rf3e</strong> &mdash; starter + minimal pallas example (~2297 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
+<details><summary><strong>splash_attention &middot; rf3e</strong> &mdash; starter + minimal pallas example (~2482 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -452,8 +465,21 @@ def double(x):  # x: [heads, seq, head_dim]
 ## Output
 
 One fenced ```python block containing the complete program. No prose after it.
+
+Rules that decide whether your program can be graded at all (each one below
+has killed real submissions):
+- The block must be COMPLETE and SELF-CONTAINED: all imports included
+  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
+  that assumes surrounding context dies with a NameError.
+- If starter/scaffold code was given, return the ENTIRE program with your
+  parts filled in -- never the filled parts alone.
+- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
+  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
+  does not exist).
+- Close every string, bracket, and the fence itself; a program cut mid-line
+  scores 0. Budget your reasoning so the code block finishes.
 </pre></details>
-<details><summary><strong>splash_attention &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~4046 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
+<details><summary><strong>splash_attention &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~4231 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -788,8 +814,21 @@ def kernel(q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None):
 ## Output
 
 One fenced ```python block containing the complete program. No prose after it.
+
+Rules that decide whether your program can be graded at all (each one below
+has killed real submissions):
+- The block must be COMPLETE and SELF-CONTAINED: all imports included
+  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
+  that assumes surrounding context dies with a NameError.
+- If starter/scaffold code was given, return the ENTIRE program with your
+  parts filled in -- never the filled parts alone.
+- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
+  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
+  does not exist).
+- Close every string, bracket, and the fence itself; a program cut mid-line
+  scores 0. Budget your reasoning so the code block finishes.
 </pre></details>
-<details><summary><strong>rg_lru &middot; rf3</strong> &mdash; starter prompt (~1202 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
+<details><summary><strong>rg_lru &middot; rf3</strong> &mdash; starter prompt (~1387 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -878,8 +917,21 @@ the backward needs -- e.g. row max/denominator statistics -- as residuals).
 ## Output
 
 One fenced ```python block containing the complete program. No prose after it.
+
+Rules that decide whether your program can be graded at all (each one below
+has killed real submissions):
+- The block must be COMPLETE and SELF-CONTAINED: all imports included
+  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
+  that assumes surrounding context dies with a NameError.
+- If starter/scaffold code was given, return the ENTIRE program with your
+  parts filled in -- never the filled parts alone.
+- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
+  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
+  does not exist).
+- Close every string, bracket, and the fence itself; a program cut mid-line
+  scores 0. Budget your reasoning so the code block finishes.
 </pre></details>
-<details><summary><strong>rg_lru &middot; rf3e</strong> &mdash; starter + minimal pallas example (~1394 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
+<details><summary><strong>rg_lru &middot; rf3e</strong> &mdash; starter + minimal pallas example (~1579 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -996,8 +1048,21 @@ def double(x):  # x: [b, t, d]
 ## Output
 
 One fenced ```python block containing the complete program. No prose after it.
+
+Rules that decide whether your program can be graded at all (each one below
+has killed real submissions):
+- The block must be COMPLETE and SELF-CONTAINED: all imports included
+  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
+  that assumes surrounding context dies with a NameError.
+- If starter/scaffold code was given, return the ENTIRE program with your
+  parts filled in -- never the filled parts alone.
+- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
+  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
+  does not exist).
+- Close every string, bracket, and the fence itself; a program cut mid-line
+  scores 0. Budget your reasoning so the code block finishes.
 </pre></details>
-<details><summary><strong>rg_lru &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~2272 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
+<details><summary><strong>rg_lru &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~2457 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -1196,22 +1261,43 @@ def kernel(x, a, reset):
 ## Output
 
 One fenced ```python block containing the complete program. No prose after it.
+
+Rules that decide whether your program can be graded at all (each one below
+has killed real submissions):
+- The block must be COMPLETE and SELF-CONTAINED: all imports included
+  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
+  that assumes surrounding context dies with a NameError.
+- If starter/scaffold code was given, return the ENTIRE program with your
+  parts filled in -- never the filled parts alone.
+- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
+  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
+  does not exist).
+- Close every string, bracket, and the fence itself; a program cut mid-line
+  scores 0. Budget your reasoning so the code block finishes.
 </pre></details>
 <h4>Improvement turn</h4>
 <p class="sub sm">Each later round re-sends the base prompt plus the candidate&rsquo;s own prior program,
 its reward, and the judge&rsquo;s observation (gate, measured error vs tolerance, per-case timings), with:
 &ldquo;keep what works, fix what the feedback names, and make it faster.&rdquo;</p>
 
-<h2>Generations &mdash; partial readouts, rounds 1&ndash;2 (Qwen3.5-27B, temperature 1.0)</h2>
-<p class="sub">Two smoke rounds, both cut short by spot VM deaths (~20&ndash;35 min each); numbers are
-honest partials with per-cell n stated. The finding that survives any n: <strong>truncation is the
-confound that must die before prompt arms can be compared</strong> &mdash; 94% of whole-program splash
-attempts blew a 16k completion cap, and 53% of scaffold-arm rg_lru attempts blew 18432 <em>even though
-the scaffold only asks for body fills</em>. Qwen&rsquo;s thinking channel consumes the budget at
-temperature 1.0. Thinking stays ON by design (it is on for training, so it must be on for the smoke);
-the fix is headroom: round 3 (in flight) serves 32k context with a 27,648-token completion cap &mdash;
-the first round where validity measures the prompts rather than the token budget.</p>
-<div class="grid"><section class='card'><h3 class='mono sm'>splash_attention &middot; rf3 &middot; group 32</h3><div class='pending'><div class='bar'><div class='tr' style='width:93.8%'></div><div class='gf' style='width:78.1%'></div><div class='nd' style='width:6.2%'></div></div><div class='legend'>truncated 30 &middot; no program 0 &middot; gate-failed 25 &middot; <b>valid 0</b> &middot; lost to preemption 2</div><b>0 / 32 valid</b> (round 1, 16k cap) &mdash; 93.8% truncated; gate deaths 19 syntax (truncation mid-program) + 6 no-pallas. 25 distinct programs: diversity exists, completion does not.</div></section><section class='card'><h3 class='mono sm'>splash_attention &middot; rf3e &middot; group 32</h3><div class='pending'>~4 real completions across two preempted rounds &mdash; 0 valid; n too small to read.</div></section><section class='card'><h3 class='mono sm'>splash_attention &middot; rf3s &middot; group 32</h3><div class='pending'><em>no data yet</em> &mdash; round 2 preempted before this cell; queued first in round 3.</div></section><section class='card'><h3 class='mono sm'>rg_lru &middot; rf3 &middot; group 32</h3><div class='pending'><em>no data yet</em> &mdash; both rounds preempted before this cell.</div></section><section class='card'><h3 class='mono sm'>rg_lru &middot; rf3e &middot; group 32</h3><div class='pending'><em>no data yet</em> &mdash; preempted before generation.</div></section><section class='card'><h3 class='mono sm'>rg_lru &middot; rf3s &middot; group 32</h3><div class='pending'><div class='bar'><div class='tr' style='width:53.1%'></div><div class='np' style='width:9.4%'></div><div class='gf' style='width:46.9%'></div><div class='nd' style='width:43.8%'></div></div><div class='legend'>truncated 17 &middot; no program 3 &middot; gate-failed 15 &middot; <b>valid 0</b> &middot; lost to preemption 14</div><b>0 / ~18 valid</b> (round 2, 18432 cap) &mdash; 53% truncated EVEN WITH the scaffold; 9 no-pallas + 5 syntax + 1 AttributeError among extracted programs, most pulled from truncated text. Only ~1 of 18 finished cleanly.</div></section></div>
+<h2>Generations &mdash; the single-phase &rarr; two-phase A/B (Qwen3.5-27B, temp 1.0, thinking on)</h2>
+<p class="sub">Five rounds settled the single-phase question definitively: <strong>0 valid / ~236
+completions, truncation 75&ndash;97% at 16k, 18k, and 27.6k caps</strong> &mdash; thinking expands to
+fill any budget it is given, so raising caps is a losing game. Round 5 switched to <strong>two-phase
+completion</strong> (thinking capped at 13,824; on truncation the assistant message is continued past a
+forcing cue &mdash; &ldquo;I have thought about this enough&hellip;&rdquo; &mdash; with a usage-sized
+answer budget), plus an output-discipline prompt section built from the measured failure modes
+(self-contained block, entire-program-not-fills, <code>jnp.cast</code>/<code>pltpu.smem</code> facts).
+Turn-1 validity is still 0 &mdash; but the failure class moved down the stack from &ldquo;nothing
+extractable&rdquo; to executing-kernel semantics, which is the raw material of the repair loop. The
+next metric that matters: <strong>validity after one repair turn</strong> with the verbatim traceback
+in the prompt.</p>
+<p class="sub sm">Bars: single-phase (best available n) vs two-phase per cell. Orange = gate-failed,
+tan = truncated, green would be valid. Serving note: six spot serving-VM deaths across the campaign
+(20 min&ndash;2h45m post-boot, both east5 zones; the two long-lived VMs died at 2h40m and 2h45m);
+cells are ordered no-data-first and every completion banks to NFS as it lands, so the campaign
+converges by attrition.</p>
+<div class="grid"><section class='card'><h3 class='mono sm'>splash_attention &middot; rf3 &middot; group 32</h3><div class='pending'><h4>single-phase (r1, 16k cap)</h4><div class='bar'><div class='tr' style='width:93.8%'></div><div class='gf' style='width:6.2%'></div></div><div class='legend'>truncated 30 &middot; no program 0 &middot; gate-failed 2 &middot; <b>valid 0</b> &middot; lost to preemption 0</div><h4>two-phase</h4><em>generating (round 5b, 12288 answer cap)</em></div></section><section class='card'><h3 class='mono sm'>splash_attention &middot; rf3e &middot; group 32</h3><div class='pending'><h4>single-phase</h4>~4 completions, all preempted rounds; n too small.<h4>two-phase</h4><em>generating (round 5b, 12288 answer cap)</em></div></section><section class='card'><h3 class='mono sm'>splash_attention &middot; rf3s &middot; group 32</h3><div class='pending'><h4>single-phase (r3, 27.6k cap)</h4><div class='bar'><div class='tr' style='width:75.0%'></div><div class='gf' style='width:25.0%'></div></div><div class='legend'>truncated 24 &middot; no program 0 &middot; gate-failed 8 &middot; <b>valid 0</b> &middot; lost to preemption 0</div><h4>two-phase (r5, 13.8k think + 8k answer)</h4><div class='bar'><div class='tr' style='width:78.1%'></div><div class='gf' style='width:21.9%'></div></div><div class='legend'>truncated 25 &middot; no program 0 &middot; gate-failed 7 &middot; <b>valid 0</b> &middot; lost to preemption 0</div>UNCHANGED &mdash; splash programs (fwd+bwd custom_vjp) overflow the 8k answer cap; the 12288-cap rerun is the fix under test.</div></section><section class='card'><h3 class='mono sm'>rg_lru &middot; rf3 &middot; group 32</h3><div class='pending'><h4>single-phase (r5a, 27.6k cap)</h4><div class='bar'><div class='tr' style='width:96.9%'></div><div class='gf' style='width:3.1%'></div></div><div class='legend'>truncated 31 &middot; no program 0 &middot; gate-failed 1 &middot; <b>valid 0</b> &middot; lost to preemption 0</div><h4>two-phase (r5)</h4><div class='bar'><div class='tr' style='width:65.6%'></div><div class='gf' style='width:34.4%'></div></div><div class='legend'>truncated 21 &middot; no program 0 &middot; gate-failed 11 &middot; <b>valid 0</b> &middot; lost to preemption 0</div>97% &rarr; 66% truncated; runtime tracebacks appear for the first time.</div></section><section class='card'><h3 class='mono sm'>rg_lru &middot; rf3e &middot; group 32</h3><div class='pending'><h4>single-phase (r5a)</h4><div class='bar'><div class='tr' style='width:90.6%'></div><div class='gf' style='width:9.4%'></div></div><div class='legend'>truncated 29 &middot; no program 0 &middot; gate-failed 3 &middot; <b>valid 0</b> &middot; lost to preemption 0</div><h4>two-phase (r5)</h4><div class='bar'><div class='tr' style='width:65.6%'></div><div class='gf' style='width:34.4%'></div></div><div class='legend'>truncated 21 &middot; no program 0 &middot; gate-failed 11 &middot; <b>valid 0</b> &middot; lost to preemption 0</div>91% &rarr; 66% truncated; residue still extraction-shaped (syntax 9, no-pallas 8).</div></section><section class='card'><h3 class='mono sm'>rg_lru &middot; rf3s &middot; group 32</h3><div class='pending'><h4>single-phase (r3+r4, 27.6k cap, n=64)</h4><div class='bar'><div class='tr' style='width:81.2%'></div><div class='gf' style='width:18.8%'></div></div><div class='legend'>truncated 26 &middot; no program 0 &middot; gate-failed 6 &middot; <b>valid 0</b> &middot; lost to preemption 0</div><h4>two-phase (r5)</h4><div class='bar'><div class='tr' style='width:28.1%'></div><div class='gf' style='width:71.9%'></div></div><div class='legend'>truncated 9 &middot; no program 0 &middot; gate-failed 23 &middot; <b>valid 0</b> &middot; lost to preemption 0</div><b>The breakthrough cell</b>: 81% &rarr; 28% truncated; 72% deliver complete, EXECUTING programs whose failures are now semantic &mdash; Pallas lowering rank rules (14&times; ValueError), broadcast shapes, <code>pl.program_id</code> vs <code>pltpu.program_id</code> &mdash; exactly the one-traceback-fixable class the repair loop consumes.</div></section></div>
 
 <h2>How these tasks got here</h2>
 <p class="sub sm">From the 66-kernel regrade that retired every historical &ldquo;win&rdquo;: best
