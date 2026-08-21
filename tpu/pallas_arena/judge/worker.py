@@ -122,14 +122,24 @@ def build_signatures(problem, scored_cases, holdout_cases, adv_cases):
     for adv in adv_cases:
         abstract = jax.eval_shape(adv.make_inputs, jax.ShapeDtypeStruct((2,), "uint32"))
         adv_sig[adv.name] = sig_of(abstract, "fwd", f"adv:{adv.name}")
-    grad_sig = None
-    if problem.has_bwd and scored_cases:
-        grad_sig = sig_of(
-            problem.abstract_inputs(scored_cases[0]),
-            "grad",
-            "grad",
-            optional=not problem.bwd_gates,
-        )
+    # The backward is SWEPT like the forward (tokamax convention: every
+    # attention arg_spec registers both a forward and a forward_and_vjp
+    # benchmark, and test_vjp defaults on) -- one grad signature per case,
+    # features bound identically to the forward sig. TP-declared cases are
+    # skipped: their forward exports at per-shard shapes, and a full-shape
+    # grad artifact would be a different program than the case declares.
+    grad_sig = {}
+    if problem.has_bwd:
+        for case in list(scored_cases) + list(holdout_cases):
+            if problem.tp_declared_width(case):
+                continue
+            grad_sig[case.name] = sig_of(
+                problem.abstract_inputs(case),
+                "grad",
+                f"grad:{case.name}",
+                optional=not problem.bwd_gates,
+                features=case.feature_kwargs,
+            )
     return sigs, case_sig, adv_sig, grad_sig
 
 
@@ -638,8 +648,14 @@ class PersistentWorker:
                     warmed.add(sig_name)
         except Exception as e:
             return fail("fixtures", f"{type(e).__name__}: {e}", judge_fault=True)
-        if grad_sig is not None and fixtures:
-            warm_units.append(("grad", lambda: block(fns[grad_sig](*fixtures[0].inputs))))
+        if grad_sig and fixtures:
+            fix_by_case = {f.case.name: f for f in fixtures if f.case is not None}
+            for _cname, _gsig in grad_sig.items():
+                if _gsig in fns and _cname in fix_by_case:
+                    warm_units.append((
+                        f"grad:{_cname}",
+                        lambda g=_gsig, i=fix_by_case[_cname].inputs: block(fns[g](*i)),
+                    ))
 
         t_warmc = self.perf()
         try:
@@ -694,85 +710,106 @@ class PersistentWorker:
             # A non-differentiable candidate exports no grad artifact when the
             # backward is scored rather than gated. That is a recorded outcome
             # (grad_reward stays absent), not a judge fault.
-            if grad_sig is not None and grad_sig not in fns:
-                result["grad_ok"] = False
-                result["grad_error"] = (
-                    child.get(f"{grad_sig}_export_error") or "backward not exported"
-                )
-                grad_sig = None
-            if grad_sig is not None:
+            grad_live = bool(grad_sig)
+            swept = [c for c in self.scored_cases + self.holdout_cases if c.name in (grad_sig or {})]
+            if grad_live:
                 from pallas_arena.judge.problems.base import check_grad_tolerance as check_grad_tol
                 from pallas_arena.judge.problems.base import grad_leaf_tolerances as tolerance_from_reference_leaves
 
-                g_case = self.scored_cases[0]
-                pg = problem.for_case(g_case)
-                g_inputs = problem.make_inputs(fold_in(k_corr, 999), g_case)
-                block(g_inputs)
-                ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
-                cal_grads = [pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)]
-                for _variant in pg.grad_calibration_variants():
-                    try:
-                        cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
-                    except Exception:  # noqa: BLE001
-                        continue
-                g_tol = tolerance_from_reference_leaves(ref_g, *cal_grads)
                 gates = problem.bwd_gates
-                try:
-                    cand_g = fns[grad_sig](*g_inputs)
-                    block(cand_g)
-                except Exception as e:
-                    why = f"grad failed: {type(e).__name__}: {e}"
+                # Strict completeness: the backward must export AND be correct
+                # at EVERY swept shape before any of it is timed. "Correct
+                # backward" is one claim about one function; a shape-dependent
+                # vjp that works at 2048 and lies at 2049 is a wrong backward,
+                # not a partially-scoring one.
+                _missing = [c.name for c in swept if grad_sig[c.name] not in fns]
+                if _missing:
+                    why = (
+                        child.get(f"{grad_sig[_missing[0]]}_export_error")
+                        or f"backward not exported at {_missing[0]}"
+                    )
                     if gates:
                         return fail("gradient", why)
-                    result["grad_ok"], result["grad_error"] = False, why[:400]
-                    grad_sig = None
-                if grad_sig is not None:
+                    result["grad_ok"], result["grad_error"] = False, str(why)[:400]
+                    grad_live = False
+            if grad_live:
+                for _gi, g_case in enumerate(swept):
+                    if over_budget():
+                        return budget_fail(f"gradient ({g_case.name})")
+                    pg = problem.for_case(g_case)
+                    g_inputs = problem.make_inputs(fold_in(k_corr, 999 + _gi), g_case)
+                    block(g_inputs)
+                    ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
+                    cal_grads = [pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)]
+                    for _variant in pg.grad_calibration_variants():
+                        try:
+                            cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
+                        except Exception:  # noqa: BLE001
+                            continue
+                    g_tol = tolerance_from_reference_leaves(ref_g, *cal_grads)
+                    try:
+                        cand_g = fns[grad_sig[g_case.name]](*g_inputs)
+                        block(cand_g)
+                    except Exception as e:
+                        why = f"grad failed at {g_case.name}: {type(e).__name__}: {e}"
+                        if gates:
+                            return fail("gradient", why)
+                        result["grad_ok"], result["grad_error"] = False, why[:400]
+                        grad_live = False
+                        break
                     okay, why = check_grad_tol(cand_g, ref_g, g_tol)
-                    if not okay and gates:
-                        return fail("gradient", why)
-                    result["grad_ok"] = bool(okay)
                     if not okay:
-                        result["grad_error"] = why[:400]
+                        if gates:
+                            return fail("gradient", f"{g_case.name}: {why}")
+                        result["grad_ok"] = False
+                        result["grad_error"] = f"{g_case.name}: {why}"[:400]
                         # Wrong gradients must not be TIMED into a reward --
                         # a fast wrong backward is worth nothing.
-                        grad_sig = None
+                        grad_live = False
+                        break
+                else:
+                    result["grad_ok"] = True
 
-                # ---- 5b. TIME the backward as its own benchmark.
-                # tokamax treats forward and forward+vjp as two separate
-                # benchmarks with separately tuned configs
-                # (dot_product_attention vs dot_product_attention_vjp are
-                # distinct autotuning cache entries), and for training the
-                # backward is often the more expensive half. Until now our
-                # backward was only a pass/fail gate and the reward timed the
-                # forward alone -- so a kernel with a correct but catastrophic
-                # backward scored exactly like one with a fast backward.
-                # Reported separately, never folded into the forward reward:
-                # they are different numbers about different things.
-                #
-                # Only timed when the backward exists AND is correct: a missing
-                # or wrong gradient has already cleared grad_sig, and timing a
-                # wrong backward would pay reward for the wrong thing.
-                if grad_sig is not None:
+            # ---- 5b. TIME the backward at EVERY swept shape.
+            # tokamax treats forward and forward+vjp as two separate
+            # benchmarks with separately tuned configs, registered per
+            # arg_spec -- the backward gets the same shape sweep as the
+            # forward, because for training it is the more expensive half of
+            # the step. Each swept shape becomes one grad factor in the
+            # reward fold (timing.fold_grad_reward), giving fwd:bwd equal
+            # aggregate log-weight instead of the old 1-of-(n+1) afterthought.
+            #
+            # Only timed when the backward exists AND is correct at every
+            # shape (grad_live): timing a wrong backward would pay reward for
+            # the wrong thing. A per-shape timing failure is a judge-side
+            # fault: that factor is EXCLUDED from the fold (never floored --
+            # the floor is the price of candidate absence, not judge trouble).
+            if grad_live:
+                grad_scores, grad_lat, grad_impls, grad_terr = {}, {}, {}, {}
+                for g_case in swept:
+                    if over_budget():
+                        return budget_fail(f"grad timing ({g_case.name})")
                     try:
-                        _gb = self._general_baselines.get(self.scored_cases[0].name, {})
+                        _gb = self._general_baselines.get(g_case.name, {})
                         base_grad_raw = _gb.get("raw") or problem.baseline
-                        # WHICH backward the grad_reward was measured against.
-                        # The forward already records `baseline_impl` for exactly
-                        # this reason -- a ratio against a fallback must never be
-                        # read as a ratio against the production kernel. The
-                        # backward had no such record, so a grad_reward could not
-                        # be interpreted at all: differentiating recurrentgemma's
-                        # Pallas scan and differentiating lax.associative_scan
-                        # are different bars, and only one of them is the claim
-                        # anyone cares about.
-                        result["grad_baseline_impl"] = _gb.get("impl") or getattr(
+                        # WHICH backward each ratio was measured against: a
+                        # ratio vs a fallback must never read as a ratio vs
+                        # the production kernel (same reason the forward
+                        # records baseline_impl per case).
+                        grad_impls[g_case.name] = _gb.get("impl") or getattr(
                             problem, "baseline_impl", "?"
                         )
-                        gb_fn = self.jax.jit(lambda *i: problem.grad_outputs(base_grad_raw, *i))
-                        gc_fn = self.jax.jit(lambda *i: fns[grad_sig](*i))
+                        gb_fn = self.jax.jit(
+                            lambda *i, _b=base_grad_raw: problem.grad_outputs(_b, *i)
+                        )
+                        gc_fn = self.jax.jit(
+                            lambda *i, _g=grad_sig[g_case.name]: fns[_g](*i)
+                        )
                         gpairs = []
                         for i in range(self.timing_warmup + self.timing_pairs):
-                            gi = problem.make_inputs(fold_in(fold_in(k_time, 7000 + i), 31), self.scored_cases[0])
+                            gi = problem.make_inputs(
+                                fold_in(fold_in(k_time, 7000 + i), 31 + swept.index(g_case)), g_case
+                            )
                             block(gi)
                             gp, _, _ = timing_mod.counterbalanced_pair(
                                 i, lambda: gb_fn(*gi), lambda: gc_fn(*gi), perf, block
@@ -780,14 +817,25 @@ class PersistentWorker:
                             if i >= self.timing_warmup:
                                 gpairs.append(gp)
                         if gpairs:
-                            gt = timing_mod.CaseTiming(case=f"grad:{self.scored_cases[0].name}", pairs=gpairs)
-                            result["grad_score"] = gt.score
-                            result["grad_reward"] = timing_mod.gate_reward(gt.score, self.noise_floor or 0.0)
-                            result["grad_latencies"] = {
+                            gt = timing_mod.CaseTiming(case=f"grad:{g_case.name}", pairs=gpairs)
+                            grad_scores[g_case.name] = gt.score
+                            grad_lat[g_case.name] = {
                                 "ref_median_s": gt.ref_median_s, "cand_median_s": gt.cand_median_s
                             }
                     except Exception as e:  # noqa: BLE001 -- a backward TIMING failure must not fail a correct kernel
-                        result["grad_timing_error"] = f"{type(e).__name__}: {str(e)[:160]}"
+                        grad_terr[g_case.name] = f"{type(e).__name__}: {str(e)[:160]}"
+                if grad_scores:
+                    result["grad_scores"] = grad_scores
+                    # Scalar view for existing consumers (regrade_winners,
+                    # artifact tables): the geomean of the swept ratios.
+                    result["grad_score"] = timing_mod.geomean(list(grad_scores.values()))
+                    result["grad_reward"] = timing_mod.gate_reward(
+                        result["grad_score"], self.noise_floor or 0.0
+                    )
+                    result["grad_latencies"] = grad_lat
+                    result["grad_baseline_impl"] = grad_impls
+                if grad_terr:
+                    result["grad_timing_error"] = grad_terr
 
             # ---- 6. counterbalanced interleaved timing, fresh inputs per
             # ---- iteration, correctness verified on TIMED outputs
@@ -920,13 +968,21 @@ class PersistentWorker:
             case_timings, self.noise_floor or 0.0, general=getattr(problem, "general_mode", False)
         )
         if problem.has_bwd:
-            # THE training scalar for RL on has_bwd tasks: backward folded
-            # into the geomean as one more case, absence floored (see
-            # timing.fold_grad_reward). `reward` stays the forward-only
-            # number so nothing existing changes meaning.
+            # THE training scalar for RL on has_bwd tasks: the swept backward
+            # joins the geomean with one factor per shape -- fwd:bwd aggregate
+            # log-weight ~1:1, the train-step reality. Absence or wrongness
+            # floors EVERY grad factor; judge-side timing faults EXCLUDE their
+            # factor instead (empty list = pure forward passthrough). `reward`
+            # stays the forward-only number so nothing existing changes meaning.
+            if result.get("grad_ok") and result.get("grad_scores"):
+                gvals = list(result["grad_scores"].values())
+            elif result.get("grad_ok"):
+                gvals = []  # correct backward, judge could not time it
+            else:
+                gvals = [None] * max(1, len(grad_sig))
             reward_frame["reward_with_bwd"] = timing_mod.fold_grad_reward(
                 reward_frame,
-                result.get("grad_score") if result.get("grad_ok") else None,
+                gvals,
                 self.noise_floor or 0.0,
                 reward_frame["n_scored_cases"],
             )
@@ -983,6 +1039,17 @@ class PersistentWorker:
              unbounded stall on ALL of them.
         """
         budget = self.compile_budget_s
+        # The budget is a TOTAL deadline across units, tuned when a candidate
+        # compiled ~a dozen artifacts. The swept backward roughly doubles the
+        # unit count on has_bwd tasks, so scale the deadline with the unit
+        # count past that historical size -- never TIGHTER than configured
+        # (small candidates keep exactly the old bound; only genuinely bigger
+        # warm sets get proportionally more room).
+        if budget:
+            budget = max(budget, budget * len(units) / 12.0)
+        # The EFFECTIVE budget, for the two timeout messages (they live in
+        # other methods where the local is out of scope).
+        self._effective_compile_budget_s = budget
         if not budget:
             for _label, run in units:
                 run()
@@ -1013,14 +1080,14 @@ class PersistentWorker:
     def _check_compile_deadline(self, t0, deadline, label) -> None:
         if self.perf() >= deadline:
             raise CompileBudgetExceeded(
-                f"candidate compile exceeded the {self.compile_budget_s:.0f}s compile budget "
+                f"candidate compile exceeded the {self._effective_compile_budget_s:.0f}s compile budget "
                 f"({self.perf() - t0:.1f}s at unit {label!r})"
             )
 
     def _on_compile_timeout(self, code: str, tag, unit, elapsed: float) -> None:
         self.compile_timeouts += 1
         why = (
-            f"candidate compile exceeded the {self.compile_budget_s:.0f}s compile budget "
+            f"candidate compile exceeded the {self._effective_compile_budget_s:.0f}s compile budget "
             f"({elapsed:.1f}s inside a single un-cancellable XLA compile at unit {unit!r}); "
             f"judge restarting"
         )

@@ -42,10 +42,13 @@ def test_honest_kernel_passes_with_warm_cost_split(worker):
     assert set(r["holdout"]) == {"tiny-holdout"}
     # the cost split exists: export (sandbox child) / artifact load /
     # candidate compile-warm / steady-state chip time — and the warm chip
-    # time excludes every compile (the ~4s phase-4 target metric)
+    # time excludes every compile (the ~4s phase-4 target metric). The old
+    # tighter bound (chip < export+load+compile) died with the swept
+    # backward: per-shape reference grads and per-shape grad timing are
+    # legitimate chip work, so the split is now asserted by EXISTENCE and
+    # separation, not by proportion.
     assert r["export_s"] > 0 and r["warm_chip_s"] > 0
     assert r["candidate_compile_s"] > 0
-    assert r["warm_chip_s"] < r["export_s"] + r["load_s"] + r["candidate_compile_s"]
 
 
 def test_recalibrated_goldens_pass(worker):

@@ -128,20 +128,24 @@ _RF3_BWD = {
 #      (stale names, unstated shapes) has cost real judge runs; build3 takes
 #      the exact case names the driver grades.
 _BWD_SECTION = """
-## Backward pass (part of your total reward)
+## Backward pass (HALF of your total reward)
 
-Your kernel is also differentiated: the judge runs `jax.grad` through it,
-checks d/d{grad_inputs} against the reference's gradients (per-input
-tolerances), and times your backward against {bwd_baseline}. The backward
-then joins your total as ONE MORE CASE in the geometric mean:
+These kernels are for TRAINING, where the backward is the more expensive
+half of every step -- so it is graded exactly like the forward: at EVERY
+test shape listed above. Per shape, the judge runs `jax.grad` through your
+kernel, checks d/d{grad_inputs} against the reference's gradients
+(per-input tolerances), and times your backward against {bwd_baseline}.
+Each shape's backward speed ratio joins the geometric mean as its own case:
 
-    total = (forward_score^n * grad)^(1/(n+1))
-    grad  = your backward's speed ratio      if it is correct
-          = a small floor (~0.05)            if missing or wrong
+    total  = (fwd_1 * ... * fwd_n  *  bwd_1 * ... * bwd_n)^(1/2n)
+    bwd_i  = your backward's speed ratio at shape i   if correct at ALL shapes
+           = a small floor (~0.05-0.13)               if missing or wrong anywhere
 
-So a kernel with no backward is never zeroed -- but its total takes a
-significant haircut (roughly 25-35%). No backward < slow correct backward
-< fast backward, always.
+Your backward must be correct at every shape to be timed at all -- a vjp
+that works at 2048 but lies at 2049 is a wrong backward. A kernel with no
+backward is never zeroed, but with half the factors sitting on the floor
+its total takes a severe haircut (roughly 40-60%). No backward <= slow
+correct backward < fast backward, always.
 
 A raw `pl.pallas_call` is NOT differentiable: generic autodiff cannot trace
 into a Pallas grid. To earn the backward, wrap your kernel in
@@ -210,8 +214,11 @@ One program must trace and run at ALL of these:
 Correctness first: per-element error against the starter code above on hidden random \
 seeds (max and 99th-percentile tail, tolerance calibrated to what honest \
 implementations achieve), plus a few adversarial inputs (saturating values, fully \
-masked rows, empty groups). Then speed: your kernel is timed against {baseline}; \
-reward = its median time / yours, so 1.0 is parity and above 1.0 beats it.
+masked rows, empty groups). Then speed: at EACH test shape your kernel is timed \
+against {baseline}; the shape's score = its median time / yours, so 1.0 is parity \
+and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores \
+across all test shapes (so a win at one shape cannot buy back a loss at another \
+-- be uniformly fast, including at the non-divisible shapes).
 
 ## Three TPU notes
 

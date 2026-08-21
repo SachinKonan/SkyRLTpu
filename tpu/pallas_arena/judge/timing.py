@@ -371,19 +371,33 @@ def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general:
 
 # The BACKWARD-FOLDED total: the training scalar for RL on has_bwd tasks.
 #
-# The backward joins the geomean as ONE MORE CASE (weight 1/(n+1)) -- one
-# number, one domain, TriMul's one-scalar discipline -- with an ABSENCE
-# FLOOR instead of 0: a literal zero in a geomean zeroes the total, which
-# silently re-creates the hard gradient gate that flattened 8/8 splash
-# winners (flat reward = no RL signal). max(noise_floor, 0.05) preserves
-# the ordering that matters -- no backward (~25-35% haircut at our case
-# counts) < slow-but-correct backward < fast backward -- without a cliff.
+# The backward is SWEPT across the same shapes as the forward (tokamax:
+# every arg_spec registers a forward AND a forward_and_vjp benchmark) and
+# joins the geomean with ONE FACTOR PER SHAPE -- one number, one domain,
+# TriMul's one-scalar discipline, but with fwd:bwd aggregate log-weight
+# ~1:1. That weight is deliberate: these kernels are upstream-bound for
+# TRAINING, where the backward is the more expensive half of the step; the
+# old single grad factor gave it 1/(n+1) weight as an artifact of how many
+# shapes the forward happened to sweep.
+#
+# Each missing/wrong grad factor takes an ABSENCE FLOOR instead of 0: a
+# literal zero in a geomean zeroes the total, which silently re-creates the
+# hard gradient gate that flattened 8/8 splash winners (flat reward = no RL
+# signal). max(noise_floor, 0.05) preserves the ordering that matters --
+# no backward (~40-60% haircut under the full sweep) < slow-but-correct
+# backward < fast backward -- without a cliff.
 GRAD_ABSENT_FLOOR = 0.05
 
 
-def fold_grad_reward(reward_frame: dict, grad_score: float | None,
+def fold_grad_reward(reward_frame: dict, grad_scores: list[float | None],
                      noise_floor: float, n_scored: int) -> float:
-    """Fold the backward into the forward geomean as one more case.
+    """Fold the swept backward into the forward geomean.
+
+    ``grad_scores`` carries one entry per swept backward shape: a measured
+    baseline/candidate ratio, or None where the backward is absent or wrong
+    (floored). An EMPTY list means the judge could not time any backward
+    through no fault of the candidate -- the fold is a passthrough of the
+    forward reward, never a punishment for judge trouble.
 
     A CORRECT backward is clamped UP to the floor as well: without the
     clamp, a correct-but-very-slow backward (score < floor) totals WORSE
@@ -393,6 +407,11 @@ def fold_grad_reward(reward_frame: dict, grad_score: float | None,
     at the floor."""
     fwd = reward_frame["score"]
     floor = max(noise_floor, GRAD_ABSENT_FLOOR)
-    comp = max(grad_score, floor) if grad_score else floor
-    total = (fwd ** n_scored * comp) ** (1.0 / (n_scored + 1))
+    comps = [max(g, floor) if g else floor for g in grad_scores]
+    if not comps:
+        return gate_reward(fwd, noise_floor)
+    prod = 1.0
+    for c in comps:
+        prod *= c
+    total = (fwd ** n_scored * prod) ** (1.0 / (n_scored + len(comps)))
     return gate_reward(total, noise_floor)

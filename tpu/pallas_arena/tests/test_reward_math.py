@@ -232,27 +232,40 @@ def test_fold_grad_reward_orders_none_slow_fast():
     from pallas_arena.judge.timing import fold_grad_reward
 
     frame = {"score": 0.5}
-    none_ = fold_grad_reward(frame, None, noise_floor=0.02, n_scored=6)
-    slow = fold_grad_reward(frame, 0.2, noise_floor=0.02, n_scored=6)
-    fast = fold_grad_reward(frame, 0.9, noise_floor=0.02, n_scored=6)
+    none_ = fold_grad_reward(frame, [None] * 6, noise_floor=0.02, n_scored=6)
+    slow = fold_grad_reward(frame, [0.2] * 6, noise_floor=0.02, n_scored=6)
+    fast = fold_grad_reward(frame, [0.9] * 6, noise_floor=0.02, n_scored=6)
     assert 0 < none_ < slow < fast, (none_, slow, fast)
     # absence is a haircut, not an execution
     assert none_ > 0.2 * frame["score"], none_
     # and a strong backward on a strong forward can still clear parity gating
-    assert fold_grad_reward({"score": 1.2}, 1.2, 0.02, 6) > 1.0
+    assert fold_grad_reward({"score": 1.2}, [1.2] * 6, 0.02, 6) > 1.0
 
 
-def test_fold_grad_reward_weight_is_one_case():
-    """The backward carries exactly 1/(n+1) weight -- folding it as a case,
-    not as a separate weighted term."""
+def test_fold_grad_reward_swept_weight_is_one_factor_per_shape():
+    """Each swept backward shape is one geomean factor: with a full sweep
+    (m == n) the fwd:bwd aggregate log-weight is exactly 1:1 -- the
+    train-step reality, not the old 1/(n+1) afterthought."""
     import math
 
     from pallas_arena.judge.timing import fold_grad_reward
 
     n = 7
-    got = fold_grad_reward({"score": 0.4}, 0.8, noise_floor=0.0, n_scored=n)
-    want = math.exp((n * math.log(0.4) + math.log(0.8)) / (n + 1))
+    got = fold_grad_reward({"score": 0.4}, [0.8] * n, noise_floor=0.0, n_scored=n)
+    want = math.sqrt(0.4 * 0.8)  # (0.4^n * 0.8^n)^(1/2n)
     assert abs(got - want) < 1e-12
+    # a partial sweep weights by its actual factor count
+    got_one = fold_grad_reward({"score": 0.4}, [0.8], noise_floor=0.0, n_scored=n)
+    want_one = math.exp((n * math.log(0.4) + math.log(0.8)) / (n + 1))
+    assert abs(got_one - want_one) < 1e-12
+
+
+def test_fold_grad_reward_empty_sweep_is_a_passthrough():
+    """An empty grad_scores list means the JUDGE could not time the (correct)
+    backward -- judge trouble must never haircut the candidate."""
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    assert fold_grad_reward({"score": 0.5}, [], noise_floor=0.0, n_scored=6) == 0.5
 
 
 def test_fold_never_punishes_a_correct_backward_below_absence():
@@ -262,6 +275,10 @@ def test_fold_never_punishes_a_correct_backward_below_absence():
     from pallas_arena.judge.timing import fold_grad_reward
 
     frame = {"score": 0.5}
-    absent = fold_grad_reward(frame, None, noise_floor=0.05, n_scored=6)
-    glacial = fold_grad_reward(frame, 0.01, noise_floor=0.05, n_scored=6)
+    absent = fold_grad_reward(frame, [None] * 6, noise_floor=0.05, n_scored=6)
+    glacial = fold_grad_reward(frame, [0.01] * 6, noise_floor=0.05, n_scored=6)
     assert glacial >= absent, (glacial, absent)
+    # mixed: some shapes measured, some absent -- still never below all-absent
+    mixed = fold_grad_reward(frame, [0.3, None, 0.01], noise_floor=0.05, n_scored=6)
+    all_absent = fold_grad_reward(frame, [None] * 3, noise_floor=0.05, n_scored=6)
+    assert mixed >= all_absent, (mixed, all_absent)
