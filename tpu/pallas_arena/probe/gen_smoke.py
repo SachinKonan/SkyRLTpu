@@ -32,13 +32,11 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
         "max_tokens": max_tokens,
         "temperature": temperature,
         "top_p": 1.0,
-        # Thinking OFF: measured at temp 1.0, qwen's thinking blows through
-        # an 18432-token completion cap on >50% of attempts EVEN WITH the
-        # rf3s scaffold (round 2: 17/18 truncated or unfinished) -- validity
-        # is unmeasurable through that confound. A policy that cannot finish
-        # a program in 18k tokens is not usable for evolution in that mode
-        # regardless; gemma has no thinking channel at all.
-        "chat_template_kwargs": {"enable_thinking": False},
+        # Thinking ON -- everywhere, by direction: initial generation AND
+        # improvement mode both run the policy we would actually train.
+        # Truncation under thinking is a MEASURED OUTCOME, not a confound to
+        # remove: the completion budget is the lever (32k-context serving is
+        # the headroom move if the rate stays high), never the channel.
     }
     req = urllib.request.Request(
         f"{server}/v1/chat/completions",
