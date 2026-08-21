@@ -237,6 +237,19 @@ indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
 ## Output
 
 One fenced ```python block containing the complete program. No prose after it.
+
+Rules that decide whether your program can be graded at all (each one below
+has killed real submissions):
+- The block must be COMPLETE and SELF-CONTAINED: all imports included
+  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
+  that assumes surrounding context dies with a NameError.
+- If starter/scaffold code was given, return the ENTIRE program with your
+  parts filled in -- never the filled parts alone.
+- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
+  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
+  does not exist).
+- Close every string, bracket, and the fence itself; a program cut mid-line
+  scores 0. Budget your reasoning so the code block finishes.
 """
 
 _EXAMPLE = """

@@ -33,7 +33,11 @@ LAND_DEADLINE_S=${LAND_DEADLINE_S:-10800}
 HARD_CAP_S=${HARD_CAP_S:-14400}
 SERVE_READY_S=${SERVE_READY_S:-5400}   # fresh 32k compile on first boot
 GROUP_SIZE=${GROUP_SIZE:-32}
-MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-27648}
+# Two-phase: MAX_NEW_TOKENS is the PHASE-1 (thinking) cap; when it
+# truncates, the client forces the answer with ANSWER_CAP more tokens
+# (rq2 pattern). Single-phase caps measured 53-97% truncation at any size.
+MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-13824}
+ANSWER_CAP=${ANSWER_CAP:-8192}
 QWEN_MODEL=${QWEN_MODEL:-Qwen/Qwen3.5-27B}
 # 32k context, like the llamafarm serving: thinking stays ON and the
 # completion budget absorbs it instead of truncating. First boot at 32k
@@ -149,7 +153,8 @@ timeout 300 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJ
 
 uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_smoke.py \
   --server "http://127.0.0.1:${LOCAL_PORT}" --model "$QWEN_MODEL" \
-  --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS" --concurrency 6
+  --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS" --concurrency 6 \
+  --answer-cap "$ANSWER_CAP" --cells "${SMOKE_CELLS:-}"
 rc=$?
 echo "=== generation rc=${rc}; gens at ${GENS_OUT} ==="
 exit "$rc"

@@ -81,7 +81,15 @@ def main() -> None:
             continue
         if row.get("finish_reason") != "stop":
             cell["truncated"] += 1
-        program = extract_program(row.get("text") or "")
+        text = row.get("text") or ""
+        # Two-phase rows: the program is whatever follows the forcing cue,
+        # fence-closed or not (a forced answer may hit EOS before closing
+        # its fence -- rq2 loop.py extracts the same way).
+        from pallas_arena.probe.gen_smoke import FORCE
+        if FORCE in text:
+            program = text.rsplit(FORCE, 1)[1].split("```", 1)[0].strip() or None
+        else:
+            program = extract_program(text)
         if not program:
             cell["no_program"] += 1
             verdict["outcome"] = "no_program"

@@ -24,20 +24,15 @@ import time
 import urllib.request
 
 
-def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: float,
-          timeout_s: float) -> dict:
-    body = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "top_p": 1.0,
-        # Thinking ON -- everywhere, by direction: initial generation AND
-        # improvement mode both run the policy we would actually train.
-        # Truncation under thinking is a MEASURED OUTCOME, not a confound to
-        # remove: the completion budget is the lever (32k-context serving is
-        # the headroom move if the rate stays high), never the channel.
-    }
+# Two-phase forcing cue (byte-identical to the proven rq2/client/loop.py
+# pattern): appended to the truncated assistant message, continued with
+# continue_final_message. Extraction-friendly: the program is whatever
+# follows this cue inside the opened fence.
+FORCE = ("\n\nI have thought about this enough. Here is my final, complete, "
+         "self-contained program:\n\n```python\n")
+
+
+def _post(server: str, body: dict, timeout_s: float) -> dict:
     req = urllib.request.Request(
         f"{server}/v1/chat/completions",
         data=json.dumps(body).encode(),
@@ -45,6 +40,48 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
     )
     with urllib.request.urlopen(req, timeout=timeout_s) as r:
         return json.load(r)
+
+
+def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: float,
+          timeout_s: float, ctx: int = 32768, answer_cap: int = 8192) -> dict:
+    """Two-phase completion. Thinking stays ON (by direction: we sample the
+    policy we would train), but it is CAPPED: phase 1 gets `max_tokens`; if
+    it truncates, the assistant message is continued past a forcing cue with
+    an answer budget sized from ACTUAL usage (rq2 loop.py measured fixed p2
+    overflowing the context -> vLLM 400 -- sizing from usage is load-bearing).
+    Measured motivation: 16k/18k/27k single-phase caps truncated 53-97% of
+    completions -- thinking expands to fill ANY budget it is given."""
+    base = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "top_p": 1.0,
+    }
+    d = _post(server, {**base, "max_tokens": max_tokens}, timeout_s)
+    ch = d["choices"][0]
+    if ch.get("finish_reason") != "length":
+        return d
+    text = ch["message"].get("content") or ""
+    u = d.get("usage") or {}
+    used = (u.get("prompt_tokens") or 0) + (u.get("completion_tokens") or max_tokens)
+    room = ctx - used - 256
+    p2 = min(answer_cap, room)
+    if p2 < 512:
+        return d  # no room to force; the parser gets the phase-1 text
+    d2 = _post(server, {
+        **base, "max_tokens": p2,
+        "messages": base["messages"] + [{"role": "assistant", "content": text + FORCE}],
+        "continue_final_message": True, "add_generation_prompt": False,
+    }, timeout_s)
+    ch2 = d2["choices"][0]
+    merged = dict(d2)
+    merged["choices"] = [dict(ch2)]
+    merged["choices"][0]["message"] = dict(ch2["message"])
+    merged["choices"][0]["message"]["content"] = (
+        text + FORCE + (ch2["message"].get("content") or ""))
+    merged["two_phase"] = True
+    merged["phase1_usage"] = u
+    return merged
 
 
 def main() -> None:
@@ -57,14 +94,21 @@ def main() -> None:
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--timeout-s", type=float, default=2400.0)
+    ap.add_argument("--cells", default="", help="comma list of task:variant to run (default: all)")
+    ap.add_argument("--ctx", type=int, default=32768)
+    ap.add_argument("--answer-cap", type=int, default=8192,
+                    help="phase-2 code budget when phase 1 (--max-tokens) truncates")
     args = ap.parse_args()
 
     sys.path.insert(0, "tpu")
     from pallas_arena.probe.prompt_ref_first import build3, build3s
     from pallas_arena.probe.smoke_config import CELLS
 
+    want = {tuple(c.split(":")) for c in args.cells.split(",") if c.strip()}
     jobs = []
     for (task, variant), (cases, example) in CELLS.items():
+        if want and (task, variant) not in want:
+            continue
         if example == "scaffold":
             prompt = build3s(task, cases)
         else:
@@ -72,17 +116,21 @@ def main() -> None:
         ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
         for i in range(args.group_size):
             jobs.append((task, variant, i, prompt, ph))
-    print(f"[gen] {len(jobs)} generations over {len(CELLS)} cells", flush=True)
+    n_cells = len({(t, v) for t, v, *_ in jobs})
+    print(f"[gen] {len(jobs)} generations over {n_cells} cells", flush=True)
 
     def run(job):
         task, variant, i, prompt, ph = job
         t0 = time.time()
         try:
             resp = _chat(args.server, args.model, prompt, args.max_tokens,
-                         args.temperature, args.timeout_s)
+                         args.temperature, args.timeout_s,
+                         ctx=args.ctx, answer_cap=args.answer_cap)
             ch = resp["choices"][0]
             return {
                 "task": task, "variant": variant, "idx": i, "prompt_sha": ph,
+                "two_phase": bool(resp.get("two_phase")),
+                "phase1_usage": resp.get("phase1_usage"),
                 "finish_reason": ch.get("finish_reason"),
                 "text": ch["message"].get("content") or "",
                 "reasoning": ch["message"].get("reasoning_content") or "",
