@@ -205,8 +205,13 @@ if [ -n "${JAX_CACHE_GCS:-}" ]; then
   gcloud storage rsync -r "$JAX_CACHE_GCS" "$JAX_CACHE_LOCAL" >/dev/null 2>&1 \
     && echo "trainer JAX cache restored from $JAX_CACHE_GCS" \
     || echo "trainer JAX cache empty/miss (will compile)"
-  ( for _i in $(seq 1 24); do
-      sleep 600
+  # Publish cadence: a preemption between "compile finished" and "next tick"
+  # loses the whole compile (bit muse live: ~25min fb compile, 10min tick,
+  # slice died in the gap -- cache stayed at 0 after the attempt). Short spot
+  # windows need a tight cadence; the rsync is checksum-additive so an
+  # empty-delta tick is nearly free. 180s x 480 spans the same 24h.
+  ( for _i in $(seq 1 480); do
+      sleep "${JAX_CACHE_PUBLISH_SECS:-180}"
       gcloud storage rsync -r "$JAX_CACHE_LOCAL" "$JAX_CACHE_GCS" >/dev/null 2>&1
     done ) >/dev/null 2>&1 &
 fi
