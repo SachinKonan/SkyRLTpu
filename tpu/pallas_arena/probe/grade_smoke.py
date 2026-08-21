@@ -89,7 +89,14 @@ def main() -> None:
         if FORCE in text:
             program = text.rsplit(FORCE, 1)[1].split("```", 1)[0].strip() or None
         else:
-            program = extract_program(text)
+            # Thinking drafts fenced snippets before the real answer, so
+            # "last block" can also be a trailing usage example. Prefer the
+            # LAST block that defines the entrypoint; plain last-block is the
+            # fallback for responses with no `def kernel` anywhere.
+            import re as _re
+            blocks = _re.findall(r"```(?:python)?\s*\n(.*?)```", text, _re.S)
+            with_kernel = [b for b in blocks if "def kernel" in b]
+            program = (with_kernel[-1].strip() if with_kernel else extract_program(text))
         if not program:
             cell["no_program"] += 1
             verdict["outcome"] = "no_program"
