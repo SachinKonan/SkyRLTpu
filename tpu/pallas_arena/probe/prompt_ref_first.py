@@ -128,16 +128,23 @@ _RF3_BWD = {
 #      (stale names, unstated shapes) has cost real judge runs; build3 takes
 #      the exact case names the driver grades.
 _BWD_SECTION = """
-## Backward pass (separately scored)
+## Backward pass (part of your total reward)
 
-Your kernel is also differentiated: the judge runs `jax.grad` through it and
+Your kernel is also differentiated: the judge runs `jax.grad` through it,
 checks d/d{grad_inputs} against the reference's gradients (per-input
-tolerances), then times your backward against {bwd_baseline}. This is a
-SEPARATE reward component -- a forward-only kernel keeps its forward reward
-and simply earns 0 for the backward.
+tolerances), and times your backward against {bwd_baseline}. The backward
+then joins your total as ONE MORE CASE in the geometric mean:
+
+    total = (forward_score^n * grad)^(1/(n+1))
+    grad  = your backward's speed ratio      if it is correct
+          = a small floor (~0.05)            if missing or wrong
+
+So a kernel with no backward is never zeroed -- but its total takes a
+significant haircut (roughly 25-35%). No backward < slow correct backward
+< fast backward, always.
 
 A raw `pl.pallas_call` is NOT differentiable: generic autodiff cannot trace
-into a Pallas grid. To earn the backward component, wrap your kernel in
+into a Pallas grid. To earn the backward, wrap your kernel in
 `jax.custom_vjp` and write the backward as its own Pallas kernel (save what
 the backward needs -- e.g. row max/denominator statistics -- as residuals).
 """

@@ -42,7 +42,11 @@ QWEN_MODEL=${QWEN_MODEL:-Qwen/Qwen3.5-27B}
 QWEN_MAXLEN=${QWEN_MAXLEN:-32768}
 BUCKET=gs://sk7524-tinker-tpu-us-east5
 QWEN_HF_GCS=${QWEN_HF_GCS:-${BUCKET}/hf-cache}
-QWEN_XLA_GCS=${QWEN_XLA_GCS:-${BUCKET}/vllm-xla-cache-qwen35-32k}
+# cache prefix encodes the FULL config (RQ2 convention: model-ctx-bN),
+# plus hardware: XLA caches are keyed by topology too, so a v6e-8 b64
+# cache and this v5p-8 b16 cache can never be shared. The bare -32k
+# name would have collided with RQ2\x27s (never-populated) -32k-b64.
+QWEN_XLA_GCS=${QWEN_XLA_GCS:-${BUCKET}/vllm-xla-cache-qwen35-32k-b16-v5p8}
 VLLM_PORT=8001
 LOCAL_PORT=18001
 
