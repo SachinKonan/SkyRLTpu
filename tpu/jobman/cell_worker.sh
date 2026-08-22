@@ -179,7 +179,14 @@ pick_tiles() {
       FLCE_TILE=1024; VOCAB_TILING=32
       MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" ;;
     muse-glimmer-30b)
-      FLCE_TILE=2048; VOCAB_TILING=8
+      # nvt 32, not the RL spec's 8: the fb arena measured a ~41G
+      # seq-independent constant (60.47G @22528 vs 56.99G @18432 -- only the
+      # ~850KB/token slope moved), i.e. vocab-sized workspace dominates, and
+      # V/nvt is its divisor. 32 is the value muse's own MAXTEXT.md
+      # training-half config validated (gemma runs 32, qwen 64; 8 was the
+      # outlier). FLCE tile stays 2048 -- both validated configs agree, and
+      # smaller FLCE tiles grow the scorer (the known trap).
+      FLCE_TILE=2048; VOCAB_TILING=32
       MT_KWARGS="{\"remat_policy\": \"full\", \"ici_fsdp_parallelism\": 4, \"num_vocab_tiling\": $VOCAB_TILING}" ;;
     *)
       case "$CELL" in
