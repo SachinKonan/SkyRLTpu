@@ -211,7 +211,9 @@ def _fwd_body(x_ref, a_ref, reset_ref, h_ref, *, t):
     Ref shapes (sliced by the BlockSpecs below):
       x_ref    : [t, BLOCK_D] bf16
       a_ref    : [t, BLOCK_D] f32   gates in [0, 1)
-      reset_ref: [t]          bool  (True -> state resets to 0 at this step)
+      reset_ref: [t, 1]       bool  (True -> state resets to 0 at this step;
+                              the trailing axis is there so it broadcasts
+                              DIRECTLY against [t, BLOCK_D] -- no reshaping)
       h_ref    : [t, BLOCK_D] f32   write ALL hidden states here
     Recurrence: h_t = a_t * h_{t-1} + sqrt(1 - a_t^2) * x_t, with a_t forced
     to 0 where reset_t (so no state crosses the boundary).
@@ -229,17 +231,18 @@ def _forward(x, a, reset):
         in_specs=[
             pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
             pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
-            pl.BlockSpec((1, t), lambda i, j: (i, 0)),
+            pl.BlockSpec((1, t, 1), lambda i, j: (i, 0, 0)),
         ],
         out_specs=pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
         out_shape=jax.ShapeDtypeStruct((b, t, d), jnp.float32),
         interpret=INTERPRET,
-    )(x, a, reset)
+    )(x, a, reset[..., None])
 
 
 # ------------------------------------------------- backward (custom_vjp) ---
 def _bwd_body(x_ref, a_ref, reset_ref, h_ref, g_ref, dx_ref, da_ref, *, t):
     """Same grid as forward, REVERSE-time recurrence.
+    reset_ref: [t, 1] bool (broadcasts against [t, BLOCK_D] directly).
     g_ref: [t, BLOCK_D] f32 incoming cotangent dL/dh.
     Write dx into dx_ref [t, BLOCK_D] and da into da_ref [t, BLOCK_D].
     Remember the gate path: h_t depends on a_t both through a_t*h_{t-1} AND
@@ -266,7 +269,7 @@ def kernel(x, a, reset):
             in_specs=[
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
-                pl.BlockSpec((1, t), lambda i, j: (i, 0)),
+                pl.BlockSpec((1, t, 1), lambda i, j: (i, 0, 0)),
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
             ],
@@ -279,7 +282,7 @@ def kernel(x, a, reset):
                 jax.ShapeDtypeStruct((b, t, d), jnp.float32),
             ],
             interpret=INTERPRET,
-        )(x, a, reset, h, g.astype(jnp.float32))
+        )(x, a, reset[..., None], h, g.astype(jnp.float32))
         # reset is boolean: cotangent slot None.
         return (dx.astype(x.dtype), da.astype(a.dtype), None)
 
@@ -324,8 +327,8 @@ SPLASH_NAIVE_FWD = '''
 RGLRU_NAIVE_FWD = '''
     x = x_ref[0].astype(jnp.float32)          # [t, block_d]
     a = a_ref[0]                              # [t, block_d] f32
-    reset = reset_ref[0]                      # [t]
-    a = a * (1.0 - reset[:, None].astype(jnp.float32))
+    reset = reset_ref[0]                      # [t, 1]
+    a = a * (1.0 - reset.astype(jnp.float32))
     gx = jnp.sqrt(jnp.maximum(1.0 - a * a, 0.0)) * x
 
     def step(carry, idx):
@@ -340,10 +343,10 @@ RGLRU_NAIVE_FWD = '''
 RGLRU_NAIVE_BWD = '''
     x = x_ref[0].astype(jnp.float32)
     a_raw = a_ref[0]
-    reset = reset_ref[0]
+    reset = reset_ref[0]                      # [t, 1]
     h = h_ref[0]
     g = g_ref[0]
-    live = 1.0 - reset[:, None].astype(jnp.float32)
+    live = 1.0 - reset.astype(jnp.float32)
     a = a_raw * live
     root = jnp.sqrt(jnp.maximum(1.0 - a * a, 0.0))
     h_prev = jnp.concatenate([jnp.zeros((1, x.shape[1]), jnp.float32), h[:-1]], axis=0)

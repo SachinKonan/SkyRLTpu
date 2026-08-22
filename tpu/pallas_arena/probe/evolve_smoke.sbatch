@@ -172,7 +172,9 @@ ENGINE_SNAP_PID=$!
 uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_smoke.py \
   --server "http://127.0.0.1:${LOCAL_PORT}" --model "$QWEN_MODEL" \
   --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS" --concurrency 6 \
-  --answer-cap "$ANSWER_CAP" --cells "${SMOKE_CELLS:-}"
+  --answer-cap "$ANSWER_CAP" --cells "${SMOKE_CELLS:-}" --ctx "$QWEN_MAXLEN" \
+  ${REPAIR_FROM:+--repair-from "$REPAIR_FROM" --gens-from "$GENS_FROM"} \
+  ${ENABLE_THINKING_KWARG:+--enable-thinking-kwarg}
 rc=$?
 echo "=== generation rc=${rc}; gens at ${GENS_OUT} ==="
 exit "$rc"

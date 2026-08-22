@@ -33,6 +33,23 @@ FORCE = ("\n\nI have thought about this enough. Here is my final, complete, "
          "`pl.pallas_call` kernel and every import included:\n\n```python\n")
 
 
+def extract_completion(text: str) -> str | None:
+    """The program in a completion: after the forcing cue when present
+    (fence-closed or not), else the last fenced block defining kernel()."""
+    import re
+    cue = "I have thought about this enough"
+    if cue in text:
+        after = text.rsplit(cue, 1)[1]
+        if "```python\n" in after:
+            after = after.split("```python\n", 1)[1]
+        return after.split("```", 1)[0].strip() or None
+    blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", text, re.S)
+    with_kernel = [b for b in blocks if "def kernel" in b]
+    if with_kernel:
+        return with_kernel[-1].strip()
+    return blocks[-1].strip() if blocks else None
+
+
 def _post(server: str, body: dict, timeout_s: float) -> dict:
     req = urllib.request.Request(
         f"{server}/v1/chat/completions",
@@ -44,7 +61,8 @@ def _post(server: str, body: dict, timeout_s: float) -> dict:
 
 
 def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: float,
-          timeout_s: float, ctx: int = 32768, answer_cap: int = 8192) -> dict:
+          timeout_s: float, ctx: int = 32768, answer_cap: int = 8192,
+          extra_body: dict | None = None) -> dict:
     """Two-phase completion. Thinking stays ON (by direction: we sample the
     policy we would train), but it is CAPPED: phase 1 gets `max_tokens`; if
     it truncates, the assistant message is continued past a forcing cue with
@@ -58,6 +76,8 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
         "temperature": temperature,
         "top_p": 1.0,
     }
+    if extra_body:
+        base.update(extra_body)
     d = _post(server, {**base, "max_tokens": max_tokens}, timeout_s)
     ch = d["choices"][0]
     if ch.get("finish_reason") != "length":
@@ -96,6 +116,10 @@ def main() -> None:
     ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--timeout-s", type=float, default=2400.0)
     ap.add_argument("--cells", default="", help="comma list of task:variant to run (default: all)")
+    ap.add_argument("--repair-from", default="", help="graded json of a prior round: run ONE repair turn per failed program (the RL improvement turn)")
+    ap.add_argument("--gens-from", default="", help="gens jsonl matching --repair-from")
+    ap.add_argument("--enable-thinking-kwarg", action="store_true",
+                    help="send chat_template_kwargs enable_thinking=True (gemma needs it; qwen thinks by default)")
     ap.add_argument("--ctx", type=int, default=32768)
     ap.add_argument("--answer-cap", type=int, default=8192,
                     help="phase-2 code budget when phase 1 (--max-tokens) truncates")
@@ -106,17 +130,51 @@ def main() -> None:
     from pallas_arena.probe.smoke_config import CELLS
 
     want = {tuple(c.split(":")) for c in args.cells.split(",") if c.strip()}
+
+    def base_prompt(task, variant):
+        cases, example = CELLS[(task, variant)]
+        return build3s(task, cases) if example == "scaffold" else build3(task, cases, example=example)
+
     jobs = []
-    for (task, variant), (cases, example) in CELLS.items():
-        if want and (task, variant) not in want:
-            continue
-        if example == "scaffold":
-            prompt = build3s(task, cases)
-        else:
-            prompt = build3(task, cases, example=example)
-        ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
-        for i in range(args.group_size):
-            jobs.append((task, variant, i, prompt, ph))
+    if args.repair_from:
+        # THE RL IMPROVEMENT TURN, simulated: base prompt + the candidate's
+        # own program + the verbatim judge feedback it earned.
+        from pallas_arena.probe.prompt_ref_first import IMPROVE_TEMPLATE
+        graded = json.load(open(args.repair_from))
+        prior = {}
+        for line in open(args.gens_from):
+            r = json.loads(line)
+            if not r.get("error"):
+                prior[(r["task"], r["variant"], r["idx"])] = r.get("text") or ""
+        for cell_key, celld in graded.items():
+            task, variant = cell_key.split(":")
+            if want and (task, variant) not in want:
+                continue
+            for row in celld["rows"]:
+                out = str(row.get("outcome") or "")
+                text = prior.get((task, variant, row["idx"]))
+                if text is None or out.startswith("gen_error") or out == "no_program":
+                    continue
+                program = extract_completion(text)
+                if not program:
+                    continue
+                fb = out.replace("pregate: ", "", 1)
+                prompt = IMPROVE_TEMPLATE.format(
+                    base=base_prompt(task, variant),
+                    reward="0.0 (failed validity)" if out != "correct" else "passed validity",
+                    program=program,
+                    observation=fb,
+                )
+                ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
+                jobs.append((task, f"{variant}+repair", row["idx"], prompt, ph))
+    else:
+        for (task, variant), (cases, example) in CELLS.items():
+            if want and (task, variant) not in want:
+                continue
+            prompt = base_prompt(task, variant)
+            ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
+            for i in range(args.group_size):
+                jobs.append((task, variant, i, prompt, ph))
     n_cells = len({(t, v) for t, v, *_ in jobs})
     print(f"[gen] {len(jobs)} generations over {n_cells} cells", flush=True)
 
@@ -124,9 +182,11 @@ def main() -> None:
         task, variant, i, prompt, ph = job
         t0 = time.time()
         try:
+            extra = ({"chat_template_kwargs": {"enable_thinking": True}}
+                     if args.enable_thinking_kwarg else None)
             resp = _chat(args.server, args.model, prompt, args.max_tokens,
                          args.temperature, args.timeout_s,
-                         ctx=args.ctx, answer_cap=args.answer_cap)
+                         ctx=args.ctx, answer_cap=args.answer_cap, extra_body=extra)
             ch = resp["choices"][0]
             return {
                 "task": task, "variant": variant, "idx": i, "prompt_sha": ph,

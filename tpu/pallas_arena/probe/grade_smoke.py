@@ -82,27 +82,10 @@ def main() -> None:
         if row.get("finish_reason") != "stop":
             cell["truncated"] += 1
         text = row.get("text") or ""
-        # Two-phase rows: the program is whatever follows the forcing cue,
-        # fence-closed or not (a forced answer may hit EOS before closing
-        # its fence -- rq2 loop.py extracts the same way).
-        # Cue-tolerant: match the stable sentence, not the exact cue text
-        # (the cue gained a pallas reminder between rounds; old rows must
-        # still regrade).
-        _CUE = "I have thought about this enough"
-        if _CUE in text:
-            after = text.rsplit(_CUE, 1)[1]
-            if "```python\n" in after:
-                after = after.split("```python\n", 1)[1]
-            program = after.split("```", 1)[0].strip() or None
-        else:
-            # Thinking drafts fenced snippets before the real answer, so
-            # "last block" can also be a trailing usage example. Prefer the
-            # LAST block that defines the entrypoint; plain last-block is the
-            # fallback for responses with no `def kernel` anywhere.
-            import re as _re
-            blocks = _re.findall(r"```(?:python)?\s*\n(.*?)```", text, _re.S)
-            with_kernel = [b for b in blocks if "def kernel" in b]
-            program = (with_kernel[-1].strip() if with_kernel else extract_program(text))
+        # Shared with the generator (incl. the repair round's re-extraction):
+        # forcing-cue-first, then last kernel-bearing fenced block.
+        from pallas_arena.probe.gen_smoke import extract_completion
+        program = extract_completion(text) or extract_program(text)
         if not program:
             cell["no_program"] += 1
             verdict["outcome"] = "no_program"
