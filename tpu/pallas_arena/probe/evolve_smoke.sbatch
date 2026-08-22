@@ -56,7 +56,11 @@ QWEN_HF_GCS=${QWEN_HF_GCS:-${BUCKET}/hf-cache}
 # name would have collided with RQ2\x27s (never-populated) -32k-b64.
 QWEN_XLA_GCS=${QWEN_XLA_GCS:-${BUCKET}/vllm-xla-cache-qwen35-32k-b16-v5p8}
 VLLM_PORT=8001
-LOCAL_PORT=18001
+# Job-unique: two smoke jobs coscheduled on ONE slurm node collided on a
+# shared 18001 -- the second job's readiness probe answered through the
+# FIRST job's tunnel (measured: gemma 'ready' 17s after ACTIVE, 192
+# instant 404s against the wrong engine).
+LOCAL_PORT=$(( 15000 + SLURM_JOB_ID % 20000 ))
 
 QR="sk7524-evsmoke-${SLURM_JOB_ID}"
 GENS_OUT="${out_dir}/evolve-smoke-gens-${SLURM_JOB_ID}.jsonl"
