@@ -186,7 +186,11 @@ pick_tiles() {
       # training-half config validated (gemma runs 32, qwen 64; 8 was the
       # outlier). FLCE tile stays 2048 -- both validated configs agree, and
       # smaller FLCE tiles grow the scorer (the known trap).
-      FLCE_TILE=2048; VOCAB_TILING=32
+      # FLCE tile 1024 (gemma's value, larger-vocab precedent): at 18432 the
+      # fb ask is 56.99G vs 56.45G free -- short by 0.54G. Measured knob
+      # response: budget none, uniform 850KB/token, nvt none; the FLCE
+      # working buffers are the next term with a validated smaller setting.
+      FLCE_TILE=1024; VOCAB_TILING=32
       MT_KWARGS="{\"remat_policy\": \"full\", \"ici_fsdp_parallelism\": 4, \"num_vocab_tiling\": $VOCAB_TILING}" ;;
     *)
       case "$CELL" in
