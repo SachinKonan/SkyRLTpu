@@ -129,7 +129,8 @@ timeout 900 gcloud compute tpus tpu-vm scp "${repo_root}/tpu/pallas_arena/probe/
 # dies with only 6 requests in flight, concurrency was never the killer.
 ( timeout 7200 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
     --command="MODEL='${QWEN_MODEL}' PORT=${VLLM_PORT} MAX_MODEL_LEN=${QWEN_MAXLEN} \
-      HF_CACHE_GCS='${QWEN_HF_GCS}' XLA_CACHE_GCS='${QWEN_XLA_GCS}' bash ~/serve_vllm.sh" \
+      HF_CACHE_GCS='${QWEN_HF_GCS}' XLA_CACHE_GCS='${QWEN_XLA_GCS}' \
+      ${EXTRA_PIP:+EXTRA_PIP='${EXTRA_PIP}'} bash ~/serve_vllm.sh" \
     ; echo "[serve] launcher rc=$?" ) &
 
 ( trap - EXIT TERM INT HUP
