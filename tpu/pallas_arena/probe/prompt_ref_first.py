@@ -240,6 +240,10 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
+- The single most common way submissions score 0: writing a plain
+  `jax.numpy`/`lax` implementation with NO `pl.pallas_call`. The judge
+  rejects those automatically, no matter how fast or correct -- your
+  compute must run INSIDE a real Pallas kernel.
 - The block must be COMPLETE and SELF-CONTAINED: all imports included
   (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
   that assumes surrounding context dies with a NameError.

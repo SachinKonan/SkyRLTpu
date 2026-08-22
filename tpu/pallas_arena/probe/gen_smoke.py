@@ -29,7 +29,8 @@ import urllib.request
 # continue_final_message. Extraction-friendly: the program is whatever
 # follows this cue inside the opened fence.
 FORCE = ("\n\nI have thought about this enough. Here is my final, complete, "
-         "self-contained program:\n\n```python\n")
+         "self-contained program, with the compute inside a real "
+         "`pl.pallas_call` kernel and every import included:\n\n```python\n")
 
 
 def _post(server: str, body: dict, timeout_s: float) -> dict:

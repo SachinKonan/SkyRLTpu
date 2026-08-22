@@ -36,11 +36,12 @@ GROUP_SIZE=${GROUP_SIZE:-32}
 # Two-phase: MAX_NEW_TOKENS is the PHASE-1 (thinking) cap; when it
 # truncates, the client forces the answer with ANSWER_CAP more tokens
 # (rq2 pattern). Single-phase caps measured 53-97% truncation at any size.
-MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-13824}
-# 12288: round-5 measured 40-78% of forced answers clipping at 8192 --
-# full fwd+bwd custom_vjp programs are ~7-10k tokens. 2.7k prompt +
-# 13.8k think + 12.3k answer = 28.8k < 32k ctx.
-ANSWER_CAP=${ANSWER_CAP:-12288}
+MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-10240}
+# 15360: 45% of splash answers still clipped at 12288; thinking saturated
+# 13824 with null quality return (muse study), so the budget moved
+# think->answer. 2.7k prompt + 10.2k think + 15.4k answer ~= 28.3k < 32k;
+# gen_smoke sizes phase 2 from actual usage so bigger prompts self-clamp.
+ANSWER_CAP=${ANSWER_CAP:-15360}
 QWEN_MODEL=${QWEN_MODEL:-Qwen/Qwen3.5-27B}
 # 32k context, like the llamafarm serving: thinking stays ON and the
 # completion budget absorbs it instead of truncating. First boot at 32k

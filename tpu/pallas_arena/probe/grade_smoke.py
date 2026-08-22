@@ -85,9 +85,15 @@ def main() -> None:
         # Two-phase rows: the program is whatever follows the forcing cue,
         # fence-closed or not (a forced answer may hit EOS before closing
         # its fence -- rq2 loop.py extracts the same way).
-        from pallas_arena.probe.gen_smoke import FORCE
-        if FORCE in text:
-            program = text.rsplit(FORCE, 1)[1].split("```", 1)[0].strip() or None
+        # Cue-tolerant: match the stable sentence, not the exact cue text
+        # (the cue gained a pallas reminder between rounds; old rows must
+        # still regrade).
+        _CUE = "I have thought about this enough"
+        if _CUE in text:
+            after = text.rsplit(_CUE, 1)[1]
+            if "```python\n" in after:
+                after = after.split("```python\n", 1)[1]
+            program = after.split("```", 1)[0].strip() or None
         else:
             # Thinking drafts fenced snippets before the real answer, so
             # "last block" can also be a trailing usage example. Prefer the
