@@ -54,7 +54,7 @@ case "$CELL" in
     MEMBER_SPEC='meta-models/Muse-Glimmer-30B:muse_glimmer_high_reasoning:muse'
     MEMBER_DIR=member_muse
     HF_OFFLINE=0
-    CTX=22528; PHASE1=16896 ;;
+    CTX=18432; PHASE1=13824 ;;   # qwen-matching: see cell_worker m-* BUDGET comment
   *)
     MODEL_HF=Qwen/Qwen3.5-27B
     MEMBER_SPEC='Qwen/Qwen3.5-27B:qwen3:qwen'

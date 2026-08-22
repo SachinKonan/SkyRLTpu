@@ -99,7 +99,15 @@ case "$CELL" in
     # asked to reserve 60.47G with 55.48G free -- over by 9%. One uniform seq
     # per fb call halves the arena (~30G, fits with headroom); costs 2x fb
     # calls per train step, changes nothing about what is trained.
-    MAXTGT=22528; BUDGET=22528; UNIFORM=22528
+    # 18432 == qwen's exact train shape. The 22528 fb program asks 60.47G
+    # regardless of token budget (verified twice live: identical ask at
+    # budget 45056 and 22528) -- the arena belongs to the [1, 22528] pass
+    # itself, dominated by the 13 full-attention layers' S^2 backward.
+    # 18432 scales it to ~40G (fits, ~16G headroom) and, paired with
+    # CTX/PHASE1 18432/13824 in launch_cell.sh, nothing is dropped from
+    # training -- rollouts simply cap at qwen's budget, which also removes
+    # the longer-leash confound from the A/B.
+    MAXTGT=18432; BUDGET=18432; UNIFORM=18432
     VLLM_LEN=22528
     VLLM_IMPL=vllm
     # The exact SHA run_muse_rl.sh pins: carries the torch muse model AND the
