@@ -65,6 +65,7 @@ EXTRA_PIP=""
 LORA_RETRIES=3; LORA_RETRY_SLEEP=2
 REQ_TIMEOUT=300
 TPU_BACKEND=torchax
+FREE_BASE_STATE=0
 UNSET_PLUGINS=0
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
@@ -130,6 +131,14 @@ case "$CELL" in
     # transformers fallback -- EngineCore-fatal on the first generate. The
     # validated smoke ran UNSET (all plugins load, resolver included).
     UNSET_PLUGINS=1
+    # Reclaims 35.5 GiB. Measured on this cell: create_model took HBM in_use from
+    # 12.97 -> 49.79 GiB, rank-independent (rank 4 within 1.4 GiB of rank 32), i.e.
+    # duplicated base weights, not adapters -- qwix's wrap does not share the merged
+    # arrays and _init_lora_state builds a SECOND whole model to read 0.77 GiB of
+    # seeds. That is why the [1, 18432] fb asked 56.99G against 56.45G free and no
+    # budget/tiling/remat knob ever moved it. With the release: delta 1.33 GiB, and
+    # the same fb COMPLETES in 46.9s (loss -0.00215, peak 60.9 of 95.7 GiB).
+    FREE_BASE_STATE=1
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
     TP_SIZE=2; ENGINES_PER_HOST=2
     # 64/engine x 6 engines = 384 pooled scheduler slots, under the measured
@@ -255,6 +264,7 @@ elif ! tinker_healthy && vllm_healthy; then
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
     VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" VLLM_UNSET_PLUGINS="$UNSET_PLUGINS" \
+    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -297,6 +307,7 @@ else
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
     VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" VLLM_UNSET_PLUGINS="$UNSET_PLUGINS" \
+    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \

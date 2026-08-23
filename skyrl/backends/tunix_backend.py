@@ -21,6 +21,7 @@ Design notes:
     adapter updates (``inference_backend="vllm"``, reusing VllmSamplingClient).
 """
 
+import gc
 import json
 import os
 import time
@@ -163,6 +164,20 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
     vllm_max_concurrent_requests: int = Field(default=64)
     vllm_client_side_round_robin: bool = Field(default=False)
     vllm_group_completions: bool = Field(default=True)
+    free_base_state_after_template: bool = Field(
+        default=False,
+        description=(
+            "Drop the pristine base parameter state once a LoRA template exists. "
+            "qwix.apply_lora_to_model does NOT share the base arrays -- measured on "
+            "muse-glimmer-30b: HBM in_use 12.97 GiB after load -> 48.37 GiB after "
+            "create_model, and that +35.4 GiB is rank-independent (rank 4 and rank 32 "
+            "differ by 1.4 GiB), i.e. it is a second copy of the weights, not adapters. "
+            "The original copy is then only needed to build ADDITIONAL templates, so a "
+            "run that uses one (rank, attn, mlp) combo -- every RL cell -- can release "
+            "it and get the whole 12.97 GiB back. Requesting a second template after "
+            "the release raises instead of silently retraining from nothing."
+        ),
+    )
 
 
 def round_up_seq_len(seq_len: int) -> int:
@@ -662,9 +677,19 @@ class TunixBackend(AbstractBackend):
         return "|".join(parts)
 
     def _wrap_with_lora(self, lora_config: types.LoraConfig, seed: int) -> nnx.Module:
-        """Apply qwix LoRA to a fresh merge of the base model (shares base arrays)."""
+        """Apply qwix LoRA to a fresh merge of the base model.
+
+        NOTE: despite the merge, qwix does not share the base arrays -- the wrapped
+        model carries its own copy (see free_base_state_after_template).
+        """
         import qwix
 
+        if self.base_state is None:
+            raise RuntimeError(
+                "base parameter state was released after the first LoRA template "
+                "(free_base_state_after_template=True); a second template cannot be "
+                "built. Disable that option to use more than one LoRA config."
+            )
         model = nnx.merge(self.base_graphdef, self.base_state)
         provider = qwix.LoraProvider(
             module_path=self._module_path_regex(lora_config),
@@ -946,6 +971,23 @@ class TunixBackend(AbstractBackend):
             lora_state=lora_state,
             optimizer=optimizer,
         )
+        # Reclaim the two full-model copies this path leaves behind. Measured on
+        # muse-glimmer-30b (v5p, fsdp=4): HBM in_use 12.97 GiB after load ->
+        # 49.79 GiB after create_model, +36.8 GiB that is rank-INDEPENDENT (rank 4
+        # differs by 1.4 GiB), i.e. base weights, not adapters. Two sources:
+        # qwix.apply_lora_to_model does not share the merged arrays, and
+        # _init_lora_state wraps a SECOND whole model just to read ~0.77 GiB of
+        # freshly-seeded adapters. The second one is garbage by the time we get
+        # here; the pristine base_state is only needed to build additional
+        # templates, which single-config runs (every RL cell) never do.
+        gc.collect()
+        if self.config.free_base_state_after_template and self.base_state is not None:
+            self.base_state = None
+            gc.collect()
+            logger.info(
+                "Released the pristine base parameter state (the template holds its own "
+                "copy); additional LoRA configs are unavailable for this process."
+            )
         logger.info(f"Created model {model_id} with lora rank={lora_config.rank}, alpha={lora_config.alpha}")
 
     def delete_model(self, model_id: str) -> None:

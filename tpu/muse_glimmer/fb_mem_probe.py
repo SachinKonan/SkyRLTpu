@@ -50,6 +50,8 @@ def _batch(tokens: List[int], loss_fn: str):
         all_token_weights=[[1.0] * len(tokens)],
         all_sampling_logprobs=[[0.0] * len(tokens)],
         all_advantages=[[1.0] * len(tokens)],
+        all_values=[[0.0] * len(tokens)],
+        all_returns=[[0.0] * len(tokens)],
         all_loss_fns=[loss_fn],
         all_loss_fn_configs=[{}],
         request_batch_slices=[("0", "mg_probe", 0, 1)],
@@ -61,6 +63,15 @@ def main() -> int:
     ap.add_argument("--base-model", required=True)
     ap.add_argument("--orbax", required=True)
     ap.add_argument("--length", type=int, required=True)
+    ap.add_argument("--rank", type=int, default=32,
+                    help="LoRA rank. Sweeping this separates LoRA-sized cost "
+                         "from base-weight duplication in the create_model delta.")
+    ap.add_argument("--free-base", action="store_true",
+                    help="Set free_base_state_after_template: release the pristine "
+                         "base copy once the template exists.")
+    ap.add_argument("--skip-fb", action="store_true",
+                    help="Measure load/LoRA HBM only -- the create_model delta "
+                         "is the interesting number and needs no fb.")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -87,9 +98,10 @@ def main() -> int:
         flce_tile_size=CELL_FLCE_TILE,
         train_token_budget=L,
         param_dtype="bfloat16",
-        max_lora_rank=32,
+        max_lora_rank=max(args.rank, 32),
         inference_backend="native",
         train_micro_batch_size=1,
+        free_base_state_after_template=args.free_base,
     )
     t0 = time.time()
     backend = TunixBackend(args.base_model, cfg)
@@ -108,8 +120,16 @@ def main() -> int:
             return {}
 
     res["hbm_after_load"] = hbm()
-    backend.create_model("mg_probe", types.LoraConfig(rank=32, alpha=64.0, seed=0))
+    backend.create_model("mg_probe", types.LoraConfig(rank=args.rank, alpha=2.0 * args.rank, seed=0))
     res["hbm_after_lora"] = hbm()
+    res["rank"] = args.rank
+    res["free_base"] = args.free_base
+    res["create_model_delta_gib"] = round(
+        res["hbm_after_lora"]["in_use_gib"] - res["hbm_after_load"]["in_use_gib"], 2)
+    if args.skip_fb:
+        json.dump(res, open(args.out, "w"), indent=2)
+        print(json.dumps(res, indent=2), flush=True)
+        return 0
 
     tokens = list(range(2, L + 1))  # exactly L-1 tokens + BOS-ish; padded to L by uniform mode
     tokens = tokens[: L - 1]

@@ -89,6 +89,10 @@ VLLM_LORA_UPLOAD_ENDPOINT="${VLLM_LORA_UPLOAD_ENDPOINT:-/skyrl/v1/upload_lora_ad
 VLLM_LORA_LOAD_RETRIES="${VLLM_LORA_LOAD_RETRIES:-3}"
 VLLM_LORA_LOAD_RETRY_SLEEP_SEC="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-2}"
 VLLM_REQUEST_TIMEOUT_SEC="${VLLM_REQUEST_TIMEOUT_SEC:-300}"
+# Release the pristine base params once the LoRA template exists (see
+# tunix_backend.free_base_state_after_template). Off by default: it makes a
+# second LoRA config an error, which single-config RL cells never need.
+TUNIX_FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-0}"
 VLLM_MAX_CONCURRENT_REQUESTS="${VLLM_MAX_CONCURRENT_REQUESTS:-256}"
 VLLM_CLIENT_SIDE_ROUND_ROBIN="${VLLM_CLIENT_SIDE_ROUND_ROBIN:-0}"
 
@@ -560,6 +564,7 @@ if backend == "tunix":
         "train_token_budget": int("${TUNIX_TRAIN_TOKEN_BUDGET}"),
         "flce_tile_size": int("${TUNIX_FLCE_TILE_SIZE}"),
         "maxtext_ckpt_cache_dir": "${TUNIX_MAXTEXT_CKPT_CACHE}",
+        "free_base_state_after_template": "${TUNIX_FREE_BASE_STATE}".lower() in ("1", "true", "yes", "on"),
         **vllm_cfg,
     }
     if "${TUNIX_MAXTEXT_MODEL_NAME}":
