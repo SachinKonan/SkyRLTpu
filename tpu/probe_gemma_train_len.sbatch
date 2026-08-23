@@ -51,7 +51,7 @@ ACCEL=${ACCEL:-v5p-16}
 RUNTIME=${RUNTIME:-v2-alpha-tpuv5}
 LAND_DEADLINE_S=${LAND_DEADLINE_S:-10800}
 HARD_CAP_S=${HARD_CAP_S:-25200}
-TINKER_READY_S=${TINKER_READY_S:-3600}
+TINKER_READY_S=${TINKER_READY_S:-4500}
 
 # "UNIFORM:BUDGET" pairs, most valuable first. 16384 = gemma's SERVING length
 # (the natural target: generation never exceeds what the trainer can hold).
@@ -65,6 +65,16 @@ FLCE_TILE=${FLCE_TILE:-1024}
 VOCAB_TILING=${VOCAB_TILING:-32}
 HF_GCS=${HF_GCS:-gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4}
 JAX_CACHE_GCS=${JAX_CACHE_GCS:-gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-gemma4-lenprobe}
+# vLLM is started even though this probe only measures the TRAINER: the shared
+# bring-up waits for vLLM readiness whenever START_TINKER=1 (line ~502), so
+# START_VLLM=0 hangs on engines it never launched (job 3748236). Serving runs
+# on worker 1, trainer alone on worker 0 -- the same host separation as
+# production, so the trainer's HBM picture is unchanged. Values are the
+# league's own gemma cell (cell_worker.sh).
+VLLM_XLA_GCS=${VLLM_XLA_GCS:-gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k}
+MAXTEXT_PIP=${MAXTEXT_PIP:-"maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"}
+TPUINF_REF=${TPUINF_REF:-skyrl/v0.23.0-lora}
+TF_VERSION=${TF_VERSION:-5.8.0}
 
 QR="sk7524-gemmalen-${SLURM_JOB_ID}"
 RESULTS="${out_dir}/gemma-len-probe-results-${SLURM_JOB_ID}.txt"
@@ -139,7 +149,14 @@ for cand in $CANDIDATES; do
     TUNIX_UNIFORM_SEQ_LEN="$UNIFORM" TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" \
     TUNIX_MINIMAL_FB_OUTPUT=1 SKYRL_SCORE_FIXED_LEN="$UNIFORM" \
     HF_CACHE_GCS="$HF_GCS" JAX_CACHE_GCS="$JAX_CACHE_GCS" \
-    READY_ATTEMPTS=900 SYNC_SKYRL="$SYNC" START_VLLM=0 START_TINKER=1 \
+    TUNIX_MAXTEXT_PIP_SPEC="$MAXTEXT_PIP" \
+    VLLM_WORKERS=1 VLLM_MODEL_IMPL_TYPE=vllm TPU_INFERENCE_FORK_REF="$TPUINF_REF" \
+    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE=4 VLLM_ENGINES_PER_HOST=1 \
+    VLLM_TPU_BACKEND_TYPE=torchax VLLM_MAX_MODEL_LEN=16384 VLLM_MAX_NUM_SEQS=128 \
+    VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
+    VLLM_XLA_CACHE_GCS="$VLLM_XLA_GCS" \
+    VLLM_EXTRA_ARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85" \
+    READY_ATTEMPTS=900 SYNC_SKYRL="$SYNC" START_VLLM=1 START_TINKER=1 \
     bash "${repo_root}/tpu/start_colocated_vllm_tinker.sh" \
       > "${out_dir}/gemma-len-bringup-${SLURM_JOB_ID}-${UNIFORM}-${BUDGET}.log" 2>&1 \
     || echo "[warn] bring-up returned nonzero (health check decides)"
