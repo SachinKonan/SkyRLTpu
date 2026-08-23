@@ -191,7 +191,7 @@ pick_tiles() {
       # response: budget none, uniform 850KB/token, nvt none; the FLCE
       # working buffers are the next term with a validated smaller setting.
       FLCE_TILE=1024; VOCAB_TILING=32
-      MT_KWARGS="{\"remat_policy\": \"full\", \"ici_fsdp_parallelism\": 4, \"num_vocab_tiling\": $VOCAB_TILING}" ;;
+      MT_KWARGS="{\"remat_policy\": \"full\", \"ici_fsdp_parallelism\": 4, \"num_vocab_tiling\": $VOCAB_TILING, \"parameter_memory_host_offload\": true}" ;;
     *)
       case "$CELL" in
         *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
