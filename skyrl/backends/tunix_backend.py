@@ -726,7 +726,34 @@ class TunixBackend(AbstractBackend):
         return template
 
     def _init_lora_state(self, lora_config: types.LoraConfig) -> nnx.State:
-        """Fresh, independently-seeded LoRA state for a new model."""
+        """Fresh, independently-seeded LoRA state for a new model.
+
+        Normally this wraps a second whole model just to read ~0.8 GiB of
+        adapters out of it, which is why create_model is so expensive (see
+        free_base_state_after_template). When the base state has been released
+        we cannot do that -- and must not, since every client restart calls
+        create_model again and would otherwise raise. The cached template
+        already holds a qwix-initialised LoRA state of exactly the right
+        structure, sharding and dtype, so copy that instead.
+
+        Caveat, deliberate: the template is built at seed 0, so a non-zero
+        lora_config.seed cannot be honoured on this path and is logged. It is
+        immaterial for our runs -- one model config per cell, and a resuming
+        client overwrites these values from its checkpoint anyway.
+        """
+        if self.base_state is None:
+            template = self.templates.get(self._template_key(lora_config))
+            if template is None:
+                raise RuntimeError(
+                    "base parameter state was released and no cached template exists "
+                    "for this LoRA config; cannot initialise adapters."
+                )
+            if lora_config.seed != 0:
+                logger.warning(
+                    "LoRA seed %s ignored: base state released, seeding adapters from "
+                    "the cached seed-0 template.", lora_config.seed
+                )
+            return jax.tree.map(jnp.copy, template.lora_shape)
         model = self._wrap_with_lora(lora_config, seed=lora_config.seed)
         return nnx.state(model, nnx.LoRAParam)
 
