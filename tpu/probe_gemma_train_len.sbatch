@@ -40,7 +40,14 @@ out_dir=${repo_root}/runs/pallas_arena
 PROJECT=vision-mix
 ZONE=${ZONE:-us-east5-a}
 OTHER_ZONE=${OTHER_ZONE:-us-east5-b}
-ACCEL=${ACCEL:-v5p-8}
+# v5p-16, not v5p-8: start_colocated_vllm_tinker.sh resolves a vLLM
+# COORDINATOR ip unconditionally (line ~383) even with START_VLLM=0, so a
+# single-host slice dies with 'TPU worker 1 is out of range for 1
+# endpoints' before anything is measured (job 3748201). The trainer still
+# runs alone on worker 0 -- same per-chip HBM, same single-host mesh as
+# production -- worker 1 just idles. Patching the shared bring-up script
+# mid-league-campaign is the riskier fix.
+ACCEL=${ACCEL:-v5p-16}
 RUNTIME=${RUNTIME:-v2-alpha-tpuv5}
 LAND_DEADLINE_S=${LAND_DEADLINE_S:-10800}
 HARD_CAP_S=${HARD_CAP_S:-25200}
@@ -147,9 +154,16 @@ for cand in $CANDIDATES; do
     sleep 30
   done
   if [ "$ready" -ne 1 ]; then
-    echo "uniform=${UNIFORM} budget=${BUDGET}: TRAINER NEVER READY (boot-time OOM or compile failure)" | tee -a "$RESULTS"
+    echo "uniform=${UNIFORM} budget=${BUDGET}: TRAINER NEVER READY -- see bringup/tinker tails below" | tee -a "$RESULTS"
+    # BOTH logs: "never ready" conflates boot-time OOM, compile failure, and
+    # plain infrastructure faults, and the bring-up log is where the last one
+    # shows up (job 3748201 lost an hour to a single-host worker-list error
+    # that the tinker log never saw).
+    echo "--- bringup tail ---" | tee -a "$RESULTS"
+    tail -12 "${out_dir}/gemma-len-bringup-${SLURM_JOB_ID}-${UNIFORM}-${BUDGET}.log" 2>/dev/null | tee -a "$RESULTS"
+    echo "--- tinker tail ---" | tee -a "$RESULTS"
     timeout 120 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
-      --command="tail -40 ~/skyrl-logs/tinker-api.log 2>/dev/null" 2>/dev/null | tail -25
+      --command="tail -40 ~/skyrl-logs/tinker-api.log 2>/dev/null" 2>/dev/null | tail -20 | tee -a "$RESULTS"
     continue
   fi
   echo "trainer ready $(date +%H:%M:%S); probing"
