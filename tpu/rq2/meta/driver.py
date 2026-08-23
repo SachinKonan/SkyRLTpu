@@ -306,7 +306,18 @@ def main():
     ap.add_argument("--depth", type=int, default=5)
     ap.add_argument("--bootstrap", action="store_true",
                     help="run only the shared meta-round 1 for this problem")
+    # inner-run overrides, for smoke tests only -- production uses the module defaults
+    ap.add_argument("--B", type=int)
+    ap.add_argument("--G", type=int)
+    ap.add_argument("--steps", type=int)
+    ap.add_argument("--concurrency", type=int)
+    ap.add_argument("--root", help="override META_ROOT (smoke tests write elsewhere)")
     a = ap.parse_args()
+    for k in ("B", "G", "steps", "concurrency"):
+        if getattr(a, k) is not None:
+            INNER[k] = getattr(a, k)
+    if a.root:
+        globals()["META_ROOT"] = Path(a.root)
     cfg = PROBLEMS[a.problem]
     if a.bootstrap:
         bootstrap(a.problem, cfg)
