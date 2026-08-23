@@ -370,7 +370,11 @@ class PerennialState(StateReuse):
             return max((v[c] for c in kids), default=v[nid])
 
         def score(nid):
-            return q(nid) + PUCT_C * scale * prior[nid] * math.sqrt(1 + T) / (1 + vis.get(nid, 0))
+            # visits keys are ALWAYS strings: update() writes str(parent), and JSON object keys
+            # are strings regardless, so a raw int nid silently matched nothing and the
+            # 1/(1+visits) damping was inert for every perennial/team/team-split run.
+            return q(nid) + PUCT_C * scale * prior[nid] * math.sqrt(1 + T) / (
+                1 + vis.get(str(nid), 0))
 
         def lineage(nid):
             import networkx as nx
@@ -472,7 +476,11 @@ class PerennialState(StateReuse):
                 if cur is None or ((cand > cur) if self.maximize else (cand < cur)):
                     self.abest[str(a)] = cand
         (self.root / "agent_best.json").write_text(json.dumps(self.abest))
-        # memory edits: one spark exec per agent, merit-gated teammate visibility
+        # memory edits: one spark exec per agent, merit-gated teammate visibility.
+        # mem_ok is surfaced to the caller (-> trace.jsonl) because a silently empty memory is
+        # indistinguishable from a working one in every other artifact: 10 RQ2 cells ran all 10
+        # steps with a dead editor (codex 401 refresh_token_reused) and nothing flagged it.
+        self.mem_ok = []
         if memory_fn is not None:
             for a in range(self.n_agents):
                 bar = self.abest.get(str(a))
@@ -488,9 +496,14 @@ class PerennialState(StateReuse):
                             crossed.append(r)
                 md = self._round_md(a, by_agent[a], crossed, step)
                 new = memory_fn(a, md, self._mem_path(a))
-                if new and new.strip():
+                ok = bool(new and new.strip())
+                self.mem_ok.append(ok)
+                if ok:
                     self._mem_path(a).write_text(new)
                     (self.root / f"memory_{a}_step{step:02d}.md").write_text(new)
+                else:
+                    print(f"[state] step {step} agent {a}: MEMORY EDIT PRODUCED NOTHING -- this "
+                          f"agent is running without memory", flush=True)
 
     def best(self):
         top, prog = None, None

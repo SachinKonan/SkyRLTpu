@@ -28,6 +28,7 @@ import asyncio
 import hashlib
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -341,7 +342,67 @@ def grade_round(results, problem, outdir, concurrency, fast_budget):
 
 
 # ------------------------------------------------------------------------ agent invocations
+AUTH_SRC = Path.home() / ".codex" / "auth.json"
+AUTH_LOCK = Path.home() / ".codex" / ".rq2-auth.lock"
+AUTH_RETRIES = 4
+
+
+def _auth_sync(codex_home, direction):
+    """Keep every cell's copied auth.json in step with the one real credential.
+
+    write_codex_home COPIES ~/.codex/auth.json into each cell, but the OAuth refresh token inside
+    is single-use: the first cell to refresh rotates it and every other copy 401s with
+    `refresh_token_reused`. That is what silently emptied the memory of 10 RQ2 cells.
+
+    direction "in"  -- pull the current credential just before running codex
+    direction "out" -- push a rotated credential back so the next cell picks it up
+    Both under one flock, held only for the copy, never across the codex call itself.
+    """
+    import fcntl
+    dst = Path(codex_home) / "auth.json"
+    if not AUTH_SRC.exists():
+        return
+    AUTH_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(AUTH_LOCK, "a+") as lk:
+            fcntl.flock(lk, fcntl.LOCK_EX)
+            try:
+                if direction == "in":
+                    dst.write_text(AUTH_SRC.read_text())
+                elif dst.exists() and dst.read_text() != AUTH_SRC.read_text():
+                    AUTH_SRC.write_text(dst.read_text())   # we rotated it; publish
+            finally:
+                fcntl.flock(lk, fcntl.LOCK_UN)
+    except Exception as e:                                  # never let auth plumbing kill a run
+        print(f"[loop] auth sync ({direction}) failed: {type(e).__name__}: {e}", flush=True)
+
+
+def _auth_reuse_error(log_path):
+    try:
+        return "refresh_token_reused" in Path(log_path).read_text()
+    except Exception:
+        return False
+
+
 def run_codex(model, effort, prompt, wd, mcp_url, wall, tag, codex_home):
+    """Retries when another cell rotated the shared refresh token out from under this one."""
+    for attempt in range(AUTH_RETRIES):
+        _auth_sync(codex_home, "in")
+        rc = _run_codex_once(model, effort, prompt, wd, mcp_url, wall, tag, codex_home)
+        _auth_sync(codex_home, "out")
+        if not _auth_reuse_error(wd / f"{tag}.jsonl"):
+            return rc
+        if attempt < AUTH_RETRIES - 1:
+            back = min(60, 5 * (attempt + 1)) + random.uniform(0, 5)
+            print(f"[loop] codex {tag}: refresh_token_reused, resyncing auth and retrying "
+                  f"in {back:.0f}s ({attempt + 1}/{AUTH_RETRIES - 1})", flush=True)
+            time.sleep(back)
+    print(f"[loop] codex {tag}: still refresh_token_reused after {AUTH_RETRIES} attempts",
+          flush=True)
+    return rc
+
+
+def _run_codex_once(model, effort, prompt, wd, mcp_url, wall, tag, codex_home):
     cmd = ["codex", "exec", "--strict-config", "-m", model,
            "-c", f"model_reasoning_effort={effort}", "-s", "danger-full-access",
            "-c", "approval_policy=never", "--json", "-C", str(wd)]
@@ -629,6 +690,8 @@ def main():
             fh.write(json.dumps({"step": step, "plan_submitted": allocations is not None,
                                  "groups": len(allocations) if allocations else None,
                                  "n_requested": args.n, "valid": len(ok), "best": best,
+                                 # per-agent memory-editor success; [] for states with no memory
+                                 "mem_ok": getattr(st, "mem_ok", []),
                                  "secs": round(time.time() - t0)}) + "\n")
         import collections
         why = collections.Counter((r.get("detail") or "ok")[:60] for r in results if r.get("score") is None)
