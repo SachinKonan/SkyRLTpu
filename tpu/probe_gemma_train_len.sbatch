@@ -74,6 +74,11 @@ JAX_CACHE_GCS=${JAX_CACHE_GCS:-gs://sk7524-tinker-tpu-us-east5/jax-compile-cache
 VLLM_XLA_GCS=${VLLM_XLA_GCS:-gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k}
 MAXTEXT_PIP=${MAXTEXT_PIP:-"maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"}
 TPUINF_REF=${TPUINF_REF:-skyrl/v0.23.0-lora}
+# The pin goes through VLLM_EXTRA_PIP_SPECS, NOT VLLM_TRANSFORMERS_VERSION:
+# nothing in start_vllm_tpu.sh / start_colocated reads the latter (the league
+# passes it, but it is dead env). Without the pin, transformers 5.15 raises
+# AmbiguousGlobalPerLayerAttributeError on gemma's per-layer head_dim and the
+# engine never boots -- job 3748384, and the same crash the arena smoke hit.
 TF_VERSION=${TF_VERSION:-5.8.0}
 
 QR="sk7524-gemmalen-${SLURM_JOB_ID}"
@@ -151,7 +156,8 @@ for cand in $CANDIDATES; do
     HF_CACHE_GCS="$HF_GCS" JAX_CACHE_GCS="$JAX_CACHE_GCS" \
     TUNIX_MAXTEXT_PIP_SPEC="$MAXTEXT_PIP" \
     VLLM_WORKERS=1 VLLM_MODEL_IMPL_TYPE=vllm TPU_INFERENCE_FORK_REF="$TPUINF_REF" \
-    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE=4 VLLM_ENGINES_PER_HOST=1 \
+    VLLM_TP_SIZE=4 VLLM_ENGINES_PER_HOST=1 \
+    VLLM_EXTRA_PIP_SPECS="transformers==${TF_VERSION}" \
     VLLM_TPU_BACKEND_TYPE=torchax VLLM_MAX_MODEL_LEN=16384 VLLM_MAX_NUM_SEQS=128 \
     VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
     VLLM_XLA_CACHE_GCS="$VLLM_XLA_GCS" \
