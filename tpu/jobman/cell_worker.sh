@@ -191,8 +191,21 @@ case "$CELL" in
   *)
     MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b
     MAXTGT=22528; BUDGET=73728; UNIFORM=18432
-    VLLM_LEN=22528
-    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k"
+    # Serve just above the client's context, not 4k above it. TTD_M0_CONTEXT_WINDOW
+    # is 18432 and the two-phase completer budgets every phase against that, so
+    # prompt+generated can never exceed it; 22528 was reserving 22% more KV
+    # envelope per sequence than any rollout can use. 1024 tokens of margin kept
+    # deliberately -- serving exactly at the client ceiling turns any off-by-one
+    # into a context-overflow 400, which is a known failure mode here.
+    VLLM_LEN=19456
+    # 16384: qwen's phase-2 re-prefill is prompt(3085) + phase1(13824) ~= 17k
+    # tokens, which at 8192 was split into 3 chunks. 0.90: qwen's weights are
+    # 13.5 GiB/chip at TP=4, so there is room for more KV blocks. A too-high
+    # value fails loudly at boot rather than corrupting a run.
+    VLLM_XARGS="--max-num-batched-tokens 16384 --gpu-memory-utilization 0.90"
+    # New prefix: max-model-len is part of the compiled shape key, so the 22k
+    # cache cannot be reused. First bring-up after this pays a cold compile.
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-qwen35-19k"
     JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-qwen35-18k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     ;;
