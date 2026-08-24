@@ -36,7 +36,7 @@ ssh:
 resumable:
   enabled: true
   run_id: auto
-  run_id_prefix: stagea-m-grpo-n
+  run_id_prefix: stageb-m-lr-n
   local_cache_root: /n/fs/vision-mix/sk7524/jobman-runs
   remote_gcs_cache_root: /home/sk7524_princeton_edu/gcs/jobman-runs
   remote_local_cache_root: /tmp/jobman-runs
