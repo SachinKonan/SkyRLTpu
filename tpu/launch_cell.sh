@@ -80,29 +80,52 @@ done
 SIDECAR
 sed -i "s|RUNDIRPLACEHOLDER|$HOME/skyrl-runs/$RUN|; s|GCSRUNPLACEHOLDER|$GCS_RUN|" ~/sidecar_"$RUN".sh
 chmod +x ~/sidecar_"$RUN".sh
-tmux kill-session -t cell-backup 2>/dev/null
-tmux new-session -d -s cell-backup "bash ~/sidecar_$RUN.sh"
+SESSION=${CELL_SESSION:-cell}
+tmux kill-session -t "${SESSION}-backup" 2>/dev/null
+tmux new-session -d -s "${SESSION}-backup" "bash ~/sidecar_$RUN.sh"
 
 # ---- re-register durable checkpoints BEFORE the client starts --------------
 # Must be here, not only in bring-up: a relaunch invokes THIS script directly.
 # Reads the LOCAL jsonl the restore just pulled down, so it does not depend on
 # gcloud auth. reregister_states.py is idempotent.
+# REREG_HOST (default local): the tinker registry lives on the member's
+# TRAINER host. A stage cell's client runs there, so local is right; a meta
+# member's client runs on w0 while its trainer may be w4/w8 -- the register
+# must happen THERE (the L-ctrl-x [3, None] crash-loop lesson).
+REREG_HOST=${REREG_HOST:-local}
+_rereg() {  # $1 = jsonl path
+  if [ "$REREG_HOST" = local ]; then
+    python3 ~/ttd-client/tpu/reregister_states.py --base-model "$MODEL_HF" --jsonl "$1" 2>&1 | tail -2
+  else
+    local K="$HOME/.ssh/jobman_tpu_ed25519"
+    local O="-i $K -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+    timeout 60 scp $O ~/ttd-client/tpu/reregister_states.py       sk7524_princeton_edu@"$REREG_HOST":~/reregister_states.py >/dev/null 2>&1
+    timeout 60 scp $O "$1" sk7524_princeton_edu@"$REREG_HOST":~/rr_$(basename "$1") >/dev/null 2>&1
+    timeout 90 ssh $O sk7524_princeton_edu@"$REREG_HOST"       "python3 ~/reregister_states.py --base-model '$MODEL_HF' --jsonl ~/rr_$(basename "$1")" 2>/dev/null | tail -2
+  fi
+}
 _jsonl=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/"$MEMBER_DIR"/checkpoints.jsonl 2>/dev/null | head -1)
 if [ -s "${_jsonl:-}" ]; then
-  python3 ~/ttd-client/tpu/reregister_states.py --base-model "$MODEL_HF" --jsonl "$_jsonl" 2>&1 | tail -2
+  _rereg "$_jsonl"
 else
   echo "reregister: no local checkpoints.jsonl (fresh lineage)"
 fi
+# Meta weights-carry: the init state was saved under the PREVIOUS generation's
+# run, so its rows are not in this run's jsonl -- register them too.
+if [ -s "${EXTRA_REREG_JSONL:-}" ]; then
+  _rereg "$EXTRA_REREG_JSONL"
+fi
 
-tmux kill-session -t cell 2>/dev/null
-tmux new-session -d -s cell "cd ~/ttd-client && \
+tmux kill-session -t "$SESSION" 2>/dev/null
+tmux new-session -d -s "$SESSION" "cd ~/ttd-client && \
+  ${EXTRA_TTD_ENV:-} \
   HF_HUB_OFFLINE=$HF_OFFLINE \
   EXPERIMENT_NAME=$EXP \
   TTD_RUN_DIR=\$HOME/skyrl-runs/$RUN \
   TTD_ENV=$PROB_ENV TTD_PROBLEM_TYPE=$PROB_TYPE TTD_FCALGO_MAX_CASES=$FC_MAX_CASES \
   TTD_ENSEMBLE_MODELS=$MEMBER_SPEC \
   TTD_ALLOW_SINGLE_MEMBER=1 \
-  TTD_M0_BASE_URL=http://127.0.0.1:8000 \
+  TTD_M0_BASE_URL=${TTD_M0_BASE_URL:-http://127.0.0.1:8000} \
   TTD_M0_CONTEXT_WINDOW=$CTX TTD_M0_TRAIN_MAX_SEQ=$CTX TTD_M0_PHASE1_MAX_TOKENS=$PHASE1 \
   TTD_QWEN_TWO_PHASE=1 TTD_DISABLE_WANDB_TABLES=1 \
   TTD_CROSS_WEIGHT=0 \
@@ -123,4 +146,4 @@ tmux new-session -d -s cell "cd ~/ttd-client && \
   third_party/discover/.venv-ttd-discover/bin/python tpu/run_ttd_ensemble.py \
   2>&1 | tee -a ~/skyrl-runs/$EXP.console.log"
 sleep 8
-tmux has-session -t cell 2>/dev/null && echo "CELL-UP $CELL" || echo "CELL-FAIL $CELL"
+tmux has-session -t "$SESSION" 2>/dev/null && echo "CELL-UP $CELL" || echo "CELL-FAIL $CELL"

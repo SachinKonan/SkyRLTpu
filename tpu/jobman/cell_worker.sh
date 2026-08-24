@@ -18,6 +18,11 @@ KEY="$HOME/.ssh/jobman_tpu_ed25519"
 SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
 INT="$JOBMAN_TPU_INTERNAL_IPS"
 W0INT=$(echo "$INT" | cut -d, -f1)
+# Host count from the IP list itself: a stage cell passes 4 IPs (unchanged
+# behavior); a meta member passes its 4 + any spare hosts, which become extra
+# vLLM replicas + ray workers with no other change.
+NHOSTS=$(echo "$INT" | awk -F, '{print NF}')
+VLLM_IDXS=$(seq -s, 1 $((NHOSTS-1)))
 ln -sfn "$REPO" "$HOME/ttd-client"
 
 # --- client venv (idempotent) ------------------------------------------------
@@ -42,7 +47,7 @@ vllm_healthy() {
   # and the client, which round-robins across all 6 URLs, would sample against
   # a dead endpoint every other request.
   local ip e port
-  for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
+  for ip in $(echo "$INT" | cut -d, -f2-$NHOSTS | tr ',' ' '); do
     for (( e=0; e<${ENGINES_PER_HOST:-1}; e++ )); do
       port=$(( 8001 + e ))
       curl -fsS -m6 "http://$ip:$port/v1/models" >/dev/null 2>&1 || return 1
@@ -308,7 +313,7 @@ elif ! tinker_healthy && vllm_healthy; then
   pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
-    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=$VLLM_IDXS VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
@@ -330,7 +335,7 @@ elif ! tinker_healthy && vllm_healthy; then
     # bring-up, which is the only path that rebuilds trainer state from scratch.
     echo "tinker-only restart FAILED -- tearing down vLLM to force a full rebuild next attempt"
     tail -6 ~/tinker-restart.log 2>/dev/null || true
-    for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
+    for ip in $(echo "$INT" | cut -d, -f2-$NHOSTS | tr ',' ' '); do
       timeout 60 ssh $SSHO sk7524_princeton_edu@"$ip" \
         "tmux kill-session -t skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
     done
@@ -351,7 +356,7 @@ else
   pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
-    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2,3 VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=$VLLM_IDXS VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
@@ -382,7 +387,7 @@ if ! "$RAYBIN" status >/dev/null 2>&1; then
   echo "ray head started"
 fi
 RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray; print(ray.__version__)")
-for ip in $(echo "$INT" | cut -d, -f2-4 | tr ',' ' '); do
+for ip in $(echo "$INT" | cut -d, -f2-$NHOSTS | tr ',' ' '); do
   timeout 900 ssh $SSHO sk7524_princeton_edu@"$ip" "
     export PATH=\$HOME/.local/bin:\$PATH
     pgrep -f '[r]ay/core' >/dev/null && { echo \"ray already on \$(hostname)\"; exit 0; }
