@@ -53,15 +53,21 @@ for cand in $CANDIDATES; do
     echo "[skip] ${UNIFORM}:${BUDGET} already measured"; continue
   fi
   echo "=== candidate uniform=${UNIFORM} budget=${BUDGET} $(date -u +%H:%M:%S) ==="
+  t_cand=$(date +%s)
   kill_trainer
 
   # SYNC_SKYRL=0: the bundle is already on disk (jobman prepare unpacked it),
   # and the sync path wants a worktree checkout this VM does not have.
   # START_VLLM=0 is now honoured -- the vLLM readiness wait is gated on
   # START_VLLM alone (fixed in start_colocated_vllm_tinker.sh).
-  env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS=127.0.0.1 TPU_INTERNAL_IPS=127.0.0.1 \
+  # Exactly the league's addressing: direct ssh over the INTERNAL ips jobman
+  # exports. VLLM_WORKERS=1 because TRAIN_WORKERS and VLLM_WORKERS must be
+  # disjoint (bring-up asserts it) and worker 1's ip is resolved even though
+  # START_VLLM=0 means nothing is ever started there.
+  env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$JOBMAN_TPU_INTERNAL_IPS" \
+    TPU_INTERNAL_IPS="$JOBMAN_TPU_INTERNAL_IPS" \
     REMOTE_USER="$USER" SSH_KEY_FILE="$HOME/.ssh/jobman_tpu_ed25519" \
-    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=0 \
+    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1 \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" \
     TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": ${VOCAB_TILING}}" \
     TUNIX_MAX_TARGET_LENGTH="$UNIFORM" TUNIX_TRAIN_TOKEN_BUDGET="$BUDGET" \
@@ -71,6 +77,16 @@ for cand in $CANDIDATES; do
     READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > "$HOME/lenprobe-bringup-${UNIFORM}-${BUDGET}.log" 2>&1 \
     || echo "[warn] bring-up rc=$? (health check decides)"
+
+  # A bring-up that dies in seconds is a config fault, not a slow compile:
+  # waiting out the full ready window just delays the diagnosis by ~50min.
+  if ! tinker_up && [ "$(( $(date +%s) - t_cand ))" -lt 60 ]; then
+    echo "[fast-fail] bring-up returned in <60s -- config fault, not a compile"
+    { echo "uniform=${UNIFORM} budget=${BUDGET}: BRINGUP-FAULT"
+      echo "  $(tail -3 "$HOME/lenprobe-bringup-${UNIFORM}-${BUDGET}.log" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+    } >> "$RESULTS"
+    publish; continue
+  fi
 
   ready=0; end=$(( $(date +%s) + READY_S ))
   while [ "$(date +%s)" -lt "$end" ]; do
