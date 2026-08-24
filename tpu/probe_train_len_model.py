@@ -37,7 +37,11 @@ def one_fb(tc, length: int, tag: str) -> tuple[bool, str]:
             "target_tokens": types.TensorData.from_torch(torch.tensor(tokens[1:], dtype=torch.int64)),
             "logprobs": types.TensorData.from_torch(torch.zeros(n)),
             "advantages": types.TensorData.from_torch(torch.zeros(n)),
-            "mask": types.TensorData.from_torch(torch.ones(n)),
+            # NO "mask": the production path builds the datum with a mask and
+            # then STRIPS it before forward_backward (ttt_discover
+            # rl/train.py:remove_mask). Sending it makes the server fail with
+            # 400 "'NoneType' object has no attribute 'shape'" -- which reads
+            # like a model fault but is purely a request-shape error.
         },
     )
     t0 = time.time()

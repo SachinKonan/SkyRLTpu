@@ -49,7 +49,15 @@ kill_trainer() {
 
 for cand in $CANDIDATES; do
   UNIFORM="${cand%%:*}"; BUDGET="${cand##*:}"
-  if grep -q "^uniform=${UNIFORM} budget=${BUDGET}:" "$RESULTS" 2>/dev/null; then
+  # Skip only REAL measurements. An earlier version skipped any recorded
+  # line, so an infrastructure fault (NOT-READY from a broken venv, a 400 from
+  # a malformed request) permanently poisoned that candidate -- 16384:16384 was
+  # never measured because a stale fault from the broken-Python cycle looked
+  # like a result.
+  if grep "^uniform=${UNIFORM} budget=${BUDGET}:" "$RESULTS" 2>/dev/null \
+     | grep -q "PROBE-RESULTS-JSON" \
+     && ! grep "^uniform=${UNIFORM} budget=${BUDGET}:" "$RESULTS" 2>/dev/null \
+        | grep -qE "status 400|NoneType"; then
     echo "[skip] ${UNIFORM}:${BUDGET} already measured"; continue
   fi
   echo "=== candidate uniform=${UNIFORM} budget=${BUDGET} $(date -u +%H:%M:%S) ==="
