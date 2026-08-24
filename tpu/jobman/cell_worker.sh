@@ -235,7 +235,14 @@ pick_tiles() {
 # Trainer JAX compile cache: restore before bring-up, then publish on a cadence
 # so a preempted node still leaves its compiles behind (same reasoning as the
 # vLLM cache seed-back; keyed by HLO hash, so a miss just recompiles).
-JAX_CACHE_LOCAL="$HOME/jax-compile-cache"
+# MaxText owns this path: base.yml sets `jax_cache_dir: "~/jax_cache"` and calls
+# JAX's cache init with it, which OVERRIDES the JAX_COMPILATION_CACHE_DIR we
+# export. We synced ~/jax-compile-cache for weeks while every compile landed in
+# ~/jax_cache -- all three per-model GCS caches sat at 0 MB while the trainer
+# host held 120 MB of real entries including jit_forward_backward_fn. Net effect:
+# every fresh VM recompiled the fb from scratch (~25 min for muse), on a zone
+# that preempts every few hours. Sync the directory MaxText actually writes.
+JAX_CACHE_LOCAL="${TUNIX_JAX_CACHE_LOCAL:-$HOME/jax_cache}"
 mkdir -p "$JAX_CACHE_LOCAL"
 if [ -n "${JAX_CACHE_GCS:-}" ]; then
   gcloud storage rsync -r "$JAX_CACHE_GCS" "$JAX_CACHE_LOCAL" >/dev/null 2>&1 \
