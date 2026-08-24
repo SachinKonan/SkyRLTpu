@@ -109,7 +109,22 @@ case "$CELL" in
     # CTX/PHASE1 18432/13824 in launch_cell.sh, nothing is dropped from
     # training -- rollouts simply cap at qwen's budget, which also removes
     # the longer-leash confound from the A/B.
-    MAXTGT=18432; BUDGET=18432; UNIFORM=18432
+    # BUDGET = 4 x UNIFORM, i.e. qwen's packing. Measured on-slice at steady
+    # state (3 fb calls, first discarded as JIT): 1 datum 27.3s, 4 datums 27.4s
+    # -- FOUR DATUMS COST THE SAME AS ONE. The fb is not compute-bound; it is
+    # bound by a fixed per-microbatch cost, almost certainly the FSDP all-gather
+    # of 55.7GB of weights. So packing is ~4x free throughput: 27.3 -> 6.85 s
+    # per datum. At ~296 trained datums/step that is train 7983s -> ~2030s, and
+    # since 2030 < the 6972s sampling window it should finally disappear under
+    # the pipeline instead of serialising after it.
+    #
+    # remat_policy stays "full": measured 27.4s (none) vs 27.5s (full) at 4
+    # datums, i.e. free in time, and it saves a large amount of HBM. Dropping it
+    # would be a pure memory regression for no speed.
+    #
+    # Verified to FIT at 4 x 18432 with free_base_state, which is production's
+    # worst case since uniform mode pads every datum to 18432.
+    MAXTGT=18432; BUDGET=73728; UNIFORM=18432
     VLLM_LEN=22528
     VLLM_IMPL=vllm
     # The exact SHA run_muse_rl.sh pins: carries the torch muse model AND the
