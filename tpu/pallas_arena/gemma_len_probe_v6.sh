@@ -17,6 +17,16 @@
 set -uo pipefail
 
 REPO=/n/fs/vision-mix/sk7524/SkyRLTpu
+# SINGLE-INSTANCE LOCK: two concurrent drivers (a stale rerun-chain + a fresh
+# slice waiter) interleaved on one VM, each killing the other's tinker server
+# between candidates -- 30-second "ready"s against the sibling's server, probes
+# cut mid-fb, every verdict empty. Never again.
+LOCK=/tmp/gemma-len-probe.lock
+exec 9>"$LOCK"
+if ! flock -n 9; then
+  echo "another gemma_len_probe_v6 instance holds $LOCK; exiting"
+  exit 0
+fi
 cd "$REPO"
 
 TPU_NAME="${TPU_NAME:-sk7524-gemma4len-v5p16-east5a_spot}"
