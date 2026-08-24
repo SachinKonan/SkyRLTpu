@@ -99,3 +99,24 @@ def test_warm_start_from_copied_state(tmp_path, n_agents, shared):
     after = sum(len(s.g.nodes) for s in child.stores)
     assert after == before, "child must inherit the parent's buffer, not reseed"
     assert child.visits == st.visits
+
+
+def test_round_md_caps_program_dumps(tmp_path):
+    """The memory editor's input must stay small: every rollout in the table, source for a few.
+
+    The unbounded version dumped ~150 programs at 24k chars each -> 1.5 MB round files, which is
+    what drained the codex 5-hour quota after ~33 memory edits.
+    """
+    st = _mk(tmp_path, maximize=True, seed_score=0.0)
+    own = [{"sid": f"s01_r{i:04d}", "score": 0.5 - i * 1e-4, "program": "X" * 24000}
+           for i in range(150)]
+    own += [{"sid": "s01_r9999", "score": None, "detail": "compile error", "program": None}]
+    p = st._round_md(0, own, [], 1)
+    text = p.read_text()
+
+    assert text.count("```") == 2 * SR.ROUND_MD_PROGRAMS, "wrong number of source blocks"
+    assert len(text) < 150_000, f"round md is {len(text)} bytes -- too big for one codex call"
+    for r in own[:5]:                       # every rollout still appears in the table
+        assert r["sid"] in text
+    assert "s01_r9999" in text and "compile error" in text
+    assert "top 8 of 150 valid" in text

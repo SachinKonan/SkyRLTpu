@@ -33,5 +33,6 @@ DEPTH=${DEPTH:-5}
 export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
 echo "[meta] cell $i: problem=$P rule=$R policy=$POL depth=$DEPTH start=$(date '+%F %T')"
 third_party/discover/.venv-ttd-discover/bin/python tpu/rq2/meta/driver.py \
-  --problem "$P" --rule "$R" --policy "$POL" --depth "$DEPTH"
+  --problem "$P" --rule "$R" --policy "$POL" --depth "$DEPTH" \
+  --compact-model "${COMPACT_MODEL:-gpt-5.6-terra}"
 echo "[meta] cell $i done=$(date '+%F %T')"

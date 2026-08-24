@@ -286,6 +286,10 @@ class SimpleTesState(StateReuse):
 
 # ---------------------------------------------------- S3-S5: discovery-PUCT + perennial memory
 MEMORY_MAX_CHARS = 18_000    # mechanical backstop for the 5k-token MEMORY.md contract
+# Round-markdown budget. These bound what one memory-editor call can cost: 8 x 8k plus the score
+# table is ~80 KB, against the 1.5 MB the unbounded version produced.
+ROUND_MD_PROGRAMS = 8
+ROUND_MD_PROGRAM_CHARS = 8_000
 PUCT_C = 1.0
 TOPK_CHILDREN = 2            # discovery sampler default: top-k results of a group join the buffer
 
@@ -425,6 +429,14 @@ class PerennialState(StateReuse):
         return []                               # memory is the only language channel
 
     def _round_md(self, agent, own, crossed, step):
+        """The memory editor's input. Every rollout appears in the score table; only the best few
+        get their source dumped.
+
+        Dumping all ~150 valid programs at MAX_PROGRAM_CHARS produced 1.5 MB round files, and a
+        single codex call chewing through one at --turns 20 logged 1.15 MB -- which is how ~33
+        memory edits drained a 5-hour model quota. The editor distils lessons; it needs the
+        frontier and the outcome distribution, not every program it could never read in 20 turns.
+        """
         p = self.root / f"round_{step:02d}_agent{agent}.md"
         L = [f"# Step {step} -- agent {agent}: {len(own)} own results"
              + (f", {len(crossed)} teammate results that beat your best" if crossed else ""),
@@ -440,9 +452,13 @@ class PerennialState(StateReuse):
             for r in ok + bad:
                 L.append(f"| {r.get('sid')} | {r.get('score')} | "
                          f"{'ok' if r.get('score') is not None else (r.get('detail') or 'invalid')[:60]} |")
-            for r in ok:
+            shown = ok[:ROUND_MD_PROGRAMS]
+            if len(ok) > len(shown):
+                L.append(f"\n_Source shown for the top {len(shown)} of {len(ok)} valid results; "
+                         f"the table above covers all of them._")
+            for r in shown:
                 L.extend([f"\n### {r['sid']}  score={r['score']}", "```",
-                          (r.get("program") or "")[:MAX_PROGRAM_CHARS], "```"])
+                          (r.get("program") or "")[:ROUND_MD_PROGRAM_CHARS], "```"])
         block(own, "Your rollouts")
         block(crossed, "Teammate rollouts that outperformed your best (merit-gated share)")
         p.write_text("\n".join(L))

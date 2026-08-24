@@ -19,5 +19,5 @@ P=${PROBLEMS[$SLURM_ARRAY_TASK_ID]}
 export TTD_EVAL_BACKEND=local TTD_DISCOVER_SYNC=0
 echo "[boot] problem=$P start=$(date '+%F %T')"
 third_party/discover/.venv-ttd-discover/bin/python tpu/rq2/meta/driver.py \
-  --problem "$P" --bootstrap
+  --problem "$P" --bootstrap --compact-model "${COMPACT_MODEL:-gpt-5.6-terra}"
 echo "[boot] problem=$P done=$(date '+%F %T')"

@@ -184,7 +184,7 @@ def read_best(node_dir: Path):
         return None
 
 
-def launch(problem, model, node_dir: Path, cfg, log: Path):
+def launch(problem, model, node_dir: Path, cfg, log: Path, compact_model=None):
     cmd = [str(PY), str(LOOP),
            "--problem", problem, "--state", "perennial", "--execution", "simple",
            "--composition", model,
@@ -193,6 +193,8 @@ def launch(problem, model, node_dir: Path, cfg, log: Path):
            "--fast-budget", str(cfg["fast_budget"]),
            "--grade-concurrency", str(cfg["grade_conc"]),
            "--out", str(node_dir)]
+    if compact_model:
+        cmd += ["--compact-model", compact_model]
     env = os.environ.copy()
     env.update(TTD_EVAL_BACKEND="local", TTD_DISCOVER_SYNC="0")
     return subprocess.Popen(cmd, stdout=open(log, "a"), stderr=subprocess.STDOUT,
@@ -225,7 +227,7 @@ def mem_health(node_dir: Path):
 
 
 # ----------------------------------------------------------------- driver
-def bootstrap(problem, cfg):
+def bootstrap(problem, cfg, compact_model=None):
     """Meta-round 1, shared by all six treatments: expand the bare seed with each model."""
     rd = META_ROOT / problem / "round1"
     rd.mkdir(parents=True, exist_ok=True)
@@ -237,7 +239,8 @@ def bootstrap(problem, cfg):
             print(f"[meta] bootstrap {problem}/{model}: already done", flush=True)
             continue
         print(f"[meta] bootstrap {problem}/{model}: launching", flush=True)
-        jobs.append((nd, launch(problem, model, nd, cfg, rd / f"n001_{model}.log")))
+        jobs.append((nd, launch(problem, model, nd, cfg, rd / f"n001_{model}.log",
+                                compact_model)))
     if jobs:
         run_pair(jobs)
     out = []
@@ -249,14 +252,14 @@ def bootstrap(problem, cfg):
     return out
 
 
-def run_treatment(problem, rule, policy, depth, cfg):
+def run_treatment(problem, rule, policy, depth, cfg, compact_model=None):
     cell = META_ROOT / problem / f"{rule}_{policy}"
     cell.mkdir(parents=True, exist_ok=True)
     mpath = cell / "meta.json"
     meta = load_meta(mpath)
 
     if not meta["nodes"]:                       # seed from the shared round 1
-        meta["nodes"] = bootstrap(problem, cfg)
+        meta["nodes"] = bootstrap(problem, cfg, compact_model)
         meta["rounds_done"] = 1
         save_meta(mpath, meta)
 
@@ -273,7 +276,8 @@ def run_treatment(problem, rule, policy, depth, cfg):
             if not expansion_done(nd):
                 apply_continuation(Path(parent["path"]) / "state", nd / "state",
                                    rule, cfg["maximize"])
-                jobs.append((nd, launch(problem, model, nd, cfg, cell / f"{nid}.log")))
+                jobs.append((nd, launch(problem, model, nd, cfg, cell / f"{nid}.log",
+                                        compact_model)))
             print(f"[meta] {cell.name} round {rnd}: {model} <- {parent['id']} "
                   f"(best={parent['best']})", flush=True)
             pending.append((nid, nd, parent, model))
@@ -319,6 +323,10 @@ def main():
     ap.add_argument("--steps", type=int)
     ap.add_argument("--concurrency", type=int)
     ap.add_argument("--root", help="override META_ROOT (smoke tests write elsewhere)")
+    ap.add_argument("--compact-model", default="gpt-5.6-terra",
+                    help="model for the memory editor. The loop default (gpt-5.3-codex-spark) "
+                         "has a 5-hour rolling quota that ~33 memory edits exhausted; keep this "
+                         "the SAME across all cells of a campaign.")
     a = ap.parse_args()
     for k in ("B", "G", "steps", "concurrency"):
         if getattr(a, k) is not None:
@@ -327,11 +335,11 @@ def main():
         globals()["META_ROOT"] = Path(a.root)
     cfg = PROBLEMS[a.problem]
     if a.bootstrap:
-        bootstrap(a.problem, cfg)
+        bootstrap(a.problem, cfg, a.compact_model)
         return
     if not (a.rule and a.policy):
         ap.error("--rule and --policy are required unless --bootstrap")
-    run_treatment(a.problem, a.rule, a.policy, a.depth, cfg)
+    run_treatment(a.problem, a.rule, a.policy, a.depth, cfg, a.compact_model)
 
 
 if __name__ == "__main__":
