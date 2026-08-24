@@ -19,6 +19,14 @@ ZONE="${ZONE:-us-east5-a}"
 RETRY_S="${RETRY_S:-480}"
 GCLOUD="${GCLOUD:-/n/fs/vision-mix/sk7524/google-cloud-sdk/bin/gcloud}"
 
+SMOKE_ON_UP="${SMOKE_ON_UP:-1}"
+
+# OUTER LIFECYCLE LOOP: spot preemption killed the first cell ~40min into
+# bring-up. Acquire -> prep -> bring up -> watch the slice; when it dies,
+# re-acquire and do it all again. Every successful bring-up (re)submits the
+# rf3c smoke so generation evidence accumulates whenever the cell is alive.
+while true; do
+
 echo "=== acquiring ${QR} (retry every ${RETRY_S}s through quota 429s) ==="
 while true; do
   st=$(timeout 300 "$GCLOUD" compute tpus queued-resources describe "$QR" --zone="$ZONE" \
@@ -57,4 +65,17 @@ done
 wait
 echo "=== prep done; cell bring-up ==="
 TPU_NAME="$QR" bash tpu/pallas_arena/rl_v5p32_bringup.sh
-echo "=== chain complete rc=$? $(date +%H:%M:%S) ==="
+brc=$?
+echo "=== bring-up rc=${brc} $(date +%H:%M:%S) ==="
+if [ "$brc" -eq 0 ] && [ "$SMOKE_ON_UP" = "1" ]; then
+  sbatch tpu/pallas_arena/probe/smoke_on_cell.sbatch 2>&1 | tail -1
+fi
+
+# Watch the slice; on death, loop back to acquisition.
+while timeout 120 "$GCLOUD" compute tpus tpu-vm list --zone="$ZONE" --project="$PROJECT" 2>/dev/null     | grep -q "^${QR}\b.*READY"; do
+  sleep 180
+done
+echo "=== slice lost $(date +%H:%M:%S); re-acquiring ==="
+timeout 600 "$GCLOUD" compute tpus queued-resources delete "$QR"   --zone="$ZONE" --project="$PROJECT" --force --quiet 2>/dev/null || true
+sleep 60
+done  # outer lifecycle loop
