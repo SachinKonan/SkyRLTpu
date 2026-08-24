@@ -40,6 +40,10 @@ ENV_REGISTRY = {
     # Frontier-CS 2.0 planar unit-distance problem; problem_type = N points
     # ("65536" real task, "10" mirrors their erdos_demo smoke variant).
     "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv", "65536", 1100),
+    # Pallas kernel arena, RG-LRU: remote TPU judging via ARENA_QUEUE_URL.
+    # eval_timeout is the QUEUE-WAIT bound, not a sandbox budget (nothing runs
+    # locally); a 32-group on a few judges is queue-depth dominated.
+    "pallas_rglru": ("examples.pallas_rglru.env", "PallasRgLruEnv", "", 3600),
 }
 
 
