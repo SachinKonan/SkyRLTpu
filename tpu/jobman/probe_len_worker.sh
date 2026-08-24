@@ -127,6 +127,17 @@ for cand in $CANDIDATES; do
         timeout 2400 uv run --extra tpu --extra tinker python "$REPO/tpu/probe_train_len_model.py" "$UNIFORM" 2>&1 | tail -8)
   echo "$out"
   echo "uniform=${UNIFORM} budget=${BUDGET}: $(echo "$out" | grep -E 'PROBE-RESULTS-JSON|cold |warm ' | tr '\n' ' ' | cut -c1-400)" >> "$RESULTS"
+  # A 400 is a request-shape bug on OUR side, and its only real diagnosis is
+  # the SERVER traceback -- which lives in a log that the next session
+  # truncates and that dies with the slice. Capture it inline: hand-reading it
+  # over ssh lost the race with preemption twice.
+  if echo "$out" | grep -q "status 400"; then
+    {
+      echo "  --- server traceback (uniform=${UNIFORM}) ---"
+      grep -B25 "has no attribute" "$HOME/skyrl-logs/tinker-api.log" 2>/dev/null \
+        | grep -E 'File "|line [0-9]+, in|Error|attribute|raise' | tail -14 | sed 's/^/    /'
+    } >> "$RESULTS"
+  fi
   publish
 done
 
