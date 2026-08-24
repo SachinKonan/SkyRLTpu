@@ -67,6 +67,7 @@ for cand in $CANDIDATES; do
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$JOBMAN_TPU_INTERNAL_IPS" \
     TPU_INTERNAL_IPS="$JOBMAN_TPU_INTERNAL_IPS" \
     REMOTE_USER="$USER" SSH_KEY_FILE="$HOME/.ssh/jobman_tpu_ed25519" \
+    REMOTE_SKYRL_DIR="$REPO" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1 \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" \
     TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": ${VOCAB_TILING}}" \
@@ -88,9 +89,16 @@ for cand in $CANDIDATES; do
     publish; continue
   fi
 
-  ready=0; end=$(( $(date +%s) + READY_S ))
+  ready=0; end=$(( $(date +%s) + READY_S )); tick=0
   while [ "$(date +%s)" -lt "$end" ]; do
     tinker_up && { ready=1; break; }
+    # The launcher runs in tmux and can die seconds in (bad path, bad env)
+    # while bring-up already returned 0. Once its session is gone AND the
+    # endpoint is down, waiting out the window teaches nothing.
+    tick=$(( tick + 1 ))
+    if [ "$tick" -ge 6 ] && ! tmux has-session -t skyrl-tinker 2>/dev/null; then
+      echo "[fast-fail] tinker tmux session gone"; break
+    fi
     sleep 20
   done
 
