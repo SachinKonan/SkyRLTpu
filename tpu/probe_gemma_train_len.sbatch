@@ -131,6 +131,15 @@ for _ in 1 2 3 4 5 6; do
   sleep 20
 done
 
+# The trainer launcher calls bare `uv`, but the tmux shell it runs under does
+# not source the profile that puts ~/.local/bin on PATH -- "uv: command not
+# found" (job 3748560). The vLLM bootstrap used to paper over this by
+# installing uv system-wide, so dropping serving from the probe exposed it.
+timeout 300 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
+  --command="sudo -u sk7524_princeton_edu bash -lc 'command -v uv >/dev/null || (curl -LsSf https://astral.sh/uv/install.sh | sh)' >/dev/null 2>&1; \
+             sudo ln -sf /home/sk7524_princeton_edu/.local/bin/uv /usr/local/bin/uv; \
+             sudo -u sk7524_princeton_edu bash -c 'command -v uv'" 2>&1 | tail -2
+
 : > "$RESULTS"
 SYNC=1
 for cand in $CANDIDATES; do
