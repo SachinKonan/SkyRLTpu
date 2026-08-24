@@ -22,6 +22,14 @@ MODEL_NAME="${MODEL_NAME:-google/gemma-4-31B-it}"
 MAXTEXT_MODEL="${TUNIX_MAXTEXT_MODEL_NAME:-gemma4-31b}"
 FLCE_TILE="${FLCE_TILE:-1024}"
 VOCAB_TILING="${VOCAB_TILING:-32}"
+# THE MAXTEXT FORK IS LOAD-BEARING, not a preference: the FLCE loss path calls
+# model(..., skip_lm_head=True) and uses the returned hidden states. Stock
+# PyPI maxtext ignores that kwarg and returns None, so the FIRST
+# forward_backward dies with "'NoneType' object has no attribute 'shape'"
+# inside _flce_target_logprobs -- while boot, weight load and serving all look
+# perfectly healthy. Passing it via the jobman env alone did NOT reach the
+# venv build; the league passes it explicitly too (cell_worker.sh).
+MAXTEXT_PIP_SPEC="${TUNIX_MAXTEXT_PIP_SPEC:-maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense}"
 CANDIDATES="${CANDIDATES:-16384:16384 16384:65536 12288:49152 20480:20480}"
 READY_S="${READY_S:-3000}"
 RESULTS_GCS="${RESULTS_GCS:-gs://sk7524-tinker-tpu-us-east5/lenprobe/gemma4-31b}"
@@ -75,7 +83,7 @@ for cand in $CANDIDATES; do
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$JOBMAN_TPU_INTERNAL_IPS" \
     TPU_INTERNAL_IPS="$JOBMAN_TPU_INTERNAL_IPS" \
     REMOTE_USER="$USER" SSH_KEY_FILE="$HOME/.ssh/jobman_tpu_ed25519" \
-    REMOTE_SKYRL_DIR="$REPO" \
+    REMOTE_SKYRL_DIR="$REPO" TUNIX_MAXTEXT_PIP_SPEC="$MAXTEXT_PIP_SPEC" \
     TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1 \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" \
     TUNIX_MAXTEXT_KWARGS="{\"num_vocab_tiling\": ${VOCAB_TILING}}" \
