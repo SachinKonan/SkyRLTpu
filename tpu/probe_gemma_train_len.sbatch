@@ -65,21 +65,17 @@ FLCE_TILE=${FLCE_TILE:-1024}
 VOCAB_TILING=${VOCAB_TILING:-32}
 HF_GCS=${HF_GCS:-gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4}
 JAX_CACHE_GCS=${JAX_CACHE_GCS:-gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-gemma4-lenprobe}
-# vLLM is started even though this probe only measures the TRAINER: the shared
-# bring-up waits for vLLM readiness whenever START_TINKER=1 (line ~502), so
-# START_VLLM=0 hangs on engines it never launched (job 3748236). Serving runs
-# on worker 1, trainer alone on worker 0 -- the same host separation as
-# production, so the trainer's HBM picture is unchanged. Values are the
-# league's own gemma cell (cell_worker.sh).
-VLLM_XLA_GCS=${VLLM_XLA_GCS:-gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k}
+# TRAINER ONLY: no vLLM. The shared bring-up used to wait for vLLM whenever
+# START_TINKER=1 -- fixed here in main (start_colocated ~line 502) so the wait
+# is gated on START_VLLM alone. This matters for survival, not just tidiness:
+# with serving in the loop, bring-up ran ~90min and spot preemption killed the
+# VM mid-boot (job 3748521, VM gone, its IP reassigned to a stranger's machine
+# -> host-key error). Trainer-only roughly halves the exposure window. It also
+# drops the whole serving failure surface (transformers pin, XLA cache, engine
+# compile), none of which this measurement needs.
+# VLLM_WORKERS=1 is still set: worker-1's ip is resolved unconditionally at
+# bring-up (~line 383), which is why the slice is v5p-16 rather than v5p-8.
 MAXTEXT_PIP=${MAXTEXT_PIP:-"maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"}
-TPUINF_REF=${TPUINF_REF:-skyrl/v0.23.0-lora}
-# The pin goes through VLLM_EXTRA_PIP_SPECS, NOT VLLM_TRANSFORMERS_VERSION:
-# nothing in start_vllm_tpu.sh / start_colocated reads the latter (the league
-# passes it, but it is dead env). Without the pin, transformers 5.15 raises
-# AmbiguousGlobalPerLayerAttributeError on gemma's per-layer head_dim and the
-# engine never boots -- job 3748384, and the same crash the arena smoke hit.
-TF_VERSION=${TF_VERSION:-5.8.0}
 
 QR="sk7524-gemmalen-${SLURM_JOB_ID}"
 RESULTS="${out_dir}/gemma-len-probe-results-${SLURM_JOB_ID}.txt"
@@ -155,27 +151,35 @@ for cand in $CANDIDATES; do
     TUNIX_MINIMAL_FB_OUTPUT=1 SKYRL_SCORE_FIXED_LEN="$UNIFORM" \
     HF_CACHE_GCS="$HF_GCS" JAX_CACHE_GCS="$JAX_CACHE_GCS" \
     TUNIX_MAXTEXT_PIP_SPEC="$MAXTEXT_PIP" \
-    VLLM_WORKERS=1 VLLM_MODEL_IMPL_TYPE=vllm TPU_INFERENCE_FORK_REF="$TPUINF_REF" \
-    VLLM_TP_SIZE=4 VLLM_ENGINES_PER_HOST=1 \
-    VLLM_EXTRA_PIP_SPECS="transformers==${TF_VERSION}" \
-    VLLM_TPU_BACKEND_TYPE=torchax VLLM_MAX_MODEL_LEN=16384 VLLM_MAX_NUM_SEQS=128 \
-    VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
-    VLLM_XLA_CACHE_GCS="$VLLM_XLA_GCS" \
-    VLLM_EXTRA_ARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85" \
-    READY_ATTEMPTS=900 SYNC_SKYRL="$SYNC" START_VLLM=1 START_TINKER=1 \
+    VLLM_WORKERS=1 \
+    READY_ATTEMPTS=900 SYNC_SKYRL="$SYNC" START_VLLM=0 START_TINKER=1 \
     bash "${repo_root}/tpu/start_colocated_vllm_tinker.sh" \
       > "${out_dir}/gemma-len-bringup-${SLURM_JOB_ID}-${UNIFORM}-${BUDGET}.log" 2>&1 \
     || echo "[warn] bring-up returned nonzero (health check decides)"
   SYNC=0
 
-  ready=0; end=$(( $(date +%s) + TINKER_READY_S ))
+  ready=0; gone=0; end=$(( $(date +%s) + TINKER_READY_S )); poll=0
   while [ "$(date +%s)" -lt "$end" ]; do
     if timeout 60 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0 \
          --command="curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null" 2>/dev/null; then
       ready=1; break
     fi
+    # Every ~5min, check the SLICE is still alive. Spot preemption during a
+    # long bring-up otherwise burns the entire ready window and then reports
+    # the same "NEVER READY" as a real OOM -- and the next candidate boots
+    # against a corpse (job 3748521).
+    poll=$(( poll + 1 ))
+    if [ $(( poll % 10 )) -eq 0 ]; then
+      if ! timeout 120 gcloud compute tpus tpu-vm list --zone="$ZONE" --project="$PROJECT" 2>/dev/null | grep -q "^${QR}\b"; then
+        echo "[preempt] slice vanished during bring-up"; gone=1; break
+      fi
+    fi
     sleep 30
   done
+  if [ "$gone" -eq 1 ]; then
+    echo "uniform=${UNIFORM} budget=${BUDGET}: SLICE PREEMPTED during bring-up (no measurement)" | tee -a "$RESULTS"
+    break
+  fi
   if [ "$ready" -ne 1 ]; then
     echo "uniform=${UNIFORM} budget=${BUDGET}: TRAINER NEVER READY -- see bringup/tinker tails below" | tee -a "$RESULTS"
     # BOTH logs: "never ready" conflates boot-time OOM, compile failure, and

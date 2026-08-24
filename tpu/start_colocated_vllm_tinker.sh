@@ -499,7 +499,12 @@ exit 1
   tpu_vm_ssh "$worker" "$remote_cmd"
 }
 
-if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
+# Wait for vLLM only when we actually STARTED it. The old condition also
+# fired for START_VLLM=0 + START_TINKER=1, i.e. it blocked on engines that
+# were never launched -- a trainer-only bring-up could never succeed (measured:
+# gemma length probe, job 3748236). Trainer-only is the shape a sizing probe
+# wants, and it removes ~40min of serving bring-up from the critical path.
+if [[ "$START_VLLM" == "1" ]]; then
   for vllm_worker in "${vllm_workers[@]}"; do
     for ((engine = 0; engine < VLLM_ENGINES_PER_HOST; engine++)); do
       engine_label="vLLM worker ${vllm_worker}"
