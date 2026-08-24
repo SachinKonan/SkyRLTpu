@@ -140,13 +140,20 @@ case "$CELL" in
     # budget/tiling/remat knob ever moved it. With the release: delta 1.33 GiB, and
     # the same fb COMPLETES in 46.9s (loss -0.00215, peak 60.9 of 95.7 GiB).
     FREE_BASE_STATE=1
-    # Phase 2 of the two-phase completer re-sends prompt + ALL phase-1 tokens
-    # (~13.8k for muse). Index round-robin sends that to the engine holding its
-    # KV only 1 time in 6, so the other 5/6 re-prefill context another engine
-    # just produced: measured 49% prefix-cache hit rate and generation collapsing
-    # to 28-114 tok/s with 39-64 seqs running. Prefix-hash routing pins a group's
-    # traffic to one engine.
-    ROUTE_PREFIX=1
+    # REVERTED, and left here as the record. The theory was that phase 2
+    # re-sends prompt + ALL phase-1 tokens (~13.8k) and index round-robin lands
+    # it on the engine holding that KV only 1 time in 6. Pinning by prompt
+    # prefix was measured and did NOT work: windowed prefix-cache hit rate was
+    # 36.1% (queries +666988, hits +240992 over a live 10-min sampling window)
+    # against a 49.6% lifetime baseline -- i.e. worse, not better -- while step
+    # 2's sampling ran 7060s vs step 1's 5949s on FEWER generated tokens
+    # (throughput -25%). Load balance was fine (six engines within 2%), so the
+    # allocator worked; the affinity itself did not take. Most likely the
+    # phase-2 request never reaches the patched router with its prompt_ids and
+    # silently falls back to index routing -- worth confirming offline before
+    # anyone tries this again. Re-enable with ROUTE_PREFIX=1 only with a
+    # windowed hit-rate measurement to prove it.
+    ROUTE_PREFIX=0
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
     TP_SIZE=2; ENGINES_PER_HOST=2
     # 64/engine x 6 engines = 384 pooled scheduler slots, under the measured
