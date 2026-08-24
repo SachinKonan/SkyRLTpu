@@ -1,0 +1,15 @@
+[ab] node=neu319.neuronic.cs.princeton.edu job=3630583 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/subagent_guard4.sh
+=== config.toml ===
+[features]
+multi_agent_v2 = true
+
+[features.multi_agent_v2]
+default_subagent_model = "gpt-5.4-mini"
+default_subagent_reasoning_effort = "low"
+max_concurrent_threads_per_session = 4
+expose_spawn_agent_model_overrides = true
+collab events: 0
+0
+final: 
+=== models in ISOLATED session store ===

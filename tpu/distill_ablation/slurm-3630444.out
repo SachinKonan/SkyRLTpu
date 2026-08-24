@@ -1,0 +1,12 @@
+[ab] node=neu316.neuronic.cs.princeton.edu job=3630444 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/subagent_guard.sh
+=== case: topLevel
+  models seen in event stream:
+    (none)
+  spawn/thread events: 1 started
+=== case: featuresNS
+  models seen in event stream:
+    (none)
+  spawn/thread events: 1 started
+
+=== raw model/agent fields (first case) ===

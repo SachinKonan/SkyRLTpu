@@ -1,0 +1,11 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3593893 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/portfolio_smoke.sh
+[pf] resumed store: 1 nodes
+[pf] r1 FALLBACK groups=[[0]]
+[pf] r1 g0 x0: node 1 score=0.38092797079763624  (900s)
+[pf] ===== round 1 done: best 0.3809279707976363 -> 0.38092797079763624 (2 nodes) =====
+[pf] r2 FALLBACK groups=[[0], [1]]
+[pf] r2 g0 x0: node 2 score=0.38092797079763624  (900s)
+[pf] r2 g1 x0: node 3 score=0.3809279707976363  (900s)
+[pf] ===== round 2 done: best 0.38092797079763624 -> 0.38092797079763624 (4 nodes) =====
+[pf] FINAL best node 1: r=0.38092797079763624

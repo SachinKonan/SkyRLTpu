@@ -1,0 +1,31 @@
+[ab] node=neu302.neuronic.cs.princeton.edu job=3637359 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/exp1_v2.sh
+########## fc46 / mechanical ##########
+[mr] fc46/mechanical r1: baseline=0.073942
+[mr] map wave done (25/100)
+[mr] map wave done (50/100)
+[mr] map wave done (75/100)
+[mr] map wave done (100/100)
+[mr] map: 100/100 accepted submissions
+[mr] RESULT {"problem": "fc46", "arm": "mechanical", "replicate": 1, "baseline": 0.073942, "best": 0.226338, "n_submissions": 101, "sessions_used": 101, "wall_secs": 5379, "map_submissions": 100, "reduced": true}
+########## fc46 / native ##########
+[mr] fc46/native r1: baseline=0.073942
+[mr] native: subagents actually spawned=3, submissions=1
+[mr] RESULT {"problem": "fc46", "arm": "native", "replicate": 1, "baseline": 0.073942, "best": 0.22319, "n_submissions": 1, "sessions_used": 1, "wall_secs": 4521, "spawned": 3}
+########## fc302 / mechanical ##########
+[mr] fc302/mechanical r1: baseline=0.3677963558477999
+[mr] map wave done (25/100)
+[mr] map wave done (50/100)
+[mr] map wave done (75/100)
+[mr] map wave done (100/100)
+[mr] map: 100/100 accepted submissions
+[mr] RESULT {"problem": "fc302", "arm": "mechanical", "replicate": 1, "baseline": 0.3677963558477999, "best": 0.4298313205895, "n_submissions": 101, "sessions_used": 101, "wall_secs": 5001, "map_submissions": 100, "reduced": true}
+########## fc302 / native ##########
+[mr] fc302/native r1: baseline=0.3677963558477999
+[mr] native: subagents actually spawned=4, submissions=1
+[mr] RESULT {"problem": "fc302", "arm": "native", "replicate": 1, "baseline": 0.3677963558477999, "best": 0.33399748524279993, "n_submissions": 1, "sessions_used": 1, "wall_secs": 4443, "spawned": 4}
+########## EXP-1 v2 DONE ##########
+{  "problem": "fc302",  "arm": "mechanical",  "replicate": 1,  "baseline": 0.3677963558477999,  "best": 0.4298313205895,  "n_submissions": 101,  "sessions_used": 101,  "wall_secs": 5001,  "map_submissions": 100,  "reduced": true}
+{  "problem": "fc302",  "arm": "native",  "replicate": 1,  "baseline": 0.3677963558477999,  "best": 0.33399748524279993,  "n_submissions": 1,  "sessions_used": 1,  "wall_secs": 4443,  "spawned": 4}
+{  "problem": "fc46",  "arm": "mechanical",  "replicate": 1,  "baseline": 0.073942,  "best": 0.226338,  "n_submissions": 101,  "sessions_used": 101,  "wall_secs": 5379,  "map_submissions": 100,  "reduced": true}
+{  "problem": "fc46",  "arm": "native",  "replicate": 1,  "baseline": 0.073942,  "best": 0.22319,  "n_submissions": 1,  "sessions_used": 1,  "wall_secs": 4521,  "spawned": 3}

@@ -1,0 +1,36 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3631500 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/node_ws_probe.sh
++ set -uo pipefail
++ export PATH=/n/fs/vision-mix/sk7524/.npm-global/bin:/n/fs/vision-mix/sk7524/yazi/target/release:/n/fs/vision-mix/sk7524/latex/texlive/bin/x86_64-linux:/n/fs/vision-mix/sk7524/.pandoc/bin:/n/fs/vision-mix/sk7524/.aws-local/bin:/n/fs/vision-mix/sk7524/.npm-global/bin:/u/sk7524/bin:/n/fs/vision-mix/sk7524/yazi/target/release:/u/sk7524/.cargo/bin:/n/fs/vision-mix/sk7524/latex/texlive/bin/x86_64-linux:/n/fs/vision-mix/sk7524/.pandoc/bin:/n/fs/vision-mix/sk7524/.aws-local/bin:/n/fs/vision-mix/sk7524/.npm-global/bin:/n/fs/vision-mix/sk7524/google-cloud-sdk/bin:/u/sk7524/.deno/bin:/usr/local/anaconda3/2024.02/condabin:/u/sk7524/.local/bin:/u/sk7524/bin:/usr/share/Modules/bin:/u/sk7524/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin
++ PATH=/n/fs/vision-mix/sk7524/.npm-global/bin:/n/fs/vision-mix/sk7524/yazi/target/release:/n/fs/vision-mix/sk7524/latex/texlive/bin/x86_64-linux:/n/fs/vision-mix/sk7524/.pandoc/bin:/n/fs/vision-mix/sk7524/.aws-local/bin:/n/fs/vision-mix/sk7524/.npm-global/bin:/u/sk7524/bin:/n/fs/vision-mix/sk7524/yazi/target/release:/u/sk7524/.cargo/bin:/n/fs/vision-mix/sk7524/latex/texlive/bin/x86_64-linux:/n/fs/vision-mix/sk7524/.pandoc/bin:/n/fs/vision-mix/sk7524/.aws-local/bin:/n/fs/vision-mix/sk7524/.npm-global/bin:/n/fs/vision-mix/sk7524/google-cloud-sdk/bin:/u/sk7524/.deno/bin:/usr/local/anaconda3/2024.02/condabin:/u/sk7524/.local/bin:/u/sk7524/bin:/usr/share/Modules/bin:/u/sk7524/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin
+++ hostname -s
++ N=neu332
++ WD=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332
++ rm -rf /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332
++ mkdir -p /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332
++ cd /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332
++ CH=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/ch
++ mkdir -p /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/ch
++ cp /u/sk7524/.codex/auth.json /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/ch/
++ printf '[features]\nuse_legacy_landlock = true\n'
++ for i in 1 2 3 4
++ for i in 1 2 3 4
++ for i in 1 2 3 4
++ CODEX_HOME=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/ch
++ timeout 300 codex exec -m gpt-5.4-mini -c model_reasoning_effort=high -s workspace-write -c approval_policy=never --json -C /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332 'Write a short C++ function that sorts a vector, then explain it in one sentence.'
++ for i in 1 2 3 4
++ CODEX_HOME=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/ch
++ timeout 300 codex exec -m gpt-5.4-mini -c model_reasoning_effort=high -s workspace-write -c approval_policy=never --json -C /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332 'Write a short C++ function that sorts a vector, then explain it in one sentence.'
++ CODEX_HOME=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/ch
++ wait
++ timeout 300 codex exec -m gpt-5.4-mini -c model_reasoning_effort=high -s workspace-write -c approval_policy=never --json -C /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332 'Write a short C++ function that sorts a vector, then explain it in one sentence.'
++ CODEX_HOME=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/ch
++ timeout 300 codex exec -m gpt-5.4-mini -c model_reasoning_effort=high -s workspace-write -c approval_policy=never --json -C /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332 'Write a short C++ function that sorts a vector, then explain it in one sentence.'
+++ wc -l
+++ grep -l 'idle timeout waiting for websocket\|stream disconnected' /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s1.jsonl /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s2.jsonl /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s3.jsonl /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s4.jsonl
++ drops=0
+++ wc -l
+++ grep -l '"type":"turn.completed"' /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s1.jsonl /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s2.jsonl /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s3.jsonl /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ws_probe/neu332/s4.jsonl
++ done_ok=4
++ echo 'NODE=neu332 sessions=4 websocket_drops=0 completed=4'
+NODE=neu332 sessions=4 websocket_drops=0 completed=4

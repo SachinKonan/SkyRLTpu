@@ -1,0 +1,11 @@
+[ab] node=neu304.neuronic.cs.princeton.edu job=3631335 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/sandbox_probe.sh
+node=neu304.neuronic.cs.princeton.edu
+max_user_namespaces=0
+  A_workspace_write: shell_worked=no bwrap_errors=0
+0
+  B_bwrap_off: shell_worked=YES bwrap_errors=2
+  C_landlock: shell_worked=YES bwrap_errors=0
+0
+  D_full_access: shell_worked=no bwrap_errors=0
+0

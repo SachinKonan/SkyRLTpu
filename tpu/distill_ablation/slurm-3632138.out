@@ -1,0 +1,4 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3632138 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/yield_probe.sh
+YIELD label=wall420 concurrency=16 wall=420s drops=0 usable_final_msg=0  (0%)
+YIELD label=wall900 concurrency=16 wall=900s drops=12 usable_final_msg=2  (12%)

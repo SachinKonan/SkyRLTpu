@@ -1,0 +1,6 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3632217 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/provider_probe.sh
+### step 1: does auth work through the custom provider?
+  AUTH OK
+### step 2: 8 concurrent long rollouts (baseline was 7/8 dropped)
+RESULT custom_provider sessions=8 drops=3 usable=5  (baseline drops=7 usable=1)

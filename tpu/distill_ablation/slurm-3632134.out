@@ -1,0 +1,4 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3632134 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/timeout_probe.sh
+prompt=/n/fs/vision-mix/sk7524/SkyRLTpu/runs/sweep/fc46_simple_tes_smoke/r1_s0_k0/prompt.txt (13451 chars), 8 concurrent, idle_timeout=30min
+RESULT sessions=8 ws_drops=0 final_msg=0 config_errors=8   (baseline was drops=7 final=1)

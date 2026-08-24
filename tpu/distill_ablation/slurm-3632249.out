@@ -1,0 +1,81 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3632249 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/sweep_fc46.sh
+########## ARM 1/3: simple_tes + rpucg formula ##########
+[sw] fc46/simple_tes: seed recorded=0.073942 chars=5456
+[sw] baseline production score = 0.073942
+[sw] r1 groups=[[0]]
+[sw] r1: launching 10 rollouts (25 at a time)
+[sw] r1: rollouts done in 1110s
+[sw] r1: production-grading 9 programs...
+[sw] ===== r1: best=0.098398 genuine=9/10 hardcoded=0 sessions=10 =====
+[sw] r2 groups=[[6], [9], [2], [7], [8], [3], [1], [4], [5]]
+[sw] r2: launching 90 rollouts (25 at a time)
+[sw] r2: rollouts done in 3420s
+[sw] r2: production-grading 39 programs...
+[sw] ===== r2: best=0.143699 genuine=36/90 hardcoded=0 sessions=100 =====
+[sw] r3 groups=[[36], [31], [28], [15], [17], [30], [19], [16], [29], [27]]
+[sw] r3: launching 100 rollouts (25 at a time)
+[sw] r3: rollouts done in 3691s
+[sw] r3: production-grading 48 programs...
+[sw] ===== r3: best=0.150035 genuine=46/100 hardcoded=0 sessions=200 =====
+[sw] r4 groups=[[67], [48], [62], [54], [73], [51], [50], [47], [68], [58]]
+[sw] r4: launching 100 rollouts (25 at a time)
+[sw] r4: rollouts done in 3539s
+[sw] r4: production-grading 63 programs...
+[sw] ===== r4: best=0.150035 genuine=61/100 hardcoded=2 sessions=300 =====
+[sw] r5 groups=[[107], [109], [143], [144], [108], [147], [136], [128], [111], [96]]
+[sw] r5: launching 100 rollouts (25 at a time)
+[sw] r5: rollouts done in 3637s
+[sw] r5: production-grading 59 programs...
+[sw] ===== r5: best=0.181152 genuine=56/100 hardcoded=2 sessions=400 =====
+[sw] r6 groups=[[169], [170], [166], [163], [173], [186], [209], [187], [172], [195]]
+[sw] r6: launching 100 rollouts (25 at a time)
+[sw] r6: rollouts done in 3556s
+[sw] r6: production-grading 53 programs...
+[sw] ===== r6: best=0.181152 genuine=48/100 hardcoded=2 sessions=500 =====
+[sw] r7 groups=[[211], [223], [214], [226], [213], [212], [239], [217], [243], [222]]
+[sw] r7: launching 100 rollouts (25 at a time)
+[sw] r7: rollouts done in 3601s
+[sw] r7: production-grading 54 programs...
+[sw] ===== r7: best=0.181152 genuine=49/100 hardcoded=3 sessions=600 =====
+[sw] r8 groups=[[269], [264], [271], [285], [286], [287], [273], [296], [272], [198]]
+[sw] r8: launching 100 rollouts (25 at a time)
+[sw] r8: rollouts done in 3541s
+[sw] r8: production-grading 65 programs...
+[sw] ===== r8: best=0.181152 genuine=63/100 hardcoded=1 sessions=700 =====
+[sw] r9 groups=[[358], [310], [307], [313], [311], [361], [351], [347], [339], [349]]
+[sw] r9: launching 100 rollouts (25 at a time)
+[sw] r9: rollouts done in 3581s
+[sw] r9: production-grading 53 programs...
+[sw] ===== r9: best=0.181152 genuine=50/100 hardcoded=3 sessions=800 =====
+[sw] r10 groups=[[373], [405], [403], [404], [415], [378], [370], [379], [418], [345]]
+[sw] r10: launching 100 rollouts (25 at a time)
+[sw] r10: rollouts done in 3542s
+[sw] r10: production-grading 56 programs...
+[sw] ===== r10: best=0.181152 genuine=51/100 hardcoded=2 sessions=900 =====
+[sw] FINAL best=0.181152 sessions_used=900
+########## ARM 2/3: continual (shared workspace) ##########
+[sw] fc46/continual: seed recorded=0.073942 chars=5456
+[sw] baseline production score = 0.073942
+[sw] r1: launching 100 rollouts (25 at a time)
+[sw] r1: rollouts done in 3690s
+[sw] r1: production-grading 50 programs...
+[sw] ===== r1: best=0.135905 genuine=48/100 hardcoded=1 sessions=100 =====
+[sw] r1: workspace 9499 chars
+[sw] r2: launching 100 rollouts (25 at a time)
+[sw] r2: rollouts done in 3550s
+[sw] r2: production-grading 47 programs...
+[sw] ===== r2: best=0.156547 genuine=45/100 hardcoded=2 sessions=201 =====
+[sw] r2: workspace 14733 chars
+[sw] r3: launching 100 rollouts (25 at a time)
+[sw] r3: rollouts done in 3579s
+[sw] r3: production-grading 55 programs...
+[sw] ===== r3: best=0.156547 genuine=55/100 hardcoded=0 sessions=302 =====
+[sw] r3: workspace 19539 chars
+[sw] r4: launching 100 rollouts (25 at a time)
+[sw] r4: rollouts done in 3511s
+[sw] r4: production-grading 59 programs...
+[sw] ===== r4: best=0.156547 genuine=57/100 hardcoded=1 sessions=403 =====
+[sw] r4: workspace 21706 chars
+[sw] r5: launching 100 rollouts (25 at a time)
+[2026-08-05T11:42:49.612] error: *** JOB 3632249 ON neu332 CANCELLED AT 2026-08-05T11:42:49 DUE to SIGNAL Terminated ***

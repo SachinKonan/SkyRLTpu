@@ -1,0 +1,5 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3631884 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/effort_probe.sh
+using prompt: /n/fs/vision-mix/sk7524/SkyRLTpu/runs/sweep/fc46_simple_tes_smoke/r1_s0_k0/prompt.txt (13451 chars)
+EFFORT=high sessions=4 ws_drops=3 final_msg_produced=1
+EFFORT=medium sessions=4 ws_drops=4 final_msg_produced=0

@@ -1,0 +1,13 @@
+[ab] node=neu302.neuronic.cs.princeton.edu job=3637207 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/identity_probe.sh
+[mr] fc46/native r98: baseline=0.073942
+[mr] native: subagents actually spawned=6, submissions=1
+[mr] RESULT {"problem": "fc46", "arm": "native", "replicate": 98, "baseline": 0.073942, "best": 0.128546, "n_submissions": 1, "sessions_used": 1, "wall_secs": 894, "spawned": 6}
+=== identity.jsonl: distinct transport identities vs claimed sessions ===
+  calls logged: 58
+  distinct transport conns : 8
+  distinct client_ids      : 1
+  distinct claimed sessions: 2
+  claimed session values: {'native_orch': 57, '': 1}
+  conn -> #calls: {'00ae8210': 17, '67e18450': 16, '00ae1510': 8, '00b02e10': 5, '00aea390': 4, '00cc7050': 4, '00adbd10': 3, '67de8390': 1}
+  sample headers: {'user-agent': 'python-httpx/0.28.1', 'mcp-session-id': 'b64fab844cce4ae3a7e2ab2ef88af7c7'}

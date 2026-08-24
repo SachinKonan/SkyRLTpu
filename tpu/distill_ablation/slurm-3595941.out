@@ -1,0 +1,12 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3595941 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/ab_pickseed.sh
+ idx        rec_c5     check@10s  valid   secs  detail
+  27   0.3814006850.38140004430369945   True     14  C5 bound: 0.38140004430369945
+  35   0.3814349650.3814349645573353   True     13  C5 bound: 0.3814349645573353
+  12   0.3814393850.3814393848272628   True      8  C5 bound: 0.3814393848272628
+   2   0.3814472720.3814394273410035   True     13  C5 bound: 0.3814394273410035
+  32   0.381457720          None  False    248  Evaluation failed: Process timed out after 245 seconds
+  31   0.3814729020.3818153274602414   True     43  C5 bound: 0.3818153274602414
+
+VALID and FAST (<=60s): [27, 35, 12, 2, 31]
+RECOMMEND seed idx=12 rec_c5=0.381439385 check10s=0.3814393848272628 in 8s

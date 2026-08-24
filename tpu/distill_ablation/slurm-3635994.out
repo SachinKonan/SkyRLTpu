@@ -1,0 +1,27 @@
+[ab] node=neu303.neuronic.cs.princeton.edu job=3635994 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/exp1_mapreduce.sh
+########## fc46 / mechanical ##########
+[mr] fc46/mechanical r0: baseline=0.073942
+[mr] map wave done (25/50)
+[mr] map wave done (50/50)
+[mr] map: 50/50 accepted submissions
+[mr] RESULT {"problem": "fc46", "arm": "mechanical", "replicate": 0, "baseline": 0.073942, "best": 0.219703, "n_submissions": 51, "sessions_used": 51, "wall_secs": 3525, "map_submissions": 50}
+########## fc46 / native ##########
+[mr] fc46/native r0: baseline=0.073942
+[mr] native: subagents actually spawned=3, submissions=1
+[mr] RESULT {"problem": "fc46", "arm": "native", "replicate": 0, "baseline": 0.073942, "best": 0.152179, "n_submissions": 1, "sessions_used": 1, "wall_secs": 1259, "spawned": 3}
+########## fc302 / mechanical ##########
+[mr] fc302/mechanical r0: baseline=0.3677963558477999
+[mr] map wave done (25/50)
+[mr] map wave done (50/50)
+[mr] map: 50/50 accepted submissions
+[mr] RESULT {"problem": "fc302", "arm": "mechanical", "replicate": 0, "baseline": 0.3677963558477999, "best": 0.4269045542016999, "n_submissions": 51, "sessions_used": 51, "wall_secs": 2660, "map_submissions": 50}
+########## fc302 / native ##########
+[mr] fc302/native r0: baseline=0.3677963558477999
+[mr] native: subagents actually spawned=5, submissions=1
+[mr] RESULT {"problem": "fc302", "arm": "native", "replicate": 0, "baseline": 0.3677963558477999, "best": 0.4197847255618001, "n_submissions": 1, "sessions_used": 1, "wall_secs": 1248, "spawned": 5}
+########## EXP-1 DONE ##########
+{  "problem": "fc302",  "arm": "mechanical",  "replicate": 0,  "baseline": 0.3677963558477999,  "best": 0.4269045542016999,  "n_submissions": 51,  "sessions_used": 51,  "wall_secs": 2660,  "map_submissions": 50}
+{  "problem": "fc302",  "arm": "native",  "replicate": 0,  "baseline": 0.3677963558477999,  "best": 0.4197847255618001,  "n_submissions": 1,  "sessions_used": 1,  "wall_secs": 1248,  "spawned": 5}
+{  "problem": "fc46",  "arm": "mechanical",  "replicate": 0,  "baseline": 0.073942,  "best": 0.219703,  "n_submissions": 51,  "sessions_used": 51,  "wall_secs": 3525,  "map_submissions": 50}
+{  "problem": "fc46",  "arm": "native",  "replicate": 0,  "baseline": 0.073942,  "best": 0.152179,  "n_submissions": 1,  "sessions_used": 1,  "wall_secs": 1259,  "spawned": 3}

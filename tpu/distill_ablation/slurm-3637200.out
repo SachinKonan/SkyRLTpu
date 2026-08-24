@@ -1,0 +1,26 @@
+[ab] node=neu307.neuronic.cs.princeton.edu job=3637200 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/identity_probe.sh
+Traceback (most recent call last):
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/mapreduce.py", line 346, in start_grader_full
+    socket.create_connection(("127.0.0.1", port), 1).close()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/u/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/socket.py", line 863, in create_connection
+    raise exceptions[0]
+  File "/u/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/socket.py", line 848, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [Errno 111] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/mapreduce.py", line 380, in <module>
+    main()
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/mapreduce.py", line 229, in main
+    grader, port = start_grader_full(args.problem, root, base_json, args.grader_conc, cap)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/mapreduce.py", line 350, in start_grader_full
+    raise RuntimeError(f"grader died; see {logdir}/grader.log")
+RuntimeError: grader died; see /n/fs/vision-mix/sk7524/SkyRLTpu/runs/mapreduce/fc46_native_r98/grader.log
+^^ FAILED
+=== identity.jsonl: distinct transport identities vs claimed sessions ===
+  (no identity log)

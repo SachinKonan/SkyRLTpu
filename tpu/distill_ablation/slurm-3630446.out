@@ -1,0 +1,20 @@
+[ab] node=neu316.neuronic.cs.princeton.edu job=3630446 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/subagent_guard2.sh
+### A. plain session, positional prompt, effort=high
+  bytes=470  agent_text: "text":"PONG 
+### B. multi_agent_v2 spawn, subagent model override (top-level key)
+  bytes=1109
+  event types:
+          3 "type":"item.completed"
+          2 "type":"collab_tool_call"
+          2 "type":"agent_message"
+          1 "type":"turn.started"
+          1 "type":"turn.completed"
+          1 "type":"thread.started"
+          1 "type":"item.started"
+  collab/spawn hits: 2
+  agent text tail: "text":"I’ll delegate exactly that one-word task to one subagent and wait for its respon "text":"The subagent said: PONG 
+### C. new session files -> which models were used?
+  new session files: 3
+   -- rollout-2026-08-04T15-39-36-019fce49-e212-7710-bfe6-375434e8d00e.jsonl
+            2 "model":"gpt-5.6-sol"

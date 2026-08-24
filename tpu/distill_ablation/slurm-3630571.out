@@ -1,0 +1,14 @@
+[ab] node=neu315.neuronic.cs.princeton.edu job=3630571 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/subagent_guard3.sh
+collab events: 2
+final: "text":"Both subagents replied:\n\n- PONG\n- PONG
+=== models per NEW session file ===
+-- rollout-2026-08-04T16-09-39-019fce65-637
+     "model":"gpt-5.6-sol"
+     "reasoning_effort":"high"
+-- rollout-2026-08-04T16-09-45-019fce65-7dd
+     "model":"gpt-5.6-sol"
+     "reasoning_effort":"high"
+-- rollout-2026-08-04T16-09-47-019fce65-86c
+     "model":"gpt-5.6-sol"
+     "reasoning_effort":"high"

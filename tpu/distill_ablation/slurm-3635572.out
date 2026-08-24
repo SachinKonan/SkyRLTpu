@@ -1,0 +1,11 @@
+[ab] node=neu317.neuronic.cs.princeton.edu job=3635572 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/mr_smoke.sh
+########## ARM mechanical ##########
+[mr] fc46/mechanical r99: baseline=0.073942
+[mr] map wave done (3/3)
+[mr] map: 3/3 accepted submissions
+[mr] RESULT {"problem": "fc46", "arm": "mechanical", "replicate": 99, "baseline": 0.073942, "best": 0.200368, "n_submissions": 4, "sessions_used": 4, "wall_secs": 1382, "map_submissions": 3}
+########## ARM native ##########
+[mr] fc46/native r99: baseline=0.073942
+[mr] native: subagents actually spawned=3, submissions=1
+[mr] RESULT {"problem": "fc46", "arm": "native", "replicate": 99, "baseline": 0.073942, "best": 0.1847, "n_submissions": 1, "sessions_used": 1, "wall_secs": 695, "spawned": 3}

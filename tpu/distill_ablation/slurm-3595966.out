@@ -1,0 +1,40 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3595966 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/ab_scheme.sh
+[ab] seed worse_set[2] recorded c5=0.381447272 (record 0.380928; headroom 5.19e-04) prog_chars=7786
+[ab] BASELINE seed production score = 0.3814394273410035 (10s=0.3814394273410035) detail=C5 bound: 0.3814394273410035
+
+[ab] ===== ARM fast: wall=600s grade_full=False group=10 =====
+[ab] arm fast: rollouts done in 960s
+[ab] arm fast: grading 6 programs concurrently (production 1000s/1100s)...
+[ab] arm fast: grading wave done in 9s
+[ab] fast x0: production=None (10s=0.39178358796177276, uses-budget=n/a) [salvaged from check (10s score 0.39178358796177276)]
+[ab] fast x1: NO PROGRAM (no valid checked solution)
+[ab] fast x2: NO PROGRAM (no valid checked solution)
+[ab] fast x3: production=None (10s=0.41018518518518515, uses-budget=n/a) [salvaged from check (10s score 0.41018518518518515)]
+[ab] fast x4: production=None (10s=0.38139166945437597, uses-budget=n/a) [salvaged from check (10s score 0.38139166945437597)]
+[ab] fast x5: NO PROGRAM (no valid checked solution)
+[ab] fast x6: production=None (10s=0.38144727204390005, uses-budget=n/a) [salvaged from check (10s score 0.38144727204390005)]
+[ab] fast x7: production=None (10s=0.3814623406363883, uses-budget=n/a) [salvaged from check (10s score 0.38146891340659916)]
+[ab] fast x8: production=None (10s=0.38815987447576716, uses-budget=n/a) [salvaged from check (10s score 0.38815987447576716)]
+[ab] fast x9: NO PROGRAM (no valid checked solution)
+[ab] ARM fast SUMMARY valid=0/10 best=None beat_baseline=0/10 mean=None grade_calls=51
+
+[ab] ===== ARM full: wall=1800s grade_full=True group=10 =====
+[ab] arm full: rollouts done in 2100s
+[ab] arm full: grading 8 programs concurrently (production 1000s/1100s)...
+[ab] arm full: grading wave done in 953s
+[ab] full x0: production=0.3821693971725379 (10s=0.3821693971725379, uses-budget=+0.00e+00) [salvaged from check (10s score 0.3821693971725379)]
+[ab] full x1: production=0.39049356060689006 (10s=0.39049356060689006, uses-budget=+0.00e+00) [salvaged from check (10s score 0.39049356060689006)]
+[ab] full x2: production=0.38140725603675635 (10s=0.38144727204390005, uses-budget=+4.00e-05) [salvaged from check (10s score 0.38140725603675635)]
+[ab] full x3: production=0.5528253065628577 (10s=0.5528253065628577, uses-budget=+0.00e+00) [salvaged from check (10s score 0.5528253065628577)]
+[ab] full x4: NO PROGRAM (no valid checked solution)
+[ab] full x5: production=0.40625 (10s=0.40625, uses-budget=+0.00e+00) [salvaged from check (10s score 0.40625)]
+[ab] full x6: NO PROGRAM (no valid checked solution)
+[ab] full x7: production=0.38144727204390005 (10s=0.38144727204390005, uses-budget=+0.00e+00) [salvaged from check (10s score 0.38144727204390005)]
+[ab] full x8: production=0.38092303510845016 (10s=0.38092303510845016, uses-budget=+0.00e+00) [salvaged from check (10s score 0.38092303510845016)]
+[ab] full x9: production=0.38143287604117765 (10s=0.3814328760411777, uses-budget=+5.55e-17) [salvaged from check (10s score 0.38143287604117765)]
+[ab] ARM full SUMMARY valid=8/10 best=0.38092303510845016 beat_baseline=3/10 mean=0.4071185879465712 grade_calls=126
+
+[ab] ============ A/B RESULT (baseline production = 0.3814394273410035) ============
+  fast  wall= 600s full=False | valid 0/10 | beat-baseline 0/10 | best None | mean None | grade calls 51
+  full  wall=1800s full=True  | valid 8/10 | beat-baseline 3/10 | best 0.38092303510845016 | mean 0.4071185879465712 | grade calls 126

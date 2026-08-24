@@ -53,6 +53,10 @@ fi
 # The XLA cache goes on LOCAL disk, never the gcsfuse mount: writing it
 # during compile has flaked with "transport endpoint not connected".
 export VLLM_XLA_CACHE_PATH="$HOME/vllm-xla-cache-local"
+# torchax-on-jax compiles through JAX's compilation cache, which ignores
+# VLLM_XLA_CACHE_PATH -- point BOTH at the same dir or the save-back
+# uploads an empty tree (measured: job 3744162, 55 min up, zero objects).
+export JAX_COMPILATION_CACHE_DIR="$VLLM_XLA_CACHE_PATH"
 mkdir -p "$VLLM_XLA_CACHE_PATH"
 if [ -n "$XLA_CACHE_GCS" ]; then
   gsutil -m -q rsync -r "$XLA_CACHE_GCS" "$VLLM_XLA_CACHE_PATH" 2>/dev/null \
@@ -67,8 +71,14 @@ if [ -n "$XLA_CACHE_GCS" ]; then
     done
     if curl -sf "http://127.0.0.1:${PORT}/v1/models" >/dev/null 2>&1; then
       sleep 60   # let warmup compilation finish writing
-      gsutil -m -q rsync -r "$VLLM_XLA_CACHE_PATH" "$XLA_CACHE_GCS" 2>/dev/null \
-        && echo "XLA cache saved back to ${XLA_CACHE_GCS}"
+      # Lazy compile (no precompile) means shapes keep landing through the
+      # first request waves -- re-sync a few times so late compiles bank too.
+      for _ in 1 2 3; do
+        _n=$(find "$VLLM_XLA_CACHE_PATH" -type f | wc -l)
+        gsutil -m -q rsync -r "$VLLM_XLA_CACHE_PATH" "$XLA_CACHE_GCS" 2>/dev/null \
+          && echo "XLA cache saved back to ${XLA_CACHE_GCS} (${_n} files)"
+        sleep 600
+      done
     fi ) &
 fi
 

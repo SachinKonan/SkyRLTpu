@@ -1,0 +1,2 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3631369 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/node_ws_probe.sh

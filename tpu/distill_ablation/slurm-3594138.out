@@ -1,0 +1,8 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3594138 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/portfolio_aggtest.sh
+[pf] resumed store: 4 nodes
+[pf] r1 aggregator 28s groups=[[1], [2]]
+[pf] r1 g0 x0: node 4 score=0.40740406513214117  (900s)
+[pf] r1 g1 x0: node 5 score=0.3809279707976363  (900s)
+[pf] ===== round 1 done: best 0.38092797079763624 -> 0.38092797079763624 (6 nodes) =====
+[pf] FINAL best node 1: r=0.38092797079763624

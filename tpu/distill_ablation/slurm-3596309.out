@@ -1,0 +1,48 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3596309 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/ab_finish.sh
+[rg] arm=fast programs recovered: 6/10 -> [0, 3, 4, 6, 7, 8]
+[rg] grading 6 programs concurrently at production 1000s/1100s...
+[rg] wave done in 925s
+[rg] x0: production=0.39178358796177276 (10s=0.39178358796177276, uses-budget=+0.00e+00) [salvaged from check (10s score 0.39178358796177276)]
+[rg] x1: NO PROGRAM (no valid checked solution)
+[rg] x2: NO PROGRAM (no valid checked solution)
+[rg] x3: production=0.41018518518518515 (10s=0.41018518518518515, uses-budget=+0.00e+00) [salvaged from check (10s score 0.41018518518518515)]
+[rg] x4: production=0.381271455561979 (10s=0.3814034560292014, uses-budget=+1.32e-04) [salvaged from check (10s score 0.38139166945437597)]
+[rg] x5: NO PROGRAM (no valid checked solution)
+[rg] x6: production=0.38232965867172797 (10s=0.38144727204390005, uses-budget=-8.82e-04) [salvaged from check (10s score 0.38144727204390005)]
+[rg] x7: production=0.38128332560606437 (10s=0.38150584163276113, uses-budget=+2.23e-04) [salvaged from check (10s score 0.38146891340659916)]
+[rg] x8: production=0.38815987447576716 (10s=0.38815987447576716, uses-budget=+0.00e+00) [salvaged from check (10s score 0.38815987447576716)]
+[rg] x9: NO PROGRAM (no valid checked solution)
+
+[rg] ARM fast (regraded) baseline=0.3814394273410035 valid=6/10 beat_baseline=2/10 best=0.381271455561979 mean=0.38916884791041606
+[rg] wrote /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ab_scheme/erdos/regrade_fast.json
+
+===== ARM fast (baseline 0.3814394273410035) =====
+  x       production  uses_budget  verdict       why
+  0 0.39178358796177276     +0.0e+00  GENUINE       computes from scratch
+  1             None          n/a  NO-PROGRAM    no valid checked solution
+  2             None          n/a  NO-PROGRAM    no valid checked solution
+  3 0.41018518518518515     +0.0e+00  GENUINE       computes from scratch
+  4 0.381271455561979     +1.3e-04  SUSPECT       literal array of 42 high-precision floats (but also reads initia
+  5             None          n/a  NO-PROGRAM    no valid checked solution
+  6 0.38232965867172797     -8.8e-04  GENUINE       uses initial_h_values
+  7 0.38128332560606437     +2.2e-04  GENUINE       uses initial_h_values
+  8 0.38815987447576716     +0.0e+00  GENUINE       computes from scratch
+  9             None          n/a  NO-PROGRAM    no valid checked solution
+  -> genuine 5/10 | hardcoded/suspect 1 | returns-base 0 | GENUINE best 0.38128332560606437 | genuine beat-baseline 1
+
+===== ARM full (baseline 0.3814394273410035) =====
+  x       production  uses_budget  verdict       why
+  0 0.3821693971725379     +0.0e+00  GENUINE       uses initial_h_values
+  1 0.39049356060689006     +0.0e+00  GENUINE       computes from scratch
+  2 0.38140725603675635     +4.0e-05  GENUINE       uses initial_h_values
+  3 0.5528253065628577     +0.0e+00  GENUINE       uses initial_h_values
+  4             None          n/a  GENUINE       uses initial_h_values
+  5          0.40625     +0.0e+00  GENUINE       computes from scratch
+  6             None          n/a  GENUINE       uses initial_h_values
+  7 0.38144727204390005     +0.0e+00  GENUINE       uses initial_h_values
+  8 0.38092303510845016     +0.0e+00  HARDCODED     literal array of 42 high-precision floats
+  9 0.38143287604117765     +5.6e-17  GENUINE       uses initial_h_values
+  -> genuine 7/10 | hardcoded/suspect 1 | returns-base 0 | GENUINE best 0.38140725603675635 | genuine beat-baseline 2
+
+wrote /n/fs/vision-mix/sk7524/SkyRLTpu/runs/ab_scheme/erdos/audit.json

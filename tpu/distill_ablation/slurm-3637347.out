@@ -1,0 +1,9 @@
+[ab] node=neu302.neuronic.cs.princeton.edu job=3637347 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/submit_test.sh
+tools: ['check', 'grade_full', 'submit']
+1. submit BEFORE grade_full -> accepted=False  (expect False)
+2. grade_full -> valid=True score=0.030795
+3. submit a DIFFERENT program -> accepted=False  (expect False)
+4. submit the VERIFIED program -> accepted=False score=None  (expect True)
+5. grade_full past cap(2) -> valid=True detail=official_score=3.079 unbounded=3.079 cases=1/1 PARTIAL=1 | 1
+6. submissions.jsonl: {"session": "test_sess", "sol_hash": "225aad0ff573", "score": 0.030795, "approach": "tabu search", "insight": "use critical path", "ts": 1785942259.5}

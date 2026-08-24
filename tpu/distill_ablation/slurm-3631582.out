@@ -1,0 +1,13 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3631582 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/sweep_smoke.sh
+########## simple_tes / rpucg (no LLM selector) ##########
+[sw] fc46/simple_tes: seed recorded=0.073942 chars=5456
+[sw] baseline production score = 0.073942
+[sw] r1 groups=[[0]]
+[sw] r1: launching 2 rollouts (4 at a time)
+[sw] r1: rollouts done in 780s
+[sw] r1: production-grading 1 programs...
+[sw] ===== r1: best=0.073942 genuine=1/2 hardcoded=0 sessions=2 =====
+[sw] r2 groups=[[0]]
+[sw] r2: launching 2 rollouts (4 at a time)
+[2026-08-04T19:38:25.783] error: *** JOB 3631582 ON neu332 CANCELLED AT 2026-08-04T19:38:25 DUE to SIGNAL Terminated ***

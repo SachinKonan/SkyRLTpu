@@ -1,0 +1,7 @@
+[ab] node=neu332.neuronic.cs.princeton.edu job=3595843 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/ab_preflight.sh
+seed idx=3 recorded_c5=0.381670526 base_len=801
+tools (--no-full): ['check']
+check@10s -> valid=False score=None left=537 wall=60s
+tools (full): ['check', 'grade_full']
+PREFLIGHT PASSED

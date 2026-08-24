@@ -1,0 +1,7 @@
+[ab] node=neu304.neuronic.cs.princeton.edu job=3631274 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/subagent_guard6.sh
+config-error: 0
+0
+collab events: 0
+0
+=== spawn tool call payloads (look for a model field) ===

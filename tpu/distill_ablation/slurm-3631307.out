@@ -1,0 +1,33 @@
+[ab] node=neu304.neuronic.cs.princeton.edu job=3631307 cores=64
+[ab] job script: /n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/jobs/sweep_smoke.sh
+########## ARM continual ##########
+[sw] fc46/continual: seed recorded=0.073942 chars=5456
+[sw] baseline production score = 0.073942
+[sw] r1: launching 4 rollouts (4 at a time)
+Traceback (most recent call last):
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/sweep.py", line 441, in <module>
+    main()
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/sweep.py", line 346, in main
+    pr = rollout_prompt(args.problem, sess,
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/sweep.py", line 136, in rollout_prompt
+    p = [TASK[problem], "", ROLLOUT_CONTRACT.format(sess=sess, fence=FENCE[problem]),
+         ~~~~^^^^^^^^^
+KeyError: 'fc46'
+ARM continual FAILED
+########## ARM simple_tes ##########
+[sw] fc46/simple_tes: seed recorded=0.073942 chars=5456
+[sw] baseline production score = 0.073942
+[sw] r1 groups=[[0]]
+[sw] r1: launching 2 rollouts (4 at a time)
+Traceback (most recent call last):
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/sweep.py", line 441, in <module>
+    main()
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/sweep.py", line 346, in main
+    pr = rollout_prompt(args.problem, sess,
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/distill_ablation/portfolio/sweep.py", line 136, in rollout_prompt
+    p = [TASK[problem], "", ROLLOUT_CONTRACT.format(sess=sess, fence=FENCE[problem]),
+         ~~~~^^^^^^^^^
+KeyError: 'fc46'
+ARM simple_tes FAILED
