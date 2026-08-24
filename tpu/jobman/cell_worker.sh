@@ -66,6 +66,7 @@ LORA_RETRIES=3; LORA_RETRY_SLEEP=2
 REQ_TIMEOUT=300
 TPU_BACKEND=torchax
 FREE_BASE_STATE=0
+ROUTE_PREFIX=0
 UNSET_PLUGINS=0
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
 HF_OFFLINE=0
@@ -139,6 +140,13 @@ case "$CELL" in
     # budget/tiling/remat knob ever moved it. With the release: delta 1.33 GiB, and
     # the same fb COMPLETES in 46.9s (loss -0.00215, peak 60.9 of 95.7 GiB).
     FREE_BASE_STATE=1
+    # Phase 2 of the two-phase completer re-sends prompt + ALL phase-1 tokens
+    # (~13.8k for muse). Index round-robin sends that to the engine holding its
+    # KV only 1 time in 6, so the other 5/6 re-prefill context another engine
+    # just produced: measured 49% prefix-cache hit rate and generation collapsing
+    # to 28-114 tok/s with 39-64 seqs running. Prefix-hash routing pins a group's
+    # traffic to one engine.
+    ROUTE_PREFIX=1
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
     TP_SIZE=2; ENGINES_PER_HOST=2
     # 64/engine x 6 engines = 384 pooled scheduler slots, under the measured
@@ -264,7 +272,7 @@ elif ! tinker_healthy && vllm_healthy; then
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
     VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" VLLM_UNSET_PLUGINS="$UNSET_PLUGINS" \
-    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" \
+    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" VLLM_ROUTE_BY_PROMPT_PREFIX="$ROUTE_PREFIX" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
@@ -307,7 +315,7 @@ else
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
     VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" VLLM_UNSET_PLUGINS="$UNSET_PLUGINS" \
-    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" \
+    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" VLLM_ROUTE_BY_PROMPT_PREFIX="$ROUTE_PREFIX" \
     MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \

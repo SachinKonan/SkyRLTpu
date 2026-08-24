@@ -93,6 +93,8 @@ VLLM_REQUEST_TIMEOUT_SEC="${VLLM_REQUEST_TIMEOUT_SEC:-300}"
 # tunix_backend.free_base_state_after_template). Off by default: it makes a
 # second LoRA config an error, which single-config RL cells never need.
 TUNIX_FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-0}"
+# Prefix-hash engine routing so phase 2 returns to the engine holding phase-1 KV.
+VLLM_ROUTE_BY_PROMPT_PREFIX="${VLLM_ROUTE_BY_PROMPT_PREFIX:-0}"
 VLLM_MAX_CONCURRENT_REQUESTS="${VLLM_MAX_CONCURRENT_REQUESTS:-256}"
 VLLM_CLIENT_SIDE_ROUND_ROBIN="${VLLM_CLIENT_SIDE_ROUND_ROBIN:-0}"
 
@@ -548,6 +550,7 @@ vllm_cfg = {
     "vllm_request_timeout_sec": float("${VLLM_REQUEST_TIMEOUT_SEC}"),
     "vllm_max_concurrent_requests": int("${VLLM_MAX_CONCURRENT_REQUESTS}"),
     "vllm_client_side_round_robin": "${VLLM_CLIENT_SIDE_ROUND_ROBIN}".lower() in ("1", "true", "yes", "on"),
+    "vllm_route_by_prompt_prefix": "${VLLM_ROUTE_BY_PROMPT_PREFIX}".lower() in ("1", "true", "yes", "on"),
 }
 
 if backend == "tunix":

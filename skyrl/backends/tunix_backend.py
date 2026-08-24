@@ -163,6 +163,14 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
     vllm_request_timeout_sec: float = Field(default=300.0)
     vllm_max_concurrent_requests: int = Field(default=64)
     vllm_client_side_round_robin: bool = Field(default=False)
+    vllm_route_by_prompt_prefix: bool = Field(
+        default=False,
+        description=(
+            "Route each request by a hash of its prompt prefix instead of its batch "
+            "index, so a two-phase rollout's phase-2 call returns to the engine that "
+            "already holds its phase-1 KV. Requires client-side round robin."
+        ),
+    )
     vllm_group_completions: bool = Field(default=True)
     free_base_state_after_template: bool = Field(
         default=False,
@@ -415,6 +423,7 @@ class TunixBackend(AbstractBackend):
                 request_timeout_sec=config.vllm_request_timeout_sec,
                 max_concurrent_requests=config.vllm_max_concurrent_requests,
                 client_side_round_robin=config.vllm_client_side_round_robin,
+                route_by_prompt_prefix=config.vllm_route_by_prompt_prefix,
             )
 
         # For maxtext, model_path is an orbax weights dir with no tokenizer

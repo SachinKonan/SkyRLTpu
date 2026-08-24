@@ -94,10 +94,17 @@ class VllmSamplingClient:
     request_timeout_sec: float = 300.0
     max_concurrent_requests: int = 64
     client_side_round_robin: bool = False
+    route_by_prompt_prefix: bool = False
+    route_prefix_tokens: int = 1536
+    _prefix_engine: dict[int, int] = field(default_factory=dict)
+    _route_rr: int = 0
     _loaded_loras: dict[str, dict[str, str]] = field(default_factory=dict)
     _latest_lora_by_model: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        import threading
+
+        self._route_lock = threading.Lock()
         url_pairs = _normalize_vllm_url_list(self.base_url)
         self.server_base_urls = tuple(pair[0] for pair in url_pairs)
         self.openai_base_urls = tuple(pair[1] for pair in url_pairs)
@@ -111,10 +118,59 @@ class VllmSamplingClient:
         self.lora_load_retry_sleep_sec = max(0.0, self.lora_load_retry_sleep_sec)
         self.max_concurrent_requests = max(1, self.max_concurrent_requests)
 
-    def _completion_url_for_index(self, index: int) -> str:
-        if self.client_side_round_robin:
-            return self.openai_base_urls[index % len(self.openai_base_urls)]
-        return self.openai_base_url
+    def _completion_url_for_index(self, index: int, prompt_ids: list[int] | None = None) -> str:
+        """Pick the engine for a request.
+
+        With route_by_prompt_prefix, hash a fixed-length PREFIX of the prompt so
+        that every request sharing that prefix lands on the same engine and hits
+        its prefix cache. This matters for the two-phase completer: phase 2
+        re-sends the original prompt PLUS all of phase 1's generated tokens
+        (~13.8k tokens for muse), and under plain index round-robin it reaches
+        the engine holding that KV only ~1 time in N. Measured on m-grpo-n: 49%
+        prefix-cache hit rate and generation throughput collapsing to 28-114
+        tok/s while 39-64 sequences were "running" -- engines re-prefilling
+        context another engine had just produced.
+
+        The prefix length must sit BELOW the shortest prompt: phase 2's prompt is
+        phase 1's prompt plus generated tokens, so any prefix contained in the
+        original prompt is identical across both phases, while a longer one would
+        start absorbing generated tokens and route the two phases apart. 1024
+        tokens is comfortably inside the ~2.8k-token Erdos prompts and past the
+        ~400-token point where group prompts start to differ (measured: 1024-char
+        prefixes are identical across all 16 groups, so a short prefix would send
+        every group to ONE engine -- do not shrink this without re-measuring).
+
+        crc32, not hash(): PYTHONHASHSEED randomises str/tuple hashing per
+        process, which would scatter the mapping across restarts.
+        """
+        if not self.client_side_round_robin:
+            return self.openai_base_url
+        urls = self.openai_base_urls
+        if self.route_by_prompt_prefix and prompt_ids:
+            import zlib
+
+            head = prompt_ids[: max(1, self.route_prefix_tokens)]
+            key = zlib.crc32(",".join(map(str, head)).encode())
+            # Round-robin ALLOCATION, sticky LOOKUP. Hashing the key straight to
+            # an engine would pin phase 2 correctly but wreck balance -- measured
+            # on the real Erdos prompts, crc%6 puts 6 of 16 groups on one engine
+            # and leaves another idle, and a step is gated by its slowest engine.
+            # Allocating each new prefix to the next engine keeps today's even
+            # spread while still returning a group's phase 2 to the engine that
+            # holds its phase-1 KV.
+            with self._route_lock:
+                slot = self._prefix_engine.get(key)
+                if slot is None:
+                    slot = self._route_rr % len(urls)
+                    self._route_rr += 1
+                    # Bounded: prompts change every step, so old keys are dead
+                    # weight. Drop the oldest half rather than grow forever.
+                    if len(self._prefix_engine) >= 4096:
+                        for k in list(self._prefix_engine)[:2048]:
+                            del self._prefix_engine[k]
+                    self._prefix_engine[key] = slot
+            return urls[slot]
+        return urls[index % len(urls)]
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -357,7 +413,7 @@ class VllmSamplingClient:
                 model_name=model_names[i],
                 session_id=session_ids[i],
                 prompt_logprobs=prompt_logprobs,
-                openai_base_url=self._completion_url_for_index(i),
+                openai_base_url=self._completion_url_for_index(i, prompt_ids[i]),
             )
 
         workers = min(self.max_concurrent_requests, len(prompt_ids))
@@ -464,7 +520,7 @@ class VllmSamplingClient:
                 model_name=group.model_name,
                 session_id=group.session_id,
                 prompt_logprobs=prompt_logprobs,
-                openai_base_url=self._completion_url_for_index(i),
+                openai_base_url=self._completion_url_for_index(i, group.prompt_ids),
             )
 
         workers = min(self.max_concurrent_requests, len(groups))
