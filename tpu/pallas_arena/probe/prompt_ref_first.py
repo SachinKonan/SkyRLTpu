@@ -220,19 +220,50 @@ and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores 
 across all test shapes (so a win at one shape cannot buy back a loss at another \
 -- be uniformly fast, including at the non-divisible shapes).
 
-## Three TPU notes
+## Pallas TPU quick reference (the API as it actually is)
 
-1. `jnp.dot`/`jnp.einsum` on two bfloat16 arrays RETURNS bfloat16, silently rounding \
-away the MXU's float32 accumulator. Pass `preferred_element_type=jnp.float32` on \
-every matmul and keep running max/sum/accumulators float32; use bfloat16 only as \
-matmul inputs. Measured here: kernels that do this sit comfortably inside the \
-correctness tolerance; kernels that don't fail it.
-2. A kernel invocation has roughly 32 MB of VMEM for all its Refs and scratch; \
-budget your block sizes against it. Last-dimension tiles want multiples of 128, \
-second-to-last multiples of 8.
-3. Imports: `from jax.experimental import pallas as pl` and \
-`from jax.experimental.pallas import tpu as pltpu`. Refs are read and written by \
-indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
+Imports: `from jax.experimental import pallas as pl` and \
+`from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -> `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering's divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -> TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -> "requires ndarray, got
+   ...Ref". Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -> AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len > block:` on a traced value -> ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
 
 ## Output
 
@@ -240,20 +271,13 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
-- The single most common way submissions score 0: writing a plain
-  `jax.numpy`/`lax` implementation with NO `pl.pallas_call`. The judge
-  rejects those automatically, no matter how fast or correct -- your
-  compute must run INSIDE a real Pallas kernel.
-- The block must be COMPLETE and SELF-CONTAINED: all imports included
-  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
-  that assumes surrounding context dies with a NameError.
+- The block must be COMPLETE and SELF-CONTAINED: all imports included. It is
+  executed standalone -- code that assumes surrounding context dies with a
+  NameError.
 - If starter/scaffold code was given, return the ENTIRE program with your
   parts filled in -- never the filled parts alone.
-- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
-  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
-  does not exist).
 - Close every string, bracket, and the fence itself; a program cut mid-line
-  scores 0. Budget your reasoning so the code block finishes.
+  scores 0.
 """
 
 _EXAMPLE = """
