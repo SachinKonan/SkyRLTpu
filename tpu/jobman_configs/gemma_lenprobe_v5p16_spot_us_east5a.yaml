@@ -1,0 +1,133 @@
+# Gemma-4-31B max-trainable-length probe, run under jobman.
+#
+# QUESTION: gemma trains at 10240 today, but that number was fitted to Erdos
+# (short generations, everything fit) -- never measured as a limit. The kernel
+# arena needs improvement turns whose prompts embed a parent program, and those
+# do not fit under 10240 with any thinking at all. This measures the real
+# ceiling: 16384 (= gemma's serving length) first, then 20480, with 12288 as
+# the fallback rung.
+#
+# WHY JOBMAN AND NOT AN SBATCH: five hand-rolled attempts on gcloud-created QRs
+# died on provisioning gaps (worker layout, vLLM readiness wait, dead env var,
+# preemption mid-boot, uv off PATH) without measuring anything. jobman
+# provisions the user/keys/tools the bring-up scripts assume, and loop+resumable
+# re-creates the slice after preemption instead of grinding against a corpse.
+#
+# v5p-16 (not the gemma cell's v5p-32): only the trainer host is exercised --
+# serving is not started -- but the bring-up resolves a worker-1 ip
+# unconditionally, so a single-host slice is not enough.
+job:
+  name: sk7524-gemma-lenprobe
+  env_type: null
+  loop: true
+  remote_user: sk7524_princeton_edu
+  worker_num: auto
+
+tpu:
+  allocation_mode: "queued-resources"
+  accelerator: v5p-16
+  name: sk7524-gemma-lenprobe
+  zone: us-east5-a
+  version: v2-alpha-tpuv5
+  pricing: spot
+  flags:
+    - "--project=vision-mix"
+
+gcsfuse:
+  bucket_name: sk7524-tinker-tpu-us-east5
+  mount_path: /home/sk7524_princeton_edu/gcs
+
+ssh:
+  private_key: ~/.ssh/jobman_tpu_ed25519
+  identities:
+    - private_key: ~/.ssh/jobman_tpu_ed25519
+      public_key: ~/.ssh/jobman_tpu_ed25519.pub
+      config_entry: |
+        Host 10.* 34.* 35.* 8.* 104.* 136.*
+          IdentityFile ~/.ssh/jobman_tpu_ed25519
+          IdentitiesOnly yes
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+
+resumable:
+  enabled: true
+  run_id: auto
+  run_id_prefix: gemma-lenprobe
+  local_cache_root: /n/fs/vision-mix/sk7524/jobman-runs
+  remote_gcs_cache_root: /home/sk7524_princeton_edu/gcs/jobman-runs
+  remote_local_cache_root: /tmp/jobman-runs
+  retry_sleep_seconds: 60
+  lease:
+    type: local
+    poll_seconds: 30
+  run_spec:
+    experiment: gemma-max-train-length
+    model: gemma4-31b
+    candidates: "16384:16384 16384:65536 12288:49152 20480:20480"
+    tile: 1024
+    vocab_tiling: 32
+  env:
+    MODEL_NAME: google/gemma-4-31B-it
+    TUNIX_MAXTEXT_MODEL_NAME: gemma4-31b
+    FLCE_TILE: "1024"
+    VOCAB_TILING: "32"
+    CANDIDATES: "16384:16384 16384:65536 12288:49152 20480:20480"
+    RESULTS_GCS: gs://sk7524-tinker-tpu-us-east5/lenprobe/gemma4-31b
+    REPO: /home/sk7524_princeton_edu/SkyRLTpu-lenprobe
+    # maxtext is deliberately NOT in pyproject (a global transformers<=5.8.0
+    # override would block a real tpu extra); the trainer takes it by env, the
+    # same spec the league's gemma cell uses.
+    TUNIX_MAXTEXT_PIP_SPEC: "maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gemma-lenprobe.tar.gz
+  prepare:
+    workers: all
+    timeout: 0
+    command: |
+      set -euxo pipefail
+      wait_for_apt() {
+        local waited=0
+        while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+          (( waited >= 600 )) && return 1
+          sleep 5; waited=$((waited + 5))
+        done
+      }
+      if ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then
+        wait_for_apt; sudo apt-get update -y
+        wait_for_apt; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git curl tmux python3 python3-venv python3-pip build-essential
+      fi
+      command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$PATH"
+      # The trainer launcher runs under a non-login tmux shell that never
+      # sources the profile, so a PATH export is not enough -- put uv where any
+      # shell finds it (this exact gap killed a hand-rolled attempt).
+      sudo ln -sf "$HOME/.local/bin/uv" /usr/local/bin/uv || true
+      mkdir -p "$HOME/skyrl-runs" "$HOME/skyrl-logs"
+      BUNDLE_URL="gs://sk7524-tinker-tpu-us-east5/code-bundles/gemma-lenprobe.tar.gz"
+      DEST="$HOME/SkyRLTpu-lenprobe"
+      want=$(gsutil stat "$BUNDLE_URL" | awk '/Content-Length/ {print $2}')
+      test -n "$want"
+      have=$(cat "$DEST/.bundle-size" 2>/dev/null || echo none)
+      if [ "$want" != "$have" ]; then
+        gsutil -q cp "$BUNDLE_URL" /tmp/lenprobe-bundle.tar.gz
+        rm -rf "$DEST.new"; mkdir -p "$DEST.new"
+        tar -xzf /tmp/lenprobe-bundle.tar.gz -C "$DEST.new"
+        test -f "$DEST.new/tpu/probe_train_len_model.py"
+        test -x "$DEST.new/tpu/jobman/probe_len_worker.sh" || chmod +x "$DEST.new/tpu/jobman/probe_len_worker.sh"
+        echo "$want" > "$DEST.new/.bundle-size"
+        rm -rf "$DEST.old"; [ -d "$DEST" ] && mv "$DEST" "$DEST.old" || true
+        mv "$DEST.new" "$DEST"
+      fi
+      TUNIX_MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-}" MODEL_NAME="${MODEL_NAME:-}" \
+        bash "$DEST/tpu/jobman/ensure_orbax_ckpt.sh" || true
+  completion_probe:
+    workers: 0
+    timeout: 120
+    command: |
+      test -f "$HOME/.lenprobe-done" && echo COMPLETE || echo RUNNING
+
+command:
+  cmd: |
+    set -uo pipefail
+    export PATH="$HOME/.local/bin:$PATH"
+    bash "$HOME/SkyRLTpu-lenprobe/tpu/jobman/probe_len_worker.sh"
+  workers: "0"
