@@ -130,4 +130,4 @@ command:
     set -uo pipefail
     export PATH="$HOME/.local/bin:$PATH"
     bash "$HOME/SkyRLTpu-lenprobe/tpu/jobman/probe_len_worker.sh"
-  workers: "0"
+  workers: 0
