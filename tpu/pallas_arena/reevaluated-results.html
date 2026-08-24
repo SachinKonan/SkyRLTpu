@@ -92,7 +92,7 @@ wrong backward: floored everywhere, never timed. Skipping the backward costs ~46
 ~[0.1, 1.0] for honest kernels &cup; (1.0, &infin;) for genuine wins; honest-candidate spread clears both
 noise floors, so group-of-32 ranking has signal in the regime candidates actually occupy.</p>
 
-<h2>The prompts (rf3)</h2>
+<h2>The prompts (v4 — quick reference + measured pitfalls)</h2>
 <p class="sub">Reference-first, ~1.9k tokens: the fp32 reference as editable starter code, shapes rendered
 from the exact graded case list, and the contract stated as graded &mdash; the geomean-across-shapes
 aggregation (&ldquo;a win at one shape cannot buy back a loss at another&rdquo;), the swept backward as
@@ -109,7 +109,263 @@ fully-tailored scaffold passed 16/16 with within-group spread <em>below the judg
 (nothing to rank). The scaffold owns the dialect; the bodies keep the algorithm &mdash; and the spread
 &mdash; open. Every scaffold passes the real export gate and correctness bands with reference fills
 before any model sees it; rg_lru&rsquo;s backward wiring is proven differentiable end-to-end.</p>
-<details><summary><strong>splash_attention &middot; rf3</strong> &mdash; starter prompt (~2286 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
+<details><summary><strong>rg_lru &middot; rf3c (THE RL PROMPT)</strong> &mdash; fixed-output contract: model returns ONLY the required defs + TUNABLES; machinery assembled by the harness (~3063 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
+
+## Starter code (correct, slow -- restructure anything you like)
+
+This is the exact code your output will be checked against for correctness. It is slow because it materializes everything at fp32 and fuses nothing. Your job is to make it fast on a TPU while producing the same numbers.
+
+```python
+import jax
+import jax.numpy as jnp
+
+def rg_lru_scan_reference(x, a, reset):
+    &quot;&quot;&quot;fp32 sequential lax.scan — the correctness oracle.&quot;&quot;&quot;
+    x32 = x.astype(jnp.float32)
+    a32 = _apply_reset(a.astype(jnp.float32), reset)
+    gx = jnp.sqrt(jnp.maximum(1.0 - jnp.square(a32), 0.0)) * x32
+
+    def step(h, xs):
+        a_t, gx_t = xs
+        h = a_t * h + gx_t
+        return h, h
+
+    h0 = jnp.zeros((x32.shape[0], x32.shape[2]), jnp.float32)
+    _, hs = jax.lax.scan(step, h0, (jnp.moveaxis(a32, 1, 0), jnp.moveaxis(gx, 1, 0)))
+    return jnp.moveaxis(hs, 0, 1)
+```
+
+## What you must define
+
+```python
+def kernel(x, a, reset):  # -&gt; h
+```
+
+x: [b, t, d] bfloat16
+a: [b, t, d] float32 in [0, 1); reset: [b, t] bool
+h: [b, t, d] float32
+
+Your program must contain a real `pl.pallas_call` -- a submission without one (e.g. pure `jax.numpy` / `lax.associative_scan` formulations) is rejected before grading. Do not import this problem&#x27;s production kernel or any library attention/GMM/scan entry point; write the kernel yourself.
+
+## Test shapes
+
+One program must trace and run at ALL of these:
+
+  * b=4, t=2048, d=2560
+  * b=2, t=1024, d=2560
+  * b=8, t=512, d=2560
+  * b=2, t=4096, d=2560
+  * b=4, t=2048, d=1024
+  * b=2, t=1500, d=2560
+
+t=1500 is deliberately not a multiple of any chunk size. Choose your block/tile sizes with these shapes in mind.
+
+## Scoring
+
+Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against DeepMind&#x27;s recurrentgemma Pallas scan; the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
+
+## Pallas TPU quick reference (the API as it actually is)
+
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
+
+
+## Backward pass (HALF of your total reward)
+
+These kernels are for TRAINING, where the backward is the more expensive
+half of every step -- so it is graded exactly like the forward: at EVERY
+test shape listed above. Per shape, the judge runs `jax.grad` through your
+kernel, checks d/d(x, a)  -- the gradient must flow BACK THROUGH the recurrence, including the gate path against the reference&#x27;s gradients
+(per-input tolerances), and times your backward against the differentiated production scan.
+Each shape&#x27;s backward speed ratio joins the geometric mean as its own case:
+
+    total  = (fwd_1 * ... * fwd_n  *  bwd_1 * ... * bwd_n)^(1/2n)
+    bwd_i  = your backward&#x27;s speed ratio at shape i   if correct at ALL shapes
+           = a small floor (~0.05-0.13)               if missing or wrong anywhere
+
+Your backward must be correct at every shape to be timed at all -- a vjp
+that works at 2048 but lies at 2049 is a wrong backward. A kernel with no
+backward is never zeroed, but with half the factors sitting on the floor
+its total takes a severe haircut (roughly 40-60%). No backward &lt;= slow
+correct backward &lt; fast backward, always.
+
+A raw `pl.pallas_call` is NOT differentiable: generic autodiff cannot trace
+into a Pallas grid. To earn the backward, wrap your kernel in
+`jax.custom_vjp` and write the backward as its own Pallas kernel (save what
+the backward needs -- e.g. row max/denominator statistics -- as residuals).
+
+
+## Working scaffold (recommended starting point)
+
+The program below has ALL the plumbing written and verified: `pallas_call`
+grids, BlockSpecs (including the GQA head mapping and padding for
+non-divisible sequences), and the complete `jax.custom_vjp` wiring with the
+correct cotangent structure. The bodies marked `NotImplementedError` are
+yours: fill them (and tune the tile constants) or restructure anything --
+it is a starting point, not a cage. With only the forward body filled the
+kernel already grades; the backward bodies earn the separate backward
+reward.
+
+```python
+import functools
+import os
+import jax
+import jax.numpy as jnp
+from jax.experimental import pallas as pl
+from jax.experimental.pallas import tpu as pltpu
+
+# CPU-validation hook -- leave as is. 0 on the judge (real Mosaic kernel);
+# our CPU harness sets it to 1 to run the kernel in interpret mode.
+INTERPRET = bool(int(os.environ.get(&quot;PALLAS_INTERPRET&quot;, &quot;0&quot;)))
+
+# ------------------------- YOUR TILE CHOICES (tune these) -------------------
+BLOCK_D = 512          # feature columns per grid step (multiple of 128)
+
+# ---------------------------------------------------------------- forward ---
+def _fwd_body(x_ref, a_ref, reset_ref, h_ref, *, t):
+    &quot;&quot;&quot;One grid step = ONE batch row x ONE feature tile, FULL time axis.
+
+    Ref shapes (sliced by the BlockSpecs below):
+      x_ref    : [t, BLOCK_D] bf16
+      a_ref    : [t, BLOCK_D] f32   gates in [0, 1)
+      reset_ref: [t, 1]       bool  (True -&gt; state resets to 0 at this step;
+                              the trailing axis is there so it broadcasts
+                              DIRECTLY against [t, BLOCK_D] -- no reshaping)
+      h_ref    : [t, BLOCK_D] f32   write ALL hidden states here
+    Recurrence: h_t = a_t * h_{t-1} + sqrt(1 - a_t^2) * x_t, with a_t forced
+    to 0 where reset_t (so no state crosses the boundary).
+    &quot;&quot;&quot;
+    raise NotImplementedError(&quot;YOUR FORWARD BODY&quot;)
+
+
+def _forward(x, a, reset):
+    b, t, d = x.shape
+    block_d = min(BLOCK_D, d)
+    grid = (b, d // block_d)
+    return pl.pallas_call(
+        functools.partial(_fwd_body, t=t),
+        grid=grid,
+        in_specs=[
+            pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+            pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+            pl.BlockSpec((1, t, 1), lambda i, j: (i, 0, 0)),
+        ],
+        out_specs=pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+        out_shape=jax.ShapeDtypeStruct((b, t, d), jnp.float32),
+        interpret=INTERPRET,
+    )(x, a, reset[..., None])
+
+
+# ------------------------------------------------- backward (custom_vjp) ---
+def _bwd_body(x_ref, a_ref, reset_ref, h_ref, g_ref, dx_ref, da_ref, *, t):
+    &quot;&quot;&quot;Same grid as forward, REVERSE-time recurrence.
+    reset_ref: [t, 1] bool (broadcasts against [t, BLOCK_D] directly).
+    g_ref: [t, BLOCK_D] f32 incoming cotangent dL/dh.
+    Write dx into dx_ref [t, BLOCK_D] and da into da_ref [t, BLOCK_D].
+    Remember the gate path: h_t depends on a_t both through a_t*h_{t-1} AND
+    through sqrt(1-a_t^2)*x_t.&quot;&quot;&quot;
+    raise NotImplementedError(&quot;YOUR BACKWARD BODY&quot;)
+
+
+def kernel(x, a, reset):
+    @jax.custom_vjp
+    def lru(x, a, reset):
+        return _forward(x, a, reset)
+
+    def fwd(x, a, reset):
+        h = _forward(x, a, reset)
+        return h, (x, a, reset, h)
+
+    def bwd(res, g):
+        x, a, reset, h = res
+        b, t, d = x.shape
+        block_d = min(BLOCK_D, d)
+        dx, da = pl.pallas_call(
+            functools.partial(_bwd_body, t=t),
+            grid=(b, d // block_d),
+            in_specs=[
+                pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+                pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+                pl.BlockSpec((1, t, 1), lambda i, j: (i, 0, 0)),
+                pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+                pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+            ],
+            out_specs=[
+                pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+                pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
+            ],
+            out_shape=[
+                jax.ShapeDtypeStruct((b, t, d), jnp.float32),
+                jax.ShapeDtypeStruct((b, t, d), jnp.float32),
+            ],
+            interpret=INTERPRET,
+        )(x, a, reset[..., None], h, g.astype(jnp.float32))
+        # reset is boolean: cotangent slot None.
+        return (dx.astype(x.dtype), da.astype(a.dtype), None)
+
+    lru.defvjp(fwd, bwd)
+    return lru(x, a, reset)
+```
+
+## Output (FIXED CONTRACT -- do not repeat the scaffold)
+
+The scaffold above is FIXED machinery; it will be assembled around your code
+automatically. Output ONE fenced ```python block containing ONLY:
+
+1. The required function definitions, with these EXACT names and signatures:
+  def _fwd_body(x_ref, a_ref, reset_ref, h_ref, t):
+  def _bwd_body(x_ref, a_ref, reset_ref, h_ref, g_ref, dx_ref, da_ref, t):
+2. (optional) module-level helper functions/constants your bodies call.
+3. (optional) extra imports beyond the scaffold&#x27;s (jax, jax.numpy as jnp,
+   pallas as pl, pltpu, functools are already imported).
+4. (optional) TUNABLES = {...} overriding the scaffold&#x27;s constants
+   [BLOCK_D (default 512), INTERPRET (default bool(int(os.environ.get(&quot;PALLAS_INTERPRET&quot;, &quot;0&quot;))))] -- tile-size choices are part of your search space.
+
+Do NOT redefine `kernel`, the pallas_call machinery, or anything else from
+the scaffold: only the listed functions are read from your output, and a
+missing or signature-changed definition scores 0 with the reason fed back.
+
+</pre></details>
+<details><summary><strong>splash_attention &middot; rf3c</strong> &mdash; contract variant for the splash arm (~4821 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -232,11 +488,439 @@ seq=2049 is deliberately not divisible by any tile size; your kernel must still 
 
 Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against Google&#x27;s Pallas splash-attention kernel (tuned block sizes); the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
 
-## Three TPU notes
+## Pallas TPU quick reference (the API as it actually is)
 
-1. `jnp.dot`/`jnp.einsum` on two bfloat16 arrays RETURNS bfloat16, silently rounding away the MXU&#x27;s float32 accumulator. Pass `preferred_element_type=jnp.float32` on every matmul and keep running max/sum/accumulators float32; use bfloat16 only as matmul inputs. Measured here: kernels that do this sit comfortably inside the correctness tolerance; kernels that don&#x27;t fail it.
-2. A kernel invocation has roughly 32 MB of VMEM for all its Refs and scratch; budget your block sizes against it. Last-dimension tiles want multiples of 128, second-to-last multiples of 8.
-3. Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`. Refs are read and written by indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
+
+
+## Backward pass (HALF of your total reward)
+
+These kernels are for TRAINING, where the backward is the more expensive
+half of every step -- so it is graded exactly like the forward: at EVERY
+test shape listed above. Per shape, the judge runs `jax.grad` through your
+kernel, checks d/d(q, k, v) against the reference&#x27;s gradients
+(per-input tolerances), and times your backward against the production splash kernel&#x27;s own fused backward.
+Each shape&#x27;s backward speed ratio joins the geometric mean as its own case:
+
+    total  = (fwd_1 * ... * fwd_n  *  bwd_1 * ... * bwd_n)^(1/2n)
+    bwd_i  = your backward&#x27;s speed ratio at shape i   if correct at ALL shapes
+           = a small floor (~0.05-0.13)               if missing or wrong anywhere
+
+Your backward must be correct at every shape to be timed at all -- a vjp
+that works at 2048 but lies at 2049 is a wrong backward. A kernel with no
+backward is never zeroed, but with half the factors sitting on the floor
+its total takes a severe haircut (roughly 40-60%). No backward &lt;= slow
+correct backward &lt; fast backward, always.
+
+A raw `pl.pallas_call` is NOT differentiable: generic autodiff cannot trace
+into a Pallas grid. To earn the backward, wrap your kernel in
+`jax.custom_vjp` and write the backward as its own Pallas kernel (save what
+the backward needs -- e.g. row max/denominator statistics -- as residuals).
+
+
+## Working scaffold (recommended starting point)
+
+The program below has ALL the plumbing written and verified: `pallas_call`
+grids, BlockSpecs (including the GQA head mapping and padding for
+non-divisible sequences), and the complete `jax.custom_vjp` wiring with the
+correct cotangent structure. The bodies marked `NotImplementedError` are
+yours: fill them (and tune the tile constants) or restructure anything --
+it is a starting point, not a cage. With only the forward body filled the
+kernel already grades; the backward bodies earn the separate backward
+reward.
+
+```python
+import functools
+import os
+import jax
+import jax.numpy as jnp
+from jax.experimental import pallas as pl
+from jax.experimental.pallas import tpu as pltpu
+
+# CPU-validation hook -- leave as is. 0 on the judge (real Mosaic kernel);
+# our CPU harness sets it to 1 to run the kernel in interpret mode.
+INTERPRET = bool(int(os.environ.get(&quot;PALLAS_INTERPRET&quot;, &quot;0&quot;)))
+
+# ------------------------- YOUR TILE CHOICES (tune these) -------------------
+BLOCK_Q = 512          # query rows per grid step (multiple of 8)
+NEG_INF = -1e30
+
+# ---------------------------------------------------------------- forward ---
+def _fwd_body(q_ref, k_ref, v_ref, seg_ref, o_ref, *, seq, block_q,
+              window, soft_cap, sinks_val):
+    &quot;&quot;&quot;One grid step = ONE query block of ONE query head.
+
+    Ref shapes handed to you (already sliced by the BlockSpecs below):
+      q_ref  : [block_q, d]     bf16   this head&#x27;s query block
+      k_ref  : [seq_pad, d]     bf16   the matching KV head, full (padded) seq
+      v_ref  : [seq_pad, d_v]   bf16
+      seg_ref: [seq_pad]        int32  segment ids (0 = padding)
+      o_ref  : [block_q, d_v]   f32    write your output block here
+    Grid position: pl.program_id(0) = query head h, pl.program_id(1) = block i.
+    The first block_q*i rows of seg belong to positions before your block.
+    sinks_val is a float for THIS head, or None.
+    &quot;&quot;&quot;
+    raise NotImplementedError(&quot;YOUR FORWARD BODY&quot;)
+
+
+def _forward(q, k, v, segment_ids, window, soft_cap, sinks):
+    qh, seq, d = q.shape
+    kvh = k.shape[0]
+    dv = v.shape[-1]
+    group = qh // kvh
+    block_q = min(BLOCK_Q, seq)
+    seq_pad = -(-seq // block_q) * block_q                     # pad to multiple
+    pad = seq_pad - seq
+    qp = jnp.pad(q, ((0, 0), (0, pad), (0, 0)))
+    kp = jnp.pad(k, ((0, 0), (0, pad), (0, 0)))
+    vp = jnp.pad(v, ((0, 0), (0, pad), (0, 0)))
+    segp = jnp.pad(segment_ids, (0, pad))                      # pad rows = seg 0
+
+    grid = (qh, seq_pad // block_q)
+    out = pl.pallas_call(
+        functools.partial(_fwd_body, seq=seq, block_q=block_q,
+                          window=window, soft_cap=soft_cap,
+                          sinks_val=None),
+        grid=grid,
+        in_specs=[
+            pl.BlockSpec((1, block_q, d), lambda h, i: (h, i, 0)),
+            pl.BlockSpec((1, seq_pad, d), lambda h, i: (h // group, 0, 0)),
+            pl.BlockSpec((1, seq_pad, dv), lambda h, i: (h // group, 0, 0)),
+            pl.BlockSpec((seq_pad,), lambda h, i: (0,)),
+        ],
+        out_specs=pl.BlockSpec((1, block_q, dv), lambda h, i: (h, i, 0)),
+        out_shape=jax.ShapeDtypeStruct((qh, seq_pad, dv), jnp.float32),
+        interpret=INTERPRET,
+    )(qp, kp, vp, segp)
+    return out[:, :seq, :]
+
+
+# ------------------------------------------------- backward (custom_vjp) ---
+# The wiring below is COMPLETE and correct -- segment_ids is an integer input
+# so its cotangent slot must be None; window/soft_cap/sinks are static.
+# You fill the two bwd bodies (or replace the whole strategy). Until they are
+# filled the kernel still grades: forward reward is kept, backward is
+# forfeited (it is scored, not gated).
+
+def _bwd_dq_body(q_ref, k_ref, v_ref, seg_ref, do_ref, dq_ref, *, seq, block_q,
+                 window, soft_cap):
+    &quot;&quot;&quot;Same grid as forward. do_ref: [block_q, d_v] f32 incoming cotangent;
+    write dq for your block into dq_ref [block_q, d] f32.&quot;&quot;&quot;
+    raise NotImplementedError(&quot;YOUR dQ BODY&quot;)
+
+
+def _bwd_dkv_body(q_ref, k_ref, v_ref, seg_ref, do_ref, dk_ref, dv_ref, *,
+                  seq, window, soft_cap):
+    &quot;&quot;&quot;Grid over KV heads only: one step owns ONE kv head&#x27;s FULL dk/dv.
+    q_ref/do_ref carry all `group` query heads for this kv head:
+      q_ref  [group, seq_pad, d], do_ref [group, seq_pad, d_v]
+      dk_ref [seq_pad, d] f32, dv_ref [seq_pad, d_v] f32.&quot;&quot;&quot;
+    raise NotImplementedError(&quot;YOUR dK/dV BODY&quot;)
+
+
+def _make_bwd(window, soft_cap, sinks):
+    def bwd(res, g):
+        q, k, v, segment_ids = res
+        qh, seq, d = q.shape
+        kvh = k.shape[0]
+        dv = v.shape[-1]
+        group = qh // kvh
+        block_q = min(BLOCK_Q, seq)
+        seq_pad = -(-seq // block_q) * block_q
+        pad = seq_pad - seq
+        qp = jnp.pad(q, ((0, 0), (0, pad), (0, 0)))
+        kp = jnp.pad(k, ((0, 0), (0, pad), (0, 0)))
+        vp = jnp.pad(v, ((0, 0), (0, pad), (0, 0)))
+        gp = jnp.pad(g.astype(jnp.float32), ((0, 0), (0, pad), (0, 0)))
+        segp = jnp.pad(segment_ids, (0, pad))
+
+        dq = pl.pallas_call(
+            functools.partial(_bwd_dq_body, seq=seq, block_q=block_q,
+                              window=window, soft_cap=soft_cap),
+            grid=(qh, seq_pad // block_q),
+            in_specs=[
+                pl.BlockSpec((1, block_q, d), lambda h, i: (h, i, 0)),
+                pl.BlockSpec((1, seq_pad, d), lambda h, i: (h // group, 0, 0)),
+                pl.BlockSpec((1, seq_pad, dv), lambda h, i: (h // group, 0, 0)),
+                pl.BlockSpec((seq_pad,), lambda h, i: (0,)),
+                pl.BlockSpec((1, block_q, dv), lambda h, i: (h, i, 0)),
+            ],
+            out_specs=pl.BlockSpec((1, block_q, d), lambda h, i: (h, i, 0)),
+            out_shape=jax.ShapeDtypeStruct((qh, seq_pad, d), jnp.float32),
+            interpret=INTERPRET,
+        )(qp, kp, vp, segp, gp)[:, :seq, :]
+
+        qg = qp.reshape(kvh, group, seq_pad, d)
+        gg = gp.reshape(kvh, group, seq_pad, dv)
+        dk, dvv = pl.pallas_call(
+            functools.partial(_bwd_dkv_body, seq=seq,
+                              window=window, soft_cap=soft_cap),
+            grid=(kvh,),
+            in_specs=[
+                pl.BlockSpec((1, group, seq_pad, d), lambda h: (h, 0, 0, 0)),
+                pl.BlockSpec((1, seq_pad, d), lambda h: (h, 0, 0)),
+                pl.BlockSpec((1, seq_pad, dv), lambda h: (h, 0, 0)),
+                pl.BlockSpec((seq_pad,), lambda h: (0,)),
+                pl.BlockSpec((1, group, seq_pad, dv), lambda h: (h, 0, 0, 0)),
+            ],
+            out_specs=[
+                pl.BlockSpec((1, seq_pad, d), lambda h: (h, 0, 0)),
+                pl.BlockSpec((1, seq_pad, dv), lambda h: (h, 0, 0)),
+            ],
+            out_shape=[
+                jax.ShapeDtypeStruct((kvh, seq_pad, d), jnp.float32),
+                jax.ShapeDtypeStruct((kvh, seq_pad, dv), jnp.float32),
+            ],
+            interpret=INTERPRET,
+        )(qg, kp, vp, segp, gg)
+        dk = dk[:, :seq, :]
+        dvv = dvv[:, :seq, :]
+        # segment_ids is integer-typed: its cotangent slot is None.
+        return (dq.astype(q.dtype), dk.astype(k.dtype), dvv.astype(v.dtype), None)
+    return bwd
+
+
+def kernel(q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None):
+    @jax.custom_vjp
+    def attn(q, k, v, segment_ids):
+        return _forward(q, k, v, segment_ids, window, soft_cap, sinks)
+
+    def fwd(q, k, v, segment_ids):
+        out = _forward(q, k, v, segment_ids, window, soft_cap, sinks)
+        # residuals: YOUR choice -- store more (e.g. row max / denominator)
+        # to avoid recomputing the softmax statistics in the backward.
+        return out, (q, k, v, segment_ids)
+
+    attn.defvjp(fwd, _make_bwd(window, soft_cap, sinks))
+    return attn(q, k, v, segment_ids)
+```
+
+## Output (FIXED CONTRACT -- do not repeat the scaffold)
+
+The scaffold above is FIXED machinery; it will be assembled around your code
+automatically. Output ONE fenced ```python block containing ONLY:
+
+1. The required function definitions, with these EXACT names and signatures:
+  def _fwd_body(q_ref, k_ref, v_ref, seg_ref, o_ref, seq, block_q, window, soft_cap, sinks_val):
+  def _bwd_dq_body(q_ref, k_ref, v_ref, seg_ref, do_ref, dq_ref, seq, block_q, window, soft_cap):
+  def _bwd_dkv_body(q_ref, k_ref, v_ref, seg_ref, do_ref, dk_ref, dv_ref, seq, window, soft_cap):
+2. (optional) module-level helper functions/constants your bodies call.
+3. (optional) extra imports beyond the scaffold&#x27;s (jax, jax.numpy as jnp,
+   pallas as pl, pltpu, functools are already imported).
+4. (optional) TUNABLES = {...} overriding the scaffold&#x27;s constants
+   [BLOCK_Q (default 512), INTERPRET (default bool(int(os.environ.get(&quot;PALLAS_INTERPRET&quot;, &quot;0&quot;)))), NEG_INF (default -1e30)] -- tile-size choices are part of your search space.
+
+Do NOT redefine `kernel`, the pallas_call machinery, or anything else from
+the scaffold: only the listed functions are read from your output, and a
+missing or signature-changed definition scores 0 with the reason fed back.
+
+</pre></details>
+<details><summary><strong>splash_attention &middot; rf3</strong> &mdash; starter prompt (~2708 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
+
+## Starter code (correct, slow -- restructure anything you like)
+
+This is the exact code your output will be checked against for correctness. It is slow because it materializes everything at fp32 and fuses nothing. Your job is to make it fast on a TPU while producing the same numbers.
+
+```python
+import jax
+import jax.numpy as jnp
+
+def causal_segment_attention(
+    q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None
+):
+    &quot;&quot;&quot;fp32 masked-softmax closed form; fully-masked rows -&gt; exactly 0.
+
+    ``window`` (int or None): SLIDING-WINDOW attention. A query at position i
+    may attend to keys in (i - window, i] -- i.e. the `window` most recent
+    positions including itself, which is the convention splash&#x27;s
+    ``LocalMask(window_size=(window - 1, 0))`` implements for a causal left
+    window. Mistral/Ministral/Gemma-2 all ship this.
+
+    ``soft_cap`` (float or None): LOGIT SOFT-CAP, ``cap * tanh(logits / cap)``,
+    applied BEFORE masking and the softmax max-shift. Gemma-2/3 use it, and
+    splash takes it as ``attn_logits_soft_cap``. Order matters: capping after
+    the mask would squash the -inf sentinel into +-cap and silently unmask
+    every forbidden position.
+
+    ``sinks`` (tuple of one float per q-head, or None): ATTENTION SINKS,
+    gpt-oss / streaming-LLM style, exactly tokamax&#x27;s reference semantics
+    (experimental splash base.py): the sink joins the softmax max
+    (``m = max(row_max, sink)``) and adds ``exp(sink - m)`` to the
+    denominator, but contributes NO value row -- it absorbs probability mass.
+    Static per-case values (a learned parameter at train time; fixed for
+    grading, which changes neither the algorithm a kernel must implement nor
+    its cost). A fully-masked row keeps output exactly 0: every p_i is 0
+    regardless of the denominator.
+
+    GENERALIZED to the attention shapes real models actually use, because
+    MHA-with-equal-head-dims was a contract gap: tokamax benchmarks mixtral
+    8x7b as GQA (32 query heads over 8 KV heads) and deepseek2-16b with a
+    VALUE head dim that differs from q/k (192 vs 128). A kernel that only
+    handles square MHA is not a replacement for either.
+
+      q: [q_heads, seq, d]      k: [kv_heads, seq, d]     v: [kv_heads, seq, d_v]
+      out: [q_heads, seq, d_v]
+
+    MHA is exactly the group == 1 case and d_v == d, so every existing shape
+    keeps its meaning and its numbers.
+    &quot;&quot;&quot;
+    q32 = q.astype(jnp.float32)
+    k32 = k.astype(jnp.float32)
+    v32 = v.astype(jnp.float32)
+    qh, seq, d = q32.shape
+    kvh = k32.shape[0]
+    dv = v32.shape[-1]
+    group = qh // kvh
+    qg = q32.reshape(kvh, group, seq, d)
+
+    logits = jnp.einsum(&quot;hgqd,hkd-&gt;hgqk&quot;, qg, k32)
+    if soft_cap is not None:
+        # BEFORE masking: see the docstring -- capping afterwards would pull
+        # the -inf sentinel back into [-cap, cap] and unmask everything.
+        logits = soft_cap * jnp.tanh(logits / soft_cap)
+    idx = jnp.arange(seq)
+    causal = idx[:, None] &gt;= idx[None, :]
+    if window is not None:
+        causal = causal &amp; (idx[:, None] - idx[None, :] &lt; window)
+    same_seg = segment_ids[:, None] == segment_ids[None, :]
+    live = segment_ids != 0
+    mask = causal &amp; same_seg &amp; live[:, None] &amp; live[None, :]
+    mask4 = mask[None, None, :, :]
+    logits = jnp.where(mask4, logits, NEG_INF)
+    row_live = mask.any(axis=-1)  # [q] rows with at least one visible key
+    # max-shifted softmax; fully-masked rows produce 0, never NaN
+    m = jnp.max(logits, axis=-1, keepdims=True)
+    if sinks is not None:
+        # [q_heads] -&gt; [kvh, group, 1, 1], joining the max-shift per q-head
+        sk = jnp.asarray(sinks, jnp.float32).reshape(kvh, group)[:, :, None, None]
+        m = jnp.maximum(m, sk)
+    p = jnp.exp(logits - m)
+    p = jnp.where(mask4, p, 0.0)
+    denom = jnp.sum(p, axis=-1, keepdims=True)
+    if sinks is not None:
+        denom = denom + jnp.exp(sk - m)
+    p = jnp.where(row_live[None, None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
+    out = jnp.einsum(&quot;hgqk,hkv-&gt;hgqv&quot;, p, v32)
+    return out.reshape(qh, seq, dv)
+```
+
+## What you must define
+
+```python
+def kernel(q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None):  # -&gt; o
+```
+
+q: [q_heads, seq, d] bfloat16 (pre-scaled by 1/sqrt(d))
+k: [kv_heads, seq, d] bfloat16; v: [kv_heads, seq, d_v] bfloat16
+  (q_heads = kv_heads * group; kv_heads=1 is MQA; d_v may differ from d)
+segment_ids: [seq] int32; 0 marks padding
+o: [q_heads, seq, d_v] float32
+
+Your program must contain a real `pl.pallas_call` -- a submission without one (e.g. pure `jax.numpy` / `lax.associative_scan` formulations) is rejected before grading. Do not import this problem&#x27;s production kernel or any library attention/GMM/scan entry point; write the kernel yourself.
+
+## Test shapes
+
+One program must trace and run at ALL of these:
+
+  * heads=8, seq=4096, d=128
+  * heads=4, seq=2048, d=128
+  * heads=16, seq=1024, d=128
+  * heads=8, seq=4096, d=64
+  * heads=32, kv_heads=8, seq=4096, d=128
+  * heads=32, kv_heads=1, seq=4096, d=128
+  * heads=16, kv_heads=16, seq=1024, d=192, d_v=128
+  * heads=4, seq=2049, d=128
+  * heads=32, kv_heads=8, seq=2049, d=128
+
+seq=2049 is deliberately not divisible by any tile size; your kernel must still trace and run there. Choose your block/tile sizes with these shapes in mind.
+
+## Scoring
+
+Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against Google&#x27;s Pallas splash-attention kernel (tuned block sizes); the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
+
+## Pallas TPU quick reference (the API as it actually is)
+
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
 
 
 ## Backward pass (HALF of your total reward)
@@ -269,18 +953,15 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
-- The block must be COMPLETE and SELF-CONTAINED: all imports included
-  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
-  that assumes surrounding context dies with a NameError.
+- The block must be COMPLETE and SELF-CONTAINED: all imports included. It is
+  executed standalone -- code that assumes surrounding context dies with a
+  NameError.
 - If starter/scaffold code was given, return the ENTIRE program with your
   parts filled in -- never the filled parts alone.
-- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
-  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
-  does not exist).
 - Close every string, bracket, and the fence itself; a program cut mid-line
-  scores 0. Budget your reasoning so the code block finishes.
+  scores 0.
 </pre></details>
-<details><summary><strong>splash_attention &middot; rf3e</strong> &mdash; starter + minimal pallas example (~2482 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
+<details><summary><strong>splash_attention &middot; rf3e</strong> &mdash; starter + minimal pallas example (~2904 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -403,11 +1084,49 @@ seq=2049 is deliberately not divisible by any tile size; your kernel must still 
 
 Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against Google&#x27;s Pallas splash-attention kernel (tuned block sizes); the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
 
-## Three TPU notes
+## Pallas TPU quick reference (the API as it actually is)
 
-1. `jnp.dot`/`jnp.einsum` on two bfloat16 arrays RETURNS bfloat16, silently rounding away the MXU&#x27;s float32 accumulator. Pass `preferred_element_type=jnp.float32` on every matmul and keep running max/sum/accumulators float32; use bfloat16 only as matmul inputs. Measured here: kernels that do this sit comfortably inside the correctness tolerance; kernels that don&#x27;t fail it.
-2. A kernel invocation has roughly 32 MB of VMEM for all its Refs and scratch; budget your block sizes against it. Last-dimension tiles want multiples of 128, second-to-last multiples of 8.
-3. Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`. Refs are read and written by indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
 
 
 ## Backward pass (HALF of your total reward)
@@ -468,18 +1187,15 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
-- The block must be COMPLETE and SELF-CONTAINED: all imports included
-  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
-  that assumes surrounding context dies with a NameError.
+- The block must be COMPLETE and SELF-CONTAINED: all imports included. It is
+  executed standalone -- code that assumes surrounding context dies with a
+  NameError.
 - If starter/scaffold code was given, return the ENTIRE program with your
   parts filled in -- never the filled parts alone.
-- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
-  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
-  does not exist).
 - Close every string, bracket, and the fence itself; a program cut mid-line
-  scores 0. Budget your reasoning so the code block finishes.
+  scores 0.
 </pre></details>
-<details><summary><strong>splash_attention &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~4231 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
+<details><summary><strong>splash_attention &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~4654 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of causal segment-masked multi-head attention. Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -602,11 +1318,49 @@ seq=2049 is deliberately not divisible by any tile size; your kernel must still 
 
 Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against Google&#x27;s Pallas splash-attention kernel (tuned block sizes); the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
 
-## Three TPU notes
+## Pallas TPU quick reference (the API as it actually is)
 
-1. `jnp.dot`/`jnp.einsum` on two bfloat16 arrays RETURNS bfloat16, silently rounding away the MXU&#x27;s float32 accumulator. Pass `preferred_element_type=jnp.float32` on every matmul and keep running max/sum/accumulators float32; use bfloat16 only as matmul inputs. Measured here: kernels that do this sit comfortably inside the correctness tolerance; kernels that don&#x27;t fail it.
-2. A kernel invocation has roughly 32 MB of VMEM for all its Refs and scratch; budget your block sizes against it. Last-dimension tiles want multiples of 128, second-to-last multiples of 8.
-3. Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`. Refs are read and written by indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
 
 
 ## Backward pass (HALF of your total reward)
@@ -817,18 +1571,15 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
-- The block must be COMPLETE and SELF-CONTAINED: all imports included
-  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
-  that assumes surrounding context dies with a NameError.
+- The block must be COMPLETE and SELF-CONTAINED: all imports included. It is
+  executed standalone -- code that assumes surrounding context dies with a
+  NameError.
 - If starter/scaffold code was given, return the ENTIRE program with your
   parts filled in -- never the filled parts alone.
-- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
-  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
-  does not exist).
 - Close every string, bracket, and the fence itself; a program cut mid-line
-  scores 0. Budget your reasoning so the code block finishes.
+  scores 0.
 </pre></details>
-<details><summary><strong>rg_lru &middot; rf3</strong> &mdash; starter prompt (~1387 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
+<details><summary><strong>rg_lru &middot; rf3</strong> &mdash; starter prompt (~1809 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -883,11 +1634,49 @@ t=1500 is deliberately not a multiple of any chunk size. Choose your block/tile 
 
 Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against DeepMind&#x27;s recurrentgemma Pallas scan; the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
 
-## Three TPU notes
+## Pallas TPU quick reference (the API as it actually is)
 
-1. `jnp.dot`/`jnp.einsum` on two bfloat16 arrays RETURNS bfloat16, silently rounding away the MXU&#x27;s float32 accumulator. Pass `preferred_element_type=jnp.float32` on every matmul and keep running max/sum/accumulators float32; use bfloat16 only as matmul inputs. Measured here: kernels that do this sit comfortably inside the correctness tolerance; kernels that don&#x27;t fail it.
-2. A kernel invocation has roughly 32 MB of VMEM for all its Refs and scratch; budget your block sizes against it. Last-dimension tiles want multiples of 128, second-to-last multiples of 8.
-3. Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`. Refs are read and written by indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
 
 
 ## Backward pass (HALF of your total reward)
@@ -920,18 +1709,15 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
-- The block must be COMPLETE and SELF-CONTAINED: all imports included
-  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
-  that assumes surrounding context dies with a NameError.
+- The block must be COMPLETE and SELF-CONTAINED: all imports included. It is
+  executed standalone -- code that assumes surrounding context dies with a
+  NameError.
 - If starter/scaffold code was given, return the ENTIRE program with your
   parts filled in -- never the filled parts alone.
-- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
-  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
-  does not exist).
 - Close every string, bracket, and the fence itself; a program cut mid-line
-  scores 0. Budget your reasoning so the code block finishes.
+  scores 0.
 </pre></details>
-<details><summary><strong>rg_lru &middot; rf3e</strong> &mdash; starter + minimal pallas example (~1579 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
+<details><summary><strong>rg_lru &middot; rf3e</strong> &mdash; starter + minimal pallas example (~2002 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -986,11 +1772,49 @@ t=1500 is deliberately not a multiple of any chunk size. Choose your block/tile 
 
 Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against DeepMind&#x27;s recurrentgemma Pallas scan; the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
 
-## Three TPU notes
+## Pallas TPU quick reference (the API as it actually is)
 
-1. `jnp.dot`/`jnp.einsum` on two bfloat16 arrays RETURNS bfloat16, silently rounding away the MXU&#x27;s float32 accumulator. Pass `preferred_element_type=jnp.float32` on every matmul and keep running max/sum/accumulators float32; use bfloat16 only as matmul inputs. Measured here: kernels that do this sit comfortably inside the correctness tolerance; kernels that don&#x27;t fail it.
-2. A kernel invocation has roughly 32 MB of VMEM for all its Refs and scratch; budget your block sizes against it. Last-dimension tiles want multiples of 128, second-to-last multiples of 8.
-3. Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`. Refs are read and written by indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
 
 
 ## Backward pass (HALF of your total reward)
@@ -1051,18 +1875,15 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
-- The block must be COMPLETE and SELF-CONTAINED: all imports included
-  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
-  that assumes surrounding context dies with a NameError.
+- The block must be COMPLETE and SELF-CONTAINED: all imports included. It is
+  executed standalone -- code that assumes surrounding context dies with a
+  NameError.
 - If starter/scaffold code was given, return the ENTIRE program with your
   parts filled in -- never the filled parts alone.
-- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
-  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
-  does not exist).
 - Close every string, bracket, and the fence itself; a program cut mid-line
-  scores 0. Budget your reasoning so the code block finishes.
+  scores 0.
 </pre></details>
-<details><summary><strong>rg_lru &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~2457 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
+<details><summary><strong>rg_lru &middot; rf3s</strong> &mdash; starter + verified seam scaffold (~2943 tokens)</summary><pre class='prompt'>You are an expert JAX/Pallas TPU engineer. Below is a correct but slow implementation of gated linear recurrence (RG-LRU, the Griffin recurrence). Rewrite it as a fast TPU kernel.
 
 ## Starter code (correct, slow -- restructure anything you like)
 
@@ -1117,11 +1938,49 @@ t=1500 is deliberately not a multiple of any chunk size. Choose your block/tile 
 
 Correctness first: per-element error against the starter code above on hidden random seeds (max and 99th-percentile tail, tolerance calibrated to what honest implementations achieve), plus a few adversarial inputs (saturating values, fully masked rows, empty groups). Then speed: at EACH test shape your kernel is timed against DeepMind&#x27;s recurrentgemma Pallas scan; the shape&#x27;s score = its median time / yours, so 1.0 is parity and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores across all test shapes (so a win at one shape cannot buy back a loss at another -- be uniformly fast, including at the non-divisible shapes).
 
-## Three TPU notes
+## Pallas TPU quick reference (the API as it actually is)
 
-1. `jnp.dot`/`jnp.einsum` on two bfloat16 arrays RETURNS bfloat16, silently rounding away the MXU&#x27;s float32 accumulator. Pass `preferred_element_type=jnp.float32` on every matmul and keep running max/sum/accumulators float32; use bfloat16 only as matmul inputs. Measured here: kernels that do this sit comfortably inside the correctness tolerance; kernels that don&#x27;t fail it.
-2. A kernel invocation has roughly 32 MB of VMEM for all its Refs and scratch; budget your block sizes against it. Last-dimension tiles want multiples of 128, second-to-last multiples of 8.
-3. Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`. Refs are read and written by indexing (`ref[...]`, `ref[i, :] = v`); there is no pl.load/pl.store.
+Imports: `from jax.experimental import pallas as pl` and `from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -&gt; `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering&#x27;s divisibility rules inspect.
+
+## Common failure patterns from prior attempts (measured), and the fix
+
+1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
+   all failures) -- automatically rejected however fast; the compute must run
+   inside a real Pallas kernel.
+2. `pallas_call(...)` without `out_shape=` -&gt; TypeError at trace time.
+3. Broadcasting a 1-D block against a 2-D block, e.g. `(t,)` vs `(t, d)`
+   (11%) -- keep the documented ref shapes; add the trailing unit dim.
+4. Passing a Ref straight into `jnp.dot`/`matmul` -&gt; &quot;requires ndarray, got
+   ...Ref&quot;. Index first: `jnp.dot(q_ref[...], k, ...)`.
+5. CUDA idioms (`pltpu.smem`, ThreadIdx, allocate) -&gt; AttributeError; see the
+   reference above for the actual memory/grid model.
+6. Python `if seq_len &gt; block:` on a traced value -&gt; ConcretizationTypeError.
+   Shapes are static Python ints here -- branch on THOSE, or use jnp.where.
 
 
 ## Backward pass (HALF of your total reward)
@@ -1182,7 +2041,9 @@ def _fwd_body(x_ref, a_ref, reset_ref, h_ref, *, t):
     Ref shapes (sliced by the BlockSpecs below):
       x_ref    : [t, BLOCK_D] bf16
       a_ref    : [t, BLOCK_D] f32   gates in [0, 1)
-      reset_ref: [t]          bool  (True -&gt; state resets to 0 at this step)
+      reset_ref: [t, 1]       bool  (True -&gt; state resets to 0 at this step;
+                              the trailing axis is there so it broadcasts
+                              DIRECTLY against [t, BLOCK_D] -- no reshaping)
       h_ref    : [t, BLOCK_D] f32   write ALL hidden states here
     Recurrence: h_t = a_t * h_{t-1} + sqrt(1 - a_t^2) * x_t, with a_t forced
     to 0 where reset_t (so no state crosses the boundary).
@@ -1200,17 +2061,18 @@ def _forward(x, a, reset):
         in_specs=[
             pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
             pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
-            pl.BlockSpec((1, t), lambda i, j: (i, 0)),
+            pl.BlockSpec((1, t, 1), lambda i, j: (i, 0, 0)),
         ],
         out_specs=pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
         out_shape=jax.ShapeDtypeStruct((b, t, d), jnp.float32),
         interpret=INTERPRET,
-    )(x, a, reset)
+    )(x, a, reset[..., None])
 
 
 # ------------------------------------------------- backward (custom_vjp) ---
 def _bwd_body(x_ref, a_ref, reset_ref, h_ref, g_ref, dx_ref, da_ref, *, t):
     &quot;&quot;&quot;Same grid as forward, REVERSE-time recurrence.
+    reset_ref: [t, 1] bool (broadcasts against [t, BLOCK_D] directly).
     g_ref: [t, BLOCK_D] f32 incoming cotangent dL/dh.
     Write dx into dx_ref [t, BLOCK_D] and da into da_ref [t, BLOCK_D].
     Remember the gate path: h_t depends on a_t both through a_t*h_{t-1} AND
@@ -1237,7 +2099,7 @@ def kernel(x, a, reset):
             in_specs=[
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
-                pl.BlockSpec((1, t), lambda i, j: (i, 0)),
+                pl.BlockSpec((1, t, 1), lambda i, j: (i, 0, 0)),
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
                 pl.BlockSpec((1, t, block_d), lambda i, j: (i, 0, j)),
             ],
@@ -1250,7 +2112,7 @@ def kernel(x, a, reset):
                 jax.ShapeDtypeStruct((b, t, d), jnp.float32),
             ],
             interpret=INTERPRET,
-        )(x, a, reset, h, g.astype(jnp.float32))
+        )(x, a, reset[..., None], h, g.astype(jnp.float32))
         # reset is boolean: cotangent slot None.
         return (dx.astype(x.dtype), da.astype(a.dtype), None)
 
@@ -1264,16 +2126,13 @@ One fenced ```python block containing the complete program. No prose after it.
 
 Rules that decide whether your program can be graded at all (each one below
 has killed real submissions):
-- The block must be COMPLETE and SELF-CONTAINED: all imports included
-  (`jax`, `jax.numpy`, `pallas`, `pltpu`). It is executed standalone -- code
-  that assumes surrounding context dies with a NameError.
+- The block must be COMPLETE and SELF-CONTAINED: all imports included. It is
+  executed standalone -- code that assumes surrounding context dies with a
+  NameError.
 - If starter/scaffold code was given, return the ENTIRE program with your
   parts filled in -- never the filled parts alone.
-- Two API facts: `jnp.cast` does not exist (use `x.astype(dtype)`), and
-  memory spaces are UPPERCASE (`pltpu.VMEM`, `pltpu.SMEM` -- `pltpu.smem`
-  does not exist).
 - Close every string, bracket, and the fence itself; a program cut mid-line
-  scores 0. Budget your reasoning so the code block finishes.
+  scores 0.
 </pre></details>
 <h4>Improvement turn</h4>
 <p class="sub sm">Each later round re-sends the base prompt plus the candidate&rsquo;s own prior program,
