@@ -10,7 +10,7 @@
  "verification": "Recomputed from the stored construction: agrees exactly, sum(h) == n/2. Final tree 442 states, 1 contaminated, NOT at the top. Verified independently at steps 8, 10, 11, 12 during the run as well.",
  "standing": "Best verified C5 in the program. Ahead of grpo-n (0.380861631208910) by 2.28e-06, g-tsw-n (0.380861585141174) by 2.23e-06, SimpleTES (0.3808686) by 9.25e-06 and AlphaEvolve (0.380924) by 6.47e-05.",
  "search_health": "improved on 14 of 14 banked steps; no frozen best-so-far.",
- "caveat": "Ran under the OLD lenient grader (started before the fix shipped; the fix only takes effect on client restart). Unaffected in practice -- no contaminated state ever reached the top and the best-so-far curve never froze. Single seed; seeded tree, not from scratch. The LR contrast vs grpo-n is a single deliberate variable.",
+ "caveat": "Single seed. NOT a seeded-tree confound: lr-n and grpo-n both start from the same 48-state seed pool at near-identical values (0.381302427 vs 0.381358599), so the LR contrast is a clean cold-start comparison of one deliberate variable. (An earlier version of this file wrongly said 'seeded tree, not from scratch'.) Ran under the OLD lenient grader -- started before the fix shipped -- but unaffected: no contaminated state reached the top and the best-so-far curve never froze.",
  "construction": [
   4.281303414525283e-17,
   1.837275278174822e-17,
@@ -632,5 +632,6 @@
   3.986729595983477e-17,
   4.81470105297143e-17,
   2.577879865801951e-17
- ]
+ ],
+ "mechanism": "Measured against grpo-n (4e-5): the gain is USABLE SAMPLE RATE, not search behaviour. Correctness 0.565 -> 0.780 mean, 0.756 -> 0.947 final => ~307 -> ~460 valid rollouts per 512-rollout step (1.5x). Median per-step gain 3.7e-07 -> 1.2e-06 (3.4x), the excess over 1.5x being compounding. RULED OUT: group collapse (frac_mixed == 1.000 in both, no zero-gradient groups) and extra exploration (lr-n commit rate 0.080 vs 0.110 -- it explored LESS). advantage max halves (0.999 -> 0.448) as within-group rewards cluster. lr-n reaches the 13.2k thinking cap by step 3 vs step 6, same ceiling. NOTE lr-n is BEHIND at steps 2-5 and only overtakes at step 6: the effect compounds, it is not an early win."
 }
