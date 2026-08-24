@@ -41,12 +41,12 @@ if [ -z "${SLURM_JOB_ID:-}" ]; then
   exit 1
 fi
 
-N=${N:-3}
+N=${N:-2}
 QR_PREFIX=${QR_PREFIX:-sk7524-rl-judge}
-ZONE=${ZONE:-us-east5-b}
+ZONE=${ZONE:-us-east5-a}
 PROJECT=${PROJECT:-vision-mix}
-ACCEL=${ACCEL:-v6e-1}
-RUNTIME=${RUNTIME:-v2-alpha-tpuv6e}
+ACCEL=${ACCEL:-v5p-8}
+RUNTIME=${RUNTIME:-v2-alpha-tpuv5}
 PORT=${PORT:-8791}
 LAND_DEADLINE_S=${LAND_DEADLINE_S:-2700}     # 45 min to land 5 spot QRs
 HARD_CAP_S=${HARD_CAP_S:-84600}              # 23.5h; slurm -t 24h is the outer bound
