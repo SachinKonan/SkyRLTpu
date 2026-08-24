@@ -1,31 +1,23 @@
 #!/usr/bin/env bash
-# jobman completion_probe (workers: 0): exit 0 iff ALL THREE members of this
-# generation are done -- CONVERGED marker (flatline stop), a "final" checkpoint
-# row, or batch >= NUM_EPOCHS.
+# completion_probe (workers: 0): all three members done? Member run dirs live
+# on their TRAINER hosts (client-local), so gemma/muse are checked over ssh.
 set -euo pipefail
-: "${ARM:?}"; : "${GEN:?}"
-ARM="$ARM" GEN="$GEN" NUM_EPOCHS="${NUM_EPOCHS:-15}" python3 - <<'PY'
-import glob, json, os, sys
-arm, gen, target = os.environ["ARM"], os.environ["GEN"], int(os.environ["NUM_EPOCHS"])
-incomplete = []
-for tag in ("qwen", "gemma", "muse"):
-    run = f"{arm}-g{gen}-{tag}"
-    if glob.glob(os.path.expanduser(f"~/skyrl-runs/{run}/tinker_log/*/CONVERGED")):
-        continue
-    latest, final = None, False
-    for p in glob.glob(os.path.expanduser(f"~/skyrl-runs/{run}/tinker_log/*/member_*/checkpoints.jsonl")):
-        for line in open(p):
-            line = line.strip()
-            if not line: continue
-            try: row = json.loads(line)
-            except ValueError: continue
-            b = row.get("batch")
-            if isinstance(b, int): latest = b if latest is None else max(latest, b)
-            if row.get("name") == "final": final = True
-    if not (final or (latest is not None and latest >= target)):
-        incomplete.append(f"{tag}={latest}")
-if incomplete:
-    print("incomplete: " + " ".join(incomplete) + f"/{target}")
-    sys.exit(1)
-print("complete: all members done")
-PY
+: "${ARM:?}"; : "${GEN:?}"; : "${JOBMAN_TPU_INTERNAL_IPS:?}"
+INT="$JOBMAN_TPU_INTERNAL_IPS"
+ip_at() { echo "$INT" | cut -d, -f"$1"; }
+KEY="$HOME/.ssh/jobman_tpu_ed25519"
+SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
+STEPS="${NUM_EPOCHS:-15}"
+bad=""
+for spec in "qwen:$(ip_at 1)" "gemma:$(ip_at 5)" "muse:$(ip_at 9)"; do
+  tag=${spec%%:*}; trainer=${spec##*:}
+  run="${ARM}-g${GEN}-${tag}"
+  if [ "$trainer" = "$(ip_at 1)" ]; then
+    out=$(RUN="$run" TARGET="$STEPS" bash "$HOME/SkyRLTpu-league/tpu/jobman/member_done.sh" 2>/dev/null) || bad="$bad $tag(${out##*: })"
+  else
+    out=$(timeout 60 ssh $SSHO sk7524_princeton_edu@"$trainer" \
+      "RUN='$run' TARGET='$STEPS' bash \$HOME/SkyRLTpu-league/tpu/jobman/member_done.sh" 2>/dev/null) || bad="$bad $tag(${out##*: })"
+  fi
+done
+[ -z "$bad" ] && { echo "complete: all members done"; exit 0; }
+echo "incomplete:$bad"; exit 1
