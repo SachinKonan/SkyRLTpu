@@ -3,7 +3,7 @@
 #
 # WHY JOBMAN: the same probe hand-rolled on a gcloud-created QR failed five
 # times on PROVISIONING gaps, not on the measurement -- worker layout, a vLLM
-# readiness wait, a dead env var, spot preemption mid-boot, uv missing from a
+# readiness wait, an env var only the league copy implements, preemption, uv off
 # non-login PATH. jobman provisions the user/keys/tools these scripts expect
 # and, with loop+resumable, re-creates the slice after preemption instead of
 # reporting a corpse as an OOM.
