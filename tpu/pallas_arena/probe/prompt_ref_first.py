@@ -433,6 +433,35 @@ def build3s(task: str, case_names: list[str]) -> str:
     return head + _SCAFFOLD_SECTION.format(scaffold=scaffold) + "\n## Output" + tail
 
 
+def build3c(task: str, case_names: list[str]) -> str:
+    """rf3c: the FIXED-OUTPUT-CONTRACT variant of rf3s.
+
+    Same seam as rf3s -- the scaffold owns the dialect, the bodies own the
+    algorithm -- but the OUTPUT inverts: the model returns ONLY the required
+    function definitions (+ optional helpers / TUNABLES / imports) and the
+    machinery is assembled by contract_compose.compose_contract. Measured
+    motivation (the 658-failure taxonomy): no-pallas (20.8%), machinery
+    syntax, and no-kernel-def all die by construction; bodies are ~0.5-1.5k
+    tokens vs 1.7-3.1k programs; improvement prompts embed bodies-only
+    parents (~4.3k rg_lru, and splash improvement flips from
+    context-infeasible to fitting).
+    """
+    from pallas_arena.probe.contract_compose import contract_prompt_section
+    from pallas_arena.probe.seam_scaffolds import RGLRU_SCAFFOLD, SPLASH_SCAFFOLD
+
+    scaffold = {"splash_attention": SPLASH_SCAFFOLD, "rg_lru": RGLRU_SCAFFOLD}[task]
+    prompt = build3(task, case_names, example=False)
+    head, _, tail = prompt.rpartition("## Output")
+    # keep everything up to Output; replace the Output section wholesale with
+    # the contract (derived from the scaffold's own stubs and tunables)
+    tail_after = tail.split("## Backward", 1)
+    contract = contract_prompt_section(scaffold)
+    rest = ("## Backward" + tail_after[1]) if len(tail_after) == 2 else ""
+    return (head
+            + _SCAFFOLD_SECTION.format(scaffold=scaffold)
+            + "\n" + contract + "\n\n" + rest)
+
+
 IMPROVE_TEMPLATE = """{base}
 
 ## Your previous attempt (reward: {reward})
