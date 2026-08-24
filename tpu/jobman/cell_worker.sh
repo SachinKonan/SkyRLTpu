@@ -217,15 +217,17 @@ case "$CELL" in
     # envelope per sequence than any rollout can use. 1024 tokens of margin kept
     # deliberately -- serving exactly at the client ceiling turns any off-by-one
     # into a context-overflow 400, which is a known failure mode here.
-    VLLM_LEN=19456
-    # 16384: qwen's phase-2 re-prefill is prompt(3085) + phase1(13824) ~= 17k
-    # tokens, which at 8192 was split into 3 chunks. 0.90: qwen's weights are
-    # 13.5 GiB/chip at TP=4, so there is room for more KV blocks. A too-high
-    # value fails loudly at boot rather than corrupting a run.
-    VLLM_XARGS="--max-num-batched-tokens 16384 --gpu-memory-utilization 0.90"
-    # New prefix: max-model-len is part of the compiled shape key, so the 22k
-    # cache cannot be reused. First bring-up after this pays a cold compile.
-    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-qwen35-19k"
+    # REVERTED to the proven 22528 shape (meta-wt16 gen-0, 2026-08-24): the
+    # staged 19456/16384 knobs hit their own predicted cold compile on the
+    # empty -19k prefix and blew the ready window -- the canary is not the
+    # place to measure them. The -22k cache is warm from the entire ctrl-rerun.
+    # 0.90 util kept (weights 13.5 GiB/chip at TP=4; fails loudly at boot if
+    # wrong). If boot logs show a cold compile at 0.90 (KV pool size can enter
+    # the compiled shape), drop to 0.85 -- the exact config the cache was
+    # built with.
+    VLLM_LEN=22528
+    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.90"
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k"
     JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-qwen35-18k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     ;;
