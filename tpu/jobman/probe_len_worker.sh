@@ -128,3 +128,10 @@ cat "$RESULTS"
 publish
 # Signal completion to jobman's probe hook.
 touch "$HOME/.lenprobe-done"
+
+# BUNDLE CONTENTS THAT ARE LOAD-BEARING (each cost one boot to discover):
+#   skyrl-gym       -- pyproject declares it as an editable path dependency
+#   .python-version -- pins 3.12; without it uv takes the system 3.11 and
+#                      maxtext (>=3.12) becomes unsatisfiable
+#   tpu/            -- start_colocated + probe script; REMOTE_SKYRL_DIR must
+#                      point at this bundle, the launcher defaults to ~/SkyRLTpu
