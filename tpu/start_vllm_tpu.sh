@@ -12,6 +12,16 @@ VLLM_WORKERS="${VLLM_WORKERS:-$VLLM_WORKER}"
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-4B}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL_NAME}"
 VLLM_TPU_VERSION="${VLLM_TPU_VERSION:-0.23.0}"
+# Serving-venv transformers, per model. EMPTY = do not pin: vllm-tpu 0.23.0
+# already pulls the released 5.15.0, which is the first version shipping
+# muse_glimmer's modeling/config code -- the checkpoint has no .py and there is
+# no trust_remote_code path, so downgrading here yields a transformers that
+# cannot parse the architecture. gemma-4 is the opposite case: 5.15.0 raises
+# AmbiguousGlobalPerLayerAttributeError on its per-layer head_dim, so it must be
+# held at 5.8.0. The repo-wide <=5.8.0 override (there for Megatron) is NOT
+# touched by any of this; the train side needs no HF muse code (MaxText carries
+# its own, and 5.8.0 tokenizes muse correctly).
+VLLM_TRANSFORMERS_VERSION="${VLLM_TRANSFORMERS_VERSION-5.8.0}"
 VLLM_MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE:-vllm}"
 VLLM_TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE:-torchax}"
 VLLM_DISABLE_SHARDY="${VLLM_DISABLE_SHARDY:-auto}"
@@ -64,6 +74,10 @@ VLLM_RAY_PORT="${VLLM_RAY_PORT:-6379}"
 VLLM_RAY_DASHBOARD_PORT="${VLLM_RAY_DASHBOARD_PORT:-8265}"
 VLLM_VENV="${VLLM_VENV:-/home/${REMOTE_USER}/.venvs/vllm-tpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
+# Scope cache restore to THIS model's dir: the shared prefix holds several
+# models (qwen 4G + muse 55G); pulling everything doubles restore time and can
+# fill the boot disk.
+HF_MODEL_DIR="models--${MODEL_NAME//\//--}"
 # Optional shared HF weight cache on GCS: restored to the local HF hub dir
 # (REMOTE_HF_HOME/hub, vLLM's --download-dir) before serve so vLLM finds the
 # weights already on local SSD instead of re-downloading from HuggingFace. The
@@ -274,6 +288,15 @@ if [ ! -x "${VLLM_VENV}/bin/vllm" ]; then
 fi
 
 uv pip install --python "${VLLM_VENV}/bin/python" "vllm-tpu==${VLLM_TPU_VERSION}"
+# Pin transformers to the ONE version both sides accept: tpu-inference requires
+# >=5.8.0, and gemma-4's heterogeneous config (per-layer head_dim) breaks on
+# newer releases -- 5.15.0 raised AmbiguousGlobalPerLayerAttributeError at model
+# load and killed every gemma vLLM worker (verified live 2026-08-15; 5.8.0 loads
+# Gemma4Config fine). vllm-tpu leaves transformers unpinned, so a fresh venv
+# silently drifts to whatever is latest.
+if [[ -n "${VLLM_TRANSFORMERS_VERSION}" ]]; then
+  uv pip install --python "${VLLM_VENV}/bin/python" "transformers==${VLLM_TRANSFORMERS_VERSION}"
+fi
 # Overlay the forked tpu-inference (runtime LoRA forwarders + Ray env
 # allowlist). vllm-tpu is a meta-package depending on tpu-inference, so a
 # --no-deps force-reinstall cleanly swaps in the fork at the pinned ref.
@@ -323,13 +346,27 @@ set -euo pipefail
 source "${VLLM_VENV}/bin/activate"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="${REMOTE_HF_HOME}/hub"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE}"
 export SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
-# Resolve unknown adapter names from the shared lora dir (external
-# inference path references adapters by name without an explicit load).
-export VLLM_PLUGINS="\${VLLM_PLUGINS:-lora_filesystem_resolver}"
+# VLLM_PLUGINS is an ALLOW-LIST: unset loads every installed general plugin,
+# set loads ONLY the named ones. Models that exist solely in the
+# tpu-inference fork (muse) NEED the fork's vllm.general_plugins entry point
+# (tpu_inference.layers.vllm:register_layers) -- it is what injects the OOT
+# architecture into vLLM's ModelRegistry. Pinning the list to the resolver
+# excluded it, and vLLM silently served the generic transformers fallback,
+# which passes every health check and kills EngineCore on the first
+# generate (NonConcreteBooleanIndexError). The validated muse smoke ran
+# with the variable UNSET, which also still loads the resolver below.
+$( if [[ "${VLLM_UNSET_PLUGINS:-0}" == "1" ]]; then
+     echo 'unset VLLM_PLUGINS'
+   else
+     # Resolve unknown adapter names from the shared lora dir (external
+     # inference path references adapters by name without an explicit load).
+     echo 'export VLLM_PLUGINS="${VLLM_PLUGINS:-lora_filesystem_resolver}"'
+   fi )
 if [[ "${VLLM_UPLOAD_SERVER}" == "1" ]]; then
   export VLLM_LORA_RESOLVER_CACHE_DIR="${VLLM_LOCAL_LORA_DIR}"
 else
@@ -344,13 +381,53 @@ mkdir -p "${VLLM_XLA_CACHE_PATH}"
 # effort: a miss or partial just means vLLM recompiles what's absent.
 if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
   gsutil -m -q rsync -r "${VLLM_XLA_CACHE_GCS}" "${VLLM_XLA_CACHE_PATH}" 2>/dev/null && echo "restored XLA cache from ${VLLM_XLA_CACHE_GCS}" || echo "XLA cache restore skipped/failed (will compile)"
+  # Seed-back: restore alone is ONE-WAY, so entries compiled on this node died
+  # with it (the muse rs-study run repopulated nothing). Delayed additive rsync
+  # (no -d, checksum-skips existing) publishes fresh compiles once the boot
+  # compile window has passed; near-free when the cache was already warm.
+  if [[ "${VLLM_XLA_SEED_BACK:-1}" == "1" ]]; then
+    # Publish EARLY and REPEATEDLY, not once-at-1h: on spot capacity nodes die
+    # well inside an hour, so a single delayed publish loses every compile the
+    # node paid for and the next node starts cold again (lived this on muse,
+    # four bring-ups with zero cache accumulation). Additive rsync (no -d,
+    # checksum-skips existing) is near-free once warm, so a 10-min cadence
+    # costs nothing and each cycle preserves whatever compiled since the last.
+    ( for _i in \$(seq 1 24); do
+        sleep 600
+        gcloud storage rsync -r "${VLLM_XLA_CACHE_PATH}" "${VLLM_XLA_CACHE_GCS}" >/dev/null 2>&1 \
+          && echo "\$(date -u +%H:%M) XLA cache seeded back (cycle \$_i)"
+      done ) >> "\$HOME/xla-seedback.log" 2>&1 &
+  fi
 fi
 # Restore HF weights from the shared GCS cache onto local SSD so vLLM finds
 # them already present under --download-dir (below) instead of pulling from
-# HuggingFace. Best effort: a miss/partial just means vLLM downloads as usual.
-mkdir -p "${REMOTE_HF_HOME}/hub"
+# HuggingFace.
+# NOT best-effort: an interrupted rsync leaves <shard>_.gstmp partials, and a
+# partial shard is WORSE than no cache -- vLLM ignores it, re-downloads the
+# full weights via xet alongside the 40GB+ of dead partial, fills the disk, and
+# dies with "Engine core initialization failed / No space left on device".
+# The bring-up then waits for that worker forever. So: retry, and if partials
+# survive, delete them so the fallback download starts from a clean disk.
+mkdir -p "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}"
 if [[ -n "${HF_CACHE_GCS}" ]]; then
-  gsutil -m -q rsync -r "${HF_CACHE_GCS}" "${REMOTE_HF_HOME}/hub" 2>/dev/null && echo "restored HF cache from ${HF_CACHE_GCS}" || echo "HF cache restore skipped/failed (will download)"
+  hf_ok=0
+  for _try in 1 2 3; do
+    if gsutil -m -q rsync -r "${HF_CACHE_GCS}/${HF_MODEL_DIR}" "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}" 2>/dev/null; then
+      hf_ok=1
+    fi
+    _partials="\$(find "${REMOTE_HF_HOME}/hub" -name '*_.gstmp' -o -name '*.incomplete' 2>/dev/null | head -1)"
+    if [[ "\$hf_ok" == "1" && -z "\$_partials" ]]; then
+      echo "restored HF cache from ${HF_CACHE_GCS} (attempt \$_try)"
+      break
+    fi
+    echo "HF cache restore incomplete (attempt \$_try): partial=\${_partials:-none}"
+    hf_ok=0
+    sleep 15
+  done
+  if [[ "\$hf_ok" != "1" ]]; then
+    _n="\$(find "${REMOTE_HF_HOME}/hub" \( -name '*_.gstmp' -o -name '*.incomplete' \) -delete -print 2>/dev/null | wc -l)"
+    echo "HF cache restore FAILED after 3 tries; purged \$_n partial file(s) so vLLM downloads onto a clean disk"
+  fi
 fi
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
   export CLOUD_TPU_TASK_ID="\${VLLM_RELATIVE_WORKER_ID}"

@@ -102,18 +102,21 @@ resumable:
       # shell finds it (this exact gap killed a hand-rolled attempt).
       sudo ln -sf "$HOME/.local/bin/uv" /usr/local/bin/uv || true
       mkdir -p "$HOME/skyrl-runs" "$HOME/skyrl-logs"
+      # SHA-identified bundle (tpu/make_bundle.sh): compare .bundle-sha, not
+      # Content-Length -- two same-sized bundles are indistinguishable by size
+      # and that failure mode has served stale code before.
       BUNDLE_URL="gs://sk7524-tinker-tpu-us-east5/code-bundles/gemma-lenprobe.tar.gz"
       DEST="$HOME/SkyRLTpu-lenprobe"
-      want=$(gsutil stat "$BUNDLE_URL" | awk '/Content-Length/ {print $2}')
+      want=$(gsutil cat "${BUNDLE_URL%.tar.gz}.sha")
       test -n "$want"
-      have=$(cat "$DEST/.bundle-size" 2>/dev/null || echo none)
+      have=$(cat "$DEST/.bundle-sha" 2>/dev/null || echo none)
       if [ "$want" != "$have" ]; then
         gsutil -q cp "$BUNDLE_URL" /tmp/lenprobe-bundle.tar.gz
         rm -rf "$DEST.new"; mkdir -p "$DEST.new"
         tar -xzf /tmp/lenprobe-bundle.tar.gz -C "$DEST.new"
         test -f "$DEST.new/tpu/probe_train_len_model.py"
+        test -f "$DEST.new/.python-version"
         test -x "$DEST.new/tpu/jobman/probe_len_worker.sh" || chmod +x "$DEST.new/tpu/jobman/probe_len_worker.sh"
-        echo "$want" > "$DEST.new/.bundle-size"
         rm -rf "$DEST.old"; [ -d "$DEST" ] && mv "$DEST" "$DEST.old" || true
         mv "$DEST.new" "$DEST"
       fi

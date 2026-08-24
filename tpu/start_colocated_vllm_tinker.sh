@@ -89,6 +89,12 @@ VLLM_LORA_UPLOAD_ENDPOINT="${VLLM_LORA_UPLOAD_ENDPOINT:-/skyrl/v1/upload_lora_ad
 VLLM_LORA_LOAD_RETRIES="${VLLM_LORA_LOAD_RETRIES:-3}"
 VLLM_LORA_LOAD_RETRY_SLEEP_SEC="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-2}"
 VLLM_REQUEST_TIMEOUT_SEC="${VLLM_REQUEST_TIMEOUT_SEC:-300}"
+# Release the pristine base params once the LoRA template exists (see
+# tunix_backend.free_base_state_after_template). Off by default: it makes a
+# second LoRA config an error, which single-config RL cells never need.
+TUNIX_FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-0}"
+# Prefix-hash engine routing so phase 2 returns to the engine holding phase-1 KV.
+VLLM_ROUTE_BY_PROMPT_PREFIX="${VLLM_ROUTE_BY_PROMPT_PREFIX:-0}"
 VLLM_MAX_CONCURRENT_REQUESTS="${VLLM_MAX_CONCURRENT_REQUESTS:-256}"
 VLLM_CLIENT_SIDE_ROUND_ROBIN="${VLLM_CLIENT_SIDE_ROUND_ROBIN:-0}"
 
@@ -451,6 +457,8 @@ if [[ "$START_VLLM" == "1" ]]; then
     SERVED_MODEL_NAME="$SERVED_MODEL_NAME" \
     VLLM_TPU_VERSION="$VLLM_TPU_VERSION" \
     VLLM_MODEL_IMPL_TYPE="$VLLM_MODEL_IMPL_TYPE" \
+    TPU_INFERENCE_FORK_URL="${TPU_INFERENCE_FORK_URL:-}" \
+    TPU_INFERENCE_FORK_REF="${TPU_INFERENCE_FORK_REF:-}" \
     VLLM_TPU_BACKEND_TYPE="$VLLM_TPU_BACKEND_TYPE" \
     VLLM_DISABLE_SHARDY="$VLLM_DISABLE_SHARDY" \
     VLLM_SKIP_JAX_PRECOMPILE="$VLLM_SKIP_JAX_PRECOMPILE" \
@@ -484,12 +492,23 @@ wait_from_worker() {
   local worker="$1"
   local url="$2"
   local label="$3"
+  # Fail fast when the engine is already dead: a vLLM whose EngineCore failed
+  # (commonly "No space left on device" from a partial HF-cache shard) never
+  # recovers, but the plain poll would still burn the full READY_ATTEMPTS
+  # window -- ~60min, i.e. an entire spot slice's median lifetime -- before the
+  # attempt fails and the guardian can recycle.
   local remote_cmd="
 set -euo pipefail
+vlog=\"\$HOME/skyrl-logs/vllm-tpu.log\"
 for i in \$(seq 1 '${READY_ATTEMPTS}'); do
   if curl -fsS --max-time 5 '${url}' >/dev/null 2>&1; then
     echo '${label} ready at ${url}'
     exit 0
+  fi
+  if [ -f \"\$vlog\" ] && grep -qE 'Engine core initialization failed|EngineCore failed to start|No space left on device' \"\$vlog\" 2>/dev/null; then
+    echo '${label} FATAL: vLLM engine core died -- not waiting out the poll window' >&2
+    grep -aE 'RuntimeError|No space left on device' \"\$vlog\" 2>/dev/null | tail -3 >&2
+    exit 1
   fi
   sleep '${READY_SLEEP_SEC}'
 done
@@ -536,6 +555,7 @@ vllm_cfg = {
     "vllm_request_timeout_sec": float("${VLLM_REQUEST_TIMEOUT_SEC}"),
     "vllm_max_concurrent_requests": int("${VLLM_MAX_CONCURRENT_REQUESTS}"),
     "vllm_client_side_round_robin": "${VLLM_CLIENT_SIDE_ROUND_ROBIN}".lower() in ("1", "true", "yes", "on"),
+    "vllm_route_by_prompt_prefix": "${VLLM_ROUTE_BY_PROMPT_PREFIX}".lower() in ("1", "true", "yes", "on"),
 }
 
 if backend == "tunix":
@@ -552,6 +572,7 @@ if backend == "tunix":
         "train_token_budget": int("${TUNIX_TRAIN_TOKEN_BUDGET}"),
         "flce_tile_size": int("${TUNIX_FLCE_TILE_SIZE}"),
         "maxtext_ckpt_cache_dir": "${TUNIX_MAXTEXT_CKPT_CACHE}",
+        "free_base_state_after_template": "${TUNIX_FREE_BASE_STATE}".lower() in ("1", "true", "yes", "on"),
         **vllm_cfg,
     }
     if "${TUNIX_MAXTEXT_MODEL_NAME}":
@@ -610,7 +631,16 @@ set -euo pipefail
 export PATH="\$HOME/.local/bin:\$PATH"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export TINKER_API_KEY="${TINKER_API_KEY}"
+# Persist the TRAINER's JAX compiles (fb at the uniform length, optimizer
+# graphs). Without this every fresh node re-JITs them from scratch -- 10-20 min
+# of every bring-up, on every model, thrown away at each preemption. The vLLM
+# side has had a GCS-backed cache for a while; the trainer never did, though the
+# muse study scripts (rs_tpu.sh, e2e_tpu.sh) set exactly this. Cache misses are
+# free (JAX just compiles), so a stale or absent entry costs nothing.
+export JAX_COMPILATION_CACHE_DIR="${JAX_COMPILATION_CACHE_DIR:-\$HOME/jax-compile-cache}"
+mkdir -p "\$JAX_COMPILATION_CACHE_DIR"
 export TUNIX_UNIFORM_SEQ_LEN="${TUNIX_UNIFORM_SEQ_LEN:-0}"
 export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-0}"
 # Length-bucket ladder for training microbatches (see tunix_backend._bucket_len).
@@ -678,10 +708,37 @@ fi
 if [[ "${TINKER_BACKEND}" == "tunix" && -n "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}" && -n "${TUNIX_MAXTEXT_MODEL_NAME}" ]]; then
   export gsutil_bin="\$(command -v gsutil || echo "\$HOME/google-cloud-sdk/bin/gsutil")"
   mkdir -p "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}"
-  if "\$gsutil_bin" -m -q rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" 2>/dev/null; then
-    echo "restored MaxText ckpt cache from ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}"
+  # Retry + partial purge, same discipline as the HF-cache restore. An rsync cut
+  # short (preemption mid-bring-up is routine on spot) leaves *_.gstmp partials:
+  # every filename present, almost no bytes. The trainer then reads them and dies
+  # with "DATA_LOSS: Error reading shard entry" from TensorStore -- observed live
+  # on muse (132K local against a 40.58 GiB checkpoint). A partial cache is worse
+  # than none: absent, the backend just re-converts from HF.
+  _ck_dir="${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}"
+  # tpu/jobman/ensure_orbax_ckpt.sh (prepare hook) OWNS checkpoint acquisition.
+  # If it already put something here, do not touch it: two restore paths that
+  # each purge-on-incomplete race and delete each other's progress -- observed
+  # live as a sawtooth (10.5 GB -> purged -> 7.7 GB -> purged) that never
+  # converged. Presence is enough; prepare verified completeness.
+  if [ -n "\$(ls -A "\$_ck_dir" 2>/dev/null)" ]; then
+    echo "MaxText ckpt present at \$_ck_dir -- prepare hook owns it, skipping inline restore"
   else
-    echo "MaxText ckpt cache restore skipped/failed (will convert)"
+  _ck_ok=0
+  for _try in 1 2 3; do
+    "\$gsutil_bin" -m -q rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" "\$_ck_dir" 2>/dev/null && _ck_ok=1
+    _parts="\$(find "\$_ck_dir" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)"
+    if [ "\$_ck_ok" = "1" ] && [ -z "\$_parts" ]; then
+      echo "restored MaxText ckpt cache from ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME} (attempt \$_try)"
+      break
+    fi
+    echo "MaxText ckpt restore incomplete (attempt \$_try): partial=\${_parts:-none}"
+    _ck_ok=0
+    sleep 15
+  done
+  if [ "\$_ck_ok" != "1" ]; then
+    _n="\$(find "\$_ck_dir" -mindepth 1 -delete -print 2>/dev/null | wc -l)"
+    echo "MaxText ckpt cache restore FAILED after 3 tries; purged \$_n partial path(s) so the backend converts from HF instead of reading corrupt shards"
+  fi
   fi
   nohup bash -c '
     for _try in \$(seq 1 240); do
@@ -747,6 +804,7 @@ set -euo pipefail
 export PATH="\$HOME/.local/bin:\$PATH"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS}"
 export TPU_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS}"
 export TPU_PROCESS_ADDRESSES="${train_process_addresses}"
