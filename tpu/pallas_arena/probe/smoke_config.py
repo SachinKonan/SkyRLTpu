@@ -33,6 +33,10 @@ RGLRU_P1 = [
 CELLS = {
     ("rg_lru", "rf3s"): (RGLRU_P1, "scaffold"),
     ("splash_attention", "rf3s"): (SPLASH_P1, "scaffold"),
+    # rf3c: the FIXED-OUTPUT CONTRACT (the RL prompt) -- model returns only
+    # the required defs; grading composes the scaffold around them.
+    ("rg_lru", "rf3c"): (RGLRU_P1, "contract"),
+    ("splash_attention", "rf3c"): (SPLASH_P1, "contract"),
     ("rg_lru", "rf3"): (RGLRU_P1, False),
     ("rg_lru", "rf3e"): (RGLRU_P1, True),
     ("splash_attention", "rf3e"): (SPLASH_P1, True),

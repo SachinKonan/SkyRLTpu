@@ -133,7 +133,12 @@ def main() -> None:
 
     def base_prompt(task, variant):
         cases, example = CELLS[(task, variant)]
-        return build3s(task, cases) if example == "scaffold" else build3(task, cases, example=example)
+        if example == "scaffold":
+            return build3s(task, cases)
+        if example == "contract":
+            from pallas_arena.probe.prompt_ref_first import build3c
+            return build3c(task, cases)
+        return build3(task, cases, example=example)
 
     jobs = []
     if args.repair_from:

@@ -93,6 +93,21 @@ def main() -> None:
             continue
         cell["program_hashes"].add(hashlib.sha256(program.encode()).hexdigest()[:12])
 
+        if str(row.get("variant", "")).startswith("rf3c"):
+            # FIXED-OUTPUT CONTRACT: the block is defs-only; assemble the
+            # scaffold machinery before grading. A ContractError is the gate.
+            from pallas_arena.probe.contract_compose import ContractError, compose_contract
+            from pallas_arena.probe.seam_scaffolds import RGLRU_SCAFFOLD, SPLASH_SCAFFOLD
+            scaf = {"rg_lru": RGLRU_SCAFFOLD, "splash_attention": SPLASH_SCAFFOLD}[row["task"]]
+            try:
+                program = compose_contract(scaf, program)
+            except ContractError as ce:
+                gate = "contract violation"
+                cell["gates"][gate] += 1
+                verdict["outcome"] = f"pregate: contract violation: {str(ce)[:150]}"
+                cell["rows"].append(verdict)
+                continue
+
         ok, why = validity(row["task"], program)
         if not ok:
             gate = why.split(":", 1)[0][:40]
