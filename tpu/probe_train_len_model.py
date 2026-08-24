@@ -45,14 +45,25 @@ def one_fb(tc, length: int, tag: str) -> tuple[bool, str]:
         },
     )
     t0 = time.time()
-    try:
-        fb = tc.forward_backward([datum], loss_fn="importance_sampling")
-        op = tc.optim_step(types.AdamParams(learning_rate=0.0))
-        fb.result()
-        op.result()
-        return True, f"OK ({time.time() - t0:.0f}s)"
-    except Exception as e:  # noqa: BLE001 -- any failure is a datapoint
-        return False, f"FAIL: {type(e).__name__}: {str(e)[:300]}"
+    # Connection errors are NOT datapoints: the first fb at a new shape
+    # compiles for many minutes, and a tunnel blip mid-poll surfaces as
+    # tinker.APIConnectionError -- candidate 16384:65536 was mis-recorded as
+    # empty exactly this way. Retry those; everything else is a verdict.
+    for attempt in range(4):
+        try:
+            fb = tc.forward_backward([datum], loss_fn="importance_sampling")
+            op = tc.optim_step(types.AdamParams(learning_rate=0.0))
+            fb.result()
+            op.result()
+            return True, f"OK ({time.time() - t0:.0f}s)"
+        except Exception as e:  # noqa: BLE001
+            name = type(e).__name__
+            if "Connection" in name or "Connection error" in str(e):
+                print(f"  [retry {attempt+1}/4] {name}: connection blip; waiting 60s", flush=True)
+                time.sleep(60)
+                continue
+            return False, f"FAIL: {name}: {str(e)[:300]}"
+    return False, f"FAIL: connection errors through all retries ({time.time()-t0:.0f}s)"
 
 
 def main() -> None:
