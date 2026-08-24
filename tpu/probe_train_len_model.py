@@ -62,6 +62,24 @@ def main() -> None:
     lengths = [int(x) for x in sys.argv[1:]] or [16384]
     sc = tinker.ServiceClient(base_url=base_url, api_key=os.environ.get("TINKER_API_KEY", "tml-dummy"))
     tc = sc.create_lora_training_client(base_model=model, rank=rank)
+
+    # create_model is ASYNC server-side (api.py: it enqueues a future and
+    # returns), so the client hands back a handle before the LoRA state
+    # exists. An immediate forward_backward then finds it None and the server
+    # answers 400 "'NoneType' object has no attribute 'shape'" -- which looks
+    # like a model/memory fault and is really a race. Production never trips
+    # it because it samples before training; the qwen probe never tripped it
+    # because it ran against a server a live job had already warmed.
+    for attempt in range(60):
+        try:
+            tc.get_info()
+            print(f"model materialized after {attempt * 5}s", flush=True)
+            break
+        except Exception as e:  # noqa: BLE001 -- still initializing
+            if attempt == 0:
+                print(f"waiting for model init ({type(e).__name__})", flush=True)
+            time.sleep(5)
+    time.sleep(10)  # settle after the handle appears
     print(f"probe ready: model={model} rank={rank} lengths={lengths}", flush=True)
 
     results = {}
