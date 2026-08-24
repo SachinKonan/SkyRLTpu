@@ -43,8 +43,15 @@ META_ROOT = MAIN / "runs/rq2/meta"
 
 MODELS = ("qwen", "gemma")               # loop.py --composition values (single-model cells)
 INNER = {"B": 16, "G": 16, "steps": 10, "concurrency": 256}
-ROLLOUTS_PER_EXPANSION = INNER["B"] * INNER["G"] * INNER["steps"]      # 2,560
+
+
 TOPK_C = 16                              # rule (c) keeps this many; matches B so each is picked once
+
+
+def rollouts_per_expansion():
+    """Read INNER at call time: the smoke path overrides B/G/steps from the CLI."""
+    return INNER["B"] * INNER["G"] * INNER["steps"]                   # 2,560 in production
+
 
 # problem -> (maximize, fast_budget, grade_concurrency, reference score for headroom)
 # reference = best known at planning time; used ONLY to normalise Q, never reported.
@@ -294,7 +301,7 @@ def run_treatment(problem, rule, policy, depth, cfg):
     if live:
         best = max(live, key=lambda n: n["best"] if cfg["maximize"] else -n["best"])
         print(f"[meta] {cell.name} DONE depth={depth} best={best['best']} via {best['id']} "
-              f"({len(meta['nodes'])} nodes, {len(meta['nodes'])*ROLLOUTS_PER_EXPANSION} rollouts)",
+              f"({len(meta['nodes'])} nodes, {len(meta['nodes'])*rollouts_per_expansion()} rollouts)",
               flush=True)
 
 
