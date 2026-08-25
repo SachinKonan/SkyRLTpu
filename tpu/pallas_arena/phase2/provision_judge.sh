@@ -46,15 +46,20 @@ fi
 # (job 3721378: the pin assert below fired with 0.11.1 after the morning's
 # provision had resolved 0.10.2). The assert caught it; this makes the
 # resolution itself unable to drift.
+# Ray FIRST: it is the intra-host scheduler for the grading pool, and it
+# shares protobuf/grpcio/numpy with jax. Installed BEFORE the pin repeat
+# below so that repeat re-asserts jax last and any dependency ray moved is
+# put back -- the same discipline that already protects tokamax's open jax
+# floor. (The single-worker path never imports ray; a judge that does not
+# use the pool pays only the download.)
+"$HOME/arena-venv/bin/pip" install --quiet "ray[default]>=2.9"
 "$HOME/arena-venv/bin/pip" install --quiet "jax[tpu]==0.10.2" tokamax flax einops sentencepiece einshape xprof
 "$HOME/arena-venv/bin/pip" install --quiet --no-deps recurrentgemma
-# Ray: intra-host scheduler for the grading pool (chip-count-aware dispatch).
-# Installed unconditionally -- the single-worker path never imports it, so a
-# judge that does not use the pool pays only the download.
-"$HOME/arena-venv/bin/pip" install --quiet "ray[default]>=2.9"
 "$HOME/arena-venv/bin/python" - <<'EOF'
 import jax
 assert jax.__version__ == "0.10.2", f"ARENA JAX PIN MOVED: {jax.__version__}"
+import ray  # the pool's scheduler must import alongside the pinned jax
+print("ray:", ray.__version__)
 from recurrentgemma.jax.pallas import lru_pallas_scan  # noqa: F401
 import tokamax  # noqa: F401
 try:
