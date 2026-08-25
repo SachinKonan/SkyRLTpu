@@ -1,7 +1,11 @@
 # TTD-Discover at LoRA LR 1.5e-4 (qwen3.5-27B). Derived from stagea_ttd-n.yaml -- NOT emitted
 # by gen_configs.sh. Canonical TTD config (entropic_adaptive_beta, elite 0, 8x32)
-# with ONE change: LEARNING_RATE 1.5e-4 (base config carries no LR line -> 4e-5
-# default). Completes the estimator-x-LR factorial:
+# MATCHED-COMPUTE variant: 16x32 (512 rollouts/step) and elite 2, matching the
+# GRPO/hybrid cells -- NOT TTD's canonical 8x32/elite-0. At LR 1.5e-4 the qwen
+# column {lr-n, hyb-n, tlr-n} then differs ONLY in the advantage estimator:
+#   mean_baseline -> mean_baseline_adaptive_beta -> entropic_adaptive_beta.
+# (Canonical-config TTD lives in the 4e-5 arms ttd-n/g-ttd-n.) Base config
+# carries no LR line -> 4e-5 default, so the LR line is ADDED:
 #   vs ttd-n = 0.380867899946103: the LR effect under the TTD objective
 #   vs the hybrid arm at the same LR: TTD's exponential shape vs linear credit
 # Strict grader.
@@ -65,8 +69,8 @@ resumable:
     CELL: tlr-n
     LEARNING_RATE: '1.5e-4'
     TTD_ADV_ESTIMATOR: entropic_adaptive_beta
-    TTD_ELITE_SLOTS: "0"
-    GROUPS_PER_BATCH: "8"
+    TTD_ELITE_SLOTS: "2"
+    GROUPS_PER_BATCH: "16"
     GROUP_SIZE: "32"
     KL_PENALTY_COEF: "0"
     TTD_RESTART_RATIO: "0"
