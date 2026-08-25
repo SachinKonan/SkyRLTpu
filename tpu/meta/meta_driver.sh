@@ -111,10 +111,15 @@ for (( g=0; g<GENS; g++ )); do
     # them, the new member's never learns them) unless BOTH engine stacks are
     # recycled -- a 30-60 min hit per boundary for an unmeasured gain.
     spare="${META_SPARE_FOR:-qwen}"
+    # META_ACCEL + META_LAYOUT_ENV (comma list of K=V) select the slice shape;
+    # defaults reproduce the v5p-128 layout.
+    extraargs=()
+    for kv in $(echo "${META_LAYOUT_ENV:-}" | tr , " "); do extraargs+=("--extra-env" "$kv"); done
     python3 "$REPO/tpu/meta/gen_meta_config.py" \
       --template "${META_TEMPLATE:?set META_TEMPLATE to a stageC cell config.yaml}" \
       --arm "$ARM" --gen "$g" --spare-for "$spare" --steps "$STEPS" \
-      "${initargs[@]}" --out "$SD/cfg_g$g.yaml" || { log "FATAL: config gen"; exit 1; }
+      --accel "${META_ACCEL:-v5p-128}" \
+      "${extraargs[@]}" "${initargs[@]}" --out "$SD/cfg_g$g.yaml" || { log "FATAL: config gen"; exit 1; }
     log "creating gen-$g job (spares -> $spare)"
     "$JOBMAN" create "$SD/cfg_g$g.yaml" >> "$SD/driver.log" 2>&1 &
     touch "$SD/job_g$g.created"

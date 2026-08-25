@@ -53,6 +53,6 @@ launch_one() {  # $1 tag  $2 cell-alias  $3 trainer-ip  $4 env-suffix
     bash \$HOME/ttd-client/tpu/launch_cell.sh" 600
 }
 
-launch_one qwen  meta-qwen "$(ip_at 1)" QWEN
-launch_one gemma g-meta    "$(ip_at 5)" GEMMA
-launch_one muse  m-meta    "$(ip_at 9)" MUSE
+launch_one qwen  meta-qwen "$(ip_at ${T_QWEN:-1})" QWEN
+launch_one gemma g-meta    "$(ip_at ${T_GEMMA:-5})" GEMMA
+launch_one muse  m-meta    "$(ip_at ${T_MUSE:-9})" MUSE

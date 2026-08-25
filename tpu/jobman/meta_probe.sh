@@ -9,7 +9,7 @@ KEY="$HOME/.ssh/jobman_tpu_ed25519"
 SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
 STEPS="${NUM_EPOCHS:-15}"
 bad=""
-for spec in "qwen:$(ip_at 1)" "gemma:$(ip_at 5)" "muse:$(ip_at 9)"; do
+for spec in "qwen:$(ip_at ${T_QWEN:-1})" "gemma:$(ip_at ${T_GEMMA:-5})" "muse:$(ip_at ${T_MUSE:-9})"; do
   tag=${spec%%:*}; trainer=${spec##*:}
   run="${ARM}-g${GEN}-${tag}"
   if [ "$trainer" = "$(ip_at 1)" ]; then

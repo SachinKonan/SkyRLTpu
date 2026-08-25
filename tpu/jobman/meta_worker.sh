@@ -19,17 +19,31 @@ INT="$JOBMAN_TPU_INTERNAL_IPS"
 ln -sfn "$REPO" "$HOME/ttd-client"
 
 ip_at() { echo "$INT" | cut -d, -f"$1"; }
+# Layout: 1-based worker-field lists per member (trainer FIRST), overridable so
+# one script serves both shapes:
+#   v5p-128 (default): qwen 1-4 (+spares 13-16), gemma 5-8, muse 9-12
+#   v5p-64 compressed: FIELDS_QWEN="1,2,7" FIELDS_GEMMA="3,4" FIELDS_MUSE="5,6"
+#                      GRADER_FIELD=8 GRADER_FOR=gemma
 SPARE_FOR="${SPARE_FOR:-qwen}"
-SPARES="$(ip_at 13),$(ip_at 14),$(ip_at 15),$(ip_at 16)"
+FIELDS_QWEN="${FIELDS_QWEN:-1,2,3,4}"
+FIELDS_GEMMA="${FIELDS_GEMMA:-5,6,7,8}"
+FIELDS_MUSE="${FIELDS_MUSE:-9,10,11,12}"
+SPARE_FIELDS="${SPARE_FIELDS:-13,14,15,16}"
+GRADER_FIELD="${GRADER_FIELD:-}"
+GRADER_FOR="${GRADER_FOR:-gemma}"
 
-member_ips() {  # $1 = tag -> comma list, trainer first
+fields_to_ips() { local out="" f; for f in $(echo "$1" | tr , " "); do out="$out,$(ip_at "$f")"; done; echo "${out#,}"; }
+
+member_ips() {  # $1 = tag -> comma IP list, trainer first
   local base
   case "$1" in
-    qwen)  base="$(ip_at 1),$(ip_at 2),$(ip_at 3),$(ip_at 4)" ;;
-    gemma) base="$(ip_at 5),$(ip_at 6),$(ip_at 7),$(ip_at 8)" ;;
-    muse)  base="$(ip_at 9),$(ip_at 10),$(ip_at 11),$(ip_at 12)" ;;
+    qwen)  base=$(fields_to_ips "$FIELDS_QWEN") ;;
+    gemma) base=$(fields_to_ips "$FIELDS_GEMMA") ;;
+    muse)  base=$(fields_to_ips "$FIELDS_MUSE") ;;
   esac
-  if [ "$1" = "$SPARE_FOR" ]; then echo "$base,$SPARES"; else echo "$base"; fi
+  if [ -n "$SPARE_FIELDS" ] && [ "$1" = "$SPARE_FOR" ]; then
+    echo "$base,$(fields_to_ips "$SPARE_FIELDS")"
+  else echo "$base"; fi
 }
 member_cell()  { case "$1" in qwen) echo "meta-qwen";; gemma) echo "g-meta";; muse) echo "m-meta";; esac; }
 member_model() { case "$1" in qwen) echo "qwen3.5-27b Qwen/Qwen3.5-27B";; gemma) echo "gemma4-31b google/gemma-4-31B-it";; muse) echo "muse-glimmer-30b meta-models/Muse-Glimmer-30B";; esac; }
@@ -69,4 +83,22 @@ for t in "${tags[@]}"; do
   fi
 done
 [ "$ok" = 1 ] || exit 1
+
+# Optional dedicated grader host: joins ONE member's ray cluster (a ray node
+# belongs to exactly one cluster). Measured grading hides inside sampling, so
+# this is a luxury -- pinned to GRADER_FOR, cheap to repoint or reassign.
+if [ -n "$GRADER_FIELD" ]; then
+  ghost=$(fields_to_ips "$GRADER_FIELD")
+  ghead=$(member_ips "$GRADER_FOR"); ghead=${ghead%%,*}
+  RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray; print(ray.__version__)" 2>/dev/null || echo "2.30.0")
+  timeout 900 ssh $SSHO sk7524_princeton_edu@"$ghost" "
+    export PATH=\$HOME/.local/bin:\$PATH
+    pgrep -f '[r]ay/core' >/dev/null && { echo 'grader ray already up'; exit 0; }
+    [ -x ~/.venvs/grader/bin/ray ] || {
+      uv venv ~/.venvs/grader --python 3.11 >/dev/null 2>&1
+      uv pip install --python ~/.venvs/grader/bin/python 'ray==$RAYV' numpy scipy shapely numba scikit-learn psutil >/dev/null 2>&1
+    }
+    ~/.venvs/grader/bin/ray start --address=$ghead:6379 --num-cpus=150 --disable-usage-stats >/tmp/ray-worker.log 2>&1 && echo 'grader host joined $GRADER_FOR'
+  " 2>/dev/null || echo "grader host join FAILED (grading degrades, not fatal)"
+fi
 echo "meta worker 0 ready ($ARM gen $GEN, spares -> $SPARE_FOR)"

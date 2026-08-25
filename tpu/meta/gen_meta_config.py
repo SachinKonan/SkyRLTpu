@@ -21,6 +21,8 @@ ap.add_argument("--spare-for", default="qwen", choices=["qwen", "gemma", "muse"]
 ap.add_argument("--steps", type=int, default=15)
 ap.add_argument("--init", action="append", default=[],
                 help="tag=state_path,jsonl_gcs  (carry arms only)")
+ap.add_argument("--accel", default="v5p-128")
+ap.add_argument("--extra-env", action="append", default=[], help="K=V passed into resumable env")
 ap.add_argument("--out", required=True)
 args = ap.parse_args()
 
@@ -35,7 +37,7 @@ c["tpu"].pop("num_workers", None)
 
 c["job"]["name"] = f"{name}_1"
 c["job"]["worker_num"] = 1
-c["tpu"]["accelerator"] = "v5p-128"
+c["tpu"]["accelerator"] = args.accel
 c["tpu"]["name"] = f"{name}_1"
 
 c["command"]["cmd"] = ('export PATH="$HOME/.local/bin:$PATH"\n'
@@ -64,6 +66,9 @@ env.update({
     "SPARE_FOR": args.spare_for,
     "NUM_EPOCHS": str(args.steps),
 })
+for spec in args.extra_env:
+    k, v = spec.split("=", 1)
+    env[k] = v
 for spec in args.init:
     tag, rest = spec.split("=", 1)
     sp, jsonl = (rest.split(",", 1) + [""])[:2]
@@ -81,6 +86,7 @@ r["run_spec"] = {
     "steps": args.steps,
     "stop": "fixed-15 + flatline(3x<1e-9, min4)",
     "spare_for": args.spare_for,
+    "accelerator": args.accel,
 }
 yaml.safe_dump(c, open(args.out, "w"), sort_keys=False)
 print(args.out)

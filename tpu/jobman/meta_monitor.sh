@@ -10,7 +10,7 @@ INT="$JOBMAN_TPU_INTERNAL_IPS"
 ip_at() { echo "$INT" | cut -d, -f"$1"; }
 KEY="$HOME/.ssh/jobman_tpu_ed25519"
 SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15"
-declare -A TRAINER=( [qwen]="$(ip_at 1)" [gemma]="$(ip_at 5)" [muse]="$(ip_at 9)" )
+declare -A TRAINER=( [qwen]="$(ip_at ${T_QWEN:-1})" [gemma]="$(ip_at ${T_GEMMA:-5})" [muse]="$(ip_at ${T_MUSE:-9})" )
 MONITOR_INTERVAL="${MONITOR_INTERVAL_SECONDS:-30}"
 SYNC_EVERY="${SYNC_EVERY_SECONDS:-300}"
 STEPS="${NUM_EPOCHS:-15}"
