@@ -440,6 +440,19 @@ class SplashAttentionProblem(Problem):
     require_pallas = True
     general_mode = True  # score the holdout; denominator = fastest honest impl per shape
     memory_bound = False
+
+    def flops(self, case):
+        """Causal attention: QK^T and PV each 2*N*M*K, halved by causality.
+        Backward is ~2.5x forward; this counts the FORWARD only (the number
+        the forward timing is divided by)."""
+        d = case.dims
+        qh = d.get("qh") or d.get("q_heads") or d.get("heads")
+        seq = d.get("seq") or d.get("t")
+        hd = d.get("d") or d.get("head_dim")
+        dv = d.get("dv") or d.get("d_v") or hd
+        if not (qh and seq and hd):
+            return None
+        return int(qh * seq * seq * (hd + dv))  # 2*2*qh*s^2*d/2 causal
     banned_call_names = (
         "jax.nn.dot_product_attention",
         "jax.nn.scaled_dot_product_attention",

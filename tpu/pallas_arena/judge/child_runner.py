@@ -541,6 +541,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
 
     case_timings = []
     sol_fracs = {}
+    mxu_fracs = {}
     for case in scored_cases + holdout_cases:
         pairs = []
         check_iters = sorted({0, n_pairs // 2, n_pairs - 1})
@@ -578,6 +579,12 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             frac = timing_mod.speed_of_light_fraction(bm, ct.cand_median_s, chip)
             if frac is not None:
                 sol_fracs[case.name] = frac
+        fl = problem.flops(case)
+        if fl:
+            mu = timing_mod.mxu_utilization(fl, ct.cand_median_s, chip)
+            mu_ref = timing_mod.mxu_utilization(fl, ct.ref_median_s, chip)
+            if mu is not None:
+                mxu_fracs[case.name] = (mu, mu_ref)
 
     reward_frame = timing_mod.final_reward(case_timings, noise_floor)
     result.update(
@@ -586,6 +593,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         passed=True,
         **reward_frame,
         speed_of_light_fracs=sol_fracs,
+        mxu_fracs=mxu_fracs,
         latencies={t.case: {"ref_median_s": t.ref_median_s, "cand_median_s": t.cand_median_s} for t in case_timings},
         peak_hbm_bytes=_mem_stats(),
         phase="done",

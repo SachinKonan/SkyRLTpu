@@ -555,6 +555,14 @@ class Problem(abc.ABC):
         return []
 
     # ----------------------------------------------------------------- memory
+    def flops(self, case: ShapeCase) -> int | None:
+        """Analytic FLOP count for one case (compute-bound problems).
+
+        Powers the MXU-utilization line in the observation, the compute-side
+        twin of bytes_moved's speed-of-light fraction. None = not modelled.
+        """
+        return None
+
     def bytes_moved(self, case: ShapeCase) -> int | None:
         """Minimum HBM traffic for the op (speed-of-light denominator)."""
         return None

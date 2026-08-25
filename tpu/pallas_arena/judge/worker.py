@@ -840,6 +840,7 @@ class PersistentWorker:
             # ---- 6. counterbalanced interleaved timing, fresh inputs per
             # ---- iteration, correctness verified on TIMED outputs
             case_timings, sol_fracs, baseline_impls, timer_used = [], {}, {}, {}
+            mxu_fracs = {}
             skipped_tp, tp_widths = {}, {}
             for case in self.scored_cases + self.holdout_cases:
                 if over_budget():
@@ -960,6 +961,15 @@ class PersistentWorker:
                     frac = timing_mod.speed_of_light_fraction(bm, ct.cand_median_s, chip)
                     if frac is not None:
                         sol_fracs[case.name] = frac
+                fl = problem.flops(case)
+                if fl:
+                    # Roofline, both sides: bandwidth fraction (above) and MXU
+                    # fraction (here). Reported for CANDIDATE and REFERENCE so
+                    # the gap is attributable to a resource, not just a ratio.
+                    mu = timing_mod.mxu_utilization(fl, ct.cand_median_s, chip)
+                    mu_ref = timing_mod.mxu_utilization(fl, ct.ref_median_s, chip)
+                    if mu is not None:
+                        mxu_fracs[case.name] = (mu, mu_ref)
         except Exception as e:
             return fail("worker", f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=6)}")
 
@@ -996,6 +1006,7 @@ class PersistentWorker:
             gate="all",
             **reward_frame,
             speed_of_light_fracs=sol_fracs,
+            mxu_fracs=mxu_fracs,
             baseline_impl_per_case=baseline_impls,
             timer=timer_used,
             tp_widths=tp_widths,

@@ -295,9 +295,20 @@ def _pass_observation(result: dict, problem: str) -> str:
             parts.append(f"{case}: cand {c:.3f}ms vs ref{who} {r:.3f}ms ({r / c if c else 0:.3f}x)")
         except Exception:
             continue
+    # ROOFLINE, per case. Which resource a kernel is actually against is what
+    # decides the next optimization -- a candidate at 15% of both bandwidth
+    # and MXU is latency/pipelining bound, and neither wider tiles nor fewer
+    # bytes will help it. Every case is shown (the old [:2] cap hid exactly
+    # the shapes that behave differently).
     sol = result.get("speed_of_light_fracs") or {}
     if sol:
-        parts.append("speed-of-light " + ", ".join(f"{k} {100 * v:.0f}%" for k, v in list(sol.items())[:2]))
+        parts.append("HBM bandwidth used (% of chip peak): "
+                     + ", ".join(f"{k} {100 * v:.0f}%" for k, v in sol.items()))
+    mxu = result.get("mxu_fracs") or {}
+    if mxu:
+        parts.append("MXU utilization (% of chip peak bf16, yours vs ref): "
+                     + ", ".join(f"{k} {100 * v[0]:.0f}% vs {100 * v[1]:.0f}%"
+                                 for k, v in mxu.items()))
     peak = result.get("peak_hbm_bytes")
     if peak:
         parts.append(f"peak HBM {peak / 1e9:.2f}GB")

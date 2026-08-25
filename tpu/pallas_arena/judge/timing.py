@@ -19,6 +19,14 @@ SPEED_OF_LIGHT_BYTES_PER_S = {
     "v5p": 2.8e12,
 }
 
+# Peak bf16 MXU throughput per CHIP (the unit our judges time on: one chip,
+# no TP). Compute-bound tasks report achieved FLOP/s as a fraction of this --
+# the tensorcore-side twin of speed_of_light_fraction.
+PEAK_BF16_FLOPS = {
+    "v6e": 918e12,
+    "v5p": 459e12,
+}
+
 
 def geomean(xs: list[float]) -> float:
     if not xs:
@@ -295,6 +303,21 @@ def speed_of_light_fraction(bytes_moved: int, latency_s: float, chip: str) -> fl
     if bw is None or latency_s <= 0:
         return None
     return (bytes_moved / latency_s) / bw
+
+
+def mxu_utilization(flops: int, latency_s: float, chip: str) -> float | None:
+    """Fraction of peak bf16 MXU throughput achieved (compute-bound tasks).
+
+    The compute-side counterpart of speed_of_light_fraction: together they
+    tell a candidate WHICH resource it is actually against -- a kernel at 12%
+    of both is latency/pipelining bound, not bandwidth bound, and the fix is
+    different. Analytic FLOP counts (problem.flops), not hardware counters:
+    no profiler, no extra device work, exact for these kernels.
+    """
+    peak = PEAK_BF16_FLOPS.get(chip)
+    if peak is None or latency_s <= 0 or not flops:
+        return None
+    return (flops / latency_s) / peak
 
 
 @dataclass
