@@ -1,4 +1,11 @@
 #!/bin/bash
+# SUPERSEDED for the v5p-32 cell by tpu/run_ttd_arena_on_host.sh, which runs
+# the client ON w0 (league pattern: tmux, no walltime, no ssh tunnels, shared
+# fate with the slice). rl_v5p32_bringup.sh launches that automatically.
+#
+# This slurm-side client is kept for the DETACHED topology: a trainer slice
+# plus an independently-scheduled judge fleet, where the client cannot live
+# on the cell (e.g. grading a corpus against a serving-only slice).
 # ttt-discover RL client: pallas arena RG-LRU on the v5p-32 cell.
 #
 # The cell (tpu/pallas_arena/rl_v5p32_bringup.sh): w0 trainer, w1-2 vLLM,

@@ -62,7 +62,7 @@ tssh 3 "bash ~/arena/pallas_arena/phase2/provision_judge.sh"
 # Queue (CPU FastAPI) local to the judge; the client reaches it via ssh -L.
 tssh 3 "tmux kill-session -t arena-queue 2>/dev/null; tmux new-session -d -s arena-queue \
   'PYTHONPATH=~/arena ~/arena-venv/bin/python -m pallas_arena.judge.queue \
-     --port ${QUEUE_PORT} --host 127.0.0.1 --lease-timeout 240 \
+     --port ${QUEUE_PORT} --host 0.0.0.0 --lease-timeout 240 \
      2>&1 | tee -a ~/queue.log'"
 
 # Judge worker: restart loop in tmux (compile-budget watchdog exits 17 by
@@ -78,4 +78,23 @@ tssh 3 "tmux kill-session -t arena-judge 2>/dev/null; tmux new-session -d -s are
 echo "=== [C] health $(date +%H:%M:%S) ==="
 tssh 0 "curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null && echo 'tinker: UP' || echo 'tinker: DOWN'"
 tssh 3 "for i in \$(seq 1 30); do curl -fsS -m5 http://127.0.0.1:${QUEUE_PORT}/status && break; sleep 5; done; echo"
-echo "=== bring-up complete; judge boot (elections + calibration) continues in ~/worker-progress.log on w3 ==="
+echo "=== [D] RL client ON w0 (league pattern: tmux, no slurm, no tunnels) $(date +%H:%M:%S) ==="
+# The client needs the repo (env + discover submodule) on w0. start_colocated
+# already rsyncs it when SYNC_SKYRL=1; ~/ttd-client is that tree.
+w3_ip=$(timeout 120 gcloud compute tpus tpu-vm describe "$TPU_NAME" --zone="$ZONE" --project="$PROJECT" \
+          --format="value(networkEndpoints[3].ipAddress)" 2>/dev/null)
+if [ -z "$w3_ip" ]; then
+  echo "[client] FATAL: cannot resolve w3 internal IP; skipping client launch" >&2
+elif [ "${START_CLIENT:-1}" != "1" ]; then
+  echo "[client] START_CLIENT=0; skipping"
+else
+  tssh 0 "test -d ~/ttd-client || ln -sfn ~/SkyRLTpu ~/ttd-client; \
+    curl -fsS -m8 http://${w3_ip}:${QUEUE_PORT}/status >/dev/null && echo 'queue reachable from w0' || echo 'WARNING: queue not reachable from w0'"
+  tssh 0 "tmux kill-session -t arena-client 2>/dev/null; \
+    tmux new-session -d -s arena-client \
+    'EXPERIMENT_NAME=${EXPERIMENT_NAME:-rglru-arena-grpo} QUEUE_HOST=${w3_ip} QUEUE_PORT=${QUEUE_PORT} \
+     bash ~/ttd-client/tpu/run_ttd_arena_on_host.sh 2>&1 | tee -a ~/arena-client.log'"
+  tssh 0 "sleep 5; tmux has-session -t arena-client 2>/dev/null && echo ARENA-CLIENT-UP || echo ARENA-CLIENT-FAIL"
+fi
+
+echo "=== bring-up complete; judge boot (elections + calibration) continues in ~/worker-progress.log on w3; client log ~/arena-client.log on w0 ==="
