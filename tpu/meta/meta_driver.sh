@@ -114,6 +114,29 @@ PYEOF
   fi
 }
 
+# ---- optional g0 bootstrap: META_BOOTSTRAP_TREES="tag=gs://..snap.json[,...]"
+# Seeds gen-0 from existing run trees (e.g. lr-n's final tree = the de-facto
+# depth-1 winner), so the meta-run RESUMES the search frontier instead of
+# rediscovering it. Must complete before any member client first boots -- the
+# sampler loads the seed at construction and a cold client would write its own
+# step-0 over the run dir.
+if [ -n "${META_BOOTSTRAP_TREES:-}" ] && [ ! -f "$SD/seed_g0.done" ]; then
+  log "bootstrapping gen-0 seed from: $META_BOOTSTRAP_TREES"
+  btrees=()
+  for spec in $(echo "$META_BOOTSTRAP_TREES" | tr , " "); do
+    btag=${spec%%=*}; bsrc=${spec#*=}
+    gsutil -q cp "$bsrc" "$SD/boot_$btag.json" || { log "FATAL: bootstrap fetch $bsrc"; exit 1; }
+    btrees+=("--tree" "$btag=$SD/boot_$btag.json")
+  done
+  "$PYBIN" "$REPO/tpu/meta/build_meta_seed.py" --op "$OP" --k "${META_SEED_K:-48}"     --out "$SD/seed_g0.json" "${btrees[@]}" | tee -a "$SD/driver.log" || { log "FATAL: bootstrap seed build"; exit 1; }
+  for t in "${MEMBERS[@]}"; do
+    run="$ARM-g0-$t"
+    gsutil -q cp "$SD/seed_g0.json"       "$GCS/skyrl-runs/$run/tinker_log/$run/puct_sampler_step_000000.json" || { log "FATAL: bootstrap seed upload $t"; exit 1; }
+  done
+  touch "$SD/seed_g0.done"
+  log "gen-0 bootstrap seed uploaded to all members"
+fi
+
 for (( g=0; g<GENS; g++ )); do
   if gen_done "$g"; then log "gen $g already complete"; continue; fi
 
@@ -129,7 +152,7 @@ for (( g=0; g<GENS; g++ )); do
       fi
     done
     [ ${#trees[@]} -gt 0 ] || { log "FATAL: no member produced a tree"; exit 1; }
-    "$PYBIN" "$REPO/tpu/meta/build_meta_seed.py" --op "$OP" --k 16 \
+    "$PYBIN" "$REPO/tpu/meta/build_meta_seed.py" --op "$OP" --k "${META_SEED_K:-48}" \
       --out "$SD/seed_g$g.json" "${trees[@]}" | tee -a "$SD/driver.log" || { log "FATAL: seed build"; exit 1; }
     for t in "${MEMBERS[@]}"; do
       run="$ARM-g$g-$t"
