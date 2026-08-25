@@ -13,6 +13,15 @@ set -uo pipefail
 REPO=/n/fs/vision-mix/sk7524/SkyRLTpu
 cd "$REPO"
 
+# Single instance only (same lesson as the gemma probe: two supervisors
+# fighting over one slice is worse than none).
+LOCK=/tmp/arena-v5p32-lifecycle.lock
+exec 9>"$LOCK"
+if ! flock -n 9; then
+  echo "another lifecycle instance holds $LOCK; exiting"
+  exit 0
+fi
+
 QR="${QR:-sk7524-qwen35arena-v5p32-east5a_spot}"
 PROJECT="${PROJECT:-vision-mix}"
 ZONE="${ZONE:-us-east5-a}"
@@ -71,8 +80,21 @@ if [ "$brc" -eq 0 ] && [ "$SMOKE_ON_UP" = "1" ]; then
   sbatch tpu/pallas_arena/probe/smoke_on_cell.sbatch 2>&1 | tail -1
 fi
 
-# Watch the slice; on death, loop back to acquisition.
-while timeout 120 "$GCLOUD" compute tpus tpu-vm list --zone="$ZONE" --project="$PROJECT" 2>/dev/null     | grep -q "^${QR}\b.*READY"; do
+# Watch the slice; on death, loop back to acquisition. A single failed gcloud
+# call (timeout, auth blip, API 5xx) must NOT count as slice loss -- the exit
+# path DELETES the QR, so a false positive destroys a healthy cell. Require 3
+# consecutive misses, and distinguish "list call failed" from "listed not-READY".
+miss=0
+while true; do
+  listing=$(timeout 120 "$GCLOUD" compute tpus tpu-vm list --zone="$ZONE" --project="$PROJECT" 2>/dev/null)
+  if [ -z "$listing" ]; then
+    miss=$((miss+1)); echo "[watch] list call failed (${miss}/3) $(date +%H:%M:%S)"
+  elif echo "$listing" | grep -q "^${QR}\b.*READY"; then
+    miss=0
+  else
+    miss=$((miss+1)); echo "[watch] slice not READY (${miss}/3) $(date +%H:%M:%S)"
+  fi
+  [ "$miss" -ge 3 ] && break
   sleep 180
 done
 echo "=== slice lost $(date +%H:%M:%S); re-acquiring ==="
