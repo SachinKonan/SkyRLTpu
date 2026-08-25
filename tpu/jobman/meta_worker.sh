@@ -32,7 +32,9 @@ SPARE_FIELDS="${SPARE_FIELDS:-13,14,15,16}"
 GRADER_FIELD="${GRADER_FIELD:-}"
 GRADER_FOR="${GRADER_FOR:-gemma}"
 
-fields_to_ips() { local out="" f; for f in $(echo "$1" | tr , " "); do out="$out,$(ip_at "$f")"; done; echo "${out#,}"; }
+# field lists accept ',' or ';' separators (';' lets them ride inside the
+# comma-separated META_LAYOUT_ENV passthrough)
+fields_to_ips() { local out="" f; for f in $(echo "$1" | tr ',;' '  '); do out="$out,$(ip_at "$f")"; done; echo "${out#,}"; }
 
 member_ips() {  # $1 = tag -> comma IP list, trainer first
   local base
