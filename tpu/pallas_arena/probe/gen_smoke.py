@@ -180,6 +180,8 @@ def main() -> None:
                     help="path to a WORKING annotated program: run one improvement turn per "
                          "sample on it (the seeded-RL one-step test). Cell tasks come from "
                          "--cells; variant is tagged +seed.")
+    ap.add_argument("--seed-observation", default="",
+                    help="path to the REAL judge observation text for the seed (from the parity run)")
     ap.add_argument("--seed-reward", default="1.0x (parity with the production kernel -- reward only accrues ABOVE this)",
                     help="reward line shown for the seed program")
     ap.add_argument("--no-think", action="store_true",
@@ -210,21 +212,24 @@ def main() -> None:
         # SEEDED ONE-STEP TEST: every sample is an improvement turn on ONE
         # known-good annotated program (production-structure seed). This is
         # the erdos/ac-inequalities initial-state pattern applied to kernels.
-        from pallas_arena.probe.prompt_ref_first import IMPROVE_TEMPLATE, build3seed
+        from pallas_arena.probe.prompt_ref_first import SEED_IMPROVE_TEMPLATE, build3seed
         seed_program = open(args.seed_file).read()
+        obs = ("passed: correct on every test shape, forward and backward. "
+               "Reward accrues only for making it FASTER (uniformly across "
+               "shapes, fwd and bwd).")
+        if args.seed_observation:
+            # The REAL judge observation for this seed (per-shape fwd/bwd
+            # ratios) -- produced by the parity fleet run, exactly what the
+            # RL loop would show.
+            obs = open(args.seed_observation).read().strip()
         for (task, variant), (cases, _kind) in CELLS.items():
             if want and (task, variant) not in want:
                 continue
-            # Lean seed-mode base: no reference impl, no stub scaffold, no
-            # contract -- the seed below IS the working structure; the model
-            # returns the entire improved program.
-            prompt = IMPROVE_TEMPLATE.format(
+            prompt = SEED_IMPROVE_TEMPLATE.format(
                 base=build3seed(task, cases),
                 reward=args.seed_reward,
                 program=seed_program,
-                observation=("passed: correct on every test shape, forward and backward. "
-                             "This is the seed implementation; reward accrues only for "
-                             "making it FASTER (uniformly across shapes, fwd and bwd)."),
+                observation=obs,
             )
             ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
             for i in range(args.group_size):

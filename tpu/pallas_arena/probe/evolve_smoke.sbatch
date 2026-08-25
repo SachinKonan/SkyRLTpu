@@ -181,7 +181,9 @@ uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_s
   ${REPAIR_FROM:+--repair-from "$REPAIR_FROM" --gens-from "$GENS_FROM"} \
   ${ENABLE_THINKING_KWARG:+--enable-thinking-kwarg} \
   ${NO_THINK:+--no-think} \
-  ${SEED_FILE:+--seed-file "$SEED_FILE"}
+  ${SEED_FILE:+--seed-file "$SEED_FILE"} \
+  ${SEED_OBS:+--seed-observation "$SEED_OBS"} \
+  ${SEED_REWARD:+--seed-reward "$SEED_REWARD"}
 rc=$?
 echo "=== generation rc=${rc}; gens at ${GENS_OUT} ==="
 exit "$rc"

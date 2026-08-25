@@ -1,57 +1,36 @@
-# Splash attention (causal, segment-gated, GQA) -- Pallas TPU kernel.
-#
-# WORKING SEED (verified correct: forward AND both backward kernels). The
-# structure is the flash-attention pattern the production kernel uses: the
-# grid tiles (query head, BLOCK_Q query rows); K/V arrive whole per head and
-# are walked in blocks inside the body with an ONLINE SOFTMAX (running max +
-# running sum, output rescaled as the max moves). Causality and segment ids
-# gate each tile; fully-masked KV tiles cost compute here -- the production
-# kernel SKIPS them entirely, which is a large part of its speed.
-#
-# This is ONE valid approach. Faster kernels may restructure everything:
-# skip fully-masked tiles, tighten the KV loop bounds per query block,
-# fuse the backward passes differently, retune BLOCK_Q.
-#
-# Platform facts (each is a measured failure class in prior attempts):
-#   * Ref blocks arrive pre-sliced by the BlockSpecs; q is [1, BLOCK_Q, d],
-#     k/v are [1, seq, d] per (grouped) head, segment ids [seq]. Check ranks
-#     before broadcasting -- rank bugs are the top prior failure.
-#   * You cannot call jax.lax.scan inside a Pallas TPU kernel body -- it is
-#     forbidden there; use jax.lax.fori_loop. Python if/for over traced
-#     values fails (tracer errors); use jnp.where / lax.cond.
-#   * Writes go through refs (o_ref[...] = v); JAX arrays are immutable.
-#   * Softmax statistics and the output accumulator stay float32
-#     (preferred_element_type=jnp.float32 on matmuls); bf16 accumulation
-#     fails tolerance.
-#   * ~32 MB VMEM per core; tiles in multiples of 128 lanes / 8 sublanes.
-#
-# Scoring: reward = (prod fwd_i * prod bwd_i)^(1/2n) -- geomean speedup vs
-# the production splash kernel, forward and backward weighted equally.
+"""Splash attention (causal, segment-gated, GQA) -- Pallas TPU kernel.
+
+GRADED ENTRYPOINT: the tests call kernel(q, k, v, segment_ids, *, window,
+soft_cap, sinks) -> o at every shape (q: [q_heads, seq, d] bf16 pre-scaled;
+k/v: [kv_heads, seq, d|d_v] bf16; segment_ids: [seq] int32, 0 = padding;
+o: [q_heads, seq, d_v] f32). The judge differentiates through it (d/dq,
+d/dk, d/dv) via the custom_vjp wiring below.
+
+Structure: the flash-attention pattern -- grid tiles (query head, BLOCK_Q
+query rows); K/V arrive whole per (grouped) head and are walked in blocks
+inside the body with an ONLINE SOFTMAX (running max + running sum, output
+rescaled as the max moves; statistics kept float32). Causality and segment
+ids gate each tile. Fully-masked KV tiles still cost compute here -- the
+production kernel SKIPS them, a large part of its speed. This is ONE valid
+approach; faster kernels may restructure everything.
+
+Platform facts: refs have their BLOCK shape with leading 1s; jax.lax.scan
+is FORBIDDEN inside a kernel body (fori_loop only; python if/for on traced
+values fails -- use jnp.where/lax.cond); read refs at traced indices, not
+pre-loaded arrays (forbidden dynamic_slice); writes go through refs;
+matmuls need preferred_element_type=jnp.float32.
+"""
 
 import functools
 import os
+
 import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
 
-import functools
-import jax
-import jax.numpy as jnp
-from jax.experimental import pallas as pl
-from jax.experimental.pallas import tpu as pltpu
-import os
 INTERPRET = bool(int(os.environ.get("PALLAS_INTERPRET", "0")))
 BLOCK_Q = 512
-NEG_INF = -1e30
-
-
-# CPU-validation hook -- leave as is. 0 on the judge (real Mosaic kernel);
-# our CPU harness sets it to 1 to run the kernel in interpret mode.
-INTERPRET = bool(int(os.environ.get("PALLAS_INTERPRET", "0")))
-
-# ------------------------- YOUR TILE CHOICES (tune these) -------------------
-BLOCK_Q = 512          # query rows per grid step (multiple of 8)
 NEG_INF = -1e30
 
 # ---------------------------------------------------------------- forward ---

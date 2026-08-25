@@ -440,45 +440,39 @@ def build3s(task: str, case_names: list[str]) -> str:
 def build3seed(task: str, case_names: list[str]) -> str:
     """Seed-mode base prompt: for improvement turns on a WORKING seed program.
 
-    Deliberately lean -- the seed shown in the improvement wrapper replaces
-    both the reference implementation (it IS correct code carrying the math
-    in its docstrings) and the stub scaffold (it IS a complete structure),
-    and there is no output contract: the model returns the ENTIRE improved
-    program, because structural freedom (re-blocking, new grids) is exactly
-    what improvement turns are for."""
+    Deliberately minimal -- the seed program (shown by SEED_IMPROVE_TEMPLATE)
+    carries the entry contract (kernel() docstring), the API facts (top
+    docstring), and the working structure. No reference impl, no scaffold,
+    no quick reference, no output contract: the model returns the ENTIRE
+    improved program."""
     t = _TASKS[task]
     shapes, feature_lines = _shapes_table3(t["problem"], case_names)
     prompt = _SEED_HEADER.format(
         title=t["title"],
-        entry=t["entry"],
-        io=t["io"],
         shapes=shapes,
         shape_note=t["shape_note"],
         baseline=t["baseline"],
     )
     inserts = ""
     if task in _RF3_BWD:
-        inserts += _BWD_SECTION.format(**_RF3_BWD[task])
+        inserts += _BWD_BRIEF.format(**_RF3_BWD[task])
     if feature_lines:
         inserts += _FEATURE_SECTION.format(feature_lines=feature_lines)
     if inserts:
         head, _, tail = prompt.rpartition("## Output")
         prompt = head + inserts + "\n## Output" + tail
-    # Strategy sits DIRECTLY before Output (after any backward/feature
-    # inserts): the last thing read before the answer format.
-    head, _, tail = prompt.rpartition("## Output")
-    prompt = head + _STRATEGY_SECTION + "\n## Output" + tail
     return prompt
 
 
-_STRATEGY_SECTION = """
-## Strategy
+_BWD_BRIEF = """
+## Backward pass (half your reward)
 
-Before writing code, think deeply about the optimization strategy: where
-does the current kernel actually spend its time, what is the limiting
-resource (memory bandwidth, compute-unit utilization, pipelining, tile
-geometry), and which single change buys the most? Weigh several directions
-before committing to one.
+Graded exactly like the forward, at every shape:
+total = (fwd_1 * ... * fwd_n * bwd_1 * ... * bwd_n)^(1/2n); a missing or
+anywhere-wrong backward floors every bwd factor (~40-60% total haircut).
+The gradient is checked for d/d{grad_inputs} and timed against
+{bwd_baseline}.{bwd_note} A raw pl.pallas_call is not differentiable --
+keep the jax.custom_vjp wrapper, with the backward as its own kernel.
 
 """
 
@@ -486,23 +480,15 @@ _SEED_HEADER = """You are an expert JAX/Pallas TPU kernel engineer.
 
 # {title}
 
-Below you will find your current WORKING kernel implementation and its
-verdict from the judge. Your job is to make it FASTER than the production
-baseline ({baseline}) while staying correct on every test shape, forward
-and backward.
-
-## Entry point
-
-{entry}
-
-{io}
+Below is your current WORKING kernel implementation and its verdict from
+the judge. Make it FASTER than the production baseline ({baseline}) while
+staying correct on every test shape, forward and backward.
 
 ## Graded shapes
 
 {shapes}
 {shape_note}
 
-""" + _QUICK_REF + """
 ## Output
 
 Output one fenced ```python block containing the COMPLETE improved program
@@ -510,6 +496,31 @@ Output one fenced ```python block containing the COMPLETE improved program
 no prose after the block, and NO comments inside the program -- spend your
 tokens on code, not commentary. Include one short docstring at the very top
 of the program summarizing your algorithm and what you changed.
+"""
+
+
+# Strategy sits at the TRUE end of the seed prompt: after the program and
+# the judge feedback, fused with the closing instruction.
+SEED_IMPROVE_TEMPLATE = """{base}
+
+## Your current program (reward: {reward})
+
+```python
+{program}
+```
+
+## Judge feedback
+
+{observation}
+
+## Strategy
+
+Before writing code, think deeply about the optimization strategy: where
+does the current kernel actually spend its time, what is the limiting
+resource (memory bandwidth, compute-unit utilization, pipelining, tile
+geometry), and which single change buys the most? Weigh several directions
+before committing to one. Then output the complete improved program as one
+fenced ```python block, as specified above.
 """
 
 
