@@ -216,7 +216,13 @@ def main() -> None:
                 text = prior.get((task, variant, row["idx"]))
                 if text is None or out.startswith("gen_error") or out == "no_program":
                     continue
-                program = extract_completion(text)
+                req = None
+                if variant.startswith("rf3c"):
+                    from pallas_arena.probe.contract_compose import scan_scaffold
+                    from pallas_arena.probe.seam_scaffolds import RGLRU_SCAFFOLD, SPLASH_SCAFFOLD
+                    _scaf = {"rg_lru": RGLRU_SCAFFOLD, "splash_attention": SPLASH_SCAFFOLD}[task]
+                    req = list(scan_scaffold(_scaf).required_defs)
+                program = extract_completion(text, required_defs=req)
                 if not program:
                     continue
                 fb = out.replace("pregate: ", "", 1)
