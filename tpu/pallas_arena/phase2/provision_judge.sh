@@ -48,6 +48,10 @@ fi
 # resolution itself unable to drift.
 "$HOME/arena-venv/bin/pip" install --quiet "jax[tpu]==0.10.2" tokamax flax einops sentencepiece einshape xprof
 "$HOME/arena-venv/bin/pip" install --quiet --no-deps recurrentgemma
+# Ray: intra-host scheduler for the grading pool (chip-count-aware dispatch).
+# Installed unconditionally -- the single-worker path never imports it, so a
+# judge that does not use the pool pays only the download.
+"$HOME/arena-venv/bin/pip" install --quiet "ray[default]>=2.9"
 "$HOME/arena-venv/bin/python" - <<'EOF'
 import jax
 assert jax.__version__ == "0.10.2", f"ARENA JAX PIN MOVED: {jax.__version__}"

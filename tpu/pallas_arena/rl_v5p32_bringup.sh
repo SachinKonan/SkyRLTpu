@@ -65,15 +65,32 @@ tssh 3 "tmux kill-session -t arena-queue 2>/dev/null; tmux new-session -d -s are
      --port ${QUEUE_PORT} --host 0.0.0.0 --lease-timeout 240 \
      2>&1 | tee -a ~/queue.log'"
 
-# Judge worker: restart loop in tmux (compile-budget watchdog exits 17 by
-# design after posting its terminal verdict; the loop brings it back).
-tssh 3 "tmux kill-session -t arena-judge 2>/dev/null; tmux new-session -d -s arena-judge \
-  'while true; do cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
-     ~/arena-venv/bin/python -m pallas_arena.judge.worker \
-     --problem rg_lru --queue http://127.0.0.1:${QUEUE_PORT} --sim-mode real \
-     --timing-pairs 20 --worker-id w3-judge --compile-budget-s ${COMPILE_BUDGET_S} \
-     --cache ${CACHE} --boot-report ~/boot-report.json --poll-s 2 \
-     2>&1 | tee -a ~/worker-progress.log; echo \"[loop] worker exited rc=\$?; restarting in 10s\"; sleep 10; done'"
+# GRADING EXECUTION. Default is the RAY POOL: the host has 4 chips and a
+# single worker uses one, so 3/4 of a host dedicated to grading sits idle
+# while grading is what gates every RL step. Ray gives one actor per chip
+# (and chip-count-aware dispatch for TP cases later). GRADER=single falls
+# back to the one-worker loop, byte-identical to the proven path.
+if [ "${GRADER:-ray}" = "ray" ]; then
+  tssh 3 "pkill -f 'raylet|ray::' >/dev/null 2>&1; ~/arena-venv/bin/ray stop --force >/dev/null 2>&1; sleep 2; \
+    ~/arena-venv/bin/ray start --head --num-cpus=\$(nproc) --resources='{\"TPU\": ${RAY_CHIPS:-4}}' \
+      --disable-usage-stats >/dev/null 2>&1 && echo 'ray head up'"
+  tssh 3 "tmux kill-session -t arena-judge 2>/dev/null; tmux new-session -d -s arena-judge \
+    'while true; do cd ~/arena && PYTHONPATH=~/arena JAX_COMPILATION_CACHE_DIR=~/jax-compile-cache \
+       ~/arena-venv/bin/python -m pallas_arena.judge.ray_pool \
+       --queue http://127.0.0.1:${QUEUE_PORT} --problems ${PROBLEMS:-rg_lru} \
+       --actors ${RAY_ACTORS:-4} --width ${RAY_WIDTH:-1} \
+       --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
+       --cache ${CACHE} --poll-s 1 \
+       2>&1 | tee -a ~/worker-progress.log; echo \"[loop] pool exited rc=\$?; restarting in 10s\"; sleep 10; done'"
+else
+  tssh 3 "tmux kill-session -t arena-judge 2>/dev/null; tmux new-session -d -s arena-judge \
+    'while true; do cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
+       ~/arena-venv/bin/python -m pallas_arena.judge.worker \
+       --problem rg_lru --queue http://127.0.0.1:${QUEUE_PORT} --sim-mode real \
+       --timing-pairs 20 --worker-id w3-judge --compile-budget-s ${COMPILE_BUDGET_S} \
+       --cache ${CACHE} --boot-report ~/boot-report.json --poll-s 2 \
+       2>&1 | tee -a ~/worker-progress.log; echo \"[loop] worker exited rc=\$?; restarting in 10s\"; sleep 10; done'"
+fi
 
 echo "=== [C] health $(date +%H:%M:%S) ==="
 tssh 0 "curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null && echo 'tinker: UP' || echo 'tinker: DOWN'"
