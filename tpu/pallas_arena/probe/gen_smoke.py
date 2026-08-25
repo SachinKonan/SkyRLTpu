@@ -176,6 +176,9 @@ def main() -> None:
     ap.add_argument("--gens-from", default="", help="gens jsonl matching --repair-from")
     ap.add_argument("--enable-thinking-kwarg", action="store_true",
                     help="send chat_template_kwargs enable_thinking=True (gemma needs it; qwen thinks by default)")
+    ap.add_argument("--no-think", action="store_true",
+                    help="chat_template_kwargs enable_thinking=False and single-phase answer-cap "
+                         "generation (the cheap-heal arm: no thinking budget at all)")
     ap.add_argument("--ctx", type=int, default=32768)
     ap.add_argument("--answer-cap", type=int, default=8192,
                     help="phase-2 code budget when phase 1 (--max-tokens) truncates")
@@ -247,13 +250,24 @@ def main() -> None:
 
     def run(job):
         task, variant, i, prompt, ph = job
+        if args.no_think:
+            variant = f"{variant}-nt"   # separate grading cell for the A/B
         t0 = time.time()
         try:
-            extra = ({"chat_template_kwargs": {"enable_thinking": True}}
-                     if args.enable_thinking_kwarg else None)
-            resp = _chat(args.server, args.model, prompt, args.max_tokens,
-                         args.temperature, args.timeout_s,
-                         ctx=args.ctx, answer_cap=args.answer_cap, extra_body=extra)
+            if args.no_think:
+                # Cheap heal: no thinking, answer only. Single phase -- the
+                # two-phase machinery exists purely to cap thinking.
+                extra = {"chat_template_kwargs": {"enable_thinking": False}}
+                p1 = args.answer_cap
+                resp = _chat(args.server, args.model, prompt, p1,
+                             args.temperature, args.timeout_s,
+                             ctx=args.ctx, answer_cap=0, extra_body=extra)
+            else:
+                extra = ({"chat_template_kwargs": {"enable_thinking": True}}
+                         if args.enable_thinking_kwarg else None)
+                resp = _chat(args.server, args.model, prompt, args.max_tokens,
+                             args.temperature, args.timeout_s,
+                             ctx=args.ctx, answer_cap=args.answer_cap, extra_body=extra)
             ch = resp["choices"][0]
             return {
                 "task": task, "variant": variant, "idx": i, "prompt_sha": ph,
