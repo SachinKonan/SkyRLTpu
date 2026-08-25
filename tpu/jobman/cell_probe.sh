@@ -11,6 +11,12 @@ import glob, json, os, sys
 
 run = os.environ["RUN"]
 target = int(os.environ["NUM_EPOCHS"])
+# Flatline stop (meta generations): the client wrote CONVERGED and exited
+# cleanly before NUM_EPOCHS -- that IS completion. Without this check the
+# monitor relaunches it forever (resume -> instant re-flatline -> exit).
+if glob.glob(os.path.expanduser(f"~/skyrl-runs/{run}/tinker_log/*/CONVERGED")):
+    print("complete: CONVERGED marker")
+    sys.exit(0)
 pats = glob.glob(os.path.expanduser(
     f"~/skyrl-runs/{run}/tinker_log/*/member_*/checkpoints.jsonl"))
 if not pats:
