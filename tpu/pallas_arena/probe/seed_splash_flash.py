@@ -16,8 +16,9 @@
 #   * Ref blocks arrive pre-sliced by the BlockSpecs; q is [1, BLOCK_Q, d],
 #     k/v are [1, seq, d] per (grouped) head, segment ids [seq]. Check ranks
 #     before broadcasting -- rank bugs are the top prior failure.
-#   * lax.scan cannot lower in-kernel; fori_loop only. Python if/for over
-#     traced values fails (tracer errors); use jnp.where / lax.cond.
+#   * You cannot call jax.lax.scan inside a Pallas TPU kernel body -- it is
+#     forbidden there; use jax.lax.fori_loop. Python if/for over traced
+#     values fails (tracer errors); use jnp.where / lax.cond.
 #   * Writes go through refs (o_ref[...] = v); JAX arrays are immutable.
 #   * Softmax statistics and the output accumulator stay float32
 #     (preferred_element_type=jnp.float32 on matmuls); bf16 accumulation

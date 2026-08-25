@@ -16,8 +16,10 @@
 #   * Ref blocks arrive with a leading 1: [1, BLOCK_T, BLOCK_D]; reset is
 #     [1, BLOCK_T, 1]. Index [0, i, :] for a [BLOCK_D] vector -- rank
 #     mismatches here are the single most common bug.
-#   * lax.scan CANNOT lower inside a Pallas TPU kernel body; use
-#     jax.lax.fori_loop (python for/if over traced values also fails).
+#   * You cannot call jax.lax.scan inside a Pallas TPU kernel body -- it is
+#     forbidden there (the reference uses it OUTSIDE the kernel; do not
+#     imitate that in here). Use jax.lax.fori_loop for in-kernel loops.
+#     Python for/if over traced values also fails.
 #   * Arrays are immutable -- writes go through refs: h_ref[0, i, :] = v.
 #   * Accumulate in float32 (inputs are bf16); half-precision accumulation
 #     fails the correctness tolerance over long sequences.
