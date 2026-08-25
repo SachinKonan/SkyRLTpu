@@ -104,15 +104,13 @@ for (( g=0; g<GENS; g++ )); do
         fi
       done
     fi
-    # spares: the member whose metrics.jsonl was updated LAST in the previous
-    # generation was the barrier -- give it the 4 spare hosts.
-    spare=qwen
-    if [ "$g" -gt 0 ]; then
-      spare=$(for t in qwen gemma muse; do
-        ts=$(gsutil ls -l "$GCS/skyrl-runs/$ARM-g$((g-1))-$t/tinker_log/$ARM-g$((g-1))-$t/metrics.jsonl" 2>/dev/null | awk 'NR==1{print $2}')
-        echo "${ts:-1970} $t"
-      done | sort | tail -1 | awk '{print $2}')
-    fi
+    # spares: STATIC for the whole arm (META_SPARE_FOR, default qwen -- the
+    # sampling-dominated member). Per-generation reassignment was removed: on a
+    # persistent slice the boundary skips healthy engines, so moving spares
+    # would orphan the old member's engines on w12-15 (its registry still lists
+    # them, the new member's never learns them) unless BOTH engine stacks are
+    # recycled -- a 30-60 min hit per boundary for an unmeasured gain.
+    spare="${META_SPARE_FOR:-qwen}"
     python3 "$REPO/tpu/meta/gen_meta_config.py" \
       --template "${META_TEMPLATE:?set META_TEMPLATE to a stageC cell config.yaml}" \
       --arm "$ARM" --gen "$g" --spare-for "$spare" --steps "$STEPS" \
