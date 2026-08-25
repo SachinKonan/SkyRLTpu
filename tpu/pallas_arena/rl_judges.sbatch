@@ -225,9 +225,7 @@ slot_supervisor() {
         # RAY POOL: a v5p-8 judge host has 4 chips and the single-worker path
         # uses one. One actor per chip = 4 concurrent grades per host.
         remote_cmd="set -o pipefail; cd ~/arena && \
-          (~/arena-venv/bin/ray stop --force >/dev/null 2>&1; sleep 2; \
-           ~/arena-venv/bin/ray start --head --num-cpus=\$(nproc) \
-             --resources='{\"TPU\": ${RAY_CHIPS:-4}}' --disable-usage-stats >/dev/null 2>&1); \
+          RAY_CHIPS=${RAY_CHIPS:-4} bash ~/arena/pallas_arena/phase2/ray_start_tpu.sh; \
           PYTHONPATH=~/arena JAX_COMPILATION_CACHE_DIR=\$HOME/jax-compile-cache \
           ~/arena-venv/bin/python -m pallas_arena.judge.ray_pool \
           --queue http://127.0.0.1:${PORT} --problems ${PROBLEMS} \

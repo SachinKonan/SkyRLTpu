@@ -71,9 +71,7 @@ tssh 3 "tmux kill-session -t arena-queue 2>/dev/null; tmux new-session -d -s are
 # (and chip-count-aware dispatch for TP cases later). GRADER=single falls
 # back to the one-worker loop, byte-identical to the proven path.
 if [ "${GRADER:-ray}" = "ray" ]; then
-  tssh 3 "pkill -f 'raylet|ray::' >/dev/null 2>&1; ~/arena-venv/bin/ray stop --force >/dev/null 2>&1; sleep 2; \
-    ~/arena-venv/bin/ray start --head --num-cpus=\$(nproc) --resources='{\"TPU\": ${RAY_CHIPS:-4}}' \
-      --disable-usage-stats >/dev/null 2>&1 && echo 'ray head up'"
+  tssh 3 "RAY_CHIPS=${RAY_CHIPS:-4} bash ~/arena/pallas_arena/phase2/ray_start_tpu.sh"
   tssh 3 "tmux kill-session -t arena-judge 2>/dev/null; tmux new-session -d -s arena-judge \
     'while true; do cd ~/arena && PYTHONPATH=~/arena JAX_COMPILATION_CACHE_DIR=~/jax-compile-cache \
        ~/arena-venv/bin/python -m pallas_arena.judge.ray_pool \
