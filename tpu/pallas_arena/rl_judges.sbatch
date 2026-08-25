@@ -292,6 +292,14 @@ echo "=== waiting up to ${LAND_DEADLINE_S}s for ${N} judges $(date +%H:%M:%S) ==
 land_deadline=$(( t_first_qr + LAND_DEADLINE_S ))
 while [ "$(date +%s)" -lt "$land_deadline" ]; do
   ready=$(ls "$ready_dir" 2>/dev/null | wc -l)
+  # Publish as soon as MIN_JUDGES are up, not all N: in a drought the second
+  # judge can be hours behind the first, and holding the queue back leaves a
+  # provisioned, polling judge idle for no reason (measured 2026-08-25:
+  # 1/2 landed, queue unpublished, pool already up and waiting).
+  if [ "$ready" -ge "${MIN_JUDGES:-$N}" ] && [ ! -s "${out_dir}/rl-queue-url.txt" ]; then
+    echo "http://$(hostname -s):${PORT}" > "${out_dir}/rl-queue-url.txt"
+    echo "=== queue published early at ${ready}/${N} judges (min ${MIN_JUDGES:-$N}) $(date +%H:%M:%S) ==="
+  fi
   echo "  ready ${ready}/${N} $(date +%H:%M:%S)"
   [ "$ready" -ge "$N" ] && break
   sleep 30
