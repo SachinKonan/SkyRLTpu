@@ -58,7 +58,7 @@ resumable:
     CELL: m-ttd-lr-n
     TTD_ADV_ESTIMATOR: entropic_adaptive_beta
     TTD_ELITE_SLOTS: "0"
-    GROUPS_PER_BATCH: "8"
+    GROUPS_PER_BATCH: "16"
     GROUP_SIZE: "32"
     KL_PENALTY_COEF: "0"
     LEARNING_RATE: '1.5e-4'
