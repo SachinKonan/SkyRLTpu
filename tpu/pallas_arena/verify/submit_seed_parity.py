@@ -92,7 +92,7 @@ def main() -> None:
                 r = rec.get("result") or {}
                 results[name] = r
                 rw = r.get("reward_with_bwd") or r.get("reward")
-                        print(f"[verdict] {name}: passed={r.get('passed')} reward={rw} "
+                print(f"[verdict] {name}: passed={r.get('passed')} reward={rw} "
                       f"gate={r.get('gate')}", flush=True)
                 del wids[name]
         if wids:
