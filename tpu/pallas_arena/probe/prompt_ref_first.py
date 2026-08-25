@@ -486,6 +486,14 @@ and backward.
 {shape_note}
 
 """ + _QUICK_REF + """
+## Strategy
+
+Before writing code, think deeply about the optimization strategy: where
+does the current kernel actually spend its time, what is the limiting
+resource (memory bandwidth, compute-unit utilization, pipelining, tile
+geometry), and which single change buys the most? Weigh several directions
+before committing to one.
+
 ## Output
 
 Output one fenced ```python block containing the COMPLETE improved program
