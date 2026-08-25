@@ -191,7 +191,21 @@ slot_supervisor() {
     while [ "$(date +%s)" -lt "$deadline" ]; do
       st=$(gc queued-resources describe "$name" --format='value(state.state)' 2>/dev/null)
       [ "$st" = "ACTIVE" ] && break
-      case "$st" in FAILED|SUSPENDED|SUSPENDING|"") echo "[$name] state=${st:-gone}" >> "$log" ;; esac
+      # A GCP queued resource in FAILED/SUSPENDED is TERMINAL -- it never
+      # returns to the queue on its own. Measured 2026-08-25: a v6e judge
+      # FAILED with "no more capacity in the zone" 90s after create and then
+      # sat dead for the whole landing window while this loop polled it.
+      # Delete and recreate so the request is back in line for capacity.
+      case "$st" in
+        FAILED|SUSPENDED|SUSPENDING|"")
+          echo "[$name] state=${st:-gone} -- deleting and recreating $(date +%H:%M:%S)" >> "$log"
+          gc queued-resources delete "$name" --force --quiet >/dev/null 2>&1
+          sleep 30
+          gc queued-resources create "$name" --node-id="$name" \
+            --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot >> "$log" 2>&1
+          sleep 60
+          ;;
+      esac
       sleep 30
     done
     if [ "$st" != "ACTIVE" ]; then
