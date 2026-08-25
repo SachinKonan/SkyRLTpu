@@ -28,17 +28,25 @@ PY
 echo "=== [2] waiting for real-silicon parity verdicts ==="
 until [ -s "$out/seed-parity-results.json" ]; do sleep 120; done
 
-echo "=== [3] observations + measured rewards ==="
+echo "=== [3] observations + measured rewards (per task; splash may need a later pass) ==="
 python3 - <<'PY' || { echo "FATAL: a seed failed on real silicon"; exit 1; }
 import json, sys, pathlib
-res=json.load(open("runs/pallas_arena/seed-parity-results.json"))
+res={}
+for f in ("seed-parity-results.json", "seed-parity-results-rglru.json",
+          "seed-parity-results-splash.json"):
+    fp = pathlib.Path("runs/pallas_arena") / f
+    if fp.exists():
+        try: res.update(json.load(open(fp)))
+        except Exception: pass
+missing=[]
 for name, task, tag in [("SEED-rglru-timeblocked","rg_lru","rglru"),
                         ("SEED-splash-flash","splash_attention","splash")]:
     r=res.get(name) or {}
     if not r.get("passed"):
         print(f"[parity] {name}: NOT passed on TPU: gate={r.get('gate')} "
               f"violations={str(r.get('violations'))[:300]}")
-        sys.exit(1)
+        missing.append(tag)
+        continue
     rw=r.get("reward_with_bwd") or r.get("reward")
     obs=str(r.get("observation") or "").strip()
     if not obs:
@@ -47,6 +55,10 @@ for name, task, tag in [("SEED-rglru-timeblocked","rg_lru","rglru"),
     pathlib.Path(f"runs/pallas_arena/seed-reward-{tag}.txt").write_text(
         f"{float(rw):.3f}x vs the production kernel -- reward accrues only ABOVE this")
     print(f"[parity] {name}: reward={rw}; obs {len(obs)} chars banked")
+if len(missing) == 2:
+    print("[parity] NEITHER seed has a passing TPU verdict yet")
+    sys.exit(1)
+print("[parity] usable:", [t for t in ("rglru","splash") if t not in missing])
 PY
 
 echo "=== [4] launching the four arms ==="
@@ -64,8 +76,16 @@ launch() { # launch <tag> <cells> <seedfile> <obstag> [gemma]
     nohup bash "$S/bench_supervisor.sh" > "runs/pallas_arena/bench-sup-$1.log" 2>&1 &
     echo "launched $1" )
 }
-launch qwen-seed2-rglru   "rg_lru:rf3s"           "$S/seed_rglru_timeblocked.py" rglru
-launch qwen-seed2-splash  "splash_attention:rf3s" "$S/seed_splash_flash.py"      splash
-launch gemma-seed2-rglru  "rg_lru:rf3s"           "$S/seed_rglru_timeblocked.py" rglru  gemma
-launch gemma-seed2-splash "splash_attention:rf3s" "$S/seed_splash_flash.py"      splash gemma
+if [ -s "$out/seed-obs-rglru.txt" ]; then
+  launch qwen-seed2-rglru  "rg_lru:rf3s" "$S/seed_rglru_timeblocked.py" rglru
+  launch gemma-seed2-rglru "rg_lru:rf3s" "$S/seed_rglru_timeblocked.py" rglru gemma
+else
+  echo "[launch] rg_lru observation missing; skipping its arms"
+fi
+if [ -s "$out/seed-obs-splash.txt" ]; then
+  launch qwen-seed2-splash  "splash_attention:rf3s" "$S/seed_splash_flash.py" splash
+  launch gemma-seed2-splash "splash_attention:rf3s" "$S/seed_splash_flash.py" splash gemma
+else
+  echo "[launch] splash observation missing (pass 2 pending); skipping its arms"
+fi
 echo "=== all four arms launched $(date +%H:%M:%S) ==="
