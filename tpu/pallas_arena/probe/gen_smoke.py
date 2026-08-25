@@ -115,7 +115,26 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
     }
     if extra_body:
         base.update(extra_body)
-    d = _post(server, {**base, "max_tokens": max_tokens}, timeout_s)
+    try:
+        d = _post(server, {**base, "max_tokens": max_tokens}, timeout_s)
+    except urllib.error.HTTPError as e:
+        if e.code != 400:
+            raise
+        # Phase-1 400 = prompt + think cap exceeds ctx UNDER THIS MODEL'S
+        # TOKENIZER (measured: gemma inflates the splash rf3c prompt past
+        # what qwen-token estimates predicted; all 32 requests 400'd).
+        # Measure the true prompt size with a 1-token probe, then clamp.
+        probe = _post(server, {**base, "max_tokens": 1}, timeout_s)
+        ptoks = ((probe.get("usage") or {}).get("prompt_tokens") or 0)
+        # Reserve answer room: correct programs measure 2-4.4k tokens, and
+        # thinking fills any cap it is given -- without the reserve, phase 2
+        # would get sized to ~nothing and the reply ends as pure thinking.
+        reserve = min(answer_cap, 5120)
+        clamped = ctx - ptoks - reserve - 64
+        if clamped < 512:
+            raise
+        d = _post(server, {**base, "max_tokens": clamped}, timeout_s)
+        max_tokens = clamped
     ch = d["choices"][0]
     if ch.get("finish_reason") != "length":
         return d
