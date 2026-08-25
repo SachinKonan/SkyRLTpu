@@ -48,7 +48,7 @@ PROJECT=${PROJECT:-vision-mix}
 ACCEL=${ACCEL:-v5p-8}
 RUNTIME=${RUNTIME:-v2-alpha-tpuv5}
 PORT=${PORT:-8791}
-LAND_DEADLINE_S=${LAND_DEADLINE_S:-2700}     # 45 min to land 5 spot QRs
+LAND_DEADLINE_S=${LAND_DEADLINE_S:-14400}    # 4h: spot droughts have run hours (measured 2026-08-24/25)
 HARD_CAP_S=${HARD_CAP_S:-84600}              # 23.5h; slurm -t 24h is the outer bound
 LEASE_TIMEOUT_S=${LEASE_TIMEOUT_S:-240}
 COMPILE_BUDGET_S=${COMPILE_BUDGET_S:-90}
@@ -221,13 +221,30 @@ slot_supervisor() {
     local fails=0 t_s dur rc
     while true; do
       t_s=$(date +%s)
-      timeout 14400 gcloud compute tpus tpu-vm ssh "$name" --zone="$ZONE" --project="$PROJECT" --worker=0 \
-        --command="set -o pipefail; cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
+      if [ "${GRADER:-ray}" = "ray" ]; then
+        # RAY POOL: a v5p-8 judge host has 4 chips and the single-worker path
+        # uses one. One actor per chip = 4 concurrent grades per host.
+        remote_cmd="set -o pipefail; cd ~/arena && \
+          (~/arena-venv/bin/ray stop --force >/dev/null 2>&1; sleep 2; \
+           ~/arena-venv/bin/ray start --head --num-cpus=\$(nproc) \
+             --resources='{\"TPU\": ${RAY_CHIPS:-4}}' --disable-usage-stats >/dev/null 2>&1); \
+          PYTHONPATH=~/arena JAX_COMPILATION_CACHE_DIR=\$HOME/jax-compile-cache \
+          ~/arena-venv/bin/python -m pallas_arena.judge.ray_pool \
+          --queue http://127.0.0.1:${PORT} --problems ${PROBLEMS} \
+          --actors ${RAY_ACTORS:-4} --width ${RAY_WIDTH:-1} \
+          --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
+          --cache '${CACHE}' --poll-s 1 \
+          2>&1 | tee -a \$HOME/worker-progress.log"
+      else
+        remote_cmd="set -o pipefail; cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
           ~/arena-venv/bin/python -m pallas_arena.judge.worker \
           --problem $(problem_for "$name") --queue http://127.0.0.1:${PORT} --sim-mode real \
           --timing-pairs 20 --worker-id ${name} --compile-budget-s ${COMPILE_BUDGET_S} \
           --cache '${CACHE}' --boot-report \$HOME/boot-report.json --poll-s 2 \
-          2>&1 | tee -a \$HOME/worker-progress.log" \
+          2>&1 | tee -a \$HOME/worker-progress.log"
+      fi
+      timeout 14400 gcloud compute tpus tpu-vm ssh "$name" --zone="$ZONE" --project="$PROJECT" --worker=0 \
+        --command="$remote_cmd" \
         -- -R "${PORT}:localhost:${PORT}" -o ExitOnForwardFailure=yes \
            -o ServerAliveInterval=30 -o ServerAliveCountMax=4 >> "$log" 2>&1
       rc=$?
