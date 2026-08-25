@@ -2199,6 +2199,44 @@ killing the no-pallas / no-kernel / machinery-syntax classes by construction. Co
 tests landed; ONE prompt scheme for both models (consistency over per-model forking; gemma&rsquo;s
 missing repair measurement decides its arm, not assumption).</p>
 
+<h2>Grading architecture: seeded improvement, one cell, chips in parallel</h2>
+<p class="sub">Three structural changes, all driven by measurements above.</p>
+<section class="card"><h3>1. The arena stops cold-starting</h3>
+<p class="sub">Cold validity is 3&ndash;9%, so a GRPO group of 32 is mostly all-zero &mdash; no advantage, no
+gradient, wasted rollouts. Every other ttt-discover environment already avoids this:
+<span class="mono">ac_inequalities</span> seeds <b>working code</b> as its initial state,
+<span class="mono">erdos</span> seeds a scored construction (a deliberately weak one &mdash; headroom
+over anchoring). Only the kernel arena started from nothing. It now seeds a <b>verified working
+kernel</b> carrying the production structure: for RG-LRU, the time axis tiled into BLOCK_T chunks with
+the hidden state carried across chunks in VMEM scratch (a whole-sequence block at t=32,768 would need
+&gt;250&nbsp;MB of VMEM against the chip&rsquo;s ~32&nbsp;MB &mdash; time-blocking is what makes the
+declared shapes possible at all); for splash, the flash pattern with online softmax. Each carries a
+top docstring of platform facts, each one a measured failure class, and its
+<span class="mono">kernel()</span> docstring states the graded entry contract. Every rollout becomes an
+improvement turn &mdash; the 22%-validity regime, not the 3% one.</p></section>
+<section class="card"><h3>2. Grading moves into the cell, and across its chips</h3>
+<p class="sub">Judges on their own spot slices can be preempted while the trainer stays warm &mdash;
+rollouts pile up unscored and a healthy slice deadlocks. A queued resource is preempted as a UNIT, so
+the grader lives on w3 of the same v5p-32: everything up, or everything down. That costs 25% of the
+cell, and a single judge process grades ONE candidate on ONE chip &mdash; 6% of the cell actually
+working. So the grading host now runs a <b>Ray pool, one actor per chip</b>, with per-test chip counts
+(<span class="mono">resources={"TPU": N}</span>, Ray sets TPU_VISIBLE_CHIPS) ready for splash&rsquo;s
+declared <span class="mono">tp4-*</span>/<span class="mono">tp8-*</span> cases. Actors, not
+fresh-process-per-task: a worker&rsquo;s boot elects baselines and calibrates the noise floor, minutes
+amortized over every item &mdash; and candidate code already runs in a forked subprocess, so a
+core-halting kernel dies in the child regardless. The HTTP queue stays as the durable ingress (leases,
+requeue, 1699 items with zero loss). The RL client moved on-host too (tmux on w0, league&rsquo;s
+pattern): no walltime, no ssh tunnels, shared fate.</p></section>
+<section class="card"><h3>3. The judge now says WHY a kernel is slow</h3>
+<p class="sub">Feedback was a speed ratio and a gate. It now carries a roofline per shape: <b>HBM
+bandwidth used</b> (bytes moved &divide; measured latency &divide; chip peak &mdash; it existed but was
+truncated to the first two cases, hiding exactly the shapes that behave differently) and <b>MXU
+utilization</b>, analytic FLOPs &divide; peak bf16, reported for the candidate <em>and</em> the
+reference so the gap is attributable. A kernel at 15% of both is latency/pipelining bound and neither
+wider tiles nor fewer bytes will help it &mdash; which nothing in the old feedback could say. Both are
+medians over the same 20 interleaved counterbalanced pairs the reward uses, so the model is never shown
+a statistic it is not graded on.</p></section>
+
 <h2>The rf3c contract bench: qwen vs gemma, one prompt (RL deferred until this settles)</h2>
 <p class="sub">Decision: no RL spend until the prompt + format is proven. Both models get the
 IDENTICAL v4 + fixed-output-contract prompt, cold, group 32 per cell, on their standard serving
