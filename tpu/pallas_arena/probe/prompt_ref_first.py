@@ -499,7 +499,8 @@ before committing to one.
 Output one fenced ```python block containing the COMPLETE improved program
 (all imports, all helpers, the `kernel` entry point). It must run as-is;
 no prose after the block, and NO comments inside the program -- spend your
-tokens on code, not commentary.
+tokens on code, not commentary. Include one short docstring at the very top
+of the program summarizing your algorithm and what you changed.
 """
 
 

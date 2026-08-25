@@ -32,12 +32,14 @@
 # equally. Backward speed is HALF the reward -- do not neglect it.
 
 import functools
+import os
 
 import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
 
+INTERPRET = bool(int(os.environ.get("PALLAS_INTERPRET", "0")))
 BLOCK_T = 512   # timesteps per grid step (sequential axis)
 BLOCK_D = 512   # feature lanes per grid step (multiple of 128)
 
@@ -76,24 +78,24 @@ def _bwd_body(x_ref, a_ref, reset_ref, hprev_ref, g_ref, dx_ref, da_ref, dcarry_
     def _init():
         dcarry_ref[...] = jnp.zeros_like(dcarry_ref)
 
-    a = a_ref[0].astype(jnp.float32)
-    reset = reset_ref[0]
-    a_eff = jnp.where(reset, 0.0, a)
-    g_val = jnp.sqrt(jnp.maximum(1.0 - a_eff * a_eff, 0.0))
-    x = x_ref[0].astype(jnp.float32)
-    h_prev = hprev_ref[0]
-    g_cot = g_ref[0]
-    bt = a.shape[0]
+    bt = a_ref.shape[1]
 
     def step(i, dh):                                 # dh: [1, BLOCK_D] f32
         idx = bt - 1 - i                             # reverse time in-block
-        grad_h = g_cot[idx][None, :] + dh
-        dx_ref[0, idx, :] = (grad_h * g_val[idx][None, :])[0]
+        # Same rule as forward: read REFS at the traced index -- indexing a
+        # pre-loaded array at idx emits dynamic_slice, which is forbidden.
+        a_i = a_ref[0, idx, :].astype(jnp.float32)
+        r_i = reset_ref[0, idx, 0]
+        a_eff = jnp.where(r_i, 0.0, a_i)
+        g_val = jnp.sqrt(jnp.maximum(1.0 - a_eff * a_eff, 0.0))
+        grad_h = g_ref[0, idx, :][None, :] + dh
+        dx_ref[0, idx, :] = (grad_h * g_val[None, :])[0]
         # dL/da_t = grad_h * (h_{t-1} - (a/g) * x_t); exactly 0 where reset.
-        inv_g = 1.0 / jnp.maximum(g_val[idx], 1e-6)
-        da = grad_h * (h_prev[idx][None, :] - (a_eff[idx] * inv_g)[None, :] * x[idx][None, :])
-        da_ref[0, idx, :] = jnp.where(reset[idx][None, :], 0.0, da)[0]
-        return grad_h * a_eff[idx][None, :]          # dL/dh_{t-1}
+        inv_g = 1.0 / jnp.maximum(g_val, 1e-6)
+        da = grad_h * (hprev_ref[0, idx, :][None, :]
+                       - (a_eff * inv_g)[None, :] * x_ref[0, idx, :].astype(jnp.float32)[None, :])
+        da_ref[0, idx, :] = jnp.where(r_i, 0.0, da)[0]
+        return grad_h * a_eff[None, :]               # dL/dh_{t-1}
 
     dcarry_ref[...] = jax.lax.fori_loop(0, bt, step, dcarry_ref[...])
 
@@ -127,6 +129,7 @@ def _scan_fwd(x, a, reset):
         out_specs=pl.BlockSpec((1, BLOCK_T, BLOCK_D), lambda i, j, k: (i, k, j)),
         out_shape=jax.ShapeDtypeStruct((b, tp, dp), jnp.float32),
         scratch_shapes=[pltpu.VMEM((1, BLOCK_D), jnp.float32)],
+        interpret=INTERPRET,
         compiler_params=pltpu.CompilerParams(
             dimension_semantics=("parallel", "parallel", "arbitrary"),
         ),
@@ -168,6 +171,7 @@ def _scan_bwd(x, a, reset, h, g):
             jax.ShapeDtypeStruct((b, tp, dp), jnp.float32),
         ],
         scratch_shapes=[pltpu.VMEM((1, BLOCK_D), jnp.float32)],
+        interpret=INTERPRET,
         compiler_params=pltpu.CompilerParams(
             dimension_semantics=("parallel", "parallel", "arbitrary"),
         ),
