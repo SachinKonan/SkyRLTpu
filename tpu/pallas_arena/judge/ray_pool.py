@@ -127,6 +127,7 @@ def run_pool(
     poll_s: float = 1.0,
     heartbeat_frac: float = 3.0,
     max_items: int | None = None,
+    idle_exit_s: float | None = None,
 ) -> int:
     import ray
 
@@ -162,8 +163,17 @@ def run_pool(
     hb.start()
 
     done_count = 0
+    # idle_exit_s: leave when the queue has been empty this long AND nothing
+    # is in flight. None = never (the RL cell's pool must outlive lulls
+    # between steps); the offline fleet sets it so a finished corpus releases
+    # the host instead of holding a spot VM idle.
+    last_work = time.time()
     try:
         while max_items is None or done_count < max_items:
+            if (idle_exit_s is not None and not inflight
+                    and time.time() - last_work > idle_exit_s):
+                print(f"[pool] idle {idle_exit_s:.0f}s with an empty queue; exiting", flush=True)
+                break
             # 1. fill idle actors
             progressed = False
             for slot in pool:
@@ -184,6 +194,7 @@ def run_pool(
                     # fault (excluded from reward) rather than sit on a lease
                     # we cannot serve; loud, because it means misconfiguration.
                     print(f"[pool] WARNING no actor for problem={want}; faulting {item['work_id']}", flush=True)
+                    last_work = time.time()
                     try:
                         _http_json(f"{base}/result", {
                             "lease_id": item["lease_id"], "work_id": item["work_id"],
@@ -193,6 +204,7 @@ def run_pool(
                     except Exception:
                         pass
                     continue
+                last_work = time.time()
                 ref = slot["actor"].grade.remote(payload)
                 inflight[ref] = {
                     "lease_id": item["lease_id"], "work_id": item["work_id"],
@@ -247,6 +259,8 @@ def main() -> None:
     ap.add_argument("--ray-address", default="auto")
     ap.add_argument("--poll-s", type=float, default=1.0)
     ap.add_argument("--max-items", type=int, default=None)
+    ap.add_argument("--idle-exit-s", type=float, default=None,
+                    help="exit after this many idle seconds (offline fleets); default never")
     ap.add_argument("--smoke", action="store_true")
     args = ap.parse_args()
 
@@ -267,6 +281,7 @@ def main() -> None:
         cfg=cfg,
         poll_s=args.poll_s,
         max_items=args.max_items,
+        idle_exit_s=args.idle_exit_s,
     )
     print(f"[pool] exiting after {n} items")
 
