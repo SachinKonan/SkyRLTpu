@@ -83,9 +83,17 @@ def main() -> None:
             cell["truncated"] += 1
         text = row.get("text") or ""
         # Shared with the generator (incl. the repair round's re-extraction):
-        # forcing-cue-first, then last kernel-bearing fenced block.
+        # forcing-cue-first, then last kernel-bearing fenced block. Contract
+        # cells pass the required def names so multi-block answers extract
+        # the block(s) that actually satisfy the contract.
         from pallas_arena.probe.gen_smoke import extract_completion
-        program = extract_completion(text) or extract_program(text)
+        req = None
+        if str(row.get("variant", "")).startswith("rf3c"):
+            from pallas_arena.probe.contract_compose import scan_scaffold
+            from pallas_arena.probe.seam_scaffolds import RGLRU_SCAFFOLD, SPLASH_SCAFFOLD
+            _scaf = {"rg_lru": RGLRU_SCAFFOLD, "splash_attention": SPLASH_SCAFFOLD}[row["task"]]
+            req = list(scan_scaffold(_scaf).required_defs)
+        program = extract_completion(text, required_defs=req) or extract_program(text)
         if not program:
             cell["no_program"] += 1
             verdict["outcome"] = "no_program"

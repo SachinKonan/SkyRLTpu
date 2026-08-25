@@ -33,17 +33,54 @@ FORCE = ("\n\nI have thought about this enough. Here is my final, complete, "
          "`pl.pallas_call` kernel and every import included:\n\n```python\n")
 
 
-def extract_completion(text: str) -> str | None:
+def extract_completion(text: str, required_defs: list[str] | None = None) -> str | None:
     """The program in a completion: after the forcing cue when present
-    (fence-closed or not), else the last fenced block defining kernel()."""
+    (fence-closed or not), else the last fenced block defining kernel().
+
+    required_defs (contract cells): models routinely spread the answer over
+    4-9 fenced blocks (re-thinking in the answer phase); measured on bench
+    3750899, ALL 7 'missing required defs' contract violations were this
+    extractor taking the wrong single block while every required def existed
+    in the text. With required_defs we pick the block defining the most of
+    them, and if they are scattered, merge the parsable def/import/TUNABLE
+    blocks into one payload."""
     import re
     cue = "I have thought about this enough"
+    region = text.rsplit(cue, 1)[1] if cue in text else text
+    blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", region, re.S)
+    # An unclosed trailing fence (cap hit mid-block) still carries code.
+    if region.count("```") % 2 == 1 and "```python\n" in region:
+        blocks.append(region.rsplit("```python\n", 1)[1])
+    if not blocks and region is not text:
+        blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", text, re.S)
+
+    if required_defs and blocks:
+        def score(b: str) -> int:
+            return sum(1 for fn in required_defs if f"def {fn}" in b)
+        best = max(blocks, key=score)
+        if score(best) == len(required_defs):
+            return best.strip()
+        import ast
+        keep = []
+        for b in blocks:
+            try:
+                ast.parse(b)
+            except SyntaxError:
+                continue
+            if score(b) or re.search(r"(^|\n)(import |from |def |[A-Z_][A-Z_0-9]*\s*=)", b):
+                keep.append(b)
+        merged = "\n\n".join(keep).strip()
+        if merged and score(merged) > score(best):
+            return merged
+        if score(best):
+            return best.strip()
+        # fall through: no block carries any required def
+
     if cue in text:
         after = text.rsplit(cue, 1)[1]
         if "```python\n" in after:
             after = after.split("```python\n", 1)[1]
         return after.split("```", 1)[0].strip() or None
-    blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", text, re.S)
     with_kernel = [b for b in blocks if "def kernel" in b]
     if with_kernel:
         return with_kernel[-1].strip()
