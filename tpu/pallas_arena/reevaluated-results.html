@@ -2218,6 +2218,25 @@ Graded on CPU: contract compose &rarr; validity gates &rarr; interpret-mode corr
 16,384 &mdash; gemma&rsquo;s tokenizer inflates the ~4.8k-qwen-token splash prompt), the ~4.9k think +
 ~5k answer budget clips 29/32 mid-program. Splash-on-gemma needs bigger serving ctx or a smaller prompt.</td></tr>
 </table>
+<h3>The healing round (one repair turn = the RL improvement turn, simulated)</h3>
+<p class="sub">Every turn-1 failure re-prompted with its own program + verbatim gate error; A/B on
+whether the heal turn may think. Same cohorts, same errors, one knob.</p>
+<table>
+<tr><th>heal arm</th><th>valid</th><th>correct</th><th>median tok</th></tr>
+<tr><td class="mono">gemma &middot; rg_lru &middot; THINK</td><td><b>21.9%</b></td><td><b>15.6% (5/32)</b></td><td>7.5k</td></tr>
+<tr><td class="mono">gemma &middot; rg_lru &middot; no-think</td><td>0</td><td>0</td><td>1.4k</td></tr>
+<tr><td class="mono">qwen &middot; rg_lru &middot; THINK</td><td>9.4%</td><td>6.2% (2/32)</td><td rowspan="2">think ~8k+ / nt 4.2k</td></tr>
+<tr><td class="mono">qwen &middot; rg_lru &middot; no-think</td><td>3.1%</td><td>0</td></tr>
+<tr><td class="mono">qwen &middot; splash &middot; THINK</td><td>12.0%</td><td><b>12.0% (3/25) &mdash; first correct splash kernels EVER</b></td><td>&nbsp;</td></tr>
+<tr><td class="mono">qwen &middot; splash &middot; no-think</td><td>4.0%</td><td>4.0% (1/25)</td><td>&nbsp;</td></tr>
+</table>
+<p class="sub"><b>Verdicts.</b> (a) <b>Healing works and multi-turn is the unlock</b>: one repair turn
+took gemma rg_lru from 1 to 6 correct lineages (19% of 32), and produced the campaign&rsquo;s first
+correct splash kernels (fwd + both backwards, on the task no cold arm ever cracked). (b) <b>Thinking
+is load-bearing for repair</b>: the cheap no-think heal converts at 0&ndash;1/3 the think rate, and
+gemma no-think actively broke previously-executing structure (0% valid from a 9.4%-valid cohort).
+The ~5&times; token saving is not worth the conversion collapse &mdash; RL improvement turns keep
+thinking ON. 11 correct kernels banked to <span class="mono">runs/pallas_arena/correct-*-heal-*.py</span>.</p>
 <p class="sub">Findings so far. (1) <b>Format is solved for both models</b>: zero no-program outputs,
 zero/near-zero truncation &mdash; the contract killed the no-pallas and machinery-syntax classes.
 (2) <b>Cold semantic validity is unchanged for qwen</b> (~3%, same as whole-program); its errors are
