@@ -55,6 +55,11 @@ COMPILE_BUDGET_S=${COMPILE_BUDGET_S:-90}
 # FRESH prefix: the swept-backward contract (e76a5ee4) changed every reward;
 # a cache from the old fold must never serve RL verdicts.
 CACHE=${CACHE:-gs://sk7524-pallas-arena-us-east5/reward-cache-rl-rglru-v1}
+# Comma list; judge i grades problem PROBLEMS[(i-1) % len] -- lets one fleet
+# carry rg_lru AND splash judges (seed-parity validation needs both).
+PROBLEMS=${PROBLEMS:-rg_lru}
+IFS=',' read -r -a problems_arr <<< "$PROBLEMS"
+problem_for() { local idx="${1##*-}"; echo "${problems_arr[$(( (idx-1) % ${#problems_arr[@]} ))]}"; }
 MIN_JUDGES=${MIN_JUDGES:-2}
 
 repo_root=/n/fs/vision-mix/sk7524/SkyRLTpu
@@ -219,7 +224,7 @@ slot_supervisor() {
       timeout 14400 gcloud compute tpus tpu-vm ssh "$name" --zone="$ZONE" --project="$PROJECT" --worker=0 \
         --command="set -o pipefail; cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \
           ~/arena-venv/bin/python -m pallas_arena.judge.worker \
-          --problem rg_lru --queue http://127.0.0.1:${PORT} --sim-mode real \
+          --problem $(problem_for "$name") --queue http://127.0.0.1:${PORT} --sim-mode real \
           --timing-pairs 20 --worker-id ${name} --compile-budget-s ${COMPILE_BUDGET_S} \
           --cache '${CACHE}' --boot-report \$HOME/boot-report.json --poll-s 2 \
           2>&1 | tee -a \$HOME/worker-progress.log" \

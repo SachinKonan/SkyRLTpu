@@ -49,17 +49,21 @@ def _fwd_body(x_ref, a_ref, reset_ref, h_ref, carry_ref):
     def _init():
         carry_ref[...] = jnp.zeros_like(carry_ref)
 
-    a = a_ref[0].astype(jnp.float32)                 # [BLOCK_T, BLOCK_D]
-    reset = reset_ref[0]                             # [BLOCK_T, 1] bool
-    a = jnp.where(reset, 0.0, a)                     # a' = 0 where reset
-    gx = jnp.sqrt(jnp.maximum(1.0 - a * a, 0.0)) * x_ref[0].astype(jnp.float32)
-
     def step(i, h):                                  # h: [1, BLOCK_D] f32
-        h = a[i][None, :] * h + gx[i][None, :]
+        # Read the REFS at the traced index. Loading a block into a jnp
+        # array first and indexing THAT at i emits dynamic_slice, which
+        # does not exist in Pallas TPU (it killed the first version of
+        # this very kernel). Refs support dynamic indexing; arrays do not.
+        a_i = a_ref[0, i, :].astype(jnp.float32)     # [BLOCK_D]
+        r_i = reset_ref[0, i, 0]
+        a_eff = jnp.where(r_i, 0.0, a_i)
+        gx_i = (jnp.sqrt(jnp.maximum(1.0 - a_eff * a_eff, 0.0))
+                * x_ref[0, i, :].astype(jnp.float32))
+        h = a_eff[None, :] * h + gx_i[None, :]
         h_ref[0, i, :] = h[0]
         return h
 
-    carry_ref[...] = jax.lax.fori_loop(0, a.shape[0], step, carry_ref[...])
+    carry_ref[...] = jax.lax.fori_loop(0, a_ref.shape[1], step, carry_ref[...])
 
 
 def _bwd_body(x_ref, a_ref, reset_ref, hprev_ref, g_ref, dx_ref, da_ref, dcarry_ref):

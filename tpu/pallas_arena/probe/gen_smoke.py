@@ -210,13 +210,16 @@ def main() -> None:
         # SEEDED ONE-STEP TEST: every sample is an improvement turn on ONE
         # known-good annotated program (production-structure seed). This is
         # the erdos/ac-inequalities initial-state pattern applied to kernels.
-        from pallas_arena.probe.prompt_ref_first import IMPROVE_TEMPLATE
+        from pallas_arena.probe.prompt_ref_first import IMPROVE_TEMPLATE, build3seed
         seed_program = open(args.seed_file).read()
-        for (task, variant), _ in CELLS.items():
+        for (task, variant), (cases, _kind) in CELLS.items():
             if want and (task, variant) not in want:
                 continue
+            # Lean seed-mode base: no reference impl, no stub scaffold, no
+            # contract -- the seed below IS the working structure; the model
+            # returns the entire improved program.
             prompt = IMPROVE_TEMPLATE.format(
-                base=base_prompt(task, variant),
+                base=build3seed(task, cases),
                 reward=args.seed_reward,
                 program=seed_program,
                 observation=("passed: correct on every test shape, forward and backward. "

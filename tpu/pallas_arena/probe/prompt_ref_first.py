@@ -176,6 +176,38 @@ _FEATURE_DOCS = {
               "value row."),
 }
 
+_QUICK_REF = """## Pallas TPU quick reference (the API as it actually is)
+
+Imports: `from jax.experimental import pallas as pl` and \
+`from jax.experimental.pallas import tpu as pltpu`.
+
+- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
+  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
+  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
+- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
+  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
+  processes one grid tile; parallelism comes from the grid, not thread ids.
+- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
+  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
+- Inside the body a ref has its BLOCK shape, leading 1s included -- a
+  `(1, t, d)` block reads as `ref[0]` -> `[t, d]`. Keep 1-D quantities at an
+  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
+- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
+- Control flow: never a Python `if`/`while` on traced values -- use
+  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
+  recursion anywhere.
+- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
+  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
+  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
+- `jax.custom_vjp`: after defining fwd/bwd you MUST call
+  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
+  forgot to connect them.
+- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
+  in multiples of 128, second-to-last in multiples of 8; the last two dims of
+  a block shape are what the lowering's divisibility rules inspect.
+
+"""
+
 _HEADER = """You are an expert JAX/Pallas TPU engineer. Below is a correct but slow \
 implementation of {title}. Rewrite it as a fast TPU kernel.
 
@@ -220,37 +252,7 @@ and above 1.0 beats it. Your total reward is the GEOMETRIC MEAN of these scores 
 across all test shapes (so a win at one shape cannot buy back a loss at another \
 -- be uniformly fast, including at the non-divisible shapes).
 
-## Pallas TPU quick reference (the API as it actually is)
-
-Imports: `from jax.experimental import pallas as pl` and \
-`from jax.experimental.pallas import tpu as pltpu`.
-
-- `pl.pallas_call(body_fn, grid=..., in_specs=[pl.BlockSpec(block_shape, index_map)],
-  out_specs=..., out_shape=jax.ShapeDtypeStruct(shape, dtype))` -- `out_shape`
-  is REQUIRED; omitting it is the single most common TypeError in prior attempts.
-- Grid position: `pl.program_id(axis)`. Pallas has NO threads -- there is no
-  ThreadIdx / thread_idx / smem / GlobalMemory / allocate. One body invocation
-  processes one grid tile; parallelism comes from the grid, not thread ids.
-- A Ref is NOT an array: index it before any math (`x = x_ref[...]`,
-  `q = q_ref[0]`), write with `out_ref[...] = v`. There is no pl.load/pl.store.
-- Inside the body a ref has its BLOCK shape, leading 1s included -- a
-  `(1, t, d)` block reads as `ref[0]` -> `[t, d]`. Keep 1-D quantities at an
-  explicit trailing unit dim (`[t, 1]`) so they broadcast against `[t, d]`.
-- Scratch: `pltpu.VMEM((shape), dtype)` / `pltpu.SMEM(...)` -- UPPERCASE.
-- Control flow: never a Python `if`/`while` on traced values -- use
-  `jnp.where`, `jax.lax.cond`, `jax.lax.fori_loop`, `jax.lax.scan`. No
-  recursion anywhere.
-- Dtypes: `x.astype(jnp.float32)` (`jnp.cast` does not exist). Matmuls on
-  bf16 inputs MUST pass `preferred_element_type=jnp.float32` and keep
-  accumulators/max/sum in float32 -- kernels that skip this fail tolerance.
-- `jax.custom_vjp`: after defining fwd/bwd you MUST call
-  `fn.defvjp(fwd, bwd)` -- several prior attempts built both halves and
-  forgot to connect them.
-- Budget: ~32 MB VMEM per invocation for all refs + scratch. Last-dim tiles
-  in multiples of 128, second-to-last in multiples of 8; the last two dims of
-  a block shape are what the lowering's divisibility rules inspect.
-
-## Common failure patterns from prior attempts (measured), and the fix
+""" + _QUICK_REF + """## Common failure patterns from prior attempts (measured), and the fix
 
 1. Plain `jax.numpy`/`lax` implementation with NO `pl.pallas_call` (20% of
    all failures) -- automatically rejected however fast; the compute must run
@@ -431,6 +433,66 @@ def build3s(task: str, case_names: list[str]) -> str:
     prompt = build3(task, case_names, example=False)
     head, _, tail = prompt.rpartition("## Output")
     return head + _SCAFFOLD_SECTION.format(scaffold=scaffold) + "\n## Output" + tail
+
+
+def build3seed(task: str, case_names: list[str]) -> str:
+    """Seed-mode base prompt: for improvement turns on a WORKING seed program.
+
+    Deliberately lean -- the seed shown in the improvement wrapper replaces
+    both the reference implementation (it IS correct code carrying the math
+    in its docstrings) and the stub scaffold (it IS a complete structure),
+    and there is no output contract: the model returns the ENTIRE improved
+    program, because structural freedom (re-blocking, new grids) is exactly
+    what improvement turns are for."""
+    t = _TASKS[task]
+    shapes, feature_lines = _shapes_table3(t["problem"], case_names)
+    prompt = _SEED_HEADER.format(
+        title=t["title"],
+        entry=t["entry"],
+        io=t["io"],
+        shapes=shapes,
+        shape_note=t["shape_note"],
+        baseline=t["baseline"],
+    )
+    inserts = ""
+    if task in _RF3_BWD:
+        inserts += _BWD_SECTION.format(**_RF3_BWD[task])
+    if feature_lines:
+        inserts += _FEATURE_SECTION.format(feature_lines=feature_lines)
+    if inserts:
+        head, _, tail = prompt.rpartition("## Output")
+        prompt = head + inserts + "\n## Output" + tail
+    return prompt
+
+
+_SEED_HEADER = """You are an expert JAX/Pallas TPU kernel engineer.
+
+# {title}
+
+Below you will find your current WORKING kernel implementation and its
+verdict from the judge. Your job is to make it FASTER than the production
+baseline ({baseline}) while staying correct on every test shape, forward
+and backward.
+
+## Entry point
+
+{entry}
+
+{io}
+
+## Graded shapes
+
+{shapes}
+{shape_note}
+
+""" + _QUICK_REF + """
+## Output
+
+Output one fenced ```python block containing the COMPLETE improved program
+(all imports, all helpers, the `kernel` entry point). It must run as-is;
+no prose after the block, and NO comments inside the program -- spend your
+tokens on code, not commentary.
+"""
 
 
 def build3c(task: str, case_names: list[str]) -> str:
