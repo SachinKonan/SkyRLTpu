@@ -234,8 +234,16 @@ def run_pool(
                         "lease_id": meta["lease_id"], "work_id": meta["work_id"], "result": result,
                     })
                     done_count += 1
+                    # WHY it failed, not just that it did: without the gate and
+                    # first violation here, a systematic rejection (every
+                    # candidate dying at the same pregate) is invisible until
+                    # someone reads the caller's results file.
+                    why = ""
+                    if not result.get("passed"):
+                        v = result.get("violations") or []
+                        why = f" gate={result.get('gate')} {str(v[0])[:120] if v else ''}"
                     print(f"[pool] {meta['work_id']} done in {result['item_wall_s']:.1f}s "
-                          f"passed={result.get('passed')} ({done_count} total)", flush=True)
+                          f"passed={result.get('passed')}{why} ({done_count} total)", flush=True)
                 except Exception as e:
                     print(f"[pool] result post failed for {meta['work_id']}: {e!r}", flush=True)
             if not ready and not progressed:
