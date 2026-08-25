@@ -2213,9 +2213,10 @@ Graded on CPU: contract compose &rarr; validity gates &rarr; interpret-mode corr
 <tr><td class="mono"><b>gemma &middot; rg_lru:rf3c</b></td><td>32</td><td><b>9.4% (3)</b></td>
 <td><b>3.1% (1) &mdash; first COLD-correct rg_lru kernel</b></td><td>6.2%</td>
 <td>ValueError 15 (9&times; &ldquo;scan with 1 extensive output&rdquo;, 6&times; broadcast), TypeError 8, contract 4</td></tr>
-<tr><td class="mono">gemma &middot; splash:rf3c</td><td>32</td><td colspan="4">rerun pending &mdash; all 32 requests 400&rsquo;d:
-gemma&rsquo;s tokenizer inflates the splash prompt past 16,384 with the 10,240 think cap; generator now
-measures true prompt tokens on a 400 and clamps with a ~5k answer reserve</td></tr>
+<tr><td class="mono">gemma &middot; splash:rf3c</td><td>32</td><td>0</td><td>0</td><td><b>90.6%</b></td>
+<td>context-bound, not ability-bound: after the 400-clamp fix (first run: all 32 requests overflowed
+16,384 &mdash; gemma&rsquo;s tokenizer inflates the ~4.8k-qwen-token splash prompt), the ~4.9k think +
+~5k answer budget clips 29/32 mid-program. Splash-on-gemma needs bigger serving ctx or a smaller prompt.</td></tr>
 </table>
 <p class="sub">Findings so far. (1) <b>Format is solved for both models</b>: zero no-program outputs,
 zero/near-zero truncation &mdash; the contract killed the no-pallas and machinery-syntax classes.
