@@ -12,13 +12,19 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import pathlib
 import sys
 import time
 import urllib.request
 
 REPO = pathlib.Path("/n/fs/vision-mix/sk7524/SkyRLTpu")
-OUT = REPO / "runs/pallas_arena/seed-parity-results.json"
+OUT = pathlib.Path(os.environ.get(
+    "ARENA_PARITY_OUT", REPO / "runs/pallas_arena/seed-parity-results.json"))
+# One judge chip boots for ONE problem, so parity runs as sequential passes:
+# ARENA_PARITY_ONLY restricts a pass to the problem the actor is booted for
+# (everything else would just be judge-faulted).
+ONLY = os.environ.get("ARENA_PARITY_ONLY", "").strip()
 
 
 def _load(name, path):
@@ -69,7 +75,10 @@ def gather_candidates() -> dict[str, tuple[str, str]]:
 def main() -> None:
     url = (REPO / "runs/pallas_arena/rl-queue-url.txt").read_text().strip()
     cands = gather_candidates()
-    print(f"queue {url}; submitting {len(cands)} candidates")
+    if ONLY:
+        cands = {k: v for k, v in cands.items() if v[0] == ONLY}
+    print(f"queue {url}; submitting {len(cands)} candidates"
+          + (f" (problem={ONLY})" if ONLY else ""), flush=True)
     wids = {}
     for name, (prob, code) in cands.items():
         wids[name] = _post(url, "/submit", {"problem": prob, "code": code})["work_id"]
@@ -83,7 +92,8 @@ def main() -> None:
                 r = rec.get("result") or {}
                 results[name] = r
                 rw = r.get("reward_with_bwd") or r.get("reward")
-                print(f"[verdict] {name}: passed={r.get('passed')} reward={rw} gate={r.get('gate')}")
+                        print(f"[verdict] {name}: passed={r.get('passed')} reward={rw} "
+                      f"gate={r.get('gate')}", flush=True)
                 del wids[name]
         if wids:
             time.sleep(15)
