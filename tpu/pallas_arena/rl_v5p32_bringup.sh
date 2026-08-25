@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Bring up the pallas-arena RL cell on ONE v5p-32 (the agreed topology):
 #   worker 0    trainer  (tinker API + MaxText fb, sweep1 sizing)
-#   workers 1,2 vLLM     (Qwen3.5-27B, TP=8 each, client-side round robin)
-#   TP counts TensorCores: a v5p host exposes 8 cores; TP=4 made vLLM split
-#   them TP=4 x DP=2, and DP>=2 hard-rejects LoRA (needed for weight sync).
+#   workers 1,2 vLLM     (Qwen3.5-27B, TP=4 each, client-side round robin)
+#   TP=4 = one engine per 4-chip v5p host, the standard geometry everywhere
+#   (cell_worker.sh: qwen/gemma TP=4 x 1 engine/host; only muse is TP=2 x 2).
+#   VLLM_RAY_EXECUTOR=0 is REQUIRED with 2 serving hosts: on the auto/ray
+#   path the launcher sets VLLM_DATA_PARALLEL_SIZE=2 across hosts, and DP>=2
+#   hard-rejects LoRA (needed for weight sync). Round-robin alone does NOT
+#   select the no-ray path.
 #   worker 3    judge    (arena queue :8791 + rg_lru judge worker, local poll)
 #
 # Run from the login node AFTER the jobman slice
@@ -36,7 +40,7 @@ echo "=== [A] trainer (w0) + 2 vLLM engines (w1,w2) $(date +%H:%M:%S) ==="
 env TPU_NAME="$TPU_NAME" PROJECT="$PROJECT" ZONE="$ZONE" \
   REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$SSH_KEY_FILE" \
   TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=1,2 \
-  VLLM_CLIENT_SIDE_ROUND_ROBIN=1 VLLM_TP_SIZE=8 VLLM_ENGINES_PER_HOST=1 \
+  VLLM_CLIENT_SIDE_ROUND_ROBIN=1 VLLM_RAY_EXECUTOR=0 VLLM_TP_SIZE=4 VLLM_ENGINES_PER_HOST=1 \
   MODEL_NAME=Qwen/Qwen3.5-27B TUNIX_MAXTEXT_MODEL_NAME=qwen3.5-27b \
   TUNIX_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense" \
   TUNIX_MAX_TARGET_LENGTH=18432 TUNIX_UNIFORM_SEQ_LEN=18432 TUNIX_TRAIN_TOKEN_BUDGET=73728 \
