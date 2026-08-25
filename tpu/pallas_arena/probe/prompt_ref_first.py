@@ -104,10 +104,12 @@ _RF3_BWD = {
     "splash_attention": {
         "grad_inputs": "(q, k, v)",
         "bwd_baseline": "the production splash kernel's own fused backward",
+        "bwd_note": "",
     },
     "rg_lru": {
-        "grad_inputs": "(x, a)  -- the gradient must flow BACK THROUGH the recurrence, including the gate path",
+        "grad_inputs": "(x, a)",
         "bwd_baseline": "the differentiated production scan",
+        "bwd_note": " The gradient must flow BACK THROUGH the recurrence, including the gate path.",
     },
 }
 
@@ -134,7 +136,7 @@ These kernels are for TRAINING, where the backward is the more expensive
 half of every step -- so it is graded exactly like the forward: at EVERY
 test shape listed above. Per shape, the judge runs `jax.grad` through your
 kernel, checks d/d{grad_inputs} against the reference's gradients
-(per-input tolerances), and times your backward against {bwd_baseline}.
+(per-input tolerances), and times your backward against {bwd_baseline}.{bwd_note}
 Each shape's backward speed ratio joins the geometric mean as its own case:
 
     total  = (fwd_1 * ... * fwd_n  *  bwd_1 * ... * bwd_n)^(1/2n)
@@ -462,8 +464,23 @@ def build3seed(task: str, case_names: list[str]) -> str:
     if inserts:
         head, _, tail = prompt.rpartition("## Output")
         prompt = head + inserts + "\n## Output" + tail
+    # Strategy sits DIRECTLY before Output (after any backward/feature
+    # inserts): the last thing read before the answer format.
+    head, _, tail = prompt.rpartition("## Output")
+    prompt = head + _STRATEGY_SECTION + "\n## Output" + tail
     return prompt
 
+
+_STRATEGY_SECTION = """
+## Strategy
+
+Before writing code, think deeply about the optimization strategy: where
+does the current kernel actually spend its time, what is the limiting
+resource (memory bandwidth, compute-unit utilization, pipelining, tile
+geometry), and which single change buys the most? Weigh several directions
+before committing to one.
+
+"""
 
 _SEED_HEADER = """You are an expert JAX/Pallas TPU kernel engineer.
 
@@ -486,14 +503,6 @@ and backward.
 {shape_note}
 
 """ + _QUICK_REF + """
-## Strategy
-
-Before writing code, think deeply about the optimization strategy: where
-does the current kernel actually spend its time, what is the limiting
-resource (memory bandwidth, compute-unit utilization, pipelining, tile
-geometry), and which single change buys the most? Weigh several directions
-before committing to one.
-
 ## Output
 
 Output one fenced ```python block containing the COMPLETE improved program
