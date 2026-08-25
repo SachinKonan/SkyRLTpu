@@ -176,6 +176,12 @@ def main() -> None:
     ap.add_argument("--gens-from", default="", help="gens jsonl matching --repair-from")
     ap.add_argument("--enable-thinking-kwarg", action="store_true",
                     help="send chat_template_kwargs enable_thinking=True (gemma needs it; qwen thinks by default)")
+    ap.add_argument("--seed-file", default="",
+                    help="path to a WORKING annotated program: run one improvement turn per "
+                         "sample on it (the seeded-RL one-step test). Cell tasks come from "
+                         "--cells; variant is tagged +seed.")
+    ap.add_argument("--seed-reward", default="1.0x (parity with the production kernel -- reward only accrues ABOVE this)",
+                    help="reward line shown for the seed program")
     ap.add_argument("--no-think", action="store_true",
                     help="chat_template_kwargs enable_thinking=False and single-phase answer-cap "
                          "generation (the cheap-heal arm: no thinking budget at all)")
@@ -200,7 +206,27 @@ def main() -> None:
         return build3(task, cases, example=example)
 
     jobs = []
-    if args.repair_from:
+    if args.seed_file:
+        # SEEDED ONE-STEP TEST: every sample is an improvement turn on ONE
+        # known-good annotated program (production-structure seed). This is
+        # the erdos/ac-inequalities initial-state pattern applied to kernels.
+        from pallas_arena.probe.prompt_ref_first import IMPROVE_TEMPLATE
+        seed_program = open(args.seed_file).read()
+        for (task, variant), _ in CELLS.items():
+            if want and (task, variant) not in want:
+                continue
+            prompt = IMPROVE_TEMPLATE.format(
+                base=base_prompt(task, variant),
+                reward=args.seed_reward,
+                program=seed_program,
+                observation=("passed: correct on every test shape, forward and backward. "
+                             "This is the seed implementation; reward accrues only for "
+                             "making it FASTER (uniformly across shapes, fwd and bwd)."),
+            )
+            ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
+            for i in range(args.group_size):
+                jobs.append((task, f"{variant}+seed", i, prompt, ph))
+    elif args.repair_from:
         # THE RL IMPROVEMENT TURN, simulated: base prompt + the candidate's
         # own program + the verbatim judge feedback it earned.
         from pallas_arena.probe.prompt_ref_first import IMPROVE_TEMPLATE
