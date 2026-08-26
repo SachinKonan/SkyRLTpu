@@ -21,6 +21,7 @@ Design notes:
     adapter updates (``inference_backend="vllm"``, reusing VllmSamplingClient).
 """
 
+import gc
 import json
 import os
 import time
@@ -162,7 +163,29 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
     vllm_request_timeout_sec: float = Field(default=300.0)
     vllm_max_concurrent_requests: int = Field(default=64)
     vllm_client_side_round_robin: bool = Field(default=False)
+    vllm_route_by_prompt_prefix: bool = Field(
+        default=False,
+        description=(
+            "Route each request by a hash of its prompt prefix instead of its batch "
+            "index, so a two-phase rollout's phase-2 call returns to the engine that "
+            "already holds its phase-1 KV. Requires client-side round robin."
+        ),
+    )
     vllm_group_completions: bool = Field(default=True)
+    free_base_state_after_template: bool = Field(
+        default=False,
+        description=(
+            "Drop the pristine base parameter state once a LoRA template exists. "
+            "qwix.apply_lora_to_model does NOT share the base arrays -- measured on "
+            "muse-glimmer-30b: HBM in_use 12.97 GiB after load -> 48.37 GiB after "
+            "create_model, and that +35.4 GiB is rank-independent (rank 4 and rank 32 "
+            "differ by 1.4 GiB), i.e. it is a second copy of the weights, not adapters. "
+            "The original copy is then only needed to build ADDITIONAL templates, so a "
+            "run that uses one (rank, attn, mlp) combo -- every RL cell -- can release "
+            "it and get the whole 12.97 GiB back. Requesting a second template after "
+            "the release raises instead of silently retraining from nothing."
+        ),
+    )
 
 
 def round_up_seq_len(seq_len: int) -> int:
@@ -400,6 +423,7 @@ class TunixBackend(AbstractBackend):
                 request_timeout_sec=config.vllm_request_timeout_sec,
                 max_concurrent_requests=config.vllm_max_concurrent_requests,
                 client_side_round_robin=config.vllm_client_side_round_robin,
+                route_by_prompt_prefix=config.vllm_route_by_prompt_prefix,
             )
 
         # For maxtext, model_path is an orbax weights dir with no tokenizer
@@ -662,9 +686,19 @@ class TunixBackend(AbstractBackend):
         return "|".join(parts)
 
     def _wrap_with_lora(self, lora_config: types.LoraConfig, seed: int) -> nnx.Module:
-        """Apply qwix LoRA to a fresh merge of the base model (shares base arrays)."""
+        """Apply qwix LoRA to a fresh merge of the base model.
+
+        NOTE: despite the merge, qwix does not share the base arrays -- the wrapped
+        model carries its own copy (see free_base_state_after_template).
+        """
         import qwix
 
+        if self.base_state is None:
+            raise RuntimeError(
+                "base parameter state was released after the first LoRA template "
+                "(free_base_state_after_template=True); a second template cannot be "
+                "built. Disable that option to use more than one LoRA config."
+            )
         model = nnx.merge(self.base_graphdef, self.base_state)
         provider = qwix.LoraProvider(
             module_path=self._module_path_regex(lora_config),
@@ -701,7 +735,34 @@ class TunixBackend(AbstractBackend):
         return template
 
     def _init_lora_state(self, lora_config: types.LoraConfig) -> nnx.State:
-        """Fresh, independently-seeded LoRA state for a new model."""
+        """Fresh, independently-seeded LoRA state for a new model.
+
+        Normally this wraps a second whole model just to read ~0.8 GiB of
+        adapters out of it, which is why create_model is so expensive (see
+        free_base_state_after_template). When the base state has been released
+        we cannot do that -- and must not, since every client restart calls
+        create_model again and would otherwise raise. The cached template
+        already holds a qwix-initialised LoRA state of exactly the right
+        structure, sharding and dtype, so copy that instead.
+
+        Caveat, deliberate: the template is built at seed 0, so a non-zero
+        lora_config.seed cannot be honoured on this path and is logged. It is
+        immaterial for our runs -- one model config per cell, and a resuming
+        client overwrites these values from its checkpoint anyway.
+        """
+        if self.base_state is None:
+            template = self.templates.get(self._template_key(lora_config))
+            if template is None:
+                raise RuntimeError(
+                    "base parameter state was released and no cached template exists "
+                    "for this LoRA config; cannot initialise adapters."
+                )
+            if lora_config.seed != 0:
+                logger.warning(
+                    "LoRA seed %s ignored: base state released, seeding adapters from "
+                    "the cached seed-0 template.", lora_config.seed
+                )
+            return jax.tree.map(jnp.copy, template.lora_shape)
         model = self._wrap_with_lora(lora_config, seed=lora_config.seed)
         return nnx.state(model, nnx.LoRAParam)
 
@@ -946,6 +1007,23 @@ class TunixBackend(AbstractBackend):
             lora_state=lora_state,
             optimizer=optimizer,
         )
+        # Reclaim the two full-model copies this path leaves behind. Measured on
+        # muse-glimmer-30b (v5p, fsdp=4): HBM in_use 12.97 GiB after load ->
+        # 49.79 GiB after create_model, +36.8 GiB that is rank-INDEPENDENT (rank 4
+        # differs by 1.4 GiB), i.e. base weights, not adapters. Two sources:
+        # qwix.apply_lora_to_model does not share the merged arrays, and
+        # _init_lora_state wraps a SECOND whole model just to read ~0.77 GiB of
+        # freshly-seeded adapters. The second one is garbage by the time we get
+        # here; the pristine base_state is only needed to build additional
+        # templates, which single-config runs (every RL cell) never do.
+        gc.collect()
+        if self.config.free_base_state_after_template and self.base_state is not None:
+            self.base_state = None
+            gc.collect()
+            logger.info(
+                "Released the pristine base parameter state (the template holds its own "
+                "copy); additional LoRA configs are unavailable for this process."
+            )
         logger.info(f"Created model {model_id} with lora rank={lora_config.rank}, alpha={lora_config.alpha}")
 
     def delete_model(self, model_id: str) -> None:
@@ -1904,11 +1982,22 @@ class TunixBackend(AbstractBackend):
             int(self.config.maxtext_max_target_length or 32768),
             int(os.environ.get("TTD_TRAIN_MAX_SEQ", "24576") or 24576),
         )
+        # SKYRL_SCORE_FIXED_LEN: pin scoring to ONE bucket so exactly one
+        # scorer program ever exists. The 8192-bucket ladder compiles a NEW
+        # program (each pinning its own arena) as sequences grow across a run;
+        # on memory-edge cells (KL x Erdos) the accumulated scorer arenas
+        # eventually leave the fb unloadable -- observed as ENGINE-SICK trips
+        # arriving one step later per mitigation. Wastes pad compute on short
+        # sequences; only set it where the fb/scorer budget is tight.
+        _fixed = int(os.environ.get("SKYRL_SCORE_FIXED_LEN", "0") or 0)
         out: list[list[float]] = []
         for start in range(0, len(prompts), sub_batch):
             chunk = prompts[start : start + sub_batch]
             raw_len = max(len(p) for p in chunk)
-            max_len = min(score_cap, max(8192, -(-raw_len // 8192) * 8192))
+            if _fixed > 0:
+                max_len = min(score_cap, _fixed)
+            else:
+                max_len = min(score_cap, max(8192, -(-raw_len // 8192) * 8192))
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
