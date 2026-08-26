@@ -302,7 +302,7 @@ def run_pool(
                     pre = stage0_pregate(problem, payload.get("code", ""))
                 except Exception as e:
                     pre = {"passed": True, "note": f"pregate driver error: {e!r}"}
-                if pre.get("gate") not in (None, "all") and not pre.get("passed", True):
+                if pre.get("passed") is False:
                     cand.entries["__pregate__"] = {"fatal": (
                         "pregate", str((pre.get("violations") or ["pregate failed"])[0])[:300])}
                     finish(cand)
