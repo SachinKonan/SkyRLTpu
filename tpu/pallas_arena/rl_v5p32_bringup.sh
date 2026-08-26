@@ -79,6 +79,7 @@ if [ "${GRADER:-ray}" = "ray" ]; then
        --actors ${RAY_ACTORS:-4} --width ${RAY_WIDTH:-1} \
        --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
        --cache ${CACHE} --poll-s 1 \
+       --jax-cache-gcs ${JAX_CACHE_GCS:-gs://sk7524-pallas-arena-us-east5/judge-jax-cache-v5p-8} \
        2>&1 | tee -a ~/worker-progress.log; echo \"[loop] pool exited rc=\$?; restarting in 10s\"; sleep 10; done'"
 else
   tssh 3 "tmux kill-session -t arena-judge 2>/dev/null; tmux new-session -d -s arena-judge \

@@ -246,6 +246,7 @@ slot_supervisor() {
           --actors ${RAY_ACTORS:-4} --width ${RAY_WIDTH:-1} \
           --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
           --cache '${CACHE}' --poll-s 1 ${IDLE_EXIT_S:+--idle-exit-s ${IDLE_EXIT_S}} \
+          --jax-cache-gcs '${JAX_CACHE_GCS:-gs://sk7524-pallas-arena-us-east5/judge-jax-cache-${ACCEL}}' \
           2>&1 | tee -a \$HOME/worker-progress.log"
       else
         remote_cmd="set -o pipefail; cd ~/arena && ARENA_CHILD_JAX_PLATFORMS=cpu ARENA_RLIMIT_GB=32 PYTHONPATH=~/arena \

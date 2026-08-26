@@ -143,6 +143,23 @@ def cpu_per_actor() -> int:
         return 2
 
 
+def _gsutil_rsync(src: str, dst: str, label: str) -> None:
+    import subprocess
+    try:
+        r = subprocess.run(["gsutil", "-m", "-q", "rsync", "-r", src, dst],
+                           capture_output=True, timeout=900)
+        print(f"[cache] {label}: rc={r.returncode} {src} -> {dst}", flush=True)
+    except Exception as e:  # never let cache plumbing break grading
+        print(f"[cache] {label} failed: {type(e).__name__}: {e}", flush=True)
+
+
+def _cache_file_count(path: str) -> int:
+    n = 0
+    for _root, _dirs, files in os.walk(path):
+        n += len(files)
+    return n
+
+
 def run_pool(
     queue_url: str,
     problems: list[str],
@@ -159,6 +176,22 @@ def run_pool(
     base = queue_url.rstrip("/")
     ray.init(address=cfg.get("ray_address", "auto"), ignore_reinit_error=True)
 
+    # GROUND-TRUTH COMPILE CACHE. Every judge boot compiles the production
+    # baseline and the fp32 reference before it can grade anything -- the
+    # bulk of a ~119 s actor boot, paid again on every preemption. Restore
+    # the banked cache first; snapshot it back ONCE after boot, before any
+    # candidate compiles, so the bucket holds baseline entries and not
+    # thousands of throwaway candidate kernels.
+    # The path is keyed by chip: an XLA cache is compiled FOR a target, so a
+    # v6e cache cannot serve a v5p judge (same rule as the vLLM caches).
+    jax_cache_gcs = cfg.get("jax_cache_gcs")
+    local_cache = os.environ.get("JAX_COMPILATION_CACHE_DIR",
+                                 os.path.expanduser("~/jax-compile-cache"))
+    os.makedirs(local_cache, exist_ok=True)
+    if jax_cache_gcs:
+        _gsutil_rsync(jax_cache_gcs, local_cache, "restore")
+        print(f"[cache] {_cache_file_count(local_cache)} local entries after restore", flush=True)
+
     width = int(cfg.get("width", 1))
     cls = make_actor_cls(width)
     pool = []
@@ -170,6 +203,13 @@ def run_pool(
     for i, slot in enumerate(pool):
         info = ray.get(slot["actor"].ready.remote())
         print(f"[pool] actor {i} up: {info}", flush=True)
+
+    if jax_cache_gcs:
+        # Boot is done; the cache now holds exactly the baseline/reference
+        # entries. Snapshot before the first candidate touches it.
+        n = _cache_file_count(local_cache)
+        print(f"[cache] snapshotting {n} entries after boot", flush=True)
+        _gsutil_rsync(local_cache, jax_cache_gcs, "save")
 
     inflight: dict = {}  # ObjectRef -> lease info
     stop = threading.Event()
@@ -312,6 +352,8 @@ def main() -> None:
     ap.add_argument("--width", type=int, default=1, help="chips per actor (TP cases: >1)")
     ap.add_argument("--cache", default=None)
     ap.add_argument("--compile-cache-dir", default=os.path.expanduser("~/jax-compile-cache"))
+    ap.add_argument("--jax-cache-gcs", default=os.environ.get("ARENA_JAX_CACHE_GCS", ""),
+                    help="GCS prefix for the baseline compile cache; MUST be keyed by chip kind")
     ap.add_argument("--timing-pairs", type=int, default=20)
     ap.add_argument("--compile-budget-s", type=float, default=90.0)
     ap.add_argument("--grade-budget-s", type=float, default=900.0)
@@ -330,6 +372,7 @@ def main() -> None:
         "compile_budget_s": args.compile_budget_s,
         "grade_budget_s": args.grade_budget_s,
         "ray_address": args.ray_address,
+        "jax_cache_gcs": args.jax_cache_gcs or None,
         "width": args.width,
         "smoke": args.smoke,
     }
