@@ -40,21 +40,22 @@ CELL_MAXTEXT_KWARGS = {
 CELL_FLCE_TILE = 1024
 
 
-def _batch(tokens: List[int], loss_fn: str):
+def _batch(tokens: List[int], loss_fn: str, n: int = 1):
+    """n datums of identical length -- the packing path only engages with >1."""
     from skyrl.tinker import types
 
     return types.PreparedModelPassBatch(
-        all_model_ids=["mg_probe"],
-        all_model_inputs=[types.ModelInput(chunks=[types.EncodedTextChunk(tokens=tokens)])],
-        all_targets=[list(tokens[1:]) + [tokens[0]]],
-        all_token_weights=[[1.0] * len(tokens)],
-        all_sampling_logprobs=[[0.0] * len(tokens)],
-        all_advantages=[[1.0] * len(tokens)],
-        all_values=[[0.0] * len(tokens)],
-        all_returns=[[0.0] * len(tokens)],
-        all_loss_fns=[loss_fn],
-        all_loss_fn_configs=[{}],
-        request_batch_slices=[("0", "mg_probe", 0, 1)],
+        all_model_ids=["mg_probe"] * n,
+        all_model_inputs=[types.ModelInput(chunks=[types.EncodedTextChunk(tokens=tokens)]) for _ in range(n)],
+        all_targets=[list(tokens[1:]) + [tokens[0]] for _ in range(n)],
+        all_token_weights=[[1.0] * len(tokens) for _ in range(n)],
+        all_sampling_logprobs=[[0.0] * len(tokens) for _ in range(n)],
+        all_advantages=[[1.0] * len(tokens) for _ in range(n)],
+        all_values=[[0.0] * len(tokens) for _ in range(n)],
+        all_returns=[[0.0] * len(tokens) for _ in range(n)],
+        all_loss_fns=[loss_fn] * n,
+        all_loss_fn_configs=[{}] * n,
+        request_batch_slices=[("0", "mg_probe", 0, n)],
     )
 
 
@@ -63,6 +64,17 @@ def main() -> int:
     ap.add_argument("--base-model", required=True)
     ap.add_argument("--orbax", required=True)
     ap.add_argument("--length", type=int, required=True)
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="fb calls to make; the FIRST includes JIT compile, so "
+                         "report the later ones as steady state.")
+    ap.add_argument("--datums", type=int, default=1,
+                    help="How many datums to send; >1 exercises budget packing.")
+    ap.add_argument("--budget", type=int, default=0,
+                    help="train_token_budget; 0 = same as --length (1 seq/microbatch).")
+    ap.add_argument("--remat", default="full",
+                    help="maxtext remat_policy; 'none' omits the key entirely.")
+    ap.add_argument("--nvt", type=int, default=32, help="num_vocab_tiling.")
+    ap.add_argument("--flce", type=int, default=1024, help="flce_tile_size.")
     ap.add_argument("--rank", type=int, default=32,
                     help="LoRA rank. Sweeping this separates LoRA-sized cost "
                          "from base-weight duplication in the create_model delta.")
@@ -87,16 +99,22 @@ def main() -> int:
     from skyrl.backends.tunix_backend import TunixBackend, TunixBackendConfig
     from skyrl.tinker import types
 
-    res: Dict[str, Any] = {"length": L, "kwargs": CELL_MAXTEXT_KWARGS, "flce": CELL_FLCE_TILE}
+    _kwargs = {"ici_fsdp_parallelism": 4, "num_vocab_tiling": args.nvt}
+    if args.remat != "none":
+        _kwargs["remat_policy"] = args.remat
+    res: Dict[str, Any] = {
+        "length": L, "kwargs": _kwargs, "flce": args.flce,
+        "budget": args.budget or L, "seqs_per_microbatch": (args.budget or L) // L,
+    }
 
     cfg = TunixBackendConfig(
         model_source="maxtext",
         maxtext_model_name="muse-glimmer-30b",
         model_path=args.orbax,
         maxtext_max_target_length=L,
-        maxtext_kwargs=dict(CELL_MAXTEXT_KWARGS),
-        flce_tile_size=CELL_FLCE_TILE,
-        train_token_budget=L,
+        maxtext_kwargs=_kwargs,
+        flce_tile_size=args.flce,
+        train_token_budget=(args.budget or L),
         param_dtype="bfloat16",
         max_lora_rank=max(args.rank, 32),
         inference_backend="native",
@@ -123,6 +141,7 @@ def main() -> int:
     backend.create_model("mg_probe", types.LoraConfig(rank=args.rank, alpha=2.0 * args.rank, seed=0))
     res["hbm_after_lora"] = hbm()
     res["rank"] = args.rank
+    res["datums"] = args.datums
     res["free_base"] = args.free_base
     res["create_model_delta_gib"] = round(
         res["hbm_after_lora"]["in_use_gib"] - res["hbm_after_load"]["in_use_gib"], 2)
@@ -135,10 +154,16 @@ def main() -> int:
     tokens = tokens[: L - 1]
     tokens = [min(t, 199000) for t in tokens]
 
-    t0 = time.time()
     try:
-        out = backend.forward_backward(_batch(tokens, "importance_sampling"))
-        res["fb_seconds"] = round(time.time() - t0, 1)
+        _times = []
+        for _i in range(max(1, args.repeat)):
+            _t = time.time()
+            out = backend.forward_backward(_batch(tokens, "importance_sampling", args.datums))
+            _times.append(round(time.time() - _t, 1))
+        res["fb_seconds_each"] = _times
+        res["fb_seconds"] = _times[0]
+        res["fb_steady"] = _times[-1]
+        res["fb_steady_per_datum"] = round(_times[-1] / max(1, args.datums), 2)
         res["fit"] = True
         res["hbm_after_fb"] = hbm()
         o = out["0"].loss_fn_outputs[0]
@@ -147,7 +172,6 @@ def main() -> int:
                 res["mean_loss"] = float(np.mean(o[k]["data"]))
                 break
     except Exception as exc:  # noqa: BLE001
-        res["fb_seconds"] = round(time.time() - t0, 1)
         res["fit"] = False
         msg = str(exc)
         res["error_head"] = msg[:400]
