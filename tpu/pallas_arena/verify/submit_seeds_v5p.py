@@ -43,8 +43,11 @@ def main() -> None:
     base = (REPO / "runs/pallas_arena/rl-queue-url.txt").read_text().strip()
     wids = {}
     for name, (problem, f) in CANDIDATES.items():
+        # width=4: a task pinned to one chip SEES one chip, so tp4 cases
+        # would skip inside it. The whole host per seed grade lets the tp4
+        # cases build their mesh; single-chip cases stay pinned to device 0.
         wids[name] = _post(base, "/submit", {"problem": problem, "code": f.read_text(),
-                                             "tag": f"seedv5p-{name}"})["work_id"]
+                                             "tag": f"seedv5p-{name}", "width": 4})["work_id"]
         print(f"submitted {name} ({problem})", flush=True)
 
     results, deadline = {}, time.time() + 3 * 3600

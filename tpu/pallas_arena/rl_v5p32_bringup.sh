@@ -76,6 +76,7 @@ if [ "${GRADER:-ray}" = "ray" ]; then
     'while true; do cd ~/arena && PYTHONPATH=~/arena JAX_COMPILATION_CACHE_DIR=~/jax-compile-cache \
        ~/arena-venv/bin/python -m pallas_arena.judge.ray_pool \
        --queue http://127.0.0.1:${QUEUE_PORT} --problems ${PROBLEMS:-rg_lru} \
+       --cases 'rg_lru=probe-4x2048x2560,probe-2x1024x2560,probe-8x512x2560,probe-2x4096x2560,probe-4x2048x1024,probe-holdout-2x1500x2560' \
        --actors ${RAY_ACTORS:-4} --width ${RAY_WIDTH:-1} \
        --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
        --cache ${CACHE} --poll-s 1 \

@@ -101,8 +101,15 @@ def grade_one(problem: str, payload: dict, cfg: dict) -> dict:
 
     t0 = time.time()
     rc = cache_mod.RewardCache(cfg["cache"]) if cfg.get("cache") else None
+    # EXPLICIT CASE LISTS. The worker's default (declared non-probe cases) is
+    # wrong for fleet grading: splash's declared shapes cannot be graded on
+    # one chip at all (the fp32 reference materialises 10.9-43.5 GB), and the
+    # prompt declares the PROBE set. tp* cases only run when listed here AND
+    # the task was scheduled wide enough to see the chips.
+    cases = (cfg.get("cases_by_problem") or {}).get(problem)
     worker = PersistentWorker(
         problem,
+        cases=cases,
         smoke=cfg.get("smoke", False),
         timing_pairs=cfg.get("timing_pairs", 20),
         compile_budget_s=cfg.get("compile_budget_s", 90.0),
@@ -312,6 +319,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--queue", required=True)
     ap.add_argument("--problems", default="rg_lru", help="comma list this pool serves")
+    ap.add_argument("--cases", action="append", default=[],
+                    help="problem=case1,case2 (repeatable); REQUIRED in practice -- "
+                         "the worker default grades declared shapes, which for splash "
+                         "cannot run on one chip")
     ap.add_argument("--chips", type=int, default=4, help="TPU chips on this host")
     ap.add_argument("--width", type=int, default=1, help="default chips per test")
     ap.add_argument("--cache", default=None)
@@ -330,7 +341,12 @@ def main() -> None:
     ap.add_argument("--actors", type=int, default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
 
+    cases_by_problem = {}
+    for spec in args.cases:
+        prob, _, names = spec.partition("=")
+        cases_by_problem[prob.strip()] = [c.strip() for c in names.split(",") if c.strip()]
     cfg = {
+        "cases_by_problem": cases_by_problem,
         "cache": args.cache,
         "compile_cache_dir": args.compile_cache_dir,
         "jax_cache_gcs": args.jax_cache_gcs or None,
