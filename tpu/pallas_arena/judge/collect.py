@@ -127,6 +127,14 @@ def merge_case_results(
             merged[k].update(r.get(k) or {})
         floor = r.get("task_noise_floor") or default_floor
         merged["case_noise_floors"][case] = round(floor, 4)
+        if floor > 0.5:
+            # A noise floor above 50% means the ref-vs-ref control could not
+            # tell the same function from itself -- the chip was thrashing
+            # (measured during the device-busy incident: floors so large that
+            # garbage 2.8x ratios gated to 1.0). Nothing timed there is
+            # meaningful; exclude rather than launder it through the geomean.
+            merged["excluded_cases"][case] = f"noise floor {floor:.2f} -- timing environment untrustworthy"
+            continue
         if r.get("task_boot_s") is not None:
             merged["case_boot_s"][case] = r["task_boot_s"]
 

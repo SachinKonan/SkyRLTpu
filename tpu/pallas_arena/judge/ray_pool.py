@@ -47,7 +47,9 @@ import urllib.request
 
 from pallas_arena.judge import collect
 
-MAX_PENDING_FACTOR = 2   # lease new candidates while pending tasks < chips * this
+MAX_PENDING_FACTOR = 1   # never queue more tasks than chips: a dying
+                         # process must release its chip before the next
+                         # task lands on it (device-busy class)
 
 
 def _http_json(url: str, payload: dict | None = None, timeout: float = 30.0):
@@ -103,6 +105,26 @@ def grade_case(problem: str, case: str, payload: dict, cfg: dict) -> dict:
 
     t0 = time.time()
     rc = cache_mod.RewardCache(cfg["cache"]) if cfg.get("cache") else None
+    # DEVICE-BUSY RETRY: after a driver restart (or a fast chip turnover) the
+    # previous task's process may still hold libtpu while dying -- measured:
+    # 5 of 8 tasks died at jax xla_bridge init with device-busy, and their
+    # exclusion left a 3-case verdict with thrashed timings. Give the chip up
+    # to a minute to free before failing the task.
+    import jax  # noqa: F401 -- imported HERE so init happens under the retry
+    last = None
+    for attempt in range(4):
+        try:
+            import jax as _j
+            _j.local_devices()
+            last = None
+            break
+        except Exception as e:
+            last = e
+            print(f"[task {case}] device init attempt {attempt + 1} failed "
+                  f"({str(e)[:80]}); retrying in 15s", flush=True)
+            time.sleep(15)
+    if last is not None:
+        raise RuntimeError(f"device never freed: {last}")
     worker = PersistentWorker(
         problem,
         cases=[case],
