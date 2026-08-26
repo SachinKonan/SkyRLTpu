@@ -1235,7 +1235,12 @@ class PersistentWorker:
         would replay the wrong verdict and make a contract change look like a
         no-op.
         """
-        return f"bwdgate={int(self.problem.bwd_gates)}" if self.problem.has_bwd else ""
+        # The CASE LIST is part of the contract identity: per-case dispatch
+        # grades the same code with cases=[one shape] per task, and without
+        # the list in the key, case A's verdict would cache-hit case B's.
+        names = ",".join(c.name for c in self.scored_cases + self.holdout_cases)
+        bwd = f"bwdgate={int(self.problem.bwd_gates)}" if self.problem.has_bwd else ""
+        return f"{bwd}|cases={names}"
 
     def _store(self, code: str, result: dict) -> None:
         if self.cache is None:

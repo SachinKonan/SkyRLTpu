@@ -1,46 +1,39 @@
-"""Ray grading pool for the cell's dedicated grading host.
+"""Ray grading pool: PER-TEST dispatch over the host's chips.
 
-TOPOLOGY. In the v5p-32 RL cell the grading host (w3) is preempted with the
-rest of the slice -- shared fate, so there is never a warm trainer waiting on
-dead graders. But ONE judge process grades ONE candidate on ONE chip, leaving
-three of the host's four chips idle: 6% of the cell's compute doing the work
-that gates every RL step.
+THE UNIT OF SCHEDULING IS (candidate, shape case), not the candidate:
 
-DESIGN: ONE RAY HEAD, ONE TASK PER TEST, CHIPS AS A RESOURCE.
+    llm program -> cheap error check (CPU, no chips)
+                -> one Ray task PER TEST, resources={"TPU": 4 if tp4 else 1}
+                -> each task compares fwd AND bwd against ground truth on its
+                   own chip(s), runs the 20 counterbalanced pairs, reports
+                   its medians
+                -> the collector applies the global rules (correct-everywhere,
+                   geomean over all fwd+bwd factors, per-case noise-floor
+                   gating) and posts ONE verdict to the queue.
 
-    grade.options(resources={"TPU": width}).remote(...)
+Why per-test:
+  * A candidate's wall time becomes max-over-tests instead of sum: each test
+    is its own Mosaic compile (the measured dominant cost), so tests of one
+    candidate parallelise across chips.
+  * TP composes with throughput: a tp4 test holds 4 chips only while it
+    runs; single-chip tests pack around it. Per-candidate width forced the
+    whole grade to the widest case.
+  * Failure blast radius is one test: a core-halting shape no longer takes
+    the whole grade's evidence with it (though it still zeroes the verdict
+    -- a halt is the candidate's fault).
 
-Ray schedules TPU chips as a resource, so a test that needs 4 chips is
-`width=4` and a normal test is `width=1` -- no hand-rolled chip mutex. This
-is what makes TENSOR-PARALLEL tests work: a task holds its chips only while
-it runs and releases them on return, so a TP-4 test is scheduled as soon as
-four chips free up. (Long-lived width-1 ACTORS cannot do this: they hold
-every chip permanently and Ray will not preempt them, so a {"TPU": 4}
-request could never be satisfied on the same host.) splash declares
-tp4-*/tp8-* shape cases, so variable width is a real requirement; whether
-their TIMINGS are trustworthy is open task #12, but scheduling them
-correctly is this module's job.
+Fresh process per task (max_calls=1) stays load-bearing: JAX/libtpu bind to
+TPU_VISIBLE_CHIPS at process init, so reuse could carry a stale pin (silent
+co-tenancy -- ratio rewards make wrong numbers look plausible), and a halt
+poisons at most its own process. Affordable because the GROUND-TRUTH COMPILE
+CACHE is restored from GCS; every verdict carries per-case task_boot_s so
+the overhead stays measured, not assumed.
 
-max_calls=1 (a FRESH PROCESS per task) is load-bearing, not caution: JAX and
-libtpu initialise once per process and bind to TPU_VISIBLE_CHIPS at init, so
-a REUSED Ray worker could carry a stale chip pin into a task scheduled on
-different chips -- silent co-tenancy, and since the reward is a latency
-ratio, wrong numbers look plausible rather than broken. A fresh process pins
-cleanly every time; it also means a core-halting candidate (measured: one
-halted a SparseCoreSequencer and junked 102 subsequent verdicts) poisons at
-most its own process, with libtpu re-initialising on the next task.
+STAGE 0 runs in the driver on CPU (grader child, JAX_PLATFORMS=cpu): a
+syntax/dialect-broken candidate costs ~1.5 s and ZERO chip tasks.
 
-What makes fresh processes affordable is the banked GROUND-TRUTH COMPILE
-CACHE: the baseline/reference compiles dominate a judge's warmup and are
-restored from GCS instead of recompiled. Every verdict carries task_boot_s
-so the true per-task overhead stays measured, not assumed.
-
-INGRESS STAYS HTTP. The queue keeps the durable lease/requeue semantics that
-survived 1699 items with zero loss; Ray is only the intra-host scheduler.
-
-Run (on the grading host, after ray_start_tpu.sh):
-    python -m pallas_arena.judge.ray_pool --queue http://127.0.0.1:8791 \\
-      --problems rg_lru --chips 4 --cache gs://... --jax-cache-gcs gs://...
+INGRESS STAYS HTTP: the queue keeps lease/requeue semantics (1699 items,
+zero lost). Ray is only the intra-host scheduler.
 """
 
 from __future__ import annotations
@@ -51,6 +44,10 @@ import os
 import threading
 import time
 import urllib.request
+
+from pallas_arena.judge import collect
+
+MAX_PENDING_FACTOR = 2   # lease new candidates while pending tasks < chips * this
 
 
 def _http_json(url: str, payload: dict | None = None, timeout: float = 30.0):
@@ -67,13 +64,13 @@ def _http_json(url: str, payload: dict | None = None, timeout: float = 30.0):
 
 
 def _pin_chips() -> str:
-    """Bind this process to the chips Ray assigned to this task.
+    """Bind this task's process to the chips Ray assigned it.
 
     Ray publishes the assignment via the runtime context; whether it also
     exports TPU_VISIBLE_CHIPS varies by version (measured on ray 2.58: it
-    did NOT). libtpu reads the variable at process init, so this must run
-    before jax is imported. Only plain chip indices are usable; anything
-    else would break init for the task, which is worse than not pinning.
+    did NOT). libtpu reads the variable at init, so this runs before jax is
+    imported. Only plain chip indices are usable; anything else would break
+    init, which is worse than not pinning.
     """
     try:
         import ray
@@ -88,8 +85,13 @@ def _pin_chips() -> str:
     return os.environ.get("TPU_VISIBLE_CHIPS", "?")
 
 
-def grade_one(problem: str, payload: dict, cfg: dict) -> dict:
-    """Grade ONE candidate in this task's own fresh process."""
+def grade_case(problem: str, case: str, payload: dict, cfg: dict) -> dict:
+    """ONE test: grade the candidate at ONE shape case, fwd + bwd, in this
+    task's own fresh process on its own chip(s)."""
+    # The driver runs with JAX_PLATFORMS=cpu (stage 0); tasks must not
+    # inherit that even if the runtime propagates env.
+    if os.environ.get("JAX_PLATFORMS") == "cpu":
+        del os.environ["JAX_PLATFORMS"]
     pinned = _pin_chips()
     cache_dir = cfg.get("compile_cache_dir")
     if cache_dir:
@@ -101,52 +103,42 @@ def grade_one(problem: str, payload: dict, cfg: dict) -> dict:
 
     t0 = time.time()
     rc = cache_mod.RewardCache(cfg["cache"]) if cfg.get("cache") else None
-    # EXPLICIT CASE LISTS. The worker's default (declared non-probe cases) is
-    # wrong for fleet grading: splash's declared shapes cannot be graded on
-    # one chip at all (the fp32 reference materialises 10.9-43.5 GB), and the
-    # prompt declares the PROBE set. tp* cases only run when listed here AND
-    # the task was scheduled wide enough to see the chips.
-    cases = (cfg.get("cases_by_problem") or {}).get(problem)
     worker = PersistentWorker(
         problem,
-        cases=cases,
+        cases=[case],
         smoke=cfg.get("smoke", False),
         timing_pairs=cfg.get("timing_pairs", 20),
         compile_budget_s=cfg.get("compile_budget_s", 90.0),
         grade_budget_s=cfg.get("grade_budget_s", 900.0),
         cache=rc,
-        worker_id=f"ray-task-{pinned}",
+        worker_id=f"ray-{case}-{pinned}",
     )
     boot = worker.boot()
     t_boot = time.time() - t0
     result = worker.grade_code(payload.get("code", ""), tag=payload.get("tag"))
-    # The number that keeps this design honest: if warm boots stop being
-    # cheap, it shows up on every verdict rather than in a forgotten note.
     result["task_boot_s"] = round(t_boot, 1)
     result["task_chips"] = pinned
     result["task_noise_floor"] = boot.get("noise_floor")
+    result["task_case"] = case
     return result
 
 
+def stage0_pregate(problem: str, code: str) -> dict:
+    """Cheap error check, CPU only: AST/dialect/trace gates via the grader
+    child with JAX_PLATFORMS=cpu. A broken candidate never costs a chip."""
+    from pallas_arena.judge import grader
+
+    return grader.grade(
+        problem, code, mode="pregate", timeout_s=120.0,
+        child_env={"JAX_PLATFORMS": "cpu", "PALLAS_INTERPRET": "1"},
+    )
+
+
 def cpu_per_task() -> int:
-    """Mosaic compiles are CPU-hungry and now run concurrently; leave the
-    host room for the queue and any trainer sidecars."""
     try:
         return max(2, (os.cpu_count() or 8) // 8)
     except Exception:
         return 2
-
-
-def item_width(payload: dict, default: int = 1) -> int:
-    """Chips this test needs: explicit width/tp/chips in the payload wins."""
-    for key in ("width", "tp", "chips"):
-        v = payload.get(key)
-        if v:
-            try:
-                return max(1, int(v))
-            except (TypeError, ValueError):
-                continue
-    return default
 
 
 def _gsutil_rsync(src: str, dst: str, label: str) -> None:
@@ -167,6 +159,19 @@ def _cache_file_count(path: str) -> int:
     return n
 
 
+class _Candidate:
+    def __init__(self, item: dict, problem: str, cases: list[str]):
+        self.work_id = item["work_id"]
+        self.lease_id = item["lease_id"]
+        self.payload = item.get("payload") or {}
+        self.problem = problem
+        self.cases = cases
+        self.t0 = time.time()
+        self.pending: dict = {}        # ObjectRef -> case name
+        self.entries: dict = {}        # case -> collect entry
+        self.done = False
+
+
 def run_pool(
     queue_url: str,
     problems: list[str],
@@ -176,15 +181,15 @@ def run_pool(
     poll_s: float = 1.0,
     max_items: int | None = None,
     idle_exit_s: float | None = None,
+    max_tp_width: int = 4,
 ) -> int:
     import ray
 
     base = queue_url.rstrip("/")
     ray.init(address=cfg.get("ray_address", "auto"), ignore_reinit_error=True)
 
-    # GROUND-TRUTH COMPILE CACHE: restore before any task runs; snapshot back
-    # after the first grade completes (the cache then holds baseline entries,
-    # not thousands of throwaway candidate kernels).
+    # GROUND-TRUTH COMPILE CACHE: restore before any task; snapshot after the
+    # first completed candidate (baseline entries only, no throwaways).
     jax_cache_gcs = cfg.get("jax_cache_gcs")
     local_cache = cfg.get("compile_cache_dir") or os.path.expanduser("~/jax-compile-cache")
     os.makedirs(local_cache, exist_ok=True)
@@ -194,43 +199,78 @@ def run_pool(
         print(f"[cache] {_cache_file_count(local_cache)} entries after restore", flush=True)
     banked = not bool(jax_cache_gcs)
 
+    cases_by_problem = cfg.get("cases_by_problem") or {}
     cpus = cpu_per_task()
-    default_width = int(cfg.get("width", 1))
-    grade = ray.remote(num_cpus=cpus, max_calls=1)(grade_one)
-    print(f"[pool] task mode: {chips} chips, {cpus} cpus/task, default width "
-          f"{default_width}, problems {problems}", flush=True)
+    grade = ray.remote(num_cpus=cpus, max_calls=1)(grade_case)
+    print(f"[pool] per-test dispatch: {chips} chips, {cpus} cpus/task, "
+          f"max tp width {max_tp_width}, problems {problems}", flush=True)
+    for prob in problems:
+        print(f"[pool]   {prob}: cases {cases_by_problem.get(prob) or '(worker default!)'}",
+              flush=True)
 
-    inflight: dict = {}  # ObjectRef -> lease meta
-    chips_used = 0
+    cands: list[_Candidate] = []
     stop = threading.Event()
 
     def beat():
-        """One thread beats EVERY in-flight lease; per-item threads would
-        multiply with concurrency for no benefit."""
         while not stop.wait(2.0):
-            for meta in list(inflight.values()):
-                try:
-                    _http_json(f"{base}/heartbeat", {"lease_id": meta["lease_id"]})
-                except Exception:
-                    pass
+            for cand in list(cands):
+                if not cand.done:
+                    try:
+                        _http_json(f"{base}/heartbeat", {"lease_id": cand.lease_id})
+                    except Exception:
+                        pass
 
     threading.Thread(target=beat, daemon=True).start()
 
     done_count = 0
     last_work = time.time()
+
+    def finish(cand: _Candidate):
+        nonlocal done_count, banked
+        merged = collect.merge_case_results(
+            cand.problem, cand.entries,
+            general_mode=True, has_bwd=cand.problem in ("rg_lru", "splash_attention"),
+            default_floor=0.05,
+        )
+        merged["item_wall_s"] = round(time.time() - cand.t0, 1)
+        merged["tag"] = cand.payload.get("tag")
+        try:
+            from pallas_arena.judge.observation import attach_observation
+
+            attach_observation(merged)
+        except Exception:
+            pass
+        try:
+            _http_json(f"{base}/result", {
+                "lease_id": cand.lease_id, "work_id": cand.work_id, "result": merged,
+            })
+            done_count += 1
+            why = "" if merged.get("passed") else (
+                f" gate={merged.get('gate')} {str((merged.get('violations') or ['?'])[0])[:100]}")
+            print(f"[pool] {cand.work_id} done in {merged['item_wall_s']}s "
+                  f"passed={merged.get('passed')} reward={merged.get('reward_with_bwd')}"
+                  f"{why} boots={merged.get('case_boot_s')} ({done_count} total)", flush=True)
+        except Exception as e:
+            print(f"[pool] result post failed for {cand.work_id}: {e!r}", flush=True)
+        cand.done = True
+        if not banked:
+            banked = True
+            n = _cache_file_count(local_cache)
+            print(f"[cache] snapshotting {n} entries after first candidate", flush=True)
+            _gsutil_rsync(local_cache, jax_cache_gcs, "save")
+
     try:
         while max_items is None or done_count < max_items:
-            if (idle_exit_s is not None and not inflight
+            cands = [c for c in cands if not c.done]
+            n_pending = sum(len(c.pending) for c in cands)
+            if (idle_exit_s is not None and not n_pending
                     and time.time() - last_work > idle_exit_s):
                 print(f"[pool] idle {idle_exit_s:.0f}s with an empty queue; exiting", flush=True)
                 break
 
-            # 1. lease work while chips remain. Leasing past capacity would
-            #    park items in Ray's queue burning their lease timeout, so we
-            #    stop at the chip budget; the next pass picks up more.
-            progressed = False
-            while chips_used < chips and (max_items is None
-                                          or done_count + len(inflight) < max_items):
+            # 1. lease new candidates while the task backlog is bounded
+            while (n_pending < chips * MAX_PENDING_FACTOR
+                   and (max_items is None or done_count + len(cands) < max_items)):
                 try:
                     item = _http_json(f"{base}/work?worker_id=ray-pool")
                 except Exception:
@@ -238,84 +278,103 @@ def run_pool(
                 if not item:
                     break
                 payload = item.get("payload") or {}
-                want = payload.get("problem") or problems[0]
-                if want not in problems:
-                    print(f"[pool] WARNING problem={want} not served by this pool; "
-                          f"faulting {item['work_id']}", flush=True)
+                problem = payload.get("problem") or problems[0]
+                if problem not in problems:
+                    print(f"[pool] WARNING problem={problem} not served; faulting "
+                          f"{item['work_id']}", flush=True)
                     last_work = time.time()
                     try:
                         _http_json(f"{base}/result", {
                             "lease_id": item["lease_id"], "work_id": item["work_id"],
-                            "result": {"ok": False, "gate": "judge_fault",
-                                       "violations": [f"pool serves {problems}, not {want}"]},
+                            "result": {"ok": False, "gate": "judge_fault", "passed": False,
+                                       "violations": [f"pool serves {problems}, not {problem}"]},
                         })
                     except Exception:
                         pass
                     continue
-                w = min(item_width(payload, default_width), chips)
-                ref = grade.options(resources={"TPU": w}).remote(want, payload, cfg)
-                inflight[ref] = {"lease_id": item["lease_id"], "work_id": item["work_id"],
-                                 "t0": time.time(), "width": w}
-                chips_used += w
+                cases = cases_by_problem.get(problem)
+                cand = _Candidate(item, problem, cases or [])
+                cands.append(cand)
                 last_work = time.time()
-                progressed = True
 
-            if not inflight:
+                # STAGE 0: cheap error check, CPU, before any chip task.
+                try:
+                    pre = stage0_pregate(problem, payload.get("code", ""))
+                except Exception as e:
+                    pre = {"passed": True, "note": f"pregate driver error: {e!r}"}
+                if pre.get("gate") not in (None, "all") and not pre.get("passed", True):
+                    cand.entries["__pregate__"] = {"fatal": (
+                        "pregate", str((pre.get("violations") or ["pregate failed"])[0])[:300])}
+                    finish(cand)
+                    continue
+                if not cases:
+                    cand.entries["__cases__"] = {"fatal": (
+                        "judge_fault", f"no case list configured for {problem}")}
+                    finish(cand)
+                    continue
+
+                # FAN OUT: one task per test, width from the case name.
+                for case in cases:
+                    w = collect.case_width(case)
+                    if w > min(chips, max_tp_width):
+                        cand.entries[case] = {"skipped":
+                                              f"needs {w} chips (host {chips}, max tp {max_tp_width})"}
+                        continue
+                    ref = grade.options(resources={"TPU": w}).remote(
+                        problem, case, payload, cfg)
+                    cand.pending[ref] = case
+                n_pending = sum(len(c.pending) for c in cands)
+                if not cand.pending:
+                    finish(cand)
+
+            # 2. collect finished tests
+            all_refs = [r for c in cands for r in c.pending]
+            if not all_refs:
                 time.sleep(poll_s)
                 continue
-
-            # 2. collect whatever finished
-            ready, _ = ray.wait(list(inflight), num_returns=1, timeout=poll_s)
+            ready, _ = ray.wait(all_refs, num_returns=1, timeout=poll_s)
             for ref in ready:
-                meta = inflight.pop(ref)
-                chips_used -= meta["width"]
+                cand = next(c for c in cands if ref in c.pending)
+                case = cand.pending.pop(ref)
                 try:
                     result = ray.get(ref)
+                    cand.entries[case] = {"result": result}
+                    fatal_now = (not result.get("passed")
+                                 and result.get("gate") not in collect.JUDGE_FAULT_GATES
+                                 and case not in (result.get("skipped_tp") or {}))
                 except Exception as e:
-                    # Task process died (OOM, segfault): post NOTHING -- the
-                    # lease expires and the queue requeues the item.
-                    print(f"[pool] task died {meta['work_id']}: {type(e).__name__}: "
-                          f"{str(e)[:160]}", flush=True)
-                    continue
-                result["item_wall_s"] = time.time() - meta["t0"]
-                blob = str(result.get("violations")) + str(result.get("observation"))
-                if any(sig in blob for sig in ("halted unexpectedly", "CoreHalt",
-                                               "continuator has halted")):
-                    # Runtime core halt: the chip is re-initialised by the next
-                    # task's fresh process, but flag it loudly -- verdicts that
-                    # shared this window are suspect.
-                    print(f"[pool] CORE HALT on {meta['work_id']}; chip re-inits on "
-                          f"next task, nearby verdicts suspect", flush=True)
-                why = ""
-                if not result.get("passed"):
-                    v = result.get("violations") or []
-                    why = f" gate={result.get('gate')} {str(v[0])[:120] if v else ''}"
-                try:
-                    _http_json(f"{base}/result", {
-                        "lease_id": meta["lease_id"], "work_id": meta["work_id"],
-                        "result": result,
-                    })
-                    done_count += 1
-                    print(f"[pool] {meta['work_id']} w={meta['width']} "
-                          f"boot={result.get('task_boot_s')}s wall={result['item_wall_s']:.1f}s "
-                          f"passed={result.get('passed')}{why} ({done_count} total)", flush=True)
-                except Exception as e:
-                    print(f"[pool] result post failed for {meta['work_id']}: {e!r}", flush=True)
-
-                if not banked:
-                    banked = True
-                    n = _cache_file_count(local_cache)
-                    print(f"[cache] snapshotting {n} entries after first grade", flush=True)
-                    _gsutil_rsync(local_cache, jax_cache_gcs, "save")
-
-            if not ready and not progressed:
-                time.sleep(poll_s)
+                    kind = collect.classify_task_error(f"{type(e).__name__}: {e}")
+                    if kind == "fatal":
+                        cand.entries[case] = {"fatal": ("runtime_halt",
+                                                        f"task died: {str(e)[:200]}")}
+                        fatal_now = True
+                    else:
+                        cand.entries[case] = {"judge_fault": f"task died: {str(e)[:200]}"}
+                        fatal_now = False
+                if fatal_now and cand.pending:
+                    # correct-everywhere: the candidate is already zeroed --
+                    # cancel its remaining tests instead of burning chips.
+                    print(f"[pool] {cand.work_id}: {case} is candidate-fatal; "
+                          f"cancelling {len(cand.pending)} sibling tests", flush=True)
+                    for sib in list(cand.pending):
+                        try:
+                            ray.cancel(sib, force=True)
+                        except Exception:
+                            pass
+                        cand.entries[cand.pending.pop(sib)] = {
+                            "judge_fault": "cancelled after sibling candidate-fault"}
+                if not cand.pending:
+                    finish(cand)
     finally:
         stop.set()
     return done_count
 
 
 def main() -> None:
+    # The DRIVER never touches a chip: stage-0 pregates and problem-metadata
+    # imports run on CPU jax. Tasks re-enable TPU for themselves.
+    os.environ.setdefault("JAX_PLATFORMS", "cpu")
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--queue", required=True)
     ap.add_argument("--problems", default="rg_lru", help="comma list this pool serves")
@@ -324,7 +383,8 @@ def main() -> None:
                          "the worker default grades declared shapes, which for splash "
                          "cannot run on one chip")
     ap.add_argument("--chips", type=int, default=4, help="TPU chips on this host")
-    ap.add_argument("--width", type=int, default=1, help="default chips per test")
+    ap.add_argument("--max-tp-width", type=int, default=4,
+                    help="largest tp case width to run (tp8 excluded by default)")
     ap.add_argument("--cache", default=None)
     ap.add_argument("--compile-cache-dir", default=os.path.expanduser("~/jax-compile-cache"))
     ap.add_argument("--jax-cache-gcs", default=os.environ.get("ARENA_JAX_CACHE_GCS", ""),
@@ -337,8 +397,9 @@ def main() -> None:
     ap.add_argument("--max-items", type=int, default=None)
     ap.add_argument("--idle-exit-s", type=float, default=None)
     ap.add_argument("--smoke", action="store_true")
-    # Accepted for launcher compatibility: --actors N now means "N chips".
+    # accepted for launcher compatibility; --actors N historically meant chips
     ap.add_argument("--actors", type=int, default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--width", type=int, default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     cases_by_problem = {}
@@ -354,7 +415,6 @@ def main() -> None:
         "compile_budget_s": args.compile_budget_s,
         "grade_budget_s": args.grade_budget_s,
         "ray_address": args.ray_address,
-        "width": args.width,
         "smoke": args.smoke,
     }
     chips = args.chips if args.actors is None else max(args.chips, args.actors)
@@ -366,6 +426,7 @@ def main() -> None:
         poll_s=args.poll_s,
         max_items=args.max_items,
         idle_exit_s=args.idle_exit_s,
+        max_tp_width=args.max_tp_width,
     )
     print(f"[pool] exiting after {n} items")
 

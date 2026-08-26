@@ -77,7 +77,7 @@ if [ "${GRADER:-ray}" = "ray" ]; then
        ~/arena-venv/bin/python -m pallas_arena.judge.ray_pool \
        --queue http://127.0.0.1:${QUEUE_PORT} --problems ${PROBLEMS:-rg_lru} \
        --cases 'rg_lru=probe-4x2048x2560,probe-2x1024x2560,probe-8x512x2560,probe-2x4096x2560,probe-4x2048x1024,probe-holdout-2x1500x2560' \
-       --actors ${RAY_ACTORS:-4} --width ${RAY_WIDTH:-1} \
+       --chips ${RAY_CHIPS:-4} --max-tp-width ${MAX_TP_WIDTH:-4} \
        --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
        --cache ${CACHE} --poll-s 1 \
        --jax-cache-gcs ${JAX_CACHE_GCS:-gs://sk7524-pallas-arena-us-east5/judge-jax-cache-v5p-8} \

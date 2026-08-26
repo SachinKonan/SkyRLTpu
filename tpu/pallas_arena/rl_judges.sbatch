@@ -245,7 +245,7 @@ slot_supervisor() {
           --queue http://127.0.0.1:${PORT} --problems ${PROBLEMS} \
           --cases 'rg_lru=probe-4x2048x2560,probe-2x1024x2560,probe-8x512x2560,probe-2x4096x2560,probe-4x2048x1024,probe-holdout-2x1500x2560,tp4-4x2048x2560,tp4-holdout-2x1500x2560' \
           --cases 'splash_attention=probe-h8-s4096,probe-h4-s2048,probe-h16-s1024,probe-h8-s4096-d64,mixtral-8x7b-gqa32x8-s4096,mqa-h32kv1-s4096,deepseek2-16b-s1024-d192-dv128,probe-holdout-h4-s2049,mixtral-holdout-gqa32x8-s2049,tp4-h32-s4096,tp4-gqa32x8-s4096,tp4-mqa-h32kv1-s4096,tp4-holdout-h32-s2049' \
-          --actors ${RAY_ACTORS:-4} --width ${RAY_WIDTH:-1} \
+          --chips ${RAY_CHIPS:-4} --max-tp-width ${MAX_TP_WIDTH:-4} \
           --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
           --cache '${CACHE}' --poll-s 1 ${IDLE_EXIT_S:+--idle-exit-s ${IDLE_EXIT_S}} \
           --jax-cache-gcs '${JAX_CACHE_GCS:-gs://sk7524-pallas-arena-us-east5/judge-jax-cache-${ACCEL}}' \
