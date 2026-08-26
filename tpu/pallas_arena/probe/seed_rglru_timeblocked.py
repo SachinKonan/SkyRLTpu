@@ -1,25 +1,38 @@
-"""RG-LRU Pallas TPU kernel -- time-blocked scan (the production structure).
+"""RG-LRU Pallas TPU kernel -- the production structure, stripped to basics.
 
-The time axis is tiled into BLOCK_T chunks and the hidden state is CARRIED
-across chunks in VMEM scratch: the grid's last dimension iterates
-sequentially on TPU (dimension_semantics "arbitrary"), which is what makes
-the carry work. Only one [BLOCK_T, BLOCK_D] tile is on-chip at a time -- a
-whole-sequence block at t=32768 would need >250 MB VMEM vs the chip's
-~32 MB. This is ONE valid approach; faster kernels may restructure
-everything (chunked/associative scan per block, wider tiles, different
-gate fusion) as long as forward AND backward stay correct.
+This is a barebones transcription of how DeepMind's recurrentgemma Pallas
+scan is organised (its complex-number, sharding and multi-shard machinery
+removed). Two things carry all of the structure:
 
-Platform facts (each one is a measured failure class in prior attempts):
-  * Ref blocks arrive with a leading 1: [1, BLOCK_T, BLOCK_D]; reset is
-    [1, BLOCK_T, 1]. Index [0, i, :] for a [BLOCK_D] vector.
-  * jax.lax.scan is FORBIDDEN inside a kernel body (the reference uses it
-    outside); in-kernel loops are jax.lax.fori_loop. Python for/if over
-    traced values also fails.
-  * Read refs AT the traced index (a_ref[0, i, :]); indexing a pre-loaded
-    array at a traced i emits dynamic_slice, which is forbidden on TPU.
-  * Arrays are immutable; writes go through refs: h_ref[0, i, :] = v.
-  * Accumulate in float32 (inputs bf16); bf16 accumulation fails tolerance
-    over long sequences.
+  1. LAYOUT. The feature dim is split as d -> (d // 128, 128) so a block is
+     4-D: (batch, seq_tile, dim_tile, 128). The last two dims form the
+     (8,128) VMEM tile, which leaves the SEQUENCE axis outside the tiled
+     dims -- and that is what makes a per-timestep `ref[:, i]` legal: it
+     selects whole tiles, so no alignment has to be proven.
+     Putting time in the second-minor position instead fails to compile:
+       E2003 CompileTimeMosaicUnprovenMemoryAccessAlignment: cannot
+       statically prove that index in dimension 1 is a multiple of 8.
+  2. CARRY. The grid's last dimension iterates sequentially on TPU, and
+     VMEM scratch persists across those steps, so the hidden state is
+     carried from one seq tile to the next instead of materialising the
+     whole sequence (t=32768 at once would need >250 MB against ~32 MB).
+
+The gate math (reset, sqrt(1-a^2)) is elementwise, so it runs OUTSIDE the
+kernel in XLA and the kernel stays a pure linear recurrence h = a*h + gx --
+the same division of labour the production kernel uses.
+
+This is ONE valid approach; faster kernels may restructure anything (tile
+sizes, two-level chunked scans, fusing the gate work in, a different
+backward decomposition) as long as forward AND backward stay correct.
+
+Platform facts (each is a measured failure class):
+  * jax.lax.scan is FORBIDDEN inside a kernel body, and
+    jax.lax.associative_scan does not lower there either ("vector types
+    must have positive dimensions"). Use jax.lax.fori_loop.
+  * Python for/if over traced values fails; use jnp.where / lax.cond.
+  * Arrays are immutable; writes go through refs.
+  * Accumulate in float32 (inputs are bf16); bf16 accumulation fails
+    tolerance over long sequences.
 """
 
 import functools
@@ -31,125 +44,112 @@ from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
 
 INTERPRET = bool(int(os.environ.get("PALLAS_INTERPRET", "0")))
-BLOCK_T = 512
-BLOCK_D = 512
+LANE = 128          # last dim of the VMEM tile
+DIM_TILE = 8        # sublanes: dim chunks per block
+SEQ_TILE = 256      # timesteps per grid step (sequential axis)
 
 
-def _fwd_body(x_ref, a_ref, reset_ref, h_ref, carry_ref):
+def _rnn_body(a_ref, x_ref, h_ref, carry_ref, *, reverse: bool):
+    """h_t = a_t * h_{t-1} + x_t over one seq tile.
+
+    Refs are (1, seq_tile, dim_tile, LANE); `[:, i]` indexes the SEQUENCE,
+    which is outside the tiled last-two dims, so the dynamic index is a
+    whole-tile offset.
+    """
     @pl.when(pl.program_id(2) == 0)
     def _init():
         carry_ref[...] = jnp.zeros_like(carry_ref)
 
-    def step(i, h):
-        a_i = a_ref[0, i, :].astype(jnp.float32)
-        r_i = reset_ref[0, i, 0]
-        a_eff = jnp.where(r_i, 0.0, a_i)
-        gx_i = (jnp.sqrt(jnp.maximum(1.0 - a_eff * a_eff, 0.0))
-                * x_ref[0, i, :].astype(jnp.float32))
-        h = a_eff[None, :] * h + gx_i[None, :]
-        h_ref[0, i, :] = h[0]
-        return h
+    n = a_ref.shape[1]
 
-    carry_ref[...] = jax.lax.fori_loop(0, a_ref.shape[1], step, carry_ref[...])
+    def step(i, _):
+        idx = (n - 1 - i) if reverse else i
+        h = carry_ref[...]
+        h_next = a_ref[:, idx].astype(jnp.float32) * h + x_ref[:, idx].astype(jnp.float32)
+        carry_ref[...] = h_next
+        h_ref[:, idx] = h_next
+        return 0
 
-
-def _bwd_body(x_ref, a_ref, reset_ref, hprev_ref, g_ref, dx_ref, da_ref, dcarry_ref):
-    @pl.when(pl.program_id(2) == 0)
-    def _init():
-        dcarry_ref[...] = jnp.zeros_like(dcarry_ref)
-
-    bt = a_ref.shape[1]
-
-    def step(i, dh):
-        idx = bt - 1 - i
-        a_i = a_ref[0, idx, :].astype(jnp.float32)
-        r_i = reset_ref[0, idx, 0]
-        a_eff = jnp.where(r_i, 0.0, a_i)
-        g_val = jnp.sqrt(jnp.maximum(1.0 - a_eff * a_eff, 0.0))
-        grad_h = g_ref[0, idx, :][None, :] + dh
-        dx_ref[0, idx, :] = (grad_h * g_val[None, :])[0]
-        inv_g = 1.0 / jnp.maximum(g_val, 1e-6)
-        da = grad_h * (hprev_ref[0, idx, :][None, :]
-                       - (a_eff * inv_g)[None, :] * x_ref[0, idx, :].astype(jnp.float32)[None, :])
-        da_ref[0, idx, :] = jnp.where(r_i, 0.0, da)[0]
-        return grad_h * a_eff[None, :]
-
-    dcarry_ref[...] = jax.lax.fori_loop(0, bt, step, dcarry_ref[...])
+    jax.lax.fori_loop(0, n, step, 0)
 
 
-def _pad_axis(arr, axis, mult):
-    pad = (-arr.shape[axis]) % mult
-    if pad == 0:
-        return arr
-    widths = [(0, 0)] * arr.ndim
-    widths[axis] = (0, pad)
-    return jnp.pad(arr, widths)
-
-
-def _scan_fwd(x, a, reset):
-    b, t, d = x.shape
-    xp = _pad_axis(_pad_axis(x, 1, BLOCK_T), 2, BLOCK_D)
-    ap = _pad_axis(_pad_axis(a.astype(jnp.float32), 1, BLOCK_T), 2, BLOCK_D)
-    rp = _pad_axis(reset[..., None], 1, BLOCK_T)
-    tp, dp = xp.shape[1], xp.shape[2]
-    grid = (b, dp // BLOCK_D, tp // BLOCK_T)
-    h = pl.pallas_call(
-        _fwd_body,
+def _lin_rnn(a, x, *, reverse: bool):
+    """Run h = a*h + x along the sequence. a, x: [b, t, dt, LANE] f32."""
+    b, t, dt, lane = a.shape
+    nseq = t // SEQ_TILE
+    ndim = dt // DIM_TILE
+    grid = (b, ndim, nseq)
+    if reverse:
+        seq_idx = lambda i, j, k: (i, nseq - 1 - k, j, 0)
+    else:
+        seq_idx = lambda i, j, k: (i, k, j, 0)
+    blk = (1, SEQ_TILE, DIM_TILE, lane)
+    return pl.pallas_call(
+        functools.partial(_rnn_body, reverse=reverse),
         grid=grid,
-        in_specs=[
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), lambda i, j, k: (i, k, j)),
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), lambda i, j, k: (i, k, j)),
-            pl.BlockSpec((1, BLOCK_T, 1), lambda i, j, k: (i, k, 0)),
-        ],
-        out_specs=pl.BlockSpec((1, BLOCK_T, BLOCK_D), lambda i, j, k: (i, k, j)),
-        out_shape=jax.ShapeDtypeStruct((b, tp, dp), jnp.float32),
-        scratch_shapes=[pltpu.VMEM((1, BLOCK_D), jnp.float32)],
+        in_specs=[pl.BlockSpec(blk, seq_idx), pl.BlockSpec(blk, seq_idx)],
+        out_specs=pl.BlockSpec(blk, seq_idx),
+        out_shape=jax.ShapeDtypeStruct((b, t, dt, lane), jnp.float32),
+        scratch_shapes=[pltpu.VMEM((1, 1, DIM_TILE, lane), jnp.float32)],
         interpret=INTERPRET,
         compiler_params=pltpu.CompilerParams(
             dimension_semantics=("parallel", "parallel", "arbitrary"),
         ),
-    )(xp, ap, rp)
-    return h[:, :t, :d]
+    )(a, x)
 
 
-def _scan_bwd(x, a, reset, h, g):
+def _pad_t(arr, mult):
+    pad = (-arr.shape[1]) % mult
+    return arr if pad == 0 else jnp.pad(arr, ((0, 0), (0, pad), (0, 0)))
+
+
+def _to_tiles(arr):
+    """[b, t, d] -> [b, t, d//LANE, LANE] (d padded up to a LANE*DIM_TILE
+    multiple so both tiled dims divide)."""
+    b, t, d = arr.shape
+    mult = LANE * DIM_TILE
+    padd = (-d) % mult
+    if padd:
+        arr = jnp.pad(arr, ((0, 0), (0, 0), (0, padd)))
+    return arr.reshape(b, arr.shape[1], arr.shape[2] // LANE, LANE)
+
+
+def _from_tiles(arr, d):
+    b, t = arr.shape[0], arr.shape[1]
+    return arr.reshape(b, t, -1)[:, :, :d]
+
+
+def _prep(x, a, reset):
+    """Elementwise gate work, outside the kernel (as production does)."""
+    a32 = a.astype(jnp.float32) * (1.0 - reset[..., None].astype(jnp.float32))
+    gx = jnp.sqrt(jnp.maximum(1.0 - a32 * a32, 0.0)) * x.astype(jnp.float32)
+    return a32, gx
+
+
+def _fwd(x, a, reset):
     b, t, d = x.shape
-    xp = _pad_axis(_pad_axis(x, 1, BLOCK_T), 2, BLOCK_D)
-    ap = _pad_axis(_pad_axis(a.astype(jnp.float32), 1, BLOCK_T), 2, BLOCK_D)
-    rp = _pad_axis(reset[..., None], 1, BLOCK_T)
+    a32, gx = _prep(x, a, reset)
+    at, gt = _to_tiles(_pad_t(a32, SEQ_TILE)), _to_tiles(_pad_t(gx, SEQ_TILE))
+    h = _lin_rnn(at, gt, reverse=False)
+    return _from_tiles(h, d)[:, :t, :]
+
+
+def _bwd(x, a, reset, h, g):
+    """G_t = g_t + a_{t+1} G_{t+1}: the same recurrence, reversed, with the
+    coefficient shifted by one (computed outside the kernel)."""
+    b, t, d = x.shape
+    a32, _ = _prep(x, a, reset)
+    g_val = jnp.sqrt(jnp.maximum(1.0 - a32 * a32, 0.0))
+    a_next = jnp.pad(a32[:, 1:, :], ((0, 0), (0, 1), (0, 0)))
     h_prev = jnp.pad(h[:, :-1, :], ((0, 0), (1, 0), (0, 0)))
-    hp = _pad_axis(_pad_axis(h_prev, 1, BLOCK_T), 2, BLOCK_D)
-    gp = _pad_axis(_pad_axis(g.astype(jnp.float32), 1, BLOCK_T), 2, BLOCK_D)
-    tp, dp = xp.shape[1], xp.shape[2]
-    ntb = tp // BLOCK_T
-    grid = (b, dp // BLOCK_D, ntb)
-    rev = lambda i, j, k: (i, ntb - 1 - k, j)
-    rev_r = lambda i, j, k: (i, ntb - 1 - k, 0)
-    dx, da = pl.pallas_call(
-        _bwd_body,
-        grid=grid,
-        in_specs=[
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), rev),
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), rev),
-            pl.BlockSpec((1, BLOCK_T, 1), rev_r),
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), rev),
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), rev),
-        ],
-        out_specs=[
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), rev),
-            pl.BlockSpec((1, BLOCK_T, BLOCK_D), rev),
-        ],
-        out_shape=[
-            jax.ShapeDtypeStruct((b, tp, dp), jnp.float32),
-            jax.ShapeDtypeStruct((b, tp, dp), jnp.float32),
-        ],
-        scratch_shapes=[pltpu.VMEM((1, BLOCK_D), jnp.float32)],
-        interpret=INTERPRET,
-        compiler_params=pltpu.CompilerParams(
-            dimension_semantics=("parallel", "parallel", "arbitrary"),
-        ),
-    )(xp, ap, rp, hp, gp)
-    return dx[:, :t, :d], da[:, :t, :d]
+
+    ant, gct = _to_tiles(_pad_t(a_next, SEQ_TILE)), _to_tiles(_pad_t(g.astype(jnp.float32), SEQ_TILE))
+    G = _from_tiles(_lin_rnn(ant, gct, reverse=True), d)[:, :t, :]
+
+    dx = G * g_val
+    inv_g = 1.0 / jnp.maximum(g_val, 1e-6)
+    da = jnp.where(reset[..., None], 0.0, G * (h_prev - (a32 * inv_g) * x.astype(jnp.float32)))
+    return dx, da
 
 
 def kernel(x, a, reset):
@@ -159,16 +159,16 @@ def kernel(x, a, reset):
     through this function (d/dx, d/da) via the custom_vjp below."""
     @jax.custom_vjp
     def lru(x, a, reset):
-        return _scan_fwd(x, a, reset)
+        return _fwd(x, a, reset)
 
-    def fwd(x, a, reset):
-        h = _scan_fwd(x, a, reset)
+    def fwd_rule(x, a, reset):
+        h = _fwd(x, a, reset)
         return h, (x, a, reset, h)
 
-    def bwd(res, g):
+    def bwd_rule(res, g):
         x, a, reset, h = res
-        dx, da = _scan_bwd(x, a, reset, h, g)
+        dx, da = _bwd(x, a, reset, h, g)
         return (dx.astype(x.dtype), da.astype(a.dtype), None)
 
-    lru.defvjp(fwd, bwd)
+    lru.defvjp(fwd_rule, bwd_rule)
     return lru(x, a, reset)
