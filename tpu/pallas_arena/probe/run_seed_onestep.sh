@@ -77,8 +77,11 @@ launch() { # launch <tag> <cells> <seedfile> <obstag> [gemma]
     echo "launched $1" )
 }
 if [ -s "$out/seed-obs-rglru.txt" ]; then
-  launch qwen-seed2-rglru  "rg_lru:rf3s" "$S/seed_rglru_timeblocked.py" rglru
-  launch gemma-seed2-rglru "rg_lru:rf3s" "$S/seed_rglru_timeblocked.py" rglru gemma
+  # seed_rglru_active.py = the VARIANT THAT PASSED on silicon (written by
+  # submit_seeds_v5p.py); prompting with a variant that cannot compile
+  # would poison the whole experiment.
+  launch qwen-seed2-rglru  "rg_lru:rf3s" "$S/seed_rglru_active.py" rglru
+  launch gemma-seed2-rglru "rg_lru:rf3s" "$S/seed_rglru_active.py" rglru gemma
 else
   echo "[launch] rg_lru observation missing; skipping its arms"
 fi
