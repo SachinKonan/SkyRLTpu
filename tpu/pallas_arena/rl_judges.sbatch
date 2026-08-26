@@ -190,22 +190,36 @@ slot_supervisor() {
     local deadline=$(( $(date +%s) + LAND_DEADLINE_S ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
       st=$(gc queued-resources describe "$name" --format='value(state.state)' 2>/dev/null)
-      [ "$st" = "ACTIVE" ] && break
-      # A GCP queued resource in FAILED/SUSPENDED is TERMINAL -- it never
-      # returns to the queue on its own. Measured 2026-08-25: a v6e judge
-      # FAILED with "no more capacity in the zone" 90s after create and then
-      # sat dead for the whole landing window while this loop polled it.
-      # Delete and recreate so the request is back in line for capacity.
-      case "$st" in
-        FAILED|SUSPENDED|SUSPENDING|"")
-          echo "[$name] state=${st:-gone} -- deleting and recreating $(date +%H:%M:%S)" >> "$log"
-          gc queued-resources delete "$name" --force --quiet >/dev/null 2>&1
-          sleep 30
-          gc queued-resources create "$name" --node-id="$name" \
-            --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot >> "$log" 2>&1
+      [ "$st" = "ACTIVE" ] && { misses=0; break; }
+      # A GCP queued resource in FAILED/SUSPENDED is TERMINAL and must be
+      # recreated -- BUT a single empty read is NOT proof of anything: a
+      # transient gcloud failure returns empty too, and on 2026-08-26 one
+      # such blip made this loop DELETE AN ACTIVE SLICE 7 minutes after it
+      # landed, then churn create/delete every 3 minutes. Require 3
+      # consecutive non-ACTIVE reads, and for the empty case confirm with a
+      # LIST call (a different API path) before touching anything.
+      misses=$(( ${misses:-0} + 1 ))
+      echo "[$name] state=${st:-empty} (miss ${misses}/3) $(date +%H:%M:%S)" >> "$log"
+      if [ "$misses" -ge 3 ]; then
+        if [ -z "$st" ]; then
+          gc queued-resources list --format='value(name)' 2>/dev/null | grep -q "^${name}\$" \
+            && { echo "[$name] list says it EXISTS; describe was lying -- not touching it" >> "$log"; \
+                 misses=0; sleep 30; continue; }
+        fi
+        echo "[$name] confirmed ${st:-gone} -- deleting and recreating $(date +%H:%M:%S)" >> "$log"
+        misses=0
+        gc queued-resources delete "$name" --force --quiet >/dev/null 2>&1
+        sleep 30
+        create_out=$(gc queued-resources create "$name" --node-id="$name" \
+          --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot 2>&1 | tail -3)
+        echo "$create_out" >> "$log"
+        if echo "$create_out" | grep -qE "RESOURCE_EXHAUSTED|429|Quota"; then
+          echo "[$name] create quota-blocked; backing off 480s" >> "$log"
+          sleep 480
+        else
           sleep 60
-          ;;
-      esac
+        fi
+      fi
       sleep 30
     done
     if [ "$st" != "ACTIVE" ]; then
