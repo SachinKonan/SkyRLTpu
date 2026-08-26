@@ -1,24 +1,35 @@
-"""Splash attention (causal, segment-gated, GQA) -- Pallas TPU kernel.
+"""Splash attention (causal, segment-gated, GQA) -- flash kernel, the
+production structure stripped to basics.
 
-GRADED ENTRYPOINT: the tests call kernel(q, k, v, segment_ids, *, window,
-soft_cap, sinks) -> o at every shape (q: [q_heads, seq, d] bf16 pre-scaled;
-k/v: [kv_heads, seq, d|d_v] bf16; segment_ids: [seq] int32, 0 = padding;
-o: [q_heads, seq, d_v] f32). The judge differentiates through it (d/dq,
-d/dk, d/dv) via the custom_vjp wiring below.
+GRADED ENTRYPOINT: kernel(q, k, v, segment_ids, *, window=None,
+soft_cap=None, sinks=None) -> o, with q: [q_heads, seq, d] bf16
+(pre-scaled), k/v: [kv_heads, seq, d|d_v] bf16 (q_heads = kv_heads * group),
+segment_ids: [seq] int32 where 0 marks padding, o: [q_heads, seq, d_v] f32
+with padding (segment-0) query rows exactly zero. The judge differentiates
+through kernel() (d/dq, d/dk, d/dv) via the custom_vjp below.
 
-Structure: the flash-attention pattern -- grid tiles (query head, BLOCK_Q
-query rows); K/V arrive whole per (grouped) head and are walked in blocks
-inside the body with an ONLINE SOFTMAX (running max + running sum, output
-rescaled as the max moves; statistics kept float32). Causality and segment
-ids gate each tile. Fully-masked KV tiles still cost compute here -- the
-production kernel SKIPS them, a large part of its speed. This is ONE valid
-approach; faster kernels may restructure everything.
+STRUCTURE (the same shape as the production splash kernel):
+  * Grid (q_head, q_block, kv_block) with the KV axis LAST: the last grid
+    dimension iterates sequentially on TPU and VMEM scratch persists across
+    its steps -- that is what makes the ONLINE SOFTMAX carry (running max,
+    running sum, output accumulator) work. Only one [B, B] logits tile ever
+    exists; materialising full [block_q, seq] logits at the declared
+    s=18432 shapes would need ~37 MB against ~32 MB of VMEM.
+  * EVERY input arrives pre-sliced by a BlockSpec, including the segment
+    ids (a q-block ref and a kv-block ref). Nothing indexes a loaded array
+    at a traced index -- that is a dynamic gather/slice and Mosaic rejects
+    it (E2003 alignment); it killed every previously-"correct" kernel.
+  * Masks come from 2-D broadcasted_iota + program_id arithmetic (1-D iota
+    does not lower on TPU), never from gathers.
+  * The backward saves per-row LOGSUMEXP as a residual and recomputes
+    tiles (the production bwd's approach). dK/dV walk (group-head, q-block)
+    pairs on the sequential axis, accumulating in scratch; the GQA head
+    mapping happens in BlockSpec index maps, not by indexing inside.
 
-Platform facts: refs have their BLOCK shape with leading 1s; jax.lax.scan
-is FORBIDDEN inside a kernel body (fori_loop only; python if/for on traced
-values fails -- use jnp.where/lax.cond); read refs at traced indices, not
-pre-loaded arrays (forbidden dynamic_slice); writes go through refs;
-matmuls need preferred_element_type=jnp.float32.
+This is ONE valid approach; faster kernels may restructure everything
+(block sizes, SKIPPING fully-masked KV tiles -- the production kernel does,
+a large part of its speed -- a fused backward, different residuals) as long
+as forward AND backward stay correct.
 """
 
 import functools
@@ -30,331 +41,275 @@ from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
 
 INTERPRET = bool(int(os.environ.get("PALLAS_INTERPRET", "0")))
-BLOCK_Q = 512
+B = 512
 NEG_INF = -1e30
 
-# ---------------------------------------------------------------- forward ---
-def _fwd_body(q_ref, k_ref, v_ref, seg_ref, o_ref, *, seq, block_q, window, soft_cap, sinks_val):
-    """
-    Computes causal segment-masked attention for one query head and block.
-    Grid: (q_heads, num_blocks)
-    q_ref: [1, block_q, d]
-    k_ref: [1, seq_pad, d]
-    v_ref: [1, seq_pad, dv]
-    seg_ref: [seq_pad]
-    o_ref: [1, block_q, dv]
-    """
-    # Load inputs
-    q_block = q_ref[0].astype(jnp.float32)  # [block_q, d]
-    k_full = k_ref[0].astype(jnp.float32)   # [seq_pad, d]
-    v_full = v_ref[0].astype(jnp.float32)   # [seq_pad, dv]
-    seg_vals = seg_ref[...]                 # [seq_pad,] int32
-    
-    # Indices
-    q_head_idx = pl.program_id(0)
-    q_block_idx = pl.program_id(1)
-    q_idx = jnp.arange(block_q, dtype=jnp.int32) + (q_block_idx * block_q)
-    k_idx = jnp.arange(seg_vals.shape[0], dtype=jnp.int32)  # [seq_pad]
-    
-    # Q @ K^T
-    logits = jnp.matmul(q_block, k_full.T, preferred_element_type=jnp.float32)  # [block_q, seq_pad]
-    
-    # Soft cap
-    if soft_cap is not None:
-        logits = soft_cap * jnp.tanh(logits / soft_cap)
-    
-    # Masks
-    # Causal
-    causal = k_idx[None, :] <= q_idx[:, None]
+
+def _tile_mask(qi, ki, qseg_ref, kseg_ref, window):
+    """Causal + same-segment + both-live mask for one [B, B] tile. qi/ki are
+    BLOCK indices (program_id scalars are fine in arithmetic); positions come
+    from 2-D iota, segments from the pre-sliced refs."""
+    qpos = qi * B + jax.lax.broadcasted_iota(jnp.int32, (B, 1), 0)
+    kpos = ki * B + jax.lax.broadcasted_iota(jnp.int32, (1, B), 1)
+    m = kpos <= qpos
     if window is not None:
-        causal = causal & ((q_idx[:, None] - k_idx[None, :]) < window)
-    
-    # Segment
-    seg_q = seg_vals[q_idx] # [block_q]
-    seg_k = seg_vals        # [seq_pad]
-    same_seg = (seg_q[:, None] == seg_k[None, :])
-    
-    # Live (non-padding)
-    live_q = (seg_q != 0)[:, None]
-    live_k = (seg_k != 0)[None, :]
-    live = live_q & live_k
-    
-    mask = causal & same_seg & live
-    
-    # Apply mask
-    logits_masked = jnp.where(mask, logits, NEG_INF)
-    
-    # Row max
-    m = jnp.max(logits_masked, axis=-1, keepdims=True)
-    
-    # Sinks
-    if sinks_val is not None:
-        sk = float(sinks_val)
-        m = jnp.maximum(m, sk)
-    
-    # Exponentials
-    exp_logits = jnp.exp(logits_masked - m)
-    
-    # Denominator
-    denom = jnp.sum(exp_logits, axis=-1, keepdims=True)
-    if sinks_val is not None:
-        sk = float(sinks_val)
-        denom = denom + jnp.exp(sk - m)
-    
-    # Attention Probabilities
-    row_live = mask.any(axis=-1)[:, None]
-    p = jnp.where(row_live, exp_logits / jnp.maximum(denom, 1e-30), 0.0)
-    
-    # Output
-    out_block = jnp.matmul(p, v_full, preferred_element_type=jnp.float32)
-    o_ref[0, :, :] = out_block
+        m = m & ((qpos - kpos) < window)
+    qs = qseg_ref[...].reshape(B, 1)
+    ks = kseg_ref[...].reshape(1, B)
+    return m & (qs == ks) & (qs != 0) & (ks != 0)
 
 
-def _forward(q, k, v, segment_ids, window, soft_cap, sinks):
-    qh, seq, d = q.shape
+def _tile_logits(q_ref, k_ref, soft_cap):
+    z = jnp.dot(q_ref[0].astype(jnp.float32), k_ref[0].astype(jnp.float32).T,
+                preferred_element_type=jnp.float32)
+    if soft_cap is not None:
+        z = soft_cap * jnp.tanh(z / soft_cap)
+    return z
+
+
+def _fwd_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, o_ref, lse_ref,
+              m_ref, l_ref, acc_ref, *, nkv, window, soft_cap):
+    ki = pl.program_id(2)
+
+    @pl.when(ki == 0)
+    def _init():
+        m_ref[...] = jnp.full_like(m_ref, NEG_INF)
+        l_ref[...] = jnp.zeros_like(l_ref)
+        acc_ref[...] = jnp.zeros_like(acc_ref)
+
+    z = _tile_logits(q_ref, k_ref, soft_cap)
+    mask = _tile_mask(pl.program_id(1), ki, qseg_ref, kseg_ref, window)
+    z = jnp.where(mask, z, NEG_INF)
+
+    m_prev = m_ref[...]
+    m_new = jnp.maximum(m_prev, jnp.max(z, axis=1, keepdims=True))
+    alpha = jnp.exp(m_prev - m_new)
+    p = jnp.where(mask, jnp.exp(z - m_new), 0.0)
+    l_ref[...] = l_ref[...] * alpha + jnp.sum(p, axis=1, keepdims=True)
+    acc_ref[...] = acc_ref[...] * alpha + jnp.dot(
+        p, v_ref[0].astype(jnp.float32), preferred_element_type=jnp.float32)
+    m_ref[...] = m_new
+
+    @pl.when(ki == nkv - 1)
+    def _flush():
+        l = l_ref[...]
+        live = l > 0.0
+        safe = jnp.where(live, l, 1.0)
+        o_ref[0] = jnp.where(live, acc_ref[...] / safe, 0.0)
+        lse_ref[0] = jnp.where(live, m_ref[...] + jnp.log(safe), NEG_INF)[:, 0]
+
+
+def _dq_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, do_ref, lse_ref,
+             dcoef_ref, dq_ref, acc_ref, *, nkv, window, soft_cap):
+    ki = pl.program_id(2)
+
+    @pl.when(ki == 0)
+    def _init():
+        acc_ref[...] = jnp.zeros_like(acc_ref)
+
+    zc = _tile_logits(q_ref, k_ref, soft_cap)
+    mask = _tile_mask(pl.program_id(1), ki, qseg_ref, kseg_ref, window)
+    lse = lse_ref[0].reshape(B, 1)
+    p = jnp.where(mask, jnp.exp(jnp.where(mask, zc, NEG_INF) - lse), 0.0)
+    dp = jnp.dot(do_ref[0].astype(jnp.float32), v_ref[0].astype(jnp.float32).T,
+                 preferred_element_type=jnp.float32)
+    ds = p * (dp - dcoef_ref[0].reshape(B, 1))
+    if soft_cap is not None:
+        ds = ds * (1.0 - (zc / soft_cap) ** 2)     # d(capped)/d(pre-cap)
+    acc_ref[...] += jnp.dot(ds, k_ref[0].astype(jnp.float32),
+                            preferred_element_type=jnp.float32)
+
+    @pl.when(ki == nkv - 1)
+    def _flush():
+        dq_ref[0] = acc_ref[...]
+
+
+def _dkv_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, do_ref, lse_ref,
+              dcoef_ref, dk_ref, dv_ref, dk_acc, dv_acc, *, nq, group,
+              window, soft_cap):
+    si = pl.program_id(2)          # walks group*nq (head, q-block) pairs
+
+    @pl.when(si == 0)
+    def _init():
+        dk_acc[...] = jnp.zeros_like(dk_acc)
+        dv_acc[...] = jnp.zeros_like(dv_acc)
+
+    qi = si % nq                   # q-block index (the head arrives via BlockSpec)
+    zc = _tile_logits(q_ref, k_ref, soft_cap)
+    mask = _tile_mask(qi, pl.program_id(1), qseg_ref, kseg_ref, window)
+    lse = lse_ref[0].reshape(B, 1)
+    p = jnp.where(mask, jnp.exp(jnp.where(mask, zc, NEG_INF) - lse), 0.0)
+    do = do_ref[0].astype(jnp.float32)
+    dv_acc[...] += jnp.dot(p.T, do, preferred_element_type=jnp.float32)
+    dp = jnp.dot(do, v_ref[0].astype(jnp.float32).T,
+                 preferred_element_type=jnp.float32)
+    ds = p * (dp - dcoef_ref[0].reshape(B, 1))
+    if soft_cap is not None:
+        ds = ds * (1.0 - (zc / soft_cap) ** 2)
+    dk_acc[...] += jnp.dot(ds.T, q_ref[0].astype(jnp.float32),
+                           preferred_element_type=jnp.float32)
+
+    @pl.when(si == group * nq - 1)
+    def _flush():
+        dk_ref[0] = dk_acc[...]
+        dv_ref[0] = dv_acc[...]
+
+
+def _pad_seq(a, s_pad, axis=1, fill=0):
+    pad = s_pad - a.shape[axis]
+    if pad == 0:
+        return a
+    widths = [(0, 0)] * a.ndim
+    widths[axis] = (0, pad)
+    return jnp.pad(a, widths, constant_values=fill)
+
+
+def _pad_lane(a):
+    """Pad the feature dim to a 128 multiple (d=192 exists in the graded
+    set; zero columns change neither the q.k dots nor sliced-off outputs)."""
+    pad = (-a.shape[-1]) % 128
+    if pad == 0:
+        return a
+    return jnp.pad(a, [(0, 0)] * (a.ndim - 1) + [(0, pad)])
+
+
+def _forward(q, k, v, seg, window, soft_cap):
+    qh = q.shape[0]
     kvh = k.shape[0]
-    dv = v.shape[-1]
     group = qh // kvh
-    block_q = min(BLOCK_Q, seq)
-    seq_pad = -(-seq // block_q) * block_q                     # pad to multiple
-    pad = seq_pad - seq
-    qp = jnp.pad(q, ((0, 0), (0, pad), (0, 0)))
-    kp = jnp.pad(k, ((0, 0), (0, pad), (0, 0)))
-    vp = jnp.pad(v, ((0, 0), (0, pad), (0, 0)))
-    segp = jnp.pad(segment_ids, (0, pad))                      # pad rows = seg 0
+    s_pad = -(-q.shape[1] // B) * B
+    qp = _pad_lane(_pad_seq(q, s_pad))
+    kp = _pad_lane(_pad_seq(k, s_pad))
+    vp = _pad_lane(_pad_seq(v, s_pad))
+    segp = _pad_seq(seg, s_pad, axis=0)
+    dp_, dvp = qp.shape[-1], vp.shape[-1]
+    nq = s_pad // B
 
-    grid = (qh, seq_pad // block_q)
-    out = pl.pallas_call(
-        functools.partial(_fwd_body, seq=seq, block_q=block_q,
-                          window=window, soft_cap=soft_cap,
-                          sinks_val=None),
-        grid=grid,
+    o, lse = pl.pallas_call(
+        functools.partial(_fwd_body, nkv=nq, window=window, soft_cap=soft_cap),
+        grid=(qh, nq, nq),
         in_specs=[
-            pl.BlockSpec((1, block_q, d), lambda h, i: (h, i, 0)),
-            pl.BlockSpec((1, seq_pad, d), lambda h, i: (h // group, 0, 0)),
-            pl.BlockSpec((1, seq_pad, dv), lambda h, i: (h // group, 0, 0)),
-            pl.BlockSpec((seq_pad,), lambda h, i: (0,)),
+            pl.BlockSpec((1, B, dp_), lambda h, i, j: (h, i, 0)),
+            pl.BlockSpec((1, B, dp_), lambda h, i, j: (h // group, j, 0)),
+            pl.BlockSpec((1, B, dvp), lambda h, i, j: (h // group, j, 0)),
+            pl.BlockSpec((B,), lambda h, i, j: (i,)),
+            pl.BlockSpec((B,), lambda h, i, j: (j,)),
         ],
-        out_specs=pl.BlockSpec((1, block_q, dv), lambda h, i: (h, i, 0)),
-        out_shape=jax.ShapeDtypeStruct((qh, seq_pad, dv), jnp.float32),
+        out_specs=[
+            pl.BlockSpec((1, B, dvp), lambda h, i, j: (h, i, 0)),
+            pl.BlockSpec((1, B), lambda h, i, j: (h, i)),
+        ],
+        out_shape=[
+            jax.ShapeDtypeStruct((qh, s_pad, dvp), jnp.float32),
+            jax.ShapeDtypeStruct((qh, s_pad), jnp.float32),
+        ],
+        scratch_shapes=[
+            pltpu.VMEM((B, 1), jnp.float32),
+            pltpu.VMEM((B, 1), jnp.float32),
+            pltpu.VMEM((B, dvp), jnp.float32),
+        ],
         interpret=INTERPRET,
-    )(qp, kp, vp, segp)
-    return out[:, :seq, :]
+        compiler_params=pltpu.CompilerParams(
+            dimension_semantics=("parallel", "parallel", "arbitrary"),
+        ),
+    )(qp, kp, vp, segp, segp)
+    return o, lse, (qp, kp, vp, segp, s_pad)
 
 
-# ------------------------------------------------- backward (custom_vjp) ---
-# The wiring below is COMPLETE and correct -- segment_ids is an integer input
-# so its cotangent slot must be None; window/soft_cap/sinks are static.
-# You fill the two bwd bodies (or replace the whole strategy). Until they are
-# filled the kernel still grades: forward reward is kept, backward is
-# forfeited (it is scored, not gated).
+def _backward(res, lse_pad, dcoef_pad, g, dims, window, soft_cap):
+    qp, kp, vp, segp, s_pad = res
+    qh, seq, d, dv, kvh = dims
+    group = qh // kvh
+    dp_, dvp = qp.shape[-1], vp.shape[-1]
+    nq = s_pad // B
+    gp = _pad_lane(_pad_seq(g.astype(jnp.float32), s_pad))
 
-def _bwd_dq_body(q_ref, k_ref, v_ref, seg_ref, do_ref, dq_ref, *, seq, block_q, window, soft_cap):
-    """
-    Computes gradient w.r.t Q.
-    Same grid as forward.
-    """
-    q_block = q_ref[0].astype(jnp.float32)
-    k_full = k_ref[0].astype(jnp.float32)
-    v_full = v_ref[0].astype(jnp.float32)
-    do_block = do_ref[0].astype(jnp.float32)
-    seg_vals = seg_ref[...]
-    
-    q_head_idx = pl.program_id(0)
-    q_block_idx = pl.program_id(1)
-    q_idx = jnp.arange(block_q, dtype=jnp.int32) + (q_block_idx * block_q)
-    k_idx = jnp.arange(seg_vals.shape[0], dtype=jnp.int32)
-    
-    logits = jnp.matmul(q_block, k_full.T, preferred_element_type=jnp.float32)
-    if soft_cap is not None:
-        logits = soft_cap * jnp.tanh(logits / soft_cap)
-    
-    causal = k_idx[None, :] <= q_idx[:, None]
-    if window is not None:
-        causal = causal & ((q_idx[:, None] - k_idx[None, :]) < window)
-    
-    seg_q = seg_vals[q_idx]
-    seg_k = seg_vals
-    same_seg = (seg_q[:, None] == seg_k[None, :])
-    live = (seg_q[:, None] != 0) & (seg_k[None, :] != 0)
-    mask = causal & same_seg & live
-    
-    logits_masked = jnp.where(mask, logits, NEG_INF)
-    m = jnp.max(logits_masked, axis=-1, keepdims=True)
-    
-    exp_logits = jnp.exp(logits_masked - m)
-    denom = jnp.sum(exp_logits, axis=-1, keepdims=True)
-    row_live = mask.any(axis=-1)[:, None]
-    p = jnp.where(row_live, exp_logits / jnp.maximum(denom, 1e-30), 0.0)
-    
-    # G = do @ v^T
-    G = jnp.matmul(do_block, v_full.T, preferred_element_type=jnp.float32) # [block_q, seq_pad]
-    
-    # d_logits
-    sum_pG = jnp.sum(p * G, axis=-1, keepdims=True)
-    d_logits = p * (G - sum_pG)
-    
-    # dQ
-    dq_block = jnp.matmul(d_logits, k_full, preferred_element_type=jnp.float32)
-    dq_ref[0, :, :] = dq_block
+    dq = pl.pallas_call(
+        functools.partial(_dq_body, nkv=nq, window=window, soft_cap=soft_cap),
+        grid=(qh, nq, nq),
+        in_specs=[
+            pl.BlockSpec((1, B, dp_), lambda h, i, j: (h, i, 0)),
+            pl.BlockSpec((1, B, dp_), lambda h, i, j: (h // group, j, 0)),
+            pl.BlockSpec((1, B, dvp), lambda h, i, j: (h // group, j, 0)),
+            pl.BlockSpec((B,), lambda h, i, j: (i,)),
+            pl.BlockSpec((B,), lambda h, i, j: (j,)),
+            pl.BlockSpec((1, B, dvp), lambda h, i, j: (h, i, 0)),
+            pl.BlockSpec((1, B), lambda h, i, j: (h, i)),
+            pl.BlockSpec((1, B), lambda h, i, j: (h, i)),
+        ],
+        out_specs=pl.BlockSpec((1, B, dp_), lambda h, i, j: (h, i, 0)),
+        out_shape=jax.ShapeDtypeStruct((qh, s_pad, dp_), jnp.float32),
+        scratch_shapes=[pltpu.VMEM((B, dp_), jnp.float32)],
+        interpret=INTERPRET,
+        compiler_params=pltpu.CompilerParams(
+            dimension_semantics=("parallel", "parallel", "arbitrary"),
+        ),
+    )(qp, kp, vp, segp, segp, gp, lse_pad, dcoef_pad)
 
-
-def _bwd_dkv_body(q_ref, k_ref, v_ref, seg_ref, do_ref, dk_ref, dv_ref, *, seq, window, soft_cap):
-    """
-    Gradient w.r.t K, V. Iterates over all query heads/blocks for this KV head.
-    Grid: (kv_heads,)
-    Inputs contain all query heads for this KV head.
-    """
-    k_full = k_ref[0].astype(jnp.float32)  # [seq_pad, d]
-    v_full = v_ref[0].astype(jnp.float32)  # [seq_pad, dv]
-    seg_vals = seg_ref[...]                # [seq_pad]
-    
-    q_heads = q_ref.shape[1]               # group
-    seq_pad = seg_vals.shape[0]
-    num_blocks = (seq_pad + BLOCK_Q - 1) // BLOCK_Q
-    
-    # Initialize accumulators
-    dk_acc = jnp.zeros((seq_pad, k_full.shape[1]), dtype=jnp.float32)
-    dv_acc = jnp.zeros((seq_pad, v_full.shape[1]), dtype=jnp.float32)
-    
-    # Helper for block loops
-    def scan_fn(acc, state):
-        dk_curr, dv_curr = acc
-        h_idx = state
-        h = h_idx // num_blocks
-        b = h_idx % num_blocks
-        
-        # Slice q and do for this head and block
-        # q_ref: [1, group, seq_pad, d]
-        start = b * BLOCK_Q
-        end = min(start + BLOCK_Q, seq_pad)
-        
-        # Extract slices
-        # Note: jnp.take or slicing
-        q_tile = jnp.take(q_ref[0, h, :, :], jnp.arange(start, end), axis=0) # [block_q, d]
-        do_tile = jnp.take(do_ref[0, h, :, :], jnp.arange(start, end), axis=0) # [block_q, dv]
-        
-        # Current sequence indices for the block
-        q_idx = jnp.arange(start, end, dtype=jnp.int32)
-        k_idx = jnp.arange(seq_pad, dtype=jnp.int32)
-        
-        # Logits
-        logits = jnp.matmul(q_tile, k_full.T, preferred_element_type=jnp.float32)
-        if soft_cap is not None:
-            logits = soft_cap * jnp.tanh(logits / soft_cap)
-            
-        causal = k_idx[None, :] <= q_idx[:, None]
-        if window is not None:
-            causal = causal & ((q_idx[:, None] - k_idx[None, :]) < window)
-            
-        seg_q = seg_vals[q_idx]
-        seg_k = seg_vals
-        same_seg = (seg_q[:, None] == seg_k[None, :])
-        live = (seg_q[:, None] != 0) & (seg_k[None, :] != 0)
-        mask = causal & same_seg & live
-        
-        logits_masked = jnp.where(mask, logits, NEG_INF)
-        m = jnp.max(logits_masked, axis=-1, keepdims=True)
-        
-        exp_logits = jnp.exp(logits_masked - m)
-        denom = jnp.sum(exp_logits, axis=-1, keepdims=True)
-        row_live = mask.any(axis=-1)[:, None]
-        p = jnp.where(row_live, exp_logits / jnp.maximum(denom, 1e-30), 0.0) # [block_q, seq_pad]
-        
-        # dV update: p^T @ do_tile
-        # p.T is [seq_pad, block_q]
-        dv_update = jnp.matmul(p.T, do_tile, preferred_element_type=jnp.float32)
-        
-        # dK update:
-        # d_logits = p * (G - sum(p*G))
-        # G = do @ v^T
-        G = jnp.matmul(do_tile, v_full.T, preferred_element_type=jnp.float32)
-        sum_pG = jnp.sum(p * G, axis=-1, keepdims=True)
-        d_logits = p * (G - sum_pG)
-        
-        dk_update = jnp.matmul(d_logits.T, q_tile, preferred_element_type=jnp.float32)
-        
-        return ((dk_curr + dk_update, dv_curr + dv_update), None)
-    
-    # Run scan
-    (dk_final, dv_final), _ = jax.lax.scan(scan_fn, (dk_acc, dv_acc), jnp.arange(q_heads * num_blocks))
-    
-    dk_ref[0, :, :] = dk_final
-    dv_ref[0, :, :] = dv_final
-
-
-def _make_bwd(window, soft_cap, sinks):
-    def bwd(res, g):
-        q, k, v, segment_ids = res
-        qh, seq, d = q.shape
-        kvh = k.shape[0]
-        dv = v.shape[-1]
-        group = qh // kvh
-        block_q = min(BLOCK_Q, seq)
-        seq_pad = -(-seq // block_q) * block_q
-        pad = seq_pad - seq
-        qp = jnp.pad(q, ((0, 0), (0, pad), (0, 0)))
-        kp = jnp.pad(k, ((0, 0), (0, pad), (0, 0)))
-        vp = jnp.pad(v, ((0, 0), (0, pad), (0, 0)))
-        gp = jnp.pad(g.astype(jnp.float32), ((0, 0), (0, pad), (0, 0)))
-        segp = jnp.pad(segment_ids, (0, pad))
-
-        dq = pl.pallas_call(
-            functools.partial(_bwd_dq_body, seq=seq, block_q=block_q,
-                              window=window, soft_cap=soft_cap),
-            grid=(qh, seq_pad // block_q),
-            in_specs=[
-                pl.BlockSpec((1, block_q, d), lambda h, i: (h, i, 0)),
-                pl.BlockSpec((1, seq_pad, d), lambda h, i: (h // group, 0, 0)),
-                pl.BlockSpec((1, seq_pad, dv), lambda h, i: (h // group, 0, 0)),
-                pl.BlockSpec((seq_pad,), lambda h, i: (0,)),
-                pl.BlockSpec((1, block_q, dv), lambda h, i: (h, i, 0)),
-            ],
-            out_specs=pl.BlockSpec((1, block_q, d), lambda h, i: (h, i, 0)),
-            out_shape=jax.ShapeDtypeStruct((qh, seq_pad, d), jnp.float32),
-            interpret=INTERPRET,
-        )(qp, kp, vp, segp, gp)[:, :seq, :]
-
-        qg = qp.reshape(kvh, group, seq_pad, d)
-        gg = gp.reshape(kvh, group, seq_pad, dv)
-        dk, dvv = pl.pallas_call(
-            functools.partial(_bwd_dkv_body, seq=seq,
-                              window=window, soft_cap=soft_cap),
-            grid=(kvh,),
-            in_specs=[
-                pl.BlockSpec((1, group, seq_pad, d), lambda h: (h, 0, 0, 0)),
-                pl.BlockSpec((1, seq_pad, d), lambda h: (h, 0, 0)),
-                pl.BlockSpec((1, seq_pad, dv), lambda h: (h, 0, 0)),
-                pl.BlockSpec((seq_pad,), lambda h: (0,)),
-                pl.BlockSpec((1, group, seq_pad, dv), lambda h: (h, 0, 0, 0)),
-            ],
-            out_specs=[
-                pl.BlockSpec((1, seq_pad, d), lambda h: (h, 0, 0)),
-                pl.BlockSpec((1, seq_pad, dv), lambda h: (h, 0, 0)),
-            ],
-            out_shape=[
-                jax.ShapeDtypeStruct((kvh, seq_pad, d), jnp.float32),
-                jax.ShapeDtypeStruct((kvh, seq_pad, dv), jnp.float32),
-            ],
-            interpret=INTERPRET,
-        )(qg, kp, vp, segp, gg)
-        dk = dk[:, :seq, :]
-        dvv = dvv[:, :seq, :]
-        # segment_ids is integer-typed: its cotangent slot is None.
-        return (dq.astype(q.dtype), dk.astype(k.dtype), dvv.astype(v.dtype), None)
-    return bwd
+    # GQA head mapping lives in the INDEX MAPS: q-head = h*group + s//nq.
+    dk, dv_out = pl.pallas_call(
+        functools.partial(_dkv_body, nq=nq, group=group,
+                          window=window, soft_cap=soft_cap),
+        grid=(kvh, nq, group * nq),
+        in_specs=[
+            pl.BlockSpec((1, B, dp_), lambda h, j, s: (h * group + s // nq, s % nq, 0)),
+            pl.BlockSpec((1, B, dp_), lambda h, j, s: (h, j, 0)),
+            pl.BlockSpec((1, B, dvp), lambda h, j, s: (h, j, 0)),
+            pl.BlockSpec((B,), lambda h, j, s: (s % nq,)),
+            pl.BlockSpec((B,), lambda h, j, s: (j,)),
+            pl.BlockSpec((1, B, dvp), lambda h, j, s: (h * group + s // nq, s % nq, 0)),
+            pl.BlockSpec((1, B), lambda h, j, s: (h * group + s // nq, s % nq)),
+            pl.BlockSpec((1, B), lambda h, j, s: (h * group + s // nq, s % nq)),
+        ],
+        out_specs=[
+            pl.BlockSpec((1, B, dp_), lambda h, j, s: (h, j, 0)),
+            pl.BlockSpec((1, B, dvp), lambda h, j, s: (h, j, 0)),
+        ],
+        out_shape=[
+            jax.ShapeDtypeStruct((kvh, s_pad, dp_), jnp.float32),
+            jax.ShapeDtypeStruct((kvh, s_pad, dvp), jnp.float32),
+        ],
+        scratch_shapes=[
+            pltpu.VMEM((B, dp_), jnp.float32),
+            pltpu.VMEM((B, dvp), jnp.float32),
+        ],
+        interpret=INTERPRET,
+        compiler_params=pltpu.CompilerParams(
+            dimension_semantics=("parallel", "parallel", "arbitrary"),
+        ),
+    )(qp, kp, vp, segp, segp, gp, lse_pad, dcoef_pad)
+    return dq, dk, dv_out
 
 
 def kernel(q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None):
+    """See module docstring: graded entrypoint, differentiated by the judge."""
+    if sinks is not None:
+        raise NotImplementedError("sinks not supported by this seed")
+    qh, seq, d = q.shape
+    kvh, dv = k.shape[0], v.shape[2]
+    dims = (qh, seq, d, dv, kvh)
+
     @jax.custom_vjp
-    def attn(q, k, v, segment_ids):
-        return _forward(q, k, v, segment_ids, window, soft_cap, sinks)
+    def attn(q, k, v, seg):
+        o, _lse, _res = _forward(q, k, v, seg, window, soft_cap)
+        return o[:, :seq, :dv]
 
-    def fwd(q, k, v, segment_ids):
-        out = _forward(q, k, v, segment_ids, window, soft_cap, sinks)
-        # residuals: YOUR choice -- store more (e.g. row max / denominator)
-        # to avoid recomputing the softmax statistics in the backward.
-        return out, (q, k, v, segment_ids)
+    def fwd_rule(q, k, v, seg):
+        o, lse, res = _forward(q, k, v, seg, window, soft_cap)
+        return o[:, :seq, :dv], (res, lse, o)
 
-    attn.defvjp(fwd, _make_bwd(window, soft_cap, sinks))
+    def bwd_rule(saved, g):
+        res, lse_pad, o_pad = saved
+        s_pad = res[-1]
+        gp = jnp.pad(g.astype(jnp.float32),
+                     ((0, 0), (0, s_pad - seq), (0, o_pad.shape[-1] - g.shape[-1])))
+        dcoef_pad = jnp.sum(gp * o_pad, axis=-1)      # [qh, s_pad]
+        dq, dk, dv_ = _backward(res, lse_pad, dcoef_pad, g, dims,
+                                window, soft_cap)
+        return (dq[:, :seq, :d].astype(q.dtype),
+                dk[:, :seq, :d].astype(k.dtype),
+                dv_[:, :seq, :dv].astype(v.dtype),
+                None)
+
+    attn.defvjp(fwd_rule, bwd_rule)
     return attn(q, k, v, segment_ids)
