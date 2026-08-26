@@ -90,7 +90,9 @@ def _lin_rnn(a, x, *, reverse: bool):
         in_specs=[pl.BlockSpec(blk, seq_idx), pl.BlockSpec(blk, seq_idx)],
         out_specs=pl.BlockSpec(blk, seq_idx),
         out_shape=jax.ShapeDtypeStruct((b, t, dt, lane), jnp.float32),
-        scratch_shapes=[pltpu.VMEM((1, 1, DIM_TILE, lane), jnp.float32)],
+        # Carry has the block shape WITHOUT the sequence axis -- production's
+        # h_shape = x_shape[:1] + x_shape[2:] -- so it matches ref[:, i].
+        scratch_shapes=[pltpu.VMEM((1, DIM_TILE, lane), jnp.float32)],
         interpret=INTERPRET,
         compiler_params=pltpu.CompilerParams(
             dimension_semantics=("parallel", "parallel", "arbitrary"),
