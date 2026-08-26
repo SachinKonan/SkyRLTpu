@@ -61,6 +61,20 @@ class JudgeActorImpl:
     """
 
     def __init__(self, problem: str, cfg: dict):
+        # PIN THIS ACTOR TO ITS CHIPS. Ray schedules the actor against the
+        # "TPU" resource, but whether it also exports TPU_VISIBLE_CHIPS
+        # varies by version -- measured on ray 2.58: the actor came up with
+        # it UNSET. On a 1-chip judge that is harmless; on a 4-chip grading
+        # host every actor would initialise against all four and collide.
+        # Ray always knows the assignment, so derive it and set it here
+        # BEFORE jax is imported (libtpu reads it at init).
+        try:
+            import ray as _ray
+            ids = (_ray.get_runtime_context().get_accelerator_ids() or {}).get("TPU") or []
+            if ids and not os.environ.get("TPU_VISIBLE_CHIPS"):
+                os.environ["TPU_VISIBLE_CHIPS"] = ",".join(str(i) for i in ids)
+        except Exception:
+            pass
         # Every actor on this host shares ONE XLA/JAX compile cache: the same
         # baselines and reference are compiled by each of them otherwise.
         cache_dir = cfg.get("compile_cache_dir")
@@ -88,9 +102,20 @@ class JudgeActorImpl:
         return {
             "problem": self.problem,
             "visible_chips": os.environ.get("TPU_VISIBLE_CHIPS", "?"),
+            "jax_devices": self._device_count(),
             "noise_floor": self.boot_report.get("noise_floor"),
             "boot_s": self.boot_report.get("boot_s"),
         }
+
+    def _device_count(self) -> int:
+        """How many chips this actor actually sees. On a multi-chip host a
+        count > width means the pinning did not take and actors are sharing
+        silicon -- which would corrupt every timing on the host."""
+        try:
+            import jax
+            return len(jax.local_devices())
+        except Exception:
+            return -1
 
     def grade(self, payload: dict) -> dict:
         return self.worker.grade_code(payload.get("code", ""), tag=payload.get("tag"))
