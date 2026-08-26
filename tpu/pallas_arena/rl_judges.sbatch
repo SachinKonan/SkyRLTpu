@@ -191,13 +191,21 @@ slot_supervisor() {
     while [ "$(date +%s)" -lt "$deadline" ]; do
       st=$(gc queued-resources describe "$name" --format='value(state.state)' 2>/dev/null)
       [ "$st" = "ACTIVE" ] && { misses=0; break; }
-      # A GCP queued resource in FAILED/SUSPENDED is TERMINAL and must be
-      # recreated -- BUT a single empty read is NOT proof of anything: a
-      # transient gcloud failure returns empty too, and on 2026-08-26 one
-      # such blip made this loop DELETE AN ACTIVE SLICE 7 minutes after it
-      # landed, then churn create/delete every 3 minutes. Require 3
-      # consecutive non-ACTIVE reads, and for the empty case confirm with a
-      # LIST call (a different API path) before touching anything.
+      # HEALTHY waiting states are NOT misses. The first debounce version
+      # counted ANY non-ACTIVE read and deleted a PROVISIONING slice after
+      # three polls of normal queueing (2026-08-26 16:53) -- the exact
+      # disease it was written to cure. Only TERMINAL states (FAILED/
+      # SUSPENDED) and the ambiguous empty read count toward deletion.
+      case "$st" in
+        WAITING_FOR_RESOURCES|PROVISIONING|ACCEPTED|CREATING|RESUMING)
+          misses=0; sleep 30; continue ;;
+      esac
+      # A terminal QR never rejoins the queue on its own and must be
+      # recreated -- but a single empty read proves nothing (a transient
+      # gcloud failure returns empty too, and one such blip deleted an
+      # ACTIVE slice 7 minutes after it landed). Require 3 consecutive
+      # terminal/empty reads, and confirm the empty case with a LIST call
+      # (a different API path) before touching anything.
       misses=$(( ${misses:-0} + 1 ))
       echo "[$name] state=${st:-empty} (miss ${misses}/3) $(date +%H:%M:%S)" >> "$log"
       if [ "$misses" -ge 3 ]; then
