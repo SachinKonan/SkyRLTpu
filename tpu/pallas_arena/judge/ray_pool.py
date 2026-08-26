@@ -71,10 +71,25 @@ class JudgeActorImpl:
         try:
             import ray as _ray
             ids = (_ray.get_runtime_context().get_accelerator_ids() or {}).get("TPU") or []
-            if ids and not os.environ.get("TPU_VISIBLE_CHIPS"):
-                os.environ["TPU_VISIBLE_CHIPS"] = ",".join(str(i) for i in ids)
+            # Only plain chip indices are meaningful to libtpu; anything else
+            # (UUIDs, names) would break init for EVERY actor, which is worse
+            # than not pinning at all.
+            idx = [str(int(i)) for i in ids if str(i).strip().lstrip("-").isdigit()]
+            if idx and not os.environ.get("TPU_VISIBLE_CHIPS"):
+                os.environ["TPU_VISIBLE_CHIPS"] = ",".join(idx)
+                self._pinned = ",".join(idx)
         except Exception:
             pass
+        # SELF-CHECK: if the pin makes jax unable to see a chip, undo it and
+        # continue unpinned rather than losing the whole pool to a guess.
+        try:
+            import jax as _jax
+            if not _jax.local_devices():
+                raise RuntimeError("no local devices")
+        except Exception as e:
+            if os.environ.pop("TPU_VISIBLE_CHIPS", None):
+                print(f"[actor] pin rejected ({type(e).__name__}); continuing unpinned",
+                      flush=True)
         # Every actor on this host shares ONE XLA/JAX compile cache: the same
         # baselines and reference are compiled by each of them otherwise.
         cache_dir = cfg.get("compile_cache_dir")
@@ -200,9 +215,25 @@ def run_pool(
         a = cls.remote(problem, {**cfg, "worker_id": f"ray-{problem}-{i}"})
         pool.append({"actor": a, "problem": problem, "busy": None})
     print(f"[pool] booting {actors} actors ({width} chip each) ...", flush=True)
+    mispinned = False
     for i, slot in enumerate(pool):
         info = ray.get(slot["actor"].ready.remote())
         print(f"[pool] actor {i} up: {info}", flush=True)
+        # MIS-PINNING IS SILENT CORRUPTION, NOT A CRASH. If actors see more
+        # chips than they reserved, several are initialised on the SAME chip
+        # and every latency ratio measured here is contended -- the reward is
+        # a ratio, so wrong numbers look plausible. Refuse to run wide.
+        if len(pool) > 1 and isinstance(info, dict) and info.get("jax_devices", -1) > width:
+            mispinned = True
+    if mispinned:
+        print(f"[pool] MIS-PINNED: actors see more than {width} chip(s); "
+              f"falling back to ONE actor so timings stay single-tenant", flush=True)
+        for slot in pool[1:]:
+            try:
+                ray.kill(slot["actor"], no_restart=True)
+            except Exception:
+                pass
+        pool = pool[:1]
 
     if jax_cache_gcs:
         # Boot is done; the cache now holds exactly the baseline/reference
