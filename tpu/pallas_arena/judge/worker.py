@@ -876,10 +876,76 @@ class PersistentWorker:
                         continue
                     tp_in, tp_out = specs
                     tp_mesh = timing_mod.make_mesh(tp_w)
-                    raw_base = gb["raw"] if gb and gb.get("raw") else problem.for_case(case).baseline
+                    # PER-SHARD ELECTION (task #12, the megablox-39.8x class):
+                    # a baseline elected at the FULL shape can be catastrophic
+                    # at per-shard geometry (megablox's tuned tiling measured
+                    # 16x off at unelected shapes) -- a mistuned denominator
+                    # makes any candidate look absurdly fast. Re-elect among
+                    # the same candidates AT the shard shape, through the same
+                    # shard_map the timing uses.
+                    _pc_tp = problem.for_case(case)
+                    try:
+                        _bl_cands = _pc_tp.baseline_candidates()
+                    except Exception:
+                        _bl_cands = {"baseline": _pc_tp.baseline}
+                    if gb and gb.get("raw") and "elected-full" not in _bl_cands:
+                        _bl_cands = {**_bl_cands, "elected-full": gb["raw"]}
+                    _el_in = problem.make_inputs(fold_in(k_time, 77_000 + hash_stable(case.name) % 1000), case)
+                    block(_el_in)
+                    _el_sh = timing_mod.shard_inputs(_el_in, tp_mesh, tp_in)
+                    _tp_timings = {}
+                    for _nm, _fn in _bl_cands.items():
+                        try:
+                            _sf = self.jax.jit(timing_mod.shard_mapped(_fn, tp_mesh, tp_in, tp_out))
+                            for _ in range(2):
+                                block(_sf(*_el_sh))
+                            _ts = []
+                            for _ in range(5):
+                                _t0 = perf()
+                                block(_sf(*_el_sh))
+                                _ts.append(perf() - _t0)
+                            _ts.sort()
+                            _tp_timings[_nm] = (_ts[len(_ts) // 2], _sf, _fn)
+                        except Exception as _e:  # unavailable at shard shape
+                            print(f"[tp-elect] {case.name}: {_nm} unavailable: "
+                                  f"{type(_e).__name__}: {str(_e)[:100]}", flush=True)
+                    if not _tp_timings:
+                        skipped_tp[case.name] = "no baseline usable at shard shape"
+                        continue
+                    _best = min(_tp_timings, key=lambda k: _tp_timings[k][0])
+                    raw_base = _tp_timings[_best][2]
+                    base_fn = _tp_timings[_best][1]
+                    result.setdefault("tp_baseline_impls", {})[case.name] = {
+                        "impl": _best,
+                        "all_ms": {k: round(v[0] * 1e3, 3) for k, v in _tp_timings.items()},
+                    }
                     cand_fn = self.jax.jit(timing_mod.shard_mapped(cand_fn, tp_mesh, tp_in, tp_out))
-                    base_fn = self.jax.jit(timing_mod.shard_mapped(raw_base, tp_mesh, tp_in, tp_out))
                     tp_widths[case.name] = tp_w
+
+                    # TP REF-VS-REF CONTROL: the instrument must pass its own
+                    # sanity check under shard_map before any TP number is
+                    # believed. Baseline against itself through the SAME
+                    # protocol must grade ~1.0; if it does not, the timing
+                    # path (not the candidate) is broken -- skip and say so
+                    # instead of publishing an impossible score.
+                    _ctl_pairs = []
+                    for _i in range(6):
+                        _cin = problem.make_inputs(fold_in(k_time, 88_000 + _i), case)
+                        block(_cin)
+                        _cin = timing_mod.shard_inputs(_cin, tp_mesh, tp_in)
+                        _cp, _, _ = timing_mod.counterbalanced_pair(
+                            _i, lambda: base_fn(*_cin), lambda: base_fn(*_cin), perf, block
+                        )
+                        if _i >= 2:
+                            _ctl_pairs.append(_cp)
+                    _ctl = timing_mod.interleaved_score(_ctl_pairs)
+                    result.setdefault("tp_control", {})[case.name] = round(_ctl, 4)
+                    _ctl_tol = max(3 * (self.noise_floor or 0.05), 0.15)
+                    if abs(_ctl - 1.0) > _ctl_tol:
+                        skipped_tp[case.name] = (
+                            f"tp control failed: baseline-vs-baseline graded {_ctl:.3f} "
+                            f"(tolerance +/-{_ctl_tol:.2f}) -- timing distrusted")
+                        continue
 
                     # SHARDED == UNSHARDED, checked before anything is timed
                     # (tokamax's api_sharding invariant; theirs is atol=0.0).
@@ -910,6 +976,7 @@ class PersistentWorker:
                         del chk_in, un_out, sh_out
                         continue
                     del chk_in, un_out, sh_out
+                tp_wall_pairs, tp_dev_pairs = [], []
                 for i in range(self.timing_warmup + self.timing_pairs):
                     inputs = problem.make_inputs(fold_in(fold_in(k_time, i), hash_stable(case.name)), case)
                     block(inputs)
@@ -923,11 +990,14 @@ class PersistentWorker:
                     # outputs the correctness checks need, and the device pair
                     # replaces only the two latencies -- so a ratio is not
                     # squashed toward 1.0 by dispatch overhead common to both.
+                    wall_pair = pair
+                    dev_pair = None
                     if self.device_timing:
                         dp = timing_mod.counterbalanced_pair_device(
                             i, base_fn, cand_fn, inputs, timing_mod.device_timer
                         )
                         if dp is not None:
+                            dev_pair = dp
                             pair = dp
                             timer_used["device"] = timer_used.get("device", 0) + 1
                         else:
@@ -936,6 +1006,10 @@ class PersistentWorker:
                         timer_used["wallclock"] = timer_used.get("wallclock", 0) + 1
                     if i >= self.timing_warmup:
                         it = i - self.timing_warmup
+                        if tp_mesh is not None:
+                            tp_wall_pairs.append(wall_pair)
+                            if dev_pair is not None:
+                                tp_dev_pairs.append(dev_pair)
                         pairs.append(pair)
                         if it in check_iters:
                             checks[it] = (inputs, c_out)
@@ -946,6 +1020,22 @@ class PersistentWorker:
                     okay, why = check_tolerance(error_stats(c_out, ref32), tol)
                     if not okay:
                         return fail("timed_output_correctness", f"{case.name} timed iter {it}: {why}")
+                if tp_mesh is not None and tp_wall_pairs and tp_dev_pairs:
+                    # TIMER CROSS-CHECK (task #12): under shard_map the two
+                    # instruments must agree. The device timer's op-interval
+                    # union has never been validated over multiple device
+                    # timelines -- if it diverges from wallclock beyond the
+                    # floor, neither number is publishable for this case.
+                    _mw = timing_mod.interleaved_score(tp_wall_pairs)
+                    _md = timing_mod.interleaved_score(tp_dev_pairs)
+                    result.setdefault("tp_timer_ratios", {})[case.name] = {
+                        "wall": round(_mw, 4), "device": round(_md, 4)}
+                    _dis_tol = max(3 * (self.noise_floor or 0.05), 0.20)
+                    if abs(_md - _mw) > _dis_tol * max(_mw, 1e-9):
+                        skipped_tp[case.name] = (
+                            f"timer disagreement: wall {_mw:.3f} vs device {_md:.3f} "
+                            f"-- TP timing distrusted, case excluded")
+                        continue
                 ct = timing_mod.CaseTiming(
                     case=case.name, pairs=pairs, holdout=case.holdout,
                     blind=getattr(case, "blind", False),
