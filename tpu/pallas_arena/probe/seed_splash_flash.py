@@ -41,8 +41,17 @@ from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
 
 INTERPRET = bool(int(os.environ.get("PALLAS_INTERPRET", "0")))
-B = 512
+B = 1024        # q/kv block rows; 1024 = 8*128, so per-row vectors (segments,
+                # logsumexp, dcoef) tile exactly as (8, 128) blocks -- Pallas
+                # TPU requires the last two dims of every block shape to be
+                # divisible by (8, 128), which rules out (B,) and (1, B).
+ROWS, LANES = 8, 128
 NEG_INF = -1e30
+
+
+def _vec(ref):
+    """A per-row vector delivered as an (8, 128) tile -> [B, 1] column."""
+    return ref[...].reshape(B, 1)
 
 
 def _tile_mask(qi, ki, qseg_ref, kseg_ref, window):
@@ -54,8 +63,8 @@ def _tile_mask(qi, ki, qseg_ref, kseg_ref, window):
     m = kpos <= qpos
     if window is not None:
         m = m & ((qpos - kpos) < window)
-    qs = qseg_ref[...].reshape(B, 1)
-    ks = kseg_ref[...].reshape(1, B)
+    qs = _vec(qseg_ref)
+    ks = _vec(kseg_ref).reshape(1, B)
     return m & (qs == ks) & (qs != 0) & (ks != 0)
 
 
@@ -81,22 +90,24 @@ def _fwd_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, o_ref, lse_ref,
     mask = _tile_mask(pl.program_id(1), ki, qseg_ref, kseg_ref, window)
     z = jnp.where(mask, z, NEG_INF)
 
-    m_prev = m_ref[...]
+    m_prev = _vec(m_ref)
     m_new = jnp.maximum(m_prev, jnp.max(z, axis=1, keepdims=True))
     alpha = jnp.exp(m_prev - m_new)
     p = jnp.where(mask, jnp.exp(z - m_new), 0.0)
-    l_ref[...] = l_ref[...] * alpha + jnp.sum(p, axis=1, keepdims=True)
+    l_new = _vec(l_ref) * alpha + jnp.sum(p, axis=1, keepdims=True)
+    l_ref[...] = l_new.reshape(ROWS, LANES)
     acc_ref[...] = acc_ref[...] * alpha + jnp.dot(
         p, v_ref[0].astype(jnp.float32), preferred_element_type=jnp.float32)
-    m_ref[...] = m_new
+    m_ref[...] = m_new.reshape(ROWS, LANES)
 
     @pl.when(ki == nkv - 1)
     def _flush():
-        l = l_ref[...]
+        l = _vec(l_ref)
         live = l > 0.0
         safe = jnp.where(live, l, 1.0)
         o_ref[0] = jnp.where(live, acc_ref[...] / safe, 0.0)
-        lse_ref[0] = jnp.where(live, m_ref[...] + jnp.log(safe), NEG_INF)[:, 0]
+        lse_ref[...] = jnp.where(live, _vec(m_ref) + jnp.log(safe),
+                                 NEG_INF).reshape(1, ROWS, LANES)
 
 
 def _dq_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, do_ref, lse_ref,
@@ -109,11 +120,11 @@ def _dq_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, do_ref, lse_ref,
 
     zc = _tile_logits(q_ref, k_ref, soft_cap)
     mask = _tile_mask(pl.program_id(1), ki, qseg_ref, kseg_ref, window)
-    lse = lse_ref[0].reshape(B, 1)
+    lse = _vec(lse_ref)
     p = jnp.where(mask, jnp.exp(jnp.where(mask, zc, NEG_INF) - lse), 0.0)
     dp = jnp.dot(do_ref[0].astype(jnp.float32), v_ref[0].astype(jnp.float32).T,
                  preferred_element_type=jnp.float32)
-    ds = p * (dp - dcoef_ref[0].reshape(B, 1))
+    ds = p * (dp - _vec(dcoef_ref))
     if soft_cap is not None:
         ds = ds * (1.0 - (zc / soft_cap) ** 2)     # d(capped)/d(pre-cap)
     acc_ref[...] += jnp.dot(ds, k_ref[0].astype(jnp.float32),
@@ -137,13 +148,13 @@ def _dkv_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, do_ref, lse_ref,
     qi = si % nq                   # q-block index (the head arrives via BlockSpec)
     zc = _tile_logits(q_ref, k_ref, soft_cap)
     mask = _tile_mask(qi, pl.program_id(1), qseg_ref, kseg_ref, window)
-    lse = lse_ref[0].reshape(B, 1)
+    lse = _vec(lse_ref)
     p = jnp.where(mask, jnp.exp(jnp.where(mask, zc, NEG_INF) - lse), 0.0)
     do = do_ref[0].astype(jnp.float32)
     dv_acc[...] += jnp.dot(p.T, do, preferred_element_type=jnp.float32)
     dp = jnp.dot(do, v_ref[0].astype(jnp.float32).T,
                  preferred_element_type=jnp.float32)
-    ds = p * (dp - dcoef_ref[0].reshape(B, 1))
+    ds = p * (dp - _vec(dcoef_ref))
     if soft_cap is not None:
         ds = ds * (1.0 - (zc / soft_cap) ** 2)
     dk_acc[...] += jnp.dot(ds.T, q_ref[0].astype(jnp.float32),
@@ -182,6 +193,7 @@ def _forward(q, k, v, seg, window, soft_cap):
     kp = _pad_lane(_pad_seq(k, s_pad))
     vp = _pad_lane(_pad_seq(v, s_pad))
     segp = _pad_seq(seg, s_pad, axis=0)
+    seg2 = segp.reshape(s_pad // LANES, LANES)     # (8,128)-tileable
     dp_, dvp = qp.shape[-1], vp.shape[-1]
     nq = s_pad // B
 
@@ -192,32 +204,32 @@ def _forward(q, k, v, seg, window, soft_cap):
             pl.BlockSpec((1, B, dp_), lambda h, i, j: (h, i, 0)),
             pl.BlockSpec((1, B, dp_), lambda h, i, j: (h // group, j, 0)),
             pl.BlockSpec((1, B, dvp), lambda h, i, j: (h // group, j, 0)),
-            pl.BlockSpec((B,), lambda h, i, j: (i,)),
-            pl.BlockSpec((B,), lambda h, i, j: (j,)),
+            pl.BlockSpec((ROWS, LANES), lambda h, i, j: (i, 0)),
+            pl.BlockSpec((ROWS, LANES), lambda h, i, j: (j, 0)),
         ],
         out_specs=[
             pl.BlockSpec((1, B, dvp), lambda h, i, j: (h, i, 0)),
-            pl.BlockSpec((1, B), lambda h, i, j: (h, i)),
+            pl.BlockSpec((1, ROWS, LANES), lambda h, i, j: (h, i, 0)),
         ],
         out_shape=[
             jax.ShapeDtypeStruct((qh, s_pad, dvp), jnp.float32),
-            jax.ShapeDtypeStruct((qh, s_pad), jnp.float32),
+            jax.ShapeDtypeStruct((qh, s_pad // LANES, LANES), jnp.float32),
         ],
         scratch_shapes=[
-            pltpu.VMEM((B, 1), jnp.float32),
-            pltpu.VMEM((B, 1), jnp.float32),
+            pltpu.VMEM((ROWS, LANES), jnp.float32),
+            pltpu.VMEM((ROWS, LANES), jnp.float32),
             pltpu.VMEM((B, dvp), jnp.float32),
         ],
         interpret=INTERPRET,
         compiler_params=pltpu.CompilerParams(
             dimension_semantics=("parallel", "parallel", "arbitrary"),
         ),
-    )(qp, kp, vp, segp, segp)
-    return o, lse, (qp, kp, vp, segp, s_pad)
+    )(qp, kp, vp, seg2, seg2)
+    return o, lse, (qp, kp, vp, seg2, s_pad)
 
 
 def _backward(res, lse_pad, dcoef_pad, g, dims, window, soft_cap):
-    qp, kp, vp, segp, s_pad = res
+    qp, kp, vp, seg2, s_pad = res
     qh, seq, d, dv, kvh = dims
     group = qh // kvh
     dp_, dvp = qp.shape[-1], vp.shape[-1]
@@ -231,11 +243,11 @@ def _backward(res, lse_pad, dcoef_pad, g, dims, window, soft_cap):
             pl.BlockSpec((1, B, dp_), lambda h, i, j: (h, i, 0)),
             pl.BlockSpec((1, B, dp_), lambda h, i, j: (h // group, j, 0)),
             pl.BlockSpec((1, B, dvp), lambda h, i, j: (h // group, j, 0)),
-            pl.BlockSpec((B,), lambda h, i, j: (i,)),
-            pl.BlockSpec((B,), lambda h, i, j: (j,)),
+            pl.BlockSpec((ROWS, LANES), lambda h, i, j: (i, 0)),
+            pl.BlockSpec((ROWS, LANES), lambda h, i, j: (j, 0)),
             pl.BlockSpec((1, B, dvp), lambda h, i, j: (h, i, 0)),
-            pl.BlockSpec((1, B), lambda h, i, j: (h, i)),
-            pl.BlockSpec((1, B), lambda h, i, j: (h, i)),
+            pl.BlockSpec((1, ROWS, LANES), lambda h, i, j: (h, i, 0)),
+            pl.BlockSpec((1, ROWS, LANES), lambda h, i, j: (h, i, 0)),
         ],
         out_specs=pl.BlockSpec((1, B, dp_), lambda h, i, j: (h, i, 0)),
         out_shape=jax.ShapeDtypeStruct((qh, s_pad, dp_), jnp.float32),
@@ -244,7 +256,7 @@ def _backward(res, lse_pad, dcoef_pad, g, dims, window, soft_cap):
         compiler_params=pltpu.CompilerParams(
             dimension_semantics=("parallel", "parallel", "arbitrary"),
         ),
-    )(qp, kp, vp, segp, segp, gp, lse_pad, dcoef_pad)
+    )(qp, kp, vp, seg2, seg2, gp, lse_pad, dcoef_pad)
 
     # GQA head mapping lives in the INDEX MAPS: q-head = h*group + s//nq.
     dk, dv_out = pl.pallas_call(
@@ -255,11 +267,11 @@ def _backward(res, lse_pad, dcoef_pad, g, dims, window, soft_cap):
             pl.BlockSpec((1, B, dp_), lambda h, j, s: (h * group + s // nq, s % nq, 0)),
             pl.BlockSpec((1, B, dp_), lambda h, j, s: (h, j, 0)),
             pl.BlockSpec((1, B, dvp), lambda h, j, s: (h, j, 0)),
-            pl.BlockSpec((B,), lambda h, j, s: (s % nq,)),
-            pl.BlockSpec((B,), lambda h, j, s: (j,)),
+            pl.BlockSpec((ROWS, LANES), lambda h, j, s: (s % nq, 0)),
+            pl.BlockSpec((ROWS, LANES), lambda h, j, s: (j, 0)),
             pl.BlockSpec((1, B, dvp), lambda h, j, s: (h * group + s // nq, s % nq, 0)),
-            pl.BlockSpec((1, B), lambda h, j, s: (h * group + s // nq, s % nq)),
-            pl.BlockSpec((1, B), lambda h, j, s: (h * group + s // nq, s % nq)),
+            pl.BlockSpec((1, ROWS, LANES), lambda h, j, s: (h * group + s // nq, s % nq, 0)),
+            pl.BlockSpec((1, ROWS, LANES), lambda h, j, s: (h * group + s // nq, s % nq, 0)),
         ],
         out_specs=[
             pl.BlockSpec((1, B, dp_), lambda h, j, s: (h, j, 0)),
@@ -277,7 +289,7 @@ def _backward(res, lse_pad, dcoef_pad, g, dims, window, soft_cap):
         compiler_params=pltpu.CompilerParams(
             dimension_semantics=("parallel", "parallel", "arbitrary"),
         ),
-    )(qp, kp, vp, segp, segp, gp, lse_pad, dcoef_pad)
+    )(qp, kp, vp, seg2, seg2, gp, lse_pad, dcoef_pad)
     return dq, dk, dv_out
 
 
@@ -303,7 +315,8 @@ def kernel(q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None):
         s_pad = res[-1]
         gp = jnp.pad(g.astype(jnp.float32),
                      ((0, 0), (0, s_pad - seq), (0, o_pad.shape[-1] - g.shape[-1])))
-        dcoef_pad = jnp.sum(gp * o_pad, axis=-1)      # [qh, s_pad]
+        dcoef_pad = jnp.sum(gp * o_pad, axis=-1).reshape(
+            g.shape[0], s_pad // LANES, LANES)         # (8,128)-tileable
         dq, dk, dv_ = _backward(res, lse_pad, dcoef_pad, g, dims,
                                 window, soft_cap)
         return (dq[:, :seq, :d].astype(q.dtype),
