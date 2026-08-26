@@ -229,6 +229,32 @@ def run_pool(
                     print(f"[pool] grade failed {meta['work_id']}: {type(e).__name__}: {e}", flush=True)
                     continue
                 result["item_wall_s"] = time.time() - meta["t0"]
+                # CORE HALT RECOVERY. A candidate can halt a TPU core at
+                # RUNTIME (past Mosaic): measured 2026-08-26, one kernel
+                # halted a SparseCoreSequencer and every later grade on that
+                # chip returned "the program continuator has halted
+                # unexpectedly" -- 102 halts, all subsequent verdicts junk.
+                # Forking per candidate does not help: the DEVICE is
+                # poisoned, not the process. Replace the actor so the next
+                # item meets a freshly initialised chip. In RL this is the
+                # difference between one bad rollout and a whole step of
+                # falsely-zero rewards.
+                blob = (str(result.get("violations")) + str(result.get("observation")))
+                if any(sig in blob for sig in (
+                        "halted unexpectedly", "CoreHalt", "continuator has halted")):
+                    slot = meta["slot"]
+                    print(f"[pool] CORE HALT on {meta['work_id']}; replacing actor", flush=True)
+                    try:
+                        ray.kill(slot["actor"], no_restart=True)
+                    except Exception:
+                        pass
+                    slot["actor"] = cls.remote(slot["problem"],
+                                               {**cfg, "worker_id": f"ray-{slot['problem']}-r"})
+                    try:
+                        print(f"[pool] replacement actor up: "
+                              f"{ray.get(slot['actor'].ready.remote())}", flush=True)
+                    except Exception as e:
+                        print(f"[pool] replacement actor FAILED: {e!r}", flush=True)
                 try:
                     _http_json(f"{base}/result", {
                         "lease_id": meta["lease_id"], "work_id": meta["work_id"], "result": result,
