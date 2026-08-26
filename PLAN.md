@@ -73,22 +73,45 @@ The engine's single-threaded dispatch makes collective ORDER safe by constructio
    returns the facade (it no-ops distributed when coordinator_address is None,
    mirroring `JaxBackend.__init__:1372`).
 3. **Tunix internal edits** (all in `skyrl/backends/tunix_backend.py`):
-   - `__init__`: `jax.distributed.initialize(process_id=0,...)` before any JAX op
-     when coordinator_address set. KEEP `skip_jax_distributed_system=True` in
-     MaxText overrides (:600) — we own init.
+   - `__init__` (:404): `jax.distributed.initialize(process_id=0,...)` must
+     run FIRST — before `AutoTokenizer.from_pretrained` is fine, but strictly
+     before `_load_base_model()` (first JAX op). KEEP
+     `skip_jax_distributed_system=True` in MaxText overrides (:600) — we own
+     init. NOTE: the tokenizer loads from HF on every process → trainer hosts
+     1..k need the HF tokenizer cache (tiny, but HF_HUB_OFFLINE=1 hosts with a
+     cold cache will fail — see hooks item).
    - ckpt-conversion subprocess (:540): `process_index()==0` only +
      `sync_global_devices` barrier.
    - `_place_microbatch` (:1095–1121): `jax.device_put(a, row_sharding)` →
      `jax.make_array_from_process_local_data` when `process_count()>1`
      (RPC broadcast guarantees identical batch on every process).
-   - fb outputs (:1406): `jax.device_get(per_token...)` fails on non-addressable
-     shards → `multihost_utils.process_allgather(..., tiled=True)`
-     (in-tree precedent: `skyrl/tx/utils/generator.py:391`).
-   - LoRA I/O (:2137 save, :2166 load, :2186 sampler ckpt, :2224 tar, :2421
-     peft tensors): allgather LoRA state (collective — ALL processes call),
-     then p0-only writes/uploads/vLLM notify, then barrier. load: p0 reads
-     bytes → broadcast bytes → each process device_puts with its sharding
-     (hosts do not share disks).
+   - fb outputs (:1406): `jax.device_get((per_token_losses, target_logprobs))`
+     sits INSIDE the per-microbatch loop and fails on non-addressable shards
+     under a global mesh → `multihost_utils.process_allgather(..., tiled=True)`
+     (in-tree precedent: `skyrl/tx/utils/generator.py:391`). Pattern per
+     microbatch: collective gather FIRST, then
+     `if jax.process_index() != 0: continue` before the `token_losses_out`
+     row assembly. Note the comment at :1410 — device_get doubles as the
+     async-dispatch fence for the timing log; process_allgather preserves
+     that property.
+   - LoRA I/O — VERIFIED choke point: `_flat_numpy` (:2094) does the
+     per-leaf `jax.device_get` for BOTH `save_checkpoint` (:2137, which also
+     writes optimizer_state — Adam moments over LoRA params, still small) and
+     the sampler/PEFT export chain (`save_sampler_checkpoint` :2186 →
+     `_peft_adapter_tar_bytes` :2224 → `_export_peft_adapter` :2275 →
+     `_peft_tensors_maxtext` :2421). ONE allgather-aware `_flat_numpy`
+     replacement (process_allgather leaf-wise when process_count()>1) covers
+     every save path; it is a collective, so ALL processes must reach it —
+     p0-gate only the file/tar/HTTP work AFTER it, then barrier.
+     `load_checkpoint` (:2166) goes through `_read_checkpoint_archive`
+     (`download_and_unpack`) and checkpoint paths are GCS — simplest correct
+     multi-host load: let EVERY process download+parse the same archive
+     (deterministic content), each device_puts its own shards; byte-broadcast
+     from p0 is the optimization, not the requirement.
+     `save_sampler_checkpoint` detail: the in-memory snapshot
+     (`slot.sampler_lora_states[ckpt_id] = slot.lora_state`) must run on all
+     processes (it holds per-process shards); `vllm_client.push_adapter` /
+     `pack_and_upload` / `ensure_lora_loaded` are p0-only.
    - batch divisibility assert (:249) against global device_count.
    **RULE: no collective inside a process-gated branch** (deadlock).
 4. **Launcher** `tpu/start_colocated_vllm_tinker.sh`: drop the :558 tunix
@@ -96,7 +119,8 @@ The engine's single-threaded dispatch makes collective ORDER safe by constructio
    :590–598); worker scripts reuse the :780–822 generation unchanged.
 5. **Hooks**: `tpu/jobman/ensure_orbax_ckpt.sh` gate `worker 0` →
    `worker ∈ TRAIN_WORKER_IDS` (sharded orbax restore reads on every trainer
-   host). `cell_worker.sh`: allow per-cell `TRAIN_WORKERS`/`VLLM_WORKERS`
+   host). Same hosts also need the HF tokenizer cache (tokenizer loads on all
+   processes). `cell_worker.sh`: allow per-cell `TRAIN_WORKERS`/`VLLM_WORKERS`
    override (default unchanged = single-host).
 6. **Tests**: CPU 2-process fake-mesh
    (`XLA_FLAGS=--xla_force_host_platform_device_count=4`, localhost
@@ -124,6 +148,25 @@ Multi-host vLLM (exists behind `VLLM_RAY_EXECUTOR=1` in `start_vllm_tpu.sh:158`
 for >single-host models; a KV-padding loss for our 27–31B fleet), gpt-oss/muse
 specifics, meta-driver integration, any change to running v5p cells.
 
+## For the next agent — operational notes
+
+- **Nothing in this worktree is implemented.** PLAN.md is the only artifact;
+  every `skyrl/` and `tpu/` file is byte-identical to league @ 29601970.
+- Do NOT touch the league worktree's running fleet (live jobman controllers
+  drive v5p cells from /n/fs/vision-mix/sk7524/SkyRLTpu-league). Code here
+  ships to TPUs only when someone rebuilds and pushes the code bundle
+  (tar of this tree → gs://.../code-bundles/..., size-diff triggers unpack);
+  building the bundle from THIS worktree would put unfinished multihost code
+  on the live fleet — don't, until T1 passes.
+- Quick verification loop: `python3 -m py_compile` the touched files, then the
+  CPU fake-mesh test (work item 6) — no TPU needed until T0.
+- `.claude/docs/` (repo docs) + `TPU.md` cover the wider stack; the league
+  fleet's operational lore (HBM budgets, KV-head/TP rules, cache traps) lives
+  in the parent session's memory files, summarized where relevant above.
+
 ## Status log (append entries here)
 
-- 2026-08-26: worktree created, plan written. Implementation not started.
+- 2026-08-26: worktree created off league@29601970; plan written and then
+  deepened with verified line-level detail (helpers `_flat_numpy`:2094,
+  save/export call chain, fb-tail gather point, tokenizer-cache requirement).
+  Implementation NOT started — user directive: worktree + plan only.
