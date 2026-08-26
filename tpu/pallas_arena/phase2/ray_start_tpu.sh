@@ -16,6 +16,24 @@ VENV="${VENV:-$HOME/arena-venv}"
 RAY="${RAY:-$VENV/bin/ray}"
 CHIPS="${RAY_CHIPS:-4}"
 
+# IDEMPOTENT: the fleet's supervisor re-runs this on every ssh reconnect,
+# and the old stop/start KILLED every in-flight grading task each time --
+# leases expired, items requeued, duplicate verdicts (measured 2026-08-26).
+# A healthy head with a TPU resource is reused, never restarted.
+have=$("$VENV/bin/python" - <<'EOF' 2>/dev/null
+try:
+    import ray
+    ray.init(address="auto", ignore_reinit_error=True, logging_level="ERROR")
+    print(int(ray.cluster_resources().get("TPU", 0)))
+except Exception:
+    print(0)
+EOF
+)
+if [ "${have:-0}" -ge 1 ]; then
+  echo "[ray] head already up with TPU=${have}; reusing"
+  exit 0
+fi
+
 "$RAY" stop --force >/dev/null 2>&1
 pkill -f 'raylet|ray::' >/dev/null 2>&1
 sleep 2
