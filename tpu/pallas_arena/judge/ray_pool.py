@@ -280,17 +280,14 @@ def run_pool(
                 payload = item.get("payload") or {}
                 problem = payload.get("problem") or problems[0]
                 if problem not in problems:
-                    print(f"[pool] WARNING problem={problem} not served; faulting "
-                          f"{item['work_id']}", flush=True)
+                    # MULTI-POOL semantic: two pool drivers may share one queue
+                    # (e.g. a per-problem driver added beside the fleet's).
+                    # Faulting a foreign item would destroy work another pool
+                    # can grade -- drop the lease silently instead; it expires
+                    # (240 s) and requeues for the pool that serves it.
+                    print(f"[pool] problem={problem} not served here; releasing "
+                          f"{item['work_id']} for another pool", flush=True)
                     last_work = time.time()
-                    try:
-                        _http_json(f"{base}/result", {
-                            "lease_id": item["lease_id"], "work_id": item["work_id"],
-                            "result": {"ok": False, "gate": "judge_fault", "passed": False,
-                                       "violations": [f"pool serves {problems}, not {problem}"]},
-                        })
-                    except Exception:
-                        pass
                     continue
                 cases = cases_by_problem.get(problem)
                 cand = _Candidate(item, problem, cases or [])
