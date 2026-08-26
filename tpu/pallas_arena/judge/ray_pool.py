@@ -2,32 +2,45 @@
 
 TOPOLOGY. In the v5p-32 RL cell the grading host (w3) is preempted with the
 rest of the slice -- shared fate, so there is never a warm trainer waiting on
-dead graders. But one judge process grades ONE candidate on ONE chip, leaving
+dead graders. But ONE judge process grades ONE candidate on ONE chip, leaving
 three of the host's four chips idle: 6% of the cell's compute doing the work
-that gates every RL step. This module runs N judge ACTORS on that host, one
-per chip, fed by the same queue.
+that gates every RL step.
 
-WHY RAY. Ray schedules TPU chips as a resource and sets TPU_VISIBLE_CHIPS for
-each worker, so a test that needs 4 chips is `resources={"TPU": 4}` rather
-than a hand-rolled chip-set mutex. Tensor-parallel cases (splash's tp4-*/
-tp8-*) are declared shape cases, so variable width is a real requirement --
-this is the mechanism for it. (Their TIMINGS are not yet trustworthy: open
-task #12, impossible scores on v6e-8. Scheduling them is ready before
-believing them, which is fine -- TP cases are phase 2.)
+DESIGN: ONE RAY HEAD, ONE TASK PER TEST, CHIPS AS A RESOURCE.
 
-WHY ACTORS, NOT max_calls=1 TASKS. A PersistentWorker's boot elects baselines
-and calibrates the noise floor -- minutes of work amortized over every item
-it then grades. A fresh process per grade would re-pay that each time. Crash
-isolation does not need it either: `grader.py` already forks a plain
-subprocess per candidate, so a core-halting kernel dies in the child. Ray's
-actor restart covers the rarer case where the actor process itself dies.
+    grade.options(resources={"TPU": width}).remote(...)
+
+Ray schedules TPU chips as a resource, so a test that needs 4 chips is
+`width=4` and a normal test is `width=1` -- no hand-rolled chip mutex. This
+is what makes TENSOR-PARALLEL tests work: a task holds its chips only while
+it runs and releases them on return, so a TP-4 test is scheduled as soon as
+four chips free up. (Long-lived width-1 ACTORS cannot do this: they hold
+every chip permanently and Ray will not preempt them, so a {"TPU": 4}
+request could never be satisfied on the same host.) splash declares
+tp4-*/tp8-* shape cases, so variable width is a real requirement; whether
+their TIMINGS are trustworthy is open task #12, but scheduling them
+correctly is this module's job.
+
+max_calls=1 (a FRESH PROCESS per task) is load-bearing, not caution: JAX and
+libtpu initialise once per process and bind to TPU_VISIBLE_CHIPS at init, so
+a REUSED Ray worker could carry a stale chip pin into a task scheduled on
+different chips -- silent co-tenancy, and since the reward is a latency
+ratio, wrong numbers look plausible rather than broken. A fresh process pins
+cleanly every time; it also means a core-halting candidate (measured: one
+halted a SparseCoreSequencer and junked 102 subsequent verdicts) poisons at
+most its own process, with libtpu re-initialising on the next task.
+
+What makes fresh processes affordable is the banked GROUND-TRUTH COMPILE
+CACHE: the baseline/reference compiles dominate a judge's warmup and are
+restored from GCS instead of recompiled. Every verdict carries task_boot_s
+so the true per-task overhead stays measured, not assumed.
 
 INGRESS STAYS HTTP. The queue keeps the durable lease/requeue semantics that
 survived 1699 items with zero loss; Ray is only the intra-host scheduler.
 
-Run (on the grading host, after `ray start --head --resources='{"TPU": 4}'`):
+Run (on the grading host, after ray_start_tpu.sh):
     python -m pallas_arena.judge.ray_pool --queue http://127.0.0.1:8791 \\
-      --problems rg_lru --actors 4 --cache gs://...
+      --problems rg_lru --chips 4 --cache gs://... --jax-cache-gcs gs://...
 """
 
 from __future__ import annotations
@@ -53,118 +66,90 @@ def _http_json(url: str, payload: dict | None = None, timeout: float = 30.0):
         return json.loads(resp.read())
 
 
-class JudgeActorImpl:
-    """Boots one PersistentWorker and grades items on its own chip(s).
+def _pin_chips() -> str:
+    """Bind this process to the chips Ray assigned to this task.
 
-    Kept as a plain class so it is importable/testable without Ray; the Ray
-    decoration happens in `make_actor_cls`.
+    Ray publishes the assignment via the runtime context; whether it also
+    exports TPU_VISIBLE_CHIPS varies by version (measured on ray 2.58: it
+    did NOT). libtpu reads the variable at process init, so this must run
+    before jax is imported. Only plain chip indices are usable; anything
+    else would break init for the task, which is worse than not pinning.
     """
+    try:
+        import ray
 
-    def __init__(self, problem: str, cfg: dict):
-        # PIN THIS ACTOR TO ITS CHIPS. Ray schedules the actor against the
-        # "TPU" resource, but whether it also exports TPU_VISIBLE_CHIPS
-        # varies by version -- measured on ray 2.58: the actor came up with
-        # it UNSET. On a 1-chip judge that is harmless; on a 4-chip grading
-        # host every actor would initialise against all four and collide.
-        # Ray always knows the assignment, so derive it and set it here
-        # BEFORE jax is imported (libtpu reads it at init).
-        try:
-            import ray as _ray
-            ids = (_ray.get_runtime_context().get_accelerator_ids() or {}).get("TPU") or []
-            # Only plain chip indices are meaningful to libtpu; anything else
-            # (UUIDs, names) would break init for EVERY actor, which is worse
-            # than not pinning at all.
-            idx = [str(int(i)) for i in ids if str(i).strip().lstrip("-").isdigit()]
-            if idx and not os.environ.get("TPU_VISIBLE_CHIPS"):
-                os.environ["TPU_VISIBLE_CHIPS"] = ",".join(idx)
-                self._pinned = ",".join(idx)
-        except Exception:
-            pass
-        # SELF-CHECK: if the pin makes jax unable to see a chip, undo it and
-        # continue unpinned rather than losing the whole pool to a guess.
-        try:
-            import jax as _jax
-            if not _jax.local_devices():
-                raise RuntimeError("no local devices")
-        except Exception as e:
-            if os.environ.pop("TPU_VISIBLE_CHIPS", None):
-                print(f"[actor] pin rejected ({type(e).__name__}); continuing unpinned",
-                      flush=True)
-        # Every actor on this host shares ONE XLA/JAX compile cache: the same
-        # baselines and reference are compiled by each of them otherwise.
-        cache_dir = cfg.get("compile_cache_dir")
-        if cache_dir:
-            os.environ.setdefault("JAX_COMPILATION_CACHE_DIR", cache_dir)
-        # Candidate export children must not touch this actor's chip.
-        os.environ.setdefault("ARENA_CHILD_JAX_PLATFORMS", "tpu")
-        from pallas_arena.judge import cache as cache_mod
-        from pallas_arena.judge.worker import PersistentWorker
-
-        cache = cache_mod.RewardCache(cfg["cache"]) if cfg.get("cache") else None
-        self.problem = problem
-        self.worker = PersistentWorker(
-            problem,
-            smoke=cfg.get("smoke", False),
-            timing_pairs=cfg.get("timing_pairs", 20),
-            compile_budget_s=cfg.get("compile_budget_s", 90.0),
-            grade_budget_s=cfg.get("grade_budget_s", 900.0),
-            cache=cache,
-            worker_id=cfg.get("worker_id", "ray-actor"),
-        )
-        self.boot_report = self.worker.boot()
-
-    def ready(self) -> dict:
-        return {
-            "problem": self.problem,
-            "visible_chips": os.environ.get("TPU_VISIBLE_CHIPS", "?"),
-            "jax_devices": self._device_count(),
-            "noise_floor": self.boot_report.get("noise_floor"),
-            "boot_s": self.boot_report.get("boot_s"),
-        }
-
-    def _device_count(self) -> int:
-        """How many chips this actor actually sees. On a multi-chip host a
-        count > width means the pinning did not take and actors are sharing
-        silicon -- which would corrupt every timing on the host."""
-        try:
-            import jax
-            return len(jax.local_devices())
-        except Exception:
-            return -1
-
-    def grade(self, payload: dict) -> dict:
-        return self.worker.grade_code(payload.get("code", ""), tag=payload.get("tag"))
+        ids = (ray.get_runtime_context().get_accelerator_ids() or {}).get("TPU") or []
+        idx = [str(int(i)) for i in ids if str(i).strip().lstrip("-").isdigit()]
+        if idx and not os.environ.get("TPU_VISIBLE_CHIPS"):
+            os.environ["TPU_VISIBLE_CHIPS"] = ",".join(idx)
+            return os.environ["TPU_VISIBLE_CHIPS"]
+    except Exception:
+        pass
+    return os.environ.get("TPU_VISIBLE_CHIPS", "?")
 
 
-def make_actor_cls(width: int):
-    """Ray actor class reserving `width` TPU chips (Ray sets
-    TPU_VISIBLE_CHIPS accordingly)."""
-    import ray
+def grade_one(problem: str, payload: dict, cfg: dict) -> dict:
+    """Grade ONE candidate in this task's own fresh process."""
+    pinned = _pin_chips()
+    cache_dir = cfg.get("compile_cache_dir")
+    if cache_dir:
+        os.environ.setdefault("JAX_COMPILATION_CACHE_DIR", cache_dir)
+    os.environ.setdefault("ARENA_CHILD_JAX_PLATFORMS", "tpu")
 
-    return ray.remote(
-        num_cpus=cpu_per_actor(),
-        resources={"TPU": width},
-        max_restarts=5,
-        max_task_retries=0,
-    )(JudgeActorImpl)
+    from pallas_arena.judge import cache as cache_mod
+    from pallas_arena.judge.worker import PersistentWorker
+
+    t0 = time.time()
+    rc = cache_mod.RewardCache(cfg["cache"]) if cfg.get("cache") else None
+    worker = PersistentWorker(
+        problem,
+        smoke=cfg.get("smoke", False),
+        timing_pairs=cfg.get("timing_pairs", 20),
+        compile_budget_s=cfg.get("compile_budget_s", 90.0),
+        grade_budget_s=cfg.get("grade_budget_s", 900.0),
+        cache=rc,
+        worker_id=f"ray-task-{pinned}",
+    )
+    boot = worker.boot()
+    t_boot = time.time() - t0
+    result = worker.grade_code(payload.get("code", ""), tag=payload.get("tag"))
+    # The number that keeps this design honest: if warm boots stop being
+    # cheap, it shows up on every verdict rather than in a forgotten note.
+    result["task_boot_s"] = round(t_boot, 1)
+    result["task_chips"] = pinned
+    result["task_noise_floor"] = boot.get("noise_floor")
+    return result
 
 
-def cpu_per_actor() -> int:
-    """Mosaic compiles are CPU-hungry and run concurrently now. Leave the
-    host room for the queue and the trainer's own sidecars."""
+def cpu_per_task() -> int:
+    """Mosaic compiles are CPU-hungry and now run concurrently; leave the
+    host room for the queue and any trainer sidecars."""
     try:
         return max(2, (os.cpu_count() or 8) // 8)
     except Exception:
         return 2
 
 
+def item_width(payload: dict, default: int = 1) -> int:
+    """Chips this test needs: explicit width/tp/chips in the payload wins."""
+    for key in ("width", "tp", "chips"):
+        v = payload.get(key)
+        if v:
+            try:
+                return max(1, int(v))
+            except (TypeError, ValueError):
+                continue
+    return default
+
+
 def _gsutil_rsync(src: str, dst: str, label: str) -> None:
     import subprocess
+
     try:
         r = subprocess.run(["gsutil", "-m", "-q", "rsync", "-r", src, dst],
                            capture_output=True, timeout=900)
         print(f"[cache] {label}: rc={r.returncode} {src} -> {dst}", flush=True)
-    except Exception as e:  # never let cache plumbing break grading
+    except Exception as e:  # cache plumbing must never break grading
         print(f"[cache] {label} failed: {type(e).__name__}: {e}", flush=True)
 
 
@@ -179,10 +164,9 @@ def run_pool(
     queue_url: str,
     problems: list[str],
     *,
-    actors: int,
+    chips: int,
     cfg: dict,
     poll_s: float = 1.0,
-    heartbeat_frac: float = 3.0,
     max_items: int | None = None,
     idle_exit_s: float | None = None,
 ) -> int:
@@ -191,62 +175,30 @@ def run_pool(
     base = queue_url.rstrip("/")
     ray.init(address=cfg.get("ray_address", "auto"), ignore_reinit_error=True)
 
-    # GROUND-TRUTH COMPILE CACHE. Every judge boot compiles the production
-    # baseline and the fp32 reference before it can grade anything -- the
-    # bulk of a ~119 s actor boot, paid again on every preemption. Restore
-    # the banked cache first; snapshot it back ONCE after boot, before any
-    # candidate compiles, so the bucket holds baseline entries and not
-    # thousands of throwaway candidate kernels.
-    # The path is keyed by chip: an XLA cache is compiled FOR a target, so a
-    # v6e cache cannot serve a v5p judge (same rule as the vLLM caches).
+    # GROUND-TRUTH COMPILE CACHE: restore before any task runs; snapshot back
+    # after the first grade completes (the cache then holds baseline entries,
+    # not thousands of throwaway candidate kernels).
     jax_cache_gcs = cfg.get("jax_cache_gcs")
-    local_cache = os.environ.get("JAX_COMPILATION_CACHE_DIR",
-                                 os.path.expanduser("~/jax-compile-cache"))
+    local_cache = cfg.get("compile_cache_dir") or os.path.expanduser("~/jax-compile-cache")
     os.makedirs(local_cache, exist_ok=True)
+    cfg = {**cfg, "compile_cache_dir": local_cache}
     if jax_cache_gcs:
         _gsutil_rsync(jax_cache_gcs, local_cache, "restore")
-        print(f"[cache] {_cache_file_count(local_cache)} local entries after restore", flush=True)
+        print(f"[cache] {_cache_file_count(local_cache)} entries after restore", flush=True)
+    banked = not bool(jax_cache_gcs)
 
-    width = int(cfg.get("width", 1))
-    cls = make_actor_cls(width)
-    pool = []
-    for i in range(actors):
-        problem = problems[i % len(problems)]
-        a = cls.remote(problem, {**cfg, "worker_id": f"ray-{problem}-{i}"})
-        pool.append({"actor": a, "problem": problem, "busy": None})
-    print(f"[pool] booting {actors} actors ({width} chip each) ...", flush=True)
-    mispinned = False
-    for i, slot in enumerate(pool):
-        info = ray.get(slot["actor"].ready.remote())
-        print(f"[pool] actor {i} up: {info}", flush=True)
-        # MIS-PINNING IS SILENT CORRUPTION, NOT A CRASH. If actors see more
-        # chips than they reserved, several are initialised on the SAME chip
-        # and every latency ratio measured here is contended -- the reward is
-        # a ratio, so wrong numbers look plausible. Refuse to run wide.
-        if len(pool) > 1 and isinstance(info, dict) and info.get("jax_devices", -1) > width:
-            mispinned = True
-    if mispinned:
-        print(f"[pool] MIS-PINNED: actors see more than {width} chip(s); "
-              f"falling back to ONE actor so timings stay single-tenant", flush=True)
-        for slot in pool[1:]:
-            try:
-                ray.kill(slot["actor"], no_restart=True)
-            except Exception:
-                pass
-        pool = pool[:1]
+    cpus = cpu_per_task()
+    default_width = int(cfg.get("width", 1))
+    grade = ray.remote(num_cpus=cpus, max_calls=1)(grade_one)
+    print(f"[pool] task mode: {chips} chips, {cpus} cpus/task, default width "
+          f"{default_width}, problems {problems}", flush=True)
 
-    if jax_cache_gcs:
-        # Boot is done; the cache now holds exactly the baseline/reference
-        # entries. Snapshot before the first candidate touches it.
-        n = _cache_file_count(local_cache)
-        print(f"[cache] snapshotting {n} entries after boot", flush=True)
-        _gsutil_rsync(local_cache, jax_cache_gcs, "save")
-
-    inflight: dict = {}  # ObjectRef -> lease info
+    inflight: dict = {}  # ObjectRef -> lease meta
+    chips_used = 0
     stop = threading.Event()
 
     def beat():
-        """One thread beats EVERY in-flight lease. Per-item threads would
+        """One thread beats EVERY in-flight lease; per-item threads would
         multiply with concurrency for no benefit."""
         while not stop.wait(2.0):
             for meta in list(inflight.values()):
@@ -255,14 +207,9 @@ def run_pool(
                 except Exception:
                     pass
 
-    hb = threading.Thread(target=beat, daemon=True)
-    hb.start()
+    threading.Thread(target=beat, daemon=True).start()
 
     done_count = 0
-    # idle_exit_s: leave when the queue has been empty this long AND nothing
-    # is in flight. None = never (the RL cell's pool must outlive lulls
-    # between steps); the offline fleet sets it so a finished corpus releases
-    # the host instead of holding a spot VM idle.
     last_work = time.time()
     try:
         while max_items is None or done_count < max_items:
@@ -270,13 +217,13 @@ def run_pool(
                     and time.time() - last_work > idle_exit_s):
                 print(f"[pool] idle {idle_exit_s:.0f}s with an empty queue; exiting", flush=True)
                 break
-            # 1. fill idle actors
+
+            # 1. lease work while chips remain. Leasing past capacity would
+            #    park items in Ray's queue burning their lease timeout, so we
+            #    stop at the chip budget; the next pass picks up more.
             progressed = False
-            for slot in pool:
-                if slot["busy"] is not None:
-                    continue
-                if max_items is not None and done_count + len(inflight) >= max_items:
-                    break
+            while chips_used < chips and (max_items is None
+                                          or done_count + len(inflight) < max_items):
                 try:
                     item = _http_json(f"{base}/work?worker_id=ray-pool")
                 except Exception:
@@ -284,29 +231,26 @@ def run_pool(
                 if not item:
                     break
                 payload = item.get("payload") or {}
-                want = payload.get("problem")
-                if want and want != slot["problem"]:
-                    # This actor is booted for another problem. Post a judge
-                    # fault (excluded from reward) rather than sit on a lease
-                    # we cannot serve; loud, because it means misconfiguration.
-                    print(f"[pool] WARNING no actor for problem={want}; faulting {item['work_id']}", flush=True)
+                want = payload.get("problem") or problems[0]
+                if want not in problems:
+                    print(f"[pool] WARNING problem={want} not served by this pool; "
+                          f"faulting {item['work_id']}", flush=True)
                     last_work = time.time()
                     try:
                         _http_json(f"{base}/result", {
                             "lease_id": item["lease_id"], "work_id": item["work_id"],
                             "result": {"ok": False, "gate": "judge_fault",
-                                       "violations": [f"no judge actor booted for problem {want}"]},
+                                       "violations": [f"pool serves {problems}, not {want}"]},
                         })
                     except Exception:
                         pass
                     continue
+                w = min(item_width(payload, default_width), chips)
+                ref = grade.options(resources={"TPU": w}).remote(want, payload, cfg)
+                inflight[ref] = {"lease_id": item["lease_id"], "work_id": item["work_id"],
+                                 "t0": time.time(), "width": w}
+                chips_used += w
                 last_work = time.time()
-                ref = slot["actor"].grade.remote(payload)
-                inflight[ref] = {
-                    "lease_id": item["lease_id"], "work_id": item["work_id"],
-                    "slot": slot, "t0": time.time(),
-                }
-                slot["busy"] = ref
                 progressed = True
 
             if not inflight:
@@ -317,57 +261,46 @@ def run_pool(
             ready, _ = ray.wait(list(inflight), num_returns=1, timeout=poll_s)
             for ref in ready:
                 meta = inflight.pop(ref)
-                meta["slot"]["busy"] = None
+                chips_used -= meta["width"]
                 try:
                     result = ray.get(ref)
-                except Exception as e:  # actor died mid-grade: let the lease
-                    # expire so the queue requeues it on another actor.
-                    print(f"[pool] grade failed {meta['work_id']}: {type(e).__name__}: {e}", flush=True)
+                except Exception as e:
+                    # Task process died (OOM, segfault): post NOTHING -- the
+                    # lease expires and the queue requeues the item.
+                    print(f"[pool] task died {meta['work_id']}: {type(e).__name__}: "
+                          f"{str(e)[:160]}", flush=True)
                     continue
                 result["item_wall_s"] = time.time() - meta["t0"]
-                # CORE HALT RECOVERY. A candidate can halt a TPU core at
-                # RUNTIME (past Mosaic): measured 2026-08-26, one kernel
-                # halted a SparseCoreSequencer and every later grade on that
-                # chip returned "the program continuator has halted
-                # unexpectedly" -- 102 halts, all subsequent verdicts junk.
-                # Forking per candidate does not help: the DEVICE is
-                # poisoned, not the process. Replace the actor so the next
-                # item meets a freshly initialised chip. In RL this is the
-                # difference between one bad rollout and a whole step of
-                # falsely-zero rewards.
-                blob = (str(result.get("violations")) + str(result.get("observation")))
-                if any(sig in blob for sig in (
-                        "halted unexpectedly", "CoreHalt", "continuator has halted")):
-                    slot = meta["slot"]
-                    print(f"[pool] CORE HALT on {meta['work_id']}; replacing actor", flush=True)
-                    try:
-                        ray.kill(slot["actor"], no_restart=True)
-                    except Exception:
-                        pass
-                    slot["actor"] = cls.remote(slot["problem"],
-                                               {**cfg, "worker_id": f"ray-{slot['problem']}-r"})
-                    try:
-                        print(f"[pool] replacement actor up: "
-                              f"{ray.get(slot['actor'].ready.remote())}", flush=True)
-                    except Exception as e:
-                        print(f"[pool] replacement actor FAILED: {e!r}", flush=True)
+                blob = str(result.get("violations")) + str(result.get("observation"))
+                if any(sig in blob for sig in ("halted unexpectedly", "CoreHalt",
+                                               "continuator has halted")):
+                    # Runtime core halt: the chip is re-initialised by the next
+                    # task's fresh process, but flag it loudly -- verdicts that
+                    # shared this window are suspect.
+                    print(f"[pool] CORE HALT on {meta['work_id']}; chip re-inits on "
+                          f"next task, nearby verdicts suspect", flush=True)
+                why = ""
+                if not result.get("passed"):
+                    v = result.get("violations") or []
+                    why = f" gate={result.get('gate')} {str(v[0])[:120] if v else ''}"
                 try:
                     _http_json(f"{base}/result", {
-                        "lease_id": meta["lease_id"], "work_id": meta["work_id"], "result": result,
+                        "lease_id": meta["lease_id"], "work_id": meta["work_id"],
+                        "result": result,
                     })
                     done_count += 1
-                    # WHY it failed, not just that it did: without the gate and
-                    # first violation here, a systematic rejection (every
-                    # candidate dying at the same pregate) is invisible until
-                    # someone reads the caller's results file.
-                    why = ""
-                    if not result.get("passed"):
-                        v = result.get("violations") or []
-                        why = f" gate={result.get('gate')} {str(v[0])[:120] if v else ''}"
-                    print(f"[pool] {meta['work_id']} done in {result['item_wall_s']:.1f}s "
+                    print(f"[pool] {meta['work_id']} w={meta['width']} "
+                          f"boot={result.get('task_boot_s')}s wall={result['item_wall_s']:.1f}s "
                           f"passed={result.get('passed')}{why} ({done_count} total)", flush=True)
                 except Exception as e:
                     print(f"[pool] result post failed for {meta['work_id']}: {e!r}", flush=True)
+
+                if not banked:
+                    banked = True
+                    n = _cache_file_count(local_cache)
+                    print(f"[cache] snapshotting {n} entries after first grade", flush=True)
+                    _gsutil_rsync(local_cache, jax_cache_gcs, "save")
+
             if not ready and not progressed:
                 time.sleep(poll_s)
     finally:
@@ -378,39 +311,41 @@ def run_pool(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--queue", required=True)
-    ap.add_argument("--problems", default="rg_lru", help="comma list; actors are assigned round-robin")
-    ap.add_argument("--actors", type=int, default=4, help="one per chip on a v5p-8 grading host")
-    ap.add_argument("--width", type=int, default=1, help="chips per actor (TP cases: >1)")
+    ap.add_argument("--problems", default="rg_lru", help="comma list this pool serves")
+    ap.add_argument("--chips", type=int, default=4, help="TPU chips on this host")
+    ap.add_argument("--width", type=int, default=1, help="default chips per test")
     ap.add_argument("--cache", default=None)
     ap.add_argument("--compile-cache-dir", default=os.path.expanduser("~/jax-compile-cache"))
     ap.add_argument("--jax-cache-gcs", default=os.environ.get("ARENA_JAX_CACHE_GCS", ""),
-                    help="GCS prefix for the baseline compile cache; MUST be keyed by chip kind")
+                    help="GCS prefix for the baseline compile cache; keyed by chip kind")
     ap.add_argument("--timing-pairs", type=int, default=20)
     ap.add_argument("--compile-budget-s", type=float, default=90.0)
     ap.add_argument("--grade-budget-s", type=float, default=900.0)
     ap.add_argument("--ray-address", default="auto")
     ap.add_argument("--poll-s", type=float, default=1.0)
     ap.add_argument("--max-items", type=int, default=None)
-    ap.add_argument("--idle-exit-s", type=float, default=None,
-                    help="exit after this many idle seconds (offline fleets); default never")
+    ap.add_argument("--idle-exit-s", type=float, default=None)
     ap.add_argument("--smoke", action="store_true")
+    # Accepted for launcher compatibility: --actors N now means "N chips".
+    ap.add_argument("--actors", type=int, default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     cfg = {
         "cache": args.cache,
         "compile_cache_dir": args.compile_cache_dir,
+        "jax_cache_gcs": args.jax_cache_gcs or None,
         "timing_pairs": args.timing_pairs,
         "compile_budget_s": args.compile_budget_s,
         "grade_budget_s": args.grade_budget_s,
         "ray_address": args.ray_address,
-        "jax_cache_gcs": args.jax_cache_gcs or None,
         "width": args.width,
         "smoke": args.smoke,
     }
+    chips = args.chips if args.actors is None else max(args.chips, args.actors)
     n = run_pool(
         args.queue,
         [p.strip() for p in args.problems.split(",") if p.strip()],
-        actors=args.actors,
+        chips=chips,
         cfg=cfg,
         poll_s=args.poll_s,
         max_items=args.max_items,
