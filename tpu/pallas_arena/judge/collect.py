@@ -99,6 +99,14 @@ def merge_case_results(
         "tp_baseline_impls": {}, "case_noise_floors": {},
         "case_boot_s": {}, "excluded_cases": {}, "skipped_cases": {},
         "per_case": {}, "holdout": {},
+        # WHICH TIMER measured each case. On a contended host xprof device
+        # timing stays sane while wallclock does not: measured 2026-08-27 in
+        # ONE verdict, a device-timed case read 0.391 ms while wallclock-
+        # fallback cases read ~0.95 s for comparable work and carried noise
+        # floors of 0.77 and 3.15 (ref-vs-ref could not tell a function from
+        # itself). The floor gate excluded them correctly, but without this
+        # field the cause looks like a unit bug rather than a fallback.
+        "case_timer": {},
     }
     violations: list[str] = []
     fatal: tuple[str, str] | None = None
@@ -137,6 +145,8 @@ def merge_case_results(
             continue
         if r.get("task_boot_s") is not None:
             merged["case_boot_s"][case] = r["task_boot_s"]
+        if r.get("timer"):
+            merged["case_timer"][case] = r["timer"]
 
         if not r.get("passed"):
             gate = r.get("gate", "?")

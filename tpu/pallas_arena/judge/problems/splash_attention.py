@@ -31,6 +31,19 @@ from pallas_arena.judge.problems.base import (
 
 NEG_INF = -0.7 * float(np.finfo(np.float32).max)
 
+# THE ORACLE MUST ACTUALLY BE FP32. jnp.einsum without precision= is
+# Precision.DEFAULT, which on TPU multiplies f32 inputs through bf16 -- so
+# this "fp32 reference" was not fp32, and every candidate was scored against
+# a reduced-precision oracle. Measured on v6e 2026-08-27 at the adversarial
+# fixtures: the reference disagreed with a true f32 evaluation of ITSELF by
+# 1.4e-3 to 3.7e-3, and the flash seed's entire apparent error was exactly
+# that disagreement (seed vs default 1.407e-3/2.955e-3/3.675e-3 against
+# oracle disagreement 1.405e-3/2.964e-3/3.661e-3), while the same seed
+# matched a true f32 oracle to ~1e-7. The arena was therefore rewarding
+# kernels that reproduce XLA's default-precision rounding over kernels that
+# are numerically correct, and rejecting exact ones at the tolerance band.
+_F32 = jax.lax.Precision.HIGHEST
+
 
 def _scan_blocks(body, init, n: int):
     """lax.scan over jnp.arange(n), except degenerate block counts run
@@ -99,7 +112,7 @@ def causal_segment_attention(
     group = qh // kvh
     qg = q32.reshape(kvh, group, seq, d)
 
-    logits = jnp.einsum("hgqd,hkd->hgqk", qg, k32)
+    logits = jnp.einsum("hgqd,hkd->hgqk", qg, k32, precision=_F32)
     if soft_cap is not None:
         # BEFORE masking: see the docstring -- capping afterwards would pull
         # the -inf sentinel back into [-cap, cap] and unmask everything.
@@ -126,7 +139,7 @@ def causal_segment_attention(
     if sinks is not None:
         denom = denom + jnp.exp(sk - m)
     p = jnp.where(row_live[None, None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
-    out = jnp.einsum("hgqk,hkv->hgqv", p, v32)
+    out = jnp.einsum("hgqk,hkv->hgqv", p, v32, precision=_F32)
     return out.reshape(qh, seq, dv)
 
 
@@ -834,7 +847,14 @@ class SplashAttentionProblem(Problem):
         the reference-bf16-only band rejects the production numeric path on some
         shapes (RPA's tiny-holdout measured 1.15x), which is precisely the
         phase-2 failure this hook exists to prevent. The end-to-end-bf16 path
-        still fails by 1.7-2.2x with these in, so discrimination survives."""
+        still fails by 1.7-2.2x with these in, so discrimination survives.
+
+        (A tile-padded variant was tried and REVERTED: padding the sequence
+        to a 1024 tile and reducing over the padded extent gives numerically
+        IDENTICAL results at every shape tested, ragged ones included -- the
+        masked tail contributes exact zeros, so the reduction does not round
+        differently. The real cause of the marginal correctness failures was
+        the reference's own precision; see causal_segment_attention.)"""
         return [_honest_faithful_bf16, _honest_online_softmax]
 
     def adversarial_cases(self):

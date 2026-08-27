@@ -13,6 +13,7 @@ import numpy as np
 from pallas_arena.judge.problems.splash_attention import (
     PROBLEM,
     _honest_online_softmax,
+    _honest_tile_padded,
     causal_segment_attention,
 )
 
@@ -20,6 +21,12 @@ SHAPES = [
     ("mha-h4-s2048-d128", 4, 4, 2048, 128, 128),
     ("mixtral-like-gqa8x2-s1024-d64", 8, 2, 1024, 64, 64),
     ("deepseek-like-h2-s1024-d192-dv128", 2, 2, 1024, 192, 128),
+    # RAGGED: these actually exercise _honest_tile_padded (s not a multiple
+    # of the 1024 tile). The multiples above never pad, so they cannot tell
+    # whether the padded variant is correct.
+    ("ragged-h4-s2049-d128", 4, 4, 2049, 128, 128),
+    ("ragged-tiny-h2-s128-d32", 2, 2, 128, 32, 32),
+    ("ragged-gqa8x2-s1500-d64", 8, 2, 1500, 64, 64),
 ]
 
 bad = 0
@@ -31,13 +38,20 @@ for name, qh, kvh, s, d, dv in SHAPES:
     seg = jnp.where(jnp.arange(s) < s - 64,
                     jnp.where(jnp.arange(s) < s // 2, 1, 2), 0).astype(jnp.int32)
     ref = causal_segment_attention(q, k, v, seg)
-    var = _honest_online_softmax(q, k, v, seg)
-    err = float(jnp.max(jnp.abs(var - ref) / (jnp.abs(ref) + 1.0)))
-    pad_zero = float(jnp.max(jnp.abs(var[:, seg == 0, :]))) == 0.0
-    ok = err < 5e-2 and pad_zero and bool(jnp.isfinite(var).all())
-    bad += 0 if ok else 1
-    print(f"[varcheck] {name}: var_vs_ref_max_err={err:.3e} pad_zero={pad_zero}"
-          f" -> {'OK' if ok else 'FAIL'}", flush=True)
+    errs = {}
+    for label, fn in (("online", _honest_online_softmax),
+                      ("tile_padded", _honest_tile_padded)):
+        var = fn(q, k, v, seg)
+        e = float(jnp.max(jnp.abs(var - ref) / (jnp.abs(ref) + 1.0)))
+        pz = float(jnp.max(jnp.abs(var[:, seg == 0, :]))) == 0.0
+        fin = bool(jnp.isfinite(var).all())
+        errs[label] = (e, pz, fin)
+        if not (e < 5e-2 and pz and fin):
+            bad += 1
+    print(f"[varcheck] {name}: "
+          + " ".join(f"{k}_err={v[0]:.3e}(pad0={v[1]})" for k, v in errs.items())
+          + f" -> {'OK' if all(v[0] < 5e-2 and v[1] and v[2] for v in errs.values()) else 'FAIL'}",
+          flush=True)
     tol = PROBLEM.calibrated_tolerance((q, k, v, seg), ref)
     print(f"[varcheck] {name}: calibrated band now max={tol['max']:.3e} "
           f"q99={tol['q99']:.3e}", flush=True)
