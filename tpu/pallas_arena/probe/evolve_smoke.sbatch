@@ -135,6 +135,24 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   fi
   sleep 25
 done
+# DON'T ABANDON A SLICE THAT IS ACTIVELY BEING ALLOCATED. PROVISIONING means
+# the request was granted and the node is being built -- minutes away -- while
+# WAITING_FOR_RESOURCES means we are still in the queue. Aborting on the
+# former throws away a slice about to land: measured 2026-08-27, both splash
+# arms hit the deadline mid-PROVISIONING and were torn down. Grant a bounded
+# grace only for the in-flight states.
+grace=0
+while [ "$st" != "ACTIVE" ] && [ "$grace" -lt "${LAND_GRACE_TRIES:-6}" ]; do
+  case "$st" in
+    PROVISIONING|CREATING|ACCEPTED|RESUMING) : ;;
+    *) break ;;
+  esac
+  grace=$(( grace + 1 ))
+  echo "[$QR] deadline reached but state=${st} (allocating) -- grace ${grace}/${LAND_GRACE_TRIES:-6}"
+  sleep 300
+  st=$(timeout 300 gcloud compute tpus queued-resources describe "$QR" --zone="$ZONE" \
+         --project="$PROJECT" --format='value(state.state)' 2>/dev/null)
+done
 [ "$st" = "ACTIVE" ] || { echo "FATAL: not ACTIVE (state=${st:-gone})"; exit 1; }
 echo "[$QR] ACTIVE at $(date +%H:%M:%S)"
 
