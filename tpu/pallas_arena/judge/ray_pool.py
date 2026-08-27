@@ -51,6 +51,20 @@ MAX_PENDING_FACTOR = 1   # never queue more tasks than chips: a dying
                          # process must release its chip before the next
                          # task lands on it (device-busy class)
 
+# How much of a dead task's exception to keep in the verdict. Ray prefixes
+# its own header, so a small budget records boilerplate and truncates the
+# cause.
+TASK_ERROR_CHARS = 1200
+
+# Device-init retries. A TP task needs EVERY chip on the host free, so it
+# waits on the teardown of up to N single-chip processes -- Ray frees the
+# logical resource when a task returns, but the OS process keeps /dev/vfio/*
+# open for seconds after ("Device or resource busy", measured 2026-08-27).
+# A single-chip task only ever waits for its own predecessor.
+INIT_RETRIES_SINGLE = 4
+INIT_RETRIES_TP = 12
+INIT_RETRY_SLEEP_S = 15
+
 
 def _http_json(url: str, payload: dict | None = None, timeout: float = 30.0):
     if payload is None:
@@ -126,7 +140,9 @@ def grade_case(problem: str, case: str, payload: dict, cfg: dict) -> dict:
     # to a minute to free before failing the task.
     import jax  # noqa: F401 -- imported HERE so init happens under the retry
     last = None
-    for attempt in range(4):
+    width = _collect.case_width(case)
+    tries = INIT_RETRIES_TP if width > 1 else INIT_RETRIES_SINGLE
+    for attempt in range(tries):
         try:
             import jax as _j
             _j.local_devices()
@@ -134,9 +150,10 @@ def grade_case(problem: str, case: str, payload: dict, cfg: dict) -> dict:
             break
         except Exception as e:
             last = e
-            print(f"[task {case}] device init attempt {attempt + 1} failed "
-                  f"({str(e)[:80]}); retrying in 15s", flush=True)
-            time.sleep(15)
+            print(f"[task {case}] device init attempt {attempt + 1}/{tries} "
+                  f"failed ({str(e)[:80]}); retrying in {INIT_RETRY_SLEEP_S}s",
+                  flush=True)
+            time.sleep(INIT_RETRY_SLEEP_S)
     if last is not None:
         raise RuntimeError(f"device never freed: {last}")
     worker = PersistentWorker(
@@ -388,13 +405,21 @@ def run_pool(
                                  and case not in (result.get("skipped_tp") or {}))
                 except Exception as e:
                     kind = collect.classify_task_error(f"{type(e).__name__}: {e}")
+                    # KEEP THE TRACEBACK. At 200 chars a dead task recorded
+                    # only Ray's boilerplate header and cut off exactly where
+                    # the cause would be, which cost a full diagnostic cycle
+                    # on the tp4 failures (2026-08-27): the verdict said
+                    # "task died: ray::grade_case()..." and the actual
+                    # exception lived only in the interleaved judge log.
+                    why = f"task died: {str(e)[:TASK_ERROR_CHARS]}"
                     if kind == "fatal":
-                        cand.entries[case] = {"fatal": ("runtime_halt",
-                                                        f"task died: {str(e)[:200]}")}
+                        cand.entries[case] = {"fatal": ("runtime_halt", why)}
                         fatal_now = True
                     else:
-                        cand.entries[case] = {"judge_fault": f"task died: {str(e)[:200]}"}
+                        cand.entries[case] = {"judge_fault": why}
                         fatal_now = False
+                    print(f"[pool] task {case} died ({kind}): "
+                          f"{str(e)[-600:]}", flush=True)
                 if fatal_now and cand.pending:
                     # correct-everywhere: the candidate is already zeroed --
                     # cancel its remaining tests instead of burning chips.
