@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures as cf
 import hashlib
+import http.client
 import json
 import sys
 import time
@@ -87,14 +88,38 @@ def extract_completion(text: str, required_defs: list[str] | None = None) -> str
     return blocks[-1].strip() if blocks else None
 
 
-def _post(server: str, body: dict, timeout_s: float) -> dict:
+# The client reaches the engine through an SSH port-forward. That tunnel
+# flaps -- it has its own restart loop -- and while it is down every request
+# fails at the CONNECTION level even though the engine is healthy. Measured
+# 2026-08-27 on the gemma rg_lru arm: 22 of 32 generations were lost to
+# `Connection refused`/`RemoteDisconnected` while the engine log showed
+# `Running: 6 reqs` at 500 tok/s and returned 200s throughout. Those are
+# transient by construction, so retry them; HTTP errors (400/500) are the
+# engine's real answer and must NOT be retried here.
+_CONN_ERRORS = (urllib.error.URLError, http.client.RemoteDisconnected,
+                ConnectionResetError, ConnectionRefusedError, TimeoutError)
+
+
+def _post(server: str, body: dict, timeout_s: float, conn_retries: int = 6) -> dict:
     req = urllib.request.Request(
         f"{server}/v1/chat/completions",
         data=json.dumps(body).encode(),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout_s) as r:
-        return json.load(r)
+    for attempt in range(conn_retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as r:
+                return json.load(r)
+        except urllib.error.HTTPError:
+            raise                      # the engine answered; that is a verdict
+        except _CONN_ERRORS as e:
+            if attempt >= conn_retries:
+                raise
+            wait = min(30, 5 * (attempt + 1))
+            print(f"[conn] {type(e).__name__} on attempt {attempt + 1}/{conn_retries + 1}"
+                  f" -- tunnel likely restarting; retrying in {wait}s", flush=True)
+            time.sleep(wait)
+    raise RuntimeError("unreachable")
 
 
 def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: float,
