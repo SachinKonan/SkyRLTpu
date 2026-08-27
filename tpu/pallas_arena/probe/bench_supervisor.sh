@@ -12,6 +12,16 @@ LOCK="/tmp/bench-supervisor-${TAG}.lock"
 exec 9>"$LOCK"
 flock -n 9 || { echo "another supervisor holds $LOCK"; exit 0; }
 
+# ZONE ROTATION. Spot droughts are per-zone, not global: on 2026-08-27
+# us-east5-a held six queued jobs (ours and other users') stuck in
+# WAITING_FOR_RESOURCES for hours while us-east5-b was landing slices, and
+# both rg_lru arms burned a full LAND_DEADLINE in zone a, twice, without
+# ever asking b. Each attempt now flips the zone (and the complement zone
+# used for teardown verification), so a drought in one costs one attempt
+# instead of every attempt.
+ZONES=(${BENCH_ZONES:-us-east5-a us-east5-b})
+attempt=0
+
 job=""
 while true; do
   if [ -n "$job" ]; then
@@ -26,9 +36,12 @@ while true; do
     fi
     echo "[supervisor:${TAG}] job $job died without gens $(date +%H:%M:%S); resubmitting"
   fi
+  export ZONE="${ZONES[$(( attempt % ${#ZONES[@]} ))]}"
+  export OTHER_ZONE="${ZONES[$(( (attempt + 1) % ${#ZONES[@]} ))]}"
+  attempt=$(( attempt + 1 ))
   job=$(sbatch --export=ALL --job-name="bench-${TAG}" \
           tpu/pallas_arena/probe/evolve_smoke.sbatch 2>/dev/null | awk '{print $4}')
   [ -n "$job" ] || { echo "[supervisor:${TAG}] sbatch failed; retry in 600s"; sleep 600; continue; }
-  echo "[supervisor:${TAG}] submitted $job $(date +%H:%M:%S)"
+  echo "[supervisor:${TAG}] submitted $job in ${ZONE} $(date +%H:%M:%S)"
   sleep 300
 done
