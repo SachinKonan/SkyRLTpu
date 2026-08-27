@@ -170,9 +170,23 @@ timeout 900 gcloud compute tpus tpu-vm scp "${repo_root}/tpu/pallas_arena/probe/
   done ) &
 
 echo "=== waiting up to ${SERVE_READY_S}s for the engine $(date +%H:%M:%S) ==="
-ready=0; end=$(( $(date +%s) + SERVE_READY_S ))
+ready=0; end=$(( $(date +%s) + SERVE_READY_S )); hb=0
 while [ "$(date +%s)" -lt "$end" ]; do
   curl -sf "http://127.0.0.1:${LOCAL_PORT}/v1/models" >/dev/null 2>&1 && { ready=1; break; }
+  # DON'T WAIT OUT A DEAD SLICE. A preempted QR can never serve, and this
+  # loop would sit on it for the full SERVE_READY_S (measured 2026-08-27:
+  # gemma's slice was reclaimed mid-boot and the job would have burned two
+  # hours waiting on an engine that no longer had a machine). Check slice
+  # health every ~5 min and bail immediately so the supervisor re-rolls.
+  hb=$(( hb + 1 ))
+  if [ $(( hb % 15 )) -eq 0 ]; then
+    qst=$(timeout 120 gcloud compute tpus queued-resources describe "$QR" --zone="$ZONE" \
+            --project="$PROJECT" --format='value(state.state)' 2>/dev/null)
+    case "$qst" in
+      PREEMPTED|SUSPENDED|SUSPENDING|FAILED)
+        echo "FATAL: slice went ${qst} while waiting for the engine"; exit 1 ;;
+    esac
+  fi
   sleep 20
 done
 [ "$ready" -eq 1 ] || { echo "FATAL: engine never became ready"; exit 1; }
