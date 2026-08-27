@@ -2295,6 +2295,37 @@ padded extent. A padded honest variant was written and measured numerically <em>
 unpadded one at every shape including ragged 2049/128/1500, because the masked tail contributes exact
 zeros. The variant was reverted rather than kept as a no-op.</p></section>
 
+<h2>Final seed numbers (problem version 2, caches retired, uncached)</h2>
+<p class="sub">Graded after all seven defects below were fixed, with the reward caches retired by a
+problem-version bump so nothing could replay a verdict computed under the old rules &mdash; a check that
+mattered: an earlier &ldquo;result&rdquo; turned out to be a cache echo, its giveaway being that the
+numbers matched a previous run digit-for-digit, which fresh timings never do.</p>
+<table><tr><th>seed</th><th>reward</th><th>scored cases</th><th>what the model is told</th></tr>
+<tr><td class="mono">rg_lru &middot; prod-4D</td><td><b>1.0</b> (parity)</td><td>6</td>
+<td class="mono sm">cand 0.121ms vs ref 0.156ms (1.289x) &middot; HBM 12&ndash;27% of peak</td></tr>
+<tr><td class="mono">splash &middot; flash</td><td><b>0.262</b> with bwd / 0.333 fwd</td><td>9</td>
+<td class="mono sm">cand 0.154ms vs ref 0.083ms (0.539x) &middot; MXU 9% vs 25%</td></tr></table>
+<p class="sub">Both observations now carry correct units and a live roofline. Neither was true a day
+ago: the latency lines read &ldquo;154ms vs 83ms&rdquo; because the device timer returned milliseconds
+into fields named seconds, and the roofline had <em>never emitted a line on v6e</em> because JAX reports
+the chip as <span class="mono">'TPU v6 lite'</span> and the detector tested for
+<span class="mono">'v6e'</span>.</p>
+<section class="card"><h3>Tensor-parallel: infrastructure works, measurement does not yet</h3>
+<p class="sub">An earlier note in this document claimed TP grading worked, citing a tp4-holdout score of
+0.9007. That number came from the device timer under the old rule and does <b>not</b> survive correct
+gating. Retracted.</p>
+<p class="sub"><b>Works:</b> multi-chip dispatch (a width&gt;1 case reserves the whole host, since
+slice-level libtpu init cannot share one, and reserving all chips also guarantees the host-aligned
+indices the RET_CHECK demands); per-shard baseline election through <span class="mono">shard_map</span>
+(tp4-4x2048x2560 elects lax-associative-scan at 0.405 ms over production's 0.429 ms); the ref-vs-ref
+control; the wall-vs-device cross-check.</p>
+<p class="sub"><b>Does not:</b> no tp4 case yields a publishable score. On tp4-holdout the two
+instruments <em>straddle parity</em> &mdash; wall 1.11 (candidate faster) against device 0.84 (candidate
+slower) &mdash; so the cross-check refuses it, correctly. On tp4-4x2048x2560 the ref-vs-ref control reads
+1.31, meaning the judge cannot time the reference against <em>itself</em> reliably under shard_map at that
+shape. The blocker is run-to-run variance under collectives, which wants more repeats or a different TP
+protocol rather than another bug fix.</p></section>
+
 <h2>Seed parity on real silicon (per-test Ray dispatch, v6e-8)</h2>
 <p class="sub">The improvement loop starts from a seed the models edit, and the reward only means
 &ldquo;beat the production kernel&rdquo; if the seed's own grade is honest. Both rg_lru seeds were graded
@@ -2308,7 +2339,7 @@ real Mosaic (CPU interpret never runs it): a <b>log-step Hillis&ndash;Steele sca
 transcription wins and is the seed the arms edit.</p>
 <table><tr><th>seed</th><th>reward (fwd+bwd)</th><th>per-shape fwd ratio (ref&divide;cand)</th><th>verdict</th></tr>
 <tr><td class="mono">prod-4D time-blocked</td><td><b>1.0</b> &mdash; parity</td>
-<td class="mono sm">1.29 / 0.83 / 1.05 / 0.83 / 1.01 (floors 0.02&ndash;0.08 collapse all to ties)</td>
+<td class="mono sm">1.29 / 0.83 / 1.05 / 0.83 / 1.01 (aggregate 0.989, inside the 0.081 floor)</td>
 <td>SEED (what the arms start from)</td></tr>
 <tr><td class="mono">log-step scan</td><td>0.356 / 0.367 (two independent grades &mdash; 3% reproducibility)</td>
 <td class="mono sm">uniformly ~0.36 of production</td><td>fallback; real measured headroom marker</td></tr></table>
