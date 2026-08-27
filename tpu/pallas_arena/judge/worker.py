@@ -335,6 +335,11 @@ class PersistentWorker:
             _d = error_stats(_lo, _hi).get("max")
             self.oracle_precision_ok = bool(_d is not None and _d <= 1e-6)
             self.boot_report["oracle_precision_delta"] = _d
+            # Printed unconditionally: a self-check that only speaks up on
+            # failure is indistinguishable from one that silently threw, and
+            # this one guards a defect that already shipped to four tasks.
+            print(f"[boot] oracle fp32 self-check: delta={_d:.2e} "
+                  f"({'OK' if self.oracle_precision_ok else 'FAILED'})", flush=True)
             if not self.oracle_precision_ok:
                 print(f"[boot] *** ORACLE NOT FP32: {self.problem_name} reference changes by "
                       f"{_d:.3e} between bf16 and f32 default matmul precision. Its "
@@ -343,6 +348,8 @@ class PersistentWorker:
             del _i, _lo, _hi
         except Exception as e:  # noqa: BLE001 -- a self-check must never fail a grade
             self.boot_report["oracle_precision_error"] = f"{type(e).__name__}: {str(e)[:120]}"
+            print(f"[boot] oracle fp32 self-check DID NOT RUN: "
+                  f"{type(e).__name__}: {str(e)[:120]}", flush=True)
 
         self._general_baselines = {}
         if getattr(self.problem, "general_mode", False):
