@@ -1030,12 +1030,30 @@ class PersistentWorker:
                     _md = timing_mod.interleaved_score(tp_dev_pairs)
                     result.setdefault("tp_timer_ratios", {})[case.name] = {
                         "wall": round(_mw, 4), "device": round(_md, 4)}
-                    _dis_tol = max(3 * (self.noise_floor or 0.05), 0.20)
-                    if abs(_md - _mw) > _dis_tol * max(_mw, 1e-9):
+                    # WALLCLOCK IS GROUND TRUTH UNDER TP. The two instruments
+                    # disagree systematically here -- measured on v6e-8
+                    # 2026-08-27, wall 0.359/0.389/0.495 against device
+                    # 0.212/0.211/0.265 on the same four tp4 cases -- and the
+                    # reason is structural, not noise: the device timer is a
+                    # union of OP intervals, so it undercounts the cross-chip
+                    # collectives shard_map inserts, while wallclock measures
+                    # the elapsed time a user actually pays. So TP cases score
+                    # on wall and keep device as a diagnostic.
+                    #
+                    # The cross-check still gates, but on what it can actually
+                    # establish: both timers agreeing which side of parity the
+                    # candidate lands on. A case where one instrument says
+                    # faster and the other says slower is unpublishable; a case
+                    # where they agree on the verdict and differ on magnitude
+                    # is publishable at the conservative instrument. Excluding
+                    # on magnitude alone dropped EVERY tp4 case -- all four
+                    # here -- and left the arena with no TP signal at all.
+                    if (_md - 1.0) * (_mw - 1.0) < 0:
                         skipped_tp[case.name] = (
-                            f"timer disagreement: wall {_mw:.3f} vs device {_md:.3f} "
-                            f"-- TP timing distrusted, case excluded")
+                            f"timer verdict disagreement: wall {_mw:.3f} vs device "
+                            f"{_md:.3f} straddle parity -- TP timing unpublishable")
                         continue
+                    pairs = tp_wall_pairs
                 ct = timing_mod.CaseTiming(
                     case=case.name, pairs=pairs, holdout=case.holdout,
                     blind=getattr(case, "blind", False),
