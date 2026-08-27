@@ -30,6 +30,15 @@ from pallas_arena.judge.problems.base import (
 )
 
 
+# THE ORACLE MUST ACTUALLY BE FP32. jnp.einsum/@ without precision= is
+# Precision.DEFAULT, which on TPU multiplies f32 inputs through bf16, so a
+# reference documented as fp32 is not. Measured on splash (v6e 2026-08-27):
+# the oracle disagreed with a true f32 evaluation of itself by up to 3.7e-3
+# and an EXACT candidate was rejected for errors the oracle committed, while
+# the band was calibrated by honest variants that shared the defect. Same
+# defect, same fix, here.
+_F32 = jax.lax.Precision.HIGHEST
+
 def paged_decode_attention_reference(q, k_pages, v_pages, page_tables, seq_lens):
     """fp32 closed form: gather pages -> dense masked attention per seq."""
     b, qh, d = q.shape
@@ -43,7 +52,7 @@ def paged_decode_attention_reference(q, k_pages, v_pages, page_tables, seq_lens)
     v = v_pages[page_tables].reshape(b, max_len, kvh, d).astype(jnp.float32)
     q32 = q.astype(jnp.float32).reshape(b, kvh, group, d)
 
-    logits = jnp.einsum("bhgd,bthd->bhgt", q32, k)  # [b, kvh, group, t]
+    logits = jnp.einsum("bhgd,bthd->bhgt", q32, k, precision=_F32)  # [b, kvh, group, t]
     pos = jnp.arange(max_len)
     live = pos[None, :] < seq_lens[:, None]  # [b, t]
     logits = jnp.where(live[:, None, None, :], logits, -0.7 * float(np.finfo(np.float32).max))
@@ -51,7 +60,7 @@ def paged_decode_attention_reference(q, k_pages, v_pages, page_tables, seq_lens)
     p = jnp.exp(logits - m)
     p = jnp.where(live[:, None, None, :], p, 0.0)
     p = p / jnp.maximum(jnp.sum(p, axis=-1, keepdims=True), 1e-30)
-    o = jnp.einsum("bhgt,bthd->bhgd", p, v)
+    o = jnp.einsum("bhgt,bthd->bhgd", p, v, precision=_F32)
     return o.reshape(b, qh, d)
 
 

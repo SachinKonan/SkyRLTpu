@@ -78,6 +78,18 @@ def flce_target_logprobs(project_fn, hidden, target_ids, tile_size):
 BASELINE_TILE_TOKENS = 2048  # the production flce_tile_size
 
 
+# THE ORACLE MUST ACTUALLY BE FP32. `@` without a precision argument is
+# Precision.DEFAULT, which on TPU multiplies f32 inputs through bf16 -- so
+# this reference, documented as "logits = hidden @ w computed at fp32
+# accumulation", was not. Measured on splash (v6e 2026-08-27): the oracle
+# disagreed with a true f32 evaluation of itself by up to 3.7e-3, an EXACT
+# candidate was rejected for errors the oracle committed, and the band hid it
+# because the honest bf16 variant shared the defect (0.000e+00 measured
+# error). reference_bf16 below deliberately KEEPS the bf16 path -- it models
+# an honest bf16 kernel and defines the band; only the oracle changes.
+_F32 = jax.lax.Precision.HIGHEST
+
+
 class FLCEProblem(Problem):
     name = "flce"
     version = "1"
@@ -123,7 +135,9 @@ class FLCEProblem(Problem):
         return (hidden, w, targets)
 
     def reference(self, hidden, w, targets):
-        logits = hidden.astype(jnp.float32) @ w.astype(jnp.float32)
+        logits = jax.lax.dot_general(
+            hidden.astype(jnp.float32), w.astype(jnp.float32),
+            (((1,), (0,)), ((), ())), precision=_F32)
         tl = jnp.take_along_axis(logits, targets[:, None], axis=1)[:, 0]
         return tl - jax.nn.logsumexp(logits, axis=-1)
 
