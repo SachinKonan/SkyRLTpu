@@ -28,6 +28,29 @@ PEAK_BF16_FLOPS = {
 }
 
 
+def chip_from_device_kind(device_kind: str, fallback: str = "") -> str:
+    """Map JAX's ``device.device_kind`` onto our peak-table keys.
+
+    JAX does NOT report the marketing name: a v6e chip calls itself
+    ``'TPU v6 lite'``, so the obvious ``'v6e' in kind`` test never matched and
+    every roofline number silently vanished -- ``PEAK_BF16_FLOPS.get(<miss>)``
+    is None, ``mxu_utilization`` returns None, and the observation simply
+    omitted the lines (measured 2026-08-27: splash graded 6 cases on v6e-8
+    with empty ``mxu_fracs`` despite valid FLOP counts). Match the real
+    strings, and keep the fallback for anything unrecognized.
+    """
+    k = (device_kind or "").lower()
+    if "v6" in k:                      # 'TPU v6 lite' == v6e
+        return "v6e"
+    if "v5p" in k or "v5 p" in k:
+        return "v5p"
+    if "v5" in k:                      # 'TPU v5 lite' == v5e
+        return "v5e"
+    if "v4" in k:
+        return "v4"
+    return fallback
+
+
 def geomean(xs: list[float]) -> float:
     if not xs:
         raise ValueError("geomean of empty list")
@@ -111,7 +134,19 @@ def amortized_call(fn, args, repeats: int):
 
 
 def device_timer(fn, args):
-    """Device-time one call of ``fn(*args)`` in milliseconds, or None.
+    """Device-time one call of ``fn(*args)`` in SECONDS, or None.
+
+    SECONDS is load-bearing. This value lands in ``CaseTiming.pairs``
+    alongside wallclock (`perf_counter`) pairs -- the timer can fall back
+    per iteration -- and every consumer reads those as seconds:
+    ``ref_median_s``/``cand_median_s``, the roofline
+    (``speed_of_light_fraction``, ``mxu_utilization``) and the observation
+    the model reads. Returning milliseconds here (as this did until
+    2026-08-27) left rewards correct -- ``interleaved_score`` is a median of
+    per-pair ratios, so a per-pair unit cancels -- while silently scaling
+    every reported latency and roofline number by 1000x: the splash seed's
+    feedback claimed "ref 1005.000ms" for a kernel the boot election had
+    just timed at 1.16 ms, and MXU utilization printed as 0%.
 
     Copies tokamax's TPU default (`hermetic_xprof`): profile the call and take
     the DISJOINT INTERVAL UNION of XLA op intervals -- total active device
@@ -144,7 +179,7 @@ def device_timer(fn, args):
         jax.block_until_ready(fn(*args))  # warm; never timed
         with XprofProfileSession(hermetic=True, use_jax_profiler=True) as prof:
             jax.block_until_ready(fn(*args))
-        return prof.total_op_time / datetime.timedelta(milliseconds=1)
+        return prof.total_op_time / datetime.timedelta(seconds=1)
     except Exception:  # noqa: BLE001 -- profiling must never fail a grade
         return None
 

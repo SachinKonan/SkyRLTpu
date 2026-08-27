@@ -65,22 +65,34 @@ def _http_json(url: str, payload: dict | None = None, timeout: float = 30.0):
         return json.loads(resp.read())
 
 
-def _pin_chips() -> str:
-    """Bind this task's process to the chips Ray assigned it.
+_TP_BOUNDS = {1: "1,1,1", 2: "2,1,1", 4: "2,2,1", 8: "4,2,1"}
+
+
+def _pin_chips(width: int = 1) -> str:
+    """Bind this task's process to ``width`` of the chips Ray assigned it.
 
     Ray publishes the assignment via the runtime context; whether it also
     exports TPU_VISIBLE_CHIPS varies by version (measured on ray 2.58: it
     did NOT). libtpu reads the variable at init, so this runs before jax is
     imported. Only plain chip indices are usable; anything else would break
     init, which is worse than not pinning.
+
+    A TP task RESERVES the whole host (slice-level libtpu init cannot share a
+    host with single-chip processes) but must still be pinned to exactly the
+    ``width`` chips its case declares, with a matching process-bounds mesh --
+    otherwise a tp4 case would come up on 8 chips and shard the wrong way.
     """
     try:
         import ray
 
         ids = (ray.get_runtime_context().get_accelerator_ids() or {}).get("TPU") or []
         idx = [str(int(i)) for i in ids if str(i).strip().lstrip("-").isdigit()]
+        idx = idx[:width] if width and len(idx) >= width else idx
         if idx and not os.environ.get("TPU_VISIBLE_CHIPS"):
             os.environ["TPU_VISIBLE_CHIPS"] = ",".join(idx)
+            os.environ.setdefault("TPU_PROCESS_BOUNDS", "1,1,1")
+            os.environ.setdefault(
+                "TPU_CHIPS_PER_PROCESS_BOUNDS", _TP_BOUNDS.get(len(idx), "1,1,1"))
             return os.environ["TPU_VISIBLE_CHIPS"]
     except Exception:
         pass
@@ -94,7 +106,9 @@ def grade_case(problem: str, case: str, payload: dict, cfg: dict) -> dict:
     # inherit that even if the runtime propagates env.
     if os.environ.get("JAX_PLATFORMS") == "cpu":
         del os.environ["JAX_PLATFORMS"]
-    pinned = _pin_chips()
+    from pallas_arena.judge import collect as _collect
+
+    pinned = _pin_chips(_collect.case_width(case))
     cache_dir = cfg.get("compile_cache_dir")
     if cache_dir:
         os.environ.setdefault("JAX_COMPILATION_CACHE_DIR", cache_dir)
@@ -339,7 +353,18 @@ def run_pool(
                         cand.entries[case] = {"skipped":
                                               f"needs {w} chips (host {chips}, max tp {max_tp_width})"}
                         continue
-                    ref = grade.options(resources={"TPU": w}).remote(
+                    # A MULTI-CHIP TASK MUST OWN THE HOST. Chips are isolated
+                    # for single-chip processes (one vfio device each), but a
+                    # TP task opens a SLICE-level libtpu session, and that
+                    # cannot be built while other processes hold the host's
+                    # other chips: measured 2026-08-27, every tp4 case died
+                    # with "Cancel TPU slice due to HAL init error" /
+                    # TPU_RET while single-chip cases ran beside them, and a
+                    # tp4 case that ran alone elected its baseline fine.
+                    # Reserving all chips makes Ray serialize it against
+                    # every sibling; TPU_VISIBLE_CHIPS still pins it to w.
+                    ask = chips if w > 1 else 1
+                    ref = grade.options(resources={"TPU": ask}).remote(
                         problem, case, payload, cfg)
                     cand.pending[ref] = case
                 n_pending = sum(len(c.pending) for c in cands)

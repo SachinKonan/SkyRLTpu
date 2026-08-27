@@ -9,14 +9,14 @@ import sys
 os.environ.setdefault("PALLAS_INTERPRET", "1")
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
-sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/pallas_arena")
+sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu")
 sys.path.insert(0, "/n/fs/vision-mix/sk7524/SkyRLTpu/tpu/pallas_arena/probe")
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from judge.problems.splash_attention import causal_segment_attention
+from pallas_arena.judge.problems.splash_attention import causal_segment_attention
 import seed_splash_flash as seed
 
 SHAPES = [

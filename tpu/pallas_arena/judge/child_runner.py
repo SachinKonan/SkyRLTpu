@@ -156,11 +156,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
     result["backend"] = jax.default_backend()
     device = jax.local_devices()[0]
     result["device_kind"] = getattr(device, "device_kind", "?")
-    chip = (
-        "v6e"
-        if "v6e" in result["device_kind"].lower()
-        else "v5p" if "v5p" in result["device_kind"].lower() else result["backend"]
-    )
+    chip = timing_mod.chip_from_device_kind(result["device_kind"], result["backend"])
     smoke = bool(cfg.get("smoke", False))
 
     def _mem_stats():

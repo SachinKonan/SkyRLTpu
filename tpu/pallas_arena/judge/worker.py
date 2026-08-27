@@ -1042,10 +1042,8 @@ class PersistentWorker:
                 )
                 case_timings.append(ct)
                 bm = problem.bytes_moved(case)
-                chip = (
-                    "v6e"
-                    if "v6e" in result["device_kind"].lower()
-                    else "v5p" if "v5p" in result["device_kind"].lower() else self.platform
+                chip = timing_mod.chip_from_device_kind(
+                    result["device_kind"], self.platform
                 )
                 if problem.memory_bound and bm:
                     frac = timing_mod.speed_of_light_fraction(bm, ct.cand_median_s, chip)
