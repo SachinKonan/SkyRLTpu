@@ -26,6 +26,12 @@ STRUCTURE (the same shape as the production splash kernel):
     pairs on the sequential axis, accumulating in scratch; the GQA head
     mapping happens in BlockSpec index maps, not by indexing inside.
 
+Forward dots run at Precision.HIGHEST: Mosaic's default f32 matmul is a
+single reduced-precision MXU pass, which measured 6.0e-3 max error at the
+deepseek2 shape against a ~3.7e-3 calibrated band -- accuracy is bought
+first, speed is what improvement steps are for (precision choices per dot
+are a legitimate optimization axis as long as correctness holds).
+
 This is ONE valid approach; faster kernels may restructure everything
 (block sizes, SKIPPING fully-masked KV tiles -- the production kernel does,
 a large part of its speed -- a fused backward, different residuals) as long
@@ -84,7 +90,8 @@ def _tile_mask(qi, ki, qseg_ref, kseg_ref, window):
 
 def _tile_logits(q_ref, k_ref, soft_cap):
     z = jnp.dot(q_ref[0].astype(jnp.float32), k_ref[0].astype(jnp.float32).T,
-                preferred_element_type=jnp.float32)
+                preferred_element_type=jnp.float32,
+                precision=jax.lax.Precision.HIGHEST)
     if soft_cap is not None:
         z = soft_cap * jnp.tanh(z / soft_cap)
     return z
@@ -111,7 +118,8 @@ def _fwd_body(q_ref, k_ref, v_ref, qseg_ref, kseg_ref, o_ref, lse_ref,
     l_new = _col(l_ref) * alpha + jnp.sum(p, axis=1, keepdims=True)
     l_ref[...] = jnp.broadcast_to(l_new, (B, LANES))
     acc_ref[...] = acc_ref[...] * alpha + jnp.dot(
-        p, v_ref[0].astype(jnp.float32), preferred_element_type=jnp.float32)
+        p, v_ref[0].astype(jnp.float32), preferred_element_type=jnp.float32,
+        precision=jax.lax.Precision.HIGHEST)
     m_ref[...] = jnp.broadcast_to(m_new, (B, LANES))
 
     @pl.when(ki == nkv - 1)

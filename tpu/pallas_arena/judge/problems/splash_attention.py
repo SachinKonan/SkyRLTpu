@@ -255,9 +255,20 @@ def _honest_online_softmax(
     """Flash-style streaming softmax: a DIFFERENT reduction order over the key
     axis (running max + rescaled running sum) at fp32. Legal, and the shape a
     real Pallas kernel takes; included so a candidate is never punished for
-    accumulating keys in blocks rather than all at once."""
+    accumulating keys in blocks rather than all at once.
+
+    NATIVELY GROUPED (GQA) and d_v-general, like the reference: when this
+    variant raised through ``_match_kv`` on mixtral/deepseek2 shapes it was
+    silently skipped, so the tolerance band there was calibrated from
+    reference_bf16 alone -- no streaming implementation constrained it, and an
+    honest flash kernel failed correctness at deepseek2 by exactly the online
+    rescaling error this variant exists to represent (measured 2026-08-26:
+    6.0e-3 against a 3.7e-3 reference_bf16-only band)."""
     h, s, d = q.shape
-    k, v = _match_kv(q, k, v)
+    kvh = k.shape[0]
+    g = h // kvh
+    dv = v.shape[-1]
+    qg = q.reshape(kvh, g, s, d)
     idx_k = jnp.arange(s)
     live_k = segment_ids != 0
     pos_q = jnp.arange(s)
@@ -270,13 +281,13 @@ def _honest_online_softmax(
     def body(carry, j):
         run_m, run_l, acc = carry
         start = j * block_k
-        kb = jax.lax.dynamic_slice(kp, (0, start, 0), (h, block_k, d))
-        vb = jax.lax.dynamic_slice(vp, (0, start, 0), (h, block_k, d))
+        kb = jax.lax.dynamic_slice(kp, (0, start, 0), (kvh, block_k, d))
+        vb = jax.lax.dynamic_slice(vp, (0, start, 0), (kvh, block_k, dv))
         kpos = start + jnp.arange(block_k)
         in_range = kpos < s
         seg_kb = jnp.where(in_range, segment_ids[jnp.minimum(kpos, s - 1)], 0)
         live_kb = (seg_kb != 0) & in_range
-        logits = jnp.einsum("hqd,hkd->hqk", q, kb, preferred_element_type=jnp.float32)
+        logits = jnp.einsum("hgqd,hkd->hgqk", qg, kb, preferred_element_type=jnp.float32)
         if soft_cap is not None:
             logits = soft_cap * jnp.tanh(logits / soft_cap)
         causal = pos_q[:, None] >= kpos[None, :]
@@ -288,32 +299,33 @@ def _honest_online_softmax(
             & live_q[:, None]
             & live_kb[None, :]
         )
-        logits = jnp.where(m[None], logits, NEG_INF)
+        logits = jnp.where(m[None, None], logits, NEG_INF)
         blk_m = jnp.max(logits, axis=-1, keepdims=True)
         new_m = jnp.maximum(run_m, blk_m)
         corr = jnp.exp(run_m - new_m)
-        p = jnp.where(m[None], jnp.exp(logits - new_m), 0.0)
+        p = jnp.where(m[None, None], jnp.exp(logits - new_m), 0.0)
         new_l = run_l * corr + jnp.sum(p, axis=-1, keepdims=True)
-        new_acc = acc * corr + jnp.einsum("hqk,hkd->hqd", p.astype(jnp.bfloat16), vb, preferred_element_type=jnp.float32)
+        new_acc = acc * corr + jnp.einsum("hgqk,hkv->hgqv", p.astype(jnp.bfloat16), vb, preferred_element_type=jnp.float32)
         return (new_m, new_l, new_acc), None
 
     init = (
-        jnp.full((h, s, 1), NEG_INF, jnp.float32),
-        jnp.zeros((h, s, 1), jnp.float32),
-        jnp.zeros((h, s, d), jnp.float32),
+        jnp.full((kvh, g, s, 1), NEG_INF, jnp.float32),
+        jnp.zeros((kvh, g, s, 1), jnp.float32),
+        jnp.zeros((kvh, g, s, dv), jnp.float32),
     )
     (run_m, run_l, acc), _ = _scan_blocks(body, init, nb)
     if sinks is not None:
         # The sink merges AFTER the streaming pass, exactly like folding in one
         # more block containing a single logit and no value: rescale the
         # running sum/accumulator to the new max and add the sink's mass.
-        sk = jnp.asarray(sinks, jnp.float32)[:, None, None]
+        sk = jnp.asarray(sinks, jnp.float32).reshape(kvh, g)[:, :, None, None]
         new_m = jnp.maximum(run_m, sk)
         corr = jnp.exp(run_m - new_m)
         run_l = run_l * corr + jnp.exp(sk - new_m)
         acc = acc * corr
     row_live = ((idx_k[None, :] <= pos_q[:, None]) & (segment_ids[:, None] == segment_ids[None, :]) & live_q[:, None] & live_k[None, :]).any(-1)
-    return jnp.where(row_live[None, :, None], acc / jnp.maximum(run_l, 1e-30), 0.0)
+    out = jnp.where(row_live[None, None, :, None], acc / jnp.maximum(run_l, 1e-30), 0.0)
+    return out.reshape(h, s, dv)
 
 
 _FALLBACK_BLOCK_Q = 512
