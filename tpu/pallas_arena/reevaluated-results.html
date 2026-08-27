@@ -2396,47 +2396,22 @@ lax-associative-scan 2.23 ms; tp4-holdout: 0.54 ms vs 0.82 ms) &mdash; the elect
 shard_map. Per-shard ratios, the TP ref-vs-ref control and the wall-vs-device cross-check are grading
 now.</p></section>
 
-<h2>Seeded one-step result: qwen3.5-27B on rg_lru (32 candidates, real silicon)</h2>
-<p class="sub">The first arm to complete. Every candidate is an improvement turn on a seed that
-<b>scores exactly 1.0</b> &mdash; a faithful transcription of DeepMind's production kernel, verified on
-TPU three times uncached. So reward above 1.0 is improvement over Google's kernel, and the seed is the
-floor rather than a strawman.</p>
-<table><tr><th>outcome</th><th>n</th><th>%</th><th>caught where</th></tr>
-<tr><td>pregate</td><td>27</td><td>84%</td><td>CPU, no chip consumed</td></tr>
-<tr><td>Mosaic compile (VMEM exhausted)</td><td>3</td><td>9%</td><td>silicon</td></tr>
-<tr><td>AOT export at the holdout</td><td>1</td><td>3%</td><td>silicon</td></tr>
-<tr><td><b>passed every gate</b></td><td><b>1</b></td><td><b>3%</b></td><td>reward <b>1.0</b> &mdash; tied the seed</td></tr></table>
-<p class="sub"><b>Zero of 32 beat the seed.</b> Handed a working kernel and asked to make it faster, one
-seeded turn produced 31 kernels that do not work and one that matches. Notably NONE produced a
-working-but-slower kernel: the failures are categorical, not gradual.</p>
-<section class="card"><h3>The five systematic failure modes</h3>
-<table><tr><th>share</th><th>mode</th><th>whose fault</th></tr>
-<tr><td>28%</td><td><b>Shape hardcoding</b> &mdash; reshapes the 2560 feature width as (20,128), then dies
-at 1024 / 3072 / 4096. The pregate AOT-exports at EVERY case signature, so this is a shape-generality
-test that costs about a second of CPU.</td><td>model</td></tr>
-<tr><td>28%</td><td><b>Pallas contract broken while restructuring</b> &mdash; BlockSpec/argument pytree
-mismatches, wrong arity, bad <span class="mono">swap</span> shapes. The model rewrites the kernel body
-and does not keep the grid contract in sync.</td><td>model</td></tr>
-<tr><td>25%</td><td><b>No program at all</b> &mdash; 7 of 32 finished NORMALLY having emitted only
-reasoning ("Let's write the code now."), 1 hit the token cap.</td><td><b>harness</b></td></tr>
-<tr><td>9%</td><td><b>Tiles exceed the ~32MB scoped VMEM</b> &mdash; only visible on silicon; CPU
-interpret never runs Mosaic and never allocates VMEM.</td><td>model</td></tr>
-<tr><td>6%</td><td><b>Traced value where a concrete one is required</b></td><td>model</td></tr></table>
-<p class="sub">The 25% row was ours, and it is fixed: the sampler gave thinking a fixed cap and let the
-answer take whatever context survived. It now uses ttt_discover's
-<span class="mono">TwoPhaseTokenCompleter</span> rule &mdash; phase 1 gets a total context allowance
-INCLUDING the prompt, so the answer is guaranteed the remainder no matter how long the model thinks.</p></section>
-<section class="card"><h3>What the prompt actually costs (measured, both tokenizers)</h3>
-<p class="sub">Budgets had been set from estimates. Measured off each model's own
-<span class="mono">tokenizer.json</span>:</p>
-<table><tr><th>prompt</th><th>qwen3.5-27B</th><th>gemma-4-31B</th><th>seed program's share</th></tr>
-<tr><td>rg_lru</td><td class="mono">3067</td><td class="mono">3262</td><td>74%</td></tr>
-<tr><td>splash</td><td class="mono">5823</td><td class="mono">6416</td><td>86%</td></tr></table>
-<p class="sub">The seed program IS the prompt &mdash; instructions are only ~450 tokens. gemma runs ~7%
-hotter than qwen on identical text, which is why estimating one from the other once 400'd every request.
-Consequence: at gemma's original 16384 context a full splash rewrite was <em>impossible</em> (5545-token
-seed against ~4k of answer). gemma's config allows 262144 positions, so both models now serve at 32768
-and the comparison is like-for-like.</p></section>
+<h2>Seeded one-step results &mdash; pending (earlier runs voided)</h2>
+<p class="sub">An earlier qwen rg_lru arm (32 candidates) and a gemma rg_lru arm (10 of 32) were
+graded here. <b>Both are void and have been withdrawn</b>, because they were produced before the arena
+used the canonical extraction path and before the token budgets were unified &mdash; so they are not
+comparable to each other, nor to anything produced afterwards.</p>
+<p class="sub">What differed: the qwen arm ran a leftover-answer budget in which thinking took a fixed
+cap and the answer got whatever context survived (7 of 32 emitted reasoning and no program at all), an
+answer cap that truncated one more, and extraction that could return a draft from inside the reasoning
+rather than the final program. The gemma arm ran at a 16384 context against qwen's 32768, and lost 22 of
+32 generations to an SSH tunnel flap while the engine was healthy &mdash; its survivors are whatever
+happened to be issued while the tunnel was up, so the sample is not even a random subset.</p>
+<p class="sub">The replacement runs use, for all four cells identically: a 32768 context, a 12288-token
+thinking budget with the answer guaranteed the remainder (2.5x&ndash;7.6x each seed program),
+extraction through ttt_discover's RosettaStone with the model family recorded on every row, and
+connection retry so a flapping tunnel costs latency instead of samples. Results will be published here
+when those land.</p>
 
 <h2>The rf3c contract bench: qwen vs gemma, one prompt (RL deferred until this settles)</h2>
 <p class="sub">Decision: no RL spend until the prompt + format is proven. Both models get the
