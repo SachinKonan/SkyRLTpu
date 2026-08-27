@@ -32,6 +32,25 @@ from pallas_arena.judge.problems.base import (
 NEG_INF = -0.7 * float(np.finfo(np.float32).max)
 
 
+def _scan_blocks(body, init, n: int):
+    """lax.scan over jnp.arange(n), except degenerate block counts run
+    inline. Compiling a length-1/2 blocked scan at the tiny adversarial
+    shape nondeterministically overflows the TPU compiler's fiber stack
+    (SIGSEGV STACK OVERFLOW in jellyfish TransferSizeUtil, v6e-8
+    2026-08-26 -- it killed every splash grade at boot); a scan that short
+    has no batching value, so emit plain ops instead of a While loop."""
+    if n <= 2:
+        carry, ys = init, []
+        for j in range(n):
+            carry, y = body(carry, jnp.asarray(j))
+            ys.append(y)
+        stacked = None
+        if ys and ys[0] is not None:
+            stacked = jax.tree.map(lambda *a: jnp.stack(a), *ys)
+        return carry, stacked
+    return jax.lax.scan(body, init, jnp.arange(n))
+
+
 def causal_segment_attention(
     q, k, v, segment_ids, *, window=None, soft_cap=None, sinks=None
 ):
@@ -225,7 +244,7 @@ def _honest_faithful_bf16(
         out = jnp.einsum("hqk,hkd->hqd", p.astype(jnp.bfloat16), v, preferred_element_type=jnp.float32)
         return None, out
 
-    _, blocks = jax.lax.scan(block, None, jnp.arange((s + pad) // block_q))
+    _, blocks = _scan_blocks(block, None, (s + pad) // block_q)
     out = jnp.transpose(blocks, (1, 0, 2, 3)).reshape(h, s + pad, d)
     return out[:, :s, :]
 
@@ -283,7 +302,7 @@ def _honest_online_softmax(
         jnp.zeros((h, s, 1), jnp.float32),
         jnp.zeros((h, s, d), jnp.float32),
     )
-    (run_m, run_l, acc), _ = jax.lax.scan(body, init, jnp.arange(nb))
+    (run_m, run_l, acc), _ = _scan_blocks(body, init, nb)
     if sinks is not None:
         # The sink merges AFTER the streaming pass, exactly like folding in one
         # more block containing a single logit and no value: rescale the
@@ -347,7 +366,7 @@ def _xla_masked_attention(
         p = jnp.where(row_live[None, :, None], p / jnp.maximum(denom, 1e-30), 0.0)
         return None, jnp.einsum("hqk,hkd->hqd", p, v32)
 
-    _, blocks = jax.lax.scan(block, None, jnp.arange((s + pad) // block_q))
+    _, blocks = _scan_blocks(block, None, (s + pad) // block_q)
     out = jnp.transpose(blocks, (1, 0, 2, 3)).reshape(h, s + pad, d)
     return out[:, :s, :]
 
@@ -421,7 +440,7 @@ def _xla_grouped_attention(
         )
         return None, jnp.einsum("hgqk,hkv->hgqv", p, v32)
 
-    _, blocks = jax.lax.scan(block, None, jnp.arange((s + pad) // block_q))
+    _, blocks = _scan_blocks(block, None, (s + pad) // block_q)
     # blocks: [nblocks, kv_heads, group, block_q, d_v]
     out = jnp.transpose(blocks, (1, 2, 0, 3, 4)).reshape(kvh, group, s + pad, dv)
     return out[:, :, :s, :].reshape(qh, s, dv)
