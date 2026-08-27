@@ -93,11 +93,13 @@ export SKIP_JAX_PRECOMPILE=1
 # nothing is pinned. On a wider host (v6e-8 = 8 chips) TP=4 must be pinned to
 # a contiguous 4, or libtpu builds an 8-chip mesh the server never asked for.
 # SERVE_VISIBLE_CHIPS carries that choice from the launcher.
+SERVE_TP=${SERVE_TP:-4}
 if [ -n "${SERVE_VISIBLE_CHIPS:-}" ]; then
   export TPU_VISIBLE_CHIPS="$SERVE_VISIBLE_CHIPS"
-  echo "[serve] pinned to chips ${TPU_VISIBLE_CHIPS} (TP=4)"
+  echo "[serve] pinned to chips ${TPU_VISIBLE_CHIPS} (TP=${SERVE_TP})"
 else
-  unset TPU_VISIBLE_CHIPS            # all 4 local chips, TP=4
+  unset TPU_VISIBLE_CHIPS            # every local chip
+  echo "[serve] using all local chips (TP=${SERVE_TP})"
 fi
 
 # MAKE THIS HOST A STANDALONE TPU RUNTIME. Without these, libtpu on a v5p-16
@@ -107,8 +109,14 @@ fi
 # with the engine never reaching the serving loop. 1,1,1 processes x 2,2,1
 # chips = the 4 chips of THIS host, which is exactly what TP=4 wants, and it
 # is what start_colocated_vllm_tinker.sh sets for its single-worker vLLM.
+# Chip mesh must match SERVE_TP: 4 chips are 2x2x1, 8 chips are 4x2x1.
 export TPU_PROCESS_BOUNDS=1,1,1
-export TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1
+case "$SERVE_TP" in
+  8) export TPU_CHIPS_PER_PROCESS_BOUNDS=4,2,1 ;;
+  2) export TPU_CHIPS_PER_PROCESS_BOUNDS=2,1,1 ;;
+  1) export TPU_CHIPS_PER_PROCESS_BOUNDS=1,1,1 ;;
+  *) export TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1 ;;
+esac
 unset TPU_PROCESS_ADDRESSES
 
 pkill -f "vllm serve" >/dev/null 2>&1 || true
@@ -124,7 +132,7 @@ tmux new-session -d -s vllm-probe \
    '$VENV/bin/vllm' serve '$MODEL' \
      --served-model-name '$MODEL' \
      --host ${BIND_HOST:-127.0.0.1} --port $PORT \
-     --tensor-parallel-size 4 \
+     --tensor-parallel-size ${SERVE_TP} \
      --max-model-len $MAX_MODEL_LEN \
      --max-num-seqs $MAX_NUM_SEQS \
      --max-num-batched-tokens 4096 \

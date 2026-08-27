@@ -156,6 +156,7 @@ timeout 900 gcloud compute tpus tpu-vm scp "${repo_root}/tpu/pallas_arena/probe/
     --command="MODEL='${QWEN_MODEL}' PORT=${VLLM_PORT} MAX_MODEL_LEN=${QWEN_MAXLEN} \
       HF_CACHE_GCS='${QWEN_HF_GCS}' XLA_CACHE_GCS='${QWEN_XLA_GCS}' \
       ${SERVE_VISIBLE_CHIPS:+SERVE_VISIBLE_CHIPS='${SERVE_VISIBLE_CHIPS}'} \
+      ${SERVE_TP:+SERVE_TP='${SERVE_TP}'} \
       ${EXTRA_PIP:+EXTRA_PIP='${EXTRA_PIP}'} bash ~/serve_vllm.sh" \
     ; echo "[serve] launcher rc=$?" ) &
 
