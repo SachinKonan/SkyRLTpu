@@ -77,11 +77,37 @@ cleanup() {
     --zone="$ZONE" --project="$PROJECT" --force --quiet 2>/dev/null || true
   ( timeout 600 gcloud compute tpus queued-resources delete "$QR" --zone="$ZONE" \
       --project="$PROJECT" --force --quiet 2>/dev/null || true ) &
+  # VERIFY FOR REAL, AND RETRY. This block used to print "verified gone"
+  # whenever the grep failed to match -- which is also what happens when the
+  # list call itself fails -- so a QR that survived teardown was reported as
+  # removed. Three FAILED evsmoke QRs accumulated that way on 2026-08-27 and
+  # silently consumed the v6e-8 quota until new creates stopped being
+  # granted, which stalled both splash arms for over an hour with no error
+  # anywhere in their logs.
   for z in "$ZONE" "$OTHER_ZONE"; do
-    timeout 300 gcloud compute tpus queued-resources list --zone="$z" --project="$PROJECT" 2>/dev/null \
-      | grep -q "^${QR}\b" || echo "[cleanup] verified ${QR} gone from ${z}"
-    timeout 300 gcloud compute tpus tpu-vm list --zone="$z" --project="$PROJECT" 2>/dev/null \
-      | grep -q "^${QR}\b" || echo "[cleanup] verified ${QR} node gone from ${z}"
+    for attempt in 1 2 3; do
+      lst=$(timeout 300 gcloud compute tpus queued-resources list --zone="$z" \
+              --project="$PROJECT" --format='value(name)' 2>/dev/null)
+      rc=$?
+      if [ $rc -ne 0 ]; then
+        echo "[cleanup] WARNING: could not list ${z} (rc=$rc) -- cannot verify ${QR}"
+        break
+      fi
+      if ! echo "$lst" | grep -qx "$QR"; then
+        echo "[cleanup] verified ${QR} gone from ${z}"
+        break
+      fi
+      echo "[cleanup] ${QR} STILL PRESENT in ${z} (attempt ${attempt}/3) -- deleting again"
+      timeout 600 gcloud compute tpus queued-resources delete "$QR" --zone="$z" \
+        --project="$PROJECT" --force --quiet 2>/dev/null || true
+      sleep 30
+      [ "$attempt" = "3" ] && echo "[cleanup] ALARM: ${QR} survived teardown in ${z} -- it will consume quota"
+    done
+    nodes=$(timeout 300 gcloud compute tpus tpu-vm list --zone="$z" --project="$PROJECT" \
+              --format='value(name)' 2>/dev/null)
+    echo "$nodes" | grep -qx "$QR" \
+      && echo "[cleanup] ALARM: node ${QR} still in ${z}" \
+      || echo "[cleanup] verified ${QR} node gone from ${z}"
   done
 }
 trap 'cleanup' EXIT
