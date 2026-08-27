@@ -42,6 +42,13 @@ MAX_NEW_TOKENS=${MAX_NEW_TOKENS:-10240}
 # think->answer. 2.7k prompt + 10.2k think + 15.4k answer ~= 28.3k < 32k;
 # gen_smoke sizes phase 2 from actual usage so bigger prompts self-clamp.
 ANSWER_CAP=${ANSWER_CAP:-15360}
+# RESERVE-FIRST BUDGET (ttt_discover TwoPhaseTokenCompleter semantics). When
+# set, this is the total context phase 1 may occupy INCLUDING the prompt, so
+# the answer is GUARANTEED ctx - PHASE1_TOTAL - 64 tokens however much the
+# model thinks. Measured need: with a fixed think cap and a leftover answer,
+# 7 of 32 qwen rg_lru candidates finished normally having produced only
+# reasoning and no program (2026-08-27).
+PHASE1_TOTAL=${PHASE1_TOTAL:-0}
 QWEN_MODEL=${QWEN_MODEL:-Qwen/Qwen3.5-27B}
 # 32k context, like the llamafarm serving: thinking stays ON and the
 # completion budget absorbs it instead of truncating. First boot at 32k
@@ -266,6 +273,7 @@ uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_s
   --server "http://127.0.0.1:${LOCAL_PORT}" --model "$QWEN_MODEL" \
   --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS" --concurrency 6 \
   --answer-cap "$ANSWER_CAP" --cells "${SMOKE_CELLS:-}" --ctx "$QWEN_MAXLEN" \
+  ${PHASE1_TOTAL:+--phase1-total "$PHASE1_TOTAL"} \
   ${REPAIR_FROM:+--repair-from "$REPAIR_FROM" --gens-from "$GENS_FROM"} \
   ${ENABLE_THINKING_KWARG:+--enable-thinking-kwarg} \
   ${NO_THINK:+--no-think} \

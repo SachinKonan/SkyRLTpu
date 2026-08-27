@@ -99,14 +99,23 @@ def _post(server: str, body: dict, timeout_s: float) -> dict:
 
 def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: float,
           timeout_s: float, ctx: int = 32768, answer_cap: int = 8192,
-          extra_body: dict | None = None) -> dict:
+          extra_body: dict | None = None, phase1_total: int = 0) -> dict:
     """Two-phase completion. Thinking stays ON (by direction: we sample the
     policy we would train), but it is CAPPED: phase 1 gets `max_tokens`; if
     it truncates, the assistant message is continued past a forcing cue with
     an answer budget sized from ACTUAL usage (rq2 loop.py measured fixed p2
     overflowing the context -> vLLM 400 -- sizing from usage is load-bearing).
     Measured motivation: 16k/18k/27k single-phase caps truncated 53-97% of
-    completions -- thinking expands to fill ANY budget it is given."""
+    completions -- thinking expands to fill ANY budget it is given.
+
+    ``phase1_total`` (when > 0) switches to the RESERVE-FIRST budget of
+    ttt_discover's TwoPhaseTokenCompleter: it is the total context phase 1
+    may occupy INCLUDING the prompt, which guarantees
+    ``ctx - phase1_total - 64`` tokens for the answer no matter how much the
+    model thinks. The old behaviour gives thinking a fixed cap and lets the
+    answer take whatever survives, which is how 7 of 32 qwen rg_lru
+    candidates (2026-08-27) finished normally having emitted only reasoning
+    and no program at all -- the answer phase had nothing left to spend."""
     base = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -115,6 +124,20 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
     }
     if extra_body:
         base.update(extra_body)
+    if phase1_total:
+        # RESERVE THE ANSWER FIRST. Measure the true prompt size (tokenizers
+        # differ per model; qwen-token estimates already mispredicted gemma
+        # badly enough to 400 every request), then let phase 1 have only what
+        # is left of its total allowance.
+        probe = _post(server, {**base, "max_tokens": 1}, timeout_s)
+        ptoks = ((probe.get("usage") or {}).get("prompt_tokens") or 0)
+        p1 = phase1_total - ptoks
+        reserved = ctx - phase1_total - 64
+        if p1 < 512:
+            raise RuntimeError(
+                f"prompt {ptoks} leaves {p1} phase-1 tokens of a {phase1_total} budget")
+        print(f"[budget] prompt={ptoks} think<={p1} answer_reserved={reserved}", flush=True)
+        max_tokens = p1
     try:
         d = _post(server, {**base, "max_tokens": max_tokens}, timeout_s)
     except urllib.error.HTTPError as e:
@@ -142,7 +165,7 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
     u = d.get("usage") or {}
     used = (u.get("prompt_tokens") or 0) + (u.get("completion_tokens") or max_tokens)
     room = ctx - used - 256
-    p2 = min(answer_cap, room)
+    p2 = min(answer_cap, room) if not phase1_total else max(room, 0)
     if p2 < 512:
         return d  # no room to force; the parser gets the phase-1 text
     d2 = _post(server, {
@@ -188,6 +211,12 @@ def main() -> None:
                     help="chat_template_kwargs enable_thinking=False and single-phase answer-cap "
                          "generation (the cheap-heal arm: no thinking budget at all)")
     ap.add_argument("--ctx", type=int, default=32768)
+    ap.add_argument("--phase1-total", type=int, default=0,
+                    help="RESERVE-FIRST budgeting (ttt_discover TwoPhaseTokenCompleter "
+                         "semantics): total context phase 1 may occupy INCLUDING the "
+                         "prompt. The answer is then guaranteed ctx - phase1_total - 64 "
+                         "tokens regardless of how much the model thinks. 0 = legacy "
+                         "behaviour (fixed think cap, answer gets the remainder).")
     ap.add_argument("--answer-cap", type=int, default=8192,
                     help="phase-2 code budget when phase 1 (--max-tokens) truncates")
     args = ap.parse_args()
@@ -301,7 +330,8 @@ def main() -> None:
                          if args.enable_thinking_kwarg else None)
                 resp = _chat(args.server, args.model, prompt, args.max_tokens,
                              args.temperature, args.timeout_s,
-                             ctx=args.ctx, answer_cap=args.answer_cap, extra_body=extra)
+                             ctx=args.ctx, answer_cap=args.answer_cap, extra_body=extra,
+                             phase1_total=args.phase1_total)
             ch = resp["choices"][0]
             return {
                 "task": task, "variant": variant, "idx": i, "prompt_sha": ph,
