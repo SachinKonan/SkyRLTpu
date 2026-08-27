@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import secrets
 import tempfile
@@ -294,6 +295,54 @@ class PersistentWorker:
         self.device_timing = timing_mod.device_timing_available()
         print(f"[boot] device timing (xprof DIU): "
               f"{'AVAILABLE' if self.device_timing else 'unavailable -> wallclock'}", flush=True)
+
+        # IS THE ORACLE ACTUALLY FP32? Four of six task references computed
+        # their documented "fp32" closed form at Precision.DEFAULT, which on
+        # TPU multiplies f32 inputs through bf16 -- so exact kernels were
+        # scored as wrong and the arena rewarded reproducing XLA's rounding
+        # (measured v6e 2026-08-27; see causal_segment_attention).
+        #
+        # This check CANNOT live in the CPU test battery: on CPU DEFAULT is
+        # exact, so a precision-dependent oracle agrees with itself there.
+        # megablox's reference even carries a numpy-loop cross-check that
+        # passed for exactly that reason while its TPU path diverged. So the
+        # judge tests itself, on the accelerator it grades on.
+        #
+        # An explicit precision= argument overrides the context manager, so a
+        # correctly-pinned oracle returns identical values under both and a
+        # defaulting one does not.
+        self.oracle_precision_ok = None
+        try:
+            # Cheapest fixture available: the adversarial vectors are tiny,
+            # and this runs at every task boot under per-test dispatch.
+            _adv = self.adversarial_cases()
+            if _adv:
+                _i = _adv[0].make_inputs(jax.random.PRNGKey(11))
+            else:
+                _c = min(self.scored_cases + self.holdout_cases,
+                         key=lambda c: math.prod(
+                             int(v) for v in c.dims.values() if isinstance(v, int)) or 1)
+                _i = self.problem.make_inputs(jax.random.PRNGKey(11), _c)
+            self.block(_i)
+            with jax.default_matmul_precision("bfloat16"):
+                _lo = self.problem.reference(*_i)
+                self.block(_lo)
+            with jax.default_matmul_precision("float32"):
+                _hi = self.problem.reference(*_i)
+                self.block(_hi)
+            from pallas_arena.judge.problems.base import error_stats
+
+            _d = error_stats(_lo, _hi).get("max")
+            self.oracle_precision_ok = bool(_d is not None and _d <= 1e-6)
+            self.boot_report["oracle_precision_delta"] = _d
+            if not self.oracle_precision_ok:
+                print(f"[boot] *** ORACLE NOT FP32: {self.problem_name} reference changes by "
+                      f"{_d:.3e} between bf16 and f32 default matmul precision. Its "
+                      f"correctness bar is XLA's rounding, not the true value. Pin "
+                      f"precision= on the reference's matmuls. ***", flush=True)
+            del _i, _lo, _hi
+        except Exception as e:  # noqa: BLE001 -- a self-check must never fail a grade
+            self.boot_report["oracle_precision_error"] = f"{type(e).__name__}: {str(e)[:120]}"
 
         self._general_baselines = {}
         if getattr(self.problem, "general_mode", False):
