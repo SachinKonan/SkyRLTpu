@@ -58,6 +58,12 @@ CACHE=${CACHE:-gs://sk7524-pallas-arena-us-east5/reward-cache-rl-rglru-v1}
 # Comma list; judge i grades problem PROBLEMS[(i-1) % len] -- lets one fleet
 # carry rg_lru AND splash judges (seed-parity validation needs both).
 PROBLEMS=${PROBLEMS:-rg_lru}
+# sbatch --export SPLITS ON COMMAS: --export=ALL,PROBLEMS=a,b arrives as
+# PROBLEMS=a and a stray env var b (this silently dropped splash_attention
+# from the 2026-08-26 seed-parity fleet). Pass PROBLEMS=a+b (or space
+# separated); commas still work when the job is launched without --export.
+PROBLEMS=${PROBLEMS//+/,}
+PROBLEMS=${PROBLEMS// /,}
 IFS=',' read -r -a problems_arr <<< "$PROBLEMS"
 problem_for() { local idx="${1##*-}"; echo "${problems_arr[$(( (idx-1) % ${#problems_arr[@]} ))]}"; }
 MIN_JUDGES=${MIN_JUDGES:-2}
