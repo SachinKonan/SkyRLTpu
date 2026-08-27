@@ -327,8 +327,7 @@ for step in 1..N:
     </table></div>
     <p>Both models start from similar average performance. But GRPO's advantage
     <em>inherits the reward scale directly</em> — so qwen's wider spread hands it a larger
-    gradient for free, and gemma's tightness starves it. The ratio tracks variance, not
-    quality: TTT-D buys qwen 2.5× its GRPO advantage, and gemma <strong>4.7×</strong>.</p>
+    gradient for free, and gemma's tightness starves it.</p>
     <p><em>One available fix that needs no new objective:</em> raise gemma's sampling
     temperature to manufacture the spread it doesn't produce naturally.</p>
 
