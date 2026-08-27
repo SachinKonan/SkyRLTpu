@@ -89,7 +89,16 @@ export CLOUD_TPU_TASK_ID=0           # standalone single-host server
 # ~55 min on this stack, which is a third of the probe's entire wall budget;
 # skipping it compiles the shapes we actually use, on first use.
 export SKIP_JAX_PRECOMPILE=1
-unset TPU_VISIBLE_CHIPS              # all 4 local chips, TP=4
+# CHIP SELECTION. On a v5p-8 the host has exactly the 4 chips TP=4 wants, so
+# nothing is pinned. On a wider host (v6e-8 = 8 chips) TP=4 must be pinned to
+# a contiguous 4, or libtpu builds an 8-chip mesh the server never asked for.
+# SERVE_VISIBLE_CHIPS carries that choice from the launcher.
+if [ -n "${SERVE_VISIBLE_CHIPS:-}" ]; then
+  export TPU_VISIBLE_CHIPS="$SERVE_VISIBLE_CHIPS"
+  echo "[serve] pinned to chips ${TPU_VISIBLE_CHIPS} (TP=4)"
+else
+  unset TPU_VISIBLE_CHIPS            # all 4 local chips, TP=4
+fi
 
 # MAKE THIS HOST A STANDALONE TPU RUNTIME. Without these, libtpu on a v5p-16
 # tries to form the full TWO-HOST mesh and blocks -- observed as
