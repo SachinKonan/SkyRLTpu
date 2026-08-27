@@ -2248,6 +2248,53 @@ ratios, and a per-pair unit cancels); and the per-case latency list was capped a
 here because "feature silently produces nothing" and "feature not applicable" are indistinguishable
 downstream, which is exactly how it survived this long.</p></section>
 
+<h2>The fp32 reference was not fp32 &mdash; the arena was scoring correct kernels as wrong</h2>
+<p class="sub">The most consequential defect found in this campaign, and the one with the worst
+implications for training: <span class="mono">jnp.einsum</span> without an explicit
+<span class="mono">precision=</span> is <span class="mono">Precision.DEFAULT</span>, which on TPU
+multiplies f32 inputs <em>through bf16</em>. The correctness oracle every splash candidate is graded
+against &mdash; documented as an &ldquo;fp32 masked-softmax closed form&rdquo; &mdash; was therefore
+reduced precision. So was RPA's, and so was FLCE's, whose docstring states &ldquo;computed at fp32
+accumulation.&rdquo;</p>
+<section class="card"><h3>The measurement</h3>
+<p class="sub">Run on v6e at the splash adversarial fixtures: the oracle evaluated against a true f32
+evaluation <em>of itself</em>, and the flash seed against both.</p>
+<table><tr><th>fixture</th><th>oracle vs true f32<br><span class="sm">(the oracle's own error)</span></th>
+<th>seed vs oracle<br><span class="sm">(what the judge measured)</span></th>
+<th>seed vs true f32<br><span class="sm">(the truth)</span></th></tr>
+<tr><td class="mono sm">softmax-saturating</td><td class="mono">1.405e-3</td><td class="mono">1.407e-3</td><td class="mono"><b>1.1e-7</b></td></tr>
+<tr><td class="mono sm">fully-masked-rows</td><td class="mono">2.964e-3</td><td class="mono">2.955e-3</td><td class="mono"><b>1.2e-7</b></td></tr>
+<tr><td class="mono sm">outlier-value-rows</td><td class="mono">3.661e-3</td><td class="mono">3.675e-3</td><td class="mono"><b>5.7e-7</b></td></tr>
+<tr><td class="mono sm">near-overflow-bf16-keys</td><td class="mono">2.641e-3</td><td class="mono">2.648e-3</td><td class="mono"><b>1.3e-7</b></td></tr></table>
+<p class="sub">The middle two columns are the same number to three digits. The seed's <em>entire</em>
+measured error was the oracle's own error; against a true f32 oracle the same kernel is exact to
+~1e-7. It had been failing correctness for mistakes it did not make.</p></section>
+<section class="card"><h3>Why the tolerance band hid it</h3>
+<p class="sub">The band is <span class="mono">1.5 &times;</span> the worst honest variant's error, and
+one of those variants &mdash; <span class="mono">_honest_faithful_bf16</span> &mdash; measured
+<b>0.000e+00</b>. Bit-identical to the oracle, because both did bf16 multiplies. The band was being
+calibrated by implementations that <em>shared the defect</em>, which is exactly why a numerically exact
+kernel looked like the outlier rather than the reference looking wrong.</p>
+<p class="sub"><b>Net effect on the science:</b> the arena rewarded kernels that reproduce XLA's
+default-precision rounding over kernels that are numerically correct, and rejected exact ones at the
+tolerance band. As an RL signal that is worse than noise &mdash; it points training away from
+correctness.</p></section>
+<section class="card"><h3>The fix, and what deliberately did not change</h3>
+<p class="sub">Only the <b>oracles</b> move to <span class="mono">Precision.HIGHEST</span>.
+<span class="mono">reference_bf16</span> and the honest variants keep their bf16 paths &mdash; they model
+what real kernels compute and they define the band &mdash; and the production baselines are untouched
+because they set the <em>speed</em> bar, not the correctness one. After the fix the variants show their
+real errors (1.4e-3 to 3.8e-3), the band stays sane at 3.4e-3&ndash;5.7e-3 so an honest fast bf16 kernel
+still passes comfortably, and an exact kernel scores 1e-7 instead of being rejected. Precision becomes a
+legitimate optimization lever with a correct bar behind it, rather than a trap. rg_lru and rmsnorm have
+no matmul in their references and are unaffected.</p>
+<p class="sub"><b>A hypothesis that was wrong, recorded because it was tested:</b> before finding the
+precision defect the working theory was that the band failed to span the <em>tile-padded</em> class
+&mdash; Pallas block shapes must be multiples of (8,128), so every kernel pads and reduces over the
+padded extent. A padded honest variant was written and measured numerically <em>identical</em> to the
+unpadded one at every shape including ragged 2049/128/1500, because the masked tail contributes exact
+zeros. The variant was reverted rather than kept as a no-op.</p></section>
+
 <h2>Seed parity on real silicon (per-test Ray dispatch, v6e-8)</h2>
 <p class="sub">The improvement loop starts from a seed the models edit, and the reward only means
 &ldquo;beat the production kernel&rdquo; if the seed's own grade is honest. Both rg_lru seeds were graded
