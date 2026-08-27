@@ -2235,7 +2235,88 @@ utilization</b>, analytic FLOPs &divide; peak bf16, reported for the candidate <
 reference so the gap is attributable. A kernel at 15% of both is latency/pipelining bound and neither
 wider tiles nor fewer bytes will help it &mdash; which nothing in the old feedback could say. Both are
 medians over the same 20 interleaved counterbalanced pairs the reward uses, so the model is never shown
-a statistic it is not graded on.</p></section>
+a statistic it is not graded on.</p>
+<p class="sub"><b>Correction (2026-08-27):</b> this section previously reported the roofline as working.
+On v6e it had never emitted a single line. JAX does not report marketing names &mdash; a v6e chip calls
+itself <span class="mono">'TPU v6 lite'</span> &mdash; so the test <span class="mono">"v6e" in
+device_kind</span> never matched, the peak-table lookup missed, <span class="mono">mxu_utilization</span>
+returned None, and the observation builder silently omitted the lines. The FLOP counts were correct the
+whole time. Two related defects found with it: <span class="mono">device_timer</span> returned
+MILLISECONDS into fields named <span class="mono">*_median_s</span>, so every reported latency and
+roofline number was 1000&times; off (rewards were unaffected &mdash; the score is a median of per-pair
+ratios, and a per-pair unit cancels); and the per-case latency list was capped at three cases. Recorded
+here because "feature silently produces nothing" and "feature not applicable" are indistinguishable
+downstream, which is exactly how it survived this long.</p></section>
+
+<h2>Seed parity on real silicon (per-test Ray dispatch, v6e-8)</h2>
+<p class="sub">The improvement loop starts from a seed the models edit, and the reward only means
+&ldquo;beat the production kernel&rdquo; if the seed's own grade is honest. Both rg_lru seeds were graded
+end-to-end by the per-test pool &mdash; one Ray task per (candidate, shape), fresh process per task,
+per-case noise floors &mdash; against the production baselines.</p>
+
+<section class="card"><h3>RG-LRU: the production-4D transcription grades at exactly 1.0</h3>
+<p class="sub">Two seeds were written after every previously-&ldquo;correct&rdquo; banked kernel failed
+real Mosaic (CPU interpret never runs it): a <b>log-step Hillis&ndash;Steele scan</b> and a
+<b>transcription of the production kernel's 4-D time-blocked layout</b>. Both are TPU-valid; the
+transcription wins and is the seed the arms edit.</p>
+<table><tr><th>seed</th><th>reward (fwd+bwd)</th><th>per-shape fwd ratio (ref&divide;cand)</th><th>verdict</th></tr>
+<tr><td class="mono">prod-4D time-blocked</td><td><b>1.0</b> &mdash; parity</td>
+<td class="mono sm">1.29 / 0.83 / 1.05 / 0.83 / 1.01 (floors 0.02&ndash;0.08 collapse all to ties)</td>
+<td>SEED (what the arms start from)</td></tr>
+<tr><td class="mono">log-step scan</td><td>0.356 / 0.367 (two independent grades &mdash; 3% reproducibility)</td>
+<td class="mono sm">uniformly ~0.36 of production</td><td>fallback; real measured headroom marker</td></tr></table>
+<p class="sub">Backward factors for the winner: 0.81&ndash;1.69 per shape, folded per-case. Parity means
+the reward the models see is <em>pure improvement</em>: nothing is earned by transcribing the baseline.</p></section>
+
+<section class="card"><h3>Splash: the seed campaign found two judge-killing bugs first</h3>
+<p class="sub"><b>1. A libtpu compiler crash killed every splash grade at boot.</b> Compiling a
+degenerate <span class="mono">length-1 blocked lax.scan</span> at the tiny adversarial shape
+nondeterministically overflows the XLA TPU compiler's fiber stack (SIGSEGV in jellyfish
+TransferSizeUtil). Which adversarial case &ldquo;crashed&rdquo; moved with the persistent-compile-cache
+contents, which disguised it as case-specific; a no-cache fresh-process bisect flipped the crashing case
+and exposed the nondeterminism. Fix: inline the loop body when the block count is &le;2 (real shapes keep
+their scans) &mdash; 8/8 clean after, majority-crash before.</p>
+<p class="sub"><b>2. The seed itself hit a Mosaic layout law.</b> First real verdict after the judge fix:
+<span class="mono">infer-vector-layout: unsupported shape cast</span> &mdash; the seed packed per-row
+stats (running max/sum, logsumexp, dcoef, segment ids) as (8,128) tiles and reshaped them to (B,1)
+columns in-kernel. A reshape that changes the (8,128) tiling does not lower. The rewrite stores stats
+<b>lane-replicated at (B,128)</b> (segments also sublane-replicated at (8,B) for the key row): stores
+lane-broadcast a column, loads recover it by a max-reduction over identical lanes &mdash; the production
+flash kernel's own m/l scratch trick. CPU parity gate + silicon regrade in flight.</p></section>
+
+<section class="card"><h3>Why every holdout and TP case &ldquo;died&rdquo;: three bugs wearing one costume</h3>
+<p class="sub">Holdout and tp4 cases died in every run since per-test dispatch landed, on both problems.
+It looked like one hardware problem. It was three independent faults, and the last one was not hardware
+at all.</p>
+<table><tr><th>fault</th><th>evidence</th><th>fix</th></tr>
+<tr><td><b>Multi-chip HAL init</b></td>
+<td class="mono sm">Cancel TPU slice due to HAL init error; TPU_RET_CHECK ... index_on_host() == i (0 vs 4)</td>
+<td>Chips are isolated for single-chip processes (one vfio device each), but a TP task opens a
+<em>slice-level</em> session that cannot be built while other processes hold the host's other chips
+&mdash; and libtpu requires the visible chips to BE host indices 0..w-1, which Ray's arbitrary
+assignment (e.g. [4,5,6,7]) violated. A width&gt;1 case now reserves every chip, so Ray serialises it and
+hands out ids 0..7; the first w are host-aligned by construction.</td></tr>
+<tr><td><b>Device turnover</b></td>
+<td class="mono sm">open(/dev/vfio/6): Device or resource busy</td>
+<td>Ray frees the logical resource when a task returns, but the OS process keeps the device open for
+seconds. A TP task waits on EVERY single-chip process, so it gets 12&times;15 s of init retries against a
+single-chip task's 4.</td></tr>
+<tr><td><b>The actual killer</b></td>
+<td class="mono sm">ValueError: no declared (non-holdout, non-blind) case timings</td>
+<td>A pure logic bug. <span class="mono">final_reward</span> guarded the DECLARED set &mdash; sensible for
+a whole-candidate grade &mdash; but per-test dispatch grades exactly ONE case, so a holdout task's timing
+set contains only a holdout and the guard raised, killing the task. General mode <em>scores</em> holdouts,
+so the guard belongs on the scored set. A TP case whose ref-vs-ref control refuses the measurement yields
+zero timings, which is a real judge inability and now returns a judge_fault verdict the collector
+excludes, instead of taking the task down.</td></tr></table>
+<p class="sub">The diagnosis took two days longer than it should have because the collector truncated a
+dead task's exception at 200 characters &mdash; enough for Ray's boilerplate header, cut off exactly where
+the cause lived. The real traceback existed only in the interleaved judge log. Task errors now keep 1200
+characters and the pool prints the exception tail; the root cause surfaced in the first run after that
+change. Both tp4 cases now boot and elect per-shard baselines (tp4-4x2048x2560: production 1.11 ms vs
+lax-associative-scan 2.23 ms; tp4-holdout: 0.54 ms vs 0.82 ms) &mdash; the election discriminates under
+shard_map. Per-shard ratios, the TP ref-vs-ref control and the wall-vs-device cross-check are grading
+now.</p></section>
 
 <h2>The rf3c contract bench: qwen vs gemma, one prompt (RL deferred until this settles)</h2>
 <p class="sub">Decision: no RL spend until the prompt + format is proven. Both models get the
