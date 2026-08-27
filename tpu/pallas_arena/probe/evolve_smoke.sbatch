@@ -96,21 +96,42 @@ t_qr=$(date +%s)
 ( trap - EXIT TERM INT HUP; sleep "$HARD_CAP_S"
   echo "[watchdog] HARD CAP ${HARD_CAP_S}s -- tearing down"; kill -TERM $$ ) &
 
-st=""; deadline=$(( t_qr + LAND_DEADLINE_S ))
+st=""; deadline=$(( t_qr + LAND_DEADLINE_S )); misses=0
+# HEALTHY STATES ARE NOT MISSES, AND ONE FAILED READ IS NOT A DEATH.
+# An empty describe usually means the API call failed, not that the QR
+# vanished: gcloud prints "network connectivity issues" for transient errors
+# AND for 429 rate-limiting. Deleting on a single empty read turned all four
+# arms into a delete/re-create loop on 2026-08-27 -- every ~2.3 min, which
+# guarantees the QR never lands and adds API load that provokes more 429s.
+# Same debounce the judge fleet's supervisor v3 already uses: three
+# consecutive misses AND a confirming list call before destroying anything.
 while [ "$(date +%s)" -lt "$deadline" ]; do
   st=$(timeout 300 gcloud compute tpus queued-resources describe "$QR" --zone="$ZONE" \
          --project="$PROJECT" --format='value(state.state)' 2>/dev/null)
   [ "$st" = "ACTIVE" ] && break
-  if [ "$st" = "FAILED" ] || [ -z "$st" ]; then
-    # empty state == the QR vanished (failed-and-purged between polls, job
-    # 3740157 idled 3h on it); treat exactly like FAILED
-    echo "[$QR] state=${st:-gone} at $(date +%H:%M:%S) -- deleting and re-creating"
+  case "$st" in
+    WAITING_FOR_RESOURCES|PROVISIONING|ACCEPTED|CREATING|RESUMING|WAITING)
+      misses=0; sleep 25; continue ;;
+  esac
+  if [ "$st" = "FAILED" ] || [ "$st" = "SUSPENDED" ] || [ -z "$st" ]; then
+    misses=$(( misses + 1 ))
+    echo "[$QR] state=${st:-unreadable} miss ${misses}/3 at $(date +%H:%M:%S)"
+    if [ "$misses" -lt 3 ]; then sleep 45; continue; fi
+    # Confirm with an independent LIST before destroying: if the QR is listed,
+    # the describes were lying and we keep waiting.
+    if timeout 300 gcloud compute tpus queued-resources list --zone="$ZONE" \
+         --project="$PROJECT" --format='value(name)' 2>/dev/null | grep -qx "$QR"; then
+      echo "[$QR] list still shows it -- describe was unreliable; not deleting"
+      misses=0; sleep 60; continue
+    fi
+    echo "[$QR] confirmed gone at $(date +%H:%M:%S) -- re-creating"
     timeout 600 gcloud compute tpus queued-resources delete "$QR" \
       --zone="$ZONE" --project="$PROJECT" --force --quiet 2>/dev/null || true
     sleep 60
     timeout 600 gcloud compute tpus queued-resources create "$QR" --node-id="$QR" \
       --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot \
       --zone="$ZONE" --project="$PROJECT" 2>&1 | tail -1
+    misses=0
   fi
   sleep 25
 done
