@@ -70,7 +70,7 @@ def rg_lru_associative(x, a, reset):
 
 class RGLRUProblem(Problem):
     name = "rg_lru"
-    version = "1"
+    version = "2"  # v2: TP cases score on wallclock, not device op-time
     # BACKWARD IS PART OF THE CONTRACT: recurrentgemma ships _lru_fwd AND
     # _lru_bwd, so the production scan is differentiable and a forward-only
     # candidate is not a replacement for it.

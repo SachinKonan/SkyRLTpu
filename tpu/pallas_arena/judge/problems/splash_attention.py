@@ -473,7 +473,7 @@ def _xla_grouped_attention(
 
 class SplashAttentionProblem(Problem):
     name = "splash_attention"
-    version = "1"
+    version = "2"  # v2: fp32 oracle at HIGHEST precision + TP scores on wallclock
     # BACKWARD IS PART OF THE CONTRACT. Google's splash kernel has one --
     # BlockSizes carries block_q_dkv / block_kv_dkv / block_q_dq and a
     # use_fused_bwd_kernel switch -- and tokamax ships tuned vjp configs for

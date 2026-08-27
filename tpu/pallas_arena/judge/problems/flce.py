@@ -92,7 +92,7 @@ _F32 = jax.lax.Precision.HIGHEST
 
 class FLCEProblem(Problem):
     name = "flce"
-    version = "1"
+    version = "2"  # v2: fp32 oracle at HIGHEST precision
     has_bwd = True
     require_pallas = False  # baseline is a custom_vjp scan, not pallas;
     # candidates may use pallas but need not

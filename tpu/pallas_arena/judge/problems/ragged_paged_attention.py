@@ -135,7 +135,7 @@ def _xla_paged_decode(q, k_pages, v_pages, page_tables, seq_lens, block_b: int =
 
 class RaggedPagedAttentionProblem(Problem):
     name = "ragged_paged_attention"
-    version = "1"
+    version = "2"  # v2: fp32 oracle at HIGHEST precision
     has_bwd = False
     require_pallas = True
     general_mode = True  # score the holdout; denominator = fastest honest impl per shape
