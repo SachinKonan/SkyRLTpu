@@ -34,6 +34,19 @@ def _post(base, path, payload):
     return json.load(urllib.request.urlopen(req, timeout=30))
 
 
+# The graded entrypoint each problem's contract requires. Every arena task
+# currently exports kernel(); kept as a table so a task with a different or
+# wider contract does not silently fall back to the wrong extraction.
+ENTRYPOINTS = {
+    "rg_lru": ["kernel"],
+    "splash_attention": ["kernel"],
+    "megablox_gmm": ["kernel"],
+    "ragged_paged_attention": ["kernel"],
+    "flce": ["kernel"],
+    "rmsnorm": ["kernel"],
+}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--gens", required=True)
@@ -56,7 +69,14 @@ def main() -> None:
             cells[cell]["rows"].append({"idx": r.get("idx"),
                                         "outcome": f"gen_error: {str(r.get('error'))[:120]}"})
             continue
-        program = extract_completion(r["text"])
+        # TELL THE EXTRACTOR THE CONTRACT. Without required_defs it falls back
+        # to "the last fenced block", and these models routinely emit several
+        # draft blocks while reasoning -- so the graded program can be a draft
+        # rather than the final answer. Measured on the qwen rg_lru arm
+        # (2026-08-27): passing the entrypoint recovers a candidate that was
+        # otherwise scored as a syntax error, and the effect grows with
+        # program length (splash seeds are 2x longer, with more drafting).
+        program = extract_completion(r["text"], ENTRYPOINTS.get(r.get("task"), ["kernel"]))
         if not program:
             cells[cell]["no_program"] += 1
             cells[cell]["rows"].append({"idx": r.get("idx"), "outcome": "no_program"})
