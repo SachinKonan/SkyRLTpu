@@ -34,8 +34,20 @@ from pallas_arena.judge.problems.base import (
 
 def gmm_reference(lhs, rhs, group_sizes):
     """fp32 closed form via lax.ragged_dot (the design floor) — itself
-    cross-checked against a python loop in the CPU battery."""
-    return jax.lax.ragged_dot(lhs.astype(jnp.float32), rhs.astype(jnp.float32), group_sizes)
+    cross-checked against a python loop in the CPU battery.
+
+    THE PRECISION ARGUMENT IS LOAD-BEARING. Without it ragged_dot runs at
+    Precision.DEFAULT, which on TPU multiplies f32 inputs through bf16 -- so
+    this "fp32" oracle was not fp32, exactly as measured on splash (v6e
+    2026-08-27: the oracle disagreed with a true f32 evaluation of itself by
+    up to 3.7e-3 and an EXACT candidate was rejected for errors the oracle
+    committed). The numpy-loop cross-check could never catch it: on CPU the
+    default precision IS exact, so the two agreed there and diverged only on
+    the accelerator the arena actually grades on.
+    """
+    return jax.lax.ragged_dot(
+        lhs.astype(jnp.float32), rhs.astype(jnp.float32), group_sizes,
+        precision=jax.lax.Precision.HIGHEST)
 
 
 def gmm_loop_reference(lhs, rhs, group_sizes):
@@ -141,7 +153,7 @@ def _sample_group_sizes(key, num_groups, m, dist):
 
 class MegabloxGmmProblem(Problem):
     name = "megablox_gmm"
-    version = "1"
+    version = "2"  # v2: fp32 oracle at HIGHEST precision
     # BACKWARD IS PART OF THE CONTRACT. A forward-only grouped matmul cannot
     # train a mixture of experts -- the whole point of the op is the expert
     # projections, and those need gradients flowing to the expert weights.
