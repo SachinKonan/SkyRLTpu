@@ -132,6 +132,13 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
       --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot \
       --zone="$ZONE" --project="$PROJECT" 2>&1 | tail -1
     misses=0
+    # A FRESH REQUEST DESERVES A FRESH CLOCK. The deadline was absolute from
+    # the FIRST create, so a re-create late in the window had no time to land
+    # and died seconds later: measured 2026-08-27, a splash arm re-created at
+    # 09:07 and hit "FATAL: not ACTIVE (state=gone)" at 09:13. The hard-cap
+    # watchdog still bounds total runtime.
+    deadline=$(( $(date +%s) + LAND_DEADLINE_S ))
+    echo "[$QR] re-created; landing window reset to ${LAND_DEADLINE_S}s"
   fi
   sleep 25
 done
