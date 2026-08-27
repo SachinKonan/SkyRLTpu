@@ -47,7 +47,19 @@ def extract_completion(text: str, required_defs: list[str] | None = None) -> str
     blocks into one payload."""
     import re
     cue = "I have thought about this enough"
-    region = text.rsplit(cue, 1)[1] if cue in text else text
+    # THINKING FIRST. These models sketch code WHILE reasoning -- one qwen
+    # completion carried 9 fenced blocks, of which 8 were fragments inside
+    # <think> (a bare `import functools`, a half-written helper) and only the
+    # 9th, after </think>, was the program. Measured on the qwen rg_lru arm
+    # (2026-08-27): 15 of 32 completions contain </think>, and in ALL 15 a
+    # real block follows it -- so when the marker is present the answer is
+    # unambiguously after it, and anything before is a fragment that will
+    # never parse as a whole program.
+    region = text
+    if "</think>" in region:
+        region = region.rsplit("</think>", 1)[1]
+    if cue in region:
+        region = region.rsplit(cue, 1)[1]
     blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", region, re.S)
     # An unclosed trailing fence (cap hit mid-block) still carries code.
     if region.count("```") % 2 == 1 and "```python\n" in region:
