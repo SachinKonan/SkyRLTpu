@@ -406,9 +406,19 @@ def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general:
     pool = [t for t in case_timings if not t.blind]
     declared = [t for t in pool if not t.holdout]
     holdout = [t for t in pool if t.holdout]
-    if not declared:
-        raise ValueError("no declared (non-holdout, non-blind) case timings")
+    # GUARD THE SCORED SET, NOT THE DECLARED ONE. In general mode holdouts
+    # ARE scored, so a holdout-only timing set is perfectly scoreable -- and
+    # under per-test dispatch that is the normal shape of a grade, because
+    # each task grades exactly ONE case. Demanding a declared case made every
+    # holdout task raise deterministically (both arena problems, every run
+    # since per-test dispatch landed); the deaths were read as a TPU fault
+    # for two days because the exception was truncated out of the verdict.
     scored = pool if general else declared
+    if not scored:
+        raise ValueError(
+            f"no scoreable case timings (general={general}, declared={len(declared)}, "
+            f"holdout={len(holdout)}, blind={len(blind)})"
+        )
     score = geomean([t.score for t in scored])
     return {
         "score": score,

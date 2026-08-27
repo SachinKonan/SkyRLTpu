@@ -1062,9 +1062,21 @@ class PersistentWorker:
             return fail("worker", f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=6)}")
 
         result["warm_chip_s"] = self.perf() - t_chip
-        reward_frame = timing_mod.final_reward(
-            case_timings, self.noise_floor or 0.0, general=getattr(problem, "general_mode", False)
-        )
+        try:
+            reward_frame = timing_mod.final_reward(
+                case_timings, self.noise_floor or 0.0,
+                general=getattr(problem, "general_mode", False),
+            )
+        except ValueError as e:
+            # NOTHING WAS TIMEABLE. Under per-test dispatch this is a normal
+            # outcome for one task -- a TP case whose ref-vs-ref control or
+            # wall-vs-device cross-check refused the measurement leaves zero
+            # timings -- and it is the JUDGE's inability, not the candidate's
+            # fault. Raising killed the Ray task, which the collector could
+            # only read as an unexplained death; a judge_fault verdict makes
+            # the collector exclude the case and score the rest.
+            return fail("judge_fault",
+                        f"{e} (skipped_tp={result.get('skipped_tp') or {}})")
         if problem.has_bwd:
             # THE training scalar for RL on has_bwd tasks: the swept backward
             # joins the geomean with one factor per shape -- fwd:bwd aggregate
