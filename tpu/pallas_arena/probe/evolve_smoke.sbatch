@@ -49,6 +49,14 @@ ANSWER_CAP=${ANSWER_CAP:-15360}
 # 7 of 32 qwen rg_lru candidates finished normally having produced only
 # reasoning and no program (2026-08-27).
 PHASE1_TOTAL=${PHASE1_TOTAL:-0}
+# THINK_BUDGET is the preferred knob: tokens of THINKING allowed, with the
+# answer guaranteed ctx - prompt - THINK_BUDGET - 64. It self-adjusts to the
+# measured prompt, which differs by model and task (qwen 3067/5823 tokens for
+# rg_lru/splash, gemma 3262/6416). 12288 was chosen from behaviour: qwen
+# SATURATED a 10240 cap in 18 of 32 completions while gemma's whole
+# completions ran 6769-9062 tokens, and it still leaves every cell an answer
+# of 2.5x-7.6x its seed program.
+THINK_BUDGET=${THINK_BUDGET:-0}
 QWEN_MODEL=${QWEN_MODEL:-Qwen/Qwen3.5-27B}
 # 32k context, like the llamafarm serving: thinking stays ON and the
 # completion budget absorbs it instead of truncating. First boot at 32k
@@ -274,6 +282,7 @@ uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_s
   --out "$GENS_OUT" --group-size "$GROUP_SIZE" --max-tokens "$MAX_NEW_TOKENS" --concurrency 6 \
   --answer-cap "$ANSWER_CAP" --cells "${SMOKE_CELLS:-}" --ctx "$QWEN_MAXLEN" \
   ${PHASE1_TOTAL:+--phase1-total "$PHASE1_TOTAL"} \
+  ${THINK_BUDGET:+--think-budget "$THINK_BUDGET"} \
   ${REPAIR_FROM:+--repair-from "$REPAIR_FROM" --gens-from "$GENS_FROM"} \
   ${ENABLE_THINKING_KWARG:+--enable-thinking-kwarg} \
   ${NO_THINK:+--no-think} \

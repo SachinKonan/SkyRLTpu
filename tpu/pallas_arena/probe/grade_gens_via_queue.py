@@ -76,7 +76,11 @@ def main() -> None:
         # (2026-08-27): passing the entrypoint recovers a candidate that was
         # otherwise scored as a syntax error, and the effect grows with
         # program length (splash seeds are 2x longer, with more drafting).
-        program = extract_completion(r["text"], ENTRYPOINTS.get(r.get("task"), ["kernel"]))
+        # Same splitter the sampler used: the family travels with the row,
+        # so grading can never disagree with generation about where the
+        # reasoning ended.
+        program = extract_completion(r["text"], ENTRYPOINTS.get(r.get("task"), ["kernel"]),
+                                     family=r.get("family"))
         if not program:
             cells[cell]["no_program"] += 1
             cells[cell]["rows"].append({"idx": r.get("idx"), "outcome": "no_program"})
