@@ -69,24 +69,31 @@ PANELS=[("fail","failures  %",None),("noop","exact copies  %",None),
         ("impreg","improve / regress  %",None),
         ("med_imp","median improvement",True),("med_beta","median β",True),
         ("cap","groups at β ceiling  %",None)]
-fig,axes=plt.subplots(2,len(PANELS),figsize=(21,7.0),sharex=True)
+fig,axes=plt.subplots(2,len(PANELS),figsize=(21,7.0))
 fig.patch.set_facecolor("white")
 for row,(m,c) in enumerate([("qwen",QW),("gemma",GM)]):
     pts=data[m]
+    # plot against POSITION, not step number: draw one continuous line and label
+    # the ticks with the real steps, so the archive gap doesn't break the curve.
+    x=list(range(len(pts)))
+    labs=[str(p["step"]) for p in pts]
+    segs=[p["seg"] for p in pts]
+    bound=next((i for i in range(1,len(segs)) if segs[i]!=segs[i-1]), None)
     for col,(key,ylab,logy) in enumerate(PANELS):
         ax=axes[row][col]
-        for seg,ls,mk_ in (("a","-","o"),("b","--","s")):
-            P=[p for p in pts if p["seg"]==seg]
-            if not P: continue
-            x=[p["step"] for p in P]
-            if key=="impreg":
-                lab_i = "improve" if seg=="a" else None
-                lab_r = "regress" if seg=="a" else None
-                ax.plot(x,[p["imp"] for p in P],ls,color=c,lw=2,marker=mk_,ms=4,label=lab_i)
-                ax.plot(x,[p["reg"] for p in P],ls,color=c,lw=1.6,marker=mk_,ms=4,
-                        alpha=.45,label=lab_r)
-            else:
-                ax.plot(x,[p[key] for p in P],ls,color=c,lw=2,marker=mk_,ms=4)
+        if key=="impreg":
+            ax.plot(x,[p["imp"] for p in pts],"-",color=c,lw=2,label="improve")
+            ax.plot(x,[p["reg"] for p in pts],"-",color=c,lw=1.6,alpha=.45,label="regress")
+            for xi,p,sg in zip(x,pts,segs):
+                mk_="o" if sg=="a" else "s"
+                ax.plot([xi],[p["imp"]],mk_,color=c,ms=4.5)
+                ax.plot([xi],[p["reg"]],mk_,color=c,ms=4.5,alpha=.45)
+        else:
+            ax.plot(x,[p[key] for p in pts],"-",color=c,lw=2)
+            for xi,p,sg in zip(x,pts,segs):
+                ax.plot([xi],[p[key]],"o" if sg=="a" else "s",color=c,ms=4.5)
+        if bound is not None:
+            ax.axvline(bound-0.5,color="#94a3b8",ls=":",lw=1.1)
         if logy: ax.set_yscale("log")
         if key=="cap": ax.set_ylim(-4,104)
         if key in ("fail","noop"): ax.set_ylim(-3,80)
@@ -95,14 +102,14 @@ for row,(m,c) in enumerate([("qwen",QW),("gemma",GM)]):
             if row==0: ax.legend(frameon=False,fontsize=8,loc="upper left")
         if row==0: ax.set_title(ylab,fontsize=11,fontweight="bold")
         if col==0: ax.set_ylabel(m,fontsize=13,fontweight="bold",color=c,labelpad=10)
-        if row==1: ax.set_xlabel("training step")
+        ax.set_xticks(x); ax.set_xticklabels(labs,fontsize=8.5)
+        ax.set_xlabel("training step",fontsize=9.5)
 axes[0][4].axhline(CAP,color="#9f1239",ls=":",lw=1.3)
 axes[1][4].axhline(CAP,color="#9f1239",ls=":",lw=1.3)
-axes[0][4].text(0.5,CAP,"solver ceiling",fontsize=8,color="#9f1239",va="bottom")
+axes[0][4].text(0.1,CAP,"solver ceiling",fontsize=8,color="#9f1239",va="bottom")
 fig.suptitle("How a group's reward distribution changes over training  —  qwen (top), gemma (bottom)",
              fontsize=13.5,y=.985)
-fig.text(.5,.012,"Qwen is two runs: solid/circles = steps 0–3 at LR 4e-4, dashed/squares = steps 11–14 at LR 1.5e-4 "
-         "(archives began mid-run). Gemma is one continuous run at 4e-5.",
+fig.text(.5,.012,"Plotted against position rather than step number, so the curves read continuously. Qwen is two runs joined at the dotted line: circles = steps 0-3 at LR 4e-4, squares = steps 11-14 at LR 1.5e-4. Gemma is one continuous run at 4e-5.",
          ha="center",fontsize=9,color="#64748b")
 fig.tight_layout(rect=[0,.035,1,.955])
 fig.savefig(f"{OUT}/fig_trace_grid.png",dpi=140,facecolor="white")
