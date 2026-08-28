@@ -65,7 +65,7 @@ for m,items in SERIES.items():
 QW,GM = "#14867c","#c2410c"
 plt.rcParams.update({"font.size":10,"axes.grid":True,"grid.alpha":.22,
                      "axes.spines.top":False,"axes.spines.right":False})
-PANELS=[("fail","failures  %",None),("noop","exact copies  %",None),
+PANELS=[("fail","failures  %",None),("noop","no-ops: same score  %",None),
         ("impreg","improve / regress  %",None),
         ("med_imp","median improvement",True),("med_beta","median β",True),
         ("cap","groups at β ceiling  %",None)]
