@@ -65,6 +65,9 @@ env.update({
     "TTD_ENV": "erdos_min_overlap",
     "TTD_RESTART_RATIO": "0",
     "EXTRA_TTD_ENV": extra,
+    # Seeded generations: while nothing is banked, the staged step-0 seed is the
+    # ONLY legitimate snapshot (see launch_cell META_SEED_ONLY).
+    "META_SEED_ONLY": "1",
 })
 if args.init_jsonl:
     env["INIT_JSONL_GCS"] = args.init_jsonl   # fetched by launch via EXTRA_REREG_JSONL path

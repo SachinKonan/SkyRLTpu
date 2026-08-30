@@ -84,6 +84,35 @@ SESSION=${CELL_SESSION:-cell}
 tmux kill-session -t "${SESSION}-backup" 2>/dev/null
 tmux new-session -d -s "${SESSION}-backup" "bash ~/sidecar_$RUN.sh"
 
+# ---- seeded-generation guard (META_SEED_ONLY=1) ----------------------------
+# A meta generation starts from a seed snapshot the driver staged at step 0.
+# The ensemble picks which snapshot to resume by STATE COUNT (resume.py
+# pick_resume_snapshot), NOT by step number -- so if a failed launch ever writes
+# a cold tree (restore raced, sampler built fresh initial states), that tree
+# outgrows the seed after one step and wins the ranking FOREVER. Observed live:
+# meta-wt16-fresh-g0-qwen resumed a 78-state cold tree over its 48-state seed
+# and ran a whole generation from the wrong starting point.
+# While NOTHING has been banked (no metrics rows), the seed is the only
+# legitimate snapshot: delete every other one so the ranking cannot pick wrong.
+if [ "${META_SEED_ONLY:-0}" = 1 ]; then
+  _ml=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/metrics.jsonl 2>/dev/null | head -1)
+  _rows=0; [ -s "${_ml:-}" ] && _rows=$(wc -l < "$_ml")
+  if [ "$_rows" -eq 0 ]; then
+    for _snap in ~/skyrl-runs/"$RUN"/tinker_log/*/puct_sampler_step_*.json; do
+      [ -e "$_snap" ] || continue
+      case "$_snap" in
+        *puct_sampler_step_000000.json) ;;
+        *) echo "seeded start: removing non-seed snapshot $(basename "$_snap")"; rm -f "$_snap" ;;
+      esac
+    done
+    # a cold tree also leaves weight checkpoints; with 0 banked rows they are
+    # from the discarded lineage and would resume the run past the seed.
+    for _ck in ~/skyrl-runs/"$RUN"/tinker_log/*/member_*/checkpoints.jsonl; do
+      [ -e "$_ck" ] && { echo "seeded start: clearing stale $(basename "$(dirname "$_ck")")/checkpoints.jsonl"; : > "$_ck"; }
+    done
+  fi
+fi
+
 # ---- re-register durable checkpoints BEFORE the client starts --------------
 # Must be here, not only in bring-up: a relaunch invokes THIS script directly.
 # Reads the LOCAL jsonl the restore just pulled down, so it does not depend on
