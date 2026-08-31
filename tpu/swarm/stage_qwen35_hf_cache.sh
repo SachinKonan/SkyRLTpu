@@ -37,8 +37,8 @@ snapshot = snapshot_download("Qwen/Qwen3.5-27B")
 pathlib.Path(sys.argv[1]).write_text(snapshot + "\n", encoding="utf-8")
 PY
 
-snapshot=$(cat "$stage_root/snapshot-path")
-"$venv/bin/python" - "$snapshot" <<'PY'
+snapshot_dir=$(cat "$stage_root/snapshot-path")
+"$venv/bin/python" - "$snapshot_dir" <<'PY'
 import json
 import pathlib
 import sys
@@ -59,7 +59,7 @@ PY
 gcloud storage rsync -r "$HF_HOME/hub" "$CACHE_GCS"
 {
   printf 'model=%s\n' "$MODEL_NAME"
-  printf 'snapshot=%s\n' "$(basename "$snapshot")"
+  printf 'snapshot=%s\n' "$(basename "$snapshot_dir")"
   printf 'seeded_at=%s\n' "$(date -u +%FT%TZ)"
 } > "$stage_root/HF_CACHE_COMPLETE"
 gcloud storage cp "$stage_root/HF_CACHE_COMPLETE" \
