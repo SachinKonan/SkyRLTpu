@@ -13,7 +13,7 @@ set -euo pipefail
 [ "$JOBMAN_WORKER_ID" = "0" ] || { echo "worker $JOBMAN_WORKER_ID: engines are driven from w0"; exit 0; }
 
 export PATH="$HOME/.local/bin:$PATH"
-REPO="$HOME/SkyRLTpu-league"
+REPO="${SKYRL_REPO_DIR:-$HOME/SkyRLTpu-league}"
 KEY="$HOME/.ssh/jobman_tpu_ed25519"
 SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
 INT="$JOBMAN_TPU_INTERNAL_IPS"
@@ -22,8 +22,23 @@ W0INT=$(echo "$INT" | cut -d, -f1)
 # behavior); a meta member passes its 4 + any spare hosts, which become extra
 # vLLM replicas + ray workers with no other change.
 NHOSTS=$(echo "$INT" | awk -F, '{print NF}')
-VLLM_IDXS=$(seq -s, 1 $((NHOSTS-1)))
+DEFAULT_VLLM_IDXS=$(seq -s, 1 $((NHOSTS-1)))
+TRAIN_IDXS="${TRAIN_WORKERS:-0}"
+VLLM_IDXS="${VLLM_WORKERS-$DEFAULT_VLLM_IDXS}"
+EXTERNAL_VLLM_URLS="${VLLM_BASE_URL_OVERRIDE:-}"
+START_LOCAL_VLLM="${CELL_START_VLLM:-1}"
+TRAIN_TP_SIZE="${TRAIN_TP_SIZE:-4}"
+TRAIN_FSDP_SIZE="${TRAIN_FSDP_SIZE:-auto}"
+TRAIN_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS:-auto}"
+TRAIN_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS:-2,2,1}"
+TRAIN_ROW_SHARD="${TUNIX_ROW_SHARD:-0}"
+CELL_ZONE="${ZONE:-us-east5-a}"
 ln -sfn "$REPO" "$HOME/ttd-client"
+
+worker_ip() {
+  local worker="$1"
+  echo "$INT" | tr ',' '\n' | sed -n "$((worker + 1))p"
+}
 
 # --- client venv (idempotent) ------------------------------------------------
 if [ ! -x "$REPO/third_party/discover/.venv-ttd-discover/bin/python" ]; then
@@ -46,8 +61,17 @@ vllm_healthy() {
   # call a host healthy with a dead second engine -- bring-up would be skipped
   # and the client, which round-robins across all 6 URLs, would sample against
   # a dead endpoint every other request.
-  local ip e port
-  for ip in $(echo "$INT" | cut -d, -f2-$NHOSTS | tr ',' ' '); do
+  local worker ip e port
+  if [[ -z "$VLLM_IDXS" ]]; then
+    [[ -n "$EXTERNAL_VLLM_URLS" ]] || return 1
+    local url
+    for url in $(echo "$EXTERNAL_VLLM_URLS" | tr ',' ' '); do
+      curl -fsS -m6 "${url%/}/v1/models" >/dev/null 2>&1 || return 1
+    done
+    return 0
+  fi
+  for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+    ip="$(worker_ip "$worker")"
     for (( e=0; e<${ENGINES_PER_HOST:-1}; e++ )); do
       port=$(( 8001 + e ))
       curl -fsS -m6 "http://$ip:$port/v1/models" >/dev/null 2>&1 || return 1
@@ -265,6 +289,22 @@ pick_tiles() {
   # 8192-bucket as sequences lengthen. Not cell-specific: any cell that scores
   # (KL penalty OR the measure-only pass) must never build a bucket ladder.
   SCORE_FIXED=$UNIFORM
+
+  # A multi-host job owns the mesh. Replace any single-host model default
+  # (Muse historically pins ici_fsdp_parallelism=4 on one v5p host) with the
+  # explicit trainer topology while preserving remat/offload/vocab knobs.
+  if [[ "$TRAIN_FSDP_SIZE" != "auto" ]]; then
+    MT_KWARGS="$(python3 - "$MT_KWARGS" "$TRAIN_TP_SIZE" "$TRAIN_FSDP_SIZE" <<'PY'
+import json
+import sys
+
+cfg = json.loads(sys.argv[1] or "{}")
+cfg["ici_tensor_parallelism"] = int(sys.argv[2])
+cfg["ici_fsdp_parallelism"] = int(sys.argv[3])
+print(json.dumps(cfg, separators=(",", ":")))
+PY
+)"
+  fi
 }
 
 # NO w0 HF weight staging. w0 runs the trainer (which loads MaxText/orbax, not
@@ -314,8 +354,11 @@ elif ! tinker_healthy && vllm_healthy; then
   tmux kill-session -t skyrl-tinker 2>/dev/null || true; sleep 3
   pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
-    PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
-    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=$VLLM_IDXS VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
+    TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    VLLM_BASE_URL_OVERRIDE="$EXTERNAL_VLLM_URLS" \
+    TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
+    TRAIN_TPU_PROCESS_BOUNDS="$TRAIN_PROCESS_BOUNDS" TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS="$TRAIN_CHIPS_PER_PROCESS_BOUNDS" \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
@@ -326,6 +369,7 @@ elif ! tinker_healthy && vllm_healthy; then
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    TUNIX_JAX_CACHE_LOCAL="$JAX_CACHE_LOCAL" TUNIX_JAX_CACHE_GCS="$JAX_CACHE_GCS" \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
     READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/tinker-restart.log 2>&1 || true
@@ -337,7 +381,8 @@ elif ! tinker_healthy && vllm_healthy; then
     # bring-up, which is the only path that rebuilds trainer state from scratch.
     echo "tinker-only restart FAILED -- tearing down vLLM to force a full rebuild next attempt"
     tail -6 ~/tinker-restart.log 2>/dev/null || true
-    for ip in $(echo "$INT" | cut -d, -f2-$NHOSTS | tr ',' ' '); do
+    for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+      ip="$(worker_ip "$worker")"
       timeout 60 ssh $SSHO sk7524_princeton_edu@"$ip" \
         "tmux kill-session -t skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
     done
@@ -357,8 +402,11 @@ else
   # does not fit (1/9 steps trained). Non-K JSSP keeps the faster tiles.
   pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
-    PROJECT=vision-mix ZONE=us-east5-a REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
-    TINKER_BACKEND=tunix TRAIN_WORKERS=0 VLLM_WORKERS=$VLLM_IDXS VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
+    TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    VLLM_BASE_URL_OVERRIDE="$EXTERNAL_VLLM_URLS" \
+    TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
+    TRAIN_TPU_PROCESS_BOUNDS="$TRAIN_PROCESS_BOUNDS" TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS="$TRAIN_CHIPS_PER_PROCESS_BOUNDS" \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
@@ -369,12 +417,13 @@ else
     TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
     TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
     TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    TUNIX_JAX_CACHE_LOCAL="$JAX_CACHE_LOCAL" TUNIX_JAX_CACHE_GCS="$JAX_CACHE_GCS" \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
     VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=$MAX_NUM_SEQS VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
     VLLM_XLA_CACHE_GCS="$XLA_GCS" \
     HF_CACHE_GCS="$HF_GCS" \
     VLLM_EXTRA_ARGS="$VLLM_XARGS" \
-    READY_ATTEMPTS=900 SYNC_SKYRL=1 START_VLLM=1 START_TINKER=1 \
+    READY_ATTEMPTS=900 SYNC_SKYRL=1 START_VLLM="$START_LOCAL_VLLM" START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || true
   curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 \
     || { echo "engine bring-up FAILED"; tail -8 ~/engine-bringup.log; exit 1; }
@@ -389,7 +438,8 @@ if ! "$RAYBIN" status >/dev/null 2>&1; then
   echo "ray head started"
 fi
 RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray; print(ray.__version__)")
-for ip in $(echo "$INT" | cut -d, -f2-$NHOSTS | tr ',' ' '); do
+for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+  ip="$(worker_ip "$worker")"
   timeout 900 ssh $SSHO sk7524_princeton_edu@"$ip" "
     export PATH=\$HOME/.local/bin:\$PATH
     pgrep -f '[r]ay/core' >/dev/null && { echo \"ray already on \$(hostname)\"; exit 0; }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Make the trainer's MaxText/orbax checkpoint VALID before any engine starts.
 #
-# Runs from the jobman `prepare` hook on the train coordinator (worker 0) only.
+# Runs from the jobman `prepare` hook on every selected trainer worker.
 # Engine bring-up may then assume a complete checkpoint, or a deliberate absence.
 #
 # Why this exists. The restore used to live inside engine bring-up as one
@@ -24,7 +24,25 @@
 # makes unnecessary. So if the checkpoint will not fit, the weights go.
 set -uo pipefail
 
-[ "${JOBMAN_WORKER_ID:-0}" = "0" ] || { echo "ckpt: worker ${JOBMAN_WORKER_ID} no-op"; exit 0; }
+if ! python3 - "${JOBMAN_WORKER_ID:-0}" "${TRAIN_WORKERS:-0}" <<'PY'
+import sys
+
+worker = int(sys.argv[1])
+selected = set()
+for part in sys.argv[2].replace(" ", "").split(","):
+    if not part:
+        continue
+    if "-" in part:
+        lo, hi = map(int, part.split("-", 1))
+        selected.update(range(lo, hi + 1))
+    else:
+        selected.add(int(part))
+raise SystemExit(0 if worker in selected else 1)
+PY
+then
+  echo "ckpt: worker ${JOBMAN_WORKER_ID:-0} is not in TRAIN_WORKERS=${TRAIN_WORKERS:-0}; no-op"
+  exit 0
+fi
 
 # The prepare hook's env carries CELL but not the model vars (those are set in
 # cell_worker.sh, which runs later), so derive them here from the same prefixes.

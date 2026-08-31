@@ -1,0 +1,127 @@
+job:
+  name: sk7524-v6e-gemma-tp8-fsdp2-replay-diag-an1
+  env_type: null
+  loop: true
+  remote_user: sk7524_princeton_edu
+  worker_num: auto
+
+tpu:
+  allocation_mode: "queued-resources"
+  accelerator: v6e-16
+  name: sk7524-v6e-gemma-tp8-fsdp2-replay-diag-an1
+  zone: asia-northeast1-b
+  version: v2-alpha-tpuv6e
+  pricing: spot
+  flags:
+    - "--project=vision-mix"
+
+gcsfuse:
+  bucket_name: sk7524-tinker-tpu-asia-northeast1
+  mount_path: /home/sk7524_princeton_edu/gcs
+
+ssh:
+  private_key: ~/.ssh/jobman_tpu_ed25519
+  identities:
+    - private_key: ~/.ssh/jobman_tpu_ed25519
+      public_key: ~/.ssh/jobman_tpu_ed25519.pub
+      config_entry: |
+        Host 10.* 34.* 35.* 8.* 104.* 136.*
+          IdentityFile ~/.ssh/jobman_tpu_ed25519
+          IdentitiesOnly yes
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+
+resumable:
+  enabled: true
+  run_id: auto
+  run_id_prefix: v6e-gemma-tp8-fsdp2-s22528-r32-replay-diag
+  local_cache_root: /n/fs/vision-mix/sk7524/jobman-runs
+  remote_gcs_cache_root: /home/sk7524_princeton_edu/gcs/jobman-runs
+  remote_local_cache_root: /tmp/jobman-runs
+  retry_sleep_seconds: 60
+  lease:
+    type: local
+    poll_seconds: 30
+  run_spec:
+    experiment: tunix-v6e-multihost-smoke
+    model: gemma4-31b
+    topology: tp8-fsdp2
+    global_batch: 4
+    trainer_tile_rows: 2
+    trainer_token_budget: 45056
+    uniform_sequence_length: 22528
+    lora_rank: 32
+    dense_sequence: true
+    attention_kernel: tokamax-splash-autoselected
+    diagnostic: long-context-four-tile-three-replays
+  env:
+    PROJECT: vision-mix
+    ZONE: asia-northeast1-b
+    SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-v6e
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tunix-v6e-multihost-gemma-layout-v25.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: c5adb38b876718da32d0ea8a048cec25ad6abcc2e5c58798cdecc52ba00a1bc5
+    MODEL_NAME: google/gemma-4-31b-it
+    TUNIX_MAXTEXT_MODEL_NAME: gemma4-31b
+    TRAIN_WORKERS: "0,1,2,3"
+    VLLM_WORKERS: ""
+    TRAIN_TP_SIZE: "8"
+    TRAIN_FSDP_SIZE: "2"
+    TUNIX_ROW_SHARD: "2"
+    TUNIX_LORA_RANK: "32"
+    TUNIX_SMOKE_ROWS: "4"
+    TUNIX_SMOKE_REPLAYS: "3"
+    TUNIX_REPLAY_DIAGNOSTICS: "1"
+    TUNIX_SMOKE_DIAGNOSTIC_ACCEPT_FAILURE: "1"
+    TUNIX_UNIFORM_SEQ_LEN: "22528"
+    TUNIX_TRAIN_TOKEN_BUDGET: "45056"
+    TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e-gemma4-tp8-fsdp2-r32-s22528-b22528-tokamax-auto-dense-v1
+    TUNIX_JAX_CACHE_LOCAL: /home/sk7524_princeton_edu/jax_cache_gemma4_tp8_fsdp2_r32_s22528_b22528_tokamax_auto_dense_v1
+    TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts
+    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/gemma4-tp8-fsdp2-r32-s22528-rows4-replays3-layout-v2.json
+  prepare:
+    workers: all
+    timeout: 0
+    command: |
+      set -euxo pipefail
+      wait_for_apt() {
+        local waited=0
+        while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+          (( waited >= 600 )) && return 1
+          sleep 5; waited=$((waited + 5))
+        done
+      }
+      if ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then
+        wait_for_apt; sudo apt-get update -y
+        wait_for_apt; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git curl tmux python3 python3-venv python3-pip build-essential
+      fi
+      command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$PATH"
+      DEST="$HOME/SkyRLTpu-v6e"
+      BUNDLE_URL="$SKYRLTPU_BUNDLE_URL"
+      want="$SKYRLTPU_BUNDLE_SHA256"
+      test -n "$want"
+      have=$(cat "$DEST/.bundle-sha256" 2>/dev/null || echo none)
+      if [ "$want" != "$have" ]; then
+        gsutil -q cp "$BUNDLE_URL" /tmp/tunix-v6e-bundle.tar.gz
+        echo "$want  /tmp/tunix-v6e-bundle.tar.gz" | sha256sum -c -
+        rm -rf "$DEST.new"; mkdir -p "$DEST.new"
+        tar -xzf /tmp/tunix-v6e-bundle.tar.gz -C "$DEST.new"
+        test -x "$DEST.new/tpu/jobman/v6e_tunix_smoke_worker.sh"
+        echo "$want" > "$DEST.new/.bundle-sha256"
+        rm -rf "$DEST.old"; [ -d "$DEST" ] && mv "$DEST" "$DEST.old" || true
+        mv "$DEST.new" "$DEST"
+      fi
+      mkdir -p "$HOME/gcs/skyrl-checkpoints" "$HOME/skyrl-logs"
+      bash "$DEST/tpu/jobman/ensure_orbax_ckpt.sh"
+  completion_probe:
+    workers: 0
+    timeout: 120
+    command: |
+      gcloud storage objects describe "$SMOKE_RESULT_GCS" >/dev/null 2>&1
+
+command:
+  cmd: |
+    set -euo pipefail
+    export PATH="$HOME/.local/bin:$PATH"
+    bash "$HOME/SkyRLTpu-v6e/tpu/jobman/v6e_tunix_smoke_worker.sh"
+  workers: "all"

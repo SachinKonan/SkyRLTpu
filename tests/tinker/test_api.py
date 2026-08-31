@@ -3,6 +3,7 @@
 import asyncio
 import os
 import subprocess
+import sys
 import tempfile
 import urllib.request
 from contextlib import contextmanager
@@ -674,3 +675,14 @@ def test_build_cmd_engine_invalid_arg(engine_config, parent_process_cmd):
 
     with pytest.raises(ValueError, match="Unable to parse tinker API server startup command"):
         _build_uv_run_cmd_engine(parent_process_cmd, engine_config)
+
+
+def test_build_cmd_engine_direct_python(monkeypatch):
+    engine_config = EngineConfig(backend="tunix", base_model="Qwen/Qwen3-0.6B")
+    monkeypatch.setenv("SKYRL_TINKER_ENGINE_DIRECT_PYTHON", "1")
+
+    cmd = _build_uv_run_cmd_engine(["bash", "-c", "launcher | tee api.log"], engine_config)
+
+    assert cmd[:4] == [sys.executable, "-m", "skyrl.tinker.engine", "--base-model"]
+    assert "--backend" in cmd
+    assert cmd[cmd.index("--backend") + 1] == "tunix"
