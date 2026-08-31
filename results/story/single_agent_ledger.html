@@ -1,0 +1,345 @@
+<title>The Single-Agent Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap">
+<style>
+:root{
+  --paper:#fbfbfa; --panel:#ffffff; --sunk:#f4f5f4;
+  --ink:#14181c; --ink2:#3d4852; --muted:#6b7885; --rule:#e2e5e3;
+  --teal:#0f766e; --rust:#c2410c; --indigo:#4338ca;
+  --amber:#b45309; --crimson:#9f1239;
+  --figpaper:#ffffff; --figrule:#e2e5e3;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#101315; --panel:#171b1e; --sunk:#1b2023;
+    --ink:#e8ebe9; --ink2:#b3bcc2; --muted:#8b979f; --rule:#262c30;
+    --teal:#2dd4bf; --rust:#fb923c; --indigo:#a5b4fc;
+    --amber:#fbbf24; --crimson:#fb7185;
+    --figpaper:#f2f3f2; --figrule:#2c3237;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101315; --panel:#171b1e; --sunk:#1b2023;
+  --ink:#e8ebe9; --ink2:#b3bcc2; --muted:#8b979f; --rule:#262c30;
+  --teal:#2dd4bf; --rust:#fb923c; --indigo:#a5b4fc;
+  --amber:#fbbf24; --crimson:#fb7185;
+  --figpaper:#f2f3f2; --figrule:#2c3237;
+}
+:root[data-theme="light"]{
+  --paper:#fbfbfa; --panel:#ffffff; --sunk:#f4f5f4;
+  --ink:#14181c; --ink2:#3d4852; --muted:#6b7885; --rule:#e2e5e3;
+  --teal:#0f766e; --rust:#c2410c; --indigo:#4338ca;
+  --amber:#b45309; --crimson:#9f1239;
+  --figpaper:#ffffff; --figrule:#e2e5e3;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:400 16.5px/1.68 "IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 26px 90px}
+.col{max-width:70ch}
+h1,h2,h3{font-family:Newsreader,Georgia,serif;font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:clamp(2.3rem,5.4vw,3.5rem);line-height:1.06;letter-spacing:-.012em}
+h2{font-size:clamp(1.5rem,2.9vw,2.05rem);line-height:1.16;margin:0 0 .35em}
+h3{font-size:1.16rem;line-height:1.3;margin:2em 0 .5em;font-weight:600}
+p{margin:0 0 1.05em;color:var(--ink2)}
+p.lead{font-size:1.14rem;color:var(--ink)}
+a{color:var(--teal)}
+strong{color:var(--ink);font-weight:600}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+code{font-size:.87em;background:var(--sunk);padding:.12em .38em;border-radius:3px;
+  border:1px solid var(--rule)}
+
+/* ---- masthead ---- */
+header.mast{padding:76px 0 34px;border-bottom:1px solid var(--rule);margin-bottom:44px}
+.kicker{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:20px}
+.sub{font-size:1.2rem;color:var(--ink2);max-width:64ch;margin:22px 0 0}
+.strip{display:flex;flex-wrap:wrap;gap:34px;margin-top:38px;padding-top:26px;
+  border-top:1px solid var(--rule)}
+.stat .n{font-family:"IBM Plex Mono",monospace;font-size:1.32rem;font-weight:600;
+  color:var(--ink);font-variant-numeric:tabular-nums;display:block}
+.stat .k{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  margin-top:5px;display:block}
+
+/* ---- acts ---- */
+section.act{padding:46px 0;border-top:1px solid var(--rule)}
+.actno{font-family:"IBM Plex Mono",monospace;font-size:.72rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--teal);margin-bottom:12px}
+.q{font-family:"IBM Plex Mono",monospace;font-size:.92rem;color:var(--muted);
+  margin:.7em 0 1.5em;padding-left:14px;border-left:2px solid var(--rule)}
+.verdict{display:flex;gap:13px;align-items:flex-start;margin:26px 0 0;padding:17px 20px;
+  background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--teal);
+  border-radius:0 5px 5px 0}
+.verdict.bad{border-left-color:var(--crimson)}
+.verdict.warn{border-left-color:var(--amber)}
+.verdict .lab{font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);white-space:nowrap;padding-top:3px}
+.verdict p{margin:0;color:var(--ink)}
+
+/* ---- figures ---- */
+.fig{margin:30px 0 12px;padding:12px;background:var(--figpaper);
+  border:1px solid var(--figrule);border-radius:6px;overflow-x:auto}
+.fig img{display:block;width:100%;max-width:100%;height:auto}
+.dgmbox{background:var(--panel);border-color:var(--rule);padding:26px 22px}
+.dgm{display:block;width:100%;max-width:100%;height:auto;color:var(--ink2)}
+figcaption{font-size:.86rem;color:var(--muted);margin:11px 2px 0;max-width:88ch}
+.cap{font-size:.86rem;color:var(--muted);margin:-2px 2px 30px;max-width:88ch}
+
+/* ---- tables ---- */
+.tw{overflow-x:auto;margin:22px 0}
+table{border-collapse:collapse;font-size:.9rem;width:100%;
+  font-variant-numeric:tabular-nums}
+th,td{border-bottom:1px solid var(--rule);padding:9px 13px;text-align:left;vertical-align:top}
+th{font-family:"IBM Plex Mono",monospace;font-size:.71rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;border-bottom:1px solid var(--ink2)}
+td.num{text-align:right;font-family:"IBM Plex Mono",monospace}
+tr.win td{background:color-mix(in srgb,var(--teal) 8%,transparent)}
+tr.dead td{color:var(--muted)}
+.tag{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--ink)}
+.pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.68rem;
+  letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:3px;
+  border:1px solid currentColor;white-space:nowrap}
+.pill.ok{color:var(--teal)} .pill.run{color:var(--indigo)}
+.pill.dead{color:var(--crimson)} .pill.wait{color:var(--muted)}
+
+/* ---- code ---- */
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:6px;
+  padding:17px 19px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;
+  font-size:.815rem;line-height:1.62;color:var(--ink);margin:20px 0}
+pre .c{color:var(--muted)}
+pre .hl{color:var(--rust);font-weight:600}
+pre .k{color:var(--indigo)}
+
+/* ---- math ---- */
+.eq{background:var(--panel);border:1px solid var(--rule);border-radius:6px;
+  padding:16px 20px;margin:18px 0;font-family:"IBM Plex Mono",monospace;
+  font-size:.88rem;line-height:1.9;overflow-x:auto}
+.eq .nm{color:var(--muted);font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;
+  display:block;margin-bottom:7px}
+ul{padding-left:20px;color:var(--ink2)} li{margin:.42em 0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(285px,1fr));gap:22px;margin:24px 0}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px 20px}
+.card h4{margin:0 0 .5em;font-family:Newsreader,serif;font-size:1.06rem;font-weight:600}
+.card p:last-child{margin-bottom:0}
+.note{font-size:.9rem;color:var(--muted);border-top:1px solid var(--rule);
+  padding-top:16px;margin-top:26px}
+</style>
+
+
+<div class="wrap">
+<header class="mast">
+  <div class="kicker">Erdős min-overlap · every single-agent run · Jun–Aug 2026</div>
+  <h1>The Single-Agent Ledger</h1>
+  <p class="sub">Every RL run this program has made on Erdős minimum-overlap, in one place:
+  configuration, what went wrong, what it scored. Compiled from memory, the verified
+  conclusions docs, and a fresh GCS re-derivation of every run's metrics. C₅ is minimized;
+  the recurring bars are the authors' true record <b>0.3808753232</b> and AlphaEvolve
+  <b>0.380924</b>. Current program best: <b>0.380859354888</b>.</p>
+</header>
+
+<section class="act" style="border-top:none;padding-top:0"><div class="col">
+<div class="actno">Era 0 · Jun–mid-Jul</div>
+<h2>gpt-oss on Thinking Machines Tinker</h2>
+<p>The authors' own code (commit 6c40e82, infra-only patches), hosted training, local grading
+on neuronic. Batch notation throughout is <b>groups × group-size</b>. The paper's own default
+is 8×64; our 64×8 and 16×32 shapes were deviations (per the 43-agent verification doc —
+note the 120b RESULTS.md called 64×8 "canonical" at the time; the verification doc supersedes it).</p>
+</div>
+<div class="tw"><table>
+<tr><th>run</th><th>model</th><th>shape</th><th>elite</th><th>lr / kl</th><th>objective</th><th>steps</th><th>best C₅</th><th>note</th></tr>
+<tr><td class="tag">gptoss20b_full</td><td>20b</td><td>64×8</td><td>0</td><td>4e-5 / 0.1</td><td>entropic</td><td>15</td><td class="num">0.381471836</td><td>300s eval-timeout killed ~40% of rollouts</td></tr>
+<tr><td class="tag">ctrl15</td><td>20b</td><td>64×8</td><td>0</td><td>4e-5 / 0.1</td><td>entropic</td><td>15</td><td class="num">0.381001033</td><td>EVAL_TIMEOUT=1100 baseline; clone-chain monoculture</td></tr>
+<tr><td class="tag">distill15</td><td>20b</td><td>64×8</td><td>0</td><td>4e-5 / 0.1</td><td>entropic + CE β=0.1</td><td>15</td><td class="num">0.381039226</td><td>2.3× improve-rate, lost frontier by 3.8e-5</td></tr>
+<tr class="win"><td class="tag">distelite15</td><td>20b</td><td>64×8</td><td><b>8</b></td><td>4e-5 / 0.1</td><td>entropic + CE</td><td>15</td><td class="num">0.380925116</td><td>width (distill) + depth (elite): beat both parents</td></tr>
+<tr><td class="tag">20b_a8x64_delite</td><td>20b</td><td>8×64</td><td>2</td><td>4e-5 / 0.1</td><td>entropic + CE</td><td>15</td><td class="num">0.380913928</td><td>best 20b overall; elite knob behaviorally inert here</td></tr>
+<tr class="win"><td class="tag">gptoss120b_full</td><td><b>120b</b></td><td>64×8</td><td>0</td><td>4e-5 / 0.1</td><td>entropic</td><td>20</td><td class="num">0.380887659</td><td>deepest gpt-oss result; 1.23e-5 short of true record</td></tr>
+<tr><td class="tag">120b_distelite</td><td>120b</td><td>64×8</td><td>8</td><td>4e-5 / 0.1</td><td>entropic + CE</td><td>20</td><td class="num">0.380946823</td><td>recipe did NOT transfer to 120b</td></tr>
+<tr><td class="tag">120b_a8x64_ctrl</td><td>120b</td><td>8×64</td><td>2</td><td>4e-5 / 0.1</td><td>entropic</td><td>20</td><td class="num">0.380939058</td><td></td></tr>
+<tr><td class="tag">120b_a8x64_delite</td><td>120b</td><td>8×64</td><td>2</td><td>4e-5 / 0.1</td><td>entropic + CE</td><td>20</td><td class="num">0.380921331</td><td>froze for 15 consecutive steps — yet still beat its healthy twin</td></tr>
+<tr><td class="tag">obj A/B 16×32</td><td>20b</td><td>16×32</td><td>2</td><td>4e-5 / 0.1</td><td>GRPO vs entropic</td><td>~14/30</td><td class="num">0.380928 vs 0.381086</td><td><b>GRPO +1.58e-4</b> — both crashed step 13 (prod OOV tokens)</td></tr>
+</table></div>
+<div class="col">
+<p>Also in this era: the <b>in-context feedback A/B</b> (6 arms on the 20b champions —
+contrastive gap-analysis best at 0.381182; full critic reports doubled validity but zeroed
+improvement) and the <b>shared-pool ensembles</b> (20b+20b 0.380928, 20b+120b 0.380952,
+nemotron+20b 0.381013 — every ensemble tied or lost to the best solo; adding the 120b made
+it worse). The 20b→120b gap was traced to one capability: the 120b can <i>implement</i>
+smooth-max (64% of programs); the 20b plans it constantly and codes it successfully 0% of
+the time.</p>
+<div class="callout warn"><span class="lab">Era-0 problems</span>
+<p>EVAL_TIMEOUT=300 silently killing 40% of rollouts (fix: ≥1100 always); the authors' record
+mis-logged as 0.380932 when the true record is 0.3808753232 — our early "record beaten"
+claims were retracted; TTD_ELITE_SLOTS never logged, forcing behavioral reconstruction of the
+whole matrix; Tinker prod OOV token regression crashing runs at step 13.</p></div>
+</div>
+</section>
+
+<section class="act"><div class="col">
+<div class="actno">The elite-slots investigation</div>
+<h2>What elite slots actually did</h2>
+<p>Elite ∈ {0, 2, 8} was varied — but never as a single knob: it moved together with batch
+shape (64×8 arms ran elite 8, 8×64 arms elite ≤2). The verified findings:</p>
+<ul>
+<li><b>Elite reshapes the 64×8 tree:</b> it replaces consecutive polish chains with
+gap-tolerant reseeding — distelite15's champion is a depth-9 chain with 2–3-step gaps whose
+resumption parents ranked 118–242 under pure PUCT (never sampled without elite). Its run best
+came <i>uniquely</i> from an elite seed.</li>
+<li><b>Elite is redundant once the pool collapses:</b> counterfactually disabling it changes
+the seed set in 0/35 batches at 8×64 (vs 9/15 at 64×8-e8); elite-child advantage shrinks
+0.0054 → 0.0003.</li>
+<li><b>The famous "8×64 is 2–3× faster" is confounded with elite</b> (shape and elite moved
+together), and the retracted sub-claim "elite produces 45–73% of top-decile children" was
+downgraded — at 8×64 it merely relabels PUCT's own picks.</li>
+<li><b>Never run:</b> 64×8-elite2 and 8×64-elite8, the two cells that would factorize shape
+from elite. Since Stage A the program pinned elite 2 for GRPO cells (0 for canonical TTD,
+later 2 in the matched-compute arms) and stopped varying it.</li>
+</ul>
+</div></section>
+
+<section class="act"><div class="col">
+<div class="actno">Era 1 · early Aug</div>
+<h2>Qwen moves onto our own TPUs: dbtest and sweep1</h2>
+<p>Self-hosted SkyRL tinker (v5p), Qwen3.5-27B. First the 21-step <span class="tag">dbtest</span>
+proving run (champion 0.381294; established the two-phase answer-cue fix for qwen's ~22%
+format wall-jams), then <b>sweep1</b>: {entropic, GRPO} × 5 problems, 32×16, elite 2, LR 4e-5,
+KL 0, 15 steps.</p>
+</div>
+<div class="tw"><table>
+<tr><th>arm</th><th>best C₅</th><th>found at</th><th>problems</th></tr>
+<tr><td class="tag">sweep1-ttd-erdos</td><td class="num">0.380953139</td><td>step 14</td><td rowspan="2">~8 spot preemptions; both arms restarted during step 0 (no gen-0 in pools); grpo format collapsed 80.6%→1.1% — champions found at 3–4% format</td></tr>
+<tr><td class="tag">sweep1-grpo-erdos</td><td class="num">0.380984785</td><td>step 10</td></tr>
+</table></div>
+<div class="col">
+<p><b>Verdict: three completed head-to-heads, three ties</b> — every gap 0.13–0.46× of one
+step's own sampling swing. This <b>failed to replicate</b> the gpt-oss-era "GRPO by 1.58e-4."
+The lasting findings were structural: training health is decoupled from discovery (ttd
+trained far healthier and won nothing for it); improvement ability decays ~67×
+headroom-normalized; the PUCT "tree" is a width-~1.8 beam; and — accidentally — <b>policy
+resets on a persistent pool out-discovered the decayed policies they replaced</b>, because
+weight checkpoints were disabled and every preemption restarted LoRA fresh. That accident
+became the league's "restart" hypothesis, later refuted under controls.</p>
+</div></section>
+
+<section class="act"><div class="col">
+<div class="actno">Era 2–3 · mid Aug</div>
+<h2>The league record, the two big bugs, and the clean Stage A</h2>
+<p>The multi-model league produced C₅ 0.38086188 ("the WR") — but with <b>uncontrolled
+weight resets</b>: guardian relaunches skipped checkpoint re-registration, so weights
+silently restarted from base at random intervals while the tree survived. No comparison in
+it was interpretable. Stage A gen-1 then hit the second bug: <b>silent trainer OOMs banked
+steps whose gradients never landed</b> (frozen weights). Its numbers exist but are
+meaningless as training results:</p>
+</div>
+<div class="tw"><table>
+<tr><th>gen-1 (contaminated)</th><th class="num">best C₅</th><th>rows</th>
+    <th>gen-2 (clean, stageA2)</th><th class="num">best C₅</th></tr>
+<tr><td class="tag">stageA-grpo-n</td><td class="num">0.380907419</td><td class="num">9</td><td class="tag">grpo-n</td><td class="num"><b>0.380861631</b> ← record until lr-n</td></tr>
+<tr><td class="tag">stageA-ttd-n</td><td class="num">0.380901745</td><td class="num">18</td><td class="tag">ttd-n</td><td class="num">0.380867900</td></tr>
+<tr><td class="tag">stageA-ttd-k</td><td class="num">0.380879424</td><td class="num">15</td><td class="tag">ttd-k</td><td class="num">0.380891700</td></tr>
+<tr><td class="tag">stageA-ttd-r</td><td class="num">0.380868335</td><td class="num">8</td><td class="tag">ttd-r</td><td class="num">0.380907260</td></tr>
+<tr><td class="tag">stageA-grpo-r</td><td class="num">0.380904639</td><td class="num">6</td><td class="tag">grpo-r</td><td class="num">0.380870435</td></tr>
+<tr><td class="tag">stageA-grpo-k</td><td class="num">0.380901165</td><td class="num">1</td><td class="tag">grpo-k</td><td class="num">never completed (HBM fragmentation)</td></tr>
+</table></div>
+<div class="col">
+<p>Config for all gen-2 qwen cells: Qwen3.5-27B, LR 4e-5, KL per arm, LoRA r32, ctx 18432.
+<b>Note the compute asymmetry baked in here:</b> GRPO cells ran 16×32 + elite 2 (512
+rollouts/step); TTD cells ran their canonical 8×32 + elite 0 (256/step). Gen-1's inverted
+ordering (K&gt;R&gt;N) was a dose artifact. Gen-2 verdict: <b>plain N wins</b>; regularization
+is objective-specific (helps GRPO on JSSP, hurts TTD everywhere); KL suppresses qwen's
+length growth.</p>
+</div></section>
+
+<section class="act"><div class="col">
+<div class="actno">Era 4 · Aug 20</div>
+<h2>The grading bug: reported vs. tested performance</h2>
+<p>The grader ran its verifier, discarded the result, and returned the program's
+<b>self-reported</b> C₅ — guarded only by <code>np.isclose(atol=1e-4)</code>, ~150× the
+margin separating records. A program could carry 0.02% excess mass, score the un-normalized
+correlate, and bank a fictional number. Consequences, all verified bit-for-bit:</p>
+<ul>
+<li><span class="tag">tsw-n</span> (tree-swap qwen control): 94/596 fictional states — killed.</li>
+<li><span class="tag">g-grpo-n</span>: published 0.380909993 → true <b>0.380917550</b>; its
+best-claimed state was fictional and unreachable, so best-so-far <b>froze for 7 of 15
+steps</b>. The strict-grader rerun (identical knobs) improved 13/14 steps and finished
+<b>0.380911409</b> — contamination didn't just mis-report, it halted search.</li>
+<li>Six other completed cells carried 1–7 fictional states, never at the top — headlines unaffected.</li>
+</ul>
+<p>Fixed in discover <code>ae0a9bb</code>: score the recomputed value, archive the projected
+density; verifier gates on <code>sum(h)=n/2</code> and reports signed deltas.</p>
+</div></section>
+
+<section class="act"><div class="col">
+<div class="actno">Era 5 · Aug 20–23</div>
+<h2>Controlled answers: gemma, restarts, weight sharing, tree swaps, learning rate</h2>
+</div>
+<div class="tw"><table>
+<tr><th>run</th><th>question</th><th>config Δ from grpo-n</th><th class="num">best C₅</th><th>verdict</th></tr>
+<tr><td class="tag">g-ttd-n / g-grpo-n²</td><td>objective × model</td><td>gemma-4-31B</td><td class="num">0.380863196 / 0.380911409</td><td>ordering <b>inverts</b>: TTD wins gemma by 4.8e-5, GRPO wins qwen by 6.3e-6</td></tr>
+<tr><td class="tag">ctrl-n vs ours-n</td><td>weight sharing (league rerun, 20 steps)</td><td>qwen+gemma shared tree; λ=0 vs 0.1</td><td class="num">0.380862724 vs 0.380898026</td><td><b>CE sharing costs 3.5e-5</b>; and Q-GRPO alone matched the shared tree — one model was enough</td></tr>
+<tr><td class="tag">ctrl-r / ctrl-x</td><td>restart: feature or bug?</td><td>+ decay-trigger / forced@8</td><td class="num">0.380864568 / 0.380870132†</td><td><b>bug</b> — trigger fired correctly on a dead run and recovered 3e-11; historical 50–90× never replicated</td></tr>
+<tr><td class="tag">tsw-n / g-tsw-n</td><td>does the tree carry across models?</td><td>fresh qwen / gemma weights on qwen's step-9 tree</td><td class="num">0.380861626 (t0) / 0.380861585</td><td>both beat the record <b>at timestep 0</b> — continued search on a converged tree, not the model swap; control killed → uncontrolled</td></tr>
+<tr class="win"><td class="tag">lr-n</td><td>LoRA LR 4e-5 → <b>1.5e-4</b></td><td>one knob</td><td class="num"><b>0.380859354888</b></td><td><b>program best.</b> 14/14 improving steps; mechanism = usable-rollout rate 0.565→0.780 (~307→460 valid/step)</td></tr>
+<tr><td class="tag">lr2-n</td><td>LR 4e-4</td><td>one knob</td><td class="num">0.380879660 (7/15)</td><td>in flight; ahead of lr-n at matched steps</td></tr>
+<tr><td class="tag">g-lr-n</td><td>LR transfer to gemma</td><td>gemma + 1.5e-4</td><td class="num">0.380919025 (15+)</td><td>early lead over gemma baseline, then flat 6+ steps — transfer is early-run only</td></tr>
+<tr><td class="tag">tlr-n</td><td>TTD estimator @ 1.5e-4, matched 16×32/e2</td><td>estimator + LR</td><td class="num">0.380864756 (12/15)</td><td>already better than TTD@4e-5's final — LR gain transfers to entropic</td></tr>
+<tr><td class="tag">hyb-n / g-hyb-n</td><td>β-scaled softmax-centred hybrid</td><td>estimator</td><td class="num">0.380869937 (10) / 0.380953669 (3)</td><td>plateaued 5 straight steps (floors ⅓ of valid rollouts) — killed, superseded</td></tr>
+</table></div>
+<div class="col"><p class="note">† ctrl-x died in a client crash-loop at 11/20 (member
+checkpoint desync) and never finished. The league-era record artifact 0.38086188 remains
+in the ledger as produced-but-uninterpretable.</p></div>
+</section>
+
+<section class="act"><div class="col">
+<div class="actno">Era 6 · Aug 23–31</div>
+<h2>Muse, and the estimator autopsy</h2>
+<p>Muse-Glimmer-30B entered after the grading and preemption fixes (its own launch survived
+five infra blockers, a false completion-probe retirement, and a run-dir wipe — its first
+4-step life is preserved as <span class="tag">m-grpo-n-qwencue-bug</span>, renamed after
+the qwen answer-cue was found misapplied to it).</p>
+</div>
+<div class="tw"><table>
+<tr><th>muse run</th><th>objective / LR</th><th>steps</th><th class="num">best C₅</th><th>note</th></tr>
+<tr><td class="tag">m-grpo-n</td><td>GRPO 4e-5</td><td>7/15</td><td class="num">0.380867950</td><td>muse's best; still improving</td></tr>
+<tr><td class="tag">m-lr-n</td><td>GRPO 1.5e-4</td><td>11/15</td><td class="num">0.380952867</td><td><b>dead flat</b> (last gain 9e-10) — the LR win does NOT transfer to muse; first steps ran at 4e-5 (mixed-LR caveat)</td></tr>
+<tr><td class="tag">m-ttd-lr-n</td><td>TTD 1.5e-4</td><td>8/15</td><td class="num">0.380934202</td><td>slow</td></tr>
+<tr><td class="tag">meta-wt16 (muse)</td><td>GRPO 1.5e-4, warm on record tree</td><td>6</td><td class="num">0.380859055</td><td>best live number anywhere — but warm-start, different category</td></tr>
+<tr><td class="tag">stageD d-n / m-c-n / m-d-n</td><td>piecewise / MAD parent-relative</td><td>4 / 8 / 1</td><td class="num">0.380884 / 0.380890 / 0.381078</td><td>MAD mode found comatose (MAD=0 degeneracy zeroes all valid credit); superseded by E</td></tr>
+</table></div>
+<div class="col">
+<p>The per-rollout trajectory archives (shipping since Aug 22) enabled the estimator autopsy:
+GRPO pays exact no-ops +0.25 and regressions +0.66; TTD pays regressions +0.7–1.9 and pushes
+9/12 genuine improvements negative; β's one-bit budget is eaten by failures (20,000× collapse)
+and pins at its solver ceiling in 88–94% of converged groups; converged qwen is 57–63% no-ops
+(284 distinct programs — re-derivation, not copying); gemma regresses 50% of valid rollouts.
+Out of that came the parent-centered redesign, externally reviewed twice, converging on
+<b>E: feasibility-constrained, incumbent-baselined entropic expected improvement</b>.</p>
+</div></section>
+
+<section class="act"><div class="col">
+<div class="actno">Standing</div>
+<h2>The verified ladder, and what E must beat</h2>
+</div>
+<div class="tw"><table>
+<tr><th></th><th class="num">C₅</th><th>what</th></tr>
+<tr class="win"><td class="tag">lr-n</td><td class="num">0.380859354888</td><td>program best — qwen GRPO 16×32/e2 @ 1.5e-4</td></tr>
+<tr><td class="tag">g-tsw-n</td><td class="num">0.380861585</td><td>gemma on qwen's tree (uncontrolled)</td></tr>
+<tr><td class="tag">grpo-n</td><td class="num">0.380861631</td><td>qwen GRPO @ 4e-5</td></tr>
+<tr><td><i>authors' true record</i></td><td class="num"><i>0.380875323</i></td><td>gpt-oss-120b, 50 steps</td></tr>
+<tr><td class="tag">gptoss120b_full (ours)</td><td class="num">0.380887659</td><td>best gpt-oss-era result</td></tr>
+<tr><td><i>AlphaEvolve</i></td><td class="num"><i>0.380924</i></td><td></td></tr>
+</table></div>
+<div class="col">
+<p>Every margin above is n=1. Cross-era comparisons carry model, harness, timeout, and
+grader-version differences — within-era contrasts are the trustworthy ones.</p>
+<div class="callout"><span class="lab">Next: the E launch</span>
+<p>Three cells — <span class="tag">e-n</span> (qwen), <span class="tag">g-e-n</span> (gemma),
+<span class="tag">m-e-n</span> (muse) — at LR 1.5e-4, 16×32, elite 2, strict grader, 15 steps.
+Estimator: improvements weighted by a dimensionless one-bit exponential tilt over the
+improvement set (typical improver ≡ +1, no solver-ceiling pathology), no-ops and regressions
+0, failures −1. Comparators, pre-registered: qwen vs lr-n 0.380859355; gemma vs g-lr-n
+0.380919 (and the 4e-5 rerun 0.380911409); muse vs m-lr-n 0.380952867 (flat) and m-grpo-n
+0.380867950 — muse is the sharpest test, since GRPO@1.5e-4 outright failed there.</p></div>
+</div></section>
+</div>
