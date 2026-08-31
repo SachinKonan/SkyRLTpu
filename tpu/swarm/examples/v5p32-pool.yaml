@@ -1,0 +1,45 @@
+# Apply from the repository root. Three complete v5p-32 slices are requested;
+# configure target_workers=3 and recovery_reserve=1 in TPUSwarm.
+pool:
+  workers: 3
+  min_workers: 3
+  max_workers: 8
+  queue_length_threshold: 1
+  upscale_delay_seconds: 60
+  downscale_delay_seconds: 1200
+
+resources:
+  cloud: gcp
+  accelerators: tpu-v5p-32
+  use_spot: true
+
+envs:
+  # Deliberately separate from the live Jobman Stage-A bundle.
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v1.tar.gz
+
+setup: |
+  set -euo pipefail
+  root="$HOME/SkyRLTpu-tpuswarm"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -x "$staging/tpu/swarm/run_erdos_min_overlap.sh"
+    test -f "$staging/third_party/TPUSwarm/pyproject.toml"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  if [ -e "$root" ] && [ ! -L "$root" ]; then
+    echo "$root exists and is not a TPUSwarm-managed symlink" >&2
+    exit 1
+  fi
+  ln -sfn "$destination" "$root"

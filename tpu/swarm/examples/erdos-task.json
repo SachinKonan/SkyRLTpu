@@ -1,0 +1,28 @@
+{
+  "task_id": "erdos-stagea-ttd-n-001",
+  "idempotency_key": "erdos-stagea-ttd-n-001",
+  "kind": "skyrl.ttt.erdos_min_overlap.v1",
+  "resource_class": "gcp-tpu-v5p-32",
+  "priority": 500,
+  "recovery_priority": 900,
+  "payload": {
+    "cell": "ttd-n",
+    "run_dir": "stageA2-ttd-n",
+    "experiment_name": "stageA2-ttd-n",
+    "num_epochs": 15,
+    "repo_dir": "/home/sk7524_princeton_edu/SkyRLTpu-tpuswarm",
+    "secrets": {
+      "HF_TOKEN": null,
+      "WANDB_API_KEY": null
+    },
+    "env": {
+      "TTD_ADV_ESTIMATOR": "entropic_adaptive_beta",
+      "TTD_ELITE_SLOTS": "0",
+      "GROUPS_PER_BATCH": "8",
+      "GROUP_SIZE": "32",
+      "KL_PENALTY_COEF": "0",
+      "TTD_RESTART_RATIO": "0",
+      "GCS_RUN": "gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageA2-ttd-n"
+    }
+  }
+}
