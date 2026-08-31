@@ -21,11 +21,10 @@ cleanup() {
 trap cleanup EXIT
 
 export HF_HOME="$stage_root/huggingface"
-export HF_XET_HIGH_PERFORMANCE=1
 venv="$stage_root/venv"
 uv venv "$venv" --python 3.11
 uv pip install --python "$venv/bin/python" \
-  'huggingface_hub>=0.34,<2' hf_transfer
+  'huggingface_hub>=0.34,<2'
 
 "$venv/bin/python" - "$stage_root/snapshot-path" <<'PY'
 import pathlib

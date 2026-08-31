@@ -175,7 +175,7 @@ the same checkpoint and does not request a GCP CPU VM (the `vision-mix` TRC
 project has TPU-only capacity):
 
 ```bash
-srun -p cpu --time=02:00:00 --cpus-per-task=8 --mem=16G \
+srun -p cpu --time=02:00:00 --cpus-per-task=8 --mem=32G \
   bash tpu/swarm/stage_qwen35_hf_cache.sh
 ```
 
