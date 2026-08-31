@@ -2,6 +2,7 @@ import asyncio
 import os
 import random
 import signal
+import sys
 import threading
 import time
 from contextlib import asynccontextmanager, suppress
@@ -11,9 +12,10 @@ from typing import Annotated, Any, AsyncGenerator, ClassVar, Literal
 from uuid import uuid4
 
 import fastapi
+import numpy as np
 import psutil
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from pydantic import (
     Base64Bytes,
     BaseModel,
@@ -149,6 +151,15 @@ def _build_uv_run_cmd_engine(parent_cmd: list[str], engine_config: BaseModel) ->
     Returns:
         cmd: The uv run command for the tinker engine
     """
+    # TPU-only Tunix provisioning deliberately runs from a dedicated locked
+    # environment without the root project's PyTorch/CUDA extras. In that mode
+    # the API is launched with this environment's Python directly, so there is
+    # no parent `uv run` command to parse. Reuse the exact interpreter for the
+    # background engine and keep the existing uv inheritance for every other
+    # backend.
+    if _env_flag_enabled("SKYRL_TINKER_ENGINE_DIRECT_PYTHON"):
+        return [sys.executable, "-m", "skyrl.tinker.engine", *config_to_argv(engine_config)]
+
     cmd = ["uv", "run"]
     parent_flags = _get_parent_uv_run_args(parent_cmd)
     logger.debug(f"Detected API server uv run flags: {parent_flags}")
@@ -582,6 +593,239 @@ class ForwardBackwardRequest(BaseModel):
 class ForwardRequest(BaseModel):
     model_id: str
     forward_input: ForwardBackwardInput
+
+
+_PROTOBUF_CONTENT_TYPE = "application/x-protobuf"
+
+
+def _proto_tensor_to_list(tensor: Any, public_pb: Any) -> list[int] | list[float]:
+    """Decode the compact tensor representation used by tinker>=0.26."""
+    dtype_map = {
+        public_pb.DTYPE_FLOAT32: np.dtype(np.float32),
+        public_pb.DTYPE_INT64: np.dtype(np.int64),
+        public_pb.DTYPE_INT32: np.dtype(np.int32),
+        # NumPy has no portable native bfloat16 dtype. Decode the bits and
+        # widen them to float32, matching the public SDK's response decoder.
+        public_pb.DTYPE_BFLOAT16: np.dtype(np.uint16),
+    }
+    dtype = dtype_map.get(tensor.dtype)
+    if dtype is None:
+        raise ValueError(f"unsupported protobuf tensor dtype: {tensor.dtype}")
+
+    encoding = tensor.WhichOneof("encoding")
+    if encoding == "dense":
+        values = np.frombuffer(tensor.dense, dtype=dtype)
+    elif encoding == "sparse_csr":
+        if len(tensor.shape) != 2:
+            raise ValueError("sparse CSR protobuf tensor must have a two-dimensional shape")
+        rows, cols = map(int, tensor.shape)
+        sparse = tensor.sparse_csr
+        values = np.frombuffer(sparse.values, dtype=dtype)
+        crow = np.frombuffer(sparse.crow_indices, dtype=np.int64)
+        col = np.frombuffer(sparse.col_indices, dtype=np.int64)
+        if len(crow) != rows + 1 or len(col) != len(values):
+            raise ValueError("invalid sparse CSR protobuf tensor indices")
+        dense = np.zeros((rows, cols), dtype=dtype)
+        for row in range(rows):
+            start, end = int(crow[row]), int(crow[row + 1])
+            if start < 0 or end < start or end > len(values):
+                raise ValueError("invalid sparse CSR protobuf tensor row offsets")
+            if np.any(col[start:end] < 0) or np.any(col[start:end] >= cols):
+                raise ValueError("invalid sparse CSR protobuf tensor column index")
+            dense[row, col[start:end]] = values[start:end]
+        values = dense.reshape(-1)
+    else:
+        raise ValueError("protobuf tensor has no encoding")
+
+    if tensor.shape and int(np.prod(tensor.shape, dtype=np.int64)) != len(values):
+        raise ValueError("protobuf tensor byte count does not match its declared shape")
+    if tensor.dtype == public_pb.DTYPE_BFLOAT16:
+        values = (values.astype(np.uint32) << 16).view(np.float32)
+    return values.tolist()
+
+
+def _proto_datum_to_types(datum: Any, public_pb: Any) -> types.Datum:
+    chunks: list[types.ModelInputChunk] = []
+    for chunk in datum.model_input:
+        kind = chunk.WhichOneof("chunk")
+        if kind == "encoded_text":
+            token_bytes = chunk.encoded_text.tokens
+            if len(token_bytes) % np.dtype(np.int32).itemsize:
+                raise ValueError("encoded-text protobuf token bytes are not int32-aligned")
+            chunks.append(types.EncodedTextChunk(tokens=np.frombuffer(token_bytes, dtype=np.int32).tolist()))
+        elif kind == "image":
+            image = chunk.image
+            if image.format not in {"png", "jpeg"}:
+                raise ValueError(f"unsupported protobuf image format: {image.format!r}")
+            chunks.append(
+                types.ImageChunk.model_construct(
+                    data=image.data,
+                    format=image.format,
+                    expected_tokens=image.expected_tokens if image.HasField("expected_tokens") else None,
+                )
+            )
+        else:
+            raise ValueError("protobuf model input contains an unsupported or empty chunk")
+
+    inputs = {
+        name: types.TensorData(data=_proto_tensor_to_list(value, public_pb))
+        for name, value in datum.loss_fn_inputs.items()
+    }
+    if "target_tokens" not in inputs:
+        raise ValueError("protobuf datum is missing target_tokens")
+    n_targets = len(inputs["target_tokens"].data)
+
+    def _fill(name: str, value: float) -> types.TensorData:
+        return inputs.get(name, types.TensorData(data=[value] * n_targets))
+
+    return types.Datum(
+        model_input=types.ModelInput(chunks=chunks),
+        loss_fn_inputs=types.LossFnInputs(
+            target_tokens=inputs["target_tokens"],
+            weights=_fill("weights", 1.0),
+            advantages=_fill("advantages", 0.0),
+            logprobs=_fill("logprobs", 0.0),
+            values=inputs.get("values", types.TensorData(data=[])),
+            returns=inputs.get("returns", types.TensorData(data=[])),
+        ),
+    )
+
+
+def _decode_proto_forward_backward(body: bytes) -> tuple[str, types.ForwardBackwardInput, bool]:
+    """Decode tinker>=0.26's mandatory protobuf forward/backward request."""
+    from tinker.proto import tinker_public_pb2 as public_pb
+
+    request = public_pb.ForwardBackwardRequest()
+    request.ParseFromString(body)
+    # Reuse the JSON surface's validation for supported loss functions and
+    # per-loss configuration keys before constructing the internal request.
+    validated = ForwardBackwardInput(
+        data=[],
+        loss_fn=request.loss_fn,
+        loss_fn_config=dict(request.loss_fn_config) or None,
+    )
+    return (
+        request.model_id,
+        types.ForwardBackwardInput(
+            data=[_proto_datum_to_types(datum, public_pb) for datum in request.data],
+            loss_fn=validated.loss_fn,
+            loss_fn_config=validated.loss_fn_config,
+        ),
+        request.forward_only,
+    )
+
+
+def _encode_forward_backward_result_proto(result: dict[str, Any]) -> bytes:
+    """Encode a stored model-pass result for tinker>=0.26 clients."""
+    from tinker.proto import tinker_public_pb2 as public_pb
+
+    message = public_pb.ForwardBackwardOutput()
+    message.loss_fn_output_type = str(result.get("loss_fn_output_type") or "ArrayRecord")
+    message.metrics.update({name: float(value) for name, value in (result.get("metrics") or {}).items()})
+
+    outputs = result.get("loss_fn_outputs") or []
+    if not outputs:
+        return message.SerializeToString()
+    field_names = set(outputs[0])
+    if any(set(output) != field_names for output in outputs):
+        raise ValueError("all forward/backward output datums must contain the same fields")
+
+    record = message.loss_fn_outputs.add()
+    record.type_tag = message.loss_fn_output_type
+    record.num_datums = len(outputs)
+    dtype_map = {
+        "float32": (np.dtype(np.float32), public_pb.DTYPE_FLOAT32),
+        "int64": (np.dtype(np.int64), public_pb.DTYPE_INT64),
+        "int32": (np.dtype(np.int32), public_pb.DTYPE_INT32),
+    }
+    for name in sorted(field_names):
+        arrays: list[np.ndarray] = []
+        byte_offsets = [0]
+        trailing_shape: tuple[int, ...] | None = None
+        proto_dtype: int | None = None
+        for output in outputs:
+            tensor = output[name]
+            dtype_name = str(tensor.get("dtype") or "float32")
+            mapped = dtype_map.get(dtype_name)
+            if mapped is None:
+                raise ValueError(f"unsupported forward/backward output dtype: {dtype_name!r}")
+            np_dtype, current_proto_dtype = mapped
+            if proto_dtype is not None and current_proto_dtype != proto_dtype:
+                raise ValueError(f"output field {name!r} changes dtype between datums")
+            proto_dtype = current_proto_dtype
+
+            values = np.asarray(tensor.get("data") or [], dtype=np_dtype).reshape(-1)
+            declared_shape = tuple(int(dim) for dim in (tensor.get("shape") or (len(values),)))
+            if int(np.prod(declared_shape, dtype=np.int64)) != len(values):
+                raise ValueError(f"output field {name!r} data does not match its declared shape")
+            current_trailing_shape = declared_shape[1:]
+            if trailing_shape is not None and current_trailing_shape != trailing_shape:
+                raise ValueError(f"output field {name!r} changes trailing shape between datums")
+            trailing_shape = current_trailing_shape
+            arrays.append(values)
+            byte_offsets.append(byte_offsets[-1] + values.nbytes)
+
+        batched = record.fields[name]
+        batched.data = b"".join(array.tobytes() for array in arrays)
+        batched.offsets = np.asarray(byte_offsets, dtype=np.int64).tobytes()
+        batched.dtype = proto_dtype
+        batched.trailing_shape.extend(trailing_shape or ())
+    return message.SerializeToString()
+
+
+def _encode_sample_result_proto(result: dict[str, Any]) -> bytes:
+    """Encode a stored sampling result for current protobuf-only SDKs."""
+    from tinker.proto import tinker_public_pb2 as public_pb
+
+    message = public_pb.SampleResponse()
+    stop_reasons = {
+        "stop": public_pb.STOP_REASON_STOP,
+        "length": public_pb.STOP_REASON_LENGTH,
+    }
+    for sequence in result.get("sequences") or []:
+        stop_reason = stop_reasons.get(sequence.get("stop_reason"))
+        if stop_reason is None:
+            raise ValueError(f"unsupported sample stop reason: {sequence.get('stop_reason')!r}")
+        encoded = message.sequences.add()
+        encoded.stop_reason = stop_reason
+        encoded.tokens = np.asarray(sequence.get("tokens") or [], dtype=np.int32).tobytes()
+        logprobs = sequence.get("logprobs")
+        if logprobs is not None:
+            encoded.logprobs = np.asarray(logprobs, dtype=np.float32).tobytes()
+
+    prompt_logprobs = result.get("prompt_logprobs")
+    if prompt_logprobs is not None:
+        message.prompt_logprobs = np.asarray(
+            [np.nan if value is None else value for value in prompt_logprobs],
+            dtype=np.float32,
+        ).tobytes()
+    return message.SerializeToString()
+
+
+async def _parse_forward_backward_request(
+    request: Request,
+) -> tuple[str, types.ForwardBackwardInput, bool]:
+    """Accept both SkyRL's legacy JSON wire format and the current SDK wire."""
+    body = await request.body()
+    content_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
+    try:
+        if content_type == _PROTOBUF_CONTENT_TYPE:
+            content_encoding = request.headers.get("content-encoding", "").strip().lower()
+            if content_encoding:
+                if content_encoding != "zstd":
+                    raise ValueError(f"unsupported protobuf content encoding: {content_encoding!r}")
+                import zstandard
+
+                body = zstandard.ZstdDecompressor().decompress(body)
+            return _decode_proto_forward_backward(body)
+
+        parsed = ForwardBackwardRequest.model_validate_json(body)
+        return parsed.model_id, parsed.forward_backward_input.to_types(), False
+    except Exception as exc:
+        # Never include the raw input in the response: protobuf tensor bodies
+        # can be large and arbitrary bytes make FastAPI's default validation
+        # handler itself fail with UnicodeDecodeError.
+        raise HTTPException(status_code=422, detail=f"invalid forward/backward request: {exc}") from exc
 
 
 class AdamParams(BaseModel):
@@ -1047,15 +1291,16 @@ async def get_training_run(model_id: str, session: AsyncSession = Depends(get_se
 
 
 @app.post("/api/v1/forward_backward", response_model=FutureResponse)
-async def forward_backward(request: ForwardBackwardRequest, session: AsyncSession = Depends(get_session)):
-    """Compute and accumulate gradients."""
-    await get_model(session, request.model_id)
+async def forward_backward(request: Request, session: AsyncSession = Depends(get_session)):
+    """Compute a model pass from either JSON or the current protobuf wire format."""
+    model_id, request_data, forward_only = await _parse_forward_backward_request(request)
+    await get_model(session, model_id)
 
     request_id = await create_future(
         session=session,
-        request_type=types.RequestType.FORWARD_BACKWARD,
-        model_id=request.model_id,
-        request_data=request.forward_backward_input.to_types(),
+        request_type=types.RequestType.FORWARD if forward_only else types.RequestType.FORWARD_BACKWARD,
+        model_id=model_id,
+        request_data=request_data,
     )
 
     await session.commit()
@@ -1328,6 +1573,20 @@ async def retrieve_future(request: RetrieveFutureRequest, req: Request):
                     future = result.first()
 
                     if future.status == RequestStatus.COMPLETED:
+                        if _PROTOBUF_CONTENT_TYPE in req.headers.get("accept", "").lower():
+                            if future.request_type in (
+                                types.RequestType.FORWARD,
+                                types.RequestType.FORWARD_BACKWARD,
+                            ):
+                                return Response(
+                                    content=_encode_forward_backward_result_proto(future.result_data),
+                                    media_type=_PROTOBUF_CONTENT_TYPE,
+                                )
+                            if future.request_type in (types.RequestType.SAMPLE, types.RequestType.EXTERNAL):
+                                return Response(
+                                    content=_encode_sample_result_proto(future.result_data),
+                                    media_type=_PROTOBUF_CONTENT_TYPE,
+                                )
                         return future.result_data
 
                     if future.status == RequestStatus.FAILED:

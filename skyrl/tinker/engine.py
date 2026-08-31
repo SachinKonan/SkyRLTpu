@@ -193,9 +193,12 @@ def get_backend_classes(backend_name: str, use_ray: bool = False):
 
         return SkyRLTrainBackend, MegatronBackendOverrides
     elif backend_name == "tunix":
-        from skyrl.backends.tunix_backend import TunixBackend, TunixBackendConfig
+        from skyrl.backends.tunix_backend import (
+            DistributedTunixBackend,
+            TunixBackendConfig,
+        )
 
-        return TunixBackend, TunixBackendConfig
+        return DistributedTunixBackend, TunixBackendConfig
     else:
         raise ValueError(
             f"Unknown backend: {backend_name}. Available backends: jax, fsdp, megatron, tunix. "

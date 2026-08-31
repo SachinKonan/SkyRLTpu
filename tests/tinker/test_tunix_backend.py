@@ -155,6 +155,28 @@ def test_checkpoint_round_trip(backend, model_pair):
         assert all(np.array_equal(state_before[k], state_after[k]) for k in state_before)
 
 
+def test_state_from_flat_preserves_uncommitted_scalar_placement():
+    import jax
+    import jax.numpy as jnp
+
+    from skyrl.backends.tunix_backend import TunixBackend
+
+    # Optax initializes scalar state as uncommitted.  Restoring it with an
+    # explicit SingleDeviceSharding would commit it to one device and make it
+    # incompatible with global multi-host gradients.
+    target = {"count": jnp.asarray(0, dtype=jnp.int32)}
+    assert not target["count"].committed
+
+    restored = TunixBackend._state_from_flat(
+        target,
+        {"['count']": np.asarray(7, dtype=np.int32)},
+    )
+
+    assert int(restored["count"]) == 7
+    assert not restored["count"].committed
+    assert isinstance(restored["count"].sharding, jax.sharding.SingleDeviceSharding)
+
+
 def test_checkpoint_rank_mismatch_rejected(backend, model_pair):
     a, _ = model_pair
     backend.create_model("unit_rank4", types.LoraConfig(rank=4, alpha=8.0, seed=0))

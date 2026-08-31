@@ -22,6 +22,7 @@ Design notes:
 """
 
 import gc
+import hashlib
 import json
 import os
 import time
@@ -36,11 +37,19 @@ import numpy as np
 import optax
 from cloudpathlib import AnyPath
 from flax import nnx
+from jax.experimental import multihost_utils
 from pydantic import BaseModel, Field
 from transformers import AutoConfig, AutoTokenizer
 
 from skyrl.backends.backend import AbstractBackend
 from skyrl.backends.renderer import render_model_input
+from skyrl.backends.rpc import (
+    RpcPayload,
+    broadcast_command,
+    call_with_rpc_ack,
+    serialize_call_kwargs,
+    serialize_config,
+)
 from skyrl.backends.utils import pad_batch, pad_to_fsdp
 from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
@@ -61,6 +70,12 @@ _NATIVE_MLP_REGEX = r".*gate_proj|.*up_proj|.*down_proj"
 _SELF_CHECKPOINT_FILE = "tunix_lora_checkpoint.msgpack.npz"
 _CHECKPOINT_META_FILE = "tunix_checkpoint_meta.json"
 _EPHEMERAL_MARKER_FILE = "tunix_ephemeral_marker.json"
+
+
+@jax.jit
+def _jitted_global_norm(updates):
+    """Compute one global-norm program instead of one eager launch per leaf."""
+    return optax.global_norm(updates)
 
 
 class TunixBackendConfig(BaseModel, extra="forbid"):
@@ -185,6 +200,15 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
             "it and get the whole 12.97 GiB back. Requesting a second template after "
             "the release raises instead of silently retraining from nothing."
         ),
+    )
+    coordinator_address: str | None = Field(
+        default=None,
+        description="JAX coordinator address (host:port) for multi-process Tunix training.",
+    )
+    num_processes: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of JAX processes participating in the Tunix trainer.",
     )
 
 
@@ -379,6 +403,7 @@ class ModelSlot:
     accum_count: int = 0
     loaded_sampler_checkpoint_id: str | None = None
     sampler_lora_states: dict = field(default_factory=dict)  # checkpoint_id -> lora state
+    diagnostic_grad_index: int = 0
 
 
 @dataclass
@@ -407,7 +432,7 @@ class TunixBackend(AbstractBackend):
         self.metrics = types.EngineMetrics()
 
         self.vllm_client: VllmSamplingClient | None = None
-        if config.inference_backend == "vllm":
+        if config.inference_backend == "vllm" and jax.process_index() == 0:
             if not config.vllm_base_url:
                 raise ValueError("TunixBackendConfig.vllm_base_url is required when inference_backend='vllm'")
             self.vllm_client = VllmSamplingClient(
@@ -532,6 +557,15 @@ class TunixBackend(AbstractBackend):
         if items_dir.exists():
             logger.info(f"Using cached MaxText orbax checkpoint at {items_dir}")
             return str(items_dir)
+
+        if jax.process_count() > 1:
+            raise RuntimeError(
+                f"Distributed Tunix requires a complete MaxText orbax checkpoint on every host; "
+                f"none was found at {items_dir}. Restore "
+                "TUNIX_MAXTEXT_CKPT_CACHE_GCS during the Jobman prepare hook before starting "
+                "the trainer. Per-host HF conversion is intentionally disabled because it "
+                "duplicates the conversion and can exhaust each VM's boot disk."
+            )
 
         logger.info(f"Converting {self.base_model} to MaxText orbax format at {cache_root} (one-time)")
         cache_root.mkdir(parents=True, exist_ok=True)
@@ -1117,13 +1151,26 @@ class TunixBackend(AbstractBackend):
             if not getattr(self, "_shard_inputs_logged", False):
                 self._shard_inputs_logged = True
                 logger.info(f"Sharding microbatch inputs over mesh axes {batch_axes} (rows={nrows})")
-            return tuple(
-                jax.device_put(a, row_sharding)
-                if getattr(a, "ndim", 0) >= 1 and a.shape[0] == nrows
-                else a
-                for a in arrays
-            )
+            def place(array):
+                if getattr(array, "ndim", 0) < 1 or array.shape[0] != nrows:
+                    return array
+                if jax.process_count() == 1:
+                    return jax.device_put(array, row_sharding)
+                # Every RPC worker starts with the same complete host array.
+                # The callback is invoked only for this process's addressable
+                # device slices, so the global batch is neither duplicated nor
+                # reinterpreted as one full local contribution per process.
+                host_array = np.asarray(array)
+                return jax.make_array_from_callback(
+                    host_array.shape,
+                    row_sharding,
+                    lambda index, source=host_array: source[index],
+                )
+
+            return tuple(place(a) for a in arrays)
         except Exception as e:
+            if jax.process_count() > 1:
+                raise RuntimeError("distributed input sharding failed") from e
             logger.warning(f"input sharding failed ({e}); falling back to replicated inputs")
             return arrays
 
@@ -1403,7 +1450,19 @@ class TunixBackend(AbstractBackend):
                                 slot.accum_grads = jax.tree.map(jnp.add, slot.accum_grads, lora_grads)
                             slot.accum_count += len(mb_idx)
 
-                per_token_losses, target_logprobs = jax.device_get((per_token_losses, target_logprobs))
+                if jax.process_count() > 1:
+                    # Convert non-addressable global outputs into replicated
+                    # host arrays on every process. Workers discard their API
+                    # result, but must participate in the gather in the same
+                    # order as process 0.
+                    per_token_losses, target_logprobs = jax.tree.map(
+                        lambda value: np.asarray(multihost_utils.process_allgather(value, tiled=True)),
+                        (per_token_losses, target_logprobs),
+                    )
+                else:
+                    per_token_losses, target_logprobs = jax.device_get(
+                        (per_token_losses, target_logprobs)
+                    )
                 for row, i in enumerate(mb_idx):
                     token_losses_out[i] = per_token_losses[row, : seq_lens[i]].astype(np.float32)
                     logprobs_out[i] = target_logprobs[row, : seq_lens[i]].astype(np.float32)
@@ -1532,6 +1591,97 @@ class TunixBackend(AbstractBackend):
 
     # ------------------------------------------------------------------ optim step
 
+    @staticmethod
+    def _host_global_norm(flat_grads: dict[str, np.ndarray]) -> float:
+        """Compute a gradient norm from collectively gathered host arrays.
+
+        Keeping this calculation on the host is important for multihost replay
+        diagnostics.  ``optax.global_norm`` outside a JIT emits one eager
+        ``jit_integer_pow`` launch per gradient leaf.  If the first MaxText
+        step leaves even one controller with a different leaf layout, those
+        launches enter different TPU launch groups and abort the whole slice
+        before the diagnostic can describe the difference.
+        """
+        squared_norm = 0.0
+        for value in flat_grads.values():
+            array = np.asarray(value, dtype=np.float32).reshape(-1)
+            squared_norm += float(np.dot(array, array))
+        return float(np.sqrt(squared_norm))
+
+    def _record_gradient_diagnostics(
+        self,
+        model_id: str,
+        mean_grads,
+        grad_norm: float,
+        *,
+        flat_grads: dict[str, np.ndarray] | None = None,
+    ) -> None:
+        """Persist per-leaf gradient fingerprints for strict replay diagnosis.
+
+        This is deliberately opt-in: gathering a rank-32 adapter's global
+        gradient adds host traffic. Every JAX process participates in the
+        gathers, while only process 0 writes the JSONL record.
+        """
+        if os.environ.get("TUNIX_REPLAY_DIAGNOSTICS", "0").lower() not in ("1", "true", "yes", "on"):
+            return
+
+        slot = self.models[model_id]
+
+        def array_layouts(state) -> dict[str, dict[str, Any]]:
+            layouts = {}
+            for key, value in _keystr_map(state).items():
+                sharding = getattr(value, "sharding", None)
+                layouts[key] = {
+                    "sharding": str(sharding) if sharding is not None else None,
+                    "committed": bool(getattr(value, "committed", False)),
+                    "fully_addressable": bool(getattr(value, "is_fully_addressable", True)),
+                }
+            return layouts
+
+        # Capture these before the host gather below.  NNX lifted JITs return
+        # updated module arguments, and GSPMD may choose a different output
+        # sharding from the freshly-created LoRA state.  A checkpoint restored
+        # later is rebuilt using the current state's sharding, so these fields
+        # distinguish a logical gradient mismatch from an initial-vs-restored
+        # layout transition.
+        model_state_layouts = array_layouts(slot.lora_state)
+        gradient_layouts = array_layouts(mean_grads)
+        flat = self._flat_numpy(mean_grads) if flat_grads is None else flat_grads
+        index = slot.diagnostic_grad_index
+        slot.diagnostic_grad_index += 1
+        if jax.process_index() != 0:
+            return
+
+        leaves = {}
+        for key, value in flat.items():
+            array = np.ascontiguousarray(value)
+            norm_array = np.asarray(array, dtype=np.float32)
+            leaves[key] = {
+                "shape": list(array.shape),
+                "dtype": str(array.dtype),
+                "norm": float(np.linalg.norm(norm_array.reshape(-1))),
+                "sha256": hashlib.sha256(array.tobytes()).hexdigest(),
+            }
+        record = {
+            "kind": "mean_gradient",
+            "model_id": model_id,
+            "index": index,
+            "global_norm": grad_norm,
+            "model_state_layouts": model_state_layouts,
+            "gradient_layouts": gradient_layouts,
+            "leaves": leaves,
+        }
+        output = Path(
+            os.environ.get(
+                "TUNIX_REPLAY_DIAGNOSTICS_PATH",
+                str(Path.home() / "tunix-replay-diagnostics-process-0.jsonl"),
+            )
+        )
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("a") as stream:
+            stream.write(json.dumps(record, sort_keys=True) + "\n")
+        logger.info("Wrote gradient replay diagnostic %s to %s", index, output)
+
     def optim_step(self, model_id: str, request_data: types.OptimStepInput) -> types.OptimStepOutput:
         slot = self.models[model_id]
         template = self.templates[slot.template_key]
@@ -1551,7 +1701,29 @@ class TunixBackend(AbstractBackend):
         hp["eps"][...] = adam.eps
         hp["weight_decay"][...] = adam.weight_decay
 
-        grad_norm = float(jax.device_get(optax.global_norm(mean_grads)))
+        diagnostics_enabled = os.environ.get("TUNIX_REPLAY_DIAGNOSTICS", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if diagnostics_enabled:
+            # _record_gradient_diagnostics needs these global host arrays
+            # anyway.  Gather once, compute the norm without launching more
+            # TPU programs, and pass the same arrays to the recorder.
+            flat_grads = self._flat_numpy(mean_grads)
+            grad_norm = self._host_global_norm(flat_grads)
+            self._record_gradient_diagnostics(
+                model_id,
+                mean_grads,
+                grad_norm,
+                flat_grads=flat_grads,
+            )
+        else:
+            # A single compiled program keeps every JAX controller on the same
+            # launch ID.  Calling optax.global_norm eagerly here emits hundreds
+            # of independent integer_pow reductions for a rank-32 adapter.
+            grad_norm = float(jax.device_get(_jitted_global_norm(mean_grads)))
 
         if not np.isfinite(grad_norm):
             # Belt-and-braces: never apply non-finite gradients (they would
@@ -1618,7 +1790,11 @@ class TunixBackend(AbstractBackend):
                 f"Sampler checkpoint {checkpoint_id} for model {model_id} was ephemeral and is no longer "
                 "in memory (engine restarted?). Re-run save_weights_for_sampler."
             )
-        lora_state = self._state_from_flat(slot.lora_state, payload["lora_weights"])
+        lora_state = self._state_from_flat(
+            slot.lora_state,
+            payload["lora_weights"],
+            payload.get("lora_layouts"),
+        )
         slot.sampler_lora_states[checkpoint_id] = lora_state
         return lora_state
 
@@ -2091,10 +2267,17 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ checkpointing
 
     @staticmethod
-    def _flat_numpy(state) -> dict[str, np.ndarray]:
+    def _global_numpy(value) -> np.ndarray:
+        """Materialize one possibly non-addressable global array on every host."""
+        if jax.process_count() > 1 and isinstance(value, jax.Array) and not value.is_fully_addressable:
+            value = multihost_utils.process_allgather(value, tiled=True)
+        return np.asarray(jax.device_get(value))
+
+    @classmethod
+    def _flat_numpy(cls, state) -> dict[str, np.ndarray]:
         out = {}
         for k, v in _keystr_map(state).items():
-            arr = np.asarray(jax.device_get(v))
+            arr = cls._global_numpy(v)
             if arr.dtype.kind == "V":
                 # npz cannot represent extension dtypes: bfloat16 saves as raw
                 # void bytes that np.load returns untyped. Store float32
@@ -2105,8 +2288,43 @@ class TunixBackend(AbstractBackend):
         return out
 
     @staticmethod
-    def _state_from_flat(target_state, flat: dict[str, np.ndarray]):
-        """Rebuild a pytree with target structure from a {keystr: array} dict."""
+    def _checkpoint_layouts(state) -> dict[str, dict[str, Any]]:
+        """Serialize array placement needed for numerically exact replay.
+
+        GSPMD can canonicalize an initially replicated LoRA leaf onto a TP/FSDP
+        sharding after its first update. Restoring only the values into that
+        newer layout can change reduction order, and therefore gradients, even
+        though the checkpoint values and pre-update logits are identical.
+        PartitionSpecs are topology-relative, so they remain valid when a spot
+        job is recreated on a fresh slice with the same mesh axes.
+        """
+        layouts: dict[str, dict[str, Any]] = {}
+        for key, value in _keystr_map(state).items():
+            sharding = getattr(value, "sharding", None)
+            spec = getattr(sharding, "spec", None)
+            if spec is None:
+                continue
+            encoded_spec = []
+            for axis in tuple(spec):
+                if axis is None or isinstance(axis, str):
+                    encoded_spec.append(axis)
+                elif isinstance(axis, tuple) and all(isinstance(name, str) for name in axis):
+                    encoded_spec.append(list(axis))
+                else:
+                    raise TypeError(f"Unsupported checkpoint sharding axis {axis!r} for {key}")
+            layouts[key] = {
+                "spec": encoded_spec,
+                "committed": bool(getattr(value, "committed", False)),
+            }
+        return layouts
+
+    @staticmethod
+    def _state_from_flat(
+        target_state,
+        flat: dict[str, np.ndarray],
+        layouts: dict[str, dict[str, Any]] | None = None,
+    ):
+        """Rebuild a pytree from values, preferring saved array placement."""
         target_map = _keystr_map(target_state)
         missing = set(target_map) - set(flat)
         extra = set(flat) - set(target_map)
@@ -2115,12 +2333,46 @@ class TunixBackend(AbstractBackend):
         leaves, treedef = jax.tree.flatten_with_path(target_state)
 
         def restore(path, leaf):
-            arr = flat[jax.tree_util.keystr(path)]
+            key = jax.tree_util.keystr(path)
+            arr = flat[key]
             dtype = np.dtype(leaf.dtype)
             if arr.dtype.kind == "V" and arr.dtype.itemsize == dtype.itemsize:
                 # Legacy checkpoint written before the float32 conversion in
                 # _flat_numpy: the void bytes are the target dtype verbatim.
                 arr = arr.view(dtype)
+            arr = np.asarray(arr, dtype=dtype)
+            sharding = getattr(leaf, "sharding", None)
+            layout = layouts.get(key) if layouts is not None else None
+            if layout is not None and sharding is not None and hasattr(sharding, "update"):
+                from jax.sharding import PartitionSpec as P
+
+                saved_spec = tuple(
+                    tuple(axis) if isinstance(axis, list) else axis
+                    for axis in layout.get("spec", [])
+                )
+                sharding = sharding.update(spec=P(*saved_spec))
+            if sharding is not None:
+                committed = (
+                    bool(layout["committed"])
+                    if layout is not None and "committed" in layout
+                    else bool(getattr(leaf, "committed", False))
+                )
+                if committed and jax.process_count() > 1:
+                    if not getattr(sharding, "is_fully_addressable", True):
+                        return jax.make_array_from_callback(
+                            arr.shape,
+                            sharding,
+                            lambda index, source=arr: source[index],
+                        )
+                # Preserve JAX's committed/uncommitted distinction.  Optax's
+                # scalar state (count and injected hyperparameters) starts as
+                # an uncommitted array, which lets JAX place it alongside a
+                # global multi-host gradient.  Explicitly device_put-ing that
+                # scalar onto each process's default TPU commits it to one
+                # device; the next optimizer step then rejects the scalar and
+                # global gradient as having incompatible device sets.
+                if committed:
+                    return jax.device_put(arr, sharding)
             return jnp.asarray(arr, dtype=dtype)
 
         return jax.tree.unflatten(treedef, [restore(p, leaf) for p, leaf in leaves])
@@ -2136,11 +2388,27 @@ class TunixBackend(AbstractBackend):
 
     def save_checkpoint(self, output_path: AnyPath, model_id: str) -> None:
         slot = self.models[model_id]
+        # These are collectives in multi-process mode; every process must
+        # finish them before process 0 enters filesystem/GCS work.
+        optimizer_state = nnx.state(slot.optimizer)
+        lora_layouts = self._checkpoint_layouts(slot.lora_state)
+        optimizer_layouts = self._checkpoint_layouts(optimizer_state)
+        lora_flat = self._flat_numpy(slot.lora_state)
+        optimizer_flat = self._flat_numpy(optimizer_state)
+        if jax.process_index() != 0:
+            return
         with pack_and_upload(AnyPath(output_path)) as tmp:
-            self._write_npz(tmp / "lora_weights.npz", self._flat_numpy(slot.lora_state))
-            self._write_npz(tmp / "optimizer_state.npz", self._flat_numpy(nnx.state(slot.optimizer)))
+            self._write_npz(tmp / "lora_weights.npz", lora_flat)
+            self._write_npz(tmp / "optimizer_state.npz", optimizer_flat)
             (tmp / _CHECKPOINT_META_FILE).write_text(
-                json.dumps({"lora_config": slot.lora_config.model_dump(), "format": "tunix_backend_v1"})
+                json.dumps(
+                    {
+                        "lora_config": slot.lora_config.model_dump(),
+                        "format": "tunix_backend_v2",
+                        "lora_layouts": lora_layouts,
+                        "optimizer_layouts": optimizer_layouts,
+                    }
+                )
             )
         logger.info(f"Saved training checkpoint to {output_path}")
 
@@ -2175,9 +2443,17 @@ class TunixBackend(AbstractBackend):
                 f"Rank mismatch: checkpoint has rank {ckpt_rank}, model configured with rank {slot.lora_config.rank}"
             )
 
-        slot.lora_state = self._state_from_flat(slot.lora_state, payload["lora_weights"])
+        slot.lora_state = self._state_from_flat(
+            slot.lora_state,
+            payload["lora_weights"],
+            payload.get("lora_layouts"),
+        )
         if "optimizer_state" in payload:
-            opt_state = self._state_from_flat(nnx.state(slot.optimizer), payload["optimizer_state"])
+            opt_state = self._state_from_flat(
+                nnx.state(slot.optimizer),
+                payload["optimizer_state"],
+                payload.get("optimizer_layouts"),
+            )
             nnx.update(slot.optimizer, opt_state)
         slot.accum_grads = None
         slot.accum_count = 0
@@ -2192,23 +2468,41 @@ class TunixBackend(AbstractBackend):
         slot.sampler_lora_states[checkpoint_id] = slot.lora_state
         slot.loaded_sampler_checkpoint_id = checkpoint_id
 
+        # Gather once, collectively, before gating external side effects. The
+        # same complete map feeds both PEFT export and the durable NPZ.
+        lora_layouts = self._checkpoint_layouts(slot.lora_state)
+        lora_flat = self._flat_numpy(slot.lora_state)
+
+        if jax.process_index() != 0:
+            return
+
         if self.vllm_client is not None:
             if self.config.vllm_lora_upload_endpoint:
                 # Push the adapter over HTTP straight to the vLLM server's
                 # local disk — no shared filesystem in the hot path.
-                self.vllm_client.push_adapter(model_id, checkpoint_id, self._peft_adapter_tar_bytes(slot))
+                self.vllm_client.push_adapter(
+                    model_id,
+                    checkpoint_id,
+                    self._peft_adapter_tar_bytes(slot, lora_flat),
+                )
             else:
                 # Fallback: write the PEFT dir into the shared lora_base_dir
                 # under the exact adapter name ensure_lora_loaded derives; its
                 # extractor early-returns on existing dirs, skipping the
                 # tar/extract round-trip through shared storage.
-                self._publish_peft_adapter(slot, model_id, checkpoint_id)
+                self._publish_peft_adapter(slot, model_id, checkpoint_id, lora_flat)
 
         if persist:
             with pack_and_upload(output_path) as tmp:
-                self._write_npz(tmp / "lora_weights.npz", self._flat_numpy(slot.lora_state))
+                self._write_npz(tmp / "lora_weights.npz", lora_flat)
                 (tmp / _CHECKPOINT_META_FILE).write_text(
-                    json.dumps({"lora_config": slot.lora_config.model_dump(), "format": "tunix_backend_v1"})
+                    json.dumps(
+                        {
+                            "lora_config": slot.lora_config.model_dump(),
+                            "format": "tunix_backend_v2",
+                            "lora_layouts": lora_layouts,
+                        }
+                    )
                 )
         else:
             with pack_and_upload(output_path) as tmp:
@@ -2221,21 +2515,31 @@ class TunixBackend(AbstractBackend):
             # push_adapter already loaded the adapter on the push path.
             self.vllm_client.ensure_lora_loaded(model_id, output_path, checkpoint_id=checkpoint_id)
 
-    def _peft_adapter_tar_bytes(self, slot: ModelSlot) -> bytes:
+    def _peft_adapter_tar_bytes(
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> bytes:
         """Serialize the HF-PEFT adapter export as an uncompressed in-memory tar."""
         import io
         import tarfile
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            self._export_peft_adapter(slot, Path(tmp))
+            self._export_peft_adapter(slot, Path(tmp), flat_lora)
             buf = io.BytesIO()
             with tarfile.open(fileobj=buf, mode="w:") as tar:
                 for f in sorted(Path(tmp).iterdir()):
                     tar.add(f, arcname=f.name)
             return buf.getvalue()
 
-    def _publish_peft_adapter(self, slot: ModelSlot, model_id: str, checkpoint_id: str) -> None:
+    def _publish_peft_adapter(
+        self,
+        slot: ModelSlot,
+        model_id: str,
+        checkpoint_id: str,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> None:
         """Atomically place the exported PEFT dir at <lora_base_dir>/<adapter-name>."""
         import shutil
         from skyrl.backends.vllm_sampling import _sanitize_lora_name
@@ -2247,7 +2551,7 @@ class TunixBackend(AbstractBackend):
         staging = target.with_name(target.name + ".staging")
         shutil.rmtree(staging, ignore_errors=True)
         staging.mkdir(parents=True)
-        self._export_peft_adapter(slot, staging)
+        self._export_peft_adapter(slot, staging, flat_lora)
         import os
 
         os.replace(staging, target)
@@ -2272,7 +2576,12 @@ class TunixBackend(AbstractBackend):
 
     # ------------------------------------------------------------------ HF-PEFT export
 
-    def _export_peft_adapter(self, slot: ModelSlot, out_dir: Path) -> None:
+    def _export_peft_adapter(
+        self,
+        slot: ModelSlot,
+        out_dir: Path,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> None:
         """Write adapter_model.safetensors + adapter_config.json (HF-PEFT layout).
 
         gpt-oss additionally writes moe_lora.safetensors + moe_lora.json: the
@@ -2283,14 +2592,14 @@ class TunixBackend(AbstractBackend):
 
         if self.config.model_source == "maxtext":
             if self._is_gptoss_lora(slot):
-                tensors, moe_tensors, moe_meta = self._peft_tensors_gptoss(slot)
+                tensors, moe_tensors, moe_meta = self._peft_tensors_gptoss(slot, flat_lora)
                 if moe_tensors:
                     st_numpy.save_file(moe_tensors, str(out_dir / "moe_lora.safetensors"))
                     (out_dir / "moe_lora.json").write_text(json.dumps(moe_meta, indent=2))
             else:
-                tensors = self._peft_tensors_maxtext(slot)
+                tensors = self._peft_tensors_maxtext(slot, flat_lora)
         else:
-            tensors = self._peft_tensors_native(slot)
+            tensors = self._peft_tensors_native(slot, flat_lora)
 
         st_numpy.save_file(tensors, str(out_dir / "adapter_model.safetensors"))
         # ...self_attn.q_proj.lora_A.weight -> "q_proj"
@@ -2307,15 +2616,19 @@ class TunixBackend(AbstractBackend):
         }
         (out_dir / "adapter_config.json").write_text(json.dumps(adapter_config, indent=2))
 
-    def _peft_tensors_native(self, slot: ModelSlot) -> dict[str, np.ndarray]:
+    def _peft_tensors_native(
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> dict[str, np.ndarray]:
         tensors: dict[str, np.ndarray] = {}
-        for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
-            keystr = jax.tree_util.keystr(path)
+        flat_lora = flat_lora if flat_lora is not None else self._flat_numpy(slot.lora_state)
+        for keystr, leaf in flat_lora.items():
             hf_module = self._qwix_path_to_hf_module(keystr)
             if hf_module is None:
                 logger.warning("Skipping unmapped LoRA param %s in PEFT export", keystr)
                 continue
-            arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
+            arr = np.asarray(leaf, dtype=np.float32)
             if "_lora_a" in keystr:
                 # qwix lora_a: (in, r) -> PEFT lora_A.weight: (r, in)
                 tensors[f"base_model.model.{hf_module}.lora_A.weight"] = np.ascontiguousarray(arr.T)
@@ -2333,7 +2646,9 @@ class TunixBackend(AbstractBackend):
         )
 
     def _peft_tensors_gptoss(
-        self, slot: ModelSlot
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
     ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict]:
         """Split gpt-oss LoRA state into (attention PEFT tensors, MoE factors, meta).
 
@@ -2354,8 +2669,8 @@ class TunixBackend(AbstractBackend):
         moe: dict[str, np.ndarray] = {}
         entries = []
         groups: set[int] = set()
-        for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
-            keystr = jax.tree_util.keystr(path)
+        flat_lora = flat_lora if flat_lora is not None else self._flat_numpy(slot.lora_state)
+        for keystr, leaf in flat_lora.items():
             names = [a or b for a, b in re.findall(r"\['([A-Za-z_0-9]+)'\]|\[(\d+)\]", keystr)]
             group_name = next((n for n in names if re.fullmatch(r"layers_[0-9]+", n)), None)
             if group_name is None:
@@ -2363,7 +2678,7 @@ class TunixBackend(AbstractBackend):
                 continue
             group = int(group_name.split("_")[1])
             groups.add(group)
-            arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
+            arr = np.asarray(leaf, dtype=np.float32)
             entries.append((group, names, arr, keystr))
         n_groups = max(groups) + 1 if groups else 1
 
@@ -2418,7 +2733,11 @@ class TunixBackend(AbstractBackend):
         }
         return attn, moe, meta
 
-    def _peft_tensors_maxtext(self, slot: ModelSlot) -> dict[str, np.ndarray]:
+    def _peft_tensors_maxtext(
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> dict[str, np.ndarray]:
         """MaxText LoRA params are stacked over the scanned layer axis (axis 1).
 
         Two layer layouts are handled, distinguished per-path by
@@ -2441,14 +2760,14 @@ class TunixBackend(AbstractBackend):
         # must also carry the composite-model HF names.
         composite_model = self._maxtext_model_name().startswith("gemma4")
 
-        for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
-            keystr = jax.tree_util.keystr(path)
+        flat_lora = flat_lora if flat_lora is not None else self._flat_numpy(slot.lora_state)
+        for keystr, leaf in flat_lora.items():
             parsed = self._maxtext_path_to_hf(keystr)
             if parsed is None:
                 logger.warning("Skipping unmapped MaxText LoRA param %s in PEFT export", keystr)
                 continue
             hf_block, hf_proj, is_a, inner = parsed
-            arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
+            arr = np.asarray(leaf, dtype=np.float32)
             if arr.ndim != 3:
                 logger.warning("Unexpected MaxText LoRA shape %s for %s; skipping", arr.shape, keystr)
                 continue
@@ -2477,6 +2796,7 @@ class TunixBackend(AbstractBackend):
                 suffix = "lora_A.weight" if is_a else "lora_B.weight"
                 tensors[f"{name}.{suffix}"] = np.ascontiguousarray(per_layer.T)
         return tensors
+
 
     @staticmethod
     def _maxtext_path_to_hf(keystr: str) -> tuple[str, str, bool, int | None] | None:
@@ -2551,3 +2871,93 @@ class TunixBackend(AbstractBackend):
         if block not in block_map:
             return None
         return f"model.layers.{layer_idx}.{block_map[block]}.{proj}"
+
+
+class DistributedTunixBackend(TunixBackend):
+    """Process-0 Tunix facade that keeps all trainer processes in RPC order."""
+
+    def __init__(self, base_model: str, config: TunixBackendConfig):
+        self.process_id = 0
+        if config.coordinator_address is not None:
+            if config.num_processes is None:
+                raise ValueError("num_processes is required when coordinator_address is set")
+            jax.distributed.initialize(
+                coordinator_address=config.coordinator_address,
+                num_processes=config.num_processes,
+                process_id=self.process_id,
+            )
+            logger.info(
+                "Tunix JAX distributed initialized: process_id=%s (%s total), "
+                "local_devices=%s, global_devices=%s",
+                self.process_id,
+                jax.process_count(),
+                jax.local_device_count(),
+                jax.device_count(),
+            )
+
+        if jax.process_count() > 1:
+            broadcast_command(
+                RpcPayload(
+                    method="__init__",
+                    backend_name="tunix",
+                    kwargs={
+                        "base_model": base_model,
+                        "config": serialize_config(TunixBackendConfig, config),
+                    },
+                ),
+                process_id=self.process_id,
+            )
+        super().__init__(base_model=base_model, config=config)
+
+    def _broadcast_and_call(self, method: str, **kwargs):
+        if jax.process_count() > 1:
+            broadcast_command(
+                RpcPayload(
+                    method=method,
+                    kwargs=serialize_call_kwargs(TunixBackend, method, kwargs),
+                ),
+                process_id=self.process_id,
+            )
+        local_method = getattr(super(), method)
+        if jax.process_count() > 1:
+            return call_with_rpc_ack(local_method, kwargs)
+        return local_method(**kwargs)
+
+    def create_model(self, model_id: str, lora_config: types.LoraConfig, model_role: str = "policy") -> None:
+        self._broadcast_and_call(
+            "create_model",
+            model_id=model_id,
+            lora_config=lora_config,
+            model_role=model_role,
+        )
+
+    def delete_model(self, model_id: str) -> None:
+        self._broadcast_and_call("delete_model", model_id=model_id)
+
+    def forward_backward(self, prepared_batch: types.PreparedModelPassBatch):
+        return self._broadcast_and_call("forward_backward", prepared_batch=prepared_batch)
+
+    def forward(self, prepared_batch: types.PreparedModelPassBatch):
+        return self._broadcast_and_call("forward", prepared_batch=prepared_batch)
+
+    def optim_step(self, model_id: str, request_data: types.OptimStepInput):
+        return self._broadcast_and_call("optim_step", model_id=model_id, request_data=request_data)
+
+    def sample(self, prepared_batch: types.PreparedSampleBatch):
+        if self.config.inference_backend == "vllm" and not prepared_batch.needs_prompt_logprobs:
+            return TunixBackend.sample(self, prepared_batch)
+        return self._broadcast_and_call("sample", prepared_batch=prepared_batch)
+
+    def save_checkpoint(self, output_path: AnyPath, model_id: str) -> None:
+        self._broadcast_and_call("save_checkpoint", output_path=output_path, model_id=model_id)
+
+    def load_checkpoint(self, checkpoint_path: AnyPath, model_id: str) -> None:
+        self._broadcast_and_call("load_checkpoint", checkpoint_path=checkpoint_path, model_id=model_id)
+
+    def save_sampler_checkpoint(self, output_path: AnyPath, model_id: str, persist: bool = True) -> None:
+        self._broadcast_and_call(
+            "save_sampler_checkpoint",
+            output_path=output_path,
+            model_id=model_id,
+            persist=persist,
+        )
