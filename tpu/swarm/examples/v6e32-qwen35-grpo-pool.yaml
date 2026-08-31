@@ -101,4 +101,22 @@ setup: |
   ln -sfn "$destination" "$root"
   export SKYRL_REPO_DIR="$root"
   export TPUSWARM_BUNDLE_GENERATION="$generation"
+
+  # Capacity requests can run concurrently with the one-time Neuronic cache
+  # seed, but no TPU VM may fall through to Hugging Face independently.  Pool
+  # setup blocks here until the uploader writes its marker last.
+  hf_ready=0
+  for _attempt in $(seq 1 240); do
+    if gcloud storage objects describe \
+      "$HF_CACHE_GCS/HF_CACHE_COMPLETE" --format='value(name)' \
+      >/dev/null 2>&1; then
+      hf_ready=1
+      break
+    fi
+    sleep 30
+  done
+  if [ "$hf_ready" != "1" ]; then
+    echo "regional Qwen HF cache did not become ready within two hours" >&2
+    exit 1
+  fi
   bash "$root/tpu/swarm/prepare_qwen35_v6e32.sh"
