@@ -6,11 +6,30 @@ REPO=$(git rev-parse --show-toplevel)
 BUNDLE_URL=${1:-gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v1.tar.gz}
 STAGING=$(mktemp -d)
 ARCHIVE="$STAGING/tpuswarm-skyrl.tar.gz"
+MANIFEST="$STAGING/.tpuswarm-bundle-manifest"
 
 cleanup() {
   rm -rf -- "$STAGING"
 }
 trap cleanup EXIT
+
+PARENT_COMMIT=$(git -C "$REPO" rev-parse HEAD)
+if [ -n "$(git -C "$REPO" status --porcelain --untracked-files=normal)" ]; then
+  if [ "${TPUSWARM_BUNDLE_ALLOW_DIRTY:-0}" != "1" ]; then
+    echo "refusing to publish an uncommitted source bundle" >&2
+    echo "commit the parent repository, or set TPUSWARM_BUNDLE_ALLOW_DIRTY=1 for a local dry run" >&2
+    exit 2
+  fi
+  SOURCE_DIRTY=true
+else
+  SOURCE_DIRTY=false
+fi
+{
+  printf 'parent_commit=%s\n' "$PARENT_COMMIT"
+  printf 'source_dirty=%s\n' "$SOURCE_DIRTY"
+  printf 'built_at=%s\n' "$(date -u +%FT%TZ)"
+  git -C "$REPO" submodule status --recursive | sed 's/^/submodule=/'
+} > "$MANIFEST"
 
 # Keep credentials and local runtime state out of the shared worker artifact.
 # Runtime credentials belong in SkyPilot `secrets`, not in a checked-out .env.
@@ -29,6 +48,8 @@ tar -czf "$ARCHIVE" -C "$REPO" \
   --exclude='*/.pytest_cache' \
   --exclude='.ruff_cache' \
   --exclude='*/.ruff_cache' \
+  --exclude='.mypy_cache' \
+  --exclude='*/.mypy_cache' \
   --exclude='skyrl.egg-info' \
   --exclude='runs' \
   --exclude='*/runs' \
@@ -38,7 +59,8 @@ tar -czf "$ARCHIVE" -C "$REPO" \
   --exclude='*/wandb' \
   --exclude='*.log' \
   --exclude='*.tar.gz' \
-  .
+  . \
+  -C "$STAGING" .tpuswarm-bundle-manifest
 
 SHA256=$(sha256sum "$ARCHIVE" | awk '{print $1}')
 if [ "${TPUSWARM_BUNDLE_DRY_RUN:-0}" = "1" ]; then

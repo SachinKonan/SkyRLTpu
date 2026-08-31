@@ -1,0 +1,20 @@
+{
+  "task_id": "qwen35-v6e32-grpo-001",
+  "idempotency_key": "qwen35-v6e32-grpo-001",
+  "kind": "skyrl.qwen35.v6e32_grpo.v1",
+  "resource_class": "gcp-tpu-v6e-32-asia",
+  "priority": 500,
+  "recovery_priority": 900,
+  "payload": {
+    "run_dir": "qwen35-v6e32-grpo-001",
+    "experiment_name": "qwen35-v6e32-grpo-001",
+    "num_epochs": 15,
+    "repo_dir": "/home/sk7524_princeton_edu/SkyRLTpu-tpuswarm",
+    "pool": "tpuswarm-v6e32-asia-qwen35",
+    "secrets": {
+      "HF_TOKEN": null,
+      "WANDB_API_KEY": null
+    },
+    "env": {}
+  }
+}

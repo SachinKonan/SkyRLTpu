@@ -1,0 +1,104 @@
+# Five complete mixed v6e-32 slices in one quota island.  TPUSwarm admission
+# keeps at most four ordinary jobs active so the fifth warm slice is reserved
+# for blocking recovery.
+pool:
+  workers: 5
+  min_workers: 5
+  max_workers: 5
+  queue_length_threshold: 1
+  upscale_delay_seconds: 60
+  downscale_delay_seconds: 1200
+
+resources:
+  cloud: gcp
+  region: asia-northeast1
+  zone: asia-northeast1-b
+  accelerators: tpu-v6e-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv6e
+  use_spot: true
+  disk_size: 150
+
+envs:
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-qwen35-v6e32-v1.tar.gz
+  CELL: grpo-n
+  ZONE: asia-northeast1-b
+
+  # ranks 0..3 = 16-chip TP8/FSDP2 trainer; ranks 4..7 = four TP4 engines.
+  TRAIN_WORKERS: 0,1,2,3
+  VLLM_WORKERS: 4,5,6,7
+  TRAIN_TP_SIZE: "8"
+  TRAIN_FSDP_SIZE: "2"
+  TUNIX_ROW_SHARD: "2"
+  TRAIN_TPU_PROCESS_BOUNDS: 2,2,1
+  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
+  VLLM_TP_SIZE: "4"
+  VLLM_ENGINES_PER_HOST: "1"
+  VLLM_MAX_MODEL_LEN: "22528"
+  CELL_START_VLLM: "1"
+  CELL_SYNC_SKYRL: "0"
+  VLLM_RAY_EXECUTOR: "0"
+  VLLM_CLIENT_SIDE_ROUND_ROBIN: "1"
+
+  # Rank-32, full 22,528 rows, two rows per forward/backward call.
+  LORA_RANK: "32"
+  TUNIX_MAX_TARGET_LENGTH: "22528"
+  TUNIX_UNIFORM_SEQ_LEN: "22528"
+  TUNIX_TRAIN_TOKEN_BUDGET: "45056"
+
+  # All persistent state remains in asia-northeast1.  The HF/JAX/XLA prefixes
+  # are intentionally v6e-specific and may be empty on the first warm-up.
+  TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts
+  TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e-qwen35-tp8-fsdp2-r32-s22528-b45056-v1
+  VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/vllm-xla-cache-v6e-qwen35-tp4-s22528-v1
+  HF_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/hf-cache-qwen35-v1
+
+setup: |
+  set -euo pipefail
+  wait_for_apt() {
+    local waited=0
+    while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      if [ "$waited" -ge 600 ]; then return 1; fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+  }
+  if ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then
+    wait_for_apt
+    sudo apt-get update -y
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      git curl tmux python3 python3-venv python3-pip build-essential
+  fi
+  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+
+  root="$HOME/SkyRLTpu-tpuswarm"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -x "$staging/tpu/swarm/run_qwen35_v6e32_grpo.sh"
+    test -f "$staging/third_party/TPUSwarm/pyproject.toml"
+    test -f "$staging/.tpuswarm-bundle-manifest"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  if [ -e "$root" ] && [ ! -L "$root" ]; then
+    echo "$root exists and is not a TPUSwarm-managed symlink" >&2
+    exit 1
+  fi
+  ln -sfn "$destination" "$root"
+  export SKYRL_REPO_DIR="$root"
+  export TPUSWARM_BUNDLE_GENERATION="$generation"
+  bash "$root/tpu/swarm/prepare_qwen35_v6e32.sh"

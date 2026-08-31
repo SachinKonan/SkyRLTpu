@@ -14,7 +14,8 @@ set -euo pipefail
 
 export PATH="$HOME/.local/bin:$PATH"
 REPO="${SKYRL_REPO_DIR:-$HOME/SkyRLTpu-league}"
-KEY="$HOME/.ssh/jobman_tpu_ed25519"
+KEY="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
+REMOTE_USER="${REMOTE_USER:-sk7524_princeton_edu}"
 SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
 INT="$JOBMAN_TPU_INTERNAL_IPS"
 W0INT=$(echo "$INT" | cut -d, -f1)
@@ -27,6 +28,7 @@ TRAIN_IDXS="${TRAIN_WORKERS:-0}"
 VLLM_IDXS="${VLLM_WORKERS-$DEFAULT_VLLM_IDXS}"
 EXTERNAL_VLLM_URLS="${VLLM_BASE_URL_OVERRIDE:-}"
 START_LOCAL_VLLM="${CELL_START_VLLM:-1}"
+CELL_SYNC_SKYRL="${CELL_SYNC_SKYRL:-1}"
 TRAIN_TP_SIZE="${TRAIN_TP_SIZE:-4}"
 TRAIN_FSDP_SIZE="${TRAIN_FSDP_SIZE:-auto}"
 TRAIN_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS:-auto}"
@@ -256,6 +258,21 @@ case "$CELL" in
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     ;;
 esac
+
+# Deployment overrides.  The model cases above remain the proven v5p defaults;
+# a topology-specific launcher can select a different validated sequence shape,
+# serving layout, or same-region cache without forking this orchestration path.
+MAXTGT="${TUNIX_MAX_TARGET_LENGTH:-$MAXTGT}"
+BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-$BUDGET}"
+UNIFORM="${TUNIX_UNIFORM_SEQ_LEN:-$UNIFORM}"
+VLLM_LEN="${VLLM_MAX_MODEL_LEN:-$VLLM_LEN}"
+TP_SIZE="${VLLM_TP_SIZE:-$TP_SIZE}"
+ENGINES_PER_HOST="${VLLM_ENGINES_PER_HOST:-$ENGINES_PER_HOST}"
+MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-$MAX_NUM_SEQS}"
+XLA_GCS="${VLLM_XLA_CACHE_GCS:-$XLA_GCS}"
+JAX_CACHE_GCS="${TUNIX_JAX_CACHE_GCS:-$JAX_CACHE_GCS}"
+HF_GCS="${HF_CACHE_GCS:-$HF_GCS}"
+VLLM_XARGS="${VLLM_EXTRA_ARGS:-$VLLM_XARGS}"
 pick_tiles() {
   case "$MAXTEXT_MODEL" in
     gemma4-31b)
@@ -354,7 +371,7 @@ elif ! tinker_healthy && vllm_healthy; then
   tmux kill-session -t skyrl-tinker 2>/dev/null || true; sleep 3
   pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
-    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
+    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_BASE_URL_OVERRIDE="$EXTERNAL_VLLM_URLS" \
     TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
@@ -371,6 +388,7 @@ elif ! tinker_healthy && vllm_healthy; then
     TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     TUNIX_JAX_CACHE_LOCAL="$JAX_CACHE_LOCAL" TUNIX_JAX_CACHE_GCS="$JAX_CACHE_GCS" \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
+    REMOTE_SKYRL_DIR="$REPO" \
     READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/tinker-restart.log 2>&1 || true
   if ! tinker_healthy; then
@@ -383,7 +401,7 @@ elif ! tinker_healthy && vllm_healthy; then
     tail -6 ~/tinker-restart.log 2>/dev/null || true
     for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
       ip="$(worker_ip "$worker")"
-      timeout 60 ssh $SSHO sk7524_princeton_edu@"$ip" \
+      timeout 60 ssh $SSHO "$REMOTE_USER"@"$ip" \
         "tmux kill-session -t skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
     done
     exit 1
@@ -402,7 +420,7 @@ else
   # does not fit (1/9 steps trained). Non-K JSSP keeps the faster tiles.
   pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
-    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER=sk7524_princeton_edu SSH_KEY_FILE="$KEY" \
+    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
     VLLM_BASE_URL_OVERRIDE="$EXTERNAL_VLLM_URLS" \
     TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
@@ -419,11 +437,12 @@ else
     TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
     TUNIX_JAX_CACHE_LOCAL="$JAX_CACHE_LOCAL" TUNIX_JAX_CACHE_GCS="$JAX_CACHE_GCS" \
     SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
-    VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=$MAX_NUM_SEQS VLLM_XLA_CACHE_PATH=/home/sk7524_princeton_edu/vllm-xla-cache-local \
+    VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=$MAX_NUM_SEQS VLLM_XLA_CACHE_PATH="$HOME/vllm-xla-cache-local" \
     VLLM_XLA_CACHE_GCS="$XLA_GCS" \
     HF_CACHE_GCS="$HF_GCS" \
     VLLM_EXTRA_ARGS="$VLLM_XARGS" \
-    READY_ATTEMPTS=900 SYNC_SKYRL=1 START_VLLM="$START_LOCAL_VLLM" START_TINKER=1 \
+    REMOTE_SKYRL_DIR="$REPO" \
+    READY_ATTEMPTS=900 SYNC_SKYRL="$CELL_SYNC_SKYRL" START_VLLM="$START_LOCAL_VLLM" START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || true
   curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 \
     || { echo "engine bring-up FAILED"; tail -8 ~/engine-bringup.log; exit 1; }
@@ -440,7 +459,7 @@ fi
 RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray; print(ray.__version__)")
 for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
   ip="$(worker_ip "$worker")"
-  timeout 900 ssh $SSHO sk7524_princeton_edu@"$ip" "
+  timeout 900 ssh $SSHO "$REMOTE_USER"@"$ip" "
     export PATH=\$HOME/.local/bin:\$PATH
     pgrep -f '[r]ay/core' >/dev/null && { echo \"ray already on \$(hostname)\"; exit 0; }
     [ -x ~/.venvs/grader/bin/ray ] || {
