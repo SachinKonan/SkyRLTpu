@@ -62,6 +62,8 @@ case "$CELL" in
     HF_OFFLINE=0
     CTX=18432; PHASE1=13824 ;;
 esac
+CTX="${CONTEXT_WINDOW:-$CTX}"
+PHASE1="${PHASE1_MAX_TOKENS:-$PHASE1}"
 
 # ---- durable run state -----------------------------------------------------
 for _r in 1 2 3; do
@@ -126,11 +128,12 @@ _rereg() {  # $1 = jsonl path
   if [ "$REREG_HOST" = local ]; then
     python3 ~/ttd-client/tpu/reregister_states.py --base-model "$MODEL_HF" --jsonl "$1" 2>&1 | tail -2
   else
-    local K="$HOME/.ssh/jobman_tpu_ed25519"
+    local K="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
+    local U="${REMOTE_USER:-sk7524_princeton_edu}"
     local O="-i $K -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
-    timeout 60 scp $O ~/ttd-client/tpu/reregister_states.py       sk7524_princeton_edu@"$REREG_HOST":~/reregister_states.py >/dev/null 2>&1
-    timeout 60 scp $O "$1" sk7524_princeton_edu@"$REREG_HOST":~/rr_$(basename "$1") >/dev/null 2>&1
-    timeout 90 ssh $O sk7524_princeton_edu@"$REREG_HOST"       "python3 ~/reregister_states.py --base-model '$MODEL_HF' --jsonl ~/rr_$(basename "$1")" 2>/dev/null | tail -2
+    timeout 60 scp $O ~/ttd-client/tpu/reregister_states.py       "$U"@"$REREG_HOST":~/reregister_states.py >/dev/null 2>&1
+    timeout 60 scp $O "$1" "$U"@"$REREG_HOST":~/rr_$(basename "$1") >/dev/null 2>&1
+    timeout 90 ssh $O "$U"@"$REREG_HOST"       "python3 ~/reregister_states.py --base-model '$MODEL_HF' --jsonl ~/rr_$(basename "$1")" 2>/dev/null | tail -2
   fi
 }
 _jsonl=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/"$MEMBER_DIR"/checkpoints.jsonl 2>/dev/null | head -1)

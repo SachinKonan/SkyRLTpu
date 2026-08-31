@@ -144,3 +144,62 @@ process and enforces equal-step resume. Until that controller is extracted to
 durable state and member checkpoints publish barrier sequences, the whole
 existing ensemble must remain one `AutoResumable` leaf. Splitting it into child
 jobs without that refactor would not be correct.
+
+## Mixed v6e-32 Qwen GRPO pool
+
+[`v6e32-qwen35-grpo-pool.yaml`](examples/v6e32-qwen35-grpo-pool.yaml) is the
+single-zone production shape for Qwen3.5-27B. One pool worker is one complete
+`v6e-32` slice (8 TPU VMs / 32 chips), not one physical host:
+
+- ranks 0-3: 16-chip trainer, TP8 x FSDP2 (two physical hosts);
+- ranks 4-7: four independent TP4 vLLM engines (two physical hosts);
+- rank-32 LoRA, 22,528-token context, and a 45,056-token trainer budget;
+- GRPO mean baseline, 16 groups x 32 rollouts, streamed asynchronously;
+- checkpoints, run state, HF weights, and v6e executable caches remain in the
+  `sk7524-tinker-tpu-asia-northeast1` bucket.
+
+The pool pins `asia-northeast1-b`, uses GCP queued resources, and keeps exactly
+five complete slices warm. The TPUSwarm admission policy below admits at most
+four ordinary jobs, preserving one already-warm slice for recovery:
+
+```bash
+curl -fsS -X PUT "$TPUSWARM_SERVER/v1/resources/gcp-tpu-v6e-32-asia" \
+  -H "Authorization: Bearer $TPUSWARM_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"target_workers": 5, "recovery_reserve": 1}'
+```
+
+Before allocating the pool, seed the public Qwen weights once from a Neuronic
+CPU allocation. This prevents twenty serving TPU VMs from racing to download
+the same checkpoint and does not request a GCP CPU VM (the `vision-mix` TRC
+project has TPU-only capacity):
+
+```bash
+srun -p cpu --time=02:00:00 --cpus-per-task=8 --mem=16G \
+  bash tpu/swarm/stage_qwen35_hf_cache.sh
+```
+
+Publish only from a clean parent worktree. The bundle embeds a manifest with
+the exact parent and recursive submodule commits; the GCS object generation and
+SHA-256 additionally pin the bytes used by pool setup:
+
+```bash
+bash tpu/swarm/build_skyrl_bundle.sh \
+  gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-qwen35-v6e32-v1.tar.gz
+
+sky jobs pool apply --pool tpuswarm-v6e32-asia-qwen35 \
+  tpu/swarm/examples/v6e32-qwen35-grpo-pool.yaml -y
+```
+
+Submit the first idempotent training task after the five workers report ready:
+
+```bash
+uv run --isolated --extra swarm python tpu/swarm/submit_qwen35_grpo.py \
+  --task-id qwen35-v6e32-grpo-001 \
+  --run-dir qwen35-v6e32-grpo-001
+```
+
+Infrastructure loss, preemption, and capacity failures recover without a fixed
+attempt limit. Exit codes 33/34 also recover without consuming the application
+retry allowance; other nonzero application exits receive three restarts (four
+total attempts). `FAILOVER` intentionally preserves the single-zone placement.
