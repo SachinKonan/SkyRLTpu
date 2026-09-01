@@ -16,6 +16,8 @@ INT="$JOBMAN_TPU_INTERNAL_IPS"
 LORA_RANK="${TUNIX_LORA_RANK:-32}"
 SMOKE_ROWS="${TUNIX_SMOKE_ROWS:-4}"
 SMOKE_REPLAYS="${TUNIX_SMOKE_REPLAYS:-1}"
+SMOKE_EXTRA_UPDATES="${TUNIX_SMOKE_EXTRA_UPDATES:-0}"
+REQUIRE_SPARSE_EXPERT_GRADIENTS="${TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS:-0}"
 TRAIN_TP_SIZE="${TRAIN_TP_SIZE:-8}"
 TRAIN_FSDP_SIZE="${TRAIN_FSDP_SIZE:-2}"
 TUNIX_ROW_SHARD="${TUNIX_ROW_SHARD:-$TRAIN_FSDP_SIZE}"
@@ -44,6 +46,14 @@ MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3.5-27B}"
 MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-qwen3.5-27b}"
 DEFAULT_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939977ac0ab79a4e64d21730936f253567"
 case "$MAXTEXT_MODEL_NAME" in
+  gpt-oss-20b)
+    # GPT-OSS expert projections stay on MaxText's routed-token MegaBlox/GMM
+    # path. Generic Qwix handles attention/router; the pinned MaxText fork
+    # installs the six explicit sparse expert factors consumed by that GMM.
+    DEFAULT_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@b77f9f358a1dd9b223fcc16792b7d5c2530d7044"
+    DEFAULT_MAXTEXT_KWARGS='{"sparse_matmul":true,"megablox":true,"num_vocab_tiling":64,"remat_policy":"full","allow_split_physical_axes":true}'
+    DEFAULT_FLCE_TILE_SIZE=512
+    ;;
   gemma4-31b)
     # Gemma-4 has 16 local KV heads (already TP8-divisible) but only four
     # global KV heads.  Pad just the global projections to eight; MaxText's
@@ -188,14 +198,24 @@ env \
   done ) &
 CACHE_PUBLISHER_PID=$!
 
+SMOKE_ARGS=(
+  --base-model "$MODEL_NAME"
+  --rank "$LORA_RANK"
+  --rows "$SMOKE_ROWS"
+  --replays "$SMOKE_REPLAYS"
+  --extra-updates "$SMOKE_EXTRA_UPDATES"
+  --sequence-length "$UNIFORM"
+  --output "$HOME/v6e-tunix-smoke.json"
+)
+if [ "$REQUIRE_SPARSE_EXPERT_GRADIENTS" = "1" ]; then
+  SMOKE_ARGS+=(
+    --gradient-diagnostics "$HOME/tunix-replay-diagnostics-process-0.jsonl"
+    --require-sparse-expert-gradients
+  )
+fi
+
 set +e
-"$REPO/.venv/bin/python" "$REPO/tpu/v6e_tunix_smoke.py" \
-  --base-model "$MODEL_NAME" \
-  --rank "$LORA_RANK" \
-  --rows "$SMOKE_ROWS" \
-  --replays "$SMOKE_REPLAYS" \
-  --sequence-length "$UNIFORM" \
-  --output "$HOME/v6e-tunix-smoke.json" \
+"$REPO/.venv/bin/python" "$REPO/tpu/v6e_tunix_smoke.py" "${SMOKE_ARGS[@]}" \
   2>&1 | tee "$HOME/v6e-tunix-smoke.log"
 SMOKE_RC=${PIPESTATUS[0]}
 set -e

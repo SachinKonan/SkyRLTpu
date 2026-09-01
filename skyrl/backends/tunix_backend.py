@@ -640,6 +640,13 @@ class TunixBackend(AbstractBackend):
             overrides["sparse_matmul"] = True
             overrides["megablox"] = True
         overrides.update(self.config.maxtext_kwargs)
+        if "gpt-oss" in mt_name and (
+            overrides.get("sparse_matmul") is not True or overrides.get("megablox") is not True
+        ):
+            raise ValueError(
+                "GPT-OSS expert LoRA requires sparse_matmul=true and megablox=true; "
+                "the dense fallback is intentionally unsupported"
+            )
         argv = ["", "base.yml"] + [
             f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in overrides.items()
         ]

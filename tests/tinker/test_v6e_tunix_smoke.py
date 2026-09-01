@@ -1,20 +1,32 @@
 import json
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import yaml
 
-from tpu.v6e_tunix_smoke import logprob_vector, make_datum, vector_hash
 from skyrl.backends.tunix_backend import TunixBackend
-
+from tpu.v6e_tunix_smoke import (
+    load_gradient_diagnostics,
+    logprob_vector,
+    make_datum,
+    sparse_expert_gradient_summary,
+    vector_hash,
+)
 
 _WORKER_SCRIPT = Path(__file__).parents[2] / "tpu" / "jobman" / "v6e_tunix_smoke_worker.sh"
 _COLOCATED_LAUNCHER = Path(__file__).parents[2] / "tpu" / "start_colocated_vllm_tinker.sh"
 _GEMMA_TP4_CONFIG = Path(__file__).parents[2] / "tpu" / "jobman" / "configs" / "v6e_gemma_tp4_fsdp4_smoke.yaml"
 _GEMMA_TP4_ASIA_CONFIG = (
     Path(__file__).parents[2] / "tpu" / "jobman" / "configs" / "v6e_gemma_tp4_fsdp4_smoke_asia_ne1.yaml"
+)
+_GPTOSS_SPARSE_CONFIG = (
+    Path(__file__).parents[2]
+    / "tpu"
+    / "jobman"
+    / "configs"
+    / "v6e_gptoss20b_sparse_lora_tp8_fsdp2_smoke.yaml"
 )
 
 
@@ -58,6 +70,51 @@ def test_dense_datum_has_exactly_the_requested_number_of_valid_tokens():
     assert len(datum.loss_fn_inputs["target_tokens"].data) == 17
     assert len(datum.loss_fn_inputs["weights"].data) == 17
     assert sum(datum.loss_fn_inputs["weights"].data) == 15
+
+
+def test_sparse_expert_gradient_gate_observes_zero_b_initialization(tmp_path):
+    def record(index, norms):
+        return {
+            "kind": "mean_gradient",
+            "index": index,
+            "leaves": {f"['GptOssMlp']['{name}']['value']": {"norm": norm} for name, norm in norms.items()},
+        }
+
+    initial = {name: 0.0 for name in (
+        "wi_0_lora_a",
+        "wi_1_lora_a",
+        "wo_lora_a",
+    )}
+    initial.update({name: 1.0 for name in (
+        "wi_0_lora_b",
+        "wi_1_lora_b",
+        "wo_lora_b",
+    )})
+    second = {name: 2.0 for name in (
+        "wi_0_lora_a",
+        "wi_0_lora_b",
+        "wi_1_lora_a",
+        "wi_1_lora_b",
+        "wo_lora_a",
+        "wo_lora_b",
+    )}
+    path = tmp_path / "gradients.jsonl"
+    path.write_text("\n".join(json.dumps(value) for value in (record(1, second), record(0, initial))) + "\n")
+
+    records = load_gradient_diagnostics(path)
+    summary = sparse_expert_gradient_summary(records)
+
+    assert [value["index"] for value in records] == [0, 1]
+    assert summary["pass"] is True
+    assert summary["initial"]["wi_0_lora_a"] == 0.0
+    assert summary["after_first_update"]["wi_0_lora_a"] == 2.0
+
+
+def test_sparse_expert_gradient_gate_rejects_missing_second_record():
+    summary = sparse_expert_gradient_summary([])
+
+    assert summary["pass"] is False
+    assert "at least two" in summary["failures"][0]
 
 
 def test_gradient_diagnostic_records_per_leaf_hashes(tmp_path, monkeypatch):
@@ -126,10 +183,41 @@ def test_worker_uses_rank_32_and_dense_uniform_sequences_by_default():
     assert '--rank "$LORA_RANK"' in script
     assert '--rows "$SMOKE_ROWS"' in script
     assert '--replays "$SMOKE_REPLAYS"' in script
+    assert '--extra-updates "$SMOKE_EXTRA_UPDATES"' in script
     assert '--sequence-length "$UNIFORM"' in script
     assert 'TUNIX_REPLAY_DIAGNOSTICS="${TUNIX_REPLAY_DIAGNOSTICS:-0}"' in script
     assert 'TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-0}"' in script
     assert "TUNIX_SMOKE_DIAGNOSTIC_ACCEPT_FAILURE" in script
+    assert "TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS" in script
+
+
+def test_worker_has_pinned_native_sparse_gptoss_profile():
+    script = _WORKER_SCRIPT.read_text()
+    profile = script.split("gpt-oss-20b)", 1)[1].split(";;", 1)[0]
+
+    assert "b77f9f358a1dd9b223fcc16792b7d5c2530d7044" in profile
+    assert '"sparse_matmul":true' in profile
+    assert '"megablox":true' in profile
+
+
+def test_gptoss_sparse_smoke_uses_two_updates_and_unique_durable_state():
+    config = yaml.safe_load(_GPTOSS_SPARSE_CONFIG.read_text())
+    spec = config["resumable"]["run_spec"]
+    env = config["resumable"]["env"]
+
+    assert config["tpu"]["accelerator"] == "v6e-16"
+    assert spec["topology"] == "tp8-fsdp2"
+    assert spec["sparse_matmul"] is True
+    assert spec["megablox"] is True
+    assert env["MODEL_NAME"] == "openai/gpt-oss-20b"
+    assert env["TRAIN_TP_SIZE"] == "8"
+    assert env["TRAIN_FSDP_SIZE"] == "2"
+    assert env["TUNIX_SMOKE_EXTRA_UPDATES"] == "1"
+    assert env["TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS"] == "1"
+    assert "b77f9f358a1dd9b223fcc16792b7d5c2530d7044" in env["TUNIX_MAXTEXT_PIP_SPEC"]
+    assert json.loads(env["TUNIX_MAXTEXT_KWARGS"])["sparse_matmul"] is True
+    assert "gptoss20b-sparse-lora" in env["SMOKE_RESULT_GCS"]
+    assert "gptoss20b-sparse-lora-" in env["SKYRLTPU_BUNDLE_URL"]
 
 
 def test_replay_diagnostics_reach_every_multihost_controller():

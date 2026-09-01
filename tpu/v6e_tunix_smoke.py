@@ -5,11 +5,21 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 import tinker
 from tinker import types
+
+_SPARSE_EXPERT_FACTORS = (
+    "wi_0_lora_a",
+    "wi_0_lora_b",
+    "wi_1_lora_a",
+    "wi_1_lora_b",
+    "wo_lora_a",
+    "wo_lora_b",
+)
 
 
 def logprob_vector(output: types.ForwardBackwardOutput) -> np.ndarray:
@@ -29,6 +39,71 @@ def logprob_vector(output: types.ForwardBackwardOutput) -> np.ndarray:
 
 def vector_hash(values: np.ndarray) -> str:
     return hashlib.sha256(np.ascontiguousarray(values).tobytes()).hexdigest()
+
+
+def load_gradient_diagnostics(path: Path) -> list[dict]:
+    """Load process-0 gradient records written by the Tunix backend."""
+    if not path.exists():
+        return []
+    records = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"invalid gradient diagnostic at {path}:{line_number}: {exc}") from exc
+        if record.get("kind") == "mean_gradient":
+            records.append(record)
+    return sorted(records, key=lambda record: int(record.get("index", -1)))
+
+
+def sparse_expert_gradient_summary(records: list[dict]) -> dict:
+    """Check the expected zero-B LoRA gradient sequence over two updates.
+
+    Sparse expert A factors are randomly initialized and B factors start at
+    zero. The first backward must therefore reach all B families. After that
+    optimizer step makes B nonzero, the second backward must reach both A and
+    B for gate, up, and down projections.
+    """
+
+    def family_norms(record: dict) -> dict[str, float | None]:
+        leaves = record.get("leaves", {})
+        result = {}
+        for family in _SPARSE_EXPERT_FACTORS:
+            norms = [float(value["norm"]) for key, value in leaves.items() if family in key]
+            result[family] = math.sqrt(sum(norm * norm for norm in norms)) if norms else None
+        return result
+
+    failures = []
+    if len(records) < 2:
+        return {
+            "pass": False,
+            "record_count": len(records),
+            "failures": [f"expected at least two gradient records, found {len(records)}"],
+        }
+
+    initial = family_norms(records[0])
+    after_first_update = family_norms(records[1])
+    for family in ("wi_0_lora_b", "wi_1_lora_b", "wo_lora_b"):
+        norm = initial[family]
+        if norm is None:
+            failures.append(f"initial gradient is missing {family}")
+        elif not math.isfinite(norm) or norm <= 0:
+            failures.append(f"initial gradient for {family} is not finite and nonzero: {norm}")
+    for family, norm in after_first_update.items():
+        if norm is None:
+            failures.append(f"second gradient is missing {family}")
+        elif not math.isfinite(norm) or norm <= 0:
+            failures.append(f"second gradient for {family} is not finite and nonzero: {norm}")
+
+    return {
+        "pass": not failures,
+        "record_count": len(records),
+        "initial": initial,
+        "after_first_update": after_first_update,
+        "failures": failures,
+    }
 
 
 def make_datum(tokenizer, row: int, sequence_length: int = 0) -> types.Datum:
@@ -82,11 +157,27 @@ def main() -> None:
         default=0,
         help="construct each row with exactly this many valid tokens (zero keeps the short smoke input)",
     )
+    parser.add_argument(
+        "--extra-updates",
+        type=int,
+        default=0,
+        help="additional consecutive forward/backward + optimizer updates before checkpoint replay",
+    )
+    parser.add_argument(
+        "--gradient-diagnostics",
+        type=Path,
+        default=Path.home() / "tunix-replay-diagnostics-process-0.jsonl",
+    )
+    parser.add_argument("--require-sparse-expert-gradients", action="store_true")
     args = parser.parse_args()
     if args.rows < 1:
         parser.error("--rows must be at least 1")
     if args.replays < 1:
         parser.error("--replays must be at least 1")
+    if args.extra_updates < 0:
+        parser.error("--extra-updates cannot be negative")
+    if args.require_sparse_expert_gradients and args.extra_updates < 1:
+        parser.error("--require-sparse-expert-gradients needs --extra-updates >= 1")
 
     service = tinker.ServiceClient(base_url=args.base_url, api_key="tml-dummy")
     trainer = service.create_lora_training_client(base_model=args.base_model, rank=args.rank)
@@ -105,6 +196,24 @@ def main() -> None:
 
     grad_norm = float(optim.metrics.get("skyrl.ai/grad_norm", float("nan")))
     update_delta = float(np.max(np.abs(updated - baseline)))
+    extra_update_records = []
+    extra_previous = updated
+    for extra_index in range(1, args.extra_updates + 1):
+        extra_fb_future = trainer.forward_backward(batch, "importance_sampling")
+        extra_optim_future = trainer.optim_step(types.AdamParams(learning_rate=1e-2))
+        extra_fb = extra_fb_future.result()
+        extra_optim = extra_optim_future.result()
+        extra_updated = logprob_vector(trainer.forward(batch, "importance_sampling").result())
+        extra_update_records.append(
+            {
+                "index": extra_index,
+                "grad_norm": float(extra_optim.metrics.get("skyrl.ai/grad_norm", float("nan"))),
+                "output_rows": len(extra_fb.loss_fn_outputs),
+                "previous_logprob_max_abs_delta": float(np.max(np.abs(extra_updated - extra_previous))),
+                "updated_logprob_sha256": vector_hash(extra_updated),
+            }
+        )
+        extra_previous = extra_updated
     replay_records = []
     restored_checkpoint = None
     for replay_index in range(1, args.replays + 1):
@@ -138,17 +247,30 @@ def main() -> None:
     replay_delta = replay_records[0]["updated_logprob_max_abs_delta"]
     grad_valid = bool(np.isfinite(grad_norm) and grad_norm > 0)
     replay_grad_valid = all(np.isfinite(r["grad_norm"]) and r["grad_norm"] > 0 for r in replay_records)
+    extra_grad_valid = all(np.isfinite(r["grad_norm"]) and r["grad_norm"] > 0 for r in extra_update_records)
     output_rows_valid = len(fb.loss_fn_outputs) == args.rows and all(
         r["output_rows"] == args.rows for r in replay_records
     )
+    extra_output_rows_valid = all(r["output_rows"] == args.rows for r in extra_update_records)
     update_changed = update_delta > 1e-7
     restore_matches = all(r["restore_logprob_max_abs_delta"] <= 1e-5 for r in replay_records)
     replay_update_matches = all(r["updated_logprob_max_abs_delta"] <= 1e-5 for r in replay_records)
     replay_grad_matches = all(
         np.isclose(r["grad_norm"], grad_norm, rtol=1e-5, atol=1e-5) for r in replay_records
     )
-    capacity_pass = grad_valid and replay_grad_valid and output_rows_valid and update_changed
+    capacity_pass = (
+        grad_valid
+        and replay_grad_valid
+        and extra_grad_valid
+        and output_rows_valid
+        and extra_output_rows_valid
+        and update_changed
+    )
     acceptance_pass = capacity_pass and restore_matches and replay_update_matches and replay_grad_matches
+    sparse_gradient_summary = None
+    if args.require_sparse_expert_gradients:
+        sparse_gradient_summary = sparse_expert_gradient_summary(load_gradient_diagnostics(args.gradient_diagnostics))
+        acceptance_pass = acceptance_pass and sparse_gradient_summary["pass"]
 
     result = {
         "base_model": args.base_model,
@@ -156,10 +278,15 @@ def main() -> None:
         "sequence_length": args.sequence_length or len(batch[0].model_input.to_ints()),
         "rows": len(batch),
         "requested_replays": args.replays,
+        "requested_extra_updates": args.extra_updates,
         "grad_norm": grad_norm,
         "replay_grad_norm": replay_grad_norm,
         "grad_norms": [grad_norm] + [r["grad_norm"] for r in replay_records],
         "replays": replay_records,
+        "extra_updates": extra_update_records,
+        "extra_update_gradients_pass": extra_grad_valid,
+        "extra_update_rows_pass": extra_output_rows_valid,
+        "sparse_expert_gradients": sparse_gradient_summary,
         "update_logprob_max_abs_delta": update_delta,
         "restore_logprob_max_abs_delta": restore_delta,
         "replay_logprob_max_abs_delta": replay_delta,
@@ -187,13 +314,19 @@ def main() -> None:
         raise RuntimeError(f"invalid grad norm from distributed step: {grad_norm}")
     if not replay_grad_valid:
         raise RuntimeError(f"invalid grad norm from replayed distributed step: {replay_grad_norm}")
+    if not extra_grad_valid:
+        raise RuntimeError(f"invalid grad norm from consecutive updates: {extra_update_records}")
     if len(fb.loss_fn_outputs) != args.rows:
         raise RuntimeError(f"expected {args.rows} forward/backward outputs, got {len(fb.loss_fn_outputs)}")
     bad_replay_rows = [r for r in replay_records if r["output_rows"] != args.rows]
     if bad_replay_rows:
         raise RuntimeError(f"replay forward/backward output-count mismatch: {bad_replay_rows}")
+    if not extra_output_rows_valid:
+        raise RuntimeError(f"consecutive-update output-count mismatch: {extra_update_records}")
     if not update_changed:
         raise RuntimeError(f"optimizer step did not observably change target logprobs: max delta={update_delta}")
+    if sparse_gradient_summary is not None and not sparse_gradient_summary["pass"]:
+        raise RuntimeError(f"sparse expert gradient gate failed: {sparse_gradient_summary['failures']}")
     if not restore_matches:
         raise RuntimeError(f"checkpoint restore did not reproduce baseline target logprobs: {replay_records}")
     if not replay_update_matches:
