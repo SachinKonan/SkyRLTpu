@@ -63,14 +63,14 @@ resumable:
   remote_local_cache_root: /tmp/jobman-runs
   retry_sleep_seconds: 60
   run_id: auto
-  run_id_prefix: stagea-lr-n
+  run_id_prefix: staged-d-n
   run_spec:
     batch_shape: 16x32
-    cell: lr-n
+    cell: d-n
     elite_slots: 2
     experiment: stage-a-regularization
     kl_penalty_coef: 0
-    objective: mean_baseline
+    objective: parent_relative_piecewise
     problem: erdos
     restart_ratio: 0
     steps: 15

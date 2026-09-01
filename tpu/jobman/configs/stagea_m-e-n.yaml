@@ -38,7 +38,7 @@ ssh:
 resumable:
   enabled: true
   run_id: auto
-  run_id_prefix: stagea-m-grpo-n
+  run_id_prefix: stagee-m-e-n
   local_cache_root: /n/fs/vision-mix/sk7524/jobman-runs
   remote_gcs_cache_root: /home/sk7524_princeton_edu/gcs/jobman-runs
   remote_local_cache_root: /tmp/jobman-runs
@@ -48,8 +48,8 @@ resumable:
     poll_seconds: 30
   run_spec:
     experiment: stage-a-regularization
-    cell: m-grpo-n
-    objective: mean_baseline
+    cell: m-e-n
+    objective: parent_relative_ei
     elite_slots: 2
     batch_shape: 16x32
     kl_penalty_coef: 0
