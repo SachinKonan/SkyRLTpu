@@ -22,14 +22,15 @@ def ser(tag, key):
     return [s[key] for s in D[tag]["series"]]
 
 # figx1: flagship metric grid (continuous step index)
-fig, ax = plt.subplots(2, 3, figsize=(11.6, 5.6))
+fig, ax = plt.subplots(2, 4, figsize=(14.6, 5.6))
 panels = [("best", "best C5 so far (lower better)"), ("rmean", "mean reward"),
+          ("rmax", "max reward (per step)"),
           ("fmt", "format rate"), ("corr", "correctness rate"),
           ("amax", "advantage max (log)"), ("aspread", "advantage spread max-min (log)")]
 X1 = dict(MC); X1["a8x64c"] = "#8659c9"   # 120b 8x64 entropic, dashed
 X1L = dict(ML); X1L["a8x64c"] = "gpt-oss-120b (8x64 = TTT-Discover cfg)"
 for i, (key, title) in enumerate(panels):
-    a = ax[i // 3][i % 3]
+    a = ax[i // 4][i % 4]
     for tag in X1:
         if key == "aspread":
             y = [(s["amax"] - s["amin"]) if s["amax"] is not None else None for s in D[tag]["series"]]
@@ -41,6 +42,15 @@ for i, (key, title) in enumerate(panels):
     if key in ("amax", "aspread"): a.set_yscale("log")
     if key == "best": a.ticklabel_format(useOffset=False, style="plain"); a.set_ylim(0.38084, 0.38115)
     a.set_xlabel("step index")
+# 8th slot: per-step best rollout in C5 units (max reward, un-saturated view)
+a = ax[1][3]
+for tag in X1:
+    y = [1.0 / r["rmax"] - 1e-8 if r["rmax"] else None for r in D[tag]["series"]]
+    a.plot(range(len(y)), y, color=X1[tag], lw=1.6, ls="--" if tag == "a8x64c" else "-")
+a.set_title("best C5 of THIS step's rollouts")
+a.ticklabel_format(useOffset=False, style="plain")
+a.set_ylim(0.38084, 0.38115)
+a.set_xlabel("step index")
 ax[0][0].legend(fontsize=7, frameon=False)
 fig.tight_layout(); fig.savefig("figx1.png", bbox_inches="tight"); plt.close(fig)
 
