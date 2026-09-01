@@ -50,7 +50,13 @@ Pinned submodules at handoff:
 | --- | --- | --- |
 | TPUSwarm | `a039683c33ff4333c06d9275224e98ccffbaa5f5` | Published `main` |
 | SkyPilot fork | `8260324adbd8a3d2bf0cb2af332c4e363b4e2e71` | Queued-resource terminal-state cleanup and Managed Job recovery |
-| Jobman | `a7b770e7d3b9107dd75db1fa15018c84b43293c9` | Resumable/autorestart work |
+| Discover | `c95227a36111233acf7c0691bda5dddbc5cc7b1f` | Published `agent/tunix-multihost` |
+| Jobman | `a7b770e7d3b9107dd75db1fa15018c84b43293c9` | Published `agent/resumable-autorestart` |
+
+After the initial handoff, the exact pinned Discover and Jobman tips were
+published to the branches shown above. A clean `git clone
+--recurse-submodules --branch agent/tunix-multihost` was then verified through
+all parent and nested submodules.
 
 The main new operational files are:
 
