@@ -296,10 +296,10 @@ _MAXTEXT_SEQ_BLOCK = 512
 # (decoder/scanned_blocks/layers_{0..5}, stacked over scan steps) and any
 # unscanned decoder (decoder/layers_<i>) — with the standard
 # self_attention/mlp submodule names; the GptOss arm covers gpt-oss,
-# whose blocks are named GptOssAttention/{query,key,value,out} and GptOssMlp
-# (experts held as raw stacked params — scoping the whole module lets qwix
-# intercept the expert einsums; the router `gate` is deliberately included,
-# its delta merges into the gate kernel like any other). The layer_N arm
+# whose blocks are named GptOssAttention/{query,key,value,out} and
+# GptOssMlp/gate. GPT-OSS expert factors are installed explicitly by MaxText's
+# sparse expert-LoRA API because its raw expert params feed a GMM primitive
+# that Qwix cannot intercept. The layer_N arm
 # covers qwen3.5's inhomogeneous scan (decoder/layers/layer_{0..3}, stacked
 # over scan steps): full-attention layers nest as
 # layer_N/attention/attention/{query,key,value,out} (DecoderLayer.attention =
@@ -317,7 +317,7 @@ _MAXTEXT_MLP_REGEX = (
     r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
     r"|(?:.*/)?layers_[0-9]+/mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
     r"|(?:.*/)?layer_[0-9]+/mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
-    r"|(?:.*/)?GptOssMlp(?:/.*)?"
+    r"|(?:.*/)?GptOssMlp/gate(?:/.*)?"
 )
 
 # MaxText projection name -> HF (block, module) for PEFT export.
@@ -634,11 +634,11 @@ class TunixBackend(AbstractBackend):
             "skip_jax_distributed_system": True,
         }
         if "gpt-oss" in mt_name:
-            # qwix cannot inject LoRA into the megablox Pallas gmm kernel;
-            # expert adapters require the dense einsum MoE path (costs
-            # E/top_k more MoE FLOPs — acceptable at current utilization).
-            overrides["sparse_matmul"] = False
-            overrides["megablox"] = False
+            # Keep MaxText's native routed-token GMM path. Our MaxText fork
+            # supplies explicit sparse expert-LoRA factors around these GMMs;
+            # falling back to dense MoE would cost roughly E/top_k more work.
+            overrides["sparse_matmul"] = True
+            overrides["megablox"] = True
         overrides.update(self.config.maxtext_kwargs)
         argv = ["", "base.yml"] + [
             f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in overrides.items()
@@ -704,7 +704,10 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ templates
 
     def _template_key(self, lora_config: types.LoraConfig) -> tuple:
-        return (lora_config.rank, lora_config.train_attn, lora_config.train_mlp)
+        # Alpha is embedded as a static scale in both Qwix and sparse expert
+        # LoRA graphs; equal-rank adapters with different alpha cannot share a
+        # template safely.
+        return (lora_config.rank, lora_config.alpha, lora_config.train_attn, lora_config.train_mlp)
 
     def _module_path_regex(self, lora_config: types.LoraConfig) -> str:
         is_maxtext = self.config.model_source == "maxtext"
@@ -734,6 +737,25 @@ class TunixBackend(AbstractBackend):
                 "built. Disable that option to use more than one LoRA config."
             )
         model = nnx.merge(self.base_graphdef, self.base_state)
+        if (
+            self.config.model_source == "maxtext"
+            and "gpt-oss" in self._maxtext_model_name()
+            and lora_config.train_mlp
+        ):
+            try:
+                from maxtext.utils.lora_utils import install_sparse_expert_lora
+            except ImportError as e:  # pragma: no cover - catches an unpatched MaxText install
+                raise ImportError(
+                    "GPT-OSS sparse expert LoRA requires the SkyRL MaxText fork "
+                    "with install_sparse_expert_lora()"
+                ) from e
+            installed = install_sparse_expert_lora(
+                model,
+                rank=lora_config.rank,
+                alpha=lora_config.alpha,
+                rngs=nnx.Rngs(seed),
+            )
+            logger.info("Installed sparse expert LoRA on %d GPT-OSS MoE layer groups", installed)
         provider = qwix.LoraProvider(
             module_path=self._module_path_regex(lora_config),
             rank=lora_config.rank,
@@ -2584,9 +2606,9 @@ class TunixBackend(AbstractBackend):
     ) -> None:
         """Write adapter_model.safetensors + adapter_config.json (HF-PEFT layout).
 
-        gpt-oss additionally writes moe_lora.safetensors + moe_lora.json: the
-        raw expert/router LoRA factors, which standard PEFT cannot express —
-        the vLLM server's merge-on-load path consumes them.
+        gpt-oss additionally writes moe_lora.safetensors + moe_lora.json for
+        raw expert factors, which standard PEFT cannot express. The router is
+        a normal BF16 linear layer and stays in adapter_model.safetensors.
         """
         import safetensors.numpy as st_numpy
 
@@ -2638,6 +2660,7 @@ class TunixBackend(AbstractBackend):
                 tensors[f"base_model.model.{hf_module}.lora_B.weight"] = np.ascontiguousarray(out_matrix.T)
         return tensors
 
+
     @staticmethod
     def _is_gptoss_lora(slot: ModelSlot) -> bool:
         return any(
@@ -2650,7 +2673,7 @@ class TunixBackend(AbstractBackend):
         slot: ModelSlot,
         flat_lora: dict[str, np.ndarray] | None = None,
     ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict]:
-        """Split gpt-oss LoRA state into (attention PEFT tensors, MoE factors, meta).
+        """Split GPT-OSS LoRA into ordinary PEFT and fused-expert factors.
 
         gpt-oss decoders scan layers in ``layer_cycle_interval`` groups
         (``layers_{g}``: sliding/full attention alternation), stacked over
@@ -2660,7 +2683,7 @@ class TunixBackend(AbstractBackend):
         MoE factor shapes (rank r, E experts, d model dim, f ff dim):
           wi_0/wi_1: lora_a (d, L, r) shared over experts; lora_b (r, L, E, f)
           wo:        lora_a (E, L, f, r) per-expert;       lora_b (r, L, d)
-          router:    lora_a (d, L, r);                     lora_b (r, L, E)
+          router:    lora_a (d, L, r); lora_b (r, L, E), exported as PEFT
         Per-expert delta = scale * A @ B_e (see meta["contraction"]).
         """
         import re
@@ -2700,7 +2723,18 @@ class TunixBackend(AbstractBackend):
             elif "GptOssMlp" in names:
                 after = names[names.index("GptOssMlp") + 1 :]
                 if after[0] == "gate":
-                    comp, leafname = "router", after[-1]
+                    leafname = after[-1]
+                    if "lora" not in leafname or arr.ndim != 3:
+                        logger.warning("Skipping unmapped gpt-oss router LoRA param %s", keystr)
+                        continue
+                    is_a = leafname.endswith("a")
+                    for j in range(arr.shape[1]):
+                        gl = j * n_groups + group
+                        per = arr[:, j, :]  # A: (d,r), B: (r,E)
+                        name = f"base_model.model.model.layers.{gl}.mlp.router"
+                        suffix = "lora_A.weight" if is_a else "lora_B.weight"
+                        attn[f"{name}.{suffix}"] = np.ascontiguousarray(per.T)
+                    continue
                 else:
                     m = re.fullmatch(r"(wi_0|wi_1|wo)_(lora_[ab])", after[0])
                     if m is None:
@@ -2728,7 +2762,6 @@ class TunixBackend(AbstractBackend):
                 "wi_0": "delta[e,d,f] = scale * sum_r A[d,r] * B[r,e,f]  (gate half)",
                 "wi_1": "delta[e,d,f] = scale * sum_r A[d,r] * B[r,e,f]  (up half)",
                 "wo": "delta[e,f,d] = scale * sum_r A[e,f,r] * B[r,d]",
-                "router": "delta[d,e] = scale * sum_r A[d,r] * B[r,e]",
             },
         }
         return attn, moe, meta
@@ -2796,7 +2829,6 @@ class TunixBackend(AbstractBackend):
                 suffix = "lora_A.weight" if is_a else "lora_B.weight"
                 tensors[f"{name}.{suffix}"] = np.ascontiguousarray(per_layer.T)
         return tensors
-
 
     @staticmethod
     def _maxtext_path_to_hf(keystr: str) -> tuple[str, str, bool, int | None] | None:

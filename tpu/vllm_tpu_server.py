@@ -86,11 +86,11 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             async for _ in request.stream():
                 pass
 
-        # MoE LoRA sidecar (gpt-oss): merge expert/router deltas into the
-        # base weights via a worker RPC. This must run on EVERY upload call —
-        # even when the tar extract above was skipped because the adapter dir
-        # already existed — since the worker-side merge is incremental and
-        # keyed off its own previously applied factors, not the filesystem.
+        # GPT-OSS expert sidecar: replace the fixed-shape BF16 factor buffers
+        # evaluated beside the immutable MXFP4 base GMMs. This must run on
+        # every upload call, including retries whose directory already exists.
+        # The BF16 router is part of adapter_model.safetensors and follows
+        # vLLM's ordinary ReplicatedLinear LoRA path below.
         moe_path = target / "moe_lora.safetensors"
         if moe_path.exists():
             import json as _json
@@ -101,14 +101,14 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             with _safe_open(str(moe_path), framework="numpy") as _f:
                 n_tensors = len(list(_f.keys()))
 
-            async def _rpc(rpc_factors):
+            async def _rpc(rpc_factors, rpc_meta=meta):
                 # vllm 0.23: AsyncLLMEngine is v1 AsyncLLM
                 # (vllm/engine/async_llm_engine.py aliases it), whose
                 # `collective_rpc(method, timeout=None, args=(), kwargs=None)`
                 # is an async method fanning out to the TPU workers (the
                 # isawaitable branch also covers a sync variant).
                 res = engine.collective_rpc(
-                    "apply_moe_lora_deltas", args=(rpc_factors, meta)
+                    "set_moe_lora_factors", args=(rpc_factors, rpc_meta)
                 )
                 if inspect.isawaitable(res):
                     res = await res
@@ -130,7 +130,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                     result = await _rpc(str(moe_path))
                 except Exception:
                     logger.exception(
-                        "MoE LoRA merge: path-based RPC for %s failed; "
+                        "MoE LoRA factor update: path-based RPC for %s failed; "
                         "retrying with inline nested-list factors", lora_name,
                     )
                     from safetensors.numpy import load_file as _st_load
@@ -140,12 +140,19 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             except Exception as exc:
                 raise HTTPException(
                     status_code=500,
-                    detail=f"apply_moe_lora_deltas RPC failed: {exc!r}",
+                    detail=f"set_moe_lora_factors RPC failed: {exc!r}",
                 ) from exc
             logger.info(
-                "MoE LoRA merge-on-load for %s: %d tensors -> %s",
+                "MXFP4 expert LoRA factor update for %s: %d tensors -> %s",
                 lora_name, n_tensors, result,
             )
+        elif previous and (lora_dir / previous / "moe_lora.safetensors").exists():
+            # Moving from a full GPT-OSS adapter to attention/router-only must
+            # not leave the previous expert factors globally active.
+            res = engine.collective_rpc("set_moe_lora_factors", args=(None, {"scale": 0.0}))
+            if inspect.isawaitable(res):
+                await res
+            logger.info("Cleared MXFP4 expert LoRA factors for %s", previous)
 
         models = request.app.state.openai_serving_models
 
