@@ -70,6 +70,25 @@ ax[0].legend(fontsize=7, frameon=False, ncol=2)
 ax[0].set_ylabel("fraction of rollouts")
 fig.tight_layout(); fig.savefig("figx2.png", bbox_inches="tight"); plt.close(fig)
 
+# figx2b: companion stacks — the TTD/entropic twins that have archives
+EL = {"tlr": "qwen entropic 1.5e-4\n(same LR as lr-n)", "gtlr": "gemma entropic 1.5e-4\n(2 steps so far)",
+      "mttd": "muse TTD 1.5e-4\n(vs GRPO at 4e-5)"}
+ECOL = {"tlr": "#d94f2b", "gtlr": "#1a7f6b", "mttd": "#b8860b"}
+fig, ax = plt.subplots(1, 3, figsize=(11.6, 2.9))
+for i, tag in enumerate(["tlr", "gtlr", "mttd"]):
+    cats = {int(k): v for k, v in D[tag]["cats"].items()}
+    ks = sorted(cats)
+    bottom = np.zeros(len(ks))
+    for c in ("fail", "reg", "noop", "imp"):
+        v = np.array([cats[k][c] / cats[k]["n"] for k in ks])
+        ax[i].bar(range(len(ks)), v, bottom=bottom, color=CAT[c], width=0.85, label=c)
+        bottom += v
+    ax[i].set_xticks(range(len(ks))); ax[i].set_xticklabels(ks, fontsize=7)
+    ax[i].set_title(EL[tag]); ax[i].set_ylim(0, 1)
+ax[0].legend(fontsize=7, frameon=False, ncol=2)
+ax[0].set_ylabel("fraction of rollouts")
+fig.tight_layout(); fig.savefig("figx2b.png", bbox_inches="tight"); plt.close(fig)
+
 # figx3: delta-distribution heatmaps (signed log-magnitude bins per step)
 # display order bottom->top: regress big..tiny, no-op, improve tiny..big
 BINS = [("-", e) for e in range(-1, -11, -1)] + ["0"] + [("+", e) for e in range(-10, 0)]
@@ -92,6 +111,25 @@ ax[0].set_yticklabels(["regress 1e-1","1e-2","1e-3","1e-4","1e-5","1e-6","1e-7",
                        "exact no-op","improve 1e-10","1e-9","1e-8","1e-7","1e-6","1e-5","1e-4","1e-3","1e-2","1e-1"], fontsize=6.5)
 fig.colorbar(im, ax=ax, shrink=0.8, label="fraction of valid rollouts")
 fig.savefig("figx3.png", bbox_inches="tight"); plt.close(fig)
+
+# figx3b: companion heatmaps
+fig, ax = plt.subplots(1, 3, figsize=(11.6, 3.4), sharey=True)
+for i, tag in enumerate(["tlr", "gtlr", "mttd"]):
+    cats = {int(k): v for k, v in D[tag]["cats"].items()}
+    ks = sorted(cats)
+    M = np.zeros((len(BINS), len(ks)))
+    for j, k in enumerate(ks):
+        h = cats[k]["hist"]; nvalid = max(1, cats[k]["n"] - cats[k]["fail"])
+        for bi, b in enumerate(BINS):
+            M[bi, j] = h.get(binkey(b), 0) / nvalid
+    im = ax[i].imshow(M, aspect="auto", origin="lower", cmap="viridis", vmin=0, vmax=0.7)
+    ax[i].set_xticks(range(len(ks))); ax[i].set_xticklabels(ks, fontsize=7)
+    ax[i].set_title(EL[tag].split("\n")[0]); ax[i].set_xlabel("step")
+ax[0].set_yticks(range(len(BINS)))
+ax[0].set_yticklabels(["regress 1e-1","1e-2","1e-3","1e-4","1e-5","1e-6","1e-7","1e-8","1e-9","1e-10",
+                       "exact no-op","improve 1e-10","1e-9","1e-8","1e-7","1e-6","1e-5","1e-4","1e-3","1e-2","1e-1"], fontsize=6.5)
+fig.colorbar(im, ax=ax, shrink=0.8, label="fraction of valid rollouts")
+fig.savefig("figx3b.png", bbox_inches="tight"); plt.close(fig)
 
 # figx4: estimator pairs per model
 PAIRS = [("qwen", "agn", "atn"), ("gemma", "ggn", "gtn"),

@@ -14,6 +14,9 @@ RUNS = {  # tag: (metrics file, member prefix or "", label)
  "objt": ("obj_ttt_16x32_metrics.jsonl","","gpt-oss-20b entropic 16x32"),
  "ctrl15": ("ctrl15_metrics.jsonl","","gpt-oss-20b entropic 64x8"),
  "a8x64c": ("a8x64c_metrics.jsonl","","gpt-oss-120b entropic 8x64"),
+ "tlr": ("tlr_metrics.jsonl","qwen/","qwen entropic 1.5e-4"),
+ "gtlr": ("gtlr_metrics.jsonl","gemma/","gemma entropic 1.5e-4"),
+ "mttd": ("mttd_metrics.jsonl","muse/","muse TTD 1.5e-4"),
 }
 out = {}
 for tag,(mf,pre,label) in RUNS.items():
@@ -33,7 +36,7 @@ for tag,(mf,pre,label) in RUNS.items():
 
 # per-rollout categories + delta distributions from trajectory archives
 def rparent(pv): return 1.0/(1e-8+abs(pv))
-for tag in ("lrn","ggn","mgn"):
+for tag in ("lrn","ggn","mgn","tlr","gtlr","mttd"):
     cats={}
     for f in sorted(glob.glob(f"{S}/{tag}_0*.jsonl.gz")):
         step=int(f.split("_")[-1].split(".")[0])
