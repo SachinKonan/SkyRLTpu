@@ -59,6 +59,37 @@ for tag in ("lrn","ggn","mgn","tlr","gtlr","mttd"):
         cats[step]=dict(n=n,fail=fail,imp=imp,noop=noop,reg=reg,hist=hb)
     out[tag]["cats"]=cats
 
+# gpt-oss per-rollout categories from local wandb gen&score tables
+WB = {
+ "full120b": "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ttd_gptoss120b_full/tinker_log/*/wandb/latest-run/files/media/table",
+ "a8x64c": "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ttd_120b_a8x64_ctrl/tinker_log/*/wandb/latest-run/files/media/table",
+ "objg": "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ttd_obj_grpo_16x32/tinker_log/*/wandb/latest-run/files/media/table",
+ "objt": "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ttd_obj_ttt_16x32/tinker_log/*/wandb/latest-run/files/media/table",
+ "ctrl15": "/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ttd_gptoss20b_ctrl15/tinker_log/*/wandb/latest-run/files/media/table",
+}
+for tag, pat in WB.items():
+    cats={}
+    for f in glob.glob(pat.replace("*", "*", 1) + "/gen&score_train_*.table.json") or glob.glob(glob.glob(pat)[0] + "/gen&score_train_*.table.json") if False else []:
+        pass
+    dirs = glob.glob(pat)
+    if not dirs: continue
+    for f in sorted(glob.glob(dirs[0] + "/gen&score_train_*.table.json")):
+        step = int(f.split("gen&score_train_")[1].split("_")[0])
+        rows = json.load(open(f))["data"]
+        n=fail=imp=noop=reg=0; hb={}
+        for row in rows:
+            n += 1
+            if float(row[3]) != 1.0: fail += 1; continue
+            d = float(row[2]) - rparent(float(row[6]))
+            if d > 0: imp += 1
+            elif d < 0: reg += 1
+            else: noop += 1
+            key = "0" if d == 0 else ("+" if d > 0 else "-") + str(max(-10, min(-1, int(math.floor(math.log10(abs(d)))))))
+            hb[key] = hb.get(key, 0) + 1
+        cats[step] = dict(n=n, fail=fail, imp=imp, noop=noop, reg=reg, hist=hb)
+    out[tag]["cats"] = cats
+    print(f"wandb cats {tag}: {len(cats)} steps")
+
 # 120b committed-lineage categories from the final tree snapshot
 snaps=sorted(glob.glob("/n/fs/vision-mix/sk7524/SkyRLTpu/runs/ttd_gptoss120b_full/tinker_log/*/puct_sampler_step_*.json"))
 d=json.load(open(snaps[-1]))

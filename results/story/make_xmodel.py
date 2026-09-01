@@ -57,14 +57,14 @@ for i, tag in enumerate(["lrn", "ggn", "mgn"]):
     ax[i].set_xticks(range(len(ks))); ax[i].set_xticklabels(ks, fontsize=7)
     ax[i].set_title(ML[tag] + f"\n(archived steps)")
     ax[i].set_ylim(0, 1)
-L = {int(k): v for k, v in D["full120b"]["lineage"].items()}
-ks = sorted(L)
+cats = {int(k): v for k, v in D["full120b"]["cats"].items()}
+ks = sorted(cats)
 bottom = np.zeros(len(ks))
-for c in ("reg", "noop", "imp"):
-    v = np.array([L[k][c] / L[k]["n"] for k in ks])
+for c in ("fail", "reg", "noop", "imp"):
+    v = np.array([cats[k][c] / cats[k]["n"] for k in ks])
     ax[3].bar(ks, v, bottom=bottom, color=CAT[c], width=0.85)
     bottom += v
-ax[3].set_title("gpt-oss-120b\nCOMMITTED tree states only")
+ax[3].set_title("gpt-oss-120b (entropic 64x8)\n(all steps, wandb gen tables)")
 ax[3].set_ylim(0, 1)
 ax[0].legend(fontsize=7, frameon=False, ncol=2)
 ax[0].set_ylabel("fraction of rollouts")
@@ -94,8 +94,8 @@ fig.tight_layout(); fig.savefig("figx2b.png", bbox_inches="tight"); plt.close(fi
 BINS = [("-", e) for e in range(-1, -11, -1)] + ["0"] + [("+", e) for e in range(-10, 0)]
 def binkey(b):  # data key: sign char + str(exponent), e.g. "+-8", "--3", "0"
     return "0" if b == "0" else b[0] + str(b[1])
-fig, ax = plt.subplots(1, 3, figsize=(11.6, 3.4), sharey=True)
-for i, tag in enumerate(["lrn", "ggn", "mgn"]):
+fig, ax = plt.subplots(1, 4, figsize=(13.2, 3.4), sharey=True)
+for i, tag in enumerate(["lrn", "ggn", "mgn", "full120b"]):
     cats = {int(k): v for k, v in D[tag]["cats"].items()}
     ks = sorted(cats)
     M = np.zeros((len(BINS), len(ks)))
@@ -106,6 +106,7 @@ for i, tag in enumerate(["lrn", "ggn", "mgn"]):
     im = ax[i].imshow(M, aspect="auto", origin="lower", cmap="viridis", vmin=0, vmax=0.7)
     ax[i].set_xticks(range(len(ks))); ax[i].set_xticklabels(ks, fontsize=7)
     ax[i].set_title(ML[tag]); ax[i].set_xlabel("step")
+    ax[i].tick_params(labelsize=6)
 ax[0].set_yticks(range(len(BINS)))
 ax[0].set_yticklabels(["regress 1e-1","1e-2","1e-3","1e-4","1e-5","1e-6","1e-7","1e-8","1e-9","1e-10",
                        "exact no-op","improve 1e-10","1e-9","1e-8","1e-7","1e-6","1e-5","1e-4","1e-3","1e-2","1e-1"], fontsize=6.5)
@@ -179,4 +180,20 @@ a.set_ylim(0.38084, 0.38120)
 a.set_xlabel("step index"); a.set_ylabel("best C5 so far")
 a.set_title("Entropic, no CE distillation: batch shape and scale")
 fig.tight_layout(); fig.savefig("figx6.png", bbox_inches="tight"); plt.close(fig)
+# figx7: gpt-oss-20b 16x32 estimator pair, per-rollout categories
+fig, ax = plt.subplots(1, 2, figsize=(9.2, 3.0), sharey=True)
+for i, (tag, name) in enumerate([("objg", "gpt-oss-20b GRPO 16x32"), ("objt", "gpt-oss-20b entropic 16x32")]):
+    cats = {int(k): v for k, v in D[tag]["cats"].items()}
+    ks = sorted(cats)
+    bottom = np.zeros(len(ks))
+    for c in ("fail", "reg", "noop", "imp"):
+        v = np.array([cats[k][c] / cats[k]["n"] for k in ks])
+        ax[i].bar(range(len(ks)), v, bottom=bottom, color=CAT[c], width=0.85, label=c)
+        bottom += v
+    ax[i].set_xticks(range(len(ks))); ax[i].set_xticklabels(ks, fontsize=7)
+    ax[i].set_title(name); ax[i].set_ylim(0, 1)
+ax[0].legend(fontsize=7, frameon=False, ncol=2)
+ax[0].set_ylabel("fraction of rollouts")
+fig.tight_layout(); fig.savefig("figx7.png", bbox_inches="tight"); plt.close(fig)
 print("figures written")
+
