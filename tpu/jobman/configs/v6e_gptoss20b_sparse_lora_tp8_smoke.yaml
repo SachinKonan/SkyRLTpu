@@ -1,5 +1,5 @@
 job:
-  name: sk7524-v6e8-gptoss20b-sparse-lora-smoke-asia
+  name: sk7524-v6e8-gptoss20b-sparse-lora-smoke-south1
   env_type: null
   loop: true
   remote_user: sk7524_princeton_edu
@@ -8,15 +8,15 @@ job:
 tpu:
   allocation_mode: "queued-resources"
   accelerator: v6e-8
-  name: sk7524-v6e8-gptoss20b-sparse-lora-smoke-asia
-  zone: asia-northeast1-b
+  name: sk7524-v6e8-gptoss20b-sparse-lora-smoke-south1
+  zone: us-south1-a
   version: v2-alpha-tpuv6e
   pricing: spot
   flags:
     - "--project=vision-mix"
 
 gcsfuse:
-  bucket_name: sk7524-tinker-tpu-asia-northeast1
+  bucket_name: sk7524-tinker-tpu-us-south1
   mount_path: /home/sk7524_princeton_edu/gcs
 
 ssh:
@@ -34,7 +34,7 @@ ssh:
 resumable:
   enabled: true
   run_id: auto
-  run_id_prefix: v6e8-gptoss20b-sparse-lora-tp8-s256-r32-asia-v1
+  run_id_prefix: v6e8-gptoss20b-sparse-lora-tp8-s256-r32-south1-v1
   local_cache_root: /n/fs/vision-mix/sk7524/jobman-runs
   remote_gcs_cache_root: /home/sk7524_princeton_edu/gcs/jobman-runs
   remote_local_cache_root: /tmp/jobman-runs
@@ -56,9 +56,9 @@ resumable:
     checkpoint_replays: 1
   env:
     PROJECT: vision-mix
-    ZONE: asia-northeast1-b
+    ZONE: us-south1-a
     SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-v6e
-    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/gptoss20b-sparse-lora-v6e8-8aa3c1e6.tar.gz
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-south1/code-bundles/gptoss20b-sparse-lora-v6e8-8aa3c1e6.tar.gz
     SKYRLTPU_BUNDLE_SHA256: f40e1b9fb01cb81aafb236a8cf2412c7a25fd1aa366a30e8abc4746431b440e5
     MODEL_NAME: openai/gpt-oss-20b
     TUNIX_MAXTEXT_MODEL_NAME: gpt-oss-20b
@@ -81,10 +81,10 @@ resumable:
     TUNIX_UNIFORM_SEQ_LEN: "256"
     TUNIX_TRAIN_TOKEN_BUDGET: "256"
     TUNIX_FLCE_TILE_SIZE: "512"
-    TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e8-gptoss20b-sparse-lora-tp8-r32-s256-v1
+    TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-south1/jax-compile-cache-v6e8-gptoss20b-sparse-lora-tp8-r32-s256-v1
     TUNIX_JAX_CACHE_LOCAL: /home/sk7524_princeton_edu/jax_cache_v6e8_gptoss20b_sparse_lora_tp8_r32_s256_v1
-    TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts
-    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/gptoss20b-sparse-lora-v6e8-tp8-r32-s256-v1.json
+    TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-south1/skyrl-maxtext-ckpts
+    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-south1/v6e-smoke-results/gptoss20b-sparse-lora-v6e8-tp8-r32-s256-v1.json
   prepare:
     workers: all
     timeout: 0

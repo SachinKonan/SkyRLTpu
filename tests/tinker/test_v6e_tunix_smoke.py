@@ -224,7 +224,7 @@ def test_gptoss_sparse_smoke_uses_two_updates_and_unique_durable_state():
     assert env["TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS"] == "1"
     assert "b77f9f358a1dd9b223fcc16792b7d5c2530d7044" in env["TUNIX_MAXTEXT_PIP_SPEC"]
     assert json.loads(env["TUNIX_MAXTEXT_KWARGS"])["sparse_matmul"] is True
-    assert config["tpu"]["zone"] == "asia-northeast1-b"
+    assert config["tpu"]["zone"] == "us-south1-a"
     assert "asia-northeast1" in env["TUNIX_MAXTEXT_CKPT_CACHE_GCS"]
     assert "gptoss20b-sparse-lora" in env["SMOKE_RESULT_GCS"]
     assert "gptoss20b-sparse-lora-" in env["SKYRLTPU_BUNDLE_URL"]
