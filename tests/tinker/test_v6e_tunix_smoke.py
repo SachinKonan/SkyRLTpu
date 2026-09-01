@@ -28,6 +28,13 @@ _GPTOSS_SPARSE_CONFIG = (
     / "configs"
     / "v6e_gptoss20b_sparse_lora_tp8_fsdp2_smoke.yaml"
 )
+_GPTOSS_SPARSE_V6E8_CONFIG = (
+    Path(__file__).parents[2]
+    / "tpu"
+    / "jobman"
+    / "configs"
+    / "v6e_gptoss20b_sparse_lora_tp8_smoke.yaml"
+)
 
 
 def _output(*rows):
@@ -178,6 +185,7 @@ def test_worker_uses_rank_32_and_dense_uniform_sequences_by_default():
     assert 'LORA_RANK="${TUNIX_LORA_RANK:-32}"' in script
     assert 'TRAIN_TP_SIZE="${TRAIN_TP_SIZE:-8}"' in script
     assert 'TRAIN_FSDP_SIZE="${TRAIN_FSDP_SIZE:-2}"' in script
+    assert 'TRAIN_WORKERS="$TRAIN_WORKERS_SPEC"' in script
     assert 'TP_SIZE="$TRAIN_TP_SIZE"' in script
     assert 'FSDP_SIZE="$TRAIN_FSDP_SIZE"' in script
     assert '--rank "$LORA_RANK"' in script
@@ -220,6 +228,21 @@ def test_gptoss_sparse_smoke_uses_two_updates_and_unique_durable_state():
     assert "asia-northeast1" in env["TUNIX_MAXTEXT_CKPT_CACHE_GCS"]
     assert "gptoss20b-sparse-lora" in env["SMOKE_RESULT_GCS"]
     assert "gptoss20b-sparse-lora-" in env["SKYRLTPU_BUNDLE_URL"]
+
+
+def test_gptoss_sparse_v6e8_race_uses_all_eight_local_chips():
+    config = yaml.safe_load(_GPTOSS_SPARSE_V6E8_CONFIG.read_text())
+    env = config["resumable"]["env"]
+
+    assert config["tpu"]["accelerator"] == "v6e-8"
+    assert config["tpu"]["zone"] == "asia-northeast1-b"
+    assert env["TRAIN_WORKERS"] == "0"
+    assert env["TRAIN_TP_SIZE"] == "8"
+    assert env["TRAIN_FSDP_SIZE"] == "1"
+    assert env["TRAIN_TPU_PROCESS_BOUNDS"] == "1,1,1"
+    assert env["TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS"] == "2,2,2"
+    assert env["TUNIX_SMOKE_EXTRA_UPDATES"] == "1"
+    assert env["TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS"] == "1"
 
 
 def test_replay_diagnostics_reach_every_multihost_controller():
