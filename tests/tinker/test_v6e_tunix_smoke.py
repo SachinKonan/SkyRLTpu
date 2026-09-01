@@ -235,7 +235,7 @@ def test_gptoss_sparse_v6e8_race_uses_all_eight_local_chips():
     env = config["resumable"]["env"]
 
     assert config["tpu"]["accelerator"] == "v6e-8"
-    assert config["tpu"]["zone"] == "us-south1-a"
+    assert config["tpu"]["zone"] == "asia-northeast1-b"
     assert env["TRAIN_WORKERS"] == "0"
     assert env["TRAIN_TP_SIZE"] == "8"
     assert env["TRAIN_FSDP_SIZE"] == "1"
