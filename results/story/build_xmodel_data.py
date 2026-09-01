@@ -71,9 +71,14 @@ for tag, pat in WB.items():
     cats={}
     for f in glob.glob(pat.replace("*", "*", 1) + "/gen&score_train_*.table.json") or glob.glob(glob.glob(pat)[0] + "/gen&score_train_*.table.json") if False else []:
         pass
-    dirs = glob.glob(pat)
+    # union ALL wandb lives (a resume creates a new run-* dir; latest-run is a
+    # symlink to the last one). Sort dirs chronologically so a later life's
+    # replay of an overlapping step overwrites the earlier one.
+    base = pat.replace("/latest-run/files/media/table", "")
+    dirs = sorted(glob.glob(base + "/run-*/files/media/table"))
     if not dirs: continue
-    for f in sorted(glob.glob(dirs[0] + "/gen&score_train_*.table.json")):
+    files = [f for d_ in dirs for f in sorted(glob.glob(d_ + "/gen&score_train_*.table.json"))]
+    for f in files:
         step = int(f.split("gen&score_train_")[1].split("_")[0])
         rows = json.load(open(f))["data"]
         n=fail=imp=noop=reg=0; hb={}
