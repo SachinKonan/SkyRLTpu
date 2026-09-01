@@ -26,15 +26,17 @@ fig, ax = plt.subplots(2, 3, figsize=(11.6, 5.6))
 panels = [("best", "best C5 so far (lower better)"), ("rmean", "mean reward"),
           ("fmt", "format rate"), ("corr", "correctness rate"),
           ("amax", "advantage max (log)"), ("aspread", "advantage spread max-min (log)")]
+X1 = dict(MC); X1["a8x64c"] = "#8659c9"   # 120b 8x64 entropic, dashed
+X1L = dict(ML); X1L["a8x64c"] = "gpt-oss-120b (8x64 = TTT-Discover cfg)"
 for i, (key, title) in enumerate(panels):
     a = ax[i // 3][i % 3]
-    for tag in MC:
+    for tag in X1:
         if key == "aspread":
             y = [(s["amax"] - s["amin"]) if s["amax"] is not None else None for s in D[tag]["series"]]
         else:
             y = ser(tag, key)
         x = list(range(len(y)))
-        a.plot(x, y, color=MC[tag], lw=1.6, label=ML[tag])
+        a.plot(x, y, color=X1[tag], lw=1.6, ls="--" if tag == "a8x64c" else "-", label=X1L[tag])
     a.set_title(title)
     if key in ("amax", "aspread"): a.set_yscale("log")
     if key == "best": a.ticklabel_format(useOffset=False, style="plain"); a.set_ylim(0.38084, 0.38115)
@@ -129,7 +131,7 @@ fig.tight_layout(); fig.savefig("figx5.png", bbox_inches="tight"); plt.close(fig
 
 # figx6: batch-shape contrast, entropic no-CE
 SH = [("objt", "20b 16x32", "#2c7fb8", "-"), ("ctrl15", "20b 64x8", "#2c7fb8", "--"),
-      ("full120b", "120b 64x8", "#8659c9", "--"), ("a8x64c", "120b 8x64 (elite2)", "#8659c9", "-")]
+      ("full120b", "120b 64x8", "#8659c9", "--"), ("a8x64c", "120b 8x64 = TTT-Discover cfg (elite2)", "#8659c9", "-")]
 fig, a = plt.subplots(figsize=(6.4, 3.6))
 for tag, lab, col, sty in SH:
     y = ser(tag, "best"); a.plot(range(len(y)), y, sty, color=col, lw=1.7, label=f"{lab}  {y[-1]:.9f}")
