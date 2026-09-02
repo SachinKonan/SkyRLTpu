@@ -1,0 +1,182 @@
+[
+ {
+  "step": 0,
+  "pool_best": 0.4835758371600583,
+  "best_parent_sampled": 0.483575837,
+  "incumbent_children": 8,
+  "distinct_parents": 64,
+  "share_top3": 0.046875,
+  "best_child": 0.3811031540619791
+ },
+ {
+  "step": 1,
+  "pool_best": 0.38110315406197914,
+  "best_parent_sampled": 0.381103154,
+  "incumbent_children": 8,
+  "distinct_parents": 63,
+  "share_top3": 0.047619047619047616,
+  "best_child": 0.38097275330629243
+ },
+ {
+  "step": 2,
+  "pool_best": 0.38097275330629243,
+  "best_parent_sampled": 0.380972753,
+  "incumbent_children": 8,
+  "distinct_parents": 63,
+  "share_top3": 0.046875,
+  "best_child": 0.38095765505139073
+ },
+ {
+  "step": 3,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380957655,
+  "incumbent_children": 8,
+  "distinct_parents": 61,
+  "share_top3": 0.04838709677419355,
+  "best_child": 0.38096602629149
+ },
+ {
+  "step": 4,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380966026,
+  "incumbent_children": 0,
+  "distinct_parents": 58,
+  "share_top3": 0.0625,
+  "best_child": 0.38096602629149
+ },
+ {
+  "step": 5,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380966026,
+  "incumbent_children": 0,
+  "distinct_parents": 60,
+  "share_top3": 0.07936507936507936,
+  "best_child": 0.38096602629149007
+ },
+ {
+  "step": 6,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380966026,
+  "incumbent_children": 0,
+  "distinct_parents": 61,
+  "share_top3": 0.078125,
+  "best_child": 0.38098808462473044
+ },
+ {
+  "step": 7,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380988085,
+  "incumbent_children": 0,
+  "distinct_parents": 56,
+  "share_top3": 0.1111111111111111,
+  "best_child": 0.38098808462473044
+ },
+ {
+  "step": 8,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380988085,
+  "incumbent_children": 0,
+  "distinct_parents": 57,
+  "share_top3": 0.15625,
+  "best_child": 0.3809835859280867
+ },
+ {
+  "step": 9,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380983586,
+  "incumbent_children": 0,
+  "distinct_parents": 52,
+  "share_top3": 0.171875,
+  "best_child": 0.38097289914295884
+ },
+ {
+  "step": 10,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380972899,
+  "incumbent_children": 0,
+  "distinct_parents": 49,
+  "share_top3": 0.0625,
+  "best_child": 0.38096381233461835
+ },
+ {
+  "step": 11,
+  "pool_best": 0.38095765505139073,
+  "best_parent_sampled": 0.380963812,
+  "incumbent_children": 0,
+  "distinct_parents": 52,
+  "share_top3": 0.046875,
+  "best_child": 0.3809560141405581
+ },
+ {
+  "step": 12,
+  "pool_best": 0.3809560141405581,
+  "best_parent_sampled": 0.380956014,
+  "incumbent_children": 8,
+  "distinct_parents": 50,
+  "share_top3": 0.046875,
+  "best_child": 0.38095601414055813
+ },
+ {
+  "step": 13,
+  "pool_best": 0.3809560141405581,
+  "best_parent_sampled": 0.380956014,
+  "incumbent_children": 8,
+  "distinct_parents": 46,
+  "share_top3": 0.046875,
+  "best_child": 0.38095601414055813
+ },
+ {
+  "step": 14,
+  "pool_best": 0.3809560141405581,
+  "best_parent_sampled": 0.380956014,
+  "incumbent_children": 16,
+  "distinct_parents": 37,
+  "share_top3": 0.0625,
+  "best_child": 0.380907871039058
+ },
+ {
+  "step": 15,
+  "pool_best": 0.380907871039058,
+  "best_parent_sampled": 0.380907871,
+  "incumbent_children": 8,
+  "distinct_parents": 32,
+  "share_top3": 0.078125,
+  "best_child": 0.380907871039058
+ },
+ {
+  "step": 16,
+  "pool_best": 0.380907871039058,
+  "best_parent_sampled": 0.380907871,
+  "incumbent_children": 16,
+  "distinct_parents": 29,
+  "share_top3": 0.07936507936507936,
+  "best_child": 0.3809078062186529
+ },
+ {
+  "step": 17,
+  "pool_best": 0.3809078062186529,
+  "best_parent_sampled": 0.380907806,
+  "incumbent_children": 8,
+  "distinct_parents": 32,
+  "share_top3": 0.06349206349206349,
+  "best_child": 0.3808876590136333
+ },
+ {
+  "step": 18,
+  "pool_best": 0.3808876590136333,
+  "best_parent_sampled": 0.380887659,
+  "incumbent_children": 8,
+  "distinct_parents": 33,
+  "share_top3": 0.047619047619047616,
+  "best_child": 0.3808876590136328
+ },
+ {
+  "step": 19,
+  "pool_best": 0.3808876590136328,
+  "best_parent_sampled": 0.380907806,
+  "incumbent_children": 0,
+  "distinct_parents": 31,
+  "share_top3": 0.06451612903225806,
+  "best_child": 0.3809078062186529
+ }
+]
