@@ -684,6 +684,16 @@ steps 11&ndash;14 at LR 1.5e-4. Gemma is one continuous run.</figcaption>
   both shape contrasts) were logged under the pre-fix lenient grader; the 120b flagship's 0.380887659
   is independently re-verified, the others are not. League runs: gemma is the post-fix strict rerun;
   qwen/muse trees were checked clean at the top.</p>
+  <p><strong>KL leash.</strong> Every gpt-oss run on this page ran with the authors' default KL penalty
+  to the base model (<code>kl_penalty_coef = 0.1</code>); every league run (qwen/gemma/muse, all N/E/D
+  arms) ran with it off. So the cross-model estimator comparison is also a cross-KL comparison. What
+  Stage A's qwen KL arms show about the leash itself: under TTD, KL 0.1 pinned correctness to the base
+  model's level (0.21 → peak 0.34 → <strong>0.20</strong> at the end, vs 0.19 → 0.48 → 0.44 without it)
+  and capped generation length at ~8k tokens (vs 13k), finishing 2.4e-5 worse. A leash toward a base
+  that formats correctly one time in five is a leash toward bad formatting. GRPO on gpt-oss still
+  repaired validity (0.32 → 0.53) <em>through</em> the leash, so KL slows repair rather than preventing
+  it — but on a low-validity base it is a regularizer toward the wrong prior. Whether it helps a
+  high-validity base (gemma, muse) is untested: no KL arm has ever run on them.</p>
   <p><strong>Coverage.</strong> Category stacks and heatmaps exist only for archived steps (qwen 11–14,
   gemma 5–14, muse 0–6 — per-rollout archiving shipped mid-campaign; it is on by default for every run
   since). Muse and the E arms are still running; the 16×32 pair ended early (OOV). The muse
