@@ -12,7 +12,14 @@ def metrics(tag):
     out = []
     for d in rows:
         k = [x for x in d if x.endswith("env/all/correctness") and "/max" not in x and "/min" not in x]
-        out.append(d[k[0]] * 512 if k else None)
+        ss = [x for x in d if x.endswith("puct/sampled_size")]
+        league = any("/env/all/correctness" in x for x in d)      # league keys are member-prefixed
+        if league and ss:
+            batch = d[ss[0]] * 32          # league: parents x 32 rollouts/parent (4e-5 TTD arms: 8x32=256)
+        else:
+            ge = [x for x in d if x == "env/all/total_episodes"]
+            batch = d[ge[0]] if ge else 512   # gpt-oss: total rollouts logged directly (512)
+        out.append(d[k[0]] * batch if k else None)
     return out
 
 # Panels: (title, [(tag, label, color, ls)])
@@ -34,7 +41,7 @@ for i, (title, runs) in enumerate(PAIRS):
     a.set_title(title); a.set_ylim(0, 512); a.axhline(256, color="#bbb", lw=0.6)
     a.legend(fontsize=7, frameon=False); a.set_xlabel("step")
 ax[0][0].set_ylabel("valid rollouts / step (of 512)"); ax[1][0].set_ylabel("valid rollouts / step (of 512)")
-fig.suptitle("Usable rollouts per step: GRPO (solid) vs TTD/entropic (dashed)", fontsize=11)
+fig.suptitle("Usable rollouts per step over each arm's OWN batch: GRPO 16x32=512 (solid) vs TTD/entropic (dashed; the 4e-5 TTD arms ran 8x32=256, elite 0)", fontsize=9)
 fig.tight_layout(); fig.savefig("figx10.png", bbox_inches="tight"); plt.close(fig)
 
 # figx11: where the gradient mass actually goes
