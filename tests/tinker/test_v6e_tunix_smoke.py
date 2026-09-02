@@ -208,6 +208,12 @@ def test_worker_has_pinned_native_sparse_gptoss_profile():
     assert '"megablox":true' in profile
 
 
+def test_colocated_launcher_installs_maxtext_runtime_import_dependencies():
+    script = _COLOCATED_LAUNCHER.read_text()
+
+    assert "'drjax>=0.1.4'" in script
+
+
 def test_gptoss_sparse_smoke_uses_two_updates_and_unique_durable_state():
     config = yaml.safe_load(_GPTOSS_SPARSE_CONFIG.read_text())
     spec = config["resumable"]["run_spec"]

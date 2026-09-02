@@ -745,8 +745,10 @@ if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
     --no-deps --editable "${REMOTE_SKYRL_DIR}"
   # MaxText declares no base dependencies. Install the caller-pinned revision
   # into the same environment from \$HOME to avoid root build configuration.
+  # drjax is imported unconditionally by MaxText's DiLoCo sharding helper on
+  # the model-creation import path, even when DiLoCo itself is disabled.
   (cd "\$HOME" && uv pip install --python "${REMOTE_SKYRL_DIR}/.venv/bin/python" \\
-      "${TUNIX_MAXTEXT_PIP_SPEC}" aqtp pathwaysutils tokamax tiktoken)
+      "${TUNIX_MAXTEXT_PIP_SPEC}" 'drjax>=0.1.4' aqtp pathwaysutils tokamax tiktoken)
 fi
 
 # Converted orbax MaxText checkpoint cache. The engine reads a LOCAL dir
