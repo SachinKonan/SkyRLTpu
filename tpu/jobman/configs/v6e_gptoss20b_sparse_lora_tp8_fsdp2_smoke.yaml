@@ -58,8 +58,8 @@ resumable:
     PROJECT: vision-mix
     ZONE: asia-northeast1-b
     SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-v6e
-    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/gptoss20b-sparse-lora-49dcc471.tar.gz
-    SKYRLTPU_BUNDLE_SHA256: 43cab95afd2965e6bcb50575d15a8c1d3293f1f422373cb0531cf3df60ec530a
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/gptoss20b-sparse-lora-ee749449.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: 01517d3c524e42d468c75b2824a6ed5e09b75d41ae60e18f47009594d9135be4
     MODEL_NAME: openai/gpt-oss-20b
     TUNIX_MAXTEXT_MODEL_NAME: gpt-oss-20b
     TUNIX_MAXTEXT_PIP_SPEC: "maxtext @ git+https://github.com/SachinKonan/maxtext.git@b77f9f358a1dd9b223fcc16792b7d5c2530d7044"
