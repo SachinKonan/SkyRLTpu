@@ -26,7 +26,7 @@ test -f "$REPO/tpu/tunix_runtime/pyproject.toml" || {
   exit 2
 }
 STAGE_ROOT="${GPTOSS120B_STAGE_ROOT:-/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage}"
-MAXTEXT_COMMIT="${GPTOSS120B_MAXTEXT_COMMIT:-d388c5478b18b2322ab36c032deb87b9a4ff065f}"
+MAXTEXT_COMMIT="${GPTOSS120B_MAXTEXT_COMMIT:-5e916f853b8f095466bf8e49537a88e4c11fafb7}"
 HF_MODEL="${GPTOSS120B_HF_MODEL:-unsloth/gpt-oss-120b-BF16}"
 HF_REVISION="${GPTOSS120B_HF_REVISION:-e7523373bc44b42296b43202e265a1eebf2ee16f}"
 GCS_ROOT="${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388}"
