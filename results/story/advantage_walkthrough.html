@@ -608,12 +608,25 @@ steps 11&ndash;14 at LR 1.5e-4. Gemma is one continuous run.</figcaption>
   new deterministic <code>_pairwise_local_search</code> stage. The earlier 1.6e-6 step (step 11) had
   added annealing to a gradient-only lineage; the step-17 gain came from the incumbent itself, adding
   Adam and pairwise local search.</p>
-  <p>Two consequences. First, this is the cleanest evidence we have that <strong>elite slots exist for a
-  reason</strong>: a single unlucky batch (0/4) buried the frontier for ten steps in a run with no
-  elite reseeding, and every league cell since runs elite = 2. Second, "flat best-so-far" is an
-  ambiguous signal — here it meant a healthy population improving under an incumbent nobody was
-  expanding, which is why the per-rollout category stacks and the best-parent-sampled trace are the
-  diagnostics to trust, not the headline curve.</p>
+  <p><strong>Does elite fix it?</strong> The same incumbent-sampling test on the two 120b runs that
+  had elite slots (recovered behaviorally — the knob was never logged):</p>
+  <table>
+  <tr><th>run</th><th>elite</th><th>steps with 0 rollouts on the incumbent</th><th>rollouts on incumbent / step</th><th>final C₅</th></tr>
+  <tr><td>64×8 <code>120b_full</code></td><td>0</td><td><strong>9 / 20</strong></td><td>8 or 0</td><td><strong>0.380887659</strong></td></tr>
+  <tr><td>8×64 <code>120b_a8x64_ctrl</code> (TTT-Discover cfg)</td><td>2</td><td>0 / 20</td><td>64, every step</td><td>0.380939091</td></tr>
+  <tr><td>64×8 <code>120b_distelite</code> (+CE)</td><td>8</td><td>0 / 20</td><td>8, every step</td><td>0.380952043</td></tr>
+  </table>
+  <p>Elite does exactly what it promises — the incumbent is re-expanded every step, starvation gone —
+  and <em>both elite runs finished worse</em>. The 8×64 run poured 12.5% of every step's budget into
+  one state for twenty steps and crawled 2.3e-5 in its last twelve; the elite-0 run's two big gains
+  came from parents 4.4e-5 and 4.7e-5 <em>below</em> the top. So the honest reading is narrower than
+  "elite slots exist for a reason": elite removes one failure mode (a single unlucky batch burying the
+  frontier) and introduces another (budget locked on an exhausted incumbent), and in this model's data
+  the breadth side won. Shape and CE are confounded across the three, so this is a strong hint, not a
+  controlled result — the controlled version is a 64×8 elite-2 run, which has never been done. What
+  the 120b tables do settle is the diagnostic point: "flat best-so-far" here meant a healthy population
+  improving under an incumbent nobody was expanding, so the per-rollout category stacks and the
+  best-parent-sampled trace are what to trust, not the headline curve.</p>
 </div></section>
 
 <section><div class="col">
