@@ -4,9 +4,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-# The patched converter fills scanned tensors incrementally, bounding the peak
-# below this reservation instead of retaining and restacking all 18 layers.
-#SBATCH --mem=128G
+# The patched converter fills scanned tensors incrementally instead of
+# retaining and restacking all 18 layers. The final tensor plus conversion
+# buffers reached the 128 GiB cgroup ceiling, so retain measured headroom.
+#SBATCH --mem=160G
 #SBATCH --time=1-00:00:00
 #SBATCH --output=/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage-%j.log
 #SBATCH --error=/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage-%j.log
