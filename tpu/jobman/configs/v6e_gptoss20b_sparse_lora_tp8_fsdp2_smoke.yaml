@@ -58,8 +58,8 @@ resumable:
     PROJECT: vision-mix
     ZONE: asia-northeast1-b
     SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-v6e
-    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/gptoss20b-sparse-lora-ee749449.tar.gz
-    SKYRLTPU_BUNDLE_SHA256: 01517d3c524e42d468c75b2824a6ed5e09b75d41ae60e18f47009594d9135be4
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/gptoss20b-sparse-lora-v6e-live-0e5e43a3-maxtext-d388c5478.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: 824c695c7b101b899f7b68ce0cfa50ee2341b62eb6fb157e45294808249b7777
     MODEL_NAME: openai/gpt-oss-20b
     TUNIX_MAXTEXT_MODEL_NAME: gpt-oss-20b
     TUNIX_MAXTEXT_PIP_SPEC: "maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
@@ -82,7 +82,7 @@ resumable:
     TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e-gptoss20b-sparse-lora-tp8-fsdp2-r32-s256-v1
     TUNIX_JAX_CACHE_LOCAL: /home/sk7524_princeton_edu/jax_cache_gptoss20b_sparse_lora_tp8_fsdp2_r32_s256_v1
     TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts
-    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/gptoss20b-sparse-lora-tp8-fsdp2-r32-s256-v1.json
+    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/gptoss20b-sparse-lora-tp8-fsdp2-r32-s256-0e5e43a3-d388c5478.json
   prepare:
     workers: all
     timeout: 0

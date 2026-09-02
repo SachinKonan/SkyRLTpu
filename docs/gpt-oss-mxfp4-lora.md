@@ -185,6 +185,13 @@ per device (13.7 GB observed peak). This validates MaxText sparse training,
 Qwix attention/router factors, optimizer state, and trainer checkpoint resume;
 it does not yet validate vLLM adapter upload or 120B capacity.
 
+The durable acceptance record is
+`gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-sparse-lora-tp8-fsdp2-r32-s256-0e5e43a3-d388c5478.json`.
+The corresponding immutable SkyRL source bundle is
+`gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-sparse-lora-v6e-live-0e5e43a3-maxtext-d388c5478.tar.gz`
+with SHA-256
+`824c695c7b101b899f7b68ce0cfa50ee2341b62eb6fb157e45294808249b7777`.
+
 1. Run CPU unit tests for factor layout, replacement/clear semantics, immutable
    base tensors, and pre-activation/pre-reduction numerical ordering.
 2. On one v6e-8, compile native `openai/gpt-oss-20b` MXFP4 with rank-32 zero
