@@ -53,13 +53,13 @@ resumable:
     lora_rank: 32
     dense_sequence: true
     attention_kernel: tokamax-splash-autoselected
-    diagnostic: long-context-single-tile-three-replays
+    diagnostic: long-context-single-tile-three-replays-host-rpc-ack
   env:
     PROJECT: vision-mix
     ZONE: us-east5-b
     SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-v6e
-    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tunix-v6e-multihost-gemma-layout-v25.tar.gz
-    SKYRLTPU_BUNDLE_SHA256: c5adb38b876718da32d0ea8a048cec25ad6abcc2e5c58798cdecc52ba00a1bc5
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tunix-v6e-multihost-gemma-host-ack-b9674762.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: 80826a78e405e8d3de8f1eda0146a1723506909bd79b0c7f063de431ac2cbb34
     MODEL_NAME: google/gemma-4-31b-it
     TUNIX_MAXTEXT_MODEL_NAME: gemma4-31b
     TRAIN_WORKERS: "0,1,2,3"
@@ -77,7 +77,7 @@ resumable:
     TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-gemma4-tp8-fsdp2-r32-s22528-b22528-tokamax-auto-dense-v1
     TUNIX_JAX_CACHE_LOCAL: /home/sk7524_princeton_edu/jax_cache_gemma4_tp8_fsdp2_r32_s22528_b22528_tokamax_auto_dense_v1
     TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts
-    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gemma4-tp8-fsdp2-r32-s22528-rows1-replays3-layout-v2.json
+    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gemma4-tp8-fsdp2-r32-s22528-rows1-replays3-host-rpc-ack-v1.json
   prepare:
     workers: all
     timeout: 0
