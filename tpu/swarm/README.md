@@ -222,6 +222,11 @@ single-writer conversion on stable Neuronic CPU capacity and shared storage:
 sbatch tpu/swarm/stage_gptoss120b_orbax.sbatch
 ```
 
+The stage requests 256 GiB of RAM. Live conversion measured more than 160 GiB
+while materializing the largest scanned expert leaf; the pinned MaxText
+converter fills that leaf incrementally and avoids an additional full-size
+`np.stack`/`np.array` copy.
+
 The stage uploads to the versioned regional prefix
 `gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388/gpt-oss-120b`
 and writes `CHECKPOINT_COMPLETE` last. Pool setup fails before holding a TPU if
