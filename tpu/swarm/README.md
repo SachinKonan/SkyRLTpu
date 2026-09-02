@@ -229,13 +229,11 @@ that marker is absent, then restores the complete checkpoint independently on
 all eight hosts. The 400 GB boot disks leave space for the runtime and compile
 cache; the 100-150 GB defaults used by smaller models are not safe here.
 
-After the marker exists, publish the dedicated source bundle and apply the
+The pool pins the already-published worker bundle for commit `d798b8e9` by
+GCS generation and SHA-256. After the checkpoint marker exists, apply the
 one-slice pool:
 
 ```bash
-bash tpu/swarm/build_skyrl_bundle.sh \
-  gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss120b-v6e32-v1.tar.gz
-
 sky jobs pool apply --pool tpuswarm-v6e32-asia-gptoss120b \
   tpu/swarm/examples/v6e32-gptoss120b-smoke-pool.yaml -y
 ```

@@ -22,7 +22,9 @@ resources:
   disk_size: 400
 
 envs:
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss120b-v6e32-v1.tar.gz
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss120b-v6e32-d798b8e9.tar.gz
+  TPUSWARM_SKYRL_BUNDLE_GENERATION: "1788383346543303"
+  TPUSWARM_SKYRL_BUNDLE_SHA256: f84e9c4d2cc93da7d5d09586e680c9905a3a372cf8caceacd8814cfa3a5b5260
   MODEL_NAME: openai/gpt-oss-120b
   TUNIX_MAXTEXT_MODEL_NAME: gpt-oss-120b
   TUNIX_MAXTEXT_PIP_SPEC: maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f
@@ -78,7 +80,10 @@ setup: |
   root="$HOME/SkyRLTpu-tpuswarm"
   generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
     --format='value(generation)')
-  test -n "$generation"
+  if [ "$generation" != "$TPUSWARM_SKYRL_BUNDLE_GENERATION" ]; then
+    echo "bundle generation changed: expected $TPUSWARM_SKYRL_BUNDLE_GENERATION, got $generation" >&2
+    exit 1
+  fi
   bundles="$HOME/.cache/tpuswarm/bundles"
   destination="$bundles/$generation"
   mkdir -p "$bundles"
@@ -87,6 +92,7 @@ setup: |
     staging=$(mktemp -d "$bundles/.extract.XXXXXX")
     trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
     gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    echo "$TPUSWARM_SKYRL_BUNDLE_SHA256  $archive" | sha256sum -c -
     tar -xzf "$archive" -C "$staging"
     test -x "$staging/tpu/swarm/run_gptoss120b_v6e32_smoke.sh"
     test -f "$staging/third_party/TPUSwarm/pyproject.toml"
@@ -101,7 +107,7 @@ setup: |
   fi
   ln -sfn "$destination" "$root"
   export SKYRL_REPO_DIR="$root"
-  export TPUSWARM_BUNDLE_GENERATION="$generation"
+  export TPUSWARM_BUNDLE_GENERATION="$TPUSWARM_SKYRL_BUNDLE_GENERATION"
 
   # Never hold a costly TPU slice while the one-time 120B conversion is still
   # running. The CPU stage writes this marker only after the complete upload.
