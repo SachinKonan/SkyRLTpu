@@ -62,7 +62,7 @@ resumable:
     SKYRLTPU_BUNDLE_SHA256: 01517d3c524e42d468c75b2824a6ed5e09b75d41ae60e18f47009594d9135be4
     MODEL_NAME: openai/gpt-oss-20b
     TUNIX_MAXTEXT_MODEL_NAME: gpt-oss-20b
-    TUNIX_MAXTEXT_PIP_SPEC: "maxtext @ git+https://github.com/SachinKonan/maxtext.git@b77f9f358a1dd9b223fcc16792b7d5c2530d7044"
+    TUNIX_MAXTEXT_PIP_SPEC: "maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
     TUNIX_MAXTEXT_KWARGS: '{"sparse_matmul":true,"megablox":true,"num_vocab_tiling":64,"remat_policy":"full","allow_split_physical_axes":true}'
     TRAIN_WORKERS: "0,1,2,3"
     VLLM_WORKERS: ""

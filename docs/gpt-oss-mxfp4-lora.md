@@ -1,9 +1,10 @@
 # GPT-OSS LoRA on TPU: immutable MXFP4 experts
 
 Status: training and inference implementations are complete for the
-single-active-adapter GMM path; CPU numeric/integration tests are included. A
-TPU compile, numeric, and performance gate is still required before using the
-20B recipe for a long RL run.
+single-active-adapter GMM path; CPU numeric/integration tests are included. The
+20B trainer acceptance gate passes on a four-host v6e-16 with TP=8/FSDP=2.
+Colocated vLLM weight-sync validation and the 120B v6e-32 gate remain before a
+long RL run.
 
 ## What is actually quantized
 
@@ -123,8 +124,10 @@ factor branches consume the already-routed token buffers inside the same
 MoE work.
 
 Training is pinned to
-[`SachinKonan/maxtext@b77f9f3`](https://github.com/SachinKonan/maxtext/commit/b77f9f358a1dd9b223fcc16792b7d5c2530d7044)
+[`SachinKonan/maxtext@d388c54`](https://github.com/SachinKonan/maxtext/commit/d388c5478b18b2322ab36c032deb87b9a4ff065f)
 (`skyrl/gptoss-sparse-lora`), based on upstream MaxText `f6dea15`.
+This revision also exposes the sown final hidden state to Tunix when vocabulary
+tiling suppresses the full logits tensor.
 
 The stored factor axes preserve MaxText's layer scan metadata. On the proposed
 v6e-32 mesh (`tensor=8`, `fsdp=4`), gate/up B and down A shard their intermediate
@@ -146,7 +149,7 @@ mixed trainer/inference partition is measured for 120B.
 ```bash
 MODEL_NAME=openai/gpt-oss-120b
 TUNIX_MAXTEXT_MODEL_NAME=gpt-oss-120b
-TUNIX_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@b77f9f358a1dd9b223fcc16792b7d5c2530d7044"
+TUNIX_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
 
 TRAIN_WORKERS=0,1,2,3,4,5,6,7
 TP_SIZE=8
@@ -172,6 +175,15 @@ length: compile time and activation HBM, rather than model weights, become the
 dominant uncertainty.
 
 ## 20B-first validation gates
+
+The trainer portion was live-validated on 2026-09-02 with
+`openai/gpt-oss-20b`, v6e-16, TP=8/FSDP=2, rank 32, two 256-token rows, one
+extra consecutive update, and one checkpoint replay. The gate passed with
+nonzero sparse expert gradients, exact restore/replay deltas (`0.0`), gradient
+norm `19.378279` reproduced after restore, and flat post-pass HBM near 3.2 GB
+per device (13.7 GB observed peak). This validates MaxText sparse training,
+Qwix attention/router factors, optimizer state, and trainer checkpoint resume;
+it does not yet validate vLLM adapter upload or 120B capacity.
 
 1. Run CPU unit tests for factor layout, replacement/clear semantics, immutable
    base tensors, and pre-activation/pre-reduction numerical ordering.

@@ -230,6 +230,104 @@ def _keystr_map(state) -> dict[str, Any]:
     return {jax.tree_util.keystr(p): v for p, v in jax.tree.flatten_with_path(state)[0]}
 
 
+def _repair_maxtext_scanned_lora_metadata(model: nnx.Module) -> int:
+    """Give dynamically-created Qwix factors scan-aware logical axes.
+
+    MaxText stores a scanned ``DenseGeneral`` kernel with the layer axis in
+    both its value and logical sharding metadata.  Qwix creates LoRA factors
+    while MaxText is executing one *sliced* layer, then MaxText stacks those
+    new variables after the scan.  With multi-axis output kernels (for example
+    GPT-OSS K/V projections), the new factor can retain the base kernel's full
+    logical spec: a rank-2 LoRA-A slice then carries three non-scan axis names.
+
+    Reconstruct the factor specs using the same rule as Qwix's
+    ``_create_lora_layer_shapes``: A inherits the first contracting kernel
+    axis, B inherits the first remaining kernel axis, and the LoRA rank is
+    replicated.  The layer axis is inserted at MaxText's configured parameter
+    scan position.  Expert-sidecar LoRA variables are not siblings of a base
+    ``kernel`` and are intentionally untouched.
+    """
+
+    repaired = 0
+    for _, module in nnx.iter_modules(model):
+        contract_axes = getattr(module, "axis", None)
+        if contract_axes is None:
+            continue
+        if isinstance(contract_axes, int):
+            contract_count = 1
+        else:
+            contract_count = len(tuple(contract_axes))
+
+        for suffix, factor_axes_for_base in (
+            ("_lora_a", lambda axes: (axes[0], None)),
+            ("_lora_b", lambda axes: (None, axes[contract_count])),
+        ):
+            for factor_name, factor in tuple(vars(module).items()):
+                if not factor_name.endswith(suffix) or not isinstance(factor, nnx.Variable):
+                    continue
+                base = getattr(module, factor_name[: -len(suffix)], None)
+                if not isinstance(base, nnx.Variable):
+                    continue
+
+                base_meta = base.get_metadata()
+                scan_name = base_meta.get(nnx.PARTITION_NAME)
+                scan_axis = base_meta.get("param_scan_axis")
+                if scan_name is None or scan_axis is None:
+                    continue
+
+                sharding_key = next(
+                    (
+                        key
+                        for key in ("out_sharding", "sharding_names", "sharding")
+                        if isinstance(base_meta.get(key), (tuple, list, jax.sharding.PartitionSpec))
+                    ),
+                    None,
+                )
+                if sharding_key is None:
+                    continue
+                base_axes = list(base_meta[sharding_key])
+                if scan_axis < len(base_axes) and base_axes[scan_axis] == scan_name:
+                    del base_axes[scan_axis]
+                elif scan_name in base_axes:
+                    base_axes.remove(scan_name)
+
+                if not base_axes or contract_count >= len(base_axes):
+                    raise ValueError(
+                        f"Cannot derive Qwix LoRA sharding for {factor_name}: "
+                        f"base axes={base_axes}, contracting axes={contract_count}"
+                    )
+                factor_axes = list(factor_axes_for_base(base_axes))
+                factor_value = factor.get_value()
+                if factor_value.ndim == len(factor_axes) + 1:
+                    factor_axes.insert(scan_axis, scan_name)
+                elif factor_value.ndim != len(factor_axes):
+                    raise ValueError(
+                        f"Unexpected Qwix LoRA factor rank for {factor_name}: "
+                        f"shape={factor_value.shape}, derived axes={factor_axes}, scan axis={scan_axis}"
+                    )
+
+                factor_meta = factor.get_metadata()
+                factor_sharding_keys = [
+                    key
+                    for key in ("out_sharding", "sharding_names", "sharding")
+                    if isinstance(factor_meta.get(key), (tuple, list, jax.sharding.PartitionSpec))
+                ]
+                if not factor_sharding_keys:
+                    factor_sharding_keys = [sharding_key]
+                for key in factor_sharding_keys:
+                    old_value = factor_meta.get(key, base_meta[sharding_key])
+                    new_value = (
+                        jax.sharding.PartitionSpec(*factor_axes)
+                        if isinstance(old_value, jax.sharding.PartitionSpec)
+                        else tuple(factor_axes)
+                    )
+                    factor.set_metadata(key, new_value)
+                factor.set_metadata(nnx.PARTITION_NAME, scan_name)
+                factor.set_metadata("param_scan_axis", scan_axis)
+                repaired += 1
+    return repaired
+
+
 class _MaxTextAdapterShim(nnx.Module):
     """Adapts tunix's MaxText wrapper to the native-tunix model interface.
 
@@ -241,8 +339,23 @@ class _MaxTextAdapterShim(nnx.Module):
     loss mask / generation bookkeeping instead.
     """
 
-    def __init__(self, adapter: nnx.Module):
+    def __init__(self, adapter: nnx.Module, logical_axis_rules=()):
         self.adapter = adapter
+        # MaxText resolves several shard_map specs dynamically while tracing a
+        # model call.  ``from_pretrained`` installs this context while building
+        # the module, but the context is gone by the time Qwix traces its LoRA
+        # template or SkyRL traces a train step.  Without restoring it here,
+        # those specs silently become replicated.  GPT-OSS exposes the bug
+        # immediately: the routed down projection is TP reduce-scattered to
+        # hidden/TP while its replicated output bias remains full hidden width.
+        # Keep the rules on the shim so every model trace, including Qwix's
+        # interception trace, sees the exact configuration used at load time.
+        self.logical_axis_rules = tuple(logical_axis_rules)
+
+    def _logical_axis_context(self):
+        from flax import linen as flax_linen
+
+        return flax_linen.logical_axis_rules(self.logical_axis_rules)
 
     def __call__(
         self,
@@ -254,7 +367,17 @@ class _MaxTextAdapterShim(nnx.Module):
         segment_ids=None,
         skip_lm_head: bool = False,
     ):
-        logits, new_cache = self.adapter(input_tokens, positions, cache, attention_mask)
+        with self._logical_axis_context():
+            adapter_kwargs = {}
+            if output_hidden_states or skip_lm_head:
+                adapter_kwargs["output_hidden_states"] = True
+            logits, new_cache = self.adapter(
+                input_tokens,
+                positions,
+                cache,
+                attention_mask,
+                **adapter_kwargs,
+            )
         return logits, new_cache
 
     def compute_final_logits(self, x):
@@ -267,7 +390,8 @@ class _MaxTextAdapterShim(nnx.Module):
         apply_output_head does). Used by the FLCE loss to project token tiles
         without ever forming the full [B, T, V]. Requires num_vocab_tiling>1 so
         __call__ returns hidden instead of logits."""
-        return self.adapter.base.logits_from_hidden_states_for_vocab_tiling(hidden_chunk, True, "train")
+        with self._logical_axis_context():
+            return self.adapter.base.logits_from_hidden_states_for_vocab_tiling(hidden_chunk, True, "train")
 
     def get_model_input(self):
         # Batch must be divisible by every mesh axis the decoder shards it
@@ -666,7 +790,7 @@ class TunixBackend(AbstractBackend):
             logger.info(f"MaxText mesh: shape={getattr(mesh, 'shape', None)} axes={getattr(mesh, 'axis_names', None)}")
         logger.info(f"Loaded MaxText model {mt_name} for {self.base_model} (pure-NNX)")
         self._log_param_sharding(model)
-        return _MaxTextAdapterShim(model)
+        return _MaxTextAdapterShim(model, maxtext_config.logical_axis_rules)
 
     def _log_param_sharding(self, model) -> None:
         """One-shot diagnostic: are params actually sharded, and how much HBM is live?
@@ -769,7 +893,12 @@ class TunixBackend(AbstractBackend):
             alpha=lora_config.alpha,
         )
         model_input = model.get_model_input()
-        return qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+        model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+        if self.config.model_source == "maxtext":
+            repaired = _repair_maxtext_scanned_lora_metadata(model)
+            if repaired:
+                logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
+        return model
 
     def _get_template(self, lora_config: types.LoraConfig) -> _Template:
         key = self._template_key(lora_config)

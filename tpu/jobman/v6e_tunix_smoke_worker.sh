@@ -53,7 +53,7 @@ case "$MAXTEXT_MODEL_NAME" in
     # GPT-OSS expert projections stay on MaxText's routed-token MegaBlox/GMM
     # path. Generic Qwix handles attention/router; the pinned MaxText fork
     # installs the six explicit sparse expert factors consumed by that GMM.
-    DEFAULT_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@b77f9f358a1dd9b223fcc16792b7d5c2530d7044"
+    DEFAULT_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
     DEFAULT_MAXTEXT_KWARGS='{"sparse_matmul":true,"megablox":true,"num_vocab_tiling":64,"remat_policy":"full","allow_split_physical_axes":true}'
     DEFAULT_FLCE_TILE_SIZE=512
     ;;

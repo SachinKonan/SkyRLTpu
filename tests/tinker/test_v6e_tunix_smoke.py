@@ -203,7 +203,7 @@ def test_worker_has_pinned_native_sparse_gptoss_profile():
     script = _WORKER_SCRIPT.read_text()
     profile = script.split("gpt-oss-20b)", 1)[1].split(";;", 1)[0]
 
-    assert "b77f9f358a1dd9b223fcc16792b7d5c2530d7044" in profile
+    assert "d388c5478b18b2322ab36c032deb87b9a4ff065f" in profile
     assert '"sparse_matmul":true' in profile
     assert '"megablox":true' in profile
 
@@ -228,7 +228,7 @@ def test_gptoss_sparse_smoke_uses_two_updates_and_unique_durable_state():
     assert env["TRAIN_FSDP_SIZE"] == "2"
     assert env["TUNIX_SMOKE_EXTRA_UPDATES"] == "1"
     assert env["TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS"] == "1"
-    assert "b77f9f358a1dd9b223fcc16792b7d5c2530d7044" in env["TUNIX_MAXTEXT_PIP_SPEC"]
+    assert "d388c5478b18b2322ab36c032deb87b9a4ff065f" in env["TUNIX_MAXTEXT_PIP_SPEC"]
     assert json.loads(env["TUNIX_MAXTEXT_KWARGS"])["sparse_matmul"] is True
     assert config["tpu"]["zone"] == "asia-northeast1-b"
     assert "asia-northeast1" in env["TUNIX_MAXTEXT_CKPT_CACHE_GCS"]
