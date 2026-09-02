@@ -234,9 +234,11 @@ that marker is absent, then restores the complete checkpoint independently on
 all eight hosts. The 400 GB boot disks leave space for the runtime and compile
 cache; the 100-150 GB defaults used by smaller models are not safe here.
 
-The pool pins the already-published worker bundle for commit `d798b8e9` by
-GCS generation and SHA-256. After the checkpoint marker exists, apply the
-one-slice pool:
+The pool pins the already-published worker bundle for commit `cd211c9a` by
+GCS generation and SHA-256. The smoke client has a four-hour attempt bound;
+if the local training service disappears, exit 33 sends the attempt through
+SkyPilot managed recovery instead of leaving TPUSwarm `RUNNING` indefinitely.
+After the checkpoint marker exists, apply the one-slice pool:
 
 ```bash
 sky jobs pool apply --pool tpuswarm-v6e32-asia-gptoss120b \

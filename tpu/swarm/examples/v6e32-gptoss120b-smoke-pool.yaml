@@ -22,9 +22,9 @@ resources:
   disk_size: 400
 
 envs:
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss120b-v6e32-d798b8e9.tar.gz
-  TPUSWARM_SKYRL_BUNDLE_GENERATION: "1788383346543303"
-  TPUSWARM_SKYRL_BUNDLE_SHA256: f84e9c4d2cc93da7d5d09586e680c9905a3a372cf8caceacd8814cfa3a5b5260
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss120b-v6e32-cd211c9a.tar.gz
+  TPUSWARM_SKYRL_BUNDLE_GENERATION: "1788391516553799"
+  TPUSWARM_SKYRL_BUNDLE_SHA256: 71cee58405390cb3337fdeadd05bc4481170f70bfebb15cb184cd395ad862edb
   MODEL_NAME: openai/gpt-oss-120b
   TUNIX_MAXTEXT_MODEL_NAME: gpt-oss-120b
   TUNIX_MAXTEXT_PIP_SPEC: maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f
