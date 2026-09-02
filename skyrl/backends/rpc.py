@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import traceback
 from dataclasses import dataclass
+from itertools import count
 from typing import Any, Callable, get_type_hints
 
 import jax
 import numpy as np
 from cloudpathlib import AnyPath
+from jax._src import distributed as jax_distributed
 from jax.experimental import multihost_utils
 from pydantic import BaseModel, TypeAdapter
 
@@ -31,6 +33,8 @@ class RpcPayload(BaseModel):
 
 _RPC_PAYLOAD_ADAPTER: TypeAdapter[RpcPayload] = TypeAdapter(RpcPayload)
 _MAX_ERROR_BYTES = 16 * 1024
+_RPC_ACK_TIMEOUT_MS = 30 * 60 * 1000
+_RPC_ACK_SEQUENCE = count()
 
 
 def broadcast_command(cmd: RpcPayload | None, process_id: int) -> RpcPayload:
@@ -97,21 +101,42 @@ def synchronize_rpc_result(error: str | None) -> dict[int, str]:
     failure to the Tinker request.
     """
     encoded = (error or "").encode("utf-8", errors="replace")[:_MAX_ERROR_BYTES]
-    lengths = np.asarray(
-        multihost_utils.process_allgather(
-            np.asarray([len(encoded)], dtype=np.int32),
-            tiled=True,
+    process_count = jax.process_count()
+    process_id = jax.process_index()
+    if process_count == 1:
+        return {process_id: error or ""} if error else {}
+
+    # Do not use a JAX array collective for this control-plane acknowledgement.
+    # The backend method immediately before this barrier may have dispatched a
+    # different number of device programs on different controllers. Launching
+    # process_allgather here can then race those programs and make TPU peers see
+    # different launch IDs, fatally poisoning an otherwise healthy slice. The
+    # distributed runtime's host-side coordination service is independent of
+    # TPU program ordering and is the appropriate transport for RPC metadata.
+    client = jax_distributed.global_state.client
+    if client is None:
+        raise RuntimeError("JAX distributed runtime client is unavailable for RPC acknowledgement")
+
+    sequence = next(_RPC_ACK_SEQUENCE)
+    prefix = f"skyrl_rpc_ack/{sequence}"
+    client.key_value_set_bytes(
+        f"{prefix}/{process_id}",
+        (b"\x01" + encoded) if error else b"\x00",
+    )
+    client.wait_at_barrier(f"{prefix}/barrier", _RPC_ACK_TIMEOUT_MS)
+
+    if process_id != 0:
+        return {}
+
+    errors: dict[int, str] = {}
+    for peer_id in range(process_count):
+        payload = client.blocking_key_value_get_bytes(
+            f"{prefix}/{peer_id}",
+            _RPC_ACK_TIMEOUT_MS,
         )
-    ).reshape(-1)
-    width = max(1, int(lengths.max(initial=0)))
-    local = np.zeros(width, dtype=np.uint8)
-    local[: len(encoded)] = np.frombuffer(encoded, dtype=np.uint8)
-    gathered = np.asarray(multihost_utils.process_allgather(local, tiled=True)).reshape(-1, width)
-    return {
-        process_id: bytes(gathered[process_id, :length]).decode("utf-8", errors="replace")
-        for process_id, length in enumerate(lengths.tolist())
-        if length
-    }
+        if payload[:1] == b"\x01":
+            errors[peer_id] = payload[1:].decode("utf-8", errors="replace")
+    return errors
 
 
 def call_with_rpc_ack(method: Callable, kwargs: dict[str, Any]):
