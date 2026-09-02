@@ -24,6 +24,7 @@ _GPTOSS120B_POOL = (
     _REPO / "tpu" / "swarm" / "examples" / "v6e32-gptoss120b-smoke-pool.yaml"
 )
 _GPTOSS120B_STAGE = _REPO / "tpu" / "swarm" / "stage_gptoss120b_orbax.sbatch"
+_V6E_SMOKE_WORKER = _REPO / "tpu" / "jobman" / "v6e_tunix_smoke_worker.sh"
 _ORBAX_PREP = _REPO / "tpu" / "jobman" / "ensure_orbax_ckpt.sh"
 
 
@@ -183,6 +184,7 @@ def test_gptoss120b_v6e32_task_pins_full_training_topology_and_checkpoint():
     assert envs["TUNIX_SMOKE_ROWS"] == "4"
     assert envs["TUNIX_UNIFORM_SEQ_LEN"] == "1024"
     assert envs["TUNIX_TRAIN_TOKEN_BUDGET"] == "4096"
+    assert envs["TUNIX_SMOKE_TIMEOUT_SECONDS"] == "14400"
     assert envs["TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER"] == "1"
     assert "gptoss120b-bf16-d388" in envs["TUNIX_MAXTEXT_CKPT_CACHE_GCS"]
     assert "d388c5478b18b2322ab36c032deb87b9a4ff065f" in envs["TUNIX_MAXTEXT_PIP_SPEC"]
@@ -259,6 +261,7 @@ def test_gptoss120b_pool_and_task_cannot_drift_on_machine_shape():
         "TUNIX_SMOKE_ROWS",
         "TUNIX_UNIFORM_SEQ_LEN",
         "TUNIX_TRAIN_TOKEN_BUDGET",
+        "TUNIX_SMOKE_TIMEOUT_SECONDS",
         "TUNIX_MAXTEXT_CKPT_CACHE_GCS",
     ):
         assert str(pool["envs"][key]) == payload["envs"][key], key
@@ -277,3 +280,11 @@ def test_gptoss120b_checkpoint_publish_and_restore_require_atomic_marker():
     assert "TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER:-0" in prep
     assert '"$SRC/CHECKPOINT_COMPLETE"' in prep
     assert '"$DST/0/items/manifest.ocdbt"' in prep
+
+
+def test_v6e_smoke_timeout_requests_managed_recovery():
+    worker = _V6E_SMOKE_WORKER.read_text()
+
+    assert 'SMOKE_TIMEOUT_SECONDS="${TUNIX_SMOKE_TIMEOUT_SECONDS:-14400}"' in worker
+    assert "timeout --foreground --signal=TERM --kill-after=60s" in worker
+    assert 'SMOKE_RC=33' in worker

@@ -264,6 +264,7 @@ class GptOss120BV6e32SmokeTask(CommandAutoResumable):
             "TUNIX_UNIFORM_SEQ_LEN": "1024",
             "TUNIX_TRAIN_TOKEN_BUDGET": "4096",
             "TUNIX_FLCE_TILE_SIZE": "512",
+            "TUNIX_SMOKE_TIMEOUT_SECONDS": "14400",
             "TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER": "1",
             "TUNIX_MAXTEXT_CKPT_CACHE_GCS": (
                 "gs://sk7524-tinker-tpu-asia-northeast1/"

@@ -113,11 +113,16 @@ FLCE_TILE_SIZE="${TUNIX_FLCE_TILE_SIZE:-$DEFAULT_FLCE_TILE_SIZE}"
 FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-1}"
 UNIFORM="${TUNIX_UNIFORM_SEQ_LEN:-4096}"
 BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-$((4 * UNIFORM))}"
+SMOKE_TIMEOUT_SECONDS="${TUNIX_SMOKE_TIMEOUT_SECONDS:-14400}"
 JAX_CACHE_GCS="${TUNIX_JAX_CACHE_GCS:-gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-qwen35-tp8-fsdp2-r${LORA_RANK}-s${UNIFORM}-v1}"
 CKPT_CACHE_GCS="${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts}"
 CACHE_LOCAL="${TUNIX_JAX_CACHE_LOCAL:-$HOME/jax_cache}"
 LOG_BUCKET_ROOT="${RESULT_GCS%%/v6e-smoke-results/*}"
 LOG_GCS="${V6E_LOG_GCS:-${LOG_BUCKET_ROOT}/v6e-smoke-logs/${JOBMAN_ATTEMPT_ID:-unknown}}"
+if ! [[ "$SMOKE_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "TUNIX_SMOKE_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 2
+fi
 
 # Spot slices have repeatedly disappeared during cold start. Publish the small
 # bring-up/API logs while the attempt is alive so the final useful line survives
@@ -218,10 +223,20 @@ if [ "$REQUIRE_SPARSE_EXPERT_GRADIENTS" = "1" ]; then
 fi
 
 set +e
-"$REPO/.venv/bin/python" "$REPO/tpu/v6e_tunix_smoke.py" "${SMOKE_ARGS[@]}" \
+timeout --foreground --signal=TERM --kill-after=60s "${SMOKE_TIMEOUT_SECONDS}s" \
+  "$REPO/.venv/bin/python" "$REPO/tpu/v6e_tunix_smoke.py" "${SMOKE_ARGS[@]}" \
   2>&1 | tee "$HOME/v6e-tunix-smoke.log"
 SMOKE_RC=${PIPESTATUS[0]}
 set -e
+
+# The Tinker SDK keeps retrying session heartbeats when the local training
+# service dies, so a failed server can otherwise leave a managed job RUNNING
+# forever. Exit 33 is in the task's SkyPilot recovery policy and causes a
+# bounded failover/restart instead of a terminal task failure.
+if [ "$SMOKE_RC" -eq 124 ] || [ "$SMOKE_RC" -eq 137 ]; then
+  echo "v6e smoke exceeded ${SMOKE_TIMEOUT_SECONDS}s; requesting managed recovery" >&2
+  SMOKE_RC=33
+fi
 
 if [ "$SMOKE_RC" -ne 0 ]; then
   kill "$CACHE_PUBLISHER_PID" 2>/dev/null || true
