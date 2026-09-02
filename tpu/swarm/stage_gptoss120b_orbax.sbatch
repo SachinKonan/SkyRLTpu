@@ -4,9 +4,9 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-# The scanned gate/up conversion stacks 18 per-layer expert tensors before
-# Orbax shards them. Its transient peak exceeds 128 GB even in lazy mode.
-#SBATCH --mem=400G
+# The patched converter fills scanned tensors incrementally, bounding the peak
+# below this reservation instead of retaining and restacking all 18 layers.
+#SBATCH --mem=128G
 #SBATCH --time=1-00:00:00
 #SBATCH --output=/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage-%j.log
 #SBATCH --error=/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage-%j.log
