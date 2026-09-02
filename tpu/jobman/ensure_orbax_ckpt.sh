@@ -56,6 +56,7 @@ CACHE="${TUNIX_MAXTEXT_CKPT_CACHE:-$HOME/skyrl-maxtext-ckpts-local}"
 CACHE_GCS="${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts}"
 HF_MODEL="${MODEL_NAME:-$_HF}"
 MARGIN_GB="${CKPT_MARGIN_GB:-12}"      # venvs, logs, XLA cache, room to breathe
+REQUIRE_MARKER="${TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER:-0}"
 
 [ -n "$MT_NAME" ] || { echo "ckpt: TUNIX_MAXTEXT_MODEL_NAME unset -- backend will derive/convert"; exit 0; }
 # gcloud storage, NOT gsutil. The checkpoint objects are composite (that is how
@@ -69,6 +70,12 @@ GCS_CLI="$(command -v gcloud || echo "$HOME/google-cloud-sdk/bin/gcloud")"
 SRC="$CACHE_GCS/$MT_NAME"
 DST="$CACHE/$MT_NAME"
 
+if [ "$REQUIRE_MARKER" = "1" ] && ! timeout 60 "$GCS_CLI" storage objects describe \
+  "$SRC/CHECKPOINT_COMPLETE" >/dev/null 2>&1; then
+  echo "ckpt: required completion marker is missing at $SRC/CHECKPOINT_COMPLETE" >&2
+  exit 3
+fi
+
 want=$(timeout 300 "$GS" du -s "$SRC" 2>/dev/null | awk '{print $1}')
 if [ -z "$want" ] || [ "$want" = "0" ]; then
   echo "ckpt: no checkpoint at $SRC -- leaving conversion-from-HF as the path"
@@ -76,11 +83,21 @@ if [ -z "$want" ] || [ "$want" = "0" ]; then
 fi
 want_gb=$(( want / 1024 / 1024 / 1024 ))
 
+valid_layout() {
+  [ -s "$DST/0/_CHECKPOINT_METADATA" ] && \
+    [ -s "$DST/0/items/_METADATA" ] && \
+    [ -s "$DST/0/items/_sharding" ] && \
+    [ -s "$DST/0/items/manifest.ocdbt" ] && \
+    { [ "$REQUIRE_MARKER" != "1" ] || [ -s "$DST/CHECKPOINT_COMPLETE" ]; }
+}
+
 have=$(du -sb "$DST" 2>/dev/null | awk '{print $1}'); have="${have:-0}"
 parts=$(find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)
-# 2% tolerance: du and gsutil du disagree slightly on block accounting.
-if [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ]; then
-  echo "ckpt: already complete ($(( have / 1024 / 1024 / 1024 )) GB >= 98% of ${want_gb} GB)"
+# Object bytes plus local directory entries make a complete `du -sb` at least
+# as large as `gsutil du`.  A percentage tolerance is unsafe for 100+ GB
+# checkpoints: even 2% missing can be several corrupt tensor chunks.
+if [ -z "$parts" ] && [ "$have" -ge "$want" ] && valid_layout; then
+  echo "ckpt: already complete ($(( have / 1024 / 1024 / 1024 ))/${want_gb} GB)"
   exit 0
 fi
 [ "$have" != "0" ] && echo "ckpt: local copy incomplete ($(( have / 1024 / 1024 / 1024 ))/${want_gb} GB, partial=${parts:-none}) -- refetching"
@@ -98,10 +115,24 @@ for try in 1 2 3; do
     fi
   fi
 
-  timeout 3600 "$GCS_CLI" storage rsync -r "$SRC" "$DST" >/dev/null 2>>"$HOME/ckpt-prep-errors.log"
+  rsync_extra=()
+  if [ "$REQUIRE_MARKER" = "1" ]; then
+    # The remote marker means its upload is complete. Do not copy it locally
+    # until this host's data rsync also completes, or an interrupted transfer
+    # could leave a false-ready local cache.
+    rm -f -- "$DST/CHECKPOINT_COMPLETE"
+    rsync_extra+=(--exclude='(^|/)CHECKPOINT_COMPLETE$')
+  fi
+  if timeout 3600 "$GCS_CLI" storage rsync -r "${rsync_extra[@]}" \
+    "$SRC" "$DST" >/dev/null 2>>"$HOME/ckpt-prep-errors.log"; then
+    if [ "$REQUIRE_MARKER" = "1" ]; then
+      timeout 60 "$GCS_CLI" storage cp "$SRC/CHECKPOINT_COMPLETE" \
+        "$DST/CHECKPOINT_COMPLETE" >/dev/null 2>>"$HOME/ckpt-prep-errors.log" || true
+    fi
+  fi
   have=$(du -sb "$DST" 2>/dev/null | awk '{print $1}'); have="${have:-0}"
   parts=$(find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)
-  if [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ]; then
+  if [ -z "$parts" ] && [ "$have" -ge "$want" ] && valid_layout; then
     echo "ckpt: restored $(( have / 1024 / 1024 / 1024 ))/${want_gb} GB from $SRC (attempt $try)"
     exit 0
   fi

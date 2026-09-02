@@ -19,6 +19,7 @@ from tpuswarm.types import (
 
 ERDOS_MIN_OVERLAP_KIND = "skyrl.ttt.erdos_min_overlap.v1"
 QWEN35_V6E32_GRPO_KIND = "skyrl.qwen35.v6e32_grpo.v1"
+GPTOSS120B_V6E32_SMOKE_KIND = "skyrl.gptoss120b.v6e32_smoke.v1"
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -143,10 +144,7 @@ class Qwen35V6e32GrpoTask(CommandAutoResumable):
             "VLLM_RAY_EXECUTOR": "0",
             "VLLM_CLIENT_SIDE_ROUND_ROBIN": "1",
             "ZONE": "asia-northeast1-b",
-            "GCS_RUN": (
-                "gs://sk7524-tinker-tpu-asia-northeast1/skyrl-runs/"
-                f"{run_dir}"
-            ),
+            "GCS_RUN": (f"gs://sk7524-tinker-tpu-asia-northeast1/skyrl-runs/{run_dir}"),
             "TUNIX_MAXTEXT_CKPT_CACHE_GCS": (
                 "gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts"
             ),
@@ -211,6 +209,125 @@ class Qwen35V6e32GrpoTask(CommandAutoResumable):
                 "secrets": secrets,
                 "cell": "grpo-n",
                 "run_dir": run_dir,
+            }
+        )
+
+
+class GptOss120BV6e32SmokeTask(CommandAutoResumable):
+    """Runs the checkpoint/replay acceptance gate on a full v6e-32 slice."""
+
+    @classmethod
+    def validate_payload(cls, payload: Mapping[str, Any]) -> Mapping[str, Any]:
+        run_name = payload.get("run_name")
+        if not isinstance(run_name, str) or _SAFE_NAME.fullmatch(run_name) is None:
+            raise ValueError(
+                "run_name must contain only letters, digits, dot, underscore, or dash"
+            )
+        repo_dir = Path(str(payload.get("repo_dir", Path.cwd()))).expanduser()
+        result_gcs = str(
+            payload.get(
+                "result_gcs",
+                "gs://sk7524-tinker-tpu-asia-northeast1/"
+                f"v6e-smoke-results/{run_name}.json",
+            )
+        )
+        if not result_gcs.startswith("gs://") or result_gcs.endswith("/"):
+            raise ValueError("result_gcs must be a GCS object URL")
+
+        env = {
+            "MODEL_NAME": "openai/gpt-oss-120b",
+            "TUNIX_MAXTEXT_MODEL_NAME": "gpt-oss-120b",
+            "TUNIX_MAXTEXT_PIP_SPEC": (
+                "maxtext @ git+https://github.com/SachinKonan/maxtext.git@"
+                "d388c5478b18b2322ab36c032deb87b9a4ff065f"
+            ),
+            "TUNIX_MAXTEXT_KWARGS": (
+                '{"sparse_matmul":true,"megablox":true,'
+                '"num_vocab_tiling":64,"remat_policy":"full",'
+                '"allow_split_physical_axes":true}'
+            ),
+            "TRAIN_WORKERS": "0,1,2,3,4,5,6,7",
+            "VLLM_WORKERS": "",
+            "TRAIN_TP_SIZE": "8",
+            "TRAIN_FSDP_SIZE": "4",
+            "TUNIX_ROW_SHARD": "4",
+            "TRAIN_TPU_PROCESS_BOUNDS": "4,2,1",
+            "TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS": "2,2,1",
+            "TUNIX_LORA_RANK": "32",
+            "TUNIX_SMOKE_ROWS": "4",
+            "TUNIX_SMOKE_REPLAYS": "1",
+            "TUNIX_SMOKE_EXTRA_UPDATES": "1",
+            "TUNIX_REPLAY_DIAGNOSTICS": "1",
+            "TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS": "1",
+            "TUNIX_FREE_BASE_STATE": "1",
+            "TUNIX_MAX_TARGET_LENGTH": "1024",
+            "TUNIX_UNIFORM_SEQ_LEN": "1024",
+            "TUNIX_TRAIN_TOKEN_BUDGET": "4096",
+            "TUNIX_FLCE_TILE_SIZE": "512",
+            "TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER": "1",
+            "TUNIX_MAXTEXT_CKPT_CACHE_GCS": (
+                "gs://sk7524-tinker-tpu-asia-northeast1/"
+                "skyrl-maxtext-ckpts-gptoss120b-bf16-d388"
+            ),
+            "TUNIX_JAX_CACHE_GCS": (
+                "gs://sk7524-tinker-tpu-asia-northeast1/"
+                "jax-compile-cache-v6e-gptoss120b-tp8-fsdp4-r32-s1024-v1"
+            ),
+            "TUNIX_JAX_CACHE_LOCAL": (
+                "/home/sk7524_princeton_edu/jax_cache_gptoss120b_tp8_fsdp4_r32_s1024_v1"
+            ),
+            "SMOKE_RESULT_GCS": result_gcs,
+            "ZONE": "asia-northeast1-b",
+            "SKYRL_REPO_DIR": str(repo_dir),
+        }
+        overrides = payload.get("env", {})
+        if not isinstance(overrides, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in overrides.items()
+        ):
+            raise ValueError("env must map strings to strings")
+        env.update(overrides)
+        secrets = payload.get("secrets", {})
+        if not isinstance(secrets, dict) or not all(
+            isinstance(key, str) and (value is None or isinstance(value, str))
+            for key, value in secrets.items()
+        ):
+            raise ValueError("secrets must map strings to strings or null")
+
+        resources = payload.get(
+            "resources",
+            {
+                "cloud": "gcp",
+                "region": "asia-northeast1",
+                "zone": "asia-northeast1-b",
+                "accelerators": "tpu-v6e-32",
+                "accelerator_args": {
+                    "gcp_queued_resource": True,
+                    "runtime_version": "v2-alpha-tpuv6e",
+                },
+                "use_spot": True,
+                # The immutable BF16 Orbax checkpoint is much larger than the
+                # 65 GB MXFP4 release. Leave room for venvs and XLA caches.
+                "disk_size": 400,
+                "job_recovery": {
+                    "strategy": "FAILOVER",
+                    "max_restarts_on_errors": 3,
+                    "recover_on_exit_codes": [33, 34],
+                },
+            },
+        )
+        wrapper = repo_dir / "tpu" / "swarm" / "run_gptoss120b_v6e32_smoke.sh"
+        probe = repo_dir / "tpu" / "swarm" / "gptoss120b_smoke_probe.sh"
+        return super().validate_payload(
+            {
+                "argv": ["bash", str(wrapper)],
+                "completion_probe_argv": ["bash", str(probe)],
+                "pool": payload.get("pool", "tpuswarm-v6e32-asia-gptoss120b"),
+                "resources": resources,
+                "envs": env,
+                "secrets": secrets,
+                "run_name": run_name,
+                "result_gcs": result_gcs,
             }
         )
 
@@ -295,6 +412,43 @@ def qwen35_v6e32_grpo_task(
     )
 
 
+def gptoss120b_v6e32_smoke_task(
+    *,
+    task_id: str,
+    repo_dir: str | Path,
+    run_name: str | None = None,
+    result_gcs: str | None = None,
+    resource_class: str = "gcp-tpu-v6e-32-asia",
+    env: Mapping[str, str] | None = None,
+    secrets: Mapping[str, str | None] | None = None,
+    pool: str = "tpuswarm-v6e32-asia-gptoss120b",
+    resources: Mapping[str, Any] | None = None,
+    priority: Priority = Priority.NORMAL,
+) -> TaskSpec:
+    """Build the fixed GPT-OSS 120B TP8/FSDP4 acceptance contract."""
+
+    payload: dict[str, Any] = {
+        "run_name": run_name or task_id,
+        "repo_dir": str(Path(repo_dir).expanduser()),
+        "env": dict(env or {}),
+        "secrets": dict(secrets or {}),
+        "pool": pool,
+    }
+    if result_gcs is not None:
+        payload["result_gcs"] = result_gcs
+    if resources is not None:
+        payload["resources"] = dict(resources)
+    return TaskSpec(
+        task_id=task_id,
+        idempotency_key=task_id,
+        kind=GPTOSS120B_V6E32_SMOKE_KIND,
+        resource_class=resource_class,
+        payload=payload,
+        priority=priority,
+        recovery_priority=Priority.BLOCKING_RECOVERY,
+    )
+
+
 def erdos_ensemble_workflow(
     *,
     workflow_id: str,
@@ -320,3 +474,4 @@ def register(registry: TaskRegistry) -> None:
 
     registry.register_task(ERDOS_MIN_OVERLAP_KIND, ErdosMinOverlapTask)
     registry.register_task(QWEN35_V6E32_GRPO_KIND, Qwen35V6e32GrpoTask)
+    registry.register_task(GPTOSS120B_V6E32_SMOKE_KIND, GptOss120BV6e32SmokeTask)

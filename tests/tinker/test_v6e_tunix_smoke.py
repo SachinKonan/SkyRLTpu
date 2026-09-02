@@ -201,7 +201,7 @@ def test_worker_uses_rank_32_and_dense_uniform_sequences_by_default():
 
 def test_worker_has_pinned_native_sparse_gptoss_profile():
     script = _WORKER_SCRIPT.read_text()
-    profile = script.split("gpt-oss-20b)", 1)[1].split(";;", 1)[0]
+    profile = script.split("gpt-oss-20b|gpt-oss-120b)", 1)[1].split(";;", 1)[0]
 
     assert "d388c5478b18b2322ab36c032deb87b9a4ff065f" in profile
     assert '"sparse_matmul":true' in profile

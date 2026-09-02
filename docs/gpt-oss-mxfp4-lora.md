@@ -167,6 +167,15 @@ TUNIX_FLCE_TILE_SIZE=512
 TUNIX_MAXTEXT_KWARGS='{"sparse_matmul":true,"megablox":true,"num_vocab_tiling":64,"remat_policy":"full","allow_split_physical_axes":true}'
 ```
 
+The runnable TPUSwarm profile is
+[`tpu/swarm/examples/v6e32-gptoss120b-smoke-pool.yaml`](../tpu/swarm/examples/v6e32-gptoss120b-smoke-pool.yaml).
+Its checkpoint is staged once by
+[`tpu/swarm/stage_gptoss120b_orbax.sbatch`](../tpu/swarm/stage_gptoss120b_orbax.sbatch)
+from the pinned 233.7 GB BF16 source and guarded by a marker written only after
+the Orbax upload completes. Every TPU host requires that marker and restores the
+same checkpoint onto a 400 GB boot disk; distributed startup never attempts
+eight independent HF conversions.
+
 The first acceptance run should use four equal 1,024-token rows, which matches
 FSDP=4 and avoids conflating sparse-LoRA correctness with long-context memory.
 After zero-adapter parity and a nonzero-gradient update pass, increase sequence

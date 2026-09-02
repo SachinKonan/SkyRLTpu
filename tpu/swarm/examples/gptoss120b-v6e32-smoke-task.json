@@ -1,0 +1,16 @@
+{
+  "task_id": "gptoss120b-v6e32-smoke-001",
+  "idempotency_key": "gptoss120b-v6e32-smoke-001",
+  "kind": "skyrl.gptoss120b.v6e32_smoke.v1",
+  "resource_class": "gcp-tpu-v6e-32-asia",
+  "priority": "NORMAL",
+  "recovery_priority": "BLOCKING_RECOVERY",
+  "payload": {
+    "run_name": "gptoss120b-v6e32-smoke-001",
+    "repo_dir": "/home/sk7524_princeton_edu/SkyRLTpu-tpuswarm",
+    "pool": "tpuswarm-v6e32-asia-gptoss120b",
+    "secrets": {
+      "HF_TOKEN": null
+    }
+  }
+}

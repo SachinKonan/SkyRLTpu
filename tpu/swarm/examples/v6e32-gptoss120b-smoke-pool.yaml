@@ -1,0 +1,111 @@
+# One complete eight-host v6e-32 slice for the GPT-OSS 120B acceptance gate.
+# Keep this pool separate from mixed Qwen training/inference workers: all 32
+# chips participate in TP8/FSDP4 training and every host restores the large
+# immutable BF16 Orbax checkpoint during setup.
+pool:
+  workers: 1
+  min_workers: 1
+  max_workers: 1
+  queue_length_threshold: 1
+  upscale_delay_seconds: 60
+  downscale_delay_seconds: 1200
+
+resources:
+  cloud: gcp
+  region: asia-northeast1
+  zone: asia-northeast1-b
+  accelerators: tpu-v6e-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv6e
+  use_spot: true
+  disk_size: 400
+
+envs:
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss120b-v6e32-v1.tar.gz
+  MODEL_NAME: openai/gpt-oss-120b
+  TUNIX_MAXTEXT_MODEL_NAME: gpt-oss-120b
+  TUNIX_MAXTEXT_PIP_SPEC: maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f
+  TUNIX_MAXTEXT_KWARGS: '{"sparse_matmul":true,"megablox":true,"num_vocab_tiling":64,"remat_policy":"full","allow_split_physical_axes":true}'
+  ZONE: asia-northeast1-b
+
+  TRAIN_WORKERS: 0,1,2,3,4,5,6,7
+  VLLM_WORKERS: ""
+  TRAIN_TP_SIZE: "8"
+  TRAIN_FSDP_SIZE: "4"
+  TUNIX_ROW_SHARD: "4"
+  TRAIN_TPU_PROCESS_BOUNDS: 4,2,1
+  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
+
+  TUNIX_LORA_RANK: "32"
+  TUNIX_SMOKE_ROWS: "4"
+  TUNIX_SMOKE_REPLAYS: "1"
+  TUNIX_SMOKE_EXTRA_UPDATES: "1"
+  TUNIX_REPLAY_DIAGNOSTICS: "1"
+  TUNIX_REQUIRE_SPARSE_EXPERT_GRADIENTS: "1"
+  TUNIX_FREE_BASE_STATE: "1"
+  TUNIX_MAX_TARGET_LENGTH: "1024"
+  TUNIX_UNIFORM_SEQ_LEN: "1024"
+  TUNIX_TRAIN_TOKEN_BUDGET: "4096"
+  TUNIX_FLCE_TILE_SIZE: "512"
+
+  TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER: "1"
+  TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388
+  TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e-gptoss120b-tp8-fsdp4-r32-s1024-v1
+  TUNIX_JAX_CACHE_LOCAL: /home/sk7524_princeton_edu/jax_cache_gptoss120b_tp8_fsdp4_r32_s1024_v1
+  SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/gptoss120b-sparse-lora-tp8-fsdp4-r32-s1024-v1.json
+
+setup: |
+  set -euo pipefail
+  wait_for_apt() {
+    local waited=0
+    while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      if [ "$waited" -ge 600 ]; then return 1; fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+  }
+  if ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then
+    wait_for_apt
+    sudo apt-get update -y
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      git curl tmux python3 python3-venv python3-pip build-essential
+  fi
+  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+
+  root="$HOME/SkyRLTpu-tpuswarm"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -x "$staging/tpu/swarm/run_gptoss120b_v6e32_smoke.sh"
+    test -f "$staging/third_party/TPUSwarm/pyproject.toml"
+    test -f "$staging/.tpuswarm-bundle-manifest"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  if [ -e "$root" ] && [ ! -L "$root" ]; then
+    echo "$root exists and is not a TPUSwarm-managed symlink" >&2
+    exit 1
+  fi
+  ln -sfn "$destination" "$root"
+  export SKYRL_REPO_DIR="$root"
+  export TPUSWARM_BUNDLE_GENERATION="$generation"
+
+  # Never hold a costly TPU slice while the one-time 120B conversion is still
+  # running. The CPU stage writes this marker only after the complete upload.
+  gcloud storage objects describe \
+    "$TUNIX_MAXTEXT_CKPT_CACHE_GCS/gpt-oss-120b/CHECKPOINT_COMPLETE" \
+    >/dev/null
+  bash "$root/tpu/swarm/prepare_gptoss120b_v6e32.sh"

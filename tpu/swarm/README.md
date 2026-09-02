@@ -203,3 +203,50 @@ Infrastructure loss, preemption, and capacity failures recover without a fixed
 attempt limit. Exit codes 33/34 also recover without consuming the application
 retry allowance; other nonzero application exits receive three restarts (four
 total attempts). `FAILOVER` intentionally preserves the single-zone placement.
+
+## GPT-OSS 120B v6e-32 acceptance pool
+
+[`v6e32-gptoss120b-smoke-pool.yaml`](examples/v6e32-gptoss120b-smoke-pool.yaml)
+is the first full-model training gate after the live 20B proof. One pool worker
+is one complete v6e-32 slice: all eight TPU VMs train with TP8 x FSDP4. The task
+runs four 1,024-token rows, two consecutive rank-32 sparse-LoRA updates, and a
+checkpoint restore/replay before publishing its durable JSON result.
+
+Checkpoint preparation is deliberately separate from TPU provisioning.
+MaxText converts the immutable
+`unsloth/gpt-oss-120b-BF16@e7523373bc44b42296b43202e265a1eebf2ee16f`
+source (233.7 GB), rather than the 65 GB MXFP4 serving checkpoint. Run the
+single-writer conversion on stable Neuronic CPU capacity and shared storage:
+
+```bash
+sbatch tpu/swarm/stage_gptoss120b_orbax.sbatch
+```
+
+The stage uploads to the versioned regional prefix
+`gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388/gpt-oss-120b`
+and writes `CHECKPOINT_COMPLETE` last. Pool setup fails before holding a TPU if
+that marker is absent, then restores the complete checkpoint independently on
+all eight hosts. The 400 GB boot disks leave space for the runtime and compile
+cache; the 100-150 GB defaults used by smaller models are not safe here.
+
+After the marker exists, publish the dedicated source bundle and apply the
+one-slice pool:
+
+```bash
+bash tpu/swarm/build_skyrl_bundle.sh \
+  gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss120b-v6e32-v1.tar.gz
+
+sky jobs pool apply --pool tpuswarm-v6e32-asia-gptoss120b \
+  tpu/swarm/examples/v6e32-gptoss120b-smoke-pool.yaml -y
+```
+
+Submit an idempotent `AutoResumable` task through the durable controller:
+
+```bash
+uv run --isolated --extra swarm python tpu/swarm/submit_gptoss120b_smoke.py \
+  --task-id gptoss120b-v6e32-smoke-001
+```
+
+SkyPilot owns spot recovery and process retries; TPUSwarm keeps the logical task
+live until `SMOKE_RESULT_GCS` exists. A replacement slice restores the same
+Orbax checkpoint and compile-cache prefix rather than re-running conversion.

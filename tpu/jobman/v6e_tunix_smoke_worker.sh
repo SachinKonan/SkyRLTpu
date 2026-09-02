@@ -49,7 +49,7 @@ MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3.5-27B}"
 MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-qwen3.5-27b}"
 DEFAULT_MAXTEXT_PIP_SPEC="maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939977ac0ab79a4e64d21730936f253567"
 case "$MAXTEXT_MODEL_NAME" in
-  gpt-oss-20b)
+  gpt-oss-20b|gpt-oss-120b)
     # GPT-OSS expert projections stay on MaxText's routed-token MegaBlox/GMM
     # path. Generic Qwix handles attention/router; the pinned MaxText fork
     # installs the six explicit sparse expert factors consumed by that GMM.
@@ -250,4 +250,4 @@ wait "$CACHE_PUBLISHER_PID" 2>/dev/null || true
 gcloud storage rsync -r "$CACHE_LOCAL" "$JAX_CACHE_GCS"
 gcloud storage cp "$HOME/v6e-tunix-smoke.json" "$RESULT_GCS"
 publish_logs
-echo "v6e TP8/FSDP2 smoke complete: $RESULT_GCS"
+echo "v6e Tunix smoke complete (TP${TRAIN_TP_SIZE}/FSDP${TRAIN_FSDP_SIZE}): $RESULT_GCS"
