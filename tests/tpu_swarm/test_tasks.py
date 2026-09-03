@@ -273,6 +273,8 @@ def test_gptoss120b_checkpoint_publish_and_restore_require_atomic_marker():
 
     assert "SLURM_SUBMIT_DIR" in stage
     assert "e7523373bc44b42296b43202e265a1eebf2ee16f" in stage
+    assert "#SBATCH --mem=320G" in stage
+    assert "5d2578e28b809bfd90062a56d5c27f5159eae46c" in stage
     assert "--lazy_load_tensors=True" in stage
     assert stage.index("gcloud storage rsync") < stage.index(
         'gcloud storage cp "$MARKER"'

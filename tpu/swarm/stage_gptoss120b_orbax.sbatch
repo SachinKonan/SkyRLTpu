@@ -4,11 +4,11 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
-# The patched converter fills scanned tensors incrementally instead of
-# retaining and restacking all 18 layers. The final tensor plus conversion
-# buffers exceeded 160 GiB, and the unfinished item-31 allocation mapped
-# 204 GiB. Reserve enough for that allocation plus Orbax writer headroom.
-#SBATCH --mem=256G
+# The patched converter fills both single- and multi-axis scanned tensors
+# incrementally instead of retaining and restacking all layers and experts.
+# The previous converter reached the exact 256 GiB cgroup ceiling at item 33;
+# keep enough headroom for the final tensor and Orbax writer buffers.
+#SBATCH --mem=320G
 #SBATCH --time=1-00:00:00
 #SBATCH --output=/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage-%j.log
 #SBATCH --error=/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage-%j.log
@@ -28,7 +28,7 @@ test -f "$REPO/tpu/tunix_runtime/pyproject.toml" || {
   exit 2
 }
 STAGE_ROOT="${GPTOSS120B_STAGE_ROOT:-/n/fs/vision-mix/sk7524/gptoss120b-orbax-stage}"
-MAXTEXT_COMMIT="${GPTOSS120B_MAXTEXT_COMMIT:-5e916f853b8f095466bf8e49537a88e4c11fafb7}"
+MAXTEXT_COMMIT="${GPTOSS120B_MAXTEXT_COMMIT:-5d2578e28b809bfd90062a56d5c27f5159eae46c}"
 HF_MODEL="${GPTOSS120B_HF_MODEL:-unsloth/gpt-oss-120b-BF16}"
 HF_REVISION="${GPTOSS120B_HF_REVISION:-e7523373bc44b42296b43202e265a1eebf2ee16f}"
 GCS_ROOT="${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388}"
