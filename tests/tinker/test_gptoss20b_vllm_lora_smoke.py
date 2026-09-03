@@ -101,7 +101,7 @@ def test_remote_runner_pins_runtime_and_publishes_success_conditionally():
     ).read_text()
 
     assert '"vllm-tpu==0.23.0"' in runner
-    assert "24c767036ccfa3d4e010f72f4bfe7a91ca3afc05" in runner
+    assert "81eb319d62c699efd510f2f8c4f1bb05de0c7ba7" in runner
     assert "--tensor-parallel-size 8" in runner
     assert "--enable-lora" in runner
     assert "--if-generation-match=0" in runner
