@@ -320,4 +320,7 @@ def test_gemma_long_context_diagnostics_use_tp8_and_three_replays(config_path, e
     assert env["TUNIX_SMOKE_REPLAYS"] == "3"
     assert env["TUNIX_REPLAY_DIAGNOSTICS"] == "1"
     assert env["TUNIX_SMOKE_DIAGNOSTIC_ACCEPT_FAILURE"] == "1"
-    assert "grad-diag" in env["SMOKE_RESULT_GCS"]
+    assert "three-replays" in spec["diagnostic"]
+    assert f"rows{expected_rows}" in env["SMOKE_RESULT_GCS"]
+    assert "replays3" in env["SMOKE_RESULT_GCS"]
+    assert env["SMOKE_RESULT_GCS"].endswith(".json")
