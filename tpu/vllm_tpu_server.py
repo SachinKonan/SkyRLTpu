@@ -91,6 +91,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
         # every upload call, including retries whose directory already exists.
         # The BF16 router is part of adapter_model.safetensors and follows
         # vLLM's ordinary ReplicatedLinear LoRA path below.
+        moe_update = None
         moe_path = target / "moe_lora.safetensors"
         if moe_path.exists():
             import json as _json
@@ -146,13 +147,15 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 "MXFP4 expert LoRA factor update for %s: %d tensors -> %s",
                 lora_name, n_tensors, result,
             )
+            moe_update = result
         elif previous and (lora_dir / previous / "moe_lora.safetensors").exists():
             # Moving from a full GPT-OSS adapter to attention/router-only must
             # not leave the previous expert factors globally active.
             res = engine.collective_rpc("set_moe_lora_factors", args=(None, {"scale": 0.0}))
             if inspect.isawaitable(res):
-                await res
+                res = await res
             logger.info("Cleared MXFP4 expert LoRA factors for %s", previous)
+            moe_update = res
 
         models = request.app.state.openai_serving_models
 
@@ -169,7 +172,15 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             if "already been loaded" not in detail:
                 raise HTTPException(status_code=400, detail=f"load_lora_adapter failed: {detail}")
 
-        return {"status": "ok", "lora_name": lora_name}
+        # Returning the worker result makes the live acceptance gate capable
+        # of proving that all MXFP4 expert buffers were updated (or cleared),
+        # without scraping a human-oriented server log. Existing clients only
+        # consume status/lora_name, so this is backward compatible.
+        return {
+            "status": "ok",
+            "lora_name": lora_name,
+            "moe_update": moe_update,
+        }
 
 
 async def _serve(args) -> None:
