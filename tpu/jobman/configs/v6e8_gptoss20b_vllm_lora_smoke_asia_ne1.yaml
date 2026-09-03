@@ -1,0 +1,96 @@
+job:
+  name: sk7524-v6e8-gptoss20b-vllm-lora-an1
+  env_type: null
+  loop: true
+  remote_user: sk7524_princeton_edu
+  worker_num: auto
+
+tpu:
+  allocation_mode: queued-resources
+  accelerator: v6e-8
+  name: sk7524-v6e8-gptoss20b-vllm-lora-an1
+  zone: asia-northeast1-b
+  version: v2-alpha-tpuv6e
+  pricing: spot
+  flags:
+    - "--project=vision-mix"
+
+gcsfuse:
+  bucket_name: sk7524-tinker-tpu-asia-northeast1
+  mount_path: /home/sk7524_princeton_edu/gcs
+
+ssh:
+  private_key: ~/.ssh/jobman_tpu_ed25519
+  identities:
+    - private_key: ~/.ssh/jobman_tpu_ed25519
+      public_key: ~/.ssh/jobman_tpu_ed25519.pub
+      config_entry: |
+        Host 10.* 34.* 35.* 8.* 104.* 136.*
+          IdentityFile ~/.ssh/jobman_tpu_ed25519
+          IdentitiesOnly yes
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+
+resumable:
+  enabled: true
+  run_id: auto
+  run_id_prefix: v6e8-gptoss20b-vllm-mxfp4-lora-v1
+  local_cache_root: /n/fs/vision-mix/sk7524/jobman-runs
+  remote_gcs_cache_root: /home/sk7524_princeton_edu/gcs/jobman-runs
+  remote_local_cache_root: /tmp/jobman-runs
+  retry_sleep_seconds: 60
+  lease:
+    type: local
+    poll_seconds: 30
+  run_spec:
+    experiment: gptoss20b-vllm-mxfp4-lora-live
+    model: openai/gpt-oss-20b
+    topology: tp8
+    rank: 1
+    validation: zero-a-b-a-router-clear-base
+    bundle_commit: 8eda17c3
+  env:
+    PROJECT: vision-mix
+    ZONE: asia-northeast1-b
+    SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-gptoss20b-vllm
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-lora-v6e8-8eda17c3.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: 429719442d2250479db4c21544625634dbc5308bd64813577e5b4bed2a13a6e4
+    TPU_INFERENCE_COMMIT: 24c767036ccfa3d4e010f72f4bfe7a91ca3afc05
+    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-lora-v6e8-v1.json
+    SMOKE_LOG_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-logs/gptoss20b-vllm-mxfp4-lora-v6e8-an1.log
+    SMOKE_FAILURE_GCS_PREFIX: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/failures/gptoss20b-vllm-mxfp4-lora-v6e8-an1
+  prepare:
+    workers: all
+    timeout: 0
+    command: |
+      set -euxo pipefail
+      command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$PATH"
+      DEST="$SKYRL_REPO_DIR"
+      want="$SKYRLTPU_BUNDLE_SHA256"
+      have=$(cat "$DEST/.bundle-sha256" 2>/dev/null || echo none)
+      if [ "$want" != "$have" ]; then
+        gcloud storage cp "$SKYRLTPU_BUNDLE_URL" /tmp/gptoss20b-vllm-bundle.tar.gz
+        echo "$want  /tmp/gptoss20b-vllm-bundle.tar.gz" | sha256sum -c -
+        rm -rf "$DEST.new"
+        mkdir -p "$DEST.new"
+        tar -xzf /tmp/gptoss20b-vllm-bundle.tar.gz -C "$DEST.new"
+        test -x "$DEST.new/tpu/run_gptoss20b_vllm_lora_smoke.sh"
+        echo "$want" > "$DEST.new/.bundle-sha256"
+        rm -rf "$DEST.old"
+        [ -d "$DEST" ] && mv "$DEST" "$DEST.old" || true
+        mv "$DEST.new" "$DEST"
+      fi
+      mkdir -p "$HOME/skyrl-logs"
+  completion_probe:
+    workers: 0
+    timeout: 120
+    command: |
+      gcloud storage objects describe "$SMOKE_RESULT_GCS" >/dev/null 2>&1
+
+command:
+  cmd: |
+    set -euo pipefail
+    export PATH="$HOME/.local/bin:$PATH"
+    bash "$SKYRL_REPO_DIR/tpu/run_gptoss20b_vllm_lora_smoke.sh"
+  workers: all

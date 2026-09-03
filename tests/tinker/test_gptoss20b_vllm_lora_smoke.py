@@ -3,9 +3,18 @@ import math
 from pathlib import Path
 
 import numpy as np
+import yaml
 from safetensors.numpy import load_file
 
 from tpu import gptoss20b_vllm_lora_smoke as smoke
+
+
+_CONFIG_DIR = Path(__file__).parents[2] / "tpu" / "jobman" / "configs"
+_RACE_CONFIGS = (
+    _CONFIG_DIR / "v6e8_gptoss20b_vllm_lora_smoke_asia_ne1.yaml",
+    _CONFIG_DIR / "v6e8_gptoss20b_vllm_lora_smoke_east5b.yaml",
+    _CONFIG_DIR / "v6e8_gptoss20b_vllm_lora_smoke_europe_w4a.yaml",
+)
 
 
 def test_synthetic_adapter_matches_split_tunix_export_contract(tmp_path, monkeypatch):
@@ -97,3 +106,27 @@ def test_remote_runner_pins_runtime_and_publishes_success_conditionally():
     assert "--enable-lora" in runner
     assert "--if-generation-match=0" in runner
     assert "acceptance passed" in runner
+
+
+def test_regional_jobman_race_has_one_shared_run_and_success_contract():
+    configs = [yaml.safe_load(path.read_text()) for path in _RACE_CONFIGS]
+    zones = {config["tpu"]["zone"] for config in configs}
+    expected_zones = {"asia-northeast1-b", "us-east5-b", "europe-west4-a"}
+
+    assert zones == expected_zones
+    assert all(config["tpu"]["accelerator"] == "v6e-8" for config in configs)
+    assert all(config["tpu"]["pricing"] == "spot" for config in configs)
+    assert len({config["resumable"]["run_id_prefix"] for config in configs}) == 1
+    assert len(
+        {json.dumps(config["resumable"]["run_spec"], sort_keys=True) for config in configs}
+    ) == 1
+
+    environments = [config["resumable"]["env"] for config in configs]
+    assert len({env["SMOKE_RESULT_GCS"] for env in environments}) == 1
+    assert len({env["SKYRLTPU_BUNDLE_URL"] for env in environments}) == 1
+    assert len({env["SKYRLTPU_BUNDLE_SHA256"] for env in environments}) == 1
+    assert len({env["SMOKE_LOG_GCS"] for env in environments}) == 3
+    assert all(
+        "gcloud storage objects describe" in config["resumable"]["completion_probe"]["command"]
+        for config in configs
+    )
