@@ -48,14 +48,14 @@ resumable:
     topology: tp8
     rank: 1
     validation: zero-a-b-a-router-clear-base
-    bundle_commit: 4660ab72
+    bundle_commit: e5a75391
   env:
     PROJECT: vision-mix
     ZONE: asia-northeast1-b
     SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-gptoss20b-vllm
-    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-lora-v6e8-4660ab72.tar.gz
-    SKYRLTPU_BUNDLE_SHA256: 873a4360ff0327a88674afb2e6d31a016d934589937ecaaa048bf7a5d5bc1708
-    TPU_INFERENCE_COMMIT: 81eb319d62c699efd510f2f8c4f1bb05de0c7ba7
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-lora-v6e8-e5a75391.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: ac8b31d9c6962de47dd8aa187f4efbd65ddc984d6ee72ffa484df70a2ca17648
+    TPU_INFERENCE_COMMIT: 22d9fcc6c23a536d1fb288b6aba02adbb24cb913
     SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-lora-v6e8-v1.json
     SMOKE_LOG_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-logs/gptoss20b-vllm-mxfp4-lora-v6e8-an1.log
     SMOKE_FAILURE_GCS_PREFIX: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/failures/gptoss20b-vllm-mxfp4-lora-v6e8-an1
