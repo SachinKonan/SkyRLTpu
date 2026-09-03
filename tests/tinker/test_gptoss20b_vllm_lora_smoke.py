@@ -101,9 +101,11 @@ def test_remote_runner_pins_runtime_and_publishes_success_conditionally():
     ).read_text()
 
     assert '"vllm-tpu==0.23.0"' in runner
-    assert "81eb319d62c699efd510f2f8c4f1bb05de0c7ba7" in runner
+    assert "22d9fcc6c23a536d1fb288b6aba02adbb24cb913" in runner
     assert "--tensor-parallel-size 8" in runner
     assert "--enable-lora" in runner
+    assert 'MOE_REQUANTIZE_WEIGHT_DTYPE:-fp8' in runner
+    assert 'MOE_REQUANTIZE_BLOCK_SIZE:-512' in runner
     assert "--if-generation-match=0" in runner
     assert "acceptance passed" in runner
 

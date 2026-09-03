@@ -11,7 +11,7 @@ VENV="${VLLM_VENV:-$HOME/.venvs/vllm-tpu-gptoss20b-lora}"
 MODEL="${MODEL_NAME:-openai/gpt-oss-20b}"
 PORT="${VLLM_PORT:-8001}"
 ZONE="${ZONE:-unknown}"
-TPUINF_COMMIT="${TPU_INFERENCE_COMMIT:-81eb319d62c699efd510f2f8c4f1bb05de0c7ba7}"
+TPUINF_COMMIT="${TPU_INFERENCE_COMMIT:-22d9fcc6c23a536d1fb288b6aba02adbb24cb913}"
 RESULT="${SMOKE_RESULT_LOCAL:-/tmp/gptoss20b-vllm-lora-result.json}"
 LOG="${SMOKE_LOG_LOCAL:-$HOME/skyrl-logs/gptoss20b-vllm-lora.log}"
 HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
@@ -65,6 +65,11 @@ export MODEL_IMPL_TYPE=vllm
 export TPU_BACKEND_TYPE=torchax
 export SKIP_JAX_PRECOMPILE=1
 export USE_MOE_EP_KERNEL=0
+# v6e has FP8 GMM support but not native FP4 GMM support.  The checkpoint
+# remains MXFP4 on disk; its experts are dequantized once at load time and
+# requantized to FP8 for execution on v6e.
+export MOE_REQUANTIZE_WEIGHT_DTYPE="${MOE_REQUANTIZE_WEIGHT_DTYPE:-fp8}"
+export MOE_REQUANTIZE_BLOCK_SIZE="${MOE_REQUANTIZE_BLOCK_SIZE:-512}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
 export VLLM_LORA_RESOLVER_CACHE_DIR="$HOME/skyrl-local-loras"
 mkdir -p "$VLLM_LORA_RESOLVER_CACHE_DIR"
