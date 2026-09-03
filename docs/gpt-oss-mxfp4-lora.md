@@ -3,8 +3,9 @@
 Status: training and inference implementations are complete for the
 single-active-adapter GMM path; CPU numeric/integration tests are included. The
 20B trainer acceptance gate passes on a four-host v6e-16 with TP=8/FSDP=2.
-Colocated vLLM weight-sync validation and the 120B v6e-32 gate remain before a
-long RL run.
+The 20B vLLM load/inference/hot-swap gate also passes on one v6e-8 with TP=8.
+Colocated trainer-to-vLLM weight-sync validation and the 120B v6e-32 gate
+remain before a long RL run.
 
 ## What is actually quantized
 
@@ -96,7 +97,9 @@ yet expose the required pre-activation and pre-reduction insertion points.
 ## Adapter lifecycle
 
 1. Model loading allocates zeroed BF16 factor buffers on their final TPU
-   shardings. MXFP4 blocks/scales are loaded and requantized exactly as before.
+   shardings. MXFP4 blocks/scales remain compressed in the source checkpoint.
+   TPU v7+ may execute native FP4 GMMs; v6e dequantizes once during loading and
+   requantizes the expert weights to the supported FP8 GMM runtime format.
 2. The trainer exports attention and router weights in
    `adapter_model.safetensors`. Expert factors remain in
    `moe_lora.safetensors` with `gptoss-moe-lora/v1` metadata.
@@ -185,6 +188,47 @@ length and token budget independently. Do not start at the production context
 length: compile time and activation HBM, rather than model weights, become the
 dominant uncertainty.
 
+## Live 20B vLLM acceptance
+
+The vLLM gate passed on 2026-09-03 on Jobman job `000702`, TPU
+`sk7524-v6e8-gptoss20b-vllm-lora-e5b_1` in `us-east5-b`, using all eight v6e
+chips as TP=8. The canonical result is:
+
+```text
+gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-lora-v6e8-v1.json
+generation: 1788461724531989
+```
+
+It reports `acceptance_pass: true` and all seven semantic checks pass:
+zero-adapter/base parity, nonzero expert effect, A-to-B replacement, exact
+A replay, nonzero router effect, clear/base parity, and immutable base weights
+after every swap. Each expert upload updated all 24 layers and reported
+`base_weights_mutated: false`. The live sequence itself completed in 27.79
+seconds after server startup and first-request compilation.
+
+The accepted source/runtime pins are:
+
+- SkyRL bundle source: `e5a753919327c7bbc45a1dfd948935d583aeac0f`.
+- TPU inference fork: `22d9fcc6c23a536d1fb288b6aba02adbb24cb913`.
+- Immutable bundle:
+  `gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-lora-v6e8-e5a75391.tar.gz`.
+- Bundle SHA-256:
+  `ac8b31d9c6962de47dd8aa187f4efbd65ddc984d6ee72ffa484df70a2ca17648`
+  (GCS generation `1788461524492466`).
+
+The live bring-up exposed two native-loader assumptions that unit tests had
+not exercised on v6e:
+
+1. GPT-OSS 20B's intermediate width 2,880 produced six W2 scale blocks at the
+   former fixed block size 512, which cannot shard over TP=8. The loader now
+   chooses a 384-value W2 block, yielding eight scale blocks and padding the
+   intermediate dimension to 3,072.
+2. Native `float4_e2m1fn` GMM kernels require TPU v7+, while v6e's Mosaic
+   compiler rejects that vector type. The native MXFP4 loader now honors the
+   standard `MOE_REQUANTIZE_WEIGHT_DTYPE` and
+   `MOE_REQUANTIZE_BLOCK_SIZE` settings; the v6e runner selects FP8/512 while
+   leaving the stored checkpoint in MXFP4.
+
 ## 20B-first validation gates
 
 The trainer portion was live-validated on 2026-09-02 with
@@ -193,8 +237,10 @@ extra consecutive update, and one checkpoint replay. The gate passed with
 nonzero sparse expert gradients, exact restore/replay deltas (`0.0`), gradient
 norm `19.378279` reproduced after restore, and flat post-pass HBM near 3.2 GB
 per device (13.7 GB observed peak). This validates MaxText sparse training,
-Qwix attention/router factors, optimizer state, and trainer checkpoint resume;
-it does not yet validate vLLM adapter upload or 120B capacity.
+Qwix attention/router factors, optimizer state, and trainer checkpoint resume.
+Together with the vLLM result above, training and inference are independently
+accepted; a live colocated weight-sync loop and 120B capacity are still
+unproven.
 
 The durable acceptance record is
 `gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-sparse-lora-tp8-fsdp2-r32-s256-0e5e43a3-d388c5478.json`.
@@ -203,14 +249,13 @@ The corresponding immutable SkyRL source bundle is
 with SHA-256
 `824c695c7b101b899f7b68ce0cfa50ee2341b62eb6fb157e45294808249b7777`.
 
-1. Run CPU unit tests for factor layout, replacement/clear semantics, immutable
+1. CPU unit tests cover factor layout, replacement/clear semantics, immutable
    base tensors, and pre-activation/pre-reduction numerical ordering.
-2. On one v6e-8, compile native `openai/gpt-oss-20b` MXFP4 with rank-32 zero
-   buffers and prove zero-adapter logits match the base path.
-3. Install deterministic random factors and compare layer outputs/logits with
-   a dense BF16 reference implementation on fixed prompts.
-4. Replace adapter A with B and then clear it; verify exact B-only/base outputs
-   with no drift across repeated swaps.
+2. The v6e-8 gate compiles `openai/gpt-oss-20b`, installs fixed rank-1 test
+   factors into rank-32 buffers, and proves zero-adapter/base parity.
+3. Deterministic nonzero expert and router factors both change live outputs.
+4. A-to-B-to-A replacement is exact, and clear restores the initial base
+   fingerprints with no drift.
 5. Benchmark prefill/decode and HBM. The first implementation adds two shared
    dense shrink matmuls, three skinny grouped matmuls, and one shared dense
    expand matmul per layer. A later Pallas kernel can fuse each low-rank A-to-B

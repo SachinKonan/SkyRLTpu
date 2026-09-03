@@ -83,9 +83,13 @@ documented in [`tpu/swarm/README.md`](../tpu/swarm/README.md) and
 - GPT-OSS 20B sparse-LoRA training passed live on v6e-16, TP8/FSDP2. Its
   durable trainer result reports `acceptance_pass: true` at
   `gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-sparse-lora-tp8-fsdp2-r32-s256-0e5e43a3-d388c5478.json`.
-- The live vLLM MXFP4/LoRA gate is being run on v6e-8. Do not call inference
-  validated until the result below exists and reports `acceptance_pass: true`:
-  `gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-lora-v6e8-v1.json`.
+- GPT-OSS 20B vLLM inference and hot-swapped expert/router LoRA passed live on
+  a TP=8 v6e-8 in `us-east5-b` (Jobman `000702`). The durable result reports
+  `acceptance_pass: true` at
+  `gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-lora-v6e8-v1.json`
+  (generation `1788461724531989`). It pins SkyRL source `e5a75391`, fork
+  `22d9fcc6c`, and the bundle/checksum recorded in
+  [`gpt-oss-mxfp4-lora.md`](gpt-oss-mxfp4-lora.md).
 - GPT-OSS 120B checkpoint conversion is complete. The marker exists at
   `gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388/gpt-oss-120b/CHECKPOINT_COMPLETE`.
 - GPT-OSS 120B training is not yet accepted. Success requires
@@ -98,6 +102,10 @@ ordinary router LoRA, expert clear, and final immutable-base parity. The
 client is [`tpu/gptoss20b_vllm_lora_smoke.py`](../tpu/gptoss20b_vllm_lora_smoke.py)
 and the remote runner is
 [`tpu/run_gptoss20b_vllm_lora_smoke.sh`](../tpu/run_gptoss20b_vllm_lora_smoke.sh).
+On v6e, "native MXFP4 load" means the published checkpoint stays MXFP4 on
+disk and is converted once to an FP8 GMM runtime representation: native FP4
+Mosaic GMM execution is a TPU v7+ feature. The fork also selects a TP-shardable
+W2 scale-block count for GPT-OSS's 2,880-wide experts.
 
 ## Remaining operational warning
 
