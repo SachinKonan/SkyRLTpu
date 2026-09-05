@@ -41,6 +41,64 @@ def test_launch_cell_restores_and_publishes_checkpoints_off_gcsfuse():
     assert "rsync -r -d" not in sync
 
 
+def test_published_local_checkpoints_are_pruned(tmp_path):
+    # Local disk is not the durable store on pool workers: each muse step leaves
+    # ~3 GB of tarballs that filled a 97 GB boot disk holding the 41 GB orbax
+    # checkpoint before step 15 (jobs 188/161, 2026-09-05).
+    source = (REPO / "tpu/launch_cell.sh").read_text()
+    assert 's|CKPTPRUNEPLACEHOLDER|$CLIENT_ROOT/tpu/jobman/prune_local_checkpoints.sh|' in source
+    writeback = source.index('echo "ckpt-writeback-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/sidecar.log"')
+    assert 'bash "CKPTPRUNEPLACEHOLDER" "CKPTROOTPLACEHOLDER" "CKPTGCSPLACEHOLDER"' in source[writeback:]
+    sync = (REPO / "tpu/jobman/cell_sync.sh").read_text()
+    assert 'prune_local_checkpoints.sh" "$CKPT_ROOT" "$SKYRL_CKPT_GCS"' in sync
+    assert sync.index("prune_local_checkpoints.sh") > sync.index("ckpt-writeback-rc")
+
+    # Functional check with a stubbed gcloud: only published, same-size, older
+    # tarballs go; the newest two, "final", seeds, and unpublished files stay.
+    root = tmp_path / "ckpt"
+    published = {}
+    for model, steps in (("model_a", ["000001", "000002", "000003", "000004"]), ("model_b", ["000007"])):
+        for family in ("", "sampler_weights/"):
+            for step in steps:
+                p = root / model / family / f"{step}.tar.gz"
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(b"x" * (100 + len(step)))
+                if not (model == "model_a" and step == "000002" and family == ""):
+                    published[f"{model}/{family}{step}.tar.gz"] = p.stat().st_size
+    (root / "model_a" / "sampler_weights" / "ss0_seq1.tar.gz").write_bytes(b"seed")
+    (root / "model_a" / "final.tar.gz").write_bytes(b"final")
+    published["model_a/sampler_weights/000001.tar.gz"] = 1  # wrong size -> keep
+    stub = tmp_path / "gcloud"
+    stub.write_text(
+        "#!/bin/bash\n"
+        "# args: storage ls -l gs://bkt/ckpts/<rel>\n"
+        'rel="${4#gs://bkt/ckpts/}"\n'
+        "case \"$rel\" in\n"
+        + "".join(f'  "{k}") echo "{v} 2026-09-05T00:00:00Z gs://bkt/ckpts/{k}";;\n' for k, v in published.items())
+        + "  *) exit 1;;\nesac\n"
+    )
+    stub.chmod(0o755)
+    import os, subprocess
+    env = dict(os.environ, GCLOUD_STORAGE_CLI=str(stub))
+    out = subprocess.run(
+        ["bash", str(REPO / "tpu/jobman/prune_local_checkpoints.sh"), str(root), "gs://bkt/ckpts"],
+        capture_output=True, text=True, env=env, check=True,
+    ).stdout
+    remaining = sorted(str(p.relative_to(root)) for p in root.rglob("*.tar.gz"))
+    assert remaining == [
+        "model_a/000002.tar.gz",  # unpublished -> kept
+        "model_a/000004.tar.gz",  # newest two of the digit names + final
+        "model_a/final.tar.gz",
+        "model_a/sampler_weights/000001.tar.gz",  # size mismatch -> kept
+        "model_a/sampler_weights/000003.tar.gz",
+        "model_a/sampler_weights/000004.tar.gz",
+        "model_a/sampler_weights/ss0_seq1.tar.gz",
+        "model_b/000007.tar.gz",
+        "model_b/sampler_weights/000007.tar.gz",
+    ]
+    assert "removed=3" in out
+
+
 def test_cell_monitor_recreates_a_missing_sidecar():
     source = (REPO / "tpu/jobman/cell_monitor.sh").read_text()
 

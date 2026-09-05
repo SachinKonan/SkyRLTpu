@@ -77,6 +77,7 @@ REQUIRED_BUNDLE_FILES=(
   tpu/jobman/cell_sync.sh
   tpu/jobman/cell_worker.sh
   tpu/jobman/grader_ray.sh
+  tpu/jobman/prune_local_checkpoints.sh
   tpu/jobman/v6e_tunix_smoke_worker.sh
   tpu/probe_topology.py
   tpu/start_colocated_vllm_tinker.sh
