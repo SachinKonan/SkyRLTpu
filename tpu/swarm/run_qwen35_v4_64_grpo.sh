@@ -33,7 +33,19 @@ ln -sfn "$SSH_KEY_FILE" "$HOME/.ssh/jobman_tpu_ed25519"
 
 REPO=$(readlink -f "${SKYRL_REPO_DIR:-$PWD}")
 export SKYRL_REPO_DIR="$REPO"
-export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-$(basename "$REPO")}"
+export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-$(basename "$REPO")}" # Runtime generation identity.
+
+# A SkyPilot recovery starts a new internal job on an existing pool worker.
+# Stop the previous attempt's client before any backend is reconciled; otherwise
+# it can continue sending requests while vLLM/trainer are being replaced.
+if [[ -n "${SKYPILOT_INTERNAL_JOB_ID:-}" ]]; then
+  session="${CELL_SESSION:-cell}"
+  if tmux has-session -t "=$session" 2>/dev/null; then
+    echo "fencing stale client before SkyPilot attempt $SKYPILOT_INTERNAL_JOB_ID"
+    tmux kill-session -t "=$session" 2>/dev/null || true
+  fi
+  rm -f "$HOME/ENGINE-SICK"
+fi
 if [[ "${V4_64_AUTO_TOPOLOGY:-1}" == "1" ]]; then
   topology_cache="$HOME/.cache/tpuswarm/v4-64-topology.env"
   topology_fingerprint=$(printf '%s' "$JOBMAN_TPU_INTERNAL_IPS" | sha256sum | awk '{print $1}')

@@ -48,9 +48,9 @@ def test_cell_monitor_recreates_a_missing_sidecar():
     # but "cell" prefix-matched "cell-backup" (852cc354), so every probe uses "=".
     heal = source.index('if ! tmux has-session -t "=${SESSION}-backup"')
     assert 'tmux new-session -d -s "${SESSION}-backup" "bash $HOME/sidecar_${RUN}.sh"' in source[heal:]
-    # inside the monitoring loop, after the client-death exit and before the
-    # engine health check
-    assert source.index("while true; do") < heal < source.index("if engines_healthy 0; then")
+    # Inside the monitoring loop and before the split trainer/vLLM checks.
+    split_health = source.index('engine_failure_kind=""', heal)
+    assert source.index("while true; do") < heal < split_health
 
 
 def test_engine_failures_use_unlimited_recovery_exit_codes():
@@ -64,3 +64,26 @@ def test_engine_failures_use_unlimited_recovery_exit_codes():
     assert 'exit "$SETUP_RETRY_EXIT_CODE"' in monitor
     assert 'exit "$RUNTIME_RECOVERY_EXIT_CODE"' in monitor
     assert "vLLM health check failed: worker=$worker ip=$ip port=$port" in monitor
+
+
+def test_cell_monitor_restarts_only_a_failed_no_ray_vllm_host():
+    source = (REPO / "tpu/jobman/cell_monitor.sh").read_text()
+
+    assert 'VLLM_INPLACE_RESTART_LIMIT="${VLLM_INPLACE_RESTART_LIMIT:-2}"' in source
+    assert 'if [[ "$VLLM_RAY_EXECUTOR" != "0" ]]' in source
+    assert 'VLLM_RELATIVE_WORKER_ID=0 VLLM_USE_RAY_EXECUTOR=0' in source
+    assert 'VLLM_START_SERVER=1 VLLM_CLEANUP=1' in source
+    assert 'capture_vllm_diagnostics "$worker" "$ip" "$port"' in source
+    assert 'restart_vllm_worker "$UNHEALTHY_VLLM_WORKER"' in source
+
+
+def test_v4_recovery_fences_the_previous_client_attempt():
+    wrapper = (REPO / "tpu/swarm/run_qwen35_v4_64_grpo.sh").read_text()
+    monitor = (REPO / "tpu/jobman/cell_monitor.sh").read_text()
+
+    fence = wrapper.index('if [[ -n "${SKYPILOT_INTERNAL_JOB_ID:-}" ]]')
+    reconcile = wrapper.index("reconcile_v4_64_role_caches.sh")
+    assert fence < reconcile
+    assert 'tmux kill-session -t "=$session"' in wrapper[fence:reconcile]
+    assert 'rm -f "$HOME/ENGINE-SICK"' in wrapper[fence:reconcile]
+    assert '${SKYPILOT_INTERNAL_JOB_ID:-standalone}' in monitor

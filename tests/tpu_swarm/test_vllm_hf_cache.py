@@ -35,8 +35,20 @@ def test_vllm_hf_cache_restore_is_serialized_across_engines_on_a_host():
     restore = source.index("gcloud storage cp --recursive --no-clobber", lock_take)
     lock_release = source.index("flock -u 9\nexec 9>&-", restore)
     assert lock_open < lock_take < restore < lock_release
-    # The lock must be released before the engine process replaces this shell.
-    assert lock_release < source.index("exec ", lock_release + len("flock -u 9\nexec 9>&-"))
+    # The lock must be released before the engine process starts.
+    server_start = source.index('"\\${server_cmd[@]}"', lock_release)
+    assert lock_release < server_start
+
+
+def test_vllm_runner_preserves_restart_logs_and_exit_codes():
+    source = (REPO / "tpu/start_vllm_tpu.sh").read_text()
+
+    assert 'runner_history_dir="\\$HOME/skyrl-logs/vllm-history"' in source
+    assert 'mv "\\$runner_log_path"' in source
+    assert "NR > 8" in source
+    assert "exit_code=%s" in source
+    assert "server_rc=\\$?" in source
+    assert 'exit "\\$server_rc"' in source
 
 
 def test_hf_tree_manifest_materialization_is_best_effort():
