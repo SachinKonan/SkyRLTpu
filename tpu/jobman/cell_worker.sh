@@ -368,7 +368,7 @@ elif ! tinker_healthy && vllm_healthy; then
   # vLLM workers would waste ~20 min of cache reloads for nothing. The client
   # re-registers against the fresh registry at its next launch.
   echo "trainer down, vLLM healthy -- surgical tinker-only restart"
-  tmux kill-session -t skyrl-tinker 2>/dev/null || true; sleep 3
+  tmux kill-session -t =skyrl-tinker 2>/dev/null || true; sleep 3
   pick_tiles
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$KEY" \
@@ -402,7 +402,7 @@ elif ! tinker_healthy && vllm_healthy; then
     for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
       ip="$(worker_ip "$worker")"
       timeout 60 ssh $SSHO "$REMOTE_USER"@"$ip" \
-        "tmux kill-session -t skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
+        "tmux kill-session -t =skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
     done
     exit 1
   fi

@@ -83,7 +83,7 @@ SIDECAR
 sed -i "s|RUNDIRPLACEHOLDER|$HOME/skyrl-runs/$RUN|; s|GCSRUNPLACEHOLDER|$GCS_RUN|" ~/sidecar_"$RUN".sh
 chmod +x ~/sidecar_"$RUN".sh
 SESSION=${CELL_SESSION:-cell}
-tmux kill-session -t "${SESSION}-backup" 2>/dev/null
+tmux kill-session -t "=${SESSION}-backup" 2>/dev/null
 tmux new-session -d -s "${SESSION}-backup" "bash ~/sidecar_$RUN.sh"
 
 # ---- seeded-generation guard (META_SEED_ONLY=1) ----------------------------
@@ -148,7 +148,7 @@ if [ -s "${EXTRA_REREG_JSONL:-}" ]; then
   _rereg "$EXTRA_REREG_JSONL"
 fi
 
-tmux kill-session -t "$SESSION" 2>/dev/null
+tmux kill-session -t "=$SESSION" 2>/dev/null
 tmux new-session -d -s "$SESSION" "cd ~/ttd-client && \
   ${EXTRA_TTD_ENV:-} \
   HF_HUB_OFFLINE=$HF_OFFLINE \
@@ -178,4 +178,4 @@ tmux new-session -d -s "$SESSION" "cd ~/ttd-client && \
   third_party/discover/.venv-ttd-discover/bin/python tpu/run_ttd_ensemble.py \
   2>&1 | tee -a ~/skyrl-runs/$EXP.console.log"
 sleep 8
-tmux has-session -t "$SESSION" 2>/dev/null && echo "CELL-UP $CELL" || echo "CELL-FAIL $CELL"
+tmux has-session -t "=$SESSION" 2>/dev/null && echo "CELL-UP $CELL" || echo "CELL-FAIL $CELL"

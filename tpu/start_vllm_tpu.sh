@@ -232,7 +232,7 @@ runner_http_port="$VLLM_PORT"
 runner_log_name="vllm-tpu.log"
 if (( VLLM_ENGINES_PER_HOST > 1 )); then
   for ((engine = 1; engine < VLLM_ENGINES_PER_HOST; engine++)); do
-    extra_engine_cleanup+=$'\n'"  tmux kill-session -t vllm-tpu-e${engine} 2>/dev/null || true"
+    extra_engine_cleanup+=$'\n'"  tmux kill-session -t =vllm-tpu-e${engine} 2>/dev/null || true"
     extra_engine_start+=$'\n'"  tmux new-session -d -s vllm-tpu-e${engine} \"VLLM_RELATIVE_WORKER_ID='\${VLLM_RELATIVE_WORKER_ID:-}' VLLM_ENGINE_INDEX=${engine} bash \$HOME/run_vllm_tpu_server.sh\""
   done
   engine_coord_base="${VLLM_TPU_PROCESS_PORT:-8476}"
@@ -311,7 +311,7 @@ print("tpu-inference fork overlay verified (runtime LoRA forwarders present)")
 PY
 
 if [[ "\${VLLM_CLEANUP:-1}" == "1" ]]; then
-  tmux kill-session -t vllm-tpu 2>/dev/null || true${extra_engine_cleanup}
+  tmux kill-session -t =vllm-tpu 2>/dev/null || true${extra_engine_cleanup}
   pkill -TERM -u "\$USER" -f "[V]LLM::EngineCore|[v]llm serve|[a]pi_server" || true
   "${VLLM_VENV}/bin/ray" stop --force >/tmp/vllm-ray-stop.log 2>&1 || true
   sleep 5
