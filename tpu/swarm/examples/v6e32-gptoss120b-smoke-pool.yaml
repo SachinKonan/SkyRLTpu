@@ -59,6 +59,24 @@ envs:
   SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/gptoss120b-sparse-lora-tp8-fsdp4-r32-s1024-v1.json
 
 setup: |
+  set -uo pipefail
+  # Two checks stay OUTSIDE the retry loop on purpose: a changed bundle
+  # generation or a missing 120B checkpoint marker must release the slice
+  # (never hold a costly v6e-32 while the one-time conversion is still
+  # running), not retain it. The CPU stage writes the marker only after the
+  # complete upload.
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  if [ "$generation" != "$TPUSWARM_SKYRL_BUNDLE_GENERATION" ]; then
+    echo "bundle generation changed: expected $TPUSWARM_SKYRL_BUNDLE_GENERATION, got $generation" >&2
+    exit 1
+  fi
+  gcloud storage objects describe \
+    "$TUNIX_MAXTEXT_CKPT_CACHE_GCS/gpt-oss-120b/CHECKPOINT_COMPLETE" \
+    >/dev/null || exit 1
+
+  setup_script="/tmp/tpuswarm-pool-setup.$$.sh"
+  cat >"$setup_script" <<'TPUSWARM_POOL_SETUP'
   set -euo pipefail
   wait_for_apt() {
     local waited=0
@@ -79,12 +97,7 @@ setup: |
   export PATH="$HOME/.local/bin:$PATH"
 
   root="$HOME/SkyRLTpu-tpuswarm"
-  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
-    --format='value(generation)')
-  if [ "$generation" != "$TPUSWARM_SKYRL_BUNDLE_GENERATION" ]; then
-    echo "bundle generation changed: expected $TPUSWARM_SKYRL_BUNDLE_GENERATION, got $generation" >&2
-    exit 1
-  fi
+  generation="$TPUSWARM_SKYRL_BUNDLE_GENERATION"
   bundles="$HOME/.cache/tpuswarm/bundles"
   destination="$bundles/$generation"
   mkdir -p "$bundles"
@@ -95,7 +108,8 @@ setup: |
     gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
     echo "$TPUSWARM_SKYRL_BUNDLE_SHA256  $archive" | sha256sum -c -
     tar -xzf "$archive" -C "$staging"
-    test -x "$staging/tpu/swarm/run_gptoss120b_v6e32_smoke.sh"
+    test -r "$staging/tpu/swarm/run_gptoss120b_v6e32_smoke.sh"
+    test -r "$staging/tpu/swarm/prepare_gptoss120b_v6e32.sh"
     test -f "$staging/third_party/TPUSwarm/pyproject.toml"
     test -f "$staging/.tpuswarm-bundle-manifest"
     mv "$staging" "$destination"
@@ -109,10 +123,19 @@ setup: |
   ln -sfn "$destination" "$root"
   export SKYRL_REPO_DIR="$root"
   export TPUSWARM_BUNDLE_GENERATION="$TPUSWARM_SKYRL_BUNDLE_GENERATION"
-
-  # Never hold a costly TPU slice while the one-time 120B conversion is still
-  # running. The CPU stage writes this marker only after the complete upload.
-  gcloud storage objects describe \
-    "$TUNIX_MAXTEXT_CKPT_CACHE_GCS/gpt-oss-120b/CHECKPOINT_COMPLETE" \
-    >/dev/null
   bash "$root/tpu/swarm/prepare_gptoss120b_v6e32.sh"
+  TPUSWARM_POOL_SETUP
+
+  setup_attempt=0
+  setup_retry_seconds="${TPUSWARM_SETUP_RETRY_SECONDS:-60}"
+  while true; do
+    setup_attempt=$((setup_attempt + 1))
+    echo "[tpuswarm setup] rank $SKYPILOT_SETUP_NODE_RANK attempt $setup_attempt"
+    if bash "$setup_script"; then
+      break
+    else
+      setup_rc=$?
+      echo "[tpuswarm setup] rank $SKYPILOT_SETUP_NODE_RANK attempt $setup_attempt failed with rc=$setup_rc; retaining the TPU and retrying in ${setup_retry_seconds}s" >&2
+    fi
+    sleep "$setup_retry_seconds"
+  done
