@@ -68,12 +68,40 @@ class ExternalInferenceClient:
         self.checkpoints_base = engine_config.checkpoints_base
         self.lora_base_dir = engine_config.external_inference_lora_base
         self.db_engine = db_engine
-        # Adapter names already extracted this process — a sampling burst is
-        # hundreds of concurrent requests for the same checkpoint, and each
-        # gcsfuse stat/unpack is expensive. The per-name lock makes extraction
-        # single-flight: exactly one request unpacks, the rest wait on it.
-        self._extracted_adapters: set[str] = set()
-        self._extract_locks: dict[str, asyncio.Lock] = {}
+        # Adapter names already available on each engine. A sampler checkpoint
+        # can be pushed directly to every vLLM server by the trainer, so do not
+        # assume the API host must also be able to read the trainer-local path.
+        self._available_adapters: set[tuple[str, str]] = set()
+        self._adapter_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+    @staticmethod
+    async def _adapter_is_loaded(http_client: httpx.AsyncClient, model_name: str) -> bool:
+        try:
+            response = await http_client.get("/models")
+            response.raise_for_status()
+            return any(model.get("id") == model_name for model in response.json().get("data", []))
+        except (httpx.HTTPError, ValueError, TypeError):
+            return False
+
+    async def _ensure_adapter_available(
+        self,
+        http_client: httpx.AsyncClient,
+        model_name: str,
+        checkpoint_path: AnyPath,
+        target_dir: Path,
+    ) -> None:
+        engine_key = (str(http_client.base_url), model_name)
+        if engine_key in self._available_adapters:
+            return
+
+        async with self._adapter_locks.setdefault(engine_key, asyncio.Lock()):
+            if engine_key in self._available_adapters:
+                return
+            if await self._adapter_is_loaded(http_client, model_name):
+                logger.info("LoRA adapter %s is already loaded on %s", model_name, http_client.base_url)
+            else:
+                await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
+            self._available_adapters.add(engine_key)
 
     async def call_and_store_result(
         self,
@@ -144,11 +172,7 @@ class ExternalInferenceClient:
             checkpoint_path = self.checkpoints_base / model_id / "sampler_weights" / f"{checkpoint_id}.tar.gz"
             target_dir = self.lora_base_dir / model_name
 
-            if model_name not in self._extracted_adapters:
-                async with self._extract_locks.setdefault(model_name, asyncio.Lock()):
-                    if model_name not in self._extracted_adapters:
-                        await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
-                        self._extracted_adapters.add(model_name)
+            await self._ensure_adapter_available(http_client, model_name, checkpoint_path, target_dir)
 
         payload = {
             "model": model_name,

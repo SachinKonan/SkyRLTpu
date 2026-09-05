@@ -12,3 +12,15 @@ GCS_RUN="${GCS_RUN:-gs://sk7524-tinker-tpu-us-east5/skyrl-runs/$RUN}"
 gsutil -m rsync -r -x '.*wandb/.*|.*\.tmp$|.*\.gstmp$' \
   "$HOME/skyrl-runs/$RUN" "$GCS_RUN" >> "$HOME/cell-sync.log" 2>&1
 echo "sync-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/cell-sync.log"
+# LoRA/optimizer checkpoints: durable for free under a gcsfuse mount (jobman),
+# local disk on pool workers -- publish additively so a resume elsewhere can
+# find them (see launch_cell.sh).
+CKPT_ROOT="${REMOTE_CHECKPOINTS:-$HOME/gcs/skyrl-checkpoints}"
+_bucket=${GCS_RUN#gs://}; _bucket=${_bucket%%/*}
+SKYRL_CKPT_GCS="${SKYRL_CKPT_GCS:-gs://$_bucket/skyrl-checkpoints}"
+if [ -d "$CKPT_ROOT" ] && ! mountpoint -q "$CKPT_ROOT" 2>/dev/null && ! mountpoint -q "$(dirname "$CKPT_ROOT")" 2>/dev/null; then
+  # gcloud rsync (multi-GB tarballs make gsutil fall back to pure-Python CRC).
+  bash "$(dirname "$0")/../gcs_rsync.sh" -r --exclude='.*\.tmp$|.*\.gstmp$|.*\.partial$' \
+    "$CKPT_ROOT" "$SKYRL_CKPT_GCS" >> "$HOME/cell-sync.log" 2>&1
+  echo "ckpt-writeback-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/cell-sync.log"
+fi

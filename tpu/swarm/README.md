@@ -52,7 +52,7 @@ in the pool examples:
 
 ```bash
 bash tpu/swarm/build_skyrl_bundle.sh \
-  gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v1.tar.gz
+  gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-qwen35-v6e32-v1.tar.gz
 ```
 
 The builder excludes `.env` files and local run state. Pass credentials through
@@ -65,6 +65,9 @@ by the GCS object generation, then atomically points
 `~/SkyRLTpu-tpuswarm` at it. The typed submit helper defaults to the matching
 `/home/sk7524_princeton_edu/SkyRLTpu-tpuswarm` path; override
 `TPUSWARM_REMOTE_SKYRL_ROOT` if SkyPilot uses another remote username.
+Pool setup retries indefinitely by default. A transient package, storage, or
+archive error therefore keeps the allocated TPU while setup retries instead of
+returning failure to SkyPilot and allowing the worker to be torn down.
 
 ## Create warm pools
 

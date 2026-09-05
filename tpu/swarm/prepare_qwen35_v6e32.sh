@@ -21,12 +21,17 @@ fi
 
 export REMOTE_USER="${REMOTE_USER:-$(id -un)}"
 export SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/ray_bootstrap_key.pem}"
-if [ ! -f "$SSH_KEY_FILE" ]; then
-  echo "SkyPilot cluster key is missing: $SSH_KEY_FILE" >&2
-  exit 2
+mkdir -p "$HOME/.ssh" "$HOME/.cache/tpuswarm" "$HOME/skyrl-runs" \
+  "$HOME/skyrl-logs"
+chmod 700 "$HOME/.ssh"
+if [ "$JOBMAN_WORKER_ID" = "0" ]; then
+  if [ ! -f "$SSH_KEY_FILE" ]; then
+    echo "SkyPilot TPU pod key is missing: $SSH_KEY_FILE" >&2
+    exit 2
+  fi
+  chmod 600 "$SSH_KEY_FILE"
+  ln -sfn "$SSH_KEY_FILE" "$HOME/.ssh/jobman_tpu_ed25519"
 fi
-mkdir -p "$HOME/.ssh" "$HOME/skyrl-runs" "$HOME/skyrl-logs"
-ln -sfn "$SSH_KEY_FILE" "$HOME/.ssh/jobman_tpu_ed25519"
 
 REPO="${SKYRL_REPO_DIR:-$HOME/SkyRLTpu-tpuswarm}"
 bash "$REPO/tpu/jobman/ensure_orbax_ckpt.sh"
@@ -37,32 +42,50 @@ bash "$REPO/tpu/jobman/ensure_orbax_ckpt.sh"
 marker_name="qwen35-v6e32-node-ready-$TPUSWARM_BUNDLE_GENERATION"
 marker="$HOME/.cache/tpuswarm/$marker_name"
 mkdir -p "$(dirname "$marker")"
-touch "$marker"
+marker_tmp="${marker}.tmp.$$"
+printf '%s\n' "$JOBMAN_WORKER_ID" >"$marker_tmp"
+mv "$marker_tmp" "$marker"
 if [ "$JOBMAN_WORKER_ID" != "0" ]; then
   echo "pool setup rank $JOBMAN_WORKER_ID ready"
   exit 0
 fi
 
-ssho=(-i "$SSH_KEY_FILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+ssho=(-F /dev/null -i "$SSH_KEY_FILE" -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=no \
   -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20)
 IFS=, read -r -a node_ips <<<"$JOBMAN_TPU_INTERNAL_IPS"
-for rank in $(seq 1 7); do
-  ip="${node_ips[$rank]}"
+declare -a ordered_ips=()
+for ip in "${node_ips[@]}"; do
   ready=0
+  node_rank=""
   for _attempt in $(seq 1 120); do
-    if ssh "${ssho[@]}" "$REMOTE_USER@$ip" \
-      "test -f \"\$HOME/.cache/tpuswarm/$marker_name\"" \
-      >/dev/null 2>&1; then
+    node_rank=$(ssh "${ssho[@]}" "$REMOTE_USER@$ip" \
+      "cat \"\$HOME/.cache/tpuswarm/$marker_name\"" 2>/dev/null || true)
+    if [[ "$node_rank" =~ ^[0-7]$ ]]; then
       ready=1
       break
     fi
     sleep 5
   done
   if [ "$ready" != "1" ]; then
-    echo "pool setup rank $rank ($ip) did not become ready" >&2
+    echo "pool setup node $ip did not publish a valid rank" >&2
+    exit 1
+  fi
+  if [ -n "${ordered_ips[$node_rank]+set}" ]; then
+    echo "duplicate pool setup rank $node_rank from $ip" >&2
+    exit 1
+  fi
+  ordered_ips[$node_rank]="$ip"
+done
+for rank in $(seq 0 7); do
+  if [ -z "${ordered_ips[$rank]+set}" ]; then
+    echo "pool setup rank $rank did not publish an IP" >&2
     exit 1
   fi
 done
+JOBMAN_TPU_INTERNAL_IPS=$(IFS=,; echo "${ordered_ips[*]}")
+export JOBMAN_TPU_INTERNAL_IPS
+echo "ordered TPU VMs by setup rank: $JOBMAN_TPU_INTERNAL_IPS"
 
 echo "all eight TPU VMs prepared; prewarming TP8/FSDP2 trainer and four TP4 engines"
 bash "$REPO/tpu/jobman/cell_worker.sh"

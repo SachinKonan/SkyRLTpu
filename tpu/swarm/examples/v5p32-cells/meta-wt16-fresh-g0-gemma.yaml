@@ -1,0 +1,102 @@
+name: meta-wt16-fresh-g0-gemma
+
+# Meta-tree arm gen-0, gemma member (qwen-best seed), start from the 48-state seed.
+# One complete four-host tpu-v5p-32 slice from pool tpuswarm-v5p32-east5a-erdos:
+# rank 0 = trainer + client + grader Ray head, ranks 1-3 = vLLM engines
+# (cell_worker.sh per-model defaults; CELL prefix selects the model).
+# Reusing GCS_RUN means RESUME from the last durable snapshot, not a clean run.
+
+resources:
+  cloud: gcp
+  region: us-east5
+  zone: us-east5-a
+  accelerators: tpu-v5p-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv5
+  use_spot: true
+  disk_size: 150
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 3
+    recover_on_exit_codes: [33, 34]
+
+envs:
+  PROJECT: vision-mix
+  ZONE: us-east5-a
+  REMOTE_USER: gcpuser
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v5.tar.gz
+  # The identity string must change with the trainer config: a relaunch that
+  # lands on the same worker otherwise reuses the running trainer (same bundle
+  # ID) and env changes like TUNIX_FREE_BASE_STATE never take effect (job 192).
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v4-g-meta-fbs1
+
+  # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
+  # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the
+  # LoRA template is built (RUNBOOK 4.4: ~35 GiB, memory-only; muse runs with it).
+  TUNIX_FREE_BASE_STATE: "1"
+  CELL: g-meta
+  RUN_DIR_NAME: meta-wt16-fresh-g0-gemma
+  EXPERIMENT_NAME: meta-wt16-fresh-g0-gemma
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/meta-wt16-fresh-g0-gemma
+  # Every rank installs the same bundle generation in `run`, so the head must
+  # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
+  CELL_START_VLLM: "1"
+  CELL_SYNC_SKYRL: "0"
+
+  TTD_ENV: erdos_min_overlap
+  TTD_ADV_ESTIMATOR: mean_baseline
+  TTD_ELITE_SLOTS: "2"
+  GROUPS_PER_BATCH: "16"
+  GROUP_SIZE: "32"
+  NUM_EPOCHS: "15"
+  LEARNING_RATE: "1.5e-4"
+  LORA_RANK: "32"
+  KL_PENALTY_COEF: "0"
+  TTD_RESTART_RATIO: "0"
+  TTD_CROSS_WEIGHT: "0"
+  TTD_KL_MEASURE_EVERY: "0"
+  TTD_LEAGUE_PIPELINE: "1"
+  TTD_ALLOW_SINGLE_MEMBER: "1"
+  TTD_SAMPLING_PROGRESS_TIMEOUT: "0"
+  EVAL_TIMEOUT: "1100"
+  WANDB_MODE: offline
+  # Seeded generation: while nothing is banked, the staged step-0 seed is the
+  # ONLY legitimate snapshot (launch_cell.sh META_SEED_ONLY guard).
+  META_SEED_ONLY: "1"
+
+  MONITOR_INTERVAL_SECONDS: "30"
+  SYNC_EVERY_SECONDS: "300"
+  TINKER_FAILURE_LIMIT: "4"
+  # The local SkyRL Tinker-compatible API is unauthenticated; the upstream
+  # client only requires the variable to be nonempty. Passed explicitly into
+  # the tmux command because a reused tmux server keeps its creator's env.
+  TINKER_API_KEY: tml-local-skyrl-no-auth
+  TINKER_BASE_URL: http://127.0.0.1:8000
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_FLATLINE_STOP=1 TTD_FLATLINE_EPS=1e-9 TTD_FLATLINE_CONSEC=3 TTD_FLATLINE_MIN_STEPS=4 TTD_RESTART_AT_STEP=-1
+
+run: |
+  set -euo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/swarm/run_v5p32_cell.sh"
+    test -r "$staging/tpu/jobman/cell_worker.sh"
+    test -r "$staging/tpu/jobman/ensure_orbax_ckpt.sh"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  exec bash "$SKYRL_REPO_DIR/tpu/swarm/run_v5p32_cell.sh"

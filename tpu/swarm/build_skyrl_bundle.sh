@@ -3,7 +3,11 @@
 set -euo pipefail
 
 REPO=$(git rev-parse --show-toplevel)
-BUNDLE_URL=${1:-gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v1.tar.gz}
+if [ "$#" -ne 1 ]; then
+  echo "usage: $0 gs://BUCKET/code-bundles/BUNDLE.tar.gz" >&2
+  exit 2
+fi
+BUNDLE_URL=$1
 STAGING=$(mktemp -d)
 ARCHIVE="$STAGING/tpuswarm-skyrl.tar.gz"
 MANIFEST="$STAGING/.tpuswarm-bundle-manifest"
@@ -61,6 +65,50 @@ tar -czf "$ARCHIVE" -C "$REPO" \
   --exclude='*.tar.gz' \
   . \
   -C "$STAGING" .tpuswarm-bundle-manifest
+
+# Validate the files consumed by pool setup from the archive itself.  Runtime
+# invokes these through bash or python, so readability is the relevant mode.
+REQUIRED_BUNDLE_FILES=(
+  .tpuswarm-bundle-manifest
+  third_party/TPUSwarm/pyproject.toml
+  tpu/gcs_rsync.sh
+  tpu/launch_cell.sh
+  tpu/jobman/cell_monitor.sh
+  tpu/jobman/cell_sync.sh
+  tpu/jobman/cell_worker.sh
+  tpu/jobman/grader_ray.sh
+  tpu/jobman/v6e_tunix_smoke_worker.sh
+  tpu/probe_topology.py
+  tpu/start_colocated_vllm_tinker.sh
+  tpu/swarm/discover_v4_64_topology.sh
+  tpu/swarm/prepare_qwen35_v6e32.sh
+  tpu/swarm/prune_hf_weight_cache.py
+  tpu/swarm/reconcile_v4_64_host_role.sh
+  tpu/swarm/reconcile_v4_64_role_caches.sh
+  tpu/swarm/run_erdos_min_overlap.sh
+  tpu/swarm/run_qwen35_v4_64_grpo.sh
+  tpu/swarm/run_qwen35_v6e32_grpo.sh
+  tpu/swarm/run_v5p32_cell.sh
+  tpu/swarm/select_v4_64_topology.py
+  tpu/swarm/stage_hf_metadata_cache.py
+)
+VERIFY_ROOT="$STAGING/verify"
+mkdir -p "$VERIFY_ROOT"
+archive_paths=()
+for required in "${REQUIRED_BUNDLE_FILES[@]}"; do
+  if [ "$required" = ".tpuswarm-bundle-manifest" ]; then
+    archive_paths+=("$required")
+  else
+    archive_paths+=("./$required")
+  fi
+done
+tar -xzf "$ARCHIVE" -C "$VERIFY_ROOT" -- "${archive_paths[@]}"
+for required in "${REQUIRED_BUNDLE_FILES[@]}"; do
+  if [ ! -r "$VERIFY_ROOT/$required" ]; then
+    echo "bundle validation failed: missing or unreadable $required" >&2
+    exit 1
+  fi
+done
 
 SHA256=$(sha256sum "$ARCHIVE" | awk '{print $1}')
 if [ "${TPUSWARM_BUNDLE_DRY_RUN:-0}" = "1" ]; then

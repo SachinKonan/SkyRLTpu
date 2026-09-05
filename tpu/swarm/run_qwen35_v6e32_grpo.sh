@@ -17,12 +17,7 @@ fi
 
 export REMOTE_USER="${REMOTE_USER:-$(id -un)}"
 export SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/ray_bootstrap_key.pem}"
-if [ ! -f "$SSH_KEY_FILE" ]; then
-  echo "SkyPilot cluster key is missing: $SSH_KEY_FILE" >&2
-  exit 2
-fi
 mkdir -p "$HOME/.ssh"
-ln -sfn "$SSH_KEY_FILE" "$HOME/.ssh/jobman_tpu_ed25519"
 
 # SkyPilot may invoke a multi-node run command on every TPU VM.  The existing
 # cell is deliberately head-driven and reaches the other seven ranks over the
@@ -31,6 +26,11 @@ if [ "$JOBMAN_WORKER_ID" != "0" ]; then
   echo "rank $JOBMAN_WORKER_ID ready; rank 0 owns the GRPO process"
   exit 0
 fi
+if [ ! -f "$SSH_KEY_FILE" ]; then
+  echo "SkyPilot TPU pod key is missing: $SSH_KEY_FILE" >&2
+  exit 2
+fi
+ln -sfn "$SSH_KEY_FILE" "$HOME/.ssh/jobman_tpu_ed25519"
 
 REPO="${SKYRL_REPO_DIR:-$PWD}"
 bash "$REPO/tpu/jobman/cell_worker.sh"

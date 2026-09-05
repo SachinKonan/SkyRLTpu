@@ -1,10 +1,9 @@
-# Five complete mixed v6e-32 slices in one quota island.  TPUSwarm admission
-# keeps at most four ordinary jobs active so the fifth warm slice is reserved
-# for blocking recovery.
+# One mixed v6e-32 slice. Region-specific launches must override the infra,
+# zone, bundle, checkpoint, HF, JAX, and XLA values together on the CLI.
 pool:
-  workers: 5
-  min_workers: 5
-  max_workers: 5
+  workers: 1
+  min_workers: 1
+  max_workers: 1
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200

@@ -9,6 +9,7 @@ sub-slices such as a 2-host train mesh on a v5p-32).
 Usage: probe_topology.py <process_id> <coordinator_host:port> <num_processes>
 """
 
+import json
 import socket
 import sys
 
@@ -25,5 +26,18 @@ jax.distributed.initialize(
 )
 
 print(f"PROBE host={socket.gethostname()} process_id={process_id}", flush=True)
-for d in jax.local_devices():
+local_devices = jax.local_devices()
+for d in local_devices:
     print(f"PROBE dev process={d.process_index} id={d.id} coords={d.coords}", flush=True)
+print(
+    "PROBE_RESULT "
+    + json.dumps(
+        {
+            "process_id": process_id,
+            "host": socket.gethostname(),
+            "coords": [[int(value) for value in device.coords] for device in local_devices],
+        },
+        sort_keys=True,
+    ),
+    flush=True,
+)

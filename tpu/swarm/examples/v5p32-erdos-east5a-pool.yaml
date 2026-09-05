@@ -1,27 +1,49 @@
-# Apply one copy per region so the global TPUSwarm queue can use every quota
-# island. Keep resource_class identical only when the task is portable across
-# those regional pools.
+# Forty-five independent v5p-32 Spot slices in us-east5-a. Each pool worker is
+# one complete four-host TPU slice and owns one GCP queued-resource request.
 pool:
-  workers: 9
-  min_workers: 9
-  max_workers: 16
+  workers: 45
+  min_workers: 45
+  max_workers: 45
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200
 
 resources:
   cloud: gcp
-  accelerators: tpu-v6e-8
+  region: us-east5
+  zone: us-east5-a
+  accelerators: tpu-v5p-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv5
   use_spot: true
+  disk_size: 150
 
 envs:
   TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-qwen35-v6e32-v1.tar.gz
+  ZONE: us-east5-a
 
 setup: |
   set -uo pipefail
   setup_script="/tmp/tpuswarm-pool-setup.$$.sh"
   cat >"$setup_script" <<'TPUSWARM_POOL_SETUP'
   set -euo pipefail
+  wait_for_apt() {
+    local waited=0
+    while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      if [ "$waited" -ge 600 ]; then return 1; fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+  }
+  if ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then
+    wait_for_apt
+    sudo apt-get update -y
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      git curl tmux python3 python3-venv python3-pip build-essential
+  fi
+
   root="$HOME/SkyRLTpu-tpuswarm"
   generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
     --format='value(generation)')
