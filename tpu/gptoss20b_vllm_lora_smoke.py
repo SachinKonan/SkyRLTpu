@@ -19,9 +19,11 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import math
 import os
 import tarfile
 import tempfile
+import threading
 import time
 import traceback
 import urllib.error
@@ -182,46 +184,51 @@ PROMPTS = (
 )
 
 
+def _sample_one(base_url: str, model: str, prompt: str, timeout: float,
+                max_tokens: int = 4) -> dict[str, Any]:
+    response = _json_request(
+        f"{base_url}/v1/completions",
+        {
+            "model": model,
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+            "temperature": 0,
+            "seed": 7524,
+            "logprobs": 20,
+        },
+        timeout,
+    )
+    choice = response["choices"][0]
+    logprobs = choice.get("logprobs") or {}
+    return {
+        "prompt": prompt,
+        "text": choice.get("text"),
+        "tokens": logprobs.get("tokens"),
+        "token_logprobs": logprobs.get("token_logprobs"),
+        "top_logprobs": logprobs.get("top_logprobs"),
+    }
+
+
 def _sample(base_url: str, model: str, timeout: float) -> list[dict[str, Any]]:
-    samples = []
-    for prompt in PROMPTS:
-        response = _json_request(
-            f"{base_url}/v1/completions",
-            {
-                "model": model,
-                "prompt": prompt,
-                "max_tokens": 4,
-                "temperature": 0,
-                "seed": 7524,
-                "logprobs": 20,
-            },
-            timeout,
-        )
-        choice = response["choices"][0]
-        logprobs = choice.get("logprobs") or {}
-        samples.append(
-            {
-                "prompt": prompt,
-                "text": choice.get("text"),
-                "tokens": logprobs.get("tokens"),
-                "token_logprobs": logprobs.get("token_logprobs"),
-                "top_logprobs": logprobs.get("top_logprobs"),
-            }
-        )
-    return samples
+    return [
+        _sample_one(base_url, model, prompt, timeout) for prompt in PROMPTS
+    ]
 
 
-def _sample_concurrently(base_url: str, models: tuple[str, ...],
-                         timeout: float) -> dict[str, list[dict[str, Any]]]:
-    """Issue different-model requests together so vLLM can mix LoRA slots."""
+def _sample_batch(base_url: str, models: tuple[str, ...], prompt: str,
+                  timeout: float) -> list[dict[str, Any]]:
+    """Issue one-token requests together so vLLM mixes physical slots."""
+
+    barrier = threading.Barrier(len(models))
+
+    def run(model: str) -> dict[str, Any]:
+        barrier.wait()
+        return _sample_one(base_url, model, prompt, timeout, max_tokens=1)
 
     with concurrent.futures.ThreadPoolExecutor(
             max_workers=len(models)) as executor:
-        futures = {
-            model: executor.submit(_sample, base_url, model, timeout)
-            for model in models
-        }
-        return {model: futures[model].result() for model in models}
+        futures = [executor.submit(run, model) for model in models]
+        return [future.result() for future in futures]
 
 
 def _fingerprint(samples: list[dict[str, Any]]) -> str:
@@ -243,6 +250,18 @@ def _distance(left: Any, right: Any) -> float:
     if isinstance(left, (int, float)) and isinstance(right, (int, float)):
         return abs(float(left) - float(right))
     return 0.0 if left == right else discrete_difference
+
+
+def _profile_distance(left: dict[str, Any], right: dict[str, Any]) -> float:
+    """RMSE over first-token top-logprobs, including missing-token penalty."""
+
+    left_top = left["top_logprobs"][0]
+    right_top = right["top_logprobs"][0]
+    keys = set(left_top) | set(right_top)
+    floor = -12.0
+    return math.sqrt(
+        sum((left_top.get(key, floor) - right_top.get(key, floor))**2
+            for key in keys) / len(keys))
 
 
 def _updates(value: Any) -> list[dict[str, Any]]:
@@ -325,14 +344,57 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 samples[name] = _sample(args.base_url, name,
                                         args.request_timeout)
 
-            mixed = _sample_concurrently(
-                args.base_url,
-                (MODEL, "expert_a", "expert_b"),
-                args.request_timeout,
-            )
-            samples["mixed_base"] = mixed[MODEL]
-            samples["mixed_expert_a"] = mixed["expert_a"]
-            samples["mixed_expert_b"] = mixed["expert_b"]
+            # TPU kernels are not bitwise invariant to concurrent batch shape:
+            # even identical base-model requests can have different logprobs.
+            # Build homogeneous concurrent reference clusters, then require
+            # every request in repeated mixed base/zero/A/B batches to remain
+            # closest to its own adapter family by a clear margin.
+            family_models = {
+                "base": MODEL,
+                "expert_a": "expert_a",
+                "expert_b": "expert_b",
+            }
+            reference_profiles: dict[str, list[dict[str, Any]]] = {}
+            for family, model in family_models.items():
+                reference_profiles[family] = []
+                for _ in range(args.reference_rounds):
+                    reference_profiles[family].extend(
+                        _sample_batch(
+                            args.base_url,
+                            (model, ) * args.concurrent_batch_size,
+                            PROMPTS[0],
+                            args.request_timeout,
+                        ))
+
+            mixed_models = (MODEL, "zero", "expert_a", "expert_b")
+            expected_families = ("base", "base", "expert_a", "expert_b")
+            mixed_classifications = []
+            for round_idx in range(args.mixed_rounds):
+                mixed_outputs = _sample_batch(args.base_url, mixed_models,
+                                              PROMPTS[0],
+                                              args.request_timeout)
+                for model, expected, output in zip(mixed_models,
+                                                   expected_families,
+                                                   mixed_outputs):
+                    family_distances = {
+                        family: min(
+                            _profile_distance(output, reference)
+                            for reference in references)
+                        for family, references in reference_profiles.items()
+                    }
+                    ordered = sorted(family_distances,
+                                     key=family_distances.get)
+                    margin = (family_distances[ordered[1]]
+                              - family_distances[expected])
+                    mixed_classifications.append({
+                        "round": round_idx,
+                        "model": model,
+                        "expected_family": expected,
+                        "nearest_family": ordered[0],
+                        "margin": margin,
+                        "distances": family_distances,
+                        "output": output,
+                    })
 
             # Fill the fourth resident slot with an ordinary router adapter,
             # then force an LRU slot reuse with an all-zero adapter. The new
@@ -363,12 +425,8 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 "base_zero": _distance(samples["base_initial"], samples["zero"]),
                 "base_expert_a": _distance(samples["base_initial"], samples["expert_a"]),
                 "expert_a_b": _distance(samples["expert_a"], samples["expert_b"]),
-                "isolated_mixed_base": _distance(
-                    samples["base_initial"], samples["mixed_base"]),
-                "isolated_mixed_expert_a": _distance(
-                    samples["expert_a"], samples["mixed_expert_a"]),
-                "isolated_mixed_expert_b": _distance(
-                    samples["expert_b"], samples["mixed_expert_b"]),
+                "mixed_min_classification_margin": min(
+                    item["margin"] for item in mixed_classifications),
                 "base_router": _distance(samples["base_initial"], samples["router"]),
                 "base_clear": _distance(samples["base_initial"], samples["clear"]),
                 "base_final": _distance(samples["base_initial"], samples["base_final"]),
@@ -378,9 +436,12 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 "expert_adapter_changes_output": distances["base_expert_a"] > args.effect_atol,
                 "expert_replacement_changes_output": distances["expert_a_b"] > args.effect_atol,
                 "resident_experts_use_distinct_slots": slots["expert_a"] != slots["expert_b"],
-                "mixed_base_parity": distances["isolated_mixed_base"] <= args.parity_atol,
-                "mixed_expert_a_parity": distances["isolated_mixed_expert_a"] <= args.parity_atol,
-                "mixed_expert_b_parity": distances["isolated_mixed_expert_b"] <= args.parity_atol,
+                "mixed_requests_classify_correctly": all(
+                    item["nearest_family"] == item["expected_family"]
+                    for item in mixed_classifications),
+                "mixed_classification_margin": distances[
+                    "mixed_min_classification_margin"]
+                >= args.classification_margin,
                 "router_lora_changes_output": distances["base_router"] > args.effect_atol,
                 "clear_adapter_parity": distances["base_clear"] <= args.parity_atol,
                 "base_immutable_after_swaps": distances["base_final"] <= args.parity_atol,
@@ -389,6 +450,16 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 {
                     "uploads": uploads,
                     "slots": {key: sorted(value) for key, value in slots.items()},
+                    "mixed_probe": {
+                        "reference_rounds": args.reference_rounds,
+                        "mixed_rounds": args.mixed_rounds,
+                        "batch_size": args.concurrent_batch_size,
+                        "reference_fingerprints": {
+                            family: _fingerprint(references)
+                            for family, references in reference_profiles.items()
+                        },
+                        "classifications": mixed_classifications,
+                    },
                     "fingerprints": {key: _fingerprint(value) for key, value in samples.items()},
                     "distances": distances,
                     "checks": checks,
@@ -419,6 +490,10 @@ def main() -> None:
     parser.add_argument("--alpha", type=float, default=8.0)
     parser.add_argument("--parity-atol", type=float, default=1e-6)
     parser.add_argument("--effect-atol", type=float, default=1e-5)
+    parser.add_argument("--classification-margin", type=float, default=0.25)
+    parser.add_argument("--reference-rounds", type=int, default=3)
+    parser.add_argument("--mixed-rounds", type=int, default=8)
+    parser.add_argument("--concurrent-batch-size", type=int, default=4)
     parser.add_argument("--request-timeout", type=float, default=1800)
     parser.add_argument("--upload-timeout", type=float, default=3600)
     args = parser.parse_args()
