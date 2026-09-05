@@ -20,8 +20,8 @@ envs:
   ZONE: us-central2-b
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v33.tar.gz
-  TPUSWARM_BUNDLE_ID: v33-qwen35-v4-64-tp4-fsdp4-r32-s22528-b90112-vllm-recovery
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v34.tar.gz
+  TPUSWARM_BUNDLE_ID: v34-qwen35-v4-64-tp4-fsdp4-r32-s22528-b90112-vllm-recovery-ckpt-mirror
 
   # GRPO baseline arm on the Erdos minimum-overlap environment.
   CELL: grpo-n

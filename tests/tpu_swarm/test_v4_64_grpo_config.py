@@ -323,8 +323,8 @@ def test_v4_64_tasks_use_checkpoint_durable_bundle():
 
     for task_path in task_paths:
         source = task_path.read_text()
-        assert "tpuswarm-skyrl-v4-mixed-v33.tar.gz" in source
-        assert "TPUSWARM_BUNDLE_ID: v33-" in source
+        assert "tpuswarm-skyrl-v4-mixed-v34.tar.gz" in source
+        assert "TPUSWARM_BUNDLE_ID: v34-" in source
         assert 'VLLM_INPLACE_RESTART_LIMIT: "2"' in source
         assert (
             "SKYRL_CKPT_GCS: "
