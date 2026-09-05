@@ -20,8 +20,8 @@ envs:
   ZONE: us-central2-b
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v34.tar.gz
-  TPUSWARM_BUNDLE_ID: v34-qwen35-v4-64-tp4-fsdp4-r32-s22528-b90112-vllm-recovery-ckpt-mirror
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v35.tar.gz
+  TPUSWARM_BUNDLE_ID: v35-qwen35-v4-64-tp4-fsdp4-r32-s22528-b90112-long-sampling-retry
 
   # GRPO baseline arm on the Erdos minimum-overlap environment.
   CELL: grpo-n
@@ -88,6 +88,11 @@ envs:
   VLLM_LORA_LOAD_RETRIES: "20"
   VLLM_LORA_LOAD_RETRY_SLEEP_SEC: "30"
   VLLM_REQUEST_TIMEOUT_SEC: "1800"
+  EXTERNAL_INFERENCE_TIMEOUT_SEC: "21600"
+  SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC: "0"
+  SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC: "28800"
+  SKYRL_EXTERNAL_WATCHDOG_STALE_SEC: "30"
+  SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH: "4"
   VLLM_INPLACE_RESTART_LIMIT: "2"
   VLLM_RESTART_READY_ATTEMPTS: "120"
   VLLM_RESTART_READY_INTERVAL_SECONDS: "15"

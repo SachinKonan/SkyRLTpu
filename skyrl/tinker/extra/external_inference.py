@@ -19,6 +19,16 @@ if TYPE_CHECKING:
     from skyrl.tinker.api import SampleRequest
 
 
+def _is_retryable_external_error(exc: Exception) -> bool:
+    """Return whether another inference engine may serve this request."""
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status >= 500 or status in {404, 408, 409, 425, 429}
+    return False
+
+
 def _extract_checkpoint_sync(checkpoint_path: AnyPath, target_dir: Path) -> None:
     """Extract a LoRA checkpoint to disk for vLLM to load.
 
@@ -73,6 +83,15 @@ class ExternalInferenceClient:
         # assume the API host must also be able to read the trainer-local path.
         self._available_adapters: set[tuple[str, str]] = set()
         self._adapter_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+    def _invalidate_engine_state(self, base_url: str) -> None:
+        """Forget adapter state cached for an engine that may have restarted."""
+        normalized_url = base_url.rstrip("/")
+        self._available_adapters = {
+            engine_key
+            for engine_key in getattr(self, "_available_adapters", set())
+            if engine_key[0].rstrip("/") != normalized_url
+        }
 
     @staticmethod
     async def _adapter_is_loaded(http_client: httpx.AsyncClient, model_name: str) -> bool:
@@ -130,6 +149,12 @@ class ExternalInferenceClient:
             status = RequestStatus.COMPLETED
         except Exception as e:
             logger.exception("External engine error (request_id=%s, engine=%s)", request_id, base_url)
+            if _is_retryable_external_error(e):
+                # A restarted vLLM process has lost its loaded-adapter state.
+                # Leave the database row PENDING so ExternalDispatcher can
+                # retry it on the next round-robin engine.
+                self._invalidate_engine_state(base_url)
+                raise
             # format_exception, not str(e): httpx timeouts stringify to "".
             result_data = {"error": format_exception(e), "status": "failed"}
             status = RequestStatus.FAILED

@@ -590,8 +590,6 @@ async def test_format_exception_keeps_the_type_for_blank_messages():
 
 async def test_failed_sample_records_an_attributable_error(db_engine):
     """A failing forward must not produce {"error": ""} in the futures row."""
-    import httpx
-
     from skyrl.tinker.extra import ExternalInferenceClient
 
     client = ExternalInferenceClient.__new__(ExternalInferenceClient)
@@ -603,7 +601,7 @@ async def test_failed_sample_records_an_attributable_error(db_engine):
     client.db_engine = db_engine
 
     async def boom(*args, **kwargs):
-        raise httpx.ReadTimeout("")
+        raise ValueError("")
 
     client._forward_to_engine = boom
 
@@ -612,7 +610,7 @@ async def test_failed_sample_records_an_attributable_error(db_engine):
 
     future = await read_future(db_engine, request_id)
     assert future.status == RequestStatus.FAILED
-    assert future.result_data["error"] == "ReadTimeout"
+    assert future.result_data["error"] == "ValueError"
 
 
 async def test_non_external_pending_rows_are_ignored(db_engine):

@@ -69,6 +69,11 @@ def test_v4_64_grpo_contract_has_valid_mesh_and_grader_isolation():
     assert json.loads(env["VLLM_LIMIT_MM_PER_PROMPT"]) == {"image": 0, "video": 0}
     assert env["GRADER_RAY_PORT"] == "6379"
     assert env["EVAL_TIMEOUT"] == "1100"
+    assert env["EXTERNAL_INFERENCE_TIMEOUT_SEC"] == "21600"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC"] == "0"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC"] == "28800"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_STALE_SEC"] == "30"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH"] == "4"
 
     worker = (Path(__file__).resolve().parents[2] / "tpu/jobman/cell_worker.sh").read_text()
     qwen_arm = re.search(
@@ -91,7 +96,7 @@ def test_v4_64_tp8_fsdp2_grpo_contract():
     config = _load("v4-64-qwen35-grpo-erdos-tp8-fsdp2.yaml")
     env = config["envs"]
 
-    assert config["name"] == "qwen35-v4-64-grpo-erdos-tp8-fsdp2-004"
+    assert config["name"] == "qwen35-v4-64-grpo-erdos-tp8-fsdp2-005"
     assert int(env["TRAIN_TP_SIZE"]) == 8
     assert int(env["TRAIN_FSDP_SIZE"]) == 2
     assert "tp8-fsdp2" in env["TPUSWARM_BUNDLE_ID"]
@@ -103,11 +108,24 @@ def test_v4_64_tp8_fsdp2_grpo_contract():
         "/jax-compile-cache-v4-qwen35-tp8-fsdp2-r32-s22528-b45056-v1"
     )
     assert env["GCS_RUN"].endswith(
-        "/skyrl-runs/v4-64-qwen35-grpo-erdos-tp8-fsdp2-004"
+        "/skyrl-runs/v4-64-qwen35-grpo-erdos-tp8-fsdp2-005"
     )
     assert env["VLLM_SKIP_JAX_PRECOMPILE"] == "0"
     assert json.loads(env["VLLM_LIMIT_MM_PER_PROMPT"]) == {"image": 0, "video": 0}
+    assert env["EXTERNAL_INFERENCE_TIMEOUT_SEC"] == "21600"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC"] == "0"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC"] == "28800"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_STALE_SEC"] == "30"
+    assert env["SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH"] == "4"
     assert config["run"].count("UV_NO_CONFIG=1 uv") == 2
+
+
+def test_cell_launcher_passes_external_inference_timeout():
+    repo = Path(__file__).resolve().parents[2]
+    launcher = (repo / "tpu/start_colocated_vllm_tinker.sh").read_text()
+
+    assert 'EXTERNAL_INFERENCE_TIMEOUT_SEC="${EXTERNAL_INFERENCE_TIMEOUT_SEC:-7200}"' in launcher
+    assert '--external-inference-timeout-sec "${EXTERNAL_INFERENCE_TIMEOUT_SEC}"' in launcher
 
 
 def test_vllm_bundle_identity_is_propagated_and_checked():
@@ -323,8 +341,8 @@ def test_v4_64_tasks_use_checkpoint_durable_bundle():
 
     for task_path in task_paths:
         source = task_path.read_text()
-        assert "tpuswarm-skyrl-v4-mixed-v34.tar.gz" in source
-        assert "TPUSWARM_BUNDLE_ID: v34-" in source
+        assert "tpuswarm-skyrl-v4-mixed-v35.tar.gz" in source
+        assert "TPUSWARM_BUNDLE_ID: v35-" in source
         assert 'VLLM_INPLACE_RESTART_LIMIT: "2"' in source
         assert (
             "SKYRL_CKPT_GCS: "
