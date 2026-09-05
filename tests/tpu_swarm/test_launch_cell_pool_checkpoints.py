@@ -145,3 +145,18 @@ def test_v4_recovery_fences_the_previous_client_attempt():
     assert 'tmux kill-session -t "=$session"' in wrapper[fence:reconcile]
     assert 'rm -f "$HOME/ENGINE-SICK"' in wrapper[fence:reconcile]
     assert '${SKYPILOT_INTERNAL_JOB_ID:-standalone}' in monitor
+
+
+def test_tunix_checkpoint_write_through_runs_on_multihost_owner():
+    backend = (REPO / "skyrl/backends/tunix_backend.py").read_text()
+    engine = (REPO / "skyrl/tinker/engine.py").read_text()
+    launcher = (REPO / "tpu/start_colocated_vllm_tinker.sh").read_text()
+
+    assert "checkpoint_mirror_gcs: str | None" in backend
+    mirror = (REPO / "skyrl/utils/checkpoint_mirror.py").read_text()
+    assert '["gcloud", "storage", "cp", str(local_path), destination]' in mirror
+    assert '"objects",\n            "describe"' in mirror
+    assert "remote_size != str(local_size)" in mirror
+    assert 'self._mirror_checkpoint(output_path, model_id, "sampler_weights")' in backend
+    assert "request_data.sampling_session_seq_id is None or bool(checkpoint_mirror)" in engine
+    assert '"checkpoint_mirror_gcs": "${SKYRL_CKPT_GCS}"' in launcher
