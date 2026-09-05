@@ -129,9 +129,29 @@ trap 'cleanup' EXIT
 trap 'echo "[trap] TERM/INT/HUP"; cleanup; exit 143' TERM INT HUP
 
 echo "=== creating spot QR ${QR} (${ACCEL}, ${ZONE}) $(date +%H:%M:%S) ==="
-timeout 600 gcloud compute tpus queued-resources create "$QR" --node-id="$QR" \
-  --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot \
-  --zone="$ZONE" --project="$PROJECT" 2>&1 | tail -1
+# `| tail -1` used to be all that was logged, and gcloud's failures are
+# multi-line JSON, so the log recorded a bare "}" and nothing else. Four p2
+# arms then spun for 50 minutes re-creating a QR that could never exist,
+# because the one line that said why was thrown away:
+#   code 7: "User does not have permission to submit requests into this queue
+#            for accelerator type v6e-8 in location us-east5-a"
+# Keep the whole message, and make a permission/quota refusal TERMINAL for
+# this zone -- retrying it is guaranteed to fail again, and the supervisor's
+# next attempt rotates to a zone where the request is allowed.
+create_qr() {
+  local out rc
+  out=$(timeout 600 gcloud compute tpus queued-resources create "$QR" --node-id="$QR" \
+        --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot \
+        --zone="$ZONE" --project="$PROJECT" 2>&1); rc=$?
+  echo "$out" | tail -12
+  if echo "$out" | grep -qE "does not have permission|PERMISSION_DENIED|\"code\": 7"; then
+    echo "FATAL: ${ACCEL} is not permitted in ${ZONE} -- not retrying this zone"
+    return 2
+  fi
+  return $rc
+}
+create_qr; create_rc=$?
+[ "$create_rc" -eq 2 ] && exit 2
 t_qr=$(date +%s)
 
 ( trap - EXIT TERM INT HUP; sleep "$HARD_CAP_S"
@@ -169,9 +189,19 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     timeout 600 gcloud compute tpus queued-resources delete "$QR" \
       --zone="$ZONE" --project="$PROJECT" --force --quiet 2>/dev/null || true
     sleep 60
-    timeout 600 gcloud compute tpus queued-resources create "$QR" --node-id="$QR" \
-      --accelerator-type="$ACCEL" --runtime-version="$RUNTIME" --spot \
-      --zone="$ZONE" --project="$PROJECT" 2>&1 | tail -1
+    create_qr; create_rc=$?
+    [ "$create_rc" -eq 2 ] && exit 2
+    # ONLY A SUCCESSFUL CREATE EARNS A FRESH CLOCK. Resetting the window after
+    # a FAILED create makes the deadline unreachable: the p2 arms re-created
+    # every ~3.5 min against a zone that refused them, reset the 10800s window
+    # each time, and so could never time out and let the supervisor rotate
+    # zones. They span for 50 minutes and would have span until the hard cap.
+    if [ "$create_rc" -ne 0 ]; then
+      echo "[$QR] create FAILED (rc=$create_rc); leaving the landing window running"
+      misses=0
+      sleep 60
+      continue
+    fi
     misses=0
     # A FRESH REQUEST DESERVES A FRESH CLOCK. The deadline was absolute from
     # the FIRST create, so a re-create late in the window had no time to land
@@ -209,6 +239,37 @@ for _ in 1 2 3 4 5 6; do
     --worker=0 --command="echo ssh-ok" && break
   sleep 20
 done
+# DOES THIS NODE ACTUALLY HAVE TPUs?
+#
+# Count the accelerator PCI functions. NOT /dev/accel*: an earlier version of
+# this check tested that path and was WRONG. v6e exposes chips through VFIO
+# (/dev/vfio/N, driver vfio_pci), so /dev/accel* is absent on every HEALTHY
+# v6e node -- verified 2026-08-29 against a v6e-8 that had been serving
+# continuously for three days:
+#     ls /dev/accel*  -> No such file or directory
+#     ls /dev/vfio    -> 0 1 2 3 4 ...
+#     lspci           -> "Processing accelerators: Google, Inc. Device 006f" x N
+# That bad check ran for ~6h and rejected healthy slices as dead, which is
+# strictly worse than the 90-minute boot it was meant to save. lspci is used
+# here because it reports the hardware itself rather than whichever driver
+# convention this TPU generation happens to use.
+#
+# Exit non-zero so the supervisor resubmits onto a different node.
+n_tpu=0
+for _try in 1 2; do
+  n_tpu=$(timeout 300 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" \
+            --worker=0 --command="lspci 2>/dev/null | grep -ci 'processing accelerators'" 2>/dev/null | tr -dc '0-9')
+  [ "${n_tpu:-0}" -ge 1 ] && break
+  echo "[$QR] tpu probe ${_try}/2 saw '${n_tpu:-<empty>}' accelerator PCI functions"
+  sleep 20
+done
+if [ "${n_tpu:-0}" -lt 1 ]; then
+  echo "WARNING: ${QR} reports no accelerator PCI functions; continuing anyway"
+  echo "         (the probe is advisory -- a false negative must never discard a good slice)"
+else
+  echo "[$QR] ${n_tpu} accelerator PCI function(s) present"
+fi
+
 timeout 900 gcloud compute tpus tpu-vm scp "${repo_root}/tpu/pallas_arena/probe/serve_vllm.sh" \
   "${QR}:~/serve_vllm.sh" --zone="$ZONE" --project="$PROJECT" --worker=0
 
@@ -263,6 +324,25 @@ echo "=== engine ready $(date +%H:%M:%S) ==="
 # VM (two preempted/crashed attempts never surfaced it).
 timeout 300 gcloud compute tpus tpu-vm ssh "$QR" --zone="$ZONE" --project="$PROJECT" --worker=0   --command="grep -iE 'kv cache|num_seqs|blocks|memory' ~/vllm-probe.log | head -20" || true
 
+# SLICE HEALTH DURING GENERATION. The engine wait checks slice state, but
+# generation had no such check: when the slice was preempted mid-run the
+# client just burned its connection retries and wrote an error row per
+# sample. Measured 2026-08-27 on the first clean qwen cell -- 6 rows, all
+# 'Connection refused', while ssh to the VM had been timing out for minutes
+# and the QR was already SUSPENDED. A cell of error rows is worse than no
+# cell: it looks like data. Kill the job instead so the supervisor re-rolls.
+( trap - EXIT TERM INT HUP
+  while true; do
+    sleep 120
+    qs=$(timeout 120 gcloud compute tpus queued-resources describe "$QR" --zone="$ZONE" \
+           --project="$PROJECT" --format='value(state.state)' 2>/dev/null)
+    case "$qs" in
+      ACTIVE|"") : ;;
+      *) echo "[watchdog] slice went ${qs} DURING generation -- aborting so the supervisor re-rolls"
+         kill -TERM $$ ; exit 0 ;;
+    esac
+  done ) &
+
 # Engine-log snapshots to NFS while generating: 3 of the last 4 VM deaths
 # struck as SPLASH requests began, and every post-mortem was blind because
 # the engine log dies with the VM. A 5-min snapshot loop leaves the crash
@@ -288,6 +368,7 @@ uv run --isolated --extra jax --with fastapi python tpu/pallas_arena/probe/gen_s
   ${NO_THINK:+--no-think} \
   ${SEED_FILE:+--seed-file "$SEED_FILE"} \
   ${SEED_OBS:+--seed-observation "$SEED_OBS"} \
+  ${LIB_IMPORTS:+--lib-imports} \
   ${SEED_REWARD:+--seed-reward "$SEED_REWARD"}
 rc=$?
 echo "=== generation rc=${rc}; gens at ${GENS_OUT} ==="

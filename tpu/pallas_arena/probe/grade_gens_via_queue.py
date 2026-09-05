@@ -25,6 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # .../tpu
 
+from pallas_arena.probe import lib_splice  # noqa: E402
 from pallas_arena.probe.gen_smoke import extract_completion  # noqa: E402
 
 
@@ -53,6 +54,9 @@ def main() -> None:
     ap.add_argument("--queue", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-wait-s", type=float, default=14400.0)
+    ap.add_argument("--seed-file", default="",
+                    help="seed program backing `from lib import ...`; required only "
+                         "if the cell was generated with --lib-imports")
     args = ap.parse_args()
     base = args.queue.rstrip("/")
 
@@ -85,6 +89,20 @@ def main() -> None:
             cells[cell]["no_program"] += 1
             cells[cell]["rows"].append({"idx": r.get("idx"), "outcome": "no_program"})
             continue
+        # RESOLVE `from lib import ...` BEFORE GRADING. The prompt offers the
+        # seed's own top-level names so a candidate can keep what it is not
+        # changing; the judge knows nothing about that, so the imports must be
+        # spliced out here, client-side, leaving one self-contained program.
+        # A candidate that never imports lib is returned byte-identical, so
+        # this is inert for every cell that does not use the feature.
+        if args.seed_file and lib_splice.wanted(program):
+            try:
+                program = lib_splice.splice(program, open(args.seed_file).read())
+            except lib_splice.SpliceError as e:
+                cells[cell]["rows"].append(
+                    {"idx": r.get("idx"), "outcome": f"[lib_import] {e}", "passed": False,
+                     "reward_with_bwd": 0.0, "observation": f"GATE lib_import | {e}"})
+                continue
         wid = _post(base, "/submit", {
             "problem": r["task"], "code": program,
             "tag": f"arm-{r.get('variant')}-{r.get('idx')}"})["work_id"]
@@ -111,9 +129,22 @@ def main() -> None:
             cells[cell]["rows"].append({
                 "idx": idx, "outcome": outcome, "passed": bool(res.get("passed")),
                 "reward_with_bwd": rw,
+                "reward": res.get("reward"),
                 "observation": str(res.get("observation") or "")[:1500],
                 "case_boot_s": res.get("case_boot_s"),
                 "excluded_cases": res.get("excluded_cases"),
+                # ROOFLINE, kept as STRUCTURED data rather than only inside
+                # the observation prose: this is the feedback the model gets
+                # about WHICH resource it is against, and a report that has
+                # to regex it back out of English will eventually be wrong.
+                "mxu_fracs": res.get("mxu_fracs"),
+                "speed_of_light_fracs": res.get("speed_of_light_fracs"),
+                "latencies": res.get("latencies"),
+                "per_case": res.get("per_case"),
+                "holdout": res.get("holdout"),
+                "grad_scores": res.get("grad_scores"),
+                "case_noise_floors": res.get("case_noise_floors"),
+                "case_timer": res.get("case_timer"),
             })
             print(f"[{cell} idx={idx}] {outcome}", flush=True)
         if pending:

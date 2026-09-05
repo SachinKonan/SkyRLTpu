@@ -125,6 +125,12 @@ _CONN_ERRORS = (urllib.error.URLError, http.client.RemoteDisconnected,
                 ConnectionResetError, ConnectionRefusedError, TimeoutError)
 
 
+# The answer must stay large enough to hold a full kernel rewrite: the
+# longest seed we ask a model to rewrite is 5545 tokens (splash, gemma
+# tokenizer), so anything under this means the cell cannot do the task.
+MIN_ANSWER_TOKENS = 8192
+
+
 def _post(server: str, body: dict, timeout_s: float, conn_retries: int = 6) -> dict:
     req = urllib.request.Request(
         f"{server}/v1/chat/completions",
@@ -182,24 +188,36 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
     }
     if extra_body:
         base.update(extra_body)
-    if think_budget and not phase1_total:
-        # Probe the true prompt size, then let phase 1 have exactly
-        # think_budget new tokens; everything else belongs to the answer.
+    ptoks = 0
+    if think_budget or phase1_total:
+        # RESERVE THE ANSWER FIRST. Measure the true prompt size ONCE --
+        # tokenizers differ per model (qwen-token estimates mispredicted gemma
+        # badly enough to 400 every request), and this probe is a real request
+        # per sample, so issuing it twice wasted a round trip on every
+        # generation.
         probe = _post(server, {**base, "max_tokens": 1}, timeout_s)
         ptoks = ((probe.get("usage") or {}).get("prompt_tokens") or 0)
+    if think_budget and not phase1_total:
+        # phase 1 gets exactly think_budget NEW tokens; the rest is the answer
         phase1_total = ptoks + think_budget
     if phase1_total:
-        # RESERVE THE ANSWER FIRST. Measure the true prompt size (tokenizers
-        # differ per model; qwen-token estimates already mispredicted gemma
-        # badly enough to 400 every request), then let phase 1 have only what
-        # is left of its total allowance.
-        probe = _post(server, {**base, "max_tokens": 1}, timeout_s)
-        ptoks = ((probe.get("usage") or {}).get("prompt_tokens") or 0)
         p1 = phase1_total - ptoks
         reserved = ctx - phase1_total - 64
+        # GUARD THE ANSWER, NOT JUST PHASE 1. The old check tested p1 < 512,
+        # which under think-budget semantics can never fire -- p1 is exactly
+        # think_budget regardless of prompt size -- so an oversized prompt
+        # sailed through with a NEGATIVE answer reserve (measured: a 30k
+        # prompt gave reserved=-9584 and no error). Fail loudly instead:
+        # silently shrinking one cell's answer budget would break the very
+        # thing these runs are for, which is four cells on identical budgets.
         if p1 < 512:
             raise RuntimeError(
                 f"prompt {ptoks} leaves {p1} phase-1 tokens of a {phase1_total} budget")
+        if reserved < MIN_ANSWER_TOKENS:
+            raise RuntimeError(
+                f"prompt {ptoks} + think {p1} leaves only {reserved} answer tokens "
+                f"of ctx {ctx} (need >= {MIN_ANSWER_TOKENS}); the budget for this "
+                f"cell would not match the others")
         print(f"[budget] prompt={ptoks} think<={p1} answer_reserved={reserved}", flush=True)
         max_tokens = p1
     try:
@@ -248,6 +266,115 @@ def _chat(server: str, model: str, prompt: str, max_tokens: int, temperature: fl
     return merged
 
 
+class _GradeSubmitter:
+    """POST each finished rollout to the arena queue as it lands.
+
+    Mirrors the league's async grading (TTD_EVAL_BACKEND=ray): the client
+    fires work off the moment a generation completes rather than banking the
+    whole cell first. Here the transport is the arena's own queue rather than
+    ray.remote, because the queue already carries leases, heartbeats and
+    expiry, and was proven at fleet scale (5x v6e-1, 1699 items, 0 lost/dup).
+
+    Never raises into the generation loop: a grading transport problem must
+    not cost us a rollout that was expensive to sample.
+    """
+
+    ENTRYPOINTS = {"rg_lru": ["kernel"], "splash_attention": ["kernel"]}
+
+    def __init__(self, queue: str, seed_file: str = ""):
+        self.queue = queue.rstrip("/")
+        self.seed = open(seed_file).read() if seed_file else ""
+        self.n_sent = 0
+        self.n_skip = 0
+
+    def submit(self, row: dict) -> str | None:
+        if not (row.get("text") or "").strip():
+            self.n_skip += 1
+            return None
+        try:
+            prog = extract_completion(
+                row["text"], self.ENTRYPOINTS.get(row.get("task"), ["kernel"]),
+                family=row.get("family"))
+            if not prog:
+                self.n_skip += 1
+                return None
+            if self.seed:
+                try:
+                    from pallas_arena.probe import lib_splice
+                except ImportError:          # running from inside probe/
+                    import lib_splice        # type: ignore
+                if lib_splice.wanted(prog):
+                    prog = lib_splice.splice(prog, self.seed)
+            body = json.dumps({"problem": row["task"], "code": prog,
+                               "tag": f"{row.get('variant')}-{row.get('idx')}"}).encode()
+            req = urllib.request.Request(f"{self.queue}/submit", data=body,
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                wid = json.load(r)["work_id"]
+            self.n_sent += 1
+            return wid
+        except Exception as e:  # noqa: BLE001 -- grading must never lose a rollout
+            print(f"[grade] submit failed for idx={row.get('idx')}: "
+                  f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+            self.n_skip += 1
+            return None
+
+    def collect(self, gens_path: str, out_path: str, wait_s: float) -> None:
+        """Poll for verdicts until every submitted item is done or time runs out."""
+        pending = {}
+        for line in open(gens_path):
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if r.get("work_id"):
+                pending[r["work_id"]] = r.get("idx")
+        print(f"[grade] collecting {len(pending)} verdicts (submitted {self.n_sent}, "
+              f"skipped {self.n_skip})", flush=True)
+        rows, deadline = [], time.time() + wait_s
+        while pending and time.time() < deadline:
+            try:
+                req = urllib.request.Request(
+                    f"{self.queue}/results",
+                    data=json.dumps({"work_ids": list(pending)}).encode(),
+                    headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    got = json.load(r)["results"]
+            except Exception as e:  # noqa: BLE001
+                print(f"[grade] poll failed: {type(e).__name__}; retrying", flush=True)
+                time.sleep(20)
+                continue
+            for wid in list(pending):
+                rec = got.get(wid) or {}
+                if not rec.get("done"):
+                    continue
+                res = rec.get("result") or rec
+                idx = pending.pop(wid)
+                rows.append({"idx": idx, "passed": bool(res.get("passed")),
+                             "reward_with_bwd": res.get("reward_with_bwd") or res.get("reward") or 0.0,
+                             "gate": res.get("gate"),
+                             "observation": str(res.get("observation") or "")[:1500],
+                             "mxu_fracs": res.get("mxu_fracs"),
+                             "speed_of_light_fracs": res.get("speed_of_light_fracs"),
+                             "latencies": res.get("latencies"),
+                             "per_case": res.get("per_case")})
+                print(f"[grade] idx={idx} passed={res.get('passed')} "
+                      f"reward={res.get('reward_with_bwd')}", flush=True)
+            # WRITE EVERY PASS, not only at the end. A walltime kill mid-poll
+            # used to discard every verdict the judge had already computed
+            # (2026-09-01: three cells landed 79 minutes before their slurm
+            # walltime). Whatever is on disk at kill time is real data.
+            with open(out_path, "w") as f:
+                json.dump({"rows": sorted(rows, key=lambda r: r.get("idx") or 0),
+                           "pending": len(pending)}, f, indent=1)
+            if pending:
+                time.sleep(15)
+        for wid, idx in pending.items():
+            rows.append({"idx": idx, "gate": "no verdict before deadline"})
+        with open(out_path, "w") as f:
+            json.dump({"rows": sorted(rows, key=lambda r: r.get("idx") or 0)}, f, indent=1)
+        print(f"[grade] wrote {out_path} ({len(rows)} verdicts)", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", required=True)
@@ -263,6 +390,20 @@ def main() -> None:
     ap.add_argument("--gens-from", default="", help="gens jsonl matching --repair-from")
     ap.add_argument("--enable-thinking-kwarg", action="store_true",
                     help="send chat_template_kwargs enable_thinking=True (gemma needs it; qwen thinks by default)")
+    ap.add_argument("--grade-queue", default="",
+                    help="arena queue URL; when set, each rollout is submitted "
+                         "for grading THE MOMENT it completes instead of after "
+                         "the whole cell (league TTD_EVAL_BACKEND=ray pattern)")
+    ap.add_argument("--grade-seed-file", default="",
+                    help="seed program backing `from lib import ...`; required "
+                         "with --grade-queue if the cell was generated with --lib-imports")
+    ap.add_argument("--grade-out", default="",
+                    help="verdict json (default: <out>-graded.json)")
+    ap.add_argument("--grade-wait-s", type=float, default=14400.0)
+    ap.add_argument("--lib-imports", action="store_true",
+                    help="offer the seed's top-level names as `from lib import ...` "
+                         "so a candidate can keep what it is not changing. The "
+                         "imports are spliced back out before grading.")
     ap.add_argument("--seed-file", default="",
                     help="path to a WORKING annotated program: run one improvement turn per "
                          "sample on it (the seeded-RL one-step test). Cell tasks come from "
@@ -310,7 +451,8 @@ def main() -> None:
         # SEEDED ONE-STEP TEST: every sample is an improvement turn on ONE
         # known-good annotated program (production-structure seed). This is
         # the erdos/ac-inequalities initial-state pattern applied to kernels.
-        from pallas_arena.probe.prompt_ref_first import SEED_IMPROVE_TEMPLATE, build3seed
+        from pallas_arena.probe.prompt_ref_first import (
+            SEED_IMPROVE_TEMPLATE, build3seed, lib_section)
         seed_program = open(args.seed_file).read()
         obs = ("passed: correct on every test shape, forward and backward. "
                "Reward accrues only for making it FASTER (uniformly across "
@@ -324,10 +466,11 @@ def main() -> None:
             if want and (task, variant) not in want:
                 continue
             prompt = SEED_IMPROVE_TEMPLATE.format(
-                base=build3seed(task, cases),
+                base=build3seed(task, cases, lib_imports=args.lib_imports),
                 reward=args.seed_reward,
                 program=seed_program,
                 observation=obs,
+                lib=lib_section(seed_program) if args.lib_imports else "",
             )
             ph = hashlib.sha256(prompt.encode()).hexdigest()[:12]
             for i in range(args.group_size):
@@ -422,15 +565,33 @@ def main() -> None:
                     "error": f"{type(e).__name__}: {str(e)[:300]}",
                     "wall_s": round(time.time() - t0, 1)}
 
+    # ASYNC GRADING: submit each rollout the INSTANT it finishes.
+    #
+    # This used to be `ex.map`, which yields in SUBMISSION order -- one slow
+    # rollout blocks every finished one behind it, so nothing could be graded
+    # until the straggler landed. as_completed yields on completion, which is
+    # what makes overlap real. The league RL loop
+    # (SkyRLTpu-league:tpu/launch_cell.sh, TTD_EVAL_BACKEND=ray) grades this
+    # way: generation and grading run concurrently on ONE slice, engine on w0
+    # and graders on the other hosts.
+    submitter = _GradeSubmitter(args.grade_queue, args.grade_seed_file) if args.grade_queue else None
     done = 0
     with open(args.out, "w") as f, cf.ThreadPoolExecutor(args.concurrency) as ex:
-        for row in ex.map(run, jobs):
+        futs = {ex.submit(run, j): j for j in jobs}
+        for fut in cf.as_completed(futs):
+            row = fut.result()
+            if submitter:
+                row["work_id"] = submitter.submit(row)
             f.write(json.dumps(row) + "\n")
             f.flush()
             done += 1
             if done % 8 == 0:
-                print(f"[gen] {done}/{len(jobs)} at {time.strftime('%H:%M:%S')}", flush=True)
+                print(f"[gen] {done}/{len(jobs)} at {time.strftime('%H:%M:%S')}"
+                      + (f" ({submitter.n_sent} graded-submitted)" if submitter else ""), flush=True)
     print(f"[gen] wrote {args.out}", flush=True)
+    if submitter:
+        submitter.collect(args.out, args.grade_out or (args.out.rsplit(".", 1)[0] + "-graded.json"),
+                          args.grade_wait_s)
 
 
 if __name__ == "__main__":
