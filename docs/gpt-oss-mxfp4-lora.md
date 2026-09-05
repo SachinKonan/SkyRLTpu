@@ -2,9 +2,10 @@
 
 Status: training and inference implementations are complete, including
 per-request multi-LoRA routing through the GMM path; CPU numeric/integration
-tests are included. The
-20B trainer acceptance gate passes on a four-host v6e-16 with TP=8/FSDP=2.
-The 20B vLLM load/inference/hot-swap gate also passes on one v6e-8 with TP=8.
+tests are included. The 20B trainer acceptance gate passes on a four-host
+v6e-16 with TP=8/FSDP=2.
+The 20B vLLM load/inference/concurrent-multi-LoRA gate also passes on one
+v6e-8 with TP=8.
 Colocated trainer-to-vLLM weight-sync validation and the 120B v6e-32 gate
 remain before a long RL run.
 
@@ -120,8 +121,8 @@ yet expose the required pre-activation and pre-reduction insertion points.
 
 The original v1 live gate below proved safe single-adapter replacement. The
 multi-LoRA v2 gate additionally keeps A and B resident, mixes simultaneous
-base/A/B requests, compares each mixed result with its isolated result, and
-forces LRU slot reuse to catch stale expert factors.
+base/A/B requests, classifies them against homogeneous concurrent reference
+families, and forces LRU slot reuse to catch stale expert factors.
 
 ## Training reality
 
@@ -197,6 +198,46 @@ dominant uncertainty.
 
 ## Live 20B vLLM acceptance
 
+### Concurrent multi-LoRA gate (v2)
+
+The multi-LoRA gate passed on 2026-09-05 on Jobman job `000705`, TPU
+`sk7524-v6e8-gptoss20b-vllm-multilora-e5b_1` in `us-east5-b`, using all eight
+v6e chips as TP=8. The durable result is:
+
+```text
+gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-multilora-v6e8-v2.json
+generation: 1788642093978801
+```
+
+It reports `acceptance_pass: true`. Expert A and B were resident
+simultaneously in physical slots 1 and 2. Across eight concurrent
+base/zero/A/B batches, all 32 requests were closest to the correct homogeneous
+reference family; the minimum separation from the next-wrong family was
+`5.2864` against a required `0.25`. The gate also forced LRU slot reuse,
+verified that the new non-expert occupant did not inherit stale expert
+factors, exercised ordinary router LoRA, and restored exact base parity.
+
+The accepted source/runtime pins are:
+
+- SkyRL bundle source: `28c72db33a0ca84d60e3d852088b12d26ac2279f`.
+- TPU inference fork: `b9e4024b5624fe74d7486c1b8dc34b1ce45c8aaa`.
+- Immutable bundle:
+  `gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-multilora-v6e8-28c72db3.tar.gz`.
+- Bundle SHA-256:
+  `3d998eaf91b3f47aeb92e1ac76b08c7e67a67ed4ecfa22a9d171d33597f5092c`
+  (GCS generation `1788641919779368`).
+
+The first version of the v2 gate compared isolated and concurrent logprobs
+bitwise. Live testing showed that this is not a valid invariant of the current
+TPU runtime: even simultaneous identical base-model requests can produce
+batch-position-dependent logprob differences. The accepted gate therefore
+builds homogeneous concurrent reference clusters and verifies adapter-family
+separation under the same batch shape. A real v6e microtest separately showed
+exact mixed-slot W13 GMM parity and W2 parity within one BF16 quantum
+(`1.5258789e-5`).
+
+### Earlier single-adapter replacement gate (v1)
+
 The vLLM gate passed on 2026-09-03 on Jobman job `000702`, TPU
 `sk7524-v6e8-gptoss20b-vllm-lora-e5b_1` in `us-east5-b`, using all eight v6e
 chips as TP=8. The canonical result is:
@@ -256,13 +297,15 @@ The corresponding immutable SkyRL source bundle is
 with SHA-256
 `824c695c7b101b899f7b68ce0cfa50ee2341b62eb6fb157e45294808249b7777`.
 
-1. CPU unit tests cover factor layout, replacement/clear semantics, immutable
-   base tensors, and pre-activation/pre-reduction numerical ordering.
+1. CPU unit tests cover multi-slot factor layout, transactional slot updates,
+   immutable base tensors, and mixed-slot pre-activation/pre-reduction
+   numerical ordering.
 2. The v6e-8 gate compiles `openai/gpt-oss-20b`, installs fixed rank-1 test
-   factors into rank-32 buffers, and proves zero-adapter/base parity.
+   factors into rank-32 banks, and proves zero-adapter/base parity.
 3. Deterministic nonzero expert and router factors both change live outputs.
-4. A-to-B-to-A replacement is exact, and clear restores the initial base
-   fingerprints with no drift.
+4. Repeated concurrent base/zero/A/B batches preserve adapter-family
+   separation; forced LRU reuse clears stale expert state, and final clear
+   restores the initial base fingerprints with no drift.
 5. Benchmark prefill/decode and HBM. The first implementation adds two shared
    dense shrink matmuls, three skinny grouped matmuls, and one shared dense
    expand matmul per layer. A later Pallas kernel can fuse each low-rank A-to-B

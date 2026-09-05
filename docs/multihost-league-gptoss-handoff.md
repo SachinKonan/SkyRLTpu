@@ -90,16 +90,24 @@ documented in [`tpu/swarm/README.md`](../tpu/swarm/README.md) and
   (generation `1788461724531989`). It pins SkyRL source `e5a75391`, fork
   `22d9fcc6c`, and the bundle/checksum recorded in
   [`gpt-oss-mxfp4-lora.md`](gpt-oss-mxfp4-lora.md).
+- GPT-OSS 20B concurrent multi-LoRA inference passed live on a TP=8 v6e-8 in
+  `us-east5-b` (Jobman `000705`). The durable v2 result reports 32/32 correctly
+  classified mixed base/zero/A/B requests and a minimum adapter-family margin
+  of `5.2864` at
+  `gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-multilora-v6e8-v2.json`
+  (generation `1788642093978801`). It pins SkyRL source `28c72db3` and fork
+  `b9e4024b5`; full bundle/checksum details are in
+  [`gpt-oss-mxfp4-lora.md`](gpt-oss-mxfp4-lora.md).
 - GPT-OSS 120B checkpoint conversion is complete. The marker exists at
   `gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388/gpt-oss-120b/CHECKPOINT_COMPLETE`.
 - GPT-OSS 120B training is not yet accepted. Success requires
   `gs://sk7524-tinker-tpu-asia-northeast1/v6e-smoke-results/gptoss120b-sparse-lora-tp8-fsdp4-r32-s1024-v1.json`
   with `acceptance_pass: true`.
 
-The v6e-8 inference gate proves native MXFP4 load, zero-adapter parity,
-nonzero expert-factor execution, A-to-B-to-A replacement without drift,
-ordinary router LoRA, expert clear, and final immutable-base parity. The
-client is [`tpu/gptoss20b_vllm_lora_smoke.py`](../tpu/gptoss20b_vllm_lora_smoke.py)
+The v6e-8 inference gates prove native MXFP4 load, zero-adapter parity,
+nonzero expert-factor execution, concurrent base/A/B isolation, LRU slot
+reuse, ordinary router LoRA, expert clear, and final immutable-base parity.
+The client is [`tpu/gptoss20b_vllm_lora_smoke.py`](../tpu/gptoss20b_vllm_lora_smoke.py)
 and the remote runner is
 [`tpu/run_gptoss20b_vllm_lora_smoke.sh`](../tpu/run_gptoss20b_vllm_lora_smoke.sh).
 On v6e, "native MXFP4 load" means the published checkpoint stays MXFP4 on
