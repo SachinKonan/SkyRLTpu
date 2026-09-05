@@ -48,13 +48,13 @@ resumable:
     topology: tp8
     rank: 1
     validation: concurrent-base-a-b-and-lru-slot-reuse
-    bundle_commit: 601b4990
+    bundle_commit: 28c72db3
   env:
     PROJECT: vision-mix
     ZONE: us-east5-b
     SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-gptoss20b-vllm
-    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-multilora-v6e8-601b4990.tar.gz
-    SKYRLTPU_BUNDLE_SHA256: b97c1479db3a26868bc7cc43f6ce7aa86652bcbb99e01c8e15c3bf648a0e3efb
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-multilora-v6e8-28c72db3.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: 3d998eaf91b3f47aeb92e1ac76b08c7e67a67ed4ecfa22a9d171d33597f5092c
     TPU_INFERENCE_COMMIT: b9e4024b5624fe74d7486c1b8dc34b1ce45c8aaa
     SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-multilora-v6e8-v2.json
     SMOKE_LOG_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-logs/gptoss20b-vllm-mxfp4-multilora-v6e8-v2-e5b.log
