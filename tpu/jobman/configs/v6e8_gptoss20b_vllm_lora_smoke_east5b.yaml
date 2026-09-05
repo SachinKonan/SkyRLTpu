@@ -1,5 +1,5 @@
 job:
-  name: sk7524-v6e8-gptoss20b-vllm-lora-e5b
+  name: sk7524-v6e8-gptoss20b-vllm-multilora-e5b
   env_type: null
   loop: true
   remote_user: sk7524_princeton_edu
@@ -8,7 +8,7 @@ job:
 tpu:
   allocation_mode: queued-resources
   accelerator: v6e-8
-  name: sk7524-v6e8-gptoss20b-vllm-lora-e5b
+  name: sk7524-v6e8-gptoss20b-vllm-multilora-e5b
   zone: us-east5-b
   version: v2-alpha-tpuv6e
   pricing: spot
@@ -34,7 +34,7 @@ ssh:
 resumable:
   enabled: true
   run_id: auto
-  run_id_prefix: v6e8-gptoss20b-vllm-mxfp4-lora-v1
+  run_id_prefix: v6e8-gptoss20b-vllm-mxfp4-multilora-v2
   local_cache_root: /n/fs/vision-mix/sk7524/jobman-runs
   remote_gcs_cache_root: /home/sk7524_princeton_edu/gcs/jobman-runs
   remote_local_cache_root: /tmp/jobman-runs
@@ -43,22 +43,22 @@ resumable:
     type: local
     poll_seconds: 30
   run_spec:
-    experiment: gptoss20b-vllm-mxfp4-lora-live
+    experiment: gptoss20b-vllm-mxfp4-multilora-live
     model: openai/gpt-oss-20b
     topology: tp8
     rank: 1
-    validation: zero-a-b-a-router-clear-base
-    bundle_commit: e5a75391
+    validation: concurrent-base-a-b-and-lru-slot-reuse
+    bundle_commit: 601b4990
   env:
     PROJECT: vision-mix
     ZONE: us-east5-b
     SKYRL_REPO_DIR: /home/sk7524_princeton_edu/SkyRLTpu-gptoss20b-vllm
-    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-lora-v6e8-e5a75391.tar.gz
-    SKYRLTPU_BUNDLE_SHA256: ac8b31d9c6962de47dd8aa187f4efbd65ddc984d6ee72ffa484df70a2ca17648
-    TPU_INFERENCE_COMMIT: 22d9fcc6c23a536d1fb288b6aba02adbb24cb913
-    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-lora-v6e8-v1.json
-    SMOKE_LOG_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-logs/gptoss20b-vllm-mxfp4-lora-v6e8-e5b.log
-    SMOKE_FAILURE_GCS_PREFIX: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/failures/gptoss20b-vllm-mxfp4-lora-v6e8-e5b
+    SKYRLTPU_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/gptoss20b-vllm-mxfp4-multilora-v6e8-601b4990.tar.gz
+    SKYRLTPU_BUNDLE_SHA256: b97c1479db3a26868bc7cc43f6ce7aa86652bcbb99e01c8e15c3bf648a0e3efb
+    TPU_INFERENCE_COMMIT: b9e4024b5624fe74d7486c1b8dc34b1ce45c8aaa
+    SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/gptoss20b-vllm-mxfp4-multilora-v6e8-v2.json
+    SMOKE_LOG_GCS: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-logs/gptoss20b-vllm-mxfp4-multilora-v6e8-v2-e5b.log
+    SMOKE_FAILURE_GCS_PREFIX: gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/failures/gptoss20b-vllm-mxfp4-multilora-v6e8-v2-e5b
   prepare:
     workers: all
     timeout: 0
