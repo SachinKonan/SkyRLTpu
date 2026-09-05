@@ -63,6 +63,10 @@ load-bearing — everything in §3 hangs off it.
 Batch shape (GRPO 16×32 = 512 rollouts/step), LoRA rank 32, temp 1.0 are common.
 LR is per-arm via `LEARNING_RATE` in the jobman config env (default 4e-5).
 
+Gemma cells are text-only: they use the default RPA kernel and set
+`--disable-chunked-mm-input --limit-mm-per-prompt {"image":0,"audio":0,"video":0}`.
+Prefix caching remains enabled.
+
 ## 4. Muse: the five things that MUST be right (each cost a live failure)
 
 1. **`TPU_BACKEND_TYPE=jax`.** Under torchax, vLLM's registry has no muse and
@@ -191,7 +195,7 @@ restores from GCS on every relaunch and will resurrect the old tree/weights.
 | `tpu/jobman/configs/*.yaml` | one jobman config per arm |
 | `tpu/jobman/cell_worker.sh` | per-model settings + orchestration (venv, caches, engines, Ray) |
 | `tpu/jobman/cell_monitor.sh` / `cell_sync.sh` / `cell_probe.sh` | client relaunch loop / GCS sync / completion |
-| `tpu/jobman/ensure_orbax_ckpt.sh` | pre-engine checkpoint restore (gcloud storage rsync, purge-on-torn) |
+| `tpu/jobman/ensure_orbax_ckpt.sh` | pre-engine checkpoint restore (gcloud rsync or recursive-copy fallback, purge-on-torn) |
 | `tpu/launch_cell.sh` | client env (CTX/PHASE1/LR/rank) + run-dir restore + client start |
 | `tpu/start_colocated_vllm_tinker.sh` | trainer + engines bring-up; generates the frozen host scripts |
 | `tpu/start_vllm_tpu.sh` | engine venv + runner generation (backend/plugins/caches baked here) |

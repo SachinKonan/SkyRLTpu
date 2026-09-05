@@ -357,7 +357,7 @@ def test_vllm_sampling_client_sample_groups_prompt_logprobs(tmp_path):
         server.shutdown()
 
 
-def test_vllm_sampling_client_push_adapter_versions_and_unloads():
+def test_vllm_sampling_client_push_adapter_versions_and_unloads(tmp_path):
     """push_adapter posts the tar to the upload endpoint with versioned names and
     passes the previous adapter name for server-side unload."""
     server = _serve()
@@ -371,6 +371,11 @@ def test_vllm_sampling_client_push_adapter_versions_and_unloads():
         name1 = client.push_adapter("model_a", "ckpt_1", b"TARBYTES1")
         name2 = client.push_adapter("model_a", "ckpt_2", b"TARBYTES2")
         assert name1 == "model_a_ckpt_1" and name2 == "model_a_ckpt_2"
+
+        # Sampling immediately follows the HTTP push. It must not try to read
+        # the trainer-local checkpoint path as shared storage.
+        missing_checkpoint = AnyPath(tmp_path / "trainer-only" / "ckpt_2.tar.gz")
+        assert client.ensure_lora_loaded("model_a", missing_checkpoint, checkpoint_id="ckpt_2") == name2
 
         uploads = [(path, payload) for path, payload, _ in server.requests]
         assert len(uploads) == 2

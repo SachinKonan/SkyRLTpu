@@ -62,12 +62,20 @@ MARGIN_GB="${CKPT_MARGIN_GB:-12}"      # venvs, logs, XLA cache, room to breathe
 # `gsutil cp -r` seeds them), and composite downloads force CRC32c validation;
 # without compiled crcmod on the node gsutil falls back to python hashing and
 # crawls -- measured 78 KiB in 90 s against 40 GB, i.e. never finishes. The same
-# transfer under `gcloud storage rsync` took 90 s flat. rs_tpu.sh already uses
-# gcloud storage for exactly this reason.
+# transfer under the compiled-CRC gcloud storage client took 90 s flat. Use its
+# recursive-copy fallback on TPU images too old to provide storage rsync.
 GS="$(command -v gsutil || echo "$HOME/google-cloud-sdk/bin/gsutil")"
 GCS_CLI="$(command -v gcloud || echo "$HOME/google-cloud-sdk/bin/gcloud")"
 SRC="$CACHE_GCS/$MT_NAME"
 DST="$CACHE/$MT_NAME"
+MARKER="$DST/.tpuswarm-complete"
+if "$GCS_CLI" storage rsync --help >/dev/null 2>&1; then
+  GCS_COPY_MODE=rsync
+else
+  # The TPU Ubuntu image currently ships gcloud 428, before storage rsync was
+  # added. Its recursive cp still uses the fast CRC32c-capable storage client.
+  GCS_COPY_MODE=recursive-cp
+fi
 
 want=$(timeout 300 "$GS" du -s "$SRC" 2>/dev/null | awk '{print $1}')
 if [ -z "$want" ] || [ "$want" = "0" ]; then
@@ -79,11 +87,19 @@ want_gb=$(( want / 1024 / 1024 / 1024 ))
 have=$(du -sb "$DST" 2>/dev/null | awk '{print $1}'); have="${have:-0}"
 parts=$(find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)
 # 2% tolerance: du and gsutil du disagree slightly on block accounting.
-if [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ]; then
+if [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ] &&
+   [ "$(cat "$MARKER" 2>/dev/null)" = "$SRC $want" ]; then
   echo "ckpt: already complete ($(( have / 1024 / 1024 / 1024 )) GB >= 98% of ${want_gb} GB)"
   exit 0
 fi
 [ "$have" != "0" ] && echo "ckpt: local copy incomplete ($(( have / 1024 / 1024 / 1024 ))/${want_gb} GB, partial=${parts:-none}) -- refetching"
+
+# A size-only check accepted sparse/truncated OCDBT files left by an interrupted
+# transfer. Start unmarked copies from an empty directory so gcloud validates
+# every object before the marker is written.
+if [ -d "$DST" ]; then
+  find "$DST" -mindepth 1 -delete
+fi
 
 mkdir -p "$DST"
 for try in 1 2 3; do
@@ -98,10 +114,19 @@ for try in 1 2 3; do
     fi
   fi
 
-  timeout 3600 "$GCS_CLI" storage rsync -r "$SRC" "$DST" >/dev/null 2>>"$HOME/ckpt-prep-errors.log"
+  if [ "$GCS_COPY_MODE" = "rsync" ]; then
+    timeout 3600 "$GCS_CLI" storage rsync -r "$SRC" "$DST" \
+      >/dev/null 2>>"$HOME/ckpt-prep-errors.log"
+  else
+    rm -rf "$DST"
+    mkdir -p "$CACHE"
+    timeout 3600 "$GCS_CLI" storage cp --recursive "$SRC" "$CACHE" \
+      >/dev/null 2>>"$HOME/ckpt-prep-errors.log"
+  fi
   have=$(du -sb "$DST" 2>/dev/null | awk '{print $1}'); have="${have:-0}"
   parts=$(find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)
   if [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ]; then
+    printf '%s %s\n' "$SRC" "$want" >"$MARKER"
     echo "ckpt: restored $(( have / 1024 / 1024 / 1024 ))/${want_gb} GB from $SRC (attempt $try)"
     exit 0
   fi
@@ -112,4 +137,4 @@ done
 # Never hand the trainer a torn checkpoint: absent is recoverable, corrupt is not.
 n=$(find "$DST" -mindepth 1 -delete -print 2>/dev/null | wc -l)
 echo "ckpt: FAILED to restore $SRC after 3 attempts; purged $n path(s). Engine bring-up will convert from HF (slow) or fail loudly." >&2
-exit 0
+exit 1

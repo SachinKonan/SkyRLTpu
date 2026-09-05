@@ -51,6 +51,18 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
         if not lora_name or "/" in lora_name or lora_name.startswith("."):
             raise HTTPException(status_code=400, detail="valid 'lora_name' query param required")
 
+        # The trainer-side client is recreated when only the trainer restarts,
+        # while this vLLM process may stay alive. Persist the last upload here
+        # so a fresh client cannot leak old adapters by forgetting their name.
+        latest_marker = lora_dir / ".skyrl-latest-lora"
+        if not previous:
+            try:
+                candidate = latest_marker.read_text().strip()
+                if candidate and "/" not in candidate and not candidate.startswith("."):
+                    previous = candidate
+            except FileNotFoundError:
+                pass
+
         target = lora_dir / lora_name
         if not target.exists():
             # Stream the tar body to disk (payloads are up to ~GBs of f32
@@ -162,6 +174,10 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             if "already been loaded" not in detail:
                 raise HTTPException(status_code=400, detail=f"load_lora_adapter failed: {detail}")
 
+        marker_tmp = latest_marker.with_suffix(".tmp")
+        marker_tmp.write_text(f"{lora_name}\n")
+        marker_tmp.replace(latest_marker)
+
         return {"status": "ok", "lora_name": lora_name}
 
 
@@ -191,7 +207,10 @@ async def _serve(args) -> None:
         log_level=args.uvicorn_log_level,
         timeout_keep_alive=envs.VLLM_HTTP_TIMEOUT_KEEP_ALIVE,
     )
-    await uvicorn.Server(config).serve()
+    server = uvicorn.Server(config)
+    # vLLM request error handlers call through this attribute.
+    app.state.server = server
+    await server.serve()
 
 
 def main() -> None:

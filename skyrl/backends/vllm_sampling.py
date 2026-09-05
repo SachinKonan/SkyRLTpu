@@ -258,21 +258,21 @@ class VllmSamplingClient:
         """
         checkpoint_id = checkpoint_id or _checkpoint_id_from_path(checkpoint_path)
         lora_name = _sanitize_lora_name(model_id, checkpoint_id)
+        loaded_servers = self._loaded_loras.setdefault(lora_name, {})
+        if all(server_url in loaded_servers for server_url in self.server_base_urls):
+            return lora_name
+
         target_dir = self.lora_base_dir / lora_name
         self._extract_lora_checkpoint(checkpoint_path, target_dir)
 
         target_path = str(target_dir)
-        loaded_servers = self._loaded_loras.setdefault(lora_name, {})
-        if all(loaded_servers.get(server_url) == target_path for server_url in self.server_base_urls):
-            return lora_name
-
         previous_lora = self._latest_lora_by_model.get(model_id)
         if previous_lora and previous_lora != lora_name:
             self._unload_lora(previous_lora)
 
         payload = {"lora_name": lora_name, "lora_path": target_path}
         for server_url in self.server_base_urls:
-            if loaded_servers.get(server_url) == target_path:
+            if server_url in loaded_servers:
                 continue
             self._post_json_with_retries(f"{server_url}{self.lora_load_endpoint}", payload)
             loaded_servers[server_url] = target_path
@@ -439,6 +439,7 @@ class VllmSamplingClient:
             query += f"&previous_lora_name={previous}"
 
         last_error: Exception | None = None
+        loaded_servers = self._loaded_loras.setdefault(lora_name, {})
         for server_url in self.server_base_urls:
             url = f"{server_url}{self.lora_upload_endpoint}?{query}"
             for attempt in range(1, self.lora_load_retries + 1):
@@ -475,6 +476,7 @@ class VllmSamplingClient:
                         time.sleep(self.lora_load_retry_sleep_sec)
             if last_error is not None:
                 raise VllmRequestError(f"adapter upload to {url} failed: {last_error}")
+            loaded_servers[server_url] = "http-upload"
 
         self._latest_lora_by_model[model_id] = lora_name
         return lora_name

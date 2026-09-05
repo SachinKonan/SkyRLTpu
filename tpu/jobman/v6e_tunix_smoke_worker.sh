@@ -18,11 +18,14 @@ SMOKE_ROWS="${TUNIX_SMOKE_ROWS:-4}"
 SMOKE_REPLAYS="${TUNIX_SMOKE_REPLAYS:-1}"
 TRAIN_TP_SIZE="${TRAIN_TP_SIZE:-8}"
 TRAIN_FSDP_SIZE="${TRAIN_FSDP_SIZE:-2}"
+TRAIN_CP_SIZE="${TRAIN_CP_SIZE:-1}"
 TUNIX_ROW_SHARD="${TUNIX_ROW_SHARD:-$TRAIN_FSDP_SIZE}"
+TRAIN_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS:-2,2,1}"
+TRAIN_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS:-2,2,1}"
 RESULT_GCS="${SMOKE_RESULT_GCS:-gs://sk7524-tinker-tpu-us-east5/v6e-smoke-results/qwen35-tp8-fsdp2-r${LORA_RANK}-v1.json}"
 
-if [ "$((TRAIN_TP_SIZE * TRAIN_FSDP_SIZE))" -ne 16 ]; then
-  echo "v6e-16 trainer mesh must use exactly 16 chips: TP=${TRAIN_TP_SIZE} FSDP=${TRAIN_FSDP_SIZE}" >&2
+if [ "$((TRAIN_TP_SIZE * TRAIN_FSDP_SIZE * TRAIN_CP_SIZE))" -ne 16 ]; then
+  echo "v6e-16 trainer mesh must use exactly 16 chips: TP=${TRAIN_TP_SIZE} FSDP=${TRAIN_FSDP_SIZE} CP=${TRAIN_CP_SIZE}" >&2
   exit 2
 fi
 if [ "$TUNIX_ROW_SHARD" -ne "$TRAIN_FSDP_SIZE" ]; then
@@ -159,9 +162,10 @@ env \
   EXTERNAL_SAMPLING=1 \
   TP_SIZE="$TRAIN_TP_SIZE" \
   FSDP_SIZE="$TRAIN_FSDP_SIZE" \
+  CP_SIZE="$TRAIN_CP_SIZE" \
   TUNIX_ROW_SHARD="$TUNIX_ROW_SHARD" \
-  TRAIN_TPU_PROCESS_BOUNDS=2,2,1 \
-  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1 \
+  TRAIN_TPU_PROCESS_BOUNDS="$TRAIN_PROCESS_BOUNDS" \
+  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS="$TRAIN_CHIPS_PER_PROCESS_BOUNDS" \
   MODEL_NAME="$MODEL_NAME" \
   TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL_NAME" \
   TUNIX_MAXTEXT_PIP_SPEC="$MAXTEXT_PIP_SPEC" \
@@ -184,7 +188,7 @@ env \
 # the transaction finishes. Only process 0 publishes; cache keys are additive.
 ( for _ in $(seq 1 120); do
     sleep 60
-    gcloud storage rsync -r "$CACHE_LOCAL" "$JAX_CACHE_GCS" >/dev/null 2>&1 || true
+    "$REPO/tpu/gcs_rsync.sh" -r "$CACHE_LOCAL" "$JAX_CACHE_GCS" >/dev/null 2>&1 || true
   done ) &
 CACHE_PUBLISHER_PID=$!
 
@@ -204,7 +208,7 @@ if [ "$SMOKE_RC" -ne 0 ]; then
   kill "$CACHE_PUBLISHER_PID" 2>/dev/null || true
   wait "$CACHE_PUBLISHER_PID" 2>/dev/null || true
   CACHE_PUBLISHER_PID=
-  gcloud storage rsync -r "$CACHE_LOCAL" "$JAX_CACHE_GCS" || true
+  "$REPO/tpu/gcs_rsync.sh" -r "$CACHE_LOCAL" "$JAX_CACHE_GCS" || true
   if [ -s "$HOME/v6e-tunix-smoke.json" ]; then
     FAILURE_GCS="${RESULT_GCS%.json}-failed.json"
     gcloud storage cp "$HOME/v6e-tunix-smoke.json" "$FAILURE_GCS" || true
@@ -224,7 +228,7 @@ fi
 # compile even if the slice is reclaimed immediately after this probe.
 kill "$CACHE_PUBLISHER_PID" 2>/dev/null || true
 wait "$CACHE_PUBLISHER_PID" 2>/dev/null || true
-gcloud storage rsync -r "$CACHE_LOCAL" "$JAX_CACHE_GCS"
+"$REPO/tpu/gcs_rsync.sh" -r "$CACHE_LOCAL" "$JAX_CACHE_GCS"
 gcloud storage cp "$HOME/v6e-tunix-smoke.json" "$RESULT_GCS"
 publish_logs
-echo "v6e TP8/FSDP2 smoke complete: $RESULT_GCS"
+echo "v6e TP${TRAIN_TP_SIZE}/FSDP${TRAIN_FSDP_SIZE}/CP${TRAIN_CP_SIZE} smoke complete: $RESULT_GCS"

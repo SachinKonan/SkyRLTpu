@@ -11,8 +11,23 @@ set -uo pipefail
 CELL=${CELL:?set CELL, e.g. grpo-n}
 EXP=${EXPERIMENT_NAME:-stageA-$CELL}
 RUN=${RUN_DIR_NAME:-stageA-$CELL}
+CLIENT_ROOT=$(readlink -f "${CLIENT_ROOT:-$HOME/ttd-client}")
 GCS_RUN=${GCS_RUN:-gs://sk7524-tinker-tpu-us-east5/skyrl-runs/$RUN}
 mkdir -p ~/skyrl-runs/"$RUN"
+
+# ---- durable LoRA/optimizer checkpoints -------------------------------------
+# The tinker server writes checkpoint tarballs under CKPT_ROOT. On jobman cells
+# that directory IS the bucket (gcsfuse mount of ~/gcs), so they were durable for
+# free. On SkyPilot pool workers it is a plain local directory: nothing restored
+# the banked weights for a resume (fresh server -> 404 "Model not found") and
+# nothing published new ones (a preemption lost every step since job start).
+# Restore-before-register and additive writeback below; both are no-ops when
+# CKPT_ROOT is a mount.
+CKPT_ROOT=${REMOTE_CHECKPOINTS:-$HOME/gcs/skyrl-checkpoints}
+_bucket=${GCS_RUN#gs://}; _bucket=${_bucket%%/*}
+SKYRL_CKPT_GCS=${SKYRL_CKPT_GCS:-gs://$_bucket/skyrl-checkpoints}
+ckpt_root_is_mount() { mountpoint -q "$CKPT_ROOT" 2>/dev/null || mountpoint -q "$(dirname "$CKPT_ROOT")" 2>/dev/null; }
+mkdir -p "$CKPT_ROOT"
 
 # ---- cell knobs (see tpu/stage_a_cells.sh for the six combinations) ---------
 OBJECTIVE=${TTD_ADV_ESTIMATOR:-mean_baseline}     # mean_baseline | entropic_adaptive_beta
@@ -77,14 +92,54 @@ while true; do
   gsutil -m rsync -r -x '.*wandb/.*|.*\.tmp$|.*\.gstmp$' \
     "RUNDIRPLACEHOLDER" "GCSRUNPLACEHOLDER" >> "$HOME/sidecar.log" 2>&1
   echo "sidecar-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/sidecar.log"
+  # Publish LoRA/optimizer checkpoints when CKPT_ROOT is local disk (pool
+  # workers). Additive: never deletes, so a partially written tarball is simply
+  # re-synced next cycle once its size settles.
+  # gcloud rsync, not gsutil: the multi-GB tarballs made gsutil fall back to
+  # pure-Python CRC32C ("crcmod C extension" absent) and sit for many minutes.
+  if [ "CKPTWRITEBACKPLACEHOLDER" = "1" ]; then
+    bash "GCSRSYNCPLACEHOLDER" -r --exclude='.*\.tmp$|.*\.gstmp$|.*\.partial$' \
+      "CKPTROOTPLACEHOLDER" "CKPTGCSPLACEHOLDER" >> "$HOME/sidecar.log" 2>&1
+    echo "ckpt-writeback-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/sidecar.log"
+  fi
   sleep 300
 done
 SIDECAR
-sed -i "s|RUNDIRPLACEHOLDER|$HOME/skyrl-runs/$RUN|; s|GCSRUNPLACEHOLDER|$GCS_RUN|" ~/sidecar_"$RUN".sh
+_ckpt_writeback=0; ckpt_root_is_mount || _ckpt_writeback=1
+sed -i "s|RUNDIRPLACEHOLDER|$HOME/skyrl-runs/$RUN|; s|GCSRUNPLACEHOLDER|$GCS_RUN|; s|CKPTWRITEBACKPLACEHOLDER|$_ckpt_writeback|; s|CKPTROOTPLACEHOLDER|$CKPT_ROOT|; s|CKPTGCSPLACEHOLDER|$SKYRL_CKPT_GCS|; s|GCSRSYNCPLACEHOLDER|$CLIENT_ROOT/tpu/gcs_rsync.sh|" ~/sidecar_"$RUN".sh
 chmod +x ~/sidecar_"$RUN".sh
 SESSION=${CELL_SESSION:-cell}
 tmux kill-session -t "=${SESSION}-backup" 2>/dev/null
 tmux new-session -d -s "${SESSION}-backup" "bash ~/sidecar_$RUN.sh"
+
+# ---- seeded-generation guard (META_SEED_ONLY=1) ----------------------------
+# A meta generation starts from a seed snapshot the driver staged at step 0.
+# The ensemble picks which snapshot to resume by STATE COUNT (resume.py
+# pick_resume_snapshot), NOT by step number -- so if a failed launch ever writes
+# a cold tree (restore raced, sampler built fresh initial states), that tree
+# outgrows the seed after one step and wins the ranking FOREVER. Observed live:
+# meta-wt16-fresh-g0-qwen resumed a 78-state cold tree over its 48-state seed
+# and ran a whole generation from the wrong starting point.
+# While NOTHING has been banked (no metrics rows), the seed is the only
+# legitimate snapshot: delete every other one so the ranking cannot pick wrong.
+if [ "${META_SEED_ONLY:-0}" = 1 ]; then
+  _ml=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/metrics.jsonl 2>/dev/null | head -1)
+  _rows=0; [ -s "${_ml:-}" ] && _rows=$(wc -l < "$_ml")
+  if [ "$_rows" -eq 0 ]; then
+    for _snap in ~/skyrl-runs/"$RUN"/tinker_log/*/puct_sampler_step_*.json; do
+      [ -e "$_snap" ] || continue
+      case "$_snap" in
+        *puct_sampler_step_000000.json) ;;
+        *) echo "seeded start: removing non-seed snapshot $(basename "$_snap")"; rm -f "$_snap" ;;
+      esac
+    done
+    # a cold tree also leaves weight checkpoints; with 0 banked rows they are
+    # from the discarded lineage and would resume the run past the seed.
+    for _ck in ~/skyrl-runs/"$RUN"/tinker_log/*/member_*/checkpoints.jsonl; do
+      [ -e "$_ck" ] && { echo "seeded start: clearing stale $(basename "$(dirname "$_ck")")/checkpoints.jsonl"; : > "$_ck"; }
+    done
+  fi
+fi
 
 # ---- re-register durable checkpoints BEFORE the client starts --------------
 # Must be here, not only in bring-up: a relaunch invokes THIS script directly.
@@ -95,19 +150,65 @@ tmux new-session -d -s "${SESSION}-backup" "bash ~/sidecar_$RUN.sh"
 # member's client runs on w0 while its trainer may be w4/w8 -- the register
 # must happen THERE (the L-ctrl-x [3, None] crash-loop lesson).
 REREG_HOST=${REREG_HOST:-local}
+# The server's sqlite registry: jobman cells ran the server from ~/SkyRLTpu;
+# pool workers run it from the bundle (= CLIENT_ROOT), where skyrl/tinker/
+# config.py creates tinker.db next to the package. reregister_states.py's own
+# default is the jobman path only, which failed with "unable to open database
+# file" on the first pool resume.
+if [ -z "${TINKER_DB:-}" ]; then
+  for _cand in "$HOME/SkyRLTpu/skyrl/tinker/tinker.db" "$CLIENT_ROOT/skyrl/tinker/tinker.db"; do
+    [ -f "$_cand" ] && { TINKER_DB=$_cand; break; }
+  done
+  TINKER_DB=${TINKER_DB:-$CLIENT_ROOT/skyrl/tinker/tinker.db}
+fi
+echo "tinker registry: $TINKER_DB (checkpoints: $CKPT_ROOT)"
 _rereg() {  # $1 = jsonl path
   if [ "$REREG_HOST" = local ]; then
-    python3 ~/ttd-client/tpu/reregister_states.py --base-model "$MODEL_HF" --jsonl "$1" 2>&1 | tail -2
+    python3 "$CLIENT_ROOT/tpu/reregister_states.py" --db "$TINKER_DB" --ckpt-root "$CKPT_ROOT" \
+      --base-model "$MODEL_HF" --jsonl "$1" 2>&1 | tail -2
   else
     local K="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
     local U="${REMOTE_USER:-sk7524_princeton_edu}"
     local O="-i $K -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
     timeout 60 scp $O ~/ttd-client/tpu/reregister_states.py       "$U"@"$REREG_HOST":~/reregister_states.py >/dev/null 2>&1
     timeout 60 scp $O "$1" "$U"@"$REREG_HOST":~/rr_$(basename "$1") >/dev/null 2>&1
-    timeout 90 ssh $O "$U"@"$REREG_HOST"       "python3 ~/reregister_states.py --base-model '$MODEL_HF' --jsonl ~/rr_$(basename "$1")" 2>/dev/null | tail -2
+    timeout 90 ssh $O "$U"@"$REREG_HOST"       "python3 ~/reregister_states.py --db '$TINKER_DB' --ckpt-root '$CKPT_ROOT' --base-model '$MODEL_HF' --jsonl ~/rr_$(basename "$1")" 2>/dev/null | tail -2
   fi
 }
+# Restore the tarballs a resume needs (latest rows first) when they are not on
+# local disk. reregister only registers tarballs it can stat, so without this a
+# pool worker registers nothing and the client 404s on create_from_state.
+_restore_ckpts() {  # $1 = jsonl path
+  [ "$REREG_HOST" = local ] || return 0
+  ckpt_root_is_mount && return 0
+  python3 - "$1" <<'PY' | tail -n 2 | while IFS=' ' read -r _model _ckpt; do
+import json, re, sys
+pat = re.compile(r"tinker://(model_[0-9a-f]+)/weights/(\d+)")
+for line in open(sys.argv[1]):
+    try:
+        m = pat.match(json.loads(line).get("state_path") or "")
+    except ValueError:
+        continue
+    if m:
+        print(m.group(1), m.group(2))
+PY
+    [ -n "$_model" ] || continue
+    for _rel in "$_ckpt.tar.gz" "sampler_weights/$_ckpt.tar.gz"; do
+      _dst="$CKPT_ROOT/$_model/$_rel"
+      [ -s "$_dst" ] && continue
+      mkdir -p "$(dirname "$_dst")"
+      if gcloud storage cp "$SKYRL_CKPT_GCS/$_model/$_rel" "$_dst" >> ~/restore.log 2>&1; then
+        echo "restored checkpoint $_model/$_rel"
+      else
+        rm -f "$_dst"; echo "no checkpoint $_model/$_rel in $SKYRL_CKPT_GCS"
+      fi
+    done
+  done
+}
 _jsonl=$(ls ~/skyrl-runs/"$RUN"/tinker_log/*/"$MEMBER_DIR"/checkpoints.jsonl 2>/dev/null | head -1)
+if [ -s "${_jsonl:-}" ]; then
+  _restore_ckpts "$_jsonl"
+fi
 if [ -s "${_jsonl:-}" ]; then
   _rereg "$_jsonl"
 else
@@ -120,8 +221,11 @@ if [ -s "${EXTRA_REREG_JSONL:-}" ]; then
 fi
 
 tmux kill-session -t "=$SESSION" 2>/dev/null
-tmux new-session -d -s "$SESSION" "cd ~/ttd-client && \
+tmux new-session -d -s "$SESSION" "cd $CLIENT_ROOT && \
+  env \
   ${EXTRA_TTD_ENV:-} \
+  TINKER_API_KEY=${TINKER_API_KEY:-tml-local-skyrl-no-auth} \
+  TINKER_BASE_URL=${TINKER_BASE_URL:-http://127.0.0.1:8000} \
   HF_HUB_OFFLINE=$HF_OFFLINE \
   EXPERIMENT_NAME=$EXP \
   TTD_RUN_DIR=\$HOME/skyrl-runs/$RUN \

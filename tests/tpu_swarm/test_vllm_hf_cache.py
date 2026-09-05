@@ -39,6 +39,17 @@ def test_vllm_hf_cache_restore_is_serialized_across_engines_on_a_host():
     assert lock_release < source.index("exec ", lock_release + len("flock -u 9\nexec 9>&-"))
 
 
+def test_hf_tree_manifest_materialization_is_best_effort():
+    # gemma4's trees/<commit>.json references blobs never uploaded; a fatal
+    # SystemExit killed every engine runner pre-log on a warm host (job 194).
+    # Readiness is decided by hf_snapshot_ready, which runs right after.
+    source = (REPO / "tpu/start_vllm_tpu.sh").read_text()
+    call = source.index("    materialize_hf_tree_manifest \\\\\n      || echo")
+    ready_check = source.index('if ! hf_snapshot_ready && [[ "\\${HF_HUB_OFFLINE}" == "1" ]]', call)
+    assert call < ready_check
+    assert "\n    materialize_hf_tree_manifest\n" not in source
+
+
 def test_qwen_engines_default_to_the_complete_offline_hf_cache():
     # gs://…/hf-cache/models--Qwen--Qwen3.5-27B holds ~4 GB (one shard + metadata);
     # jobman engines fetched the rest from HuggingFace. Pool workers are offline,

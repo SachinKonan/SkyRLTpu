@@ -4,6 +4,8 @@ set -euo pipefail
 
 : "${SLURM_JOB_ID:?run this script with srun on the cpu partition}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 CACHE_GCS="${HF_CACHE_GCS:-gs://sk7524-tinker-tpu-asia-northeast1/hf-cache-qwen35-v1}"
 MODEL_NAME="Qwen/Qwen3.5-27B"
 if gcloud storage objects describe "$CACHE_GCS/HF_CACHE_COMPLETE" \
@@ -47,15 +49,20 @@ index_path = snapshot / "model.safetensors.index.json"
 index = json.loads(index_path.read_text(encoding="utf-8"))
 shards = sorted(set(index["weight_map"].values()))
 missing = [name for name in shards if not (snapshot / name).is_file()]
+missing += [
+    name
+    for name in ("preprocessor_config.json", "video_preprocessor_config.json")
+    if not (snapshot / name).is_file()
+]
 if missing:
-    raise SystemExit(f"incomplete Qwen snapshot; missing shards: {missing}")
+    raise SystemExit(f"incomplete Qwen snapshot; missing files: {missing}")
 print(f"validated Qwen snapshot: {len(shards)} safetensor shards")
 PY
 
 # Upload the standard Hugging Face hub layout.  gcloud follows the snapshot
 # symlinks, so restored TPU caches remain usable even though GCS has no symlink
 # object type.
-gcloud storage rsync -r "$HF_HOME/hub" "$CACHE_GCS"
+"$SCRIPT_DIR/../gcs_rsync.sh" -r "$HF_HOME/hub" "$CACHE_GCS"
 {
   printf 'model=%s\n' "$MODEL_NAME"
   printf 'snapshot=%s\n' "$(basename "$snapshot_dir")"

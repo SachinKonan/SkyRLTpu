@@ -140,3 +140,39 @@ def test_qwen35_v6e32_task_rejects_unsafe_run_name():
 
     with pytest.raises(ValueError, match="run_dir"):
         handler.validate_payload({"run_dir": "run;shutdown", "repo_dir": "/repo"})
+
+
+def test_qwen35_v6e32_task_accepts_isolated_regional_storage():
+    bucket = "gs://regional-qwen-cache"
+    resources = {
+        "cloud": "gcp",
+        "region": "europe-west4",
+        "zone": "europe-west4-a",
+        "accelerators": "tpu-v6e-32",
+        "use_spot": True,
+    }
+    task = qwen35_v6e32_grpo_task(
+        task_id="qwen35-v6e32-europe",
+        run_dir="qwen35-v6e32-europe",
+        repo_dir="/repo",
+        resource_class="gcp-tpu-v6e-32-europe-west4-a",
+        pool="tpuswarm-v6e32-europe-west4a-qwen35",
+        resources=resources,
+        env={
+            "ZONE": "europe-west4-a",
+            "GCS_RUN": f"{bucket}/skyrl-runs/qwen35-v6e32-europe",
+            "HF_CACHE_GCS": f"{bucket}/hf-cache-qwen35-v1",
+            "TUNIX_MAXTEXT_CKPT_CACHE_GCS": f"{bucket}/skyrl-maxtext-ckpts",
+            "TUNIX_JAX_CACHE_GCS": f"{bucket}/jax-compile-cache",
+            "VLLM_XLA_CACHE_GCS": f"{bucket}/vllm-xla-cache",
+        },
+    )
+
+    payload = registry().task(QWEN35_V6E32_GRPO_KIND).validate_payload(task.payload)
+    assert payload["resources"] == resources
+    assert payload["envs"]["ZONE"] == "europe-west4-a"
+    assert payload["envs"]["GCS_RUN"].startswith(bucket)
+    assert payload["envs"]["HF_CACHE_GCS"].startswith(bucket)
+    assert payload["envs"]["TUNIX_MAXTEXT_CKPT_CACHE_GCS"].startswith(bucket)
+    assert payload["envs"]["TUNIX_JAX_CACHE_GCS"].startswith(bucket)
+    assert payload["envs"]["VLLM_XLA_CACHE_GCS"].startswith(bucket)

@@ -121,8 +121,10 @@ def test_worker_uses_rank_32_and_dense_uniform_sequences_by_default():
     assert 'LORA_RANK="${TUNIX_LORA_RANK:-32}"' in script
     assert 'TRAIN_TP_SIZE="${TRAIN_TP_SIZE:-8}"' in script
     assert 'TRAIN_FSDP_SIZE="${TRAIN_FSDP_SIZE:-2}"' in script
+    assert 'TRAIN_CP_SIZE="${TRAIN_CP_SIZE:-1}"' in script
     assert 'TP_SIZE="$TRAIN_TP_SIZE"' in script
     assert 'FSDP_SIZE="$TRAIN_FSDP_SIZE"' in script
+    assert 'CP_SIZE="$TRAIN_CP_SIZE"' in script
     assert '--rank "$LORA_RANK"' in script
     assert '--rows "$SMOKE_ROWS"' in script
     assert '--replays "$SMOKE_REPLAYS"' in script
@@ -141,6 +143,14 @@ def test_replay_diagnostics_reach_every_multihost_controller():
     assert script.count(
         'export TUNIX_REPLAY_DIAGNOSTICS="${TUNIX_REPLAY_DIAGNOSTICS}"'
     ) == 2
+
+
+def test_colocated_launcher_includes_context_parallelism_in_tunix_mesh():
+    script = _COLOCATED_LAUNCHER.read_text()
+
+    assert 'CP_SIZE="${CP_SIZE:-1}"' in script
+    assert 'mesh_devices="$((FSDP_SIZE * CP_SIZE * TP_SIZE))"' in script
+    assert '"ici_context_parallelism": int("${CP_SIZE}")' in script
 
 
 def test_qwen_tp8_profile_pads_four_kv_heads_via_maxtext_alignment():

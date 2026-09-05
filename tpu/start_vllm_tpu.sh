@@ -30,6 +30,11 @@ VLLM_PORT="${VLLM_PORT:-8001}"
 VLLM_TP_SIZE="${VLLM_TP_SIZE:-1}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-2048}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
+VLLM_ENABLE_LORA="${VLLM_ENABLE_LORA:-1}"
+VLLM_USE_BATCHED_RPA_KERNEL="${VLLM_USE_BATCHED_RPA_KERNEL:-0}"
+VLLM_USE_JAX_RAGGED_CONV1D="${VLLM_USE_JAX_RAGGED_CONV1D:-0}"
+VLLM_CUSTOM_NUM_TOKENS_BUCKETS="${VLLM_CUSTOM_NUM_TOKENS_BUCKETS:-}"
+VLLM_SERIALIZE_MODEL_AND_SAMPLING="${VLLM_SERIALIZE_MODEL_AND_SAMPLING:-0}"
 VLLM_MAX_LORAS="${VLLM_MAX_LORAS:-8}"
 VLLM_MAX_LORA_RANK="${VLLM_MAX_LORA_RANK:-32}"
 VLLM_DATA_PARALLEL_SIZE="${VLLM_DATA_PARALLEL_SIZE:-1}"
@@ -42,6 +47,11 @@ VLLM_DATA_PARALLEL_HYBRID_LB="${VLLM_DATA_PARALLEL_HYBRID_LB:-0}"
 VLLM_API_SERVER_COUNT="${VLLM_API_SERVER_COUNT:-}"
 VLLM_HEADLESS="${VLLM_HEADLESS:-0}"
 VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
+VLLM_LIMIT_MM_PER_PROMPT="${VLLM_LIMIT_MM_PER_PROMPT:-}"
+if [[ "$VLLM_EXTRA_ARGS" == *"--no-enable-prefix-caching"* ]]; then
+  echo "prefix caching is required; remove --no-enable-prefix-caching from VLLM_EXTRA_ARGS" >&2
+  exit 2
+fi
 # Independent vLLM servers per serving host. 1 = one engine on the whole
 # host, exactly the historical behavior (the generated remote scripts are
 # byte-identical). N>1 = N fully independent servers per worker: engine e
@@ -72,6 +82,7 @@ VLLM_USE_RAY_V2_EXECUTOR_BACKEND="${VLLM_USE_RAY_V2_EXECUTOR_BACKEND:-1}"
 VLLM_PARALLEL_PREINSTALL="${VLLM_PARALLEL_PREINSTALL:-1}"
 VLLM_RAY_PORT="${VLLM_RAY_PORT:-6379}"
 VLLM_RAY_DASHBOARD_PORT="${VLLM_RAY_DASHBOARD_PORT:-8265}"
+VLLM_RAY_TEMP_DIR="${VLLM_RAY_TEMP_DIR:-/tmp/ray_tpuswarm_vllm}"
 VLLM_VENV="${VLLM_VENV:-/home/${REMOTE_USER}/.venvs/vllm-tpu}"
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
 # Scope cache restore to THIS model's dir: the shared prefix holds several
@@ -270,6 +281,7 @@ fi
 cat > "$bootstrap_script" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-}"
 export PATH="\$HOME/.local/bin:\$PATH"
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -278,6 +290,10 @@ fi
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="\$HF_HOME/hub"
 export SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE}"
+export USE_BATCHED_RPA_KERNEL="${VLLM_USE_BATCHED_RPA_KERNEL}"
+export USE_JAX_RAGGED_CONV1D="${VLLM_USE_JAX_RAGGED_CONV1D}"
+export CUSTOM_NUM_TOKENS_BUCKETS="${VLLM_CUSTOM_NUM_TOKENS_BUCKETS}"
+export SERIALIZE_MODEL_AND_SAMPLING="${VLLM_SERIALIZE_MODEL_AND_SAMPLING}"
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
   export CLOUD_TPU_TASK_ID="\${VLLM_RELATIVE_WORKER_ID}"
 fi
@@ -300,8 +316,13 @@ fi
 # Overlay the forked tpu-inference (runtime LoRA forwarders + Ray env
 # allowlist). vllm-tpu is a meta-package depending on tpu-inference, so a
 # --no-deps force-reinstall cleanly swaps in the fork at the pinned ref.
-uv pip install --python "${VLLM_VENV}/bin/python" --no-deps --force-reinstall \\
-  "tpu-inference @ git+${TPU_INFERENCE_FORK_URL}@${TPU_INFERENCE_FORK_REF}"${extra_pip_block}
+if [[ -f "${REMOTE_SKYRL_DIR}/third_party/tpu-inference/pyproject.toml" ]]; then
+  uv pip install --python "${VLLM_VENV}/bin/python" --no-deps --force-reinstall \\
+    "${REMOTE_SKYRL_DIR}/third_party/tpu-inference"${extra_pip_block}
+else
+  uv pip install --python "${VLLM_VENV}/bin/python" --no-deps --force-reinstall \\
+    "tpu-inference @ git+${TPU_INFERENCE_FORK_URL}@${TPU_INFERENCE_FORK_REF}"${extra_pip_block}
+fi
 "${VLLM_VENV}/bin/python" - <<'PY'
 from tpu_inference.worker.tpu_worker import TPUWorker
 
@@ -313,26 +334,22 @@ PY
 if [[ "\${VLLM_CLEANUP:-1}" == "1" ]]; then
   tmux kill-session -t =vllm-tpu 2>/dev/null || true${extra_engine_cleanup}
   pkill -TERM -u "\$USER" -f "[V]LLM::EngineCore|[v]llm serve|[a]pi_server" || true
-  "${VLLM_VENV}/bin/ray" stop --force >/tmp/vllm-ray-stop.log 2>&1 || true
+  if [[ "\${VLLM_USE_RAY_EXECUTOR:-0}" == "1" ]]; then
+    RAY_BIN="${VLLM_VENV}/bin/ray" \\
+      VLLM_RAY_ADDRESS="\${VLLM_RAY_HEAD_ADDRESS}" \\
+      VLLM_RAY_TEMP_DIR="${VLLM_RAY_TEMP_DIR}" \\
+      bash "\$HOME/vllm_ray.sh" stop
+  fi
   sleep 5
   pkill -KILL -u "\$USER" -f "[V]LLM::EngineCore|[v]llm serve|[a]pi_server" || true
 fi
 
 if [[ "\${VLLM_USE_RAY_EXECUTOR:-0}" == "1" ]]; then
-  if [[ "\${VLLM_RAY_ROLE:-}" == "head" ]]; then
-    "${VLLM_VENV}/bin/ray" start \\
-      --head \\
-      --node-ip-address="\${VLLM_RAY_NODE_IP}" \\
-      --port="${VLLM_RAY_PORT}" \\
-      --dashboard-host=0.0.0.0 \\
-      --dashboard-port="${VLLM_RAY_DASHBOARD_PORT}" \\
-      --num-cpus=200
-  elif [[ "\${VLLM_RAY_ROLE:-}" == "worker" ]]; then
-    "${VLLM_VENV}/bin/ray" start \\
-      --address="\${VLLM_RAY_HEAD_ADDRESS}" \\
-      --node-ip-address="\${VLLM_RAY_NODE_IP}" \\
-      --num-cpus=200
-  fi
+  RAY_BIN="${VLLM_VENV}/bin/ray" \\
+    VLLM_RAY_ADDRESS="\${VLLM_RAY_HEAD_ADDRESS}" \\
+    VLLM_RAY_NODE_IP="\${VLLM_RAY_NODE_IP}" \\
+    VLLM_RAY_TEMP_DIR="${VLLM_RAY_TEMP_DIR}" \\
+    bash "\$HOME/vllm_ray.sh" "\${VLLM_RAY_ROLE}"
 fi
 
 if [[ "\${VLLM_START_SERVER:-1}" == "1" ]]; then
@@ -340,6 +357,7 @@ if [[ "\${VLLM_START_SERVER:-1}" == "1" ]]; then
 fi
 EOF
 
+printf -v vllm_limit_mm_per_prompt_q '%q' "$VLLM_LIMIT_MM_PER_PROMPT"
 cat > "$runner_script" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -350,7 +368,17 @@ export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export MODEL_IMPL_TYPE="${VLLM_MODEL_IMPL_TYPE}"
 export TPU_BACKEND_TYPE="${VLLM_TPU_BACKEND_TYPE}"
 export SKIP_JAX_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE}"
+export USE_BATCHED_RPA_KERNEL="${VLLM_USE_BATCHED_RPA_KERNEL}"
+export USE_JAX_RAGGED_CONV1D="${VLLM_USE_JAX_RAGGED_CONV1D}"
+export CUSTOM_NUM_TOKENS_BUCKETS="${VLLM_CUSTOM_NUM_TOKENS_BUCKETS}"
+export SERIALIZE_MODEL_AND_SAMPLING="${VLLM_SERIALIZE_MODEL_AND_SAMPLING}"
 export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+# Cloud SDK 428's parallel/sliced downloads have repeatedly stalled ext4
+# writeback or produced hash mismatches on these TPU VM boot disks. Keep cache
+# restores resumable but single-stream; they are one-time worker warmups.
+export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0
+export CLOUDSDK_STORAGE_PROCESS_COUNT=1
+export CLOUDSDK_STORAGE_THREAD_COUNT=1
 # VLLM_PLUGINS is an ALLOW-LIST: unset loads every installed general plugin,
 # set loads ONLY the named ones. Models that exist solely in the
 # tpu-inference fork (muse) NEED the fork's vllm.general_plugins entry point
@@ -380,7 +408,7 @@ mkdir -p "${VLLM_XLA_CACHE_PATH}"
 # Restore shared compiled-program cache from GCS (skips cold compile). Best
 # effort: a miss or partial just means vLLM recompiles what's absent.
 if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
-  gsutil -m -q rsync -r "${VLLM_XLA_CACHE_GCS}" "${VLLM_XLA_CACHE_PATH}" 2>/dev/null && echo "restored XLA cache from ${VLLM_XLA_CACHE_GCS}" || echo "XLA cache restore skipped/failed (will compile)"
+  bash "\$HOME/gcs_rsync.sh" -r "${VLLM_XLA_CACHE_GCS}" "${VLLM_XLA_CACHE_PATH}" 2>/dev/null && echo "restored XLA cache from ${VLLM_XLA_CACHE_GCS}" || echo "XLA cache restore skipped/failed (will compile)"
   # Seed-back: restore alone is ONE-WAY, so entries compiled on this node died
   # with it (the muse rs-study run repopulated nothing). Delayed additive rsync
   # (no -d, checksum-skips existing) publishes fresh compiles once the boot
@@ -394,25 +422,95 @@ if [[ -n "${VLLM_XLA_CACHE_GCS}" ]]; then
     # costs nothing and each cycle preserves whatever compiled since the last.
     ( for _i in \$(seq 1 24); do
         sleep 600
-        gcloud storage rsync -r "${VLLM_XLA_CACHE_PATH}" "${VLLM_XLA_CACHE_GCS}" >/dev/null 2>&1 \
+        bash "\$HOME/gcs_rsync.sh" -r "${VLLM_XLA_CACHE_PATH}" "${VLLM_XLA_CACHE_GCS}" >/dev/null 2>&1 \
           && echo "\$(date -u +%H:%M) XLA cache seeded back (cycle \$_i)"
       done ) >> "\$HOME/xla-seedback.log" 2>&1 &
   fi
 fi
 # Restore HF weights from the shared GCS cache onto local SSD so vLLM finds
 # them already present under --download-dir (below) instead of pulling from
-# HuggingFace.
-# NOT best-effort: an interrupted rsync leaves <shard>_.gstmp partials, and a
-# partial shard is WORSE than no cache -- vLLM ignores it, re-downloads the
-# full weights via xet alongside the 40GB+ of dead partial, fills the disk, and
-# dies with "Engine core initialization failed / No space left on device".
-# The bring-up then waits for that worker forever. So: retry, and if partials
-# survive, delete them so the fallback download starts from a clean disk.
+# HuggingFace. Validate first: gsutil rsync compares composite GCS objects
+# poorly on restart and can replace complete 50GB shards with duplicate
+# <shard>_.gstmp downloads until the boot disk fills.
+hf_snapshot_ready() {
+  HF_HOME="${REMOTE_HF_HOME}" HF_HUB_OFFLINE=1 \
+    "${VLLM_VENV}/bin/python" - "${MODEL_NAME}" <<'PY'
+import sys
+import json
+from pathlib import Path
+
+from huggingface_hub import snapshot_download
+
+try:
+    snapshot = Path(snapshot_download(sys.argv[1], local_files_only=True))
+except Exception:
+    raise SystemExit(1)
+
+# snapshot_download() returns an existing snapshot directory without proving
+# that a previous selective restore populated its weights or processor assets.
+index_path = snapshot / "model.safetensors.index.json"
+if index_path.is_file():
+    index = json.loads(index_path.read_text())
+    required = set(index.get("weight_map", {}).values())
+    if not required or any(not (snapshot / name).is_file() for name in required):
+        raise SystemExit(1)
+elif not any(path.is_file() for path in snapshot.glob("*.safetensors")):
+    raise SystemExit(1)
+
+if sys.argv[1].startswith("Qwen/Qwen3.5"):
+    required = ("preprocessor_config.json", "video_preprocessor_config.json")
+    if any(not (snapshot / name).is_file() for name in required):
+        raise SystemExit(1)
+PY
+}
+
+# Some cache producers store a compact trees/<commit>.json manifest instead of
+# snapshots/<commit> symlinks. Materialize the standard offline snapshot after
+# the blobs have passed GCS CRC verification.
+materialize_hf_tree_manifest() {
+  "${VLLM_VENV}/bin/python" - "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+model_dir = Path(sys.argv[1])
+trees = model_dir / "trees"
+if not trees.is_dir():
+    raise SystemExit(0)
+for manifest_path in trees.glob("*.json"):
+    manifest = json.loads(manifest_path.read_text())
+    snapshot = model_dir / "snapshots" / manifest_path.stem
+    snapshot.mkdir(parents=True, exist_ok=True)
+    for name, metadata in manifest["files"].items():
+        blob_id = metadata.get("lfs_sha256") or metadata["blob_id"]
+        blob = model_dir / "blobs" / blob_id
+        if not blob.is_file() or blob.stat().st_size != metadata["size"]:
+            raise SystemExit(f"missing or wrong-size HF blob for {name}: {blob}")
+        target = snapshot / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.unlink(missing_ok=True)
+        target.symlink_to(os.path.relpath(blob, target.parent))
+PY
+}
+
 mkdir -p "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}"
-if [[ -n "${HF_CACHE_GCS}" ]]; then
+# Engines on the same host share one HF cache. With VLLM_ENGINES_PER_HOST>1
+# every engine runner reaches this point at the same moment on a fresh host;
+# unserialized, both ran the 55 GB \`gcloud storage cp --no-clobber\` into the
+# same hub, the loser saw the winner's in-flight partials, purged them, and
+# exited before its log tee opened -- one silent engine per host (muse v5p-32
+# pool bring-up, 2026-09-04). Hold a per-model lock across the whole restore so
+# the second engine simply waits and then finds the snapshot ready.
+exec 9>"${REMOTE_HF_HOME}/hub/.${HF_MODEL_DIR}.restore.lock"
+flock 9
+if hf_snapshot_ready; then
+  echo "HF cache already complete for ${MODEL_NAME}; skipping restore"
+elif [[ -n "${HF_CACHE_GCS}" ]]; then
   hf_ok=0
   for _try in 1 2 3; do
-    if gsutil -m -q rsync -r "${HF_CACHE_GCS}/${HF_MODEL_DIR}" "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}" 2>/dev/null; then
+    if gcloud storage cp --recursive --no-clobber \
+        "${HF_CACHE_GCS}/${HF_MODEL_DIR}" "${REMOTE_HF_HOME}/hub"; then
       hf_ok=1
     fi
     _partials="\$(find "${REMOTE_HF_HOME}/hub" -name '*_.gstmp' -o -name '*.incomplete' 2>/dev/null | head -1)"
@@ -420,15 +518,32 @@ if [[ -n "${HF_CACHE_GCS}" ]]; then
       echo "restored HF cache from ${HF_CACHE_GCS} (attempt \$_try)"
       break
     fi
-    echo "HF cache restore incomplete (attempt \$_try): partial=\${_partials:-none}"
+    echo "HF cache restore incomplete (attempt \$_try): partial=\${_partials:-none}" >&2
     hf_ok=0
     sleep 15
   done
-  if [[ "\$hf_ok" != "1" ]]; then
+  if [[ "\$hf_ok" == "1" ]]; then
+    # Best effort: some caches ship a trees/<commit>.json that references blobs
+    # never uploaded (gemma4: .eval_results/*), while snapshots/ already holds
+    # real files. A fatal exit here killed every gemma engine on a warm host
+    # before its log opened (job 194, 2026-09-05); the readiness check below is
+    # the real gate.
+    materialize_hf_tree_manifest \\
+      || echo "HF tree manifest not materialized (rc=\$?); relying on the snapshot readiness check" >&2
+  else
     _n="\$(find "${REMOTE_HF_HOME}/hub" \( -name '*_.gstmp' -o -name '*.incomplete' \) -delete -print 2>/dev/null | wc -l)"
-    echo "HF cache restore FAILED after 3 tries; purged \$_n partial file(s) so vLLM downloads onto a clean disk"
+    echo "HF cache restore FAILED after 3 tries; purged \$_n partial file(s)" >&2
   fi
+  if ! hf_snapshot_ready && [[ "\${HF_HUB_OFFLINE}" == "1" ]]; then
+    echo "offline HF snapshot is incomplete for ${MODEL_NAME}" >&2
+    exit 1
+  fi
+elif [[ "\${HF_HUB_OFFLINE}" == "1" ]]; then
+  echo "offline HF snapshot is absent for ${MODEL_NAME} and HF_CACHE_GCS is unset" >&2
+  exit 1
 fi
+flock -u 9
+exec 9>&-
 if [[ -n "\${VLLM_RELATIVE_WORKER_ID:-}" ]]; then
   export CLOUD_TPU_TASK_ID="\${VLLM_RELATIVE_WORKER_ID}"
 fi
@@ -436,6 +551,7 @@ ray_args=()
 if [[ "${VLLM_RAY_EXECUTOR}" == "1" ]]; then
   export TPU_MULTIHOST_BACKEND=ray
   export VLLM_USE_RAY_V2_EXECUTOR_BACKEND="${VLLM_USE_RAY_V2_EXECUTOR_BACKEND}"
+  export RAY_ADDRESS="${ray_head_address}"
   ray_args=(--distributed-executor-backend ray)
 fi
 dp_args=()
@@ -467,6 +583,11 @@ if [[ "${VLLM_HEADLESS}" == "1" || "${VLLM_HEADLESS}" == "true" ]]; then
   dp_args+=(--headless)
 fi
 read -r -a extra_args <<< "${VLLM_EXTRA_ARGS}"
+VLLM_LIMIT_MM_PER_PROMPT=${vllm_limit_mm_per_prompt_q}
+limit_mm_args=()
+if [[ -n "\${VLLM_LIMIT_MM_PER_PROMPT}" ]]; then
+  limit_mm_args+=(--limit-mm-per-prompt "\${VLLM_LIMIT_MM_PER_PROMPT}")
+fi
 if [[ -n "${VLLM_TPU_PROCESS_BOUNDS}" ]]; then
   export TPU_PROCESS_BOUNDS="${VLLM_TPU_PROCESS_BOUNDS}"
 fi
@@ -495,6 +616,14 @@ if [[ "${VLLM_UPLOAD_SERVER}" == "1" ]]; then
 else
   server_cmd=(vllm serve "${MODEL_NAME}")
 fi
+lora_args=()
+if [[ "${VLLM_ENABLE_LORA}" == "1" || "${VLLM_ENABLE_LORA}" == "true" ]]; then
+  lora_args=(
+    --enable-lora
+    --max-loras "${VLLM_MAX_LORAS}"
+    --max-lora-rank "${VLLM_MAX_LORA_RANK}"
+  )
+fi
 # One-time self-seed of the shared HF cache: once vLLM has pulled the weights
 # onto local SSD, stage them back to GCS so the next spot VM restores from
 # HF_CACHE_GCS instead of re-downloading from HuggingFace. Fully backgrounded
@@ -508,8 +637,8 @@ if [[ -n "${HF_CACHE_GCS}" ]]; then
       sleep 10
     done
     if compgen -G "\${hub}/models--*/snapshots/*/*.safetensors" >/dev/null 2>&1 &&
-       [[ -z "\$(gsutil ls "${HF_CACHE_GCS}/**" 2>/dev/null)" ]]; then
-      gsutil -m rsync -r "\${hub}" "${HF_CACHE_GCS}" >/dev/null 2>&1 &&
+       [[ -z "\$(gcloud storage ls "${HF_CACHE_GCS}/**" 2>/dev/null)" ]]; then
+      bash "\$HOME/gcs_rsync.sh" -r "\${hub}" "${HF_CACHE_GCS}" >/dev/null 2>&1 &&
         echo "seeded HF cache to ${HF_CACHE_GCS}" || true
     fi
   ' >"\$HOME/skyrl-logs/hf-cache-seed.log" 2>&1 &
@@ -521,12 +650,12 @@ exec "\${server_cmd[@]}" \\
   --tensor-parallel-size "${VLLM_TP_SIZE}" \\
   --max-model-len "${VLLM_MAX_MODEL_LEN}" \\
   --max-num-seqs "${VLLM_MAX_NUM_SEQS}" \\
-  --enable-lora \\
-  --max-loras "${VLLM_MAX_LORAS}" \\
-  --max-lora-rank "${VLLM_MAX_LORA_RANK}" \\
+  --enable-prefix-caching \\
+  "\${lora_args[@]}" \\
   --download-dir "${REMOTE_HF_HOME}/hub" \\
   "\${ray_args[@]}" \\
   "\${dp_args[@]}" \\
+  "\${limit_mm_args[@]}" \\
   "\${extra_args[@]}" \\
   2>&1 | tee "\$HOME/skyrl-logs/${runner_log_name}"
 EOF
@@ -537,6 +666,8 @@ for worker in "${vllm_workers[@]}"; do
   tpu_vm_scp "$worker" "$bootstrap_script" "~/start_vllm_tpu_bootstrap.sh"
   tpu_vm_scp "$worker" "$runner_script" "~/run_vllm_tpu_server.sh"
   tpu_vm_scp "$worker" "${repo_root}/tpu/vllm_tpu_server.py" "~/vllm_tpu_server.py"
+  tpu_vm_scp "$worker" "${repo_root}/tpu/vllm_ray.sh" "~/vllm_ray.sh"
+  tpu_vm_scp "$worker" "${repo_root}/tpu/gcs_rsync.sh" "~/gcs_rsync.sh"
 done
 
 if [[ "$VLLM_PARALLEL_PREINSTALL" == "1" && "$vllm_worker_count" -gt 1 ]]; then

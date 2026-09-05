@@ -10,6 +10,7 @@
 # Callers must have REMOTE_USER, TPU_NAME, PROJECT, ZONE, SSH_KEY_FILE set.
 
 _tpu_direct_ssh_opts=(
+  -F /dev/null
   -o StrictHostKeyChecking=no
   -o UserKnownHostsFile=/dev/null
   -o IdentitiesOnly=yes

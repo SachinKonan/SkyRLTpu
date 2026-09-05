@@ -11,12 +11,15 @@
 set -euo pipefail
 : "${JOBMAN_WORKER_ID:?}"; : "${JOBMAN_TPU_INTERNAL_IPS:?}"; : "${CELL:?}"
 [ "$JOBMAN_WORKER_ID" = "0" ] || { echo "worker $JOBMAN_WORKER_ID: engines are driven from w0"; exit 0; }
+SETUP_RETRY_EXIT_CODE="${SETUP_RETRY_EXIT_CODE:-33}"
 
 export PATH="$HOME/.local/bin:$PATH"
-REPO="${SKYRL_REPO_DIR:-$HOME/SkyRLTpu-league}"
+REPO=$(readlink -f "${SKYRL_REPO_DIR:-$HOME/SkyRLTpu-league}")
+export SKYRL_REPO_DIR="$REPO"
+EXPECTED_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-}"
 KEY="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
 REMOTE_USER="${REMOTE_USER:-sk7524_princeton_edu}"
-SSHO="-i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+SSHO="-F /dev/null -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
 INT="$JOBMAN_TPU_INTERNAL_IPS"
 W0INT=$(echo "$INT" | cut -d, -f1)
 # Host count from the IP list itself: a stage cell passes 4 IPs (unchanged
@@ -47,16 +50,38 @@ if [ ! -x "$REPO/third_party/discover/.venv-ttd-discover/bin/python" ]; then
   ( cd "$REPO/third_party/discover" && uv sync --extra math --python 3.11 > ~/venv-build.log 2>&1 \
       && ln -sfn .venv .venv-ttd-discover )
   "$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import tinker,numpy,wandb" \
-    || { echo "client venv build FAILED"; tail -5 ~/venv-build.log; exit 1; }
+    || { echo "client venv build FAILED"; tail -5 ~/venv-build.log; exit "$SETUP_RETRY_EXIT_CODE"; }
 fi
 echo "client venv OK"
 
 # --- engines: skip when healthy ---------------------------------------------
 engines_healthy() {
-  curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 || return 1
+  tinker_healthy || return 1
   vllm_healthy
 }
-tinker_healthy() { curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1; }
+tinker_healthy() {
+  curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 || return 1
+  if [[ -n "$EXPECTED_BUNDLE_ID" ]]; then
+    local pid actual_bundle
+    pid=$(pgrep -u "$USER" -f '[p]ython.*-m skyrl\.tinker\.api.*--port 8000' | head -1)
+    [[ -n "$pid" ]] || return 1
+    actual_bundle=$(tr '\0' '\n' < "/proc/$pid/environ" | sed -n 's/^TPUSWARM_BUNDLE_ID=//p' | head -1)
+    if [[ "$actual_bundle" != "$EXPECTED_BUNDLE_ID" ]]; then
+      echo "trainer bundle mismatch: running=${actual_bundle:-unmarked} expected=$EXPECTED_BUNDLE_ID" >&2
+      return 1
+    fi
+  fi
+  local worker ip
+  for worker in $(echo "$TRAIN_IDXS" | tr ',' ' '); do
+    ip="$(worker_ip "$worker")"
+    timeout 30 ssh $SSHO "$REMOTE_USER"@"$ip" \
+      "test -x '$REPO/.venv/bin/python' && '$REPO/.venv/bin/python' -c 'import jax.scipy.linalg'" \
+      >/dev/null 2>&1 || {
+        echo "trainer runtime check failed on $ip for bundle ${EXPECTED_BUNDLE_ID:-unknown}" >&2
+        return 1
+      }
+  done
+}
 vllm_healthy() {
   # EVERY engine, not just the first: with ENGINES_PER_HOST=2 each host serves
   # 8001 AND 8002 (engine e listens on VLLM_PORT+e). Probing only 8001 would
@@ -78,6 +103,18 @@ vllm_healthy() {
       port=$(( 8001 + e ))
       curl -fsS -m6 "http://$ip:$port/v1/models" >/dev/null 2>&1 || return 1
     done
+    if [[ -n "$EXPECTED_BUNDLE_ID" ]]; then
+      timeout 30 ssh $SSHO "$REMOTE_USER"@"$ip" \
+        "pids=\$(pgrep -u \"\$USER\" -f '[p]ython.*vllm_tpu_server\\.py'); \
+         test \$(wc -w <<<\"\$pids\") -ge '${ENGINES_PER_HOST:-1}' || exit 1; \
+         for pid in \$pids; do \
+           actual=\$(tr '\\0' '\\n' < /proc/\$pid/environ | sed -n 's/^TPUSWARM_BUNDLE_ID=//p' | head -1); \
+           test \"\$actual\" = '$EXPECTED_BUNDLE_ID' || exit 1; \
+         done" >/dev/null 2>&1 || {
+          echo "vLLM bundle mismatch on $ip: expected=$EXPECTED_BUNDLE_ID" >&2
+          return 1
+        }
+    fi
   done
   return 0
 }
@@ -99,13 +136,20 @@ TPU_BACKEND=torchax
 FREE_BASE_STATE=0
 ROUTE_PREFIX=0
 UNSET_PLUGINS=0
+BATCHED_RPA_KERNEL=0
+JAX_RAGGED_CONV1D=0
 VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
+LIMIT_MM_PER_PROMPT=""
 HF_OFFLINE=0
 case "$CELL" in
   g-*)
     MODEL_NAME=google/gemma-4-31B-it; MAXTEXT_MODEL=gemma4-31b
     MAXTGT=10240; BUDGET=40960; UNIFORM=10240
     VLLM_LEN=16384
+    # Cells use Gemma for text only. Keep prefix caching enabled, use the
+    # default RPA kernel, and avoid allocating or chunking empty MM inputs.
+    VLLM_XARGS='--max-num-batched-tokens 8192 --disable-chunked-mm-input --gpu-memory-utilization 0.85'
+    LIMIT_MM_PER_PROMPT='{"image":0,"audio":0,"video":0}'
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k"
     JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-gemma4-10k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"
@@ -236,6 +280,10 @@ case "$CELL" in
     ;;
   *)
     MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b
+    # These optimization cells serve text only. Qwen3.5 advertises a vision
+    # tower, so explicitly disabling both supported modalities prevents vLLM
+    # from compiling a second, unused backbone-with-embeddings shape ladder.
+    LIMIT_MM_PER_PROMPT='{"image":0,"video":0}'
     MAXTGT=22528; BUDGET=73728; UNIFORM=18432
     # Serve just above the client's context, not 4k above it. TTD_M0_CONTEXT_WINDOW
     # is 18432 and the two-phase completer budgets every phase against that, so
@@ -255,7 +303,10 @@ case "$CELL" in
     VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.90"
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k"
     JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-qwen35-18k"
-    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
+    # hf-cache/models--Qwen--Qwen3.5-27B holds ~4 GB (one shard + metadata);
+    # jobman engines fetched the rest from HuggingFace. Pool workers are
+    # offline, so point at the complete 55.6 GB snapshot (HF_CACHE_COMPLETE).
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1"
     ;;
 esac
 
@@ -269,10 +320,19 @@ VLLM_LEN="${VLLM_MAX_MODEL_LEN:-$VLLM_LEN}"
 TP_SIZE="${VLLM_TP_SIZE:-$TP_SIZE}"
 ENGINES_PER_HOST="${VLLM_ENGINES_PER_HOST:-$ENGINES_PER_HOST}"
 MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-$MAX_NUM_SEQS}"
+BATCHED_RPA_KERNEL="${VLLM_USE_BATCHED_RPA_KERNEL:-$BATCHED_RPA_KERNEL}"
+JAX_RAGGED_CONV1D="${VLLM_USE_JAX_RAGGED_CONV1D:-$JAX_RAGGED_CONV1D}"
+SKIP_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE:-$SKIP_PRECOMPILE}"
+LORA_RETRIES="${VLLM_LORA_LOAD_RETRIES:-$LORA_RETRIES}"
+LORA_RETRY_SLEEP="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-$LORA_RETRY_SLEEP}"
+REQ_TIMEOUT="${VLLM_REQUEST_TIMEOUT_SEC:-$REQ_TIMEOUT}"
+HF_OFFLINE="${HF_HUB_OFFLINE:-$HF_OFFLINE}"
+FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-$FREE_BASE_STATE}"
 XLA_GCS="${VLLM_XLA_CACHE_GCS:-$XLA_GCS}"
 JAX_CACHE_GCS="${TUNIX_JAX_CACHE_GCS:-$JAX_CACHE_GCS}"
 HF_GCS="${HF_CACHE_GCS:-$HF_GCS}"
 VLLM_XARGS="${VLLM_EXTRA_ARGS:-$VLLM_XARGS}"
+LIMIT_MM_PER_PROMPT="${VLLM_LIMIT_MM_PER_PROMPT:-$LIMIT_MM_PER_PROMPT}"
 pick_tiles() {
   case "$MAXTEXT_MODEL" in
     gemma4-31b)
@@ -298,7 +358,14 @@ pick_tiles() {
         *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
         *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
       esac
-      MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" ;;
+      # Qwen has four physical KV heads. TP8 needs eight logical heads so the
+      # KV axis partitions cleanly; the checkpoint aligner repeats each source
+      # head and preserves the original query-to-KV grouping.
+      if [[ "$TRAIN_TP_SIZE" == "8" ]]; then
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"allow_split_physical_axes\": true, \"override_model_config\": true, \"base_num_kv_heads\": 8, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      else
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      fi ;;
   esac
   # ONE compiled shape, always. The scorer is pinned to the same uniform length
   # the fb path uses (TUNIX_UNIFORM_SEQ_LEN), so a run ever holds exactly two
@@ -344,7 +411,7 @@ PY
 JAX_CACHE_LOCAL="${TUNIX_JAX_CACHE_LOCAL:-$HOME/jax_cache}"
 mkdir -p "$JAX_CACHE_LOCAL"
 if [ -n "${JAX_CACHE_GCS:-}" ]; then
-  gcloud storage rsync -r "$JAX_CACHE_GCS" "$JAX_CACHE_LOCAL" >/dev/null 2>&1 \
+  "$REPO/tpu/gcs_rsync.sh" -r "$JAX_CACHE_GCS" "$JAX_CACHE_LOCAL" >/dev/null 2>&1 \
     && echo "trainer JAX cache restored from $JAX_CACHE_GCS" \
     || echo "trainer JAX cache empty/miss (will compile)"
   # Publish cadence: a preemption between "compile finished" and "next tick"
@@ -354,7 +421,7 @@ if [ -n "${JAX_CACHE_GCS:-}" ]; then
   # empty-delta tick is nearly free. 180s x 480 spans the same 24h.
   ( for _i in $(seq 1 480); do
       sleep "${JAX_CACHE_PUBLISH_SECS:-180}"
-      gcloud storage rsync -r "$JAX_CACHE_LOCAL" "$JAX_CACHE_GCS" >/dev/null 2>&1
+      "$REPO/tpu/gcs_rsync.sh" -r "$JAX_CACHE_LOCAL" "$JAX_CACHE_GCS" >/dev/null 2>&1
     done ) >/dev/null 2>&1 &
 fi
 export JAX_COMPILATION_CACHE_DIR="$JAX_CACHE_LOCAL"
@@ -370,6 +437,7 @@ elif ! tinker_healthy && vllm_healthy; then
   echo "trainer down, vLLM healthy -- surgical tinker-only restart"
   tmux kill-session -t =skyrl-tinker 2>/dev/null || true; sleep 3
   pick_tiles
+  bringup_rc=0
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
@@ -377,6 +445,7 @@ elif ! tinker_healthy && vllm_healthy; then
     TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
     TRAIN_TPU_PROCESS_BOUNDS="$TRAIN_PROCESS_BOUNDS" TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS="$TRAIN_CHIPS_PER_PROCESS_BOUNDS" \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
+    VLLM_USE_BATCHED_RPA_KERNEL="$BATCHED_RPA_KERNEL" VLLM_USE_JAX_RAGGED_CONV1D="$JAX_RAGGED_CONV1D" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
@@ -404,7 +473,7 @@ elif ! tinker_healthy && vllm_healthy; then
       timeout 60 ssh $SSHO "$REMOTE_USER"@"$ip" \
         "tmux kill-session -t =skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
     done
-    exit 1
+    exit "$SETUP_RETRY_EXIT_CODE"
   fi
   echo "trainer restarted (vLLM untouched)"
 else
@@ -419,6 +488,7 @@ else
   # scoring arena beside the fb arena, and grpo-k-j proved 2048/8 + penalty
   # does not fit (1/9 steps trained). Non-K JSSP keeps the faster tiles.
   pick_tiles
+  bringup_rc=0
   env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
     PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$KEY" \
     TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
@@ -426,6 +496,7 @@ else
     TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
     TRAIN_TPU_PROCESS_BOUNDS="$TRAIN_PROCESS_BOUNDS" TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS="$TRAIN_CHIPS_PER_PROCESS_BOUNDS" \
     VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
+    VLLM_USE_BATCHED_RPA_KERNEL="$BATCHED_RPA_KERNEL" VLLM_USE_JAX_RAGGED_CONV1D="$JAX_RAGGED_CONV1D" \
     VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
     VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
     VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
@@ -441,32 +512,39 @@ else
     VLLM_XLA_CACHE_GCS="$XLA_GCS" \
     HF_CACHE_GCS="$HF_GCS" \
     VLLM_EXTRA_ARGS="$VLLM_XARGS" \
+    VLLM_LIMIT_MM_PER_PROMPT="$LIMIT_MM_PER_PROMPT" \
     REMOTE_SKYRL_DIR="$REPO" \
     READY_ATTEMPTS=900 SYNC_SKYRL="$CELL_SYNC_SKYRL" START_VLLM="$START_LOCAL_VLLM" START_TINKER=1 \
-    bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || true
-  curl -fsS -m8 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 \
-    || { echo "engine bring-up FAILED"; tail -8 ~/engine-bringup.log; exit 1; }
+    bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || bringup_rc=$?
+  if (( bringup_rc != 0 )) || ! engines_healthy; then
+    echo "engine bring-up FAILED (launcher_rc=$bringup_rc)"
+    tail -12 ~/engine-bringup.log
+    exit "$SETUP_RETRY_EXIT_CODE"
+  fi
   echo "engines UP"
 fi
 
 # --- ray grading cluster (idempotent) ---------------------------------------
 RAYBIN="$REPO/third_party/discover/.venv-ttd-discover/bin/ray"
-if ! "$RAYBIN" status >/dev/null 2>&1; then
-  pkill -f "ray/core" 2>/dev/null || true; sleep 2
-  "$RAYBIN" start --head --port=6379 --num-cpus=0 --disable-usage-stats >/tmp/ray-head.log 2>&1
-  echo "ray head started"
-fi
+GRADER_RAY_ADDRESS="$W0INT:${GRADER_RAY_PORT:-6379}"
+RAY_BIN="$RAYBIN" GRADER_RAY_ADDRESS="$GRADER_RAY_ADDRESS" \
+  GRADER_RAY_NODE_IP="$W0INT" GRADER_RAY_NUM_CPUS=0 \
+  GRADER_RAY_LOG=/tmp/ray-tpuswarm-grader-head.log \
+  bash "$REPO/tpu/jobman/grader_ray.sh" head
 RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray; print(ray.__version__)")
 for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
   ip="$(worker_ip "$worker")"
   timeout 900 ssh $SSHO "$REMOTE_USER"@"$ip" "
     export PATH=\$HOME/.local/bin:\$PATH
-    pgrep -f '[r]ay/core' >/dev/null && { echo \"ray already on \$(hostname)\"; exit 0; }
     [ -x ~/.venvs/grader/bin/ray ] || {
       uv venv ~/.venvs/grader --python 3.11 >/dev/null 2>&1
       uv pip install --python ~/.venvs/grader/bin/python 'ray==$RAYV' numpy scipy shapely numba scikit-learn psutil >/dev/null 2>&1
     }
-    ~/.venvs/grader/bin/ray start --address=$W0INT:6379 --num-cpus=150 --disable-usage-stats >/tmp/ray-worker.log 2>&1 && echo \"ray worker \$(hostname)\"
+    RAY_BIN=~/.venvs/grader/bin/ray \
+      GRADER_RAY_ADDRESS=$GRADER_RAY_ADDRESS \
+      GRADER_RAY_NODE_IP=$ip GRADER_RAY_NUM_CPUS=150 \
+      GRADER_RAY_LOG=/tmp/ray-tpuswarm-grader-worker.log \
+      bash '$REPO/tpu/jobman/grader_ray.sh' worker
   " 2>/dev/null || echo "ray worker $ip FAILED (grading degrades, not fatal)"
 done
 echo "cell worker 0 ready ($CELL)"

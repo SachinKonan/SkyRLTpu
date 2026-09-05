@@ -1,0 +1,299 @@
+# Start a model with TP4 on one v4-8 VM in a v4-32 pool worker and send an
+# approximately 28k-token request through the OpenAI endpoint. Model-specific
+# values can be supplied with `sky jobs launch --env` overrides.
+name: v4-qwen35-inference-smoke-32k
+
+resources:
+  cloud: gcp
+  region: us-central2
+  zone: us-central2-b
+  accelerators: tpu-v4-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 1
+
+envs:
+  PROJECT: vision-mix
+  ZONE: us-central2-b
+  REMOTE_USER: gcpuser
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-smoke-v17.tar.gz
+  MODEL_NAME: Qwen/Qwen3.5-27B
+  SERVED_MODEL_NAME: Qwen/Qwen3.5-27B
+  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1
+  HF_HUB_OFFLINE: "1"
+  VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s32768-chunk4096-v1
+  VLLM_XLA_CACHE_PATH: /home/gcpuser/vllm-xla-cache-v4-qwen35-tp4-s32768-chunk4096-v1
+  VLLM_TP_SIZE: "4"
+  VLLM_MAX_MODEL_LEN: "32768"
+  VLLM_MAX_NUM_SEQS: "8"
+  VLLM_ENABLE_LORA: "0"
+  VLLM_SKIP_JAX_PRECOMPILE: "1"
+  VLLM_USE_BATCHED_RPA_KERNEL: "1"
+  VLLM_USE_JAX_RAGGED_CONV1D: "1"
+  VLLM_MAX_LORA_RANK: "32"
+  VLLM_RAY_EXECUTOR: "0"
+  VLLM_TPU_PROCESS_BOUNDS: 1,1,1
+  VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
+  VLLM_EXTRA_ARGS: --max-num-batched-tokens 4096 --enable-chunked-prefill --gpu-memory-utilization 0.85
+  INFERENCE_REQUEST_TOKEN_REPETITIONS: "28000"
+  INFERENCE_CONCURRENCY: "1"
+  INFERENCE_RESULT_GCS: gs://sk7524-tinker-tpu-us-central2/v4-smoke-results/qwen35-vllm-tp4-s32768-seqs8-chunk4096-request28k-v16.json
+
+run: |
+  set -euo pipefail
+  : "${SKYPILOT_NODE_RANK:=0}"
+  : "${SKYPILOT_NODE_IPS:?SkyPilot must provide all v4-32 TPU VM IPs}"
+  ips=$(printf '%s\n' "$SKYPILOT_NODE_IPS" | awk 'NF' | paste -sd, -)
+  node_count=$(awk -F, '{print NF}' <<<"$ips")
+  if [ "$node_count" -ne 4 ]; then
+    echo "v4-32 requires four TPU VMs; SkyPilot supplied $node_count" >&2
+    exit 2
+  fi
+
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/jobman/v6e_tunix_smoke_worker.sh"
+    test -r "$staging/tpu/start_colocated_vllm_tinker.sh"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  marker_name="v4-smoke-bundle-$generation-ready"
+  printf '%s\n' "$generation" >"$HOME/.cache/tpuswarm/$marker_name"
+
+  # A failed detached trainer can survive its Sky job and continue owning
+  # libtpu. This pool assigns the complete v4-32 worker exclusively, so clear
+  # only the prior trainer workload on every host before reusing the worker.
+  tmux kill-session -t skyrl-tinker 2>/dev/null || true
+  pkill -TERM -u "$USER" -f '[s]kyrl\.tinker\.(api|engine)' || true
+  tmux kill-session -t vllm-tpu 2>/dev/null || true
+  pkill -TERM -u "$USER" -f '[V]LLM::EngineCore' || true
+  pkill -TERM -u "$USER" -f '[s]tart_vllm_tpu\.sh' || true
+  pkill -TERM -u "$USER" -f '[s]tart_vllm_tpu_bootstrap\.sh' || true
+  pkill -TERM -u "$USER" -f '[g]sutil.*hf-cache-|[g]cloud storage cp.*hf-cache-' || true
+  sleep 3
+  pkill -KILL -u "$USER" -f '[s]kyrl\.tinker\.(api|engine)' || true
+  pkill -KILL -u "$USER" -f '[V]LLM::EngineCore' || true
+  pkill -KILL -u "$USER" -f '[s]tart_vllm_tpu\.sh' || true
+  pkill -KILL -u "$USER" -f '[s]tart_vllm_tpu_bootstrap\.sh' || true
+  pkill -KILL -u "$USER" -f '[g]sutil.*hf-cache-|[g]cloud storage cp.*hf-cache-' || true
+
+  if [ "$SKYPILOT_NODE_RANK" != "0" ]; then
+    echo "rank $SKYPILOT_NODE_RANK updated to bundle $generation; rank 0 owns the inference smoke"
+    exit 0
+  fi
+
+  # Only rank 0 serves. Clear its trainer checkpoint cache before restoring HF
+  # weights; the other three hosts retain their training caches. Also remove
+  # other models' HF snapshots from this exclusive worker's 97 GB boot disk.
+  rm -rf "$HOME/skyrl-maxtext-ckpts-local"
+  hf_hub="$HOME/.cache/huggingface/hub"
+  target_hf_dir="models--${MODEL_NAME//\//--}"
+  if [ -d "$hf_hub" ]; then
+    find "$hf_hub" -mindepth 1 -maxdepth 1 -type d -name 'models--*' \
+      ! -name "$target_hf_dir" -exec rm -rf -- {} +
+  fi
+  find "$HOME" -mindepth 1 -maxdepth 1 -type d -name 'vllm-xla-cache-*' \
+    ! -path "$VLLM_XLA_CACHE_PATH" -exec rm -rf -- {} +
+  rm -rf "$HOME/.cache/uv"
+  export UV_NO_CACHE=1
+
+  key="$HOME/ray_bootstrap_key.pem"
+  test -f "$key"
+  mkdir -p "$HOME/.ssh"
+  chmod 700 "$HOME/.ssh"
+  chmod 600 "$key"
+  ln -sfn "$key" "$HOME/.ssh/jobman_tpu_ed25519"
+  IFS=, read -r -a node_ips <<<"$ips"
+  ssh_opts=(-F /dev/null -i "$key" -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=20)
+  for ip in "${node_ips[@]}"; do
+    ready=0
+    for _attempt in $(seq 1 120); do
+      observed=$(ssh "${ssh_opts[@]}" "$REMOTE_USER@$ip" \
+        "cat \"\$HOME/.cache/tpuswarm/$marker_name\"" 2>/dev/null || true)
+      if [ "$observed" = "$generation" ]; then
+        ready=1
+        break
+      fi
+      sleep 5
+    done
+    if [ "$ready" != "1" ]; then
+      echo "bundle generation $generation did not become ready on $ip" >&2
+      exit 1
+    fi
+  done
+
+  cache_ready=0
+  for _attempt in $(seq 1 240); do
+    if gcloud storage objects describe \
+      "$HF_CACHE_GCS/CENTRAL2_COPY_COMPLETE" >/dev/null 2>&1; then
+      cache_ready=1
+      break
+    fi
+    sleep 30
+  done
+  if [ "$cache_ready" != "1" ]; then
+    echo "central2 HF cache for $MODEL_NAME did not become ready within two hours" >&2
+    exit 1
+  fi
+
+  export TPU_SSH_MODE=direct
+  export TPU_EXTERNAL_IPS="$ips"
+  export TPU_INTERNAL_IPS="$ips"
+  export TPU_NAME="v4-model-inference-smoke-32k"
+  export SSH_KEY_FILE="$key"
+  export REMOTE_SKYRL_DIR="$SKYRL_REPO_DIR"
+  export SYNC_SKYRL=0
+  export VLLM_WORKERS=0
+  export VLLM_TPU_PROCESS_ADDRESSES="${node_ips[0]}:8476"
+
+  source "$SKYRL_REPO_DIR/tpu/tpu_ssh_lib.sh"
+  cleanup() {
+    tpu_vm_ssh 0 'tmux kill-session -t vllm-tpu 2>/dev/null || true; pkill -TERM -u "$USER" -f "[V]LLM::EngineCore|[s]tart_vllm_tpu(_bootstrap)?\\.sh|[g]sutil.*hf-cache-|[g]cloud storage cp.*hf-cache-" 2>/dev/null || true; sleep 2; pkill -KILL -u "$USER" -f "[V]LLM::EngineCore|[s]tart_vllm_tpu(_bootstrap)?\\.sh|[g]sutil.*hf-cache-|[g]cloud storage cp.*hf-cache-" 2>/dev/null || true' || true
+  }
+  trap cleanup EXIT
+
+  rm -f -- "$HOME/skyrl-logs/vllm-tpu.log"
+  bash "$SKYRL_REPO_DIR/tpu/start_vllm_tpu.sh"
+  base_url="http://${node_ips[0]}:8001"
+  ready=0
+  for _attempt in $(seq 1 1200); do
+    if curl -fsS --max-time 5 "$base_url/v1/models" >/dev/null; then
+      ready=1
+      break
+    fi
+    if grep -qE 'Engine core initialization failed|EngineCore failed to start|No space left on device' \
+      "$HOME/skyrl-logs/vllm-tpu.log" 2>/dev/null; then
+      echo "v4 TP4 vLLM failed during startup" >&2
+      exit 1
+    fi
+    if ! tpu_vm_ssh 0 'tmux has-session -t vllm-tpu 2>/dev/null'; then
+      echo "v4 TP4 vLLM process exited before becoming ready" >&2
+      tail -200 "$HOME/skyrl-logs/vllm-tpu.log" >&2 || true
+      exit 1
+    fi
+    sleep 5
+  done
+  test "$ready" = "1"
+  endpoint="$base_url/v1/chat/completions"
+  export INFERENCE_ENDPOINT="$endpoint"
+  python3 - <<'PY'
+  import concurrent.futures
+  import json
+  import os
+  import pathlib
+  import time
+  import urllib.error
+  import urllib.request
+
+  concurrency = int(os.environ["INFERENCE_CONCURRENCY"])
+  repetitions = int(os.environ["INFERENCE_REQUEST_TOKEN_REPETITIONS"])
+  endpoint = os.environ["INFERENCE_ENDPOINT"]
+  model = os.environ["SERVED_MODEL_NAME"]
+
+  if concurrency < 1:
+      raise ValueError("INFERENCE_CONCURRENCY must be positive")
+
+  def request_one(index: int) -> dict:
+      payload = json.dumps(
+          {
+              "model": model,
+              "messages": [
+                  {
+                      "role": "user",
+                      "content": (
+                          "Return only OK after reading this context. "
+                          + "token " * repetitions
+                          + f" request-{index}"
+                      ),
+                  }
+              ],
+              "max_tokens": 8,
+              "temperature": 0,
+          }
+      ).encode()
+      request = urllib.request.Request(
+          endpoint,
+          data=payload,
+          headers={"Content-Type": "application/json"},
+          method="POST",
+      )
+      started = time.perf_counter()
+      try:
+          with urllib.request.urlopen(request, timeout=1800) as response:
+              status = response.status
+              body = response.read()
+      except urllib.error.HTTPError as exc:
+          status = exc.code
+          body = exc.read()
+      elapsed = time.perf_counter() - started
+      decoded = json.loads(body)
+      return {
+          "index": index,
+          "status": status,
+          "elapsed_seconds": elapsed,
+          "response": decoded,
+      }
+
+  started = time.perf_counter()
+  with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+      responses = list(executor.map(request_one, range(concurrency)))
+  elapsed = time.perf_counter() - started
+
+  failures = [item for item in responses if item["status"] != 200]
+  missing_choices = [
+      item for item in responses if not item["response"].get("choices")
+  ]
+  prompt_tokens = sum(
+      item["response"].get("usage", {}).get("prompt_tokens", 0)
+      for item in responses
+  )
+  completion_tokens = sum(
+      item["response"].get("usage", {}).get("completion_tokens", 0)
+      for item in responses
+  )
+  result = {
+      "model": model,
+      "max_num_seqs": int(os.environ["VLLM_MAX_NUM_SEQS"]),
+      "concurrency": concurrency,
+      "elapsed_seconds": elapsed,
+      "aggregate_prompt_tokens": prompt_tokens,
+      "aggregate_completion_tokens": completion_tokens,
+      "prompt_tokens_per_second": prompt_tokens / elapsed,
+      "completion_tokens_per_second": completion_tokens / elapsed,
+      "responses": responses,
+  }
+  pathlib.Path("/tmp/model-inference-response.json").write_text(
+      json.dumps(result, indent=2)
+  )
+  if failures or missing_choices:
+      raise RuntimeError(
+          f"inference failures={len(failures)} missing_choices={len(missing_choices)}"
+      )
+  print(json.dumps({key: result[key] for key in result if key != "responses"}, indent=2))
+  PY
+  # A smoke can finish before start_vllm_tpu.sh's first periodic seed-back.
+  # Publish the compile explicitly before writing the result marker.
+  bash "$SKYRL_REPO_DIR/tpu/gcs_rsync.sh" -r \
+    "$VLLM_XLA_CACHE_PATH" "$VLLM_XLA_CACHE_GCS"
+  gcloud storage cp /tmp/model-inference-response.json "$INFERENCE_RESULT_GCS"
+  echo "v4 $MODEL_NAME inference smoke complete: $INFERENCE_RESULT_GCS"
