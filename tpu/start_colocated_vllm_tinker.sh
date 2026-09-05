@@ -666,7 +666,7 @@ if [[ "$EXTERNAL_SAMPLING" == "1" ]]; then
 fi
 
 if [[ "$START_TINKER" == "1" ]]; then
-  cleanup_cmd='mkdir -p ~/skyrl-logs; tmux kill-session -t skyrl-tinker 2>/dev/null || true; tmux list-sessions -F "#{session_name}" 2>/dev/null | awk "/^skyrl-tinker-worker-/ {print}" | xargs -r -n1 tmux kill-session -t; pkill -TERM -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true; sleep 5; pkill -KILL -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true'
+  cleanup_cmd='mkdir -p ~/skyrl-logs; tmux kill-session -t =skyrl-tinker 2>/dev/null || true; tmux list-sessions -F "#{session_name}" 2>/dev/null | awk "/^skyrl-tinker-worker-/ {print}" | xargs -r -n1 tmux kill-session -t; pkill -TERM -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true; sleep 5; pkill -KILL -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true'
   for worker in "${train_workers[@]}"; do
     tpu_vm_ssh "$worker" "$cleanup_cmd"
   done

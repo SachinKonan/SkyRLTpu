@@ -15,11 +15,11 @@ MONITOR_INTERVAL_SECONDS="${MONITOR_INTERVAL_SECONDS:-30}"
 SYNC_EVERY_SECONDS="${SYNC_EVERY_SECONDS:-300}"
 TINKER_FAILURE_LIMIT="${TINKER_FAILURE_LIMIT:-4}"
 
-if ! tmux has-session -t cell 2>/dev/null; then
+if ! tmux has-session -t =cell 2>/dev/null; then
   echo "client not running -- launching via launch_cell.sh"
   CELL="$CELL" bash "$HOME/ttd-client/tpu/launch_cell.sh"
   sleep 5
-  tmux has-session -t cell 2>/dev/null || { echo "client failed to launch"; exit 1; }
+  tmux has-session -t =cell 2>/dev/null || { echo "client failed to launch"; exit 1; }
 fi
 
 last_sync=0
@@ -31,7 +31,7 @@ while true; do
     exit 0
   fi
 
-  if ! tmux has-session -t cell 2>/dev/null; then
+  if ! tmux has-session -t =cell 2>/dev/null; then
     echo "client tmux session gone before completion" >&2
     # ENGINE-SICK marker: the client died because the trainer is wedged (fails
     # every fb while still answering health checks). Kill the tinker session so
@@ -40,7 +40,7 @@ while true; do
     # wedged engine forever.
     if [ -f "$HOME/ENGINE-SICK" ]; then
       echo "ENGINE-SICK marker present ($(cat "$HOME/ENGINE-SICK" 2>/dev/null | head -1)) -- killing tinker for full rebuild" >&2
-      tmux kill-session -t skyrl-tinker 2>/dev/null || true
+      tmux kill-session -t =skyrl-tinker 2>/dev/null || true
       rm -f "$HOME/ENGINE-SICK"
     fi
     bash "${SCRIPT_DIR}/cell_sync.sh" || true

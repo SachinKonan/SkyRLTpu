@@ -33,9 +33,9 @@ stop_pids() {
 
 case "$V4_64_HOST_ROLE" in
   trainer)
-    tmux kill-session -t vllm-tpu 2>/dev/null || true
+    tmux kill-session -t =vllm-tpu 2>/dev/null || true
     while read -r session; do
-      [[ -z "$session" ]] || tmux kill-session -t "$session" 2>/dev/null || true
+      [[ -z "$session" ]] || tmux kill-session -t "=$session" 2>/dev/null || true
     done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^vllm-tpu-e[0-9]\+$' || true)
     stale_pids=$(ps -eo pid=,comm=,args= | awk -v model="$HF_MODEL_CACHE_DIR" '
       $2 ~ /^python/ && ($0 ~ /([v]llm_tpu_server\.py|[v]llm serve)/ || ($0 ~ /[g]cloud\.py storage cp/ && index($0, model))) {print $1}
@@ -46,9 +46,9 @@ case "$V4_64_HOST_ROLE" in
       "$HF_MODEL_CACHE_GCS" "$HF_MODEL_CACHE_DIR"
     ;;
   vllm)
-    tmux kill-session -t skyrl-tinker 2>/dev/null || true
+    tmux kill-session -t =skyrl-tinker 2>/dev/null || true
     while read -r session; do
-      [[ -z "$session" ]] || tmux kill-session -t "$session" 2>/dev/null || true
+      [[ -z "$session" ]] || tmux kill-session -t "=$session" 2>/dev/null || true
     done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^skyrl-tinker-worker-' || true)
     stale_pids=$(ps -eo pid=,comm=,args= | awk '
       $2 ~ /^python/ && $0 ~ /[s]kyrl\.(tinker|backends\.(jax|rpc))/ {print $1}
@@ -59,9 +59,9 @@ case "$V4_64_HOST_ROLE" in
       # An interrupted GCS restore may outlive its tmux parent in uninterruptible
       # ext4 writeback. Stop it before start_vllm_tpu.sh resumes the model cache;
       # complete blobs remain reusable, while partials are always disposable.
-      tmux kill-session -t vllm-tpu 2>/dev/null || true
+      tmux kill-session -t =vllm-tpu 2>/dev/null || true
       while read -r session; do
-        [[ -z "$session" ]] || tmux kill-session -t "$session" 2>/dev/null || true
+        [[ -z "$session" ]] || tmux kill-session -t "=$session" 2>/dev/null || true
       done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^vllm-tpu-e[0-9]\+$' || true)
       stale_pids=$(ps -eo pid=,comm=,args= | awk -v model="$HF_MODEL_CACHE_DIR" '
         $2 ~ /^python/ && ($0 ~ /([v]llm_tpu_server\.py|[v]llm serve|[V]LLM::EngineCore)/ || ($0 ~ /[g]cloud\.py storage cp/ && index($0, model))) {print $1}
