@@ -99,6 +99,7 @@ VLLM_LORA_UPLOAD_ENDPOINT="${VLLM_LORA_UPLOAD_ENDPOINT:-/skyrl/v1/upload_lora_ad
 VLLM_LORA_LOAD_RETRIES="${VLLM_LORA_LOAD_RETRIES:-3}"
 VLLM_LORA_LOAD_RETRY_SLEEP_SEC="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-2}"
 VLLM_REQUEST_TIMEOUT_SEC="${VLLM_REQUEST_TIMEOUT_SEC:-300}"
+EXTERNAL_INFERENCE_TIMEOUT_SEC="${EXTERNAL_INFERENCE_TIMEOUT_SEC:-7200}"
 # Release the pristine base params once the LoRA template exists (see
 # tunix_backend.free_base_state_after_template). Off by default: it makes a
 # second LoRA config an error, which single-config RL cells never need.
@@ -900,6 +901,7 @@ exec "\${runner[@]}" -m skyrl.tinker.api \\
   --session-timeout-sec "${SESSION_TIMEOUT_SEC}" \\
   --checkpoints-base "${REMOTE_CHECKPOINTS}" \\
   --external-inference-lora-base "${REMOTE_LORA_BASE}" \\
+  --external-inference-timeout-sec "${EXTERNAL_INFERENCE_TIMEOUT_SEC}" \\
   --backend "${TINKER_BACKEND}" \\
   ${external_inference_flag} \\
   --backend-config '${backend_config}'

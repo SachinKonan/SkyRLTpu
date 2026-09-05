@@ -1,4 +1,4 @@
-name: qwen35-v4-64-grpo-erdos-tp8-fsdp2-004
+name: qwen35-v4-64-grpo-erdos-tp8-fsdp2-005
 
 resources:
   cloud: gcp
@@ -20,14 +20,14 @@ envs:
   ZONE: us-central2-b
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v34.tar.gz
-  TPUSWARM_BUNDLE_ID: v34-qwen35-v4-64-tp8-fsdp2-r32-s22528-b45056-vllm-recovery-ckpt-mirror
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v35.tar.gz
+  TPUSWARM_BUNDLE_ID: v35-qwen35-v4-64-tp8-fsdp2-r32-s22528-b45056-long-sampling-retry
 
   # Parallel GRPO arm: same workload as the TP4/FSDP4 run, with more tensor
   # parallelism and full rematerialization on the 16-chip trainer half.
   CELL: grpo-n
-  RUN_DIR_NAME: v4-64-qwen35-grpo-erdos-tp8-fsdp2-004
-  EXPERIMENT_NAME: v4-64-qwen35-grpo-erdos-tp8-fsdp2-004
+  RUN_DIR_NAME: v4-64-qwen35-grpo-erdos-tp8-fsdp2-005
+  EXPERIMENT_NAME: v4-64-qwen35-grpo-erdos-tp8-fsdp2-005
   TTD_ENV: erdos_min_overlap
   TTD_ADV_ESTIMATOR: mean_baseline
   TTD_ELITE_SLOTS: "2"
@@ -85,6 +85,11 @@ envs:
   VLLM_LORA_LOAD_RETRIES: "20"
   VLLM_LORA_LOAD_RETRY_SLEEP_SEC: "30"
   VLLM_REQUEST_TIMEOUT_SEC: "1800"
+  EXTERNAL_INFERENCE_TIMEOUT_SEC: "21600"
+  SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC: "0"
+  SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC: "28800"
+  SKYRL_EXTERNAL_WATCHDOG_STALE_SEC: "30"
+  SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH: "4"
   VLLM_INPLACE_RESTART_LIMIT: "2"
   VLLM_RESTART_READY_ATTEMPTS: "120"
   VLLM_RESTART_READY_INTERVAL_SECONDS: "15"
@@ -94,7 +99,7 @@ envs:
   HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1
   VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-chunk4096-v1
 
-  GCS_RUN: gs://sk7524-tinker-tpu-us-central2/skyrl-runs/v4-64-qwen35-grpo-erdos-tp8-fsdp2-004
+  GCS_RUN: gs://sk7524-tinker-tpu-us-central2/skyrl-runs/v4-64-qwen35-grpo-erdos-tp8-fsdp2-005
   SKYRL_CKPT_GCS: gs://sk7524-tinker-tpu-us-central2/skyrl-checkpoints
   GRADER_RAY_PORT: "6379"
   MONITOR_INTERVAL_SECONDS: "30"
