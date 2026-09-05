@@ -101,12 +101,15 @@ while true; do
     bash "GCSRSYNCPLACEHOLDER" -r --exclude='.*\.tmp$|.*\.gstmp$|.*\.partial$' \
       "CKPTROOTPLACEHOLDER" "CKPTGCSPLACEHOLDER" >> "$HOME/sidecar.log" 2>&1
     echo "ckpt-writeback-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/sidecar.log"
+    # Local disk is not the durable store: drop tarballs already in GCS (newest
+    # two per model stay) so ~3 GB/step cannot fill the boot disk mid-run.
+    bash "CKPTPRUNEPLACEHOLDER" "CKPTROOTPLACEHOLDER" "CKPTGCSPLACEHOLDER" >> "$HOME/sidecar.log" 2>&1
   fi
   sleep 300
 done
 SIDECAR
 _ckpt_writeback=0; ckpt_root_is_mount || _ckpt_writeback=1
-sed -i "s|RUNDIRPLACEHOLDER|$HOME/skyrl-runs/$RUN|; s|GCSRUNPLACEHOLDER|$GCS_RUN|; s|CKPTWRITEBACKPLACEHOLDER|$_ckpt_writeback|; s|CKPTROOTPLACEHOLDER|$CKPT_ROOT|; s|CKPTGCSPLACEHOLDER|$SKYRL_CKPT_GCS|; s|GCSRSYNCPLACEHOLDER|$CLIENT_ROOT/tpu/gcs_rsync.sh|" ~/sidecar_"$RUN".sh
+sed -i "s|RUNDIRPLACEHOLDER|$HOME/skyrl-runs/$RUN|; s|GCSRUNPLACEHOLDER|$GCS_RUN|; s|CKPTWRITEBACKPLACEHOLDER|$_ckpt_writeback|; s|CKPTROOTPLACEHOLDER|$CKPT_ROOT|; s|CKPTGCSPLACEHOLDER|$SKYRL_CKPT_GCS|; s|GCSRSYNCPLACEHOLDER|$CLIENT_ROOT/tpu/gcs_rsync.sh|; s|CKPTPRUNEPLACEHOLDER|$CLIENT_ROOT/tpu/jobman/prune_local_checkpoints.sh|" ~/sidecar_"$RUN".sh
 chmod +x ~/sidecar_"$RUN".sh
 SESSION=${CELL_SESSION:-cell}
 tmux kill-session -t "=${SESSION}-backup" 2>/dev/null

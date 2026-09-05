@@ -23,4 +23,7 @@ if [ -d "$CKPT_ROOT" ] && ! mountpoint -q "$CKPT_ROOT" 2>/dev/null && ! mountpoi
   bash "$(dirname "$0")/../gcs_rsync.sh" -r --exclude='.*\.tmp$|.*\.gstmp$|.*\.partial$' \
     "$CKPT_ROOT" "$SKYRL_CKPT_GCS" >> "$HOME/cell-sync.log" 2>&1
   echo "ckpt-writeback-rc=$? $(date -u +%H:%M:%S)" >> "$HOME/cell-sync.log"
+  # Drop tarballs already in GCS (newest two per model stay): local disk is not
+  # the durable store and ~3 GB/step would fill the boot disk before step 15.
+  bash "$(dirname "$0")/prune_local_checkpoints.sh" "$CKPT_ROOT" "$SKYRL_CKPT_GCS" >> "$HOME/cell-sync.log" 2>&1
 fi
