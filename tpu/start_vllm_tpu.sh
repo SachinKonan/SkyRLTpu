@@ -362,6 +362,29 @@ cat > "$runner_script" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 source "${VLLM_VENV}/bin/activate"
+runner_log_path="\$HOME/skyrl-logs/${runner_log_name}"
+runner_status_path="\${runner_log_path%.log}.exits.log"
+runner_history_dir="\$HOME/skyrl-logs/vllm-history"
+mkdir -p "\$runner_history_dir"
+if [[ -s "\$runner_log_path" ]]; then
+  runner_started_at="\$(date -u +%Y%m%dT%H%M%SZ)"
+  mv "\$runner_log_path" \
+    "\$runner_history_dir/\$(basename "\$runner_log_path").\${runner_started_at}.\$\$.log"
+fi
+mapfile -t old_runner_logs < <(
+  find "\$runner_history_dir" -maxdepth 1 -type f \
+    -name "\$(basename "\$runner_log_path").*.log" -printf '%T@ %p\n' 2>/dev/null \
+    | sort -rn | awk 'NR > 8 {sub(/^[^ ]+ /, ""); print}'
+)
+if (( \${#old_runner_logs[@]} > 0 )); then
+  rm -f -- "\${old_runner_logs[@]}"
+fi
+printf 'start=%s pid=%s worker=%s engine=%s bundle=%s\n' \
+  "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$\$" \
+  "\${VLLM_RELATIVE_WORKER_ID:-unknown}" "\${VLLM_ENGINE_INDEX:-0}" \
+  "\${TPUSWARM_BUNDLE_ID:-unversioned}" >> "\$runner_status_path"
+exec > >(tee "\$runner_log_path") 2>&1
+echo "vLLM runner started; status=\$runner_status_path history=\$runner_history_dir"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="${REMOTE_HF_HOME}/hub"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
@@ -643,7 +666,8 @@ if [[ -n "${HF_CACHE_GCS}" ]]; then
     fi
   ' >"\$HOME/skyrl-logs/hf-cache-seed.log" 2>&1 &
 fi
-exec "\${server_cmd[@]}" \\
+set +e
+"\${server_cmd[@]}" \\
   --served-model-name "${SERVED_MODEL_NAME}" \\
   --host 0.0.0.0 \\
   --port "${runner_http_port}" \\
@@ -656,8 +680,15 @@ exec "\${server_cmd[@]}" \\
   "\${ray_args[@]}" \\
   "\${dp_args[@]}" \\
   "\${limit_mm_args[@]}" \\
-  "\${extra_args[@]}" \\
-  2>&1 | tee "\$HOME/skyrl-logs/${runner_log_name}"
+  "\${extra_args[@]}"
+server_rc=\$?
+set -e
+printf 'end=%s pid=%s worker=%s engine=%s bundle=%s exit_code=%s\n' \
+  "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$\$" \
+  "\${VLLM_RELATIVE_WORKER_ID:-unknown}" "\${VLLM_ENGINE_INDEX:-0}" \
+  "\${TPUSWARM_BUNDLE_ID:-unversioned}" "\$server_rc" >> "\$runner_status_path"
+echo "vLLM server exited with code \$server_rc"
+exit "\$server_rc"
 EOF
 
 chmod +x "$bootstrap_script" "$runner_script"

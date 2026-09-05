@@ -91,7 +91,7 @@ def test_v4_64_tp8_fsdp2_grpo_contract():
     config = _load("v4-64-qwen35-grpo-erdos-tp8-fsdp2.yaml")
     env = config["envs"]
 
-    assert config["name"] == "qwen35-v4-64-grpo-erdos-tp8-fsdp2-003"
+    assert config["name"] == "qwen35-v4-64-grpo-erdos-tp8-fsdp2-004"
     assert int(env["TRAIN_TP_SIZE"]) == 8
     assert int(env["TRAIN_FSDP_SIZE"]) == 2
     assert "tp8-fsdp2" in env["TPUSWARM_BUNDLE_ID"]
@@ -103,7 +103,7 @@ def test_v4_64_tp8_fsdp2_grpo_contract():
         "/jax-compile-cache-v4-qwen35-tp8-fsdp2-r32-s22528-b45056-v1"
     )
     assert env["GCS_RUN"].endswith(
-        "/skyrl-runs/v4-64-qwen35-grpo-erdos-tp8-fsdp2-003"
+        "/skyrl-runs/v4-64-qwen35-grpo-erdos-tp8-fsdp2-004"
     )
     assert env["VLLM_SKIP_JAX_PRECOMPILE"] == "0"
     assert json.loads(env["VLLM_LIMIT_MM_PER_PROMPT"]) == {"image": 0, "video": 0}
@@ -260,7 +260,7 @@ def test_v4_64_launcher_reconciles_roles_before_cell_worker():
     assert "import jax.scipy.linalg" in worker
 
     monitor = (repo / "tpu/jobman/cell_monitor.sh").read_text()
-    assert 'OWNER_TOKEN="$RUN:${TPUSWARM_BUNDLE_ID:-unversioned}"' in monitor
+    assert 'OWNER_TOKEN="$RUN:${TPUSWARM_BUNDLE_ID:-unversioned}:${SKYPILOT_INTERNAL_JOB_ID:-standalone}"' in monitor
     assert "full engine readiness check failed" in monitor
     assert 'engines_healthy 1' in monitor
 
@@ -323,8 +323,9 @@ def test_v4_64_tasks_use_checkpoint_durable_bundle():
 
     for task_path in task_paths:
         source = task_path.read_text()
-        assert "tpuswarm-skyrl-v4-mixed-v32.tar.gz" in source
-        assert "TPUSWARM_BUNDLE_ID: v32-" in source
+        assert "tpuswarm-skyrl-v4-mixed-v33.tar.gz" in source
+        assert "TPUSWARM_BUNDLE_ID: v33-" in source
+        assert 'VLLM_INPLACE_RESTART_LIMIT: "2"' in source
         assert (
             "SKYRL_CKPT_GCS: "
             "gs://sk7524-tinker-tpu-us-central2/skyrl-checkpoints"

@@ -471,7 +471,11 @@ elif ! tinker_healthy && vllm_healthy; then
     for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
       ip="$(worker_ip "$worker")"
       timeout 60 ssh $SSHO "$REMOTE_USER"@"$ip" \
-        "tmux kill-session -t =skyrl-vllm 2>/dev/null; pkill -f '[v]llm serve' 2>/dev/null; true" 2>/dev/null || true
+        "tmux kill-session -t =vllm-tpu 2>/dev/null; \
+         for session in \$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^vllm-tpu-e' || true); do \
+           tmux kill-session -t =\"\$session\" 2>/dev/null || true; \
+         done; \
+         pkill -f '[v]llm serve|[v]llm_tpu_server.py|[V]LLM::EngineCore' 2>/dev/null; true" 2>/dev/null || true
     done
     exit "$SETUP_RETRY_EXIT_CODE"
   fi
