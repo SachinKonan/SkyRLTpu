@@ -29,6 +29,7 @@ REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
 HF_CACHE_GCS="${HF_CACHE_GCS:-}"
 REMOTE_CHECKPOINTS="${REMOTE_CHECKPOINTS:-/home/${REMOTE_USER}/gcs/skyrl-checkpoints}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
+SKYRL_CKPT_GCS="${SKYRL_CKPT_GCS:-}"
 TINKER_API_KEY="${TINKER_API_KEY:-tml-dummy}"
 
 API_PORT="${API_PORT:-8000}"
@@ -623,6 +624,7 @@ vllm_cfg = {
 if backend == "tunix":
     cfg = {
         "vllm_lora_upload_endpoint": "${VLLM_LORA_UPLOAD_ENDPOINT}",
+        "checkpoint_mirror_gcs": "${SKYRL_CKPT_GCS}",
         "model_source": "${TUNIX_MODEL_SOURCE}",
         "max_lora_rank": int("${MAX_LORA_RANK}"),
         "train_micro_batch_size": int("${TRAIN_MICRO_BATCH_SIZE}"),

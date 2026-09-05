@@ -55,6 +55,7 @@ from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
 from skyrl.tinker.loss_fns import LOSS_FUNCTIONS, LossFnConfig
 from skyrl.tinker.types import LOSS_TYPES
+from skyrl.utils.checkpoint_mirror import mirror_checkpoint_to_gcs
 from skyrl.utils.log import logger
 from skyrl.utils.storage import download_and_unpack, pack_and_upload
 
@@ -187,6 +188,14 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
         ),
     )
     vllm_group_completions: bool = Field(default=True)
+    checkpoint_mirror_gcs: str | None = Field(
+        default=None,
+        description=(
+            "Optional gs:// prefix for synchronous training and sampler checkpoint "
+            "write-through. Multi-host process 0 owns the local archive, so mirroring "
+            "inside the backend avoids relying on a head-only sidecar."
+        ),
+    )
     free_base_state_after_template: bool = Field(
         default=False,
         description=(
@@ -2539,6 +2548,29 @@ class TunixBackend(AbstractBackend):
     def _write_npz(path: Path, flat: dict[str, np.ndarray]) -> None:
         np.savez(path, **flat)
 
+    def _mirror_checkpoint(
+        self,
+        output_path: AnyPath,
+        model_id: str,
+        family: str = "",
+    ) -> None:
+        mirror_base = self.config.checkpoint_mirror_gcs
+        if not mirror_base:
+            return
+
+        local_path = Path(str(output_path))
+        destination = mirror_checkpoint_to_gcs(
+            local_path,
+            mirror_base,
+            model_id,
+            family,
+        )
+        logger.info(
+            "Mirrored checkpoint to %s and verified %d bytes",
+            destination,
+            local_path.stat().st_size,
+        )
+
     @staticmethod
     def _read_npz(path: Path) -> dict[str, np.ndarray]:
         with np.load(path, allow_pickle=False) as data:
@@ -2568,6 +2600,7 @@ class TunixBackend(AbstractBackend):
                     }
                 )
             )
+        self._mirror_checkpoint(output_path, model_id)
         logger.info(f"Saved training checkpoint to {output_path}")
 
     def _read_checkpoint_archive(self, checkpoint_path: AnyPath) -> dict[str, Any]:
@@ -2667,6 +2700,7 @@ class TunixBackend(AbstractBackend):
                 (tmp / _EPHEMERAL_MARKER_FILE).write_text(
                     json.dumps({"checkpoint_id": checkpoint_id, "model_id": model_id})
                 )
+        self._mirror_checkpoint(output_path, model_id, "sampler_weights")
         logger.info(f"Saved sampler checkpoint for model {model_id} to {output_path} (persist={persist})")
 
         if self.vllm_client is not None and not self.config.vllm_lora_upload_endpoint:
