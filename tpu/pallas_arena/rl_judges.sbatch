@@ -155,11 +155,23 @@ uv run --isolated --extra dev --extra jax --with fastapi --with uvicorn --with f
   python -m pallas_arena.judge.queue --port "$PORT" --host 0.0.0.0 --lease-timeout "$LEASE_TIMEOUT_S" \
   > "${out_dir}/rl-queue-${SLURM_JOB_ID}.log" 2>&1 &
 queue_pid=$!
-for _ in $(seq 1 60); do
+# THE QUEUE NEEDS TIME TO BUILD ITS ENV, NOT JUST TO BIND. 120s was enough
+# only when uv's cache was warm on this node; on a cold node the install
+# alone took 51s and python's imports pushed startup past the window, so the
+# fleet declared "queue failed to start" and tore down a perfectly good run
+# 2 minutes in (measured 2026-08-27, job 3762852). Also report WHY on
+# failure -- the queue's own log holds the reason and was not being surfaced.
+for _ in $(seq 1 "${QUEUE_READY_POLLS:-300}"); do
   curl -sf "http://127.0.0.1:${PORT}/status" >/dev/null 2>&1 && break
+  kill -0 "$queue_pid" 2>/dev/null || { echo "queue process died during startup:"; \
+    tail -20 "${out_dir}/rl-queue-${SLURM_JOB_ID}.log"; exit 1; }
   sleep 2
 done
-curl -sf "http://127.0.0.1:${PORT}/status" >/dev/null || { echo "queue failed to start"; exit 1; }
+curl -sf "http://127.0.0.1:${PORT}/status" >/dev/null || {
+  echo "queue failed to start after $(( 2 * ${QUEUE_READY_POLLS:-300} ))s; its log says:"
+  tail -20 "${out_dir}/rl-queue-${SLURM_JOB_ID}.log"
+  exit 1; }
+echo "=== queue up after $(date +%H:%M:%S) ==="
 
 # ----------------------------------------------------------------- create N
 echo "=== creating ${N} spot ${ACCEL} QRs in ${ZONE} $(date +%H:%M:%S) ==="
@@ -273,6 +285,7 @@ slot_supervisor() {
           --queue http://127.0.0.1:${PORT} --problems ${PROBLEMS} \
           --cases 'rg_lru=probe-4x2048x2560,probe-2x1024x2560,probe-8x512x2560,probe-2x4096x2560,probe-4x2048x1024,probe-holdout-2x1500x2560,tp4-4x2048x2560,tp4-holdout-2x1500x2560' \
           --cases 'splash_attention=probe-h8-s4096,probe-h4-s2048,probe-h16-s1024,probe-h8-s4096-d64,mixtral-8x7b-gqa32x8-s4096,mqa-h32kv1-s4096,deepseek2-16b-s1024-d192-dv128,probe-holdout-h4-s2049,mixtral-holdout-gqa32x8-s2049,tp4-h32-s4096,tp4-gqa32x8-s4096,tp4-mqa-h32kv1-s4096,tp4-holdout-h32-s2049' \
+          --baseline ${ARENA_BASELINE:-all} \
           --chips ${RAY_CHIPS:-4} --max-tp-width ${MAX_TP_WIDTH:-4} \
           --timing-pairs 20 --compile-budget-s ${COMPILE_BUDGET_S} \
           --cache '${CACHE}' --poll-s 1 ${IDLE_EXIT_S:+--idle-exit-s ${IDLE_EXIT_S}} \
@@ -327,7 +340,11 @@ while [ "$(date +%s)" -lt "$land_deadline" ]; do
   # judge can be hours behind the first, and holding the queue back leaves a
   # provisioned, polling judge idle for no reason (measured 2026-08-25:
   # 1/2 landed, queue unpublished, pool already up and waiting).
-  if [ "$ready" -ge "${MIN_JUDGES:-$N}" ] && [ ! -s "${out_dir}/rl-queue-url.txt" ]; then
+  # The "already published" guard must be scoped to THIS run: a stale file
+  # from a previous fleet otherwise blocks the new one from publishing, and
+  # clients keep dialling a host that is gone (measured 2026-08-27 -- the
+  # relaunched fleet came up on neu301 while the file still said neu323).
+  if [ "$ready" -ge "${MIN_JUDGES:-$N}" ] && [ "$(cat "${out_dir}/rl-queue-url.txt" 2>/dev/null)" != "http://$(hostname -s):${PORT}" ]; then
     echo "http://$(hostname -s):${PORT}" > "${out_dir}/rl-queue-url.txt"
     echo "=== queue published early at ${ready}/${N} judges (min ${MIN_JUDGES:-$N}) $(date +%H:%M:%S) ==="
   fi

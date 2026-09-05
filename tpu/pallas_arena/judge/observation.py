@@ -33,6 +33,14 @@ from __future__ import annotations
 import re
 
 MAX_CHARS = 480
+# A PASSING verdict needs more room than a failing one, and it is the only
+# verdict whose length scales with the number of graded shapes: one line per
+# case, each carrying a ratio plus its roofline. splash declares 10 cases, so
+# 480 chars cannot hold them and _elide would delete the middle ones -- which
+# is what produced the unreadable "deepseek2-16 ... probe-holdout-h4-s2049".
+# Failures stay at MAX_CHARS: they name one gate and one violation and are
+# short by construction.
+PASS_MAX_CHARS = 1100
 
 # ---------------------------------------------------------------- extractors
 
@@ -67,8 +75,25 @@ _BUDGET = re.compile(r"exceeded the\s+([\d.]+)s compile budget\s*\(([\d.]+)s(?:[
 _INCOMPAT = re.compile(r"(Incompatible shapes[^.;\n]*)", re.I)
 _DIM_MISMATCH = re.compile(r"(dimensions? .{0,60}?must (?:be )?equal[^.;\n]*)", re.I)
 
-# pallas block/grid complaints
-_BLOCK = re.compile(r"((?:block|grid|BlockSpec)[^.;\n]{0,120})", re.I)
+# pallas block/grid complaints.
+#
+# The leading `[^.;\n]{0,140}?` is load-bearing. Without it the pattern starts
+# at the FIRST literal "block" in the message and silently discards whatever
+# preceded it in the sentence. On the single most common Pallas error --
+# "The Pallas TPU lowering currently requires that the last two dimensions of
+# your block shape are divisible by 8 and 128 respectively, ..." (18 of 96
+# graded candidates on 2026-08-28) -- the first "block" lands mid-sentence, so
+# the model was told "block shape are divisible by 8 and 128" with the
+# qualifier THE LAST TWO DIMENSIONS OF stripped off. That inverts the advice:
+# it reads as a constraint on every dimension. This was never a length cap;
+# the old capture was 114 chars against a 200 limit.
+#
+# Lazy, and bounded by sentence delimiters, so it reaches back to the start of
+# the sentence without swallowing a preceding one.
+_BLOCK = re.compile(r"([^.;\n]{0,140}?(?:block|grid|BlockSpec)[^.;\n]{0,120})", re.I)
+# The recovered sentence runs to 206 chars, so a 200 cap would clip the tail
+# ("...of the overall array") right back off.
+_BLOCK_CHARS = 240
 
 # last "Type: message" line of a traceback
 _EXC_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception|Exit|Warning|NotImplemented[A-Za-z]*))\s*:\s*(.*)$")
@@ -212,7 +237,7 @@ def build_observation(result: dict, max_chars: int = MAX_CHARS, hints: bool = Tr
     raw = " | ".join(str(v) for v in violations)
 
     if result.get("passed"):
-        return _elide(_pass_observation(result, problem), max_chars)
+        return _elide(_pass_observation(result, problem), max(max_chars, PASS_MAX_CHARS))
 
     fixture = ""
     for v in violations:
@@ -272,7 +297,7 @@ def _compile_body(raw: str) -> str:
         return "pallas_call block does not fit in scoped VMEM"
     m = _BLOCK.search(raw)
     if m and len(raw) > 240:
-        return _flat(m.group(1), 200)
+        return _flat(m.group(1), _BLOCK_CHARS)
     ex = _exception_tail(raw)
     return ex or _flat(raw, 200)
 
@@ -284,31 +309,47 @@ def _pass_observation(result: dict, problem: str) -> str:
     parts = [f"GATE all | {problem} | PASS reward={reward:.4f}" if isinstance(reward, float) else f"GATE all | {problem} | PASS"]
     lat = result.get("latencies") or {}
     impls = result.get("baseline_impl_per_case") or {}
-    for case, d in list(lat.items())[:3]:
+    sol = result.get("speed_of_light_fracs") or {}
+    mxu = result.get("mxu_fracs") or {}
+    # ONE LINE PER CASE, roofline INLINE. These used to be three blocks -- three
+    # timings, then every case's HBM on one line, then every case's MXU on
+    # another -- so the reader had to re-join them by name across ~200 chars,
+    # and _elide (which removes the MIDDLE) ate the names while doing it:
+    # "deepseek2-16 ... probe-holdout-h4-s2049". Worse, timings were capped at
+    # [:3] while the roofline lines listed ALL cases, so the two halves did not
+    # even describe the same set. A case's utilisation is only meaningful next
+    # to that case's own ratio: 9% vs 25% on the shape you are 5x slower on is
+    # a finding; the same number in a comma list is trivia.
+    for case in lat:
+        d = lat.get(case) or {}
         try:
             c = float(d["cand_median_s"]) * 1e3
             r = float(d["ref_median_s"]) * 1e3
-            # NAME the thing being raced. "ref 0.22ms" is anonymous; knowing the
-            # bar is XLA rather than a tuned Pallas kernel changes what is worth
-            # trying, and it is the candidate's target rather than hidden state.
-            who = f" [{impls[case]}]" if case in impls else ""
-            parts.append(f"{case}: cand {c:.3f}ms vs ref{who} {r:.3f}ms ({r / c if c else 0:.3f}x)")
         except Exception:
             continue
-    # ROOFLINE, per case. Which resource a kernel is actually against is what
-    # decides the next optimization -- a candidate at 15% of both bandwidth
-    # and MXU is latency/pipelining bound, and neither wider tiles nor fewer
-    # bytes will help it. Every case is shown (the old [:2] cap hid exactly
-    # the shapes that behave differently).
-    sol = result.get("speed_of_light_fracs") or {}
-    if sol:
-        parts.append("HBM bandwidth used (% of chip peak): "
-                     + ", ".join(f"{k} {100 * v:.0f}%" for k, v in sol.items()))
-    mxu = result.get("mxu_fracs") or {}
-    if mxu:
-        parts.append("MXU utilization (% of chip peak bf16, yours vs ref): "
-                     + ", ".join(f"{k} {100 * v[0]:.0f}% vs {100 * v[1]:.0f}%"
-                                 for k, v in mxu.items()))
+        # NAME the thing being raced. "ref 0.22ms" is anonymous; knowing the
+        # bar is XLA rather than a tuned Pallas kernel changes what is worth
+        # trying, and it is the candidate's target rather than hidden state.
+        who = f" [{impls[case]}]" if case in impls else ""
+        line = f"{case}: cand {c:.3f}ms vs ref{who} {r:.3f}ms ({r / c if c else 0:.3f}x)"
+        m = mxu.get(case)
+        if isinstance(m, (list, tuple)) and len(m) >= 2:
+            line += f"  MXU {100 * m[0]:.0f}% vs ref {100 * m[1]:.0f}%"
+        s = sol.get(case)
+        if isinstance(s, (int, float)):
+            line += f"  HBM {100 * s:.0f}%"
+        parts.append(line)
+    # Any case that never produced a timing still owes the reader its roofline.
+    for case in (set(sol) | set(mxu)) - set(lat):
+        bits = []
+        m = mxu.get(case)
+        if isinstance(m, (list, tuple)) and len(m) >= 2:
+            bits.append(f"MXU {100 * m[0]:.0f}% vs ref {100 * m[1]:.0f}%")
+        s = sol.get(case)
+        if isinstance(s, (int, float)):
+            bits.append(f"HBM {100 * s:.0f}%")
+        if bits:
+            parts.append(f"{case}: " + "  ".join(bits))
     peak = result.get("peak_hbm_bytes")
     if peak:
         parts.append(f"peak HBM {peak / 1e9:.2f}GB")

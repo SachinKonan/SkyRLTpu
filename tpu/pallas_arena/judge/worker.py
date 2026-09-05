@@ -360,7 +360,7 @@ class PersistentWorker:
                 # soft-cap), so hoisting it out of the loop would elect a
                 # baseline computing a different function than the case asks
                 # for. Featureless cases return the same objects as before.
-                cands = self.problem.for_case(case).baseline_candidates()
+                cands = self.problem.for_case(case).elected_candidates()
                 w = self.problem.make_inputs(jax.random.PRNGKey(1), case)
                 self.block(w)
                 timings = {}
@@ -1324,7 +1324,15 @@ class PersistentWorker:
         # the list in the key, case A's verdict would cache-hit case B's.
         names = ",".join(c.name for c in self.scored_cases + self.holdout_cases)
         bwd = f"bwdgate={int(self.problem.bwd_gates)}" if self.problem.has_bwd else ""
-        return f"{bwd}|cases={names}"
+        # The REWARD DENOMINATOR is part of the contract: an xla-graded verdict
+        # and a production-graded one for the same code are NOT interchangeable
+        # (measured 2026-09-03: the rg_lru seed, graded vs production in the
+        # seedbar runs, cache-hit its 1.0 verdict under --baseline xla and the
+        # election never ran). Without this, a shared cache silently serves the
+        # wrong denominator.
+        import os as _os
+        base = _os.environ.get("ARENA_BASELINE", "all")
+        return f"{bwd}|cases={names}|baseline={base}"
 
     def _store(self, code: str, result: dict) -> None:
         if self.cache is None:

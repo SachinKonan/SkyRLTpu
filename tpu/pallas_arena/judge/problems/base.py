@@ -467,6 +467,31 @@ class Problem(abc.ABC):
         """
         return {"production": self.baseline}
 
+    def elected_candidates(self) -> dict:
+        """baseline_candidates(), filtered by the ARENA_BASELINE env knob.
+
+        ARENA_BASELINE=xla drops the tuned production kernel from the
+        denominator, leaving the naive/XLA implementations (splash: xla-*;
+        rg_lru: lax-associative-scan). Rationale (2026-09-02): against the
+        production kernel every candidate scores <= 1.0 and piles up below the
+        seed, so the reward has a VALIDITY gradient but no SPEED gradient --
+        nothing pulls a working kernel toward faster. Against XLA, which the
+        seed already beats, rewards spread ABOVE 1.0 and the slope keeps going.
+        Default 'all' preserves the historical fastest-of-all election, so
+        omitting the knob changes nothing.
+        """
+        import os
+        mode = os.environ.get("ARENA_BASELINE", "all").lower()
+        cands = self.baseline_candidates()
+        if mode == "xla":
+            kept = {k: v for k, v in cands.items()
+                    if k != "production" and not k.startswith("pallas")}
+            if kept:
+                return kept
+            # No non-production candidate for this task: fall back rather than
+            # score against an empty denominator.
+        return cands
+
     def baseline_available(self) -> tuple[bool, str]:
         try:
             import jax

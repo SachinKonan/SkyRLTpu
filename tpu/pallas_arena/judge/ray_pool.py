@@ -120,6 +120,13 @@ def grade_case(problem: str, case: str, payload: dict, cfg: dict) -> dict:
     # inherit that even if the runtime propagates env.
     if os.environ.get("JAX_PLATFORMS") == "cpu":
         del os.environ["JAX_PLATFORMS"]
+    # Reward denominator, carried in cfg (shipped by value to every task) so it
+    # never depends on ray propagating shell env to workers -- which it does
+    # not do reliably (2026-09-02: raylet had ARENA_BASELINE=xla, the worker
+    # did not, and grading silently used the production denominator). Set it in
+    # THIS worker's env before the election reads it.
+    if cfg.get("baseline"):
+        os.environ["ARENA_BASELINE"] = cfg["baseline"]
     from pallas_arena.judge import collect as _collect
 
     pinned = _pin_chips(_collect.case_width(case))
@@ -466,6 +473,8 @@ def main() -> None:
     ap.add_argument("--max-items", type=int, default=None)
     ap.add_argument("--idle-exit-s", type=float, default=None)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--baseline", default=os.environ.get("ARENA_BASELINE", "all"),
+                    help="reward denominator: 'all' (fastest known) or 'xla' (naive baseline)")
     # accepted for launcher compatibility; --actors N historically meant chips
     ap.add_argument("--actors", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--width", type=int, default=None, help=argparse.SUPPRESS)
@@ -478,6 +487,7 @@ def main() -> None:
     cfg = {
         "cases_by_problem": cases_by_problem,
         "cache": args.cache,
+        "baseline": args.baseline,
         "compile_cache_dir": args.compile_cache_dir,
         "jax_cache_gcs": args.jax_cache_gcs or None,
         "timing_pairs": args.timing_pairs,
