@@ -11,7 +11,7 @@ VENV="${VLLM_VENV:-$HOME/.venvs/vllm-tpu-gptoss20b-lora}"
 MODEL="${MODEL_NAME:-openai/gpt-oss-20b}"
 PORT="${VLLM_PORT:-8001}"
 ZONE="${ZONE:-unknown}"
-TPUINF_COMMIT="${TPU_INFERENCE_COMMIT:-22d9fcc6c23a536d1fb288b6aba02adbb24cb913}"
+TPUINF_COMMIT="${TPU_INFERENCE_COMMIT:-b9e4024b5624fe74d7486c1b8dc34b1ce45c8aaa}"
 RESULT="${SMOKE_RESULT_LOCAL:-/tmp/gptoss20b-vllm-lora-result.json}"
 LOG="${SMOKE_LOG_LOCAL:-$HOME/skyrl-logs/gptoss20b-vllm-lora.log}"
 HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
@@ -56,7 +56,8 @@ from tpu_inference.worker.tpu_worker import TPUWorker
 
 assert hasattr(TPUWorker, "set_moe_lora_factors")
 assert "_create_lora_buffers" in inspect.getsource(VllmMxfp4MoEMethod)
-print("pinned GPT-OSS MXFP4 LoRA runtime verified")
+assert "max_loras" in inspect.getsource(VllmMxfp4MoEMethod._create_lora_buffers)
+print("pinned GPT-OSS MXFP4 multi-LoRA runtime verified")
 PY
 
 export HF_HOME

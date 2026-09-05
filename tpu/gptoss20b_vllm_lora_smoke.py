@@ -7,8 +7,8 @@ emitted by the Tunix backend: ordinary PEFT tensors for the BF16 router and a
 
 * a zero adapter is numerically identical to the native MXFP4 base;
 * nonzero expert factors alter inference;
-* A -> B -> A replacement reproduces A without accumulating deltas;
-* moving to a router-only adapter clears the globally active expert factors;
+* base, expert A, and expert B can execute concurrently without crosstalk;
+* moving to a router-only adapter clears only its assigned expert slot;
 * ordinary vLLM router LoRA alters inference; and
 * clearing the adapter restores the initial base response exactly.
 """
@@ -16,6 +16,7 @@ emitted by the Tunix backend: ordinary PEFT tensors for the BF16 router and a
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -210,6 +211,19 @@ def _sample(base_url: str, model: str, timeout: float) -> list[dict[str, Any]]:
     return samples
 
 
+def _sample_concurrently(base_url: str, models: tuple[str, ...],
+                         timeout: float) -> dict[str, list[dict[str, Any]]]:
+    """Issue different-model requests together so vLLM can mix LoRA slots."""
+
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(models)) as executor:
+        futures = {
+            model: executor.submit(_sample, base_url, model, timeout)
+            for model in models
+        }
+        return {model: futures[model].result() for model in models}
+
+
 def _fingerprint(samples: list[dict[str, Any]]) -> str:
     raw = json.dumps(samples, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -260,7 +274,7 @@ def _assert_update(response: dict[str, Any], *, cleared: bool) -> None:
 def _run(args: argparse.Namespace) -> dict[str, Any]:
     started = time.time()
     result: dict[str, Any] = {
-        "schema": "gptoss20b-vllm-mxfp4-lora-smoke/v1",
+        "schema": "gptoss20b-vllm-mxfp4-multilora-smoke/v2",
         "acceptance_pass": False,
         "model": MODEL,
         "accelerator": "v6e-8",
@@ -297,32 +311,64 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             uploads: dict[str, dict[str, Any]] = {}
             samples["base_initial"] = _sample(args.base_url, MODEL, args.request_timeout)
 
-            previous = None
-            for name in ("zero", "expert_a", "expert_b", "expert_a", "router", "clear"):
-                key = name if name not in uploads else f"{name}_replay"
-                uploads[key] = _upload(
+            # Keep zero/A/B resident together. Passing no previous adapter is
+            # the contract exercised by multi-tenant SkyRL sampling.
+            for name in ("zero", "expert_a", "expert_b"):
+                uploads[name] = _upload(
                     args.base_url,
                     archives[name],
                     name,
-                    previous,
+                    None,
                     args.upload_timeout,
                 )
-                if name in {"zero", "expert_a", "expert_b"}:
-                    _assert_update(uploads[key], cleared=False)
-                elif name == "router":
-                    _assert_update(uploads[key], cleared=True)
-                samples[key] = _sample(args.base_url, name, args.request_timeout)
-                previous = name
+                _assert_update(uploads[name], cleared=False)
+                samples[name] = _sample(args.base_url, name,
+                                        args.request_timeout)
+
+            mixed = _sample_concurrently(
+                args.base_url,
+                (MODEL, "expert_a", "expert_b"),
+                args.request_timeout,
+            )
+            samples["mixed_base"] = mixed[MODEL]
+            samples["mixed_expert_a"] = mixed["expert_a"]
+            samples["mixed_expert_b"] = mixed["expert_b"]
+
+            # Fill the fourth resident slot with an ordinary router adapter,
+            # then force an LRU slot reuse with an all-zero adapter. The new
+            # occupant must not inherit expert factors from the evicted slot.
+            for name in ("router", "clear"):
+                uploads[name] = _upload(
+                    args.base_url,
+                    archives[name],
+                    name,
+                    None,
+                    args.upload_timeout,
+                )
+                _assert_update(uploads[name], cleared=True)
+                samples[name] = _sample(args.base_url, name,
+                                        args.request_timeout)
 
             samples["base_final"] = _sample(args.base_url, MODEL, args.request_timeout)
+
+            slots = {
+                name: {
+                    int(update["slot"])
+                    for update in _updates(response.get("moe_update"))
+                }
+                for name, response in uploads.items()
+            }
 
             distances = {
                 "base_zero": _distance(samples["base_initial"], samples["zero"]),
                 "base_expert_a": _distance(samples["base_initial"], samples["expert_a"]),
                 "expert_a_b": _distance(samples["expert_a"], samples["expert_b"]),
-                "expert_a_replay": _distance(
-                    samples["expert_a"], samples["expert_a_replay"]
-                ),
+                "isolated_mixed_base": _distance(
+                    samples["base_initial"], samples["mixed_base"]),
+                "isolated_mixed_expert_a": _distance(
+                    samples["expert_a"], samples["mixed_expert_a"]),
+                "isolated_mixed_expert_b": _distance(
+                    samples["expert_b"], samples["mixed_expert_b"]),
                 "base_router": _distance(samples["base_initial"], samples["router"]),
                 "base_clear": _distance(samples["base_initial"], samples["clear"]),
                 "base_final": _distance(samples["base_initial"], samples["base_final"]),
@@ -331,7 +377,10 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 "zero_adapter_parity": distances["base_zero"] <= args.parity_atol,
                 "expert_adapter_changes_output": distances["base_expert_a"] > args.effect_atol,
                 "expert_replacement_changes_output": distances["expert_a_b"] > args.effect_atol,
-                "expert_a_replay_exact": distances["expert_a_replay"] <= args.parity_atol,
+                "resident_experts_use_distinct_slots": slots["expert_a"] != slots["expert_b"],
+                "mixed_base_parity": distances["isolated_mixed_base"] <= args.parity_atol,
+                "mixed_expert_a_parity": distances["isolated_mixed_expert_a"] <= args.parity_atol,
+                "mixed_expert_b_parity": distances["isolated_mixed_expert_b"] <= args.parity_atol,
                 "router_lora_changes_output": distances["base_router"] > args.effect_atol,
                 "clear_adapter_parity": distances["base_clear"] <= args.parity_atol,
                 "base_immutable_after_swaps": distances["base_final"] <= args.parity_atol,
@@ -339,6 +388,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             result.update(
                 {
                     "uploads": uploads,
+                    "slots": {key: sorted(value) for key, value in slots.items()},
                     "fingerprints": {key: _fingerprint(value) for key, value in samples.items()},
                     "distances": distances,
                     "checks": checks,

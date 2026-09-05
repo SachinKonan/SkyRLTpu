@@ -86,6 +86,61 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             async for _ in request.stream():
                 pass
 
+        # Load the ordinary PEFT half first. vLLM assigns the adapter a
+        # physical Punica slot here; the expert sidecar must be installed in
+        # that exact slot so mixed base/A/B requests select matching router,
+        # attention, and expert factors.
+        models = request.app.state.openai_serving_models
+
+        if previous and previous != lora_name:
+            await models.unload_lora_adapter(
+                UnloadLoRAAdapterRequest(lora_name=previous))
+            # Not-loaded is fine (server restart, first sync).
+            shutil.rmtree(lora_dir / previous, ignore_errors=True)
+
+        was_loaded = lora_name in models.lora_requests
+        resp = await models.load_lora_adapter(
+            LoadLoRAAdapterRequest(lora_name=lora_name,
+                                   lora_path=str(target),
+                                   load_inplace=was_loaded))
+        if not isinstance(resp, str):  # vllm returns ErrorResponse objects on failure
+            detail = getattr(resp, "message", None) or str(resp)
+            raise HTTPException(
+                status_code=400,
+                detail=f"load_lora_adapter failed: {detail}")
+        lora_request = models.lora_requests.get(lora_name)
+        if lora_request is None:
+            raise HTTPException(
+                status_code=500,
+                detail=f"loaded adapter {lora_name!r} has no vLLM request id")
+        lora_int_id = int(lora_request.lora_int_id)
+
+        async def _rollback_new_adapter() -> None:
+            if not was_loaded:
+                await models.unload_lora_adapter(
+                    UnloadLoRAAdapterRequest(lora_name=lora_name))
+
+        def _validate_moe_update(result, *, cleared: bool):
+            updates = result if isinstance(result, list) else [result]
+            if not updates:
+                raise RuntimeError(
+                    "expert LoRA update returned no worker results")
+            for item in updates:
+                if not isinstance(item, dict):
+                    raise RuntimeError(
+                        f"unexpected expert LoRA result: {item!r}")
+                if item.get("base_weights_mutated") is not False:
+                    raise RuntimeError(
+                        "worker did not prove immutable MXFP4 base: "
+                        f"{item!r}")
+                if item.get("cleared") is not cleared:
+                    raise RuntimeError(
+                        f"worker returned the wrong clear state: {item!r}")
+                if item.get("lora_id") != lora_int_id:
+                    raise RuntimeError(
+                        f"worker updated the wrong LoRA id: {item!r}")
+            return result
+
         # GPT-OSS expert sidecar: replace the fixed-shape BF16 factor buffers
         # evaluated beside the immutable MXFP4 base GMMs. This must run on
         # every upload call, including retries whose directory already exists.
@@ -109,7 +164,8 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 # is an async method fanning out to the TPU workers (the
                 # isawaitable branch also covers a sync variant).
                 res = engine.collective_rpc(
-                    "set_moe_lora_factors", args=(rpc_factors, rpc_meta)
+                    "set_moe_lora_factors",
+                    args=(rpc_factors, rpc_meta, lora_int_id),
                 )
                 if inspect.isawaitable(res):
                     res = await res
@@ -138,7 +194,9 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                     result = await _rpc({
                         k: v.tolist() for k, v in _st_load(str(moe_path)).items()
                     })
+                result = _validate_moe_update(result, cleared=False)
             except Exception as exc:
+                await _rollback_new_adapter()
                 raise HTTPException(
                     status_code=500,
                     detail=f"set_moe_lora_factors RPC failed: {exc!r}",
@@ -148,29 +206,26 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 lora_name, n_tensors, result,
             )
             moe_update = result
-        elif previous and (lora_dir / previous / "moe_lora.safetensors").exists():
-            # Moving from a full GPT-OSS adapter to attention/router-only must
-            # not leave the previous expert factors globally active.
-            res = engine.collective_rpc("set_moe_lora_factors", args=(None, {"scale": 0.0}))
-            if inspect.isawaitable(res):
-                res = await res
-            logger.info("Cleared MXFP4 expert LoRA factors for %s", previous)
+        else:
+            # An attention/router-only adapter still owns a physical expert
+            # slot. Explicitly zero it in case vLLM reused a formerly active
+            # expert slot.
+            try:
+                res = engine.collective_rpc(
+                    "set_moe_lora_factors",
+                    args=(None, {"scale": 0.0}, lora_int_id),
+                )
+                if inspect.isawaitable(res):
+                    res = await res
+                res = _validate_moe_update(res, cleared=True)
+            except Exception as exc:
+                await _rollback_new_adapter()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"clear expert LoRA slot failed: {exc!r}",
+                ) from exc
+            logger.info("Cleared MXFP4 expert LoRA factors for %s", lora_name)
             moe_update = res
-
-        models = request.app.state.openai_serving_models
-
-        if previous and previous != lora_name:
-            resp = await models.unload_lora_adapter(UnloadLoRAAdapterRequest(lora_name=previous))
-            # Not-loaded is fine (server restart, first sync); surface other errors.
-            shutil.rmtree(lora_dir / previous, ignore_errors=True)
-
-        resp = await models.load_lora_adapter(
-            LoadLoRAAdapterRequest(lora_name=lora_name, lora_path=str(target))
-        )
-        if not isinstance(resp, str):  # vllm returns ErrorResponse objects on failure
-            detail = getattr(resp, "message", None) or str(resp)
-            if "already been loaded" not in detail:
-                raise HTTPException(status_code=400, detail=f"load_lora_adapter failed: {detail}")
 
         # Returning the worker result makes the live acceptance gate capable
         # of proving that all MXFP4 expert buffers were updated (or cleared),
@@ -179,6 +234,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
         return {
             "status": "ok",
             "lora_name": lora_name,
+            "lora_int_id": lora_int_id,
             "moe_update": moe_update,
         }
 

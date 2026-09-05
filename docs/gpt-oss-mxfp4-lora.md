@@ -1,7 +1,8 @@
 # GPT-OSS LoRA on TPU: immutable MXFP4 experts
 
-Status: training and inference implementations are complete for the
-single-active-adapter GMM path; CPU numeric/integration tests are included. The
+Status: training and inference implementations are complete, including
+per-request multi-LoRA routing through the GMM path; CPU numeric/integration
+tests are included. The
 20B trainer acceptance gate passes on a four-host v6e-16 with TP=8/FSDP=2.
 The 20B vLLM load/inference/hot-swap gate also passes on one v6e-8 with TP=8.
 Colocated trainer-to-vLLM weight-sync validation and the 120B v6e-32 gate
@@ -71,13 +72,14 @@ experts:
 
 | Component | Exported A | Exported B | TPU buffer layout |
 | --- | --- | --- | --- |
-| gate (`wi_0`) | `(H, R)` | `(R, E, I)` | A `(Hpad,Rmax)`, B `(E,Rmax,Ipad)` |
-| up (`wi_1`) | `(H, R)` | `(R, E, I)` | A `(Hpad,Rmax)`, B `(E,Rmax,Ipad)` |
-| down (`wo`) | `(E, I, R)` | `(R, H)` | A `(E,Ipad,Rmax)`, B `(Rmax,Hpad)` |
+| gate (`wi_0`) | `(H, R)` | `(R, E, I)` | A `(S,Hpad,Rmax)`, B `(S,E,Rmax,Ipad)` |
+| up (`wi_1`) | `(H, R)` | `(R, E, I)` | A `(S,Hpad,Rmax)`, B `(S,E,Rmax,Ipad)` |
+| down (`wo`) | `(E, I, R)` | `(R, H)` | A `(S,E,Ipad,Rmax)`, B `(S,Rmax,Hpad)` |
 | router | `(H, R)` | `(R, E)` | ordinary PEFT `mlp.router` tensors |
 
-Rank is padded to vLLM's `max_lora_rank`, so uploads replace values without
-changing the JAX pytree or causing a rank-specific compilation.
+`S` is vLLM's `max_loras` physical-slot count. Rank is padded to
+`max_lora_rank`, so uploads replace values without changing the JAX pytree or
+causing slot- or rank-specific compilation.
 
 ## Parallelism
 
@@ -103,18 +105,23 @@ yet expose the required pre-activation and pre-reduction insertion points.
 2. The trainer exports attention and router weights in
    `adapter_model.safetensors`. Expert factors remain in
    `moe_lora.safetensors` with `gptoss-moe-lora/v1` metadata.
-3. The upload endpoint calls `set_moe_lora_factors` on every worker. The RPC
+3. vLLM loads the ordinary PEFT adapter and assigns it a physical Punica slot.
+   The upload endpoint then calls `set_moe_lora_factors` on every worker with
+   that adapter ID. The RPC
    reads the worker-local safetensors file, validates shapes/ranks, transposes
    the serialized `(R,E,I)` B tensors to the GMM's `(E,R,I)` layout, pads them,
-   and replaces the factor buffers.
-4. vLLM loads the PEFT adapter normally for attention and the BF16 router.
-5. Moving to an adapter without expert factors explicitly zeroes all expert
-   buffers.
+   and replaces only the matching factor-bank slot.
+4. Request-time Punica metadata supplies one physical slot per token. After
+   top-k routing, rows are grouped by `(expert, slot)` for the skinny expert
+   GMMs; slot `-1` is the base model and contributes exactly zero delta.
+5. vLLM's LRU activation callback keeps expert-bank ownership synchronized
+   when an adapter moves to a different physical slot. Adapters without expert
+   factors zero only their assigned slot.
 
-V1 intentionally supports one globally active expert adapter. vLLM can still
-cache multiple ordinary PEFT adapters, but per-request multiplexing of expert
-factors is out of scope. RL weight sync uses one current policy, so this removes
-adapter/expert double grouping from the first implementation.
+The original v1 live gate below proved safe single-adapter replacement. The
+multi-LoRA v2 gate additionally keeps A and B resident, mixes simultaneous
+base/A/B requests, compares each mixed result with its isolated result, and
+forces LRU slot reuse to catch stale expert factors.
 
 ## Training reality
 
