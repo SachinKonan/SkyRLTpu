@@ -437,7 +437,7 @@ def build3s(task: str, case_names: list[str]) -> str:
     return head + _SCAFFOLD_SECTION.format(scaffold=scaffold) + "\n## Output" + tail
 
 
-def build3seed(task: str, case_names: list[str]) -> str:
+def build3seed(task: str, case_names: list[str], lib_imports: bool = False) -> str:
     """Seed-mode base prompt: for improvement turns on a WORKING seed program.
 
     Deliberately minimal -- the seed program (shown by SEED_IMPROVE_TEMPLATE)
@@ -452,16 +452,132 @@ def build3seed(task: str, case_names: list[str]) -> str:
         shapes=shapes,
         shape_note=t["shape_note"],
         baseline=t["baseline"],
+        output=_OUTPUT_LIB if lib_imports else _OUTPUT_PLAIN,
     )
     inserts = ""
     if task in _RF3_BWD:
         inserts += _BWD_BRIEF.format(**_RF3_BWD[task])
     if feature_lines:
         inserts += _FEATURE_SECTION.format(feature_lines=feature_lines)
+    inserts += _CONSTRAINTS
     if inserts:
         head, _, tail = prompt.rpartition("## Output")
         prompt = head + inserts + "\n## Output" + tail
     return prompt
+
+
+# INVARIANTS, not exposition.
+#
+# The seed prompt was deliberately minimal on the theory that the working
+# program teaches the platform rules. Measured 2026-08-28 over 96 graded
+# candidates, that theory leaks in one specific way: the rules ARE in the
+# seed, but they are written as commentary explaining why the existing code
+# is shaped the way it is ("the last two dims form the (8,128) VMEM tile"),
+# and the prompt simultaneously says "restructure anything" and "NO comments
+# inside the program". A model rewriting the kernel therefore drops the
+# annotation and the constraint with it.
+#
+# Every rule below is stated in the imperative and scoped to the REWRITE, and
+# each one is here because it killed candidates, not because it is good
+# advice:
+#   * (8,128) divisibility -- 18/96, and 16 of those were gemma on rg_lru
+#   * python control flow over traced values -- 10+/96, both models on splash
+#   * BlockSpec rank vs array rank -- 5/96, both models on splash
+#   * ref writes whose value shape != ref shape -- 3/96
+#   * kernel() falling off the end and returning None -- 2/96
+_CONSTRAINTS = """
+## Rules your rewrite must satisfy
+
+Restructure anything you like -- these are properties of the TPU, not of the
+program you were given, so they outlive any redesign. Each one scores zero:
+the judge never reaches your timings.
+
+1. A BlockSpec's rank must match its array's rank, and its last two dims must
+   be divisible by (8, 128) -- or equal that array's own last two. Earlier
+   dims are free. Re-check every BlockSpec you re-tile, scratch and outputs
+   included.
+       array (B, S, D, 128)   ok  (1, 1, 8, 128)   ok  (1, 1, D, 128)
+                              bad (8, 128)          <- rank 2 vs 4
+                              bad (1, 1, 5, 100)    <- 5 % 8, 100 % 128
+2. No Python control flow on traced values.
+       bad  if s > 0: ...        ok  jnp.where(s > 0, a, b)
+       bad  max(a, b)            ok  jnp.maximum(a, b)
+       bad  while not done:      ok  lax.fori_loop / lax.cond
+3. A ref write must match the ref's shape exactly. It does not broadcast.
+       ref shape (8, 128)     bad  ref[...] = 0.0
+                              ok   ref[...] = jnp.zeros((8, 128), ref.dtype)
+4. `kernel` must return its outputs. Falling off the end returns None, which
+   scores zero however fast the kernel is.
+"""
+
+
+def lib_section(seed_program: str) -> str:
+    """The `from lib import ...` offer, with the names read off the seed.
+
+    Introspected rather than written down: a hand-maintained list that drifts
+    from the seed would advertise names that do not resolve, and the candidate
+    would fail on an import it was invited to make.
+    """
+    import ast
+
+    from pallas_arena.probe.lib_splice import available
+    try:
+        names = available(seed_program)
+        tree = ast.parse(seed_program)
+    except SyntaxError:
+        return ""
+    if not names:
+        return ""
+    # SIZE each name. A flat list gives no way to tell that _backward is 63
+    # lines and _row is 3, so it cannot support the only decision the section
+    # exists to inform: what is worth NOT retyping.
+    span = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            span[node.name] = node.end_lineno - node.lineno + 1
+    fns = [(n, span[n]) for n in names if n in span]
+    consts = [n for n in names if n not in span]
+    rows = "\n".join(f"    {n:<16}{c:>4} lines" for n, c in fns)
+    if consts:
+        rows += f"\n    {'constants':<16}     " + ", ".join(consts)
+    # The worked example must be a PARTIAL rewrite. Leading with
+    # "from lib import kernel" demonstrates changing nothing, which scores
+    # exactly the seed -- the one outcome the run is trying to beat.
+    # Import the ENTRYPOINT, override the one function. An earlier draft
+    # imported an arbitrary subset, which omitted `kernel` and so described a
+    # program with no entrypoint -- a worked example that would not grade.
+    # Importing kernel pulls its dependencies, and the override drops out of
+    # that closure automatically (verified on splash: overriding _backward
+    # leaves _dq_body/_dkv_body unpulled, since only the old one needed them).
+    biggest = max(fns, key=lambda kv: kv[1])[0] if fns else names[0]
+    if biggest == "kernel" and len(fns) > 1:
+        biggest = max((kv for kv in fns if kv[0] != "kernel"), key=lambda kv: kv[1])[0]
+    return _LIB_SECTION.format(
+        rows=rows, total=sum(c for _, c in fns),
+        biggest=biggest, biggest_lines=span.get(biggest, 0))
+
+
+_LIB_SECTION = """
+## Reusing what you are not changing
+
+Every top-level name in that program is importable from `lib`, with its size:
+
+{rows}
+
+Import what you keep instead of retyping it. An import brings its own
+dependencies, and a name you define overrides the imported one -- so
+`from lib import kernel` pulls the whole program and your redefinitions
+replace their pieces. To change only `{biggest}` of the {total} lines:
+
+    from lib import kernel
+
+    def {biggest}(...):        # yours; overrides the imported one
+        ...
+
+That is complete and valid: `kernel` runs, now through your `{biggest}`.
+Returning all {total} lines to change one function is allowed but spends
+budget you could spend thinking.
+"""
 
 
 _BWD_BRIEF = """
@@ -490,13 +606,31 @@ staying correct on every test shape, forward and backward.
 {shape_note}
 
 ## Output
+{output}
+"""
 
+
+# The output contract has to AGREE with whether lib imports are on. With the
+# lib section present and this text demanding "all helpers ... must run as-is",
+# the prompt contradicted itself: `from lib import kernel` has no lib module to
+# run against and contains no helpers. Two instructions to emit everything
+# (here and in Strategy, the last thing read) against one saying otherwise
+# would have resolved against the feature, and it would have gone unused.
+_OUTPUT_PLAIN = """
 Output one fenced ```python block containing the COMPLETE improved program
 (all imports, all helpers, the `kernel` entry point). It must run as-is;
 no prose after the block, and NO comments inside the program -- spend your
 tokens on code, not commentary. Include one short docstring at the very top
-of the program summarizing your algorithm and what you changed.
-"""
+of the program summarizing your algorithm and what you changed."""
+
+_OUTPUT_LIB = """
+Output one fenced ```python block. It must define or import everything it
+uses, ending at a `kernel` entry point -- either the whole program, or the
+parts you changed plus `from lib import ...` for the parts you kept (see
+"Reusing what you are not changing" below). No prose after the block, and NO
+comments inside the program -- spend your tokens on code, not commentary.
+Include one short docstring at the very top summarizing your algorithm and
+what you changed."""
 
 
 # Strategy sits at the TRUE end of the seed prompt: after the program and
@@ -508,6 +642,7 @@ SEED_IMPROVE_TEMPLATE = """{base}
 ```python
 {program}
 ```
+{lib}
 
 ## Judge feedback
 
@@ -519,8 +654,8 @@ Before writing code, think deeply about the optimization strategy: where
 does the current kernel actually spend its time, what is the limiting
 resource (memory bandwidth, compute-unit utilization, pipelining, tile
 geometry), and which single change buys the most? Weigh several directions
-before committing to one. Then output the complete improved program as one
-fenced ```python block, as specified above.
+before committing to one. Then output your improved program as one fenced
+```python block, exactly as the Output section specifies.
 """
 
 
