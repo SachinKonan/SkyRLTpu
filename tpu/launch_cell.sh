@@ -222,6 +222,23 @@ fi
 if [ -s "${EXTRA_REREG_JSONL:-}" ]; then
   _rereg "$EXTRA_REREG_JSONL"
 fi
+# Meta weights-carry on a POOL worker: META_INIT_STATE_PATH names a tinker
+# training state saved under ANOTHER run (tinker://model_x/weights/NNNNNN).
+# Nothing about it is in this run's jsonl and there is no gcsfuse, so restore
+# its tarballs from SKYRL_CKPT_GCS, register them, and hand the path to the
+# member as TTD_INIT_STATE_PATH_<TAG> (ensemble.py: weights only, fresh
+# optimizer; a load failure there is fatal by design). Once this run has banked
+# rows the member takes ensemble.py's RESUME branch from its own lineage and the
+# init path is ignored, so the carry applies to the first launch only.
+if [ -n "${META_INIT_STATE_PATH:-}" ]; then
+  _carry_jsonl=~/skyrl-runs/"$RUN"/carry_init.jsonl
+  printf '{"name": "carry", "state_path": "%s"}\n' "$META_INIT_STATE_PATH" > "$_carry_jsonl"
+  _restore_ckpts "$_carry_jsonl"
+  _rereg "$_carry_jsonl"
+  _carry_tag=$(tr '[:lower:]' '[:upper:]' <<<"${MEMBER_DIR#member_}")
+  EXTRA_TTD_ENV="${EXTRA_TTD_ENV:-} TTD_INIT_STATE_PATH_${_carry_tag}=$META_INIT_STATE_PATH"
+  echo "weights-carry: member ${MEMBER_DIR#member_} initializes from $META_INIT_STATE_PATH"
+fi
 
 tmux kill-session -t "=$SESSION" 2>/dev/null
 tmux new-session -d -s "$SESSION" "cd $CLIENT_ROOT && \

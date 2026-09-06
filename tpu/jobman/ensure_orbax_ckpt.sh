@@ -102,9 +102,24 @@ if [ -d "$DST" ]; then
 fi
 
 mkdir -p "$DST"
-for try in 1 2 3; do
+for try in 1 2 3 4; do
   free_kb=$(df -Pk "$DST" | awk 'NR==2 {print $4}')
   need_kb=$(( (want / 1024) + (MARGIN_GB * 1024 * 1024) ))
+  if [ "$free_kb" -lt "$need_kb" ]; then
+    # A reused pool worker may still hold ANOTHER model's orbax checkpoint: a
+    # gemma cell landing on an ex-muse head found 40 GB of muse-glimmer-30b
+    # here, could not fit its own 44 GB on the 97 GB boot disk, and the cell
+    # sat in bring-up with "No space left on device" (jobs 200/212,
+    # 2026-09-05). One trainer runs per host, so sibling checkpoints are dead
+    # weight -- evict them before touching anything this model needs.
+    for _other in "$CACHE"/*/; do
+      _other="${_other%/}"
+      [ -d "$_other" ] && [ "$_other" != "$DST" ] || continue
+      echo "ckpt: need $(( need_kb / 1024 / 1024 )) GB, free $(( free_kb / 1024 / 1024 )) GB -- evicting stale sibling checkpoint $_other"
+      rm -rf "$_other"
+    done
+    free_kb=$(df -Pk "$DST" | awk 'NR==2 {print $4}')
+  fi
   if [ "$free_kb" -lt "$need_kb" ] && [ -n "$HF_MODEL" ]; then
     # Reclaim from the alternative, not from the thing we need.
     hf_dir="$HOME/.cache/huggingface/hub/models--${HF_MODEL//\//--}"
@@ -131,6 +146,17 @@ for try in 1 2 3; do
     exit 0
   fi
   echo "ckpt: attempt $try incomplete ($(( have / 1024 / 1024 / 1024 ))/${want_gb} GB, partial=${parts:-none})"
+  # A sliced download that lost one component ("Failed to download one or more
+  # component of sliced download") leaves a `_.gstmp` partial plus gcloud
+  # tracker files, and the next rsync RESUMES from them and fails the same way
+  # -- three identical failures on one object took down job 243 (2026-09-05).
+  # Clear both and retry as a sequential, unsliced copy (the mode the HF
+  # restore in start_vllm_tpu.sh already uses for the same reason).
+  find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) -delete 2>/dev/null
+  rm -rf "${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/surface_data/storage/tracker_files" 2>/dev/null
+  export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0
+  export CLOUDSDK_STORAGE_PROCESS_COUNT=1
+  export CLOUDSDK_STORAGE_THREAD_COUNT=1
   sleep 20
 done
 

@@ -1,6 +1,7 @@
-name: meta-wt16-fresh-g0-qwen
+name: meta-wt16-fresh-g0-gemma-lr4e5
 
-# Meta-tree arm gen-0, qwen member (qwen-best seed), start from the 48-state seed.
+# Meta-tree arm gen-0, gemma member (qwen-best seed), start from the 48-state seed, LR 4e-5
+# (gen-0 branches from lr-n: muse 4e-5, qwen 1.5e-4 [job 195], gemma 4e-5; fresh weights).
 # One complete four-host tpu-v5p-32 slice from pool tpuswarm-v5p32-east5a-erdos:
 # rank 0 = trainer + client + grader Ray head, ranks 1-3 = vLLM engines
 # (cell_worker.sh per-model defaults; CELL prefix selects the model).
@@ -30,19 +31,16 @@ envs:
   # The identity string must change with the trainer config: a relaunch that
   # lands on the same worker otherwise reuses the running trainer (same bundle
   # ID) and env changes like TUNIX_FREE_BASE_STATE never take effect (job 192).
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-meta-qwen-fbs1
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-g-meta-lr4e5
 
-  # cell_worker.sh defaults qwen to gs://.../hf-cache/models--Qwen--Qwen3.5-27B,
-  # which holds only 4 GB of metadata (jobman engines fetched the rest from
-  # HuggingFace). Pool workers are offline: use the complete 55.6 GB snapshot.
-  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1
-  # Trainer fb program OOMs at warmup on this runtime (job 191, 2026-09-05), as
-  # gemma did; free the duplicate base-weight copy (RUNBOOK 4.4, memory-only).
+  # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
+  # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the
+  # LoRA template is built (RUNBOOK 4.4: ~35 GiB, memory-only; muse runs with it).
   TUNIX_FREE_BASE_STATE: "1"
-  CELL: meta-qwen
-  RUN_DIR_NAME: meta-wt16-fresh-g0-qwen
-  EXPERIMENT_NAME: meta-wt16-fresh-g0-qwen
-  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/meta-wt16-fresh-g0-qwen
+  CELL: g-meta4
+  RUN_DIR_NAME: meta-wt16-fresh-g0-gemma-lr4e5
+  EXPERIMENT_NAME: meta-wt16-fresh-g0-gemma-lr4e5
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/meta-wt16-fresh-g0-gemma-lr4e5
   # Every rank installs the same bundle generation in `run`, so the head must
   # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
   CELL_START_VLLM: "1"
@@ -54,7 +52,7 @@ envs:
   GROUPS_PER_BATCH: "16"
   GROUP_SIZE: "32"
   NUM_EPOCHS: "15"
-  LEARNING_RATE: "1.5e-4"
+  LEARNING_RATE: "4e-5"
   LORA_RANK: "32"
   KL_PENALTY_COEF: "0"
   TTD_RESTART_RATIO: "0"

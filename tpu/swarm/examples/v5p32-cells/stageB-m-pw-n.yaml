@@ -1,6 +1,9 @@
-name: meta-wt16-fresh-g0-qwen
+name: stageB-m-pw-n
 
-# Meta-tree arm gen-0, qwen member (qwen-best seed), start from the 48-state seed.
+# Muse piecewise (Stage B), fresh: third arm beside stageB-m-grpo-n / stageB-m-ttd-n
+# (16x32, LR 4e-5, elite 2).
+# piecewise_valid_entropic: A = (r - mean r) + alpha*(w - 1)*[valid]; GRPO carries validity,
+# the one-bit entropic LOO weight ranks the valid cluster only (beta solved on that subset).
 # One complete four-host tpu-v5p-32 slice from pool tpuswarm-v5p32-east5a-erdos:
 # rank 0 = trainer + client + grader Ray head, ranks 1-3 = vLLM engines
 # (cell_worker.sh per-model defaults; CELL prefix selects the model).
@@ -27,34 +30,24 @@ envs:
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
   TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v16.tar.gz
-  # The identity string must change with the trainer config: a relaunch that
-  # lands on the same worker otherwise reuses the running trainer (same bundle
-  # ID) and env changes like TUNIX_FREE_BASE_STATE never take effect (job 192).
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-meta-qwen-fbs1
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-m-pw-n
 
-  # cell_worker.sh defaults qwen to gs://.../hf-cache/models--Qwen--Qwen3.5-27B,
-  # which holds only 4 GB of metadata (jobman engines fetched the rest from
-  # HuggingFace). Pool workers are offline: use the complete 55.6 GB snapshot.
-  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1
-  # Trainer fb program OOMs at warmup on this runtime (job 191, 2026-09-05), as
-  # gemma did; free the duplicate base-weight copy (RUNBOOK 4.4, memory-only).
-  TUNIX_FREE_BASE_STATE: "1"
-  CELL: meta-qwen
-  RUN_DIR_NAME: meta-wt16-fresh-g0-qwen
-  EXPERIMENT_NAME: meta-wt16-fresh-g0-qwen
-  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/meta-wt16-fresh-g0-qwen
+  CELL: m-pw-n
+  RUN_DIR_NAME: stageB-m-pw-n
+  EXPERIMENT_NAME: stageB-m-pw-n
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageB-m-pw-n
   # Every rank installs the same bundle generation in `run`, so the head must
   # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
   CELL_START_VLLM: "1"
   CELL_SYNC_SKYRL: "0"
 
   TTD_ENV: erdos_min_overlap
-  TTD_ADV_ESTIMATOR: mean_baseline
+  TTD_ADV_ESTIMATOR: piecewise_valid_entropic
   TTD_ELITE_SLOTS: "2"
   GROUPS_PER_BATCH: "16"
   GROUP_SIZE: "32"
   NUM_EPOCHS: "15"
-  LEARNING_RATE: "1.5e-4"
+  LEARNING_RATE: "4e-5"
   LORA_RANK: "32"
   KL_PENALTY_COEF: "0"
   TTD_RESTART_RATIO: "0"
@@ -65,9 +58,6 @@ envs:
   TTD_SAMPLING_PROGRESS_TIMEOUT: "0"
   EVAL_TIMEOUT: "1100"
   WANDB_MODE: offline
-  # Seeded generation: while nothing is banked, the staged step-0 seed is the
-  # ONLY legitimate snapshot (launch_cell.sh META_SEED_ONLY guard).
-  META_SEED_ONLY: "1"
 
   MONITOR_INTERVAL_SECONDS: "30"
   SYNC_EVERY_SECONDS: "300"
@@ -77,7 +67,7 @@ envs:
   # the tmux command because a reused tmux server keeps its creator's env.
   TINKER_API_KEY: tml-local-skyrl-no-auth
   TINKER_BASE_URL: http://127.0.0.1:8000
-  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_FLATLINE_STOP=1 TTD_FLATLINE_EPS=1e-9 TTD_FLATLINE_CONSEC=3 TTD_FLATLINE_MIN_STEPS=4 TTD_RESTART_AT_STEP=-1
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0
 
 run: |
   set -euo pipefail

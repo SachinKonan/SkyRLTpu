@@ -362,6 +362,13 @@ cat > "$runner_script" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 source "${VLLM_VENV}/bin/activate"
+# The per-engine log suffix is needed by the log setup that follows, which
+# runs BEFORE the multi-engine env block further down. Under set -u the
+# VLLM_ENGINES_PER_HOST>1 runner (muse, 2xTP=2) otherwise dies on its fourth
+# line with "engine_log_suffix: unbound variable" -- before any log exists --
+# and the head waits out its whole readiness window (jobs 241/254, 2026-09-05).
+engine_log_suffix=""
+if [ "\${VLLM_ENGINE_INDEX:-0}" != "0" ]; then engine_log_suffix="-e\${VLLM_ENGINE_INDEX}"; fi
 runner_log_path="\$HOME/skyrl-logs/${runner_log_name}"
 runner_status_path="\${runner_log_path%.log}.exits.log"
 runner_history_dir="\$HOME/skyrl-logs/vllm-history"
@@ -553,6 +560,12 @@ elif [[ -n "${HF_CACHE_GCS}" ]]; then
     # the real gate.
     materialize_hf_tree_manifest \\
       || echo "HF tree manifest not materialized (rc=\$?); relying on the snapshot readiness check" >&2
+    # GCS cannot hold the symlink a native HF cache uses from snapshots/ to
+    # blobs/, so the restore materializes weight shards TWICE (gemma-4-31B-it:
+    # 11.9 GB in both, 71 GB total on a 97 GB engine disk -> 0 bytes free, LoRA
+    # uploads 500, cell dead: job 245, 2026-09-05). Collapse duplicates to
+    # hardlinks; vLLM reads snapshots/ and the bytes are unchanged.
+    bash "\$HOME/dedupe_hf_snapshot.sh" "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}" 2>/dev/null | tail -1
   else
     _n="\$(find "${REMOTE_HF_HOME}/hub" \( -name '*_.gstmp' -o -name '*.incomplete' \) -delete -print 2>/dev/null | wc -l)"
     echo "HF cache restore FAILED after 3 tries; purged \$_n partial file(s)" >&2
@@ -699,6 +712,7 @@ for worker in "${vllm_workers[@]}"; do
   tpu_vm_scp "$worker" "${repo_root}/tpu/vllm_tpu_server.py" "~/vllm_tpu_server.py"
   tpu_vm_scp "$worker" "${repo_root}/tpu/vllm_ray.sh" "~/vllm_ray.sh"
   tpu_vm_scp "$worker" "${repo_root}/tpu/gcs_rsync.sh" "~/gcs_rsync.sh"
+  tpu_vm_scp "$worker" "${repo_root}/tpu/dedupe_hf_snapshot.sh" "~/dedupe_hf_snapshot.sh"
 done
 
 if [[ "$VLLM_PARALLEL_PREINSTALL" == "1" && "$vllm_worker_count" -gt 1 ]]; then
