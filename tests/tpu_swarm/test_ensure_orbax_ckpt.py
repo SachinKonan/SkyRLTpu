@@ -19,16 +19,19 @@ def test_orbax_restore_evicts_sibling_model_checkpoints_before_its_own_hf_weight
     assert need < evict < keep_own < remove < recheck < hf_drop < copy
 
 
-def test_orbax_restore_retries_clear_partials_and_fall_back_to_unsliced_copy():
+def test_orbax_restore_uses_unsliced_copy_from_attempt_one_and_clears_partials():
     # gcloud's sliced download lost a component of one 40 GB composite object;
     # every retry resumed from the leftover _.gstmp + tracker files and failed
     # the same way, and the cell died (job 243, 2026-09-05).
     source = (REPO / "tpu/jobman/ensure_orbax_ckpt.sh").read_text()
+    lock = source.index("flock -w")
+    unsliced = source.index("export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0", lock)
+    sequential = source.index("export CLOUDSDK_STORAGE_PROCESS_COUNT=1", unsliced)
     loop = source.index("for try in 1 2 3 4; do")
+    refuse = source.index('echo "ckpt: refusing restore:', loop)
     incomplete = source.index('echo "ckpt: attempt $try incomplete', loop)
     clear_partials = source.index("find \"$DST\" \\( -name '*_.gstmp' -o -name '*.gstmp' \\) -delete", incomplete)
     clear_trackers = source.index("surface_data/storage/tracker_files", clear_partials)
-    unsliced = source.index("export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0", clear_trackers)
-    sequential = source.index("export CLOUDSDK_STORAGE_PROCESS_COUNT=1", unsliced)
-    loop_end = source.index("\ndone\n", sequential)
-    assert loop < incomplete < clear_partials < clear_trackers < unsliced < sequential < loop_end
+    loop_end = source.index("\ndone\n", clear_trackers)
+    assert lock < unsliced < sequential < loop < refuse < incomplete
+    assert incomplete < clear_partials < clear_trackers < loop_end

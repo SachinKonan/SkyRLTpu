@@ -69,6 +69,19 @@ GS="$(command -v gsutil || echo "$HOME/google-cloud-sdk/bin/gsutil")"
 GCS_CLI="$(command -v gcloud || echo "$HOME/google-cloud-sdk/bin/gcloud")"
 SRC="$CACHE_GCS/$MT_NAME"
 DST="$CACHE/$MT_NAME"
+MARKER="$DST/.tpuswarm-complete"
+mkdir -p "$CACHE"
+exec 9>"$CACHE/.${MT_NAME}.restore.lock"
+if ! flock -w "${CKPT_LOCK_TIMEOUT_SECONDS:-300}" 9; then
+  echo "ckpt: timed out waiting for the exclusive $MT_NAME restore lock" >&2
+  exit 1
+fi
+# The TPU image's sliced downloader creates many large temporary components.
+# A single verified stream is slower only on a cold miss and avoids the
+# transient 2x disk pressure and recurrent _.gstmp corruption seen on v4-64.
+export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0
+export CLOUDSDK_STORAGE_PROCESS_COUNT=1
+export CLOUDSDK_STORAGE_THREAD_COUNT=1
 if "$GCS_CLI" storage rsync --help >/dev/null 2>&1; then
   GCS_COPY_MODE=rsync
 else
@@ -143,6 +156,11 @@ for try in 1 2 3 4; do
       rm -rf "$hf_dir"
     fi
   fi
+  free_kb=$(df -Pk "$DST" | awk 'NR==2 {print $4}')
+  if [ "$free_kb" -lt "$need_kb" ]; then
+    echo "ckpt: refusing restore: need $(( need_kb / 1024 / 1024 )) GB including margin, only $(( free_kb / 1024 / 1024 )) GB free" >&2
+    exit 1
+  fi
 
   rsync_extra=()
   if [ "$REQUIRE_MARKER" = "1" ]; then
@@ -181,17 +199,13 @@ for try in 1 2 3 4; do
   # component of sliced download") leaves a `_.gstmp` partial plus gcloud
   # tracker files, and the next rsync RESUMES from them and fails the same way
   # -- three identical failures on one object took down job 243 (2026-09-05).
-  # Clear both and retry as a sequential, unsliced copy (the mode the HF
-  # restore in start_vllm_tpu.sh already uses for the same reason).
+  # Clear both before retrying the same sequential, unsliced copy.
   find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) -delete 2>/dev/null
   rm -rf "${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/surface_data/storage/tracker_files" 2>/dev/null
-  export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0
-  export CLOUDSDK_STORAGE_PROCESS_COUNT=1
-  export CLOUDSDK_STORAGE_THREAD_COUNT=1
   sleep 20
 done
 
 # Never hand the trainer a torn checkpoint: absent is recoverable, corrupt is not.
 n=$(find "$DST" -mindepth 1 -delete -print 2>/dev/null | wc -l)
-echo "ckpt: FAILED to restore $SRC after 3 attempts; purged $n path(s). Engine bring-up will convert from HF (slow) or fail loudly." >&2
+echo "ckpt: FAILED to restore $SRC after 4 attempts; purged $n path(s). Engine bring-up will convert from HF (slow) or fail loudly." >&2
 exit 1

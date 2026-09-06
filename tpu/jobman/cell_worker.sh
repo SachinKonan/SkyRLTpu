@@ -337,13 +337,21 @@ FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-$FREE_BASE_STATE}"
 XLA_GCS="${VLLM_XLA_CACHE_GCS:-$XLA_GCS}"
 JAX_CACHE_GCS="${TUNIX_JAX_CACHE_GCS:-$JAX_CACHE_GCS}"
 HF_GCS="${HF_CACHE_GCS:-$HF_GCS}"
+PIP="${TUNIX_MAXTEXT_PIP_SPEC:-$PIP}"
 VLLM_XARGS="${VLLM_EXTRA_ARGS:-$VLLM_XARGS}"
 LIMIT_MM_PER_PROMPT="${VLLM_LIMIT_MM_PER_PROMPT:-$LIMIT_MM_PER_PROMPT}"
 pick_tiles() {
   case "$MAXTEXT_MODEL" in
     gemma4-31b)
       FLCE_TILE=1024; VOCAB_TILING=32
-      MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING}" ;;
+      if [[ "$TRAIN_TP_SIZE" == "8" ]]; then
+        # Gemma-4 has four global KV heads.  The proven TP8 smoke pads only
+        # that global projection to eight logical heads; checkpoint alignment
+        # repeats the four physical heads without changing their grouping.
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"allow_split_physical_axes\": true, \"override_model_config\": true, \"global_num_kv_heads\": 8, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      else
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"allow_split_physical_axes\": true, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      fi ;;
     muse-glimmer-30b)
       # nvt 32, not the RL spec's 8: the fb arena measured a ~41G
       # seq-independent constant (60.47G @22528 vs 56.99G @18432 -- only the
@@ -357,7 +365,13 @@ pick_tiles() {
       # response: budget none, uniform 850KB/token, nvt none; the FLCE
       # working buffers are the next term with a validated smaller setting.
       FLCE_TILE=1024; VOCAB_TILING=32
-      MT_KWARGS="{\"remat_policy\": \"full\", \"ici_fsdp_parallelism\": 4, \"num_vocab_tiling\": $VOCAB_TILING, \"parameter_memory_host_offload\": true}" ;;
+      if [[ "$TRAIN_TP_SIZE" == "8" ]]; then
+        # Muse has two physical KV heads.  The proven TP8 smoke instantiates
+        # eight logical heads and repeats each physical head four times.
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"parameter_memory_host_offload\": true, \"allow_split_physical_axes\": true, \"override_model_config\": true, \"base_num_kv_heads\": 8, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      else
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"parameter_memory_host_offload\": true, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      fi ;;
     *)
       case "$CELL" in
         *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;

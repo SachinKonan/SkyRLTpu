@@ -539,6 +539,34 @@ if hf_snapshot_ready; then
 elif [[ -n "${HF_CACHE_GCS}" ]]; then
   hf_ok=0
   for _try in 1 2 3; do
+    # GCS holds no symlinks, so the seeded cache carries each weight shard
+    # under BOTH snapshots/ and blobs/. Copying the whole dir needs the full
+    # duplicated size on disk before the post-copy dedupe can run (gemma: 71 GB
+    # transient on a 97 GB engine with 76 GB free -> 0 bytes mid-restore, job
+    # 275, 2026-09-06). Restore snapshots/ first, pre-link every blob whose
+    # size matches a snapshot file, and let --no-clobber fetch only the rest.
+    _hub_model="${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}"
+    for _sub in refs trees snapshots; do
+      gcloud storage cp --recursive --no-clobber \
+        "${HF_CACHE_GCS}/${HF_MODEL_DIR}/\${_sub}" "\${_hub_model}/" 2>/dev/null || true
+    done
+    mkdir -p "\${_hub_model}/blobs"
+    gcloud storage ls -l "${HF_CACHE_GCS}/${HF_MODEL_DIR}/blobs/" 2>/dev/null \\
+      | awk '\$1 ~ /^[0-9]+\$/ && \$3 ~ /\\/blobs\\// {print \$1, \$3}' \\
+      | while read -r _sz _url; do
+          _name="\${_url##*/}"
+          [ -e "\${_hub_model}/blobs/\${_name}" ] && continue
+          [ "\$_sz" -ge 1048576 ] || continue
+          _match="\$(find "\${_hub_model}/snapshots" -type f -size "\${_sz}c" -print -quit 2>/dev/null)"
+          [ -n "\$_match" ] || continue
+          ln "\$_match" "\${_hub_model}/blobs/\${_name}" 2>/dev/null \\
+            && echo "pre-linked blob \${_name} to \$(basename "\$_match") (\$(( _sz / 1048576 )) MB not downloaded)"
+        done || true
+    # ^ the pipeline above must never fail the runner: under set -e/pipefail a
+    # listing of a model with no blobs/ (muse) or whose last blob has no
+    # snapshot twin (qwen) otherwise exits the runner silently right after the
+    # XLA cache restore -- every qwen/muse engine on bundles v17-v18 died that
+    # way (jobs 278, 280, 2026-09-06). Pre-linking is an optimization only.
     if gcloud storage cp --recursive --no-clobber \
         "${HF_CACHE_GCS}/${HF_MODEL_DIR}" "${REMOTE_HF_HOME}/hub"; then
       hf_ok=1

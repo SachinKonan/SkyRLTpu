@@ -69,6 +69,42 @@ if [[ "${V4_64_AUTO_TOPOLOGY:-1}" == "1" ]]; then
   rm -f -- "$topology_env"
   export TRAIN_WORKERS VLLM_WORKERS
 fi
-bash "$REPO/tpu/swarm/reconcile_v4_64_role_caches.sh"
-bash "$REPO/tpu/jobman/cell_worker.sh"
-exec bash "$REPO/tpu/jobman/cell_monitor.sh"
+
+# Exit 33 and 34 are explicitly configured as unlimited recovery signals in
+# the SkyPilot task. Normalize every setup failure to 33, and preserve the
+# monitor's runtime-recovery code 34. Before returning either signal, fence all
+# stale processes/downloads so the retained pool slice is reusable immediately.
+cleanup_on_failure() {
+  local rc=$?
+  trap - EXIT
+  if [[ "$rc" -ne 0 ]]; then
+    bash "$REPO/tpu/swarm/cleanup_v4_64_worker.sh" "$rc" \
+      || echo "v4-64 failure cleanup itself failed" >&2
+  fi
+  exit "$rc"
+}
+trap cleanup_on_failure EXIT
+
+setup_rc=0
+bash "$REPO/tpu/swarm/reconcile_v4_64_role_caches.sh" || setup_rc=$?
+if [[ "$setup_rc" -ne 0 ]]; then
+  echo "v4-64 cache/checkpoint setup failed (rc=$setup_rc); requesting SkyPilot recovery" >&2
+  exit "${SETUP_RETRY_EXIT_CODE:-33}"
+fi
+
+bash "$REPO/tpu/jobman/cell_worker.sh" || setup_rc=$?
+if [[ "$setup_rc" -ne 0 ]]; then
+  if [[ "$setup_rc" == "33" || "$setup_rc" == "34" ]]; then
+    exit "$setup_rc"
+  fi
+  echo "v4-64 engine setup failed (rc=$setup_rc); requesting SkyPilot recovery" >&2
+  exit "${SETUP_RETRY_EXIT_CODE:-33}"
+fi
+
+monitor_rc=0
+bash "$REPO/tpu/jobman/cell_monitor.sh" || monitor_rc=$?
+if [[ "$monitor_rc" -ne 0 && "$monitor_rc" != "33" && "$monitor_rc" != "34" ]]; then
+  echo "v4-64 runtime monitor failed (rc=$monitor_rc); requesting SkyPilot recovery" >&2
+  monitor_rc="${RUNTIME_RETRY_EXIT_CODE:-34}"
+fi
+exit "$monitor_rc"
