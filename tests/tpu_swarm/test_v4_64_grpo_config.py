@@ -129,6 +129,9 @@ def test_v4_64_gemma4_comparison_contract():
     assert env["CELL"] == "g-grpo-n"
     assert env["MODEL_NAME"] == "google/gemma-4-31B-it"
     assert env["TUNIX_MAXTEXT_MODEL_NAME"] == "gemma4-31b"
+    assert env["TUNIX_MAXTEXT_PIP_SPEC"].endswith(
+        "@0fd409939977ac0ab79a4e64d21730936f253567"
+    )
     assert int(env["TRAIN_TP_SIZE"]) == 8
     assert int(env["TRAIN_FSDP_SIZE"]) == 2
     assert int(env["TUNIX_ROW_SHARD"]) == 2
@@ -151,9 +154,58 @@ def test_v4_64_gemma4_comparison_contract():
         "/jax-compile-cache-v4-gemma4-tp8-fsdp2-r32-s22528-b45056-v1"
     )
     assert env["TPUSWARM_SKYRL_BUNDLE_URL"].endswith(
-        "/tpuswarm-skyrl-v4-mixed-v36.tar.gz"
+        "/tpuswarm-skyrl-v4-mixed-v37.tar.gz"
     )
     assert 'test -r "$staging/tpu/dedupe_hf_snapshot.sh"' in config["run"]
+
+
+def test_v4_64_muse_comparison_contract():
+    config = _load("v4-64-muse-glimmer-grpo-erdos-tp8-fsdp2.yaml")
+    env = config["envs"]
+
+    assert config["name"] == "muse-glimmer-v4-64-grpo-erdos-tp8-fsdp2-001"
+    assert config["resources"]["accelerators"] == "tpu-v4-64"
+    assert env["CELL"] == "m-grpo-n"
+    assert env["MODEL_NAME"] == "meta-models/Muse-Glimmer-30B"
+    assert env["TUNIX_MAXTEXT_MODEL_NAME"] == "muse-glimmer-30b"
+    assert env["TUNIX_MAXTEXT_PIP_SPEC"].endswith(
+        "@4f65ba50963bc975e7ad90ebaa1e752d8a9d8c82"
+    )
+    assert int(env["TRAIN_TP_SIZE"]) == 8
+    assert int(env["TRAIN_FSDP_SIZE"]) == 2
+    assert int(env["TUNIX_ROW_SHARD"]) == 2
+    assert int(env["TUNIX_TRAIN_TOKEN_BUDGET"]) == (
+        int(env["TUNIX_ROW_SHARD"]) * int(env["TUNIX_UNIFORM_SEQ_LEN"])
+    )
+    assert env["VLLM_TP_SIZE"] == "4"
+    assert env["VLLM_ENGINES_PER_HOST"] == "1"
+    assert env["VLLM_MAX_NUM_SEQS"] == "16"
+    assert env["VLLM_SKIP_JAX_PRECOMPILE"] == "1"
+    assert "--max-num-batched-tokens 4096" in env["VLLM_EXTRA_ARGS"]
+    assert "--gpu-memory-utilization 0.95" in env["VLLM_EXTRA_ARGS"]
+    assert env["HF_CACHE_GCS"].endswith("/hf-cache-muse-glimmer-v1")
+    assert env["TUNIX_JAX_CACHE_GCS"].endswith(
+        "/jax-compile-cache-v4-muse-glimmer-tp8-fsdp2-r32-s22528-b45056-v1"
+    )
+    assert env["VLLM_XLA_CACHE_GCS"].endswith(
+        "/vllm-xla-cache-v4-muse-glimmer-tp4-s22528-chunk4096-sweep-v1"
+    )
+    assert env["TPUSWARM_SKYRL_BUNDLE_URL"].endswith(
+        "/tpuswarm-skyrl-v4-mixed-v37.tar.gz"
+    )
+
+
+def test_tp8_model_kwargs_match_the_proven_v4_32_smokes():
+    repo = Path(__file__).resolve().parents[2]
+    worker = (repo / "tpu/jobman/cell_worker.sh").read_text()
+    gemma = worker[worker.index("    gemma4-31b)") : worker.index("    muse-glimmer-30b)")]
+    muse = worker[worker.index("    muse-glimmer-30b)") : worker.index("    *)", worker.index("    muse-glimmer-30b)"))]
+
+    assert '\\"global_num_kv_heads\\": 8' in gemma
+    assert '\\"override_model_config\\": true' in gemma
+    assert '\\"base_num_kv_heads\\": 8' in muse
+    assert '\\"override_model_config\\": true' in muse
+    assert 'PIP="${TUNIX_MAXTEXT_PIP_SPEC:-$PIP}"' in worker
 
 
 def test_cell_launcher_passes_external_inference_timeout():
@@ -308,6 +360,10 @@ def test_v4_64_launcher_reconciles_roles_before_cell_worker():
     assert "reusing cached v4-64 topology" in wrapper
     assert 'REPO=$(readlink -f "${SKYRL_REPO_DIR:-$PWD}")' in wrapper
     assert 'export TPUSWARM_BUNDLE_ID=' in wrapper
+    assert "cleanup_v4_64_worker.sh" in wrapper
+    assert "requesting SkyPilot recovery" in wrapper
+    assert 'exit "${SETUP_RETRY_EXIT_CODE:-33}"' in wrapper
+    assert 'monitor_rc="${RUNTIME_RETRY_EXIT_CODE:-34}"' in wrapper
 
     worker = (repo / "tpu/jobman/cell_worker.sh").read_text()
     assert "trainer bundle mismatch" in worker
@@ -330,8 +386,8 @@ def test_v4_64_launcher_reconciles_roles_before_cell_worker():
     host_reconcile = (repo / "tpu/swarm/reconcile_v4_64_host_role.sh").read_text()
     assert "evict_foreign_hf_models" in host_reconcile
     assert "evict_orbax_models 0" in host_reconcile
-    assert "stop_vllm" in host_reconcile
-    assert "[g]cloud\\.py storage cp" in host_reconcile
+    assert "stop_stale_workload" in host_reconcile
+    assert "storage (cp|rsync)" in host_reconcile
     assert "*_.gstmp" in host_reconcile
 
 
@@ -364,6 +420,7 @@ def test_v4_64_host_reconcile_uses_runtime_compatible_awk(tmp_path):
     env.update(
         {
             "PATH": f"{fake_bin}:{env['PATH']}",
+            "HOME": str(tmp_path),
             "V4_64_HOST_ROLE": "trainer",
             "SKYRL_REPO_DIR": str(repo),
             "HF_MODEL_CACHE_DIR": str(tmp_path / "hub" / "models--target"),
@@ -408,6 +465,7 @@ def test_v4_64_trainer_reconcile_evicts_only_foreign_model_caches(tmp_path):
     env.update(
         {
             "PATH": f"{fake_bin}:{env['PATH']}",
+            "HOME": str(tmp_path),
             "V4_64_HOST_ROLE": "trainer",
             "SKYRL_REPO_DIR": str(repo),
             "HF_MODEL_CACHE_DIR": str(target_hf),
@@ -451,6 +509,7 @@ def test_v4_64_vllm_reconcile_evicts_foreign_hf_and_all_orbax(tmp_path):
     env.update(
         {
             "PATH": f"{fake_bin}:{env['PATH']}",
+            "HOME": str(tmp_path),
             "V4_64_HOST_ROLE": "vllm",
             "SKYRL_REPO_DIR": str(repo),
             "HF_MODEL_CACHE_DIR": str(target_hf),
@@ -474,14 +533,15 @@ def test_v4_64_vllm_reconcile_evicts_foreign_hf_and_all_orbax(tmp_path):
 def test_v4_64_tasks_use_checkpoint_durable_bundle():
     repo = Path(__file__).resolve().parents[2]
     task_paths = (
-        repo / "tpu/swarm/examples/v4-64-qwen35-grpo-erdos.yaml",
         repo / "tpu/swarm/examples/v4-64-qwen35-grpo-erdos-tp8-fsdp2.yaml",
+        repo / "tpu/swarm/examples/v4-64-gemma4-grpo-erdos-tp8-fsdp2.yaml",
+        repo / "tpu/swarm/examples/v4-64-muse-glimmer-grpo-erdos-tp8-fsdp2.yaml",
     )
 
     for task_path in task_paths:
         source = task_path.read_text()
-        assert "tpuswarm-skyrl-v4-mixed-v35.tar.gz" in source
-        assert "TPUSWARM_BUNDLE_ID: v35-" in source
+        assert "tpuswarm-skyrl-v4-mixed-v37.tar.gz" in source
+        assert "TPUSWARM_BUNDLE_ID: v37-" in source
         assert 'VLLM_INPLACE_RESTART_LIMIT: "2"' in source
         assert (
             "SKYRL_CKPT_GCS: "
@@ -492,5 +552,32 @@ def test_v4_64_tasks_use_checkpoint_durable_bundle():
             "tpu/launch_cell.sh",
             "tpu/jobman/cell_sync.sh",
             "tpu/jobman/cell_monitor.sh",
+            "tpu/swarm/cleanup_v4_64_worker.sh",
         ):
             assert f'test -r "$staging/{required}"' in source
+
+
+def test_orbax_restore_is_serialized_and_fails_before_filling_disk():
+    repo = Path(__file__).resolve().parents[2]
+    source = (repo / "tpu/jobman/ensure_orbax_ckpt.sh").read_text()
+
+    lock = source.index("flock -w")
+    unsliced = source.index("CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0")
+    copy = source.index('storage cp --recursive "$SRC" "$CACHE"')
+    assert lock < unsliced < copy
+    assert "refusing restore" in source
+    assert "after 4 attempts" in source
+
+
+def test_v4_64_failure_cleanup_fences_all_roles_without_stopping_skypilot_ray():
+    repo = Path(__file__).resolve().parents[2]
+    source = (repo / "tpu/swarm/cleanup_v4_64_worker.sh").read_text()
+    host = (repo / "tpu/swarm/reconcile_v4_64_host_role.sh").read_text()
+
+    assert "V4_64_FAILURE_CLEANUP=1" in source
+    assert "${roles[$rank]:-}" in source
+    assert "[r]ay_tpuswarm_grader" in host
+    assert "ray stop" not in source
+    assert "ray stop" not in host
+    assert "[e]nsure_orbax_ckpt" in host
+    assert "storage (cp|rsync)" in host

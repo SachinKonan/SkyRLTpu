@@ -15,6 +15,8 @@ CKPT_ROOT="${TUNIX_MAXTEXT_CKPT_CACHE:-$HOME/skyrl-maxtext-ckpts-local}"
 HF_ROOT="${REMOTE_HF_HOME:-$HOME/.cache/huggingface}"
 HF_MODEL_DIR="models--${MODEL_NAME//\//--}"
 HF_CACHE_GCS="${HF_CACHE_GCS:?v4-64 offline startup requires HF_CACHE_GCS}"
+JAX_CACHE_LOCAL="${TUNIX_JAX_CACHE_LOCAL:-$HOME/jax_cache}"
+VLLM_CACHE_LOCAL="${VLLM_XLA_CACHE_PATH:-$HOME/vllm-xla-cache-local}"
 
 IFS=',' read -r -a worker_ips <<< "$JOBMAN_TPU_INTERNAL_IPS"
 IFS=',' read -r -a train_workers <<< "$TRAIN_WORKERS"
@@ -55,17 +57,19 @@ remote() {
 cleanup_pids=()
 for rank in "${train_workers[@]}"; do
   printf -v command \
-    'V4_64_HOST_ROLE=trainer SKYRL_REPO_DIR=%q HF_MODEL_CACHE_DIR=%q HF_MODEL_CACHE_GCS=%q MAXTEXT_MODEL_CACHE_DIR=%q bash %q' \
-    "$REPO" "$HF_ROOT/hub/$HF_MODEL_DIR" "$HF_CACHE_GCS/$HF_MODEL_DIR" \
-    "$CKPT_ROOT/$MAXTEXT_MODEL" "$REPO/tpu/swarm/reconcile_v4_64_host_role.sh"
+    'V4_64_HOST_ROLE=trainer V4_64_HOST_RANK=%q SKYRL_REPO_DIR=%q HF_MODEL_CACHE_DIR=%q HF_MODEL_CACHE_GCS=%q MAXTEXT_MODEL_CACHE_DIR=%q TUNIX_JAX_CACHE_LOCAL=%q VLLM_XLA_CACHE_PATH=%q bash %q' \
+    "$rank" "$REPO" "$HF_ROOT/hub/$HF_MODEL_DIR" "$HF_CACHE_GCS/$HF_MODEL_DIR" \
+    "$CKPT_ROOT/$MAXTEXT_MODEL" "$JAX_CACHE_LOCAL" "$VLLM_CACHE_LOCAL" \
+    "$REPO/tpu/swarm/reconcile_v4_64_host_role.sh"
   remote "$rank" "$command" &
   cleanup_pids+=("$!")
 done
 for rank in "${vllm_workers[@]}"; do
   printf -v command \
-    'V4_64_HOST_ROLE=vllm SKYRL_REPO_DIR=%q HF_MODEL_CACHE_DIR=%q HF_MODEL_CACHE_GCS=%q MAXTEXT_MODEL_CACHE_DIR=%q bash %q' \
-    "$REPO" "$HF_ROOT/hub/$HF_MODEL_DIR" "$HF_CACHE_GCS/$HF_MODEL_DIR" \
-    "$CKPT_ROOT/$MAXTEXT_MODEL" "$REPO/tpu/swarm/reconcile_v4_64_host_role.sh"
+    'V4_64_HOST_ROLE=vllm V4_64_HOST_RANK=%q SKYRL_REPO_DIR=%q HF_MODEL_CACHE_DIR=%q HF_MODEL_CACHE_GCS=%q MAXTEXT_MODEL_CACHE_DIR=%q TUNIX_JAX_CACHE_LOCAL=%q VLLM_XLA_CACHE_PATH=%q bash %q' \
+    "$rank" "$REPO" "$HF_ROOT/hub/$HF_MODEL_DIR" "$HF_CACHE_GCS/$HF_MODEL_DIR" \
+    "$CKPT_ROOT/$MAXTEXT_MODEL" "$JAX_CACHE_LOCAL" "$VLLM_CACHE_LOCAL" \
+    "$REPO/tpu/swarm/reconcile_v4_64_host_role.sh"
   remote "$rank" "$command" &
   cleanup_pids+=("$!")
 done

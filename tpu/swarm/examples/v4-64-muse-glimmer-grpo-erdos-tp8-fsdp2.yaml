@@ -1,4 +1,4 @@
-name: gemma4-v4-64-grpo-erdos-tp8-fsdp2-001
+name: muse-glimmer-v4-64-grpo-erdos-tp8-fsdp2-001
 
 resources:
   cloud: gcp
@@ -21,13 +21,11 @@ envs:
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
   TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v37.tar.gz
-  TPUSWARM_BUNDLE_ID: v37-gemma4-v4-64-tp8-fsdp2-r32-s22528-b45056-s16-u090
+  TPUSWARM_BUNDLE_ID: v37-muse-glimmer-v4-64-tp8-fsdp2-r32-s22528-b45056-s16-u095
 
-  # Match the running Qwen GRPO/Erdos arm except for model-specific learning
-  # rate, renderer, weights, caches, and the measured Gemma serving settings.
-  CELL: g-grpo-n
-  RUN_DIR_NAME: v4-64-gemma4-grpo-erdos-tp8-fsdp2-001
-  EXPERIMENT_NAME: v4-64-gemma4-grpo-erdos-tp8-fsdp2-001
+  CELL: m-grpo-n
+  RUN_DIR_NAME: v4-64-muse-glimmer-grpo-erdos-tp8-fsdp2-001
+  EXPERIMENT_NAME: v4-64-muse-glimmer-grpo-erdos-tp8-fsdp2-001
   TTD_ENV: erdos_min_overlap
   TTD_ADV_ESTIMATOR: mean_baseline
   TTD_ELITE_SLOTS: "2"
@@ -49,9 +47,9 @@ envs:
   EVAL_TIMEOUT: "1100"
   WANDB_MODE: offline
 
-  MODEL_NAME: google/gemma-4-31B-it
-  TUNIX_MAXTEXT_MODEL_NAME: gemma4-31b
-  TUNIX_MAXTEXT_PIP_SPEC: maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939977ac0ab79a4e64d21730936f253567
+  MODEL_NAME: meta-models/Muse-Glimmer-30B
+  TUNIX_MAXTEXT_MODEL_NAME: muse-glimmer-30b
+  TUNIX_MAXTEXT_PIP_SPEC: maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba50963bc975e7ad90ebaa1e752d8a9d8c82
   V4_64_AUTO_TOPOLOGY: "1"
   TRAIN_TP_SIZE: "8"
   TRAIN_FSDP_SIZE: "2"
@@ -64,8 +62,8 @@ envs:
   TUNIX_TRAIN_TOKEN_BUDGET: "45056"
   TUNIX_FREE_BASE_STATE: "1"
   TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts
-  TUNIX_JAX_CACHE_LOCAL: /home/gcpuser/jax-cache-v4-gemma4-tp8-fsdp2-r32-s22528-b45056-v1
-  TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-v4-gemma4-tp8-fsdp2-r32-s22528-b45056-v1
+  TUNIX_JAX_CACHE_LOCAL: /home/gcpuser/jax-cache-v4-muse-glimmer-tp8-fsdp2-r32-s22528-b45056-v1
+  TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-v4-muse-glimmer-tp8-fsdp2-r32-s22528-b45056-v1
 
   CELL_START_VLLM: "1"
   CELL_SYNC_SKYRL: "0"
@@ -79,7 +77,7 @@ envs:
   VLLM_CLIENT_SIDE_ROUND_ROBIN: "1"
   VLLM_TPU_PROCESS_BOUNDS: 1,1,1
   VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
-  VLLM_SKIP_JAX_PRECOMPILE: "0"
+  VLLM_SKIP_JAX_PRECOMPILE: "1"
   VLLM_USE_BATCHED_RPA_KERNEL: "0"
   VLLM_USE_JAX_RAGGED_CONV1D: "0"
   VLLM_LORA_LOAD_RETRIES: "20"
@@ -93,13 +91,12 @@ envs:
   VLLM_INPLACE_RESTART_LIMIT: "2"
   VLLM_RESTART_READY_ATTEMPTS: "120"
   VLLM_RESTART_READY_INTERVAL_SECONDS: "15"
-  VLLM_EXTRA_ARGS: --max-num-batched-tokens 1024 --enable-chunked-prefill --disable-chunked-mm-input --gpu-memory-utilization 0.90
-  VLLM_LIMIT_MM_PER_PROMPT: '{"image":0,"audio":0,"video":0}'
+  VLLM_EXTRA_ARGS: --max-num-batched-tokens 4096 --enable-chunked-prefill --gpu-memory-utilization 0.95
   HF_HUB_OFFLINE: "1"
-  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/hf-cache-gemma4-v1
-  VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-gemma4-v4-32-tp4-s22528-chunk1024-rpav3-v4-sweep-v1
+  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/hf-cache-muse-glimmer-v1
+  VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-muse-glimmer-tp4-s22528-chunk4096-sweep-v1
 
-  GCS_RUN: gs://sk7524-tinker-tpu-us-central2/skyrl-runs/v4-64-gemma4-grpo-erdos-tp8-fsdp2-001
+  GCS_RUN: gs://sk7524-tinker-tpu-us-central2/skyrl-runs/v4-64-muse-glimmer-grpo-erdos-tp8-fsdp2-001
   SKYRL_CKPT_GCS: gs://sk7524-tinker-tpu-us-central2/skyrl-checkpoints
   GRADER_RAY_PORT: "6379"
   MONITOR_INTERVAL_SECONDS: "30"

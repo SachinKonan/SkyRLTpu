@@ -20,8 +20,8 @@ envs:
   ZONE: us-central2-b
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v35.tar.gz
-  TPUSWARM_BUNDLE_ID: v35-qwen35-v4-64-tp8-fsdp2-r32-s22528-b45056-long-sampling-retry
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v37.tar.gz
+  TPUSWARM_BUNDLE_ID: v37-qwen35-v4-64-tp8-fsdp2-r32-s22528-b45056-clean-retry
 
   # Parallel GRPO arm: same workload as the TP4/FSDP4 run, with more tensor
   # parallelism and full rematerialization on the 16-chip trainer half.
@@ -51,6 +51,7 @@ envs:
 
   MODEL_NAME: Qwen/Qwen3.5-27B
   TUNIX_MAXTEXT_MODEL_NAME: qwen3.5-27b
+  TUNIX_MAXTEXT_PIP_SPEC: maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939977ac0ab79a4e64d21730936f253567
   V4_64_AUTO_TOPOLOGY: "1"
   TRAIN_TP_SIZE: "8"
   TRAIN_FSDP_SIZE: "2"
@@ -128,6 +129,7 @@ run: |
     test -r "$staging/tpu/swarm/discover_v4_64_topology.sh"
     test -r "$staging/tpu/swarm/reconcile_v4_64_role_caches.sh"
     test -r "$staging/tpu/swarm/reconcile_v4_64_host_role.sh"
+    test -r "$staging/tpu/swarm/cleanup_v4_64_worker.sh"
     test -r "$staging/tpu/swarm/prune_hf_weight_cache.py"
     test -r "$staging/tpu/swarm/stage_hf_metadata_cache.py"
     test -r "$staging/tpu/gcs_rsync.sh"

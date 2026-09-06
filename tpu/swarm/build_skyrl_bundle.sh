@@ -86,6 +86,7 @@ REQUIRED_BUNDLE_FILES=(
   tpu/swarm/prune_hf_weight_cache.py
   tpu/swarm/reconcile_v4_64_host_role.sh
   tpu/swarm/reconcile_v4_64_role_caches.sh
+  tpu/swarm/cleanup_v4_64_worker.sh
   tpu/swarm/run_erdos_min_overlap.sh
   tpu/swarm/run_qwen35_v4_64_grpo.sh
   tpu/swarm/run_qwen35_v6e32_grpo.sh
