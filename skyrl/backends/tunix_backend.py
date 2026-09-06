@@ -2629,10 +2629,12 @@ class TunixBackend(AbstractBackend):
         slot = self.models[model_id]
         local_checkpoint = Path(str(checkpoint_path))
         if not local_checkpoint.is_file() and self.config.checkpoint_mirror_gcs:
+            # The checkpoint belongs to the source model, not the new slot
+            # receiving its weights (create_training_client_from_state).
             source = restore_checkpoint_from_gcs(
                 local_checkpoint,
                 self.config.checkpoint_mirror_gcs,
-                model_id,
+                local_checkpoint.parent.name,
             )
             logger.info("Restored missing trainer-rank checkpoint from %s", source)
         payload = self._read_checkpoint_archive(AnyPath(local_checkpoint))

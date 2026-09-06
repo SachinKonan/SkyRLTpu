@@ -1,5 +1,7 @@
 """CPU mesh tests for Tunix global-array placement and restore helpers."""
 
+from types import SimpleNamespace
+
 import jax
 import numpy as np
 import pytest
@@ -89,3 +91,34 @@ def test_checkpoint_layouts_round_trip_tuple_axes():
             "committed": True,
         }
     }
+
+
+@pytest.mark.parametrize("local_exists", [False, True])
+def test_restore_fetches_source_model_not_destination_slot(monkeypatch, tmp_path, local_exists):
+    backend = _helper_backend()
+    checkpoint = tmp_path / "model_source" / "000003.tar.gz"
+    backend.config = SimpleNamespace(checkpoint_mirror_gcs="gs://bucket/checkpoints")
+    slot = SimpleNamespace(lora_state={}, accum_grads="stale", accum_count=1)
+    backend.models = {"model_new_slot": slot}
+    calls = []
+
+    def restore(path, mirror, source_model):
+        calls.append((path, mirror, source_model))
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"checkpoint")
+        return f"{mirror}/{source_model}/{path.name}"
+
+    if local_exists:
+        checkpoint.parent.mkdir()
+        checkpoint.write_bytes(b"checkpoint")
+
+    monkeypatch.setattr("skyrl.backends.tunix_backend.restore_checkpoint_from_gcs", restore)
+    monkeypatch.setattr(backend, "_read_checkpoint_archive", lambda path: {"lora_weights": {}})
+    monkeypatch.setattr(backend, "_state_from_flat", lambda *args: {"restored": True})
+
+    backend.load_checkpoint(checkpoint, "model_new_slot")
+
+    assert calls == ([] if local_exists else [(checkpoint, "gs://bucket/checkpoints", "model_source")])
+    assert slot.lora_state == {"restored": True}
+    assert slot.accum_grads is None
+    assert slot.accum_count == 0
