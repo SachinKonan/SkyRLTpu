@@ -348,6 +348,37 @@ def test_hf_metadata_stager_excludes_safetensors(tmp_path):
     assert not (destination / f"snapshots/{revision}/model-00001-of-00001.safetensors").exists()
 
 
+def test_hf_metadata_stager_supports_flat_snapshot_without_tree_manifest(tmp_path):
+    repo = Path(__file__).resolve().parents[2]
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    revision = "flat123"
+    snapshot = source / f"snapshots/{revision}"
+    snapshot.mkdir(parents=True)
+    (source / "refs").mkdir()
+    (source / "refs/main").write_text(f"{revision}\n")
+    (snapshot / "config.json").write_text('{"model_type": "muse"}')
+    (snapshot / "nested").mkdir()
+    (snapshot / "nested/tokenizer.json").write_text('{"version": 1}')
+    (snapshot / "model-00001-of-00001.safetensors").write_bytes(b"weights")
+
+    subprocess.run(
+        [
+            str(repo / "tpu/swarm/stage_hf_metadata_cache.py"),
+            str(source),
+            str(destination),
+        ],
+        check=True,
+    )
+
+    staged = destination / f"snapshots/{revision}"
+    assert (destination / "refs/main").read_text() == revision
+    assert (staged / "config.json").read_text() == '{"model_type": "muse"}'
+    assert (staged / "nested/tokenizer.json").read_text() == '{"version": 1}'
+    assert not (staged / "model-00001-of-00001.safetensors").exists()
+    assert not (destination / f"trees/{revision}.json").exists()
+
+
 def test_v4_64_launcher_reconciles_roles_before_cell_worker():
     repo = Path(__file__).resolve().parents[2]
     wrapper = (repo / "tpu/swarm/run_qwen35_v4_64_grpo.sh").read_text()
