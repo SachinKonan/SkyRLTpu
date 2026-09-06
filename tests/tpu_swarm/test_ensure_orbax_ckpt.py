@@ -25,13 +25,13 @@ def test_orbax_restore_uses_unsliced_copy_from_attempt_one_and_clears_partials()
     # the same way, and the cell died (job 243, 2026-09-05).
     source = (REPO / "tpu/jobman/ensure_orbax_ckpt.sh").read_text()
     lock = source.index("flock -w")
-    unsliced = source.index("export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0", lock)
-    sequential = source.index("export CLOUDSDK_STORAGE_PROCESS_COUNT=1", unsliced)
+    unsliced = source.index('export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD="${CACHE_DOWNLOAD_SLICED_THRESHOLD:-0}"', lock)
+    sequential = source.index('export CLOUDSDK_STORAGE_PROCESS_COUNT="${CACHE_DOWNLOAD_PROCESSES:-1}"', unsliced)
     loop = source.index("for try in 1 2 3 4; do")
     refuse = source.index('echo "ckpt: refusing restore:', loop)
     incomplete = source.index('echo "ckpt: attempt $try incomplete', loop)
     clear_partials = source.index("find \"$DST\" \\( -name '*_.gstmp' -o -name '*.gstmp' \\) -delete", incomplete)
-    clear_trackers = source.index("surface_data/storage/tracker_files", clear_partials)
-    loop_end = source.index("\ndone\n", clear_trackers)
+    clear_failed = source.index('find "$DST" -mindepth 1 -delete', clear_partials)
+    loop_end = source.index("\ndone\n", clear_failed)
     assert lock < unsliced < sequential < loop < refuse < incomplete
-    assert incomplete < clear_partials < clear_trackers < loop_end
+    assert incomplete < clear_partials < clear_failed < loop_end

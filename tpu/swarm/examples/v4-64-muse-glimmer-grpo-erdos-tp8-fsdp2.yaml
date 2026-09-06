@@ -20,8 +20,8 @@ envs:
   ZONE: us-central2-b
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v39.tar.gz
-  TPUSWARM_BUNDLE_ID: v39-muse-glimmer-v4-64-tp8-fsdp2-r32-s22528-b45056-s16-u085
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v40.tar.gz
+  TPUSWARM_BUNDLE_ID: v40-muse-glimmer-v4-64-tp8-fsdp2-r32-s22528-b45056-s16-u085
 
   CELL: m-grpo-n
   RUN_DIR_NAME: v4-64-muse-glimmer-grpo-erdos-tp8-fsdp2-001

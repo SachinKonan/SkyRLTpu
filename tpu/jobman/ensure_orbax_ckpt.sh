@@ -75,12 +75,11 @@ if ! flock -w "${CKPT_LOCK_TIMEOUT_SECONDS:-300}" 9; then
   echo "ckpt: timed out waiting for the exclusive $MT_NAME restore lock" >&2
   exit 1
 fi
-# The TPU image's sliced downloader creates many large temporary components.
-# A single verified stream is slower only on a cold miss and avoids the
-# transient 2x disk pressure and recurrent _.gstmp corruption seen on v4-64.
-export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0
-export CLOUDSDK_STORAGE_PROCESS_COUNT=1
-export CLOUDSDK_STORAGE_THREAD_COUNT=1
+# Keep slicing off on these boot disks; object-level concurrency is tunable
+# separately. More threads must be benchmarked against disk write throughput.
+export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD="${CACHE_DOWNLOAD_SLICED_THRESHOLD:-0}"
+export CLOUDSDK_STORAGE_PROCESS_COUNT="${CACHE_DOWNLOAD_PROCESSES:-1}"
+export CLOUDSDK_STORAGE_THREAD_COUNT="${CACHE_DOWNLOAD_THREADS:-1}"
 if "$GCS_CLI" storage rsync --help >/dev/null 2>&1; then
   GCS_COPY_MODE=rsync
 else
@@ -146,30 +145,30 @@ for try in 1 2 3 4; do
     exit 1
   fi
 
+  copy_rc=0
   if [ "$GCS_COPY_MODE" = "rsync" ]; then
     timeout 3600 "$GCS_CLI" storage rsync -r "$SRC" "$DST" \
-      >/dev/null 2>>"$HOME/ckpt-prep-errors.log"
+      >/dev/null 2>>"${CKPT_PREP_LOG:-$HOME/ckpt-prep-errors.log}" || copy_rc=$?
   else
     rm -rf "$DST"
     mkdir -p "$CACHE"
     timeout 3600 "$GCS_CLI" storage cp --recursive "$SRC" "$CACHE" \
-      >/dev/null 2>>"$HOME/ckpt-prep-errors.log"
+      >/dev/null 2>>"${CKPT_PREP_LOG:-$HOME/ckpt-prep-errors.log}" || copy_rc=$?
   fi
   have=$(du -sb "$DST" 2>/dev/null | awk '{print $1}'); have="${have:-0}"
   parts=$(find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)
-  if [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ]; then
+  if [ "$copy_rc" -eq 0 ] && [ -z "$parts" ] && [ "$have" -ge $(( want * 98 / 100 )) ]; then
     printf '%s %s\n' "$SRC" "$want" >"$MARKER"
     echo "ckpt: restored $(( have / 1024 / 1024 / 1024 ))/${want_gb} GB from $SRC (attempt $try)"
     exit 0
   fi
-  echo "ckpt: attempt $try incomplete ($(( have / 1024 / 1024 / 1024 ))/${want_gb} GB, partial=${parts:-none})"
-  # A sliced download that lost one component ("Failed to download one or more
-  # component of sliced download") leaves a `_.gstmp` partial plus gcloud
-  # tracker files, and the next rsync RESUMES from them and fails the same way
-  # -- three identical failures on one object took down job 243 (2026-09-05).
-  # Clear both before retrying the same sequential, unsliced copy.
+  echo "ckpt: attempt $try incomplete (copy_rc=$copy_rc, $(( have / 1024 / 1024 / 1024 ))/${want_gb} GB, partial=${parts:-none})"
+  # Remove incomplete destinations before retrying. Do not clear global SDK
+  # trackers: another cache on this host may be downloading concurrently.
   find "$DST" \( -name '*_.gstmp' -o -name '*.gstmp' \) -delete 2>/dev/null
-  rm -rf "${CLOUDSDK_CONFIG:-$HOME/.config/gcloud}/surface_data/storage/tracker_files" 2>/dev/null
+  # A failed transfer may leave ordinary-looking files too. Never allow the
+  # next attempt to accept them, or count them against its free-space budget.
+  find "$DST" -mindepth 1 -delete
   sleep 20
 done
 

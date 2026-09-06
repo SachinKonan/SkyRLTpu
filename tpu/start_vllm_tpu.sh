@@ -406,9 +406,9 @@ export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
 # Cloud SDK 428's parallel/sliced downloads have repeatedly stalled ext4
 # writeback or produced hash mismatches on these TPU VM boot disks. Keep cache
 # restores resumable but single-stream; they are one-time worker warmups.
-export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0
-export CLOUDSDK_STORAGE_PROCESS_COUNT=1
-export CLOUDSDK_STORAGE_THREAD_COUNT=1
+export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD="${CACHE_DOWNLOAD_SLICED_THRESHOLD:-0}"
+export CLOUDSDK_STORAGE_PROCESS_COUNT="${CACHE_DOWNLOAD_PROCESSES:-1}"
+export CLOUDSDK_STORAGE_THREAD_COUNT="${CACHE_DOWNLOAD_THREADS:-1}"
 # VLLM_PLUGINS is an ALLOW-LIST: unset loads every installed general plugin,
 # set loads ONLY the named ones. Models that exist solely in the
 # tpu-inference fork (muse) NEED the fork's vllm.general_plugins entry point
@@ -571,12 +571,15 @@ elif [[ -n "${HF_CACHE_GCS}" ]]; then
         "${HF_CACHE_GCS}/${HF_MODEL_DIR}" "${REMOTE_HF_HOME}/hub"; then
       hf_ok=1
     fi
-    _partials="\$(find "${REMOTE_HF_HOME}/hub" -name '*_.gstmp' -o -name '*.incomplete' 2>/dev/null | head -1)"
+    _partials="\$(find "\${_hub_model}" -name '*_.gstmp' -o -name '*.incomplete' 2>/dev/null | head -1)"
     if [[ "\$hf_ok" == "1" && -z "\$_partials" ]]; then
       echo "restored HF cache from ${HF_CACHE_GCS} (attempt \$_try)"
       break
     fi
     echo "HF cache restore incomplete (attempt \$_try): partial=\${_partials:-none}" >&2
+    # Under the model lock, discard only this model's unfinished files. Keep
+    # completed objects for --no-clobber on the next attempt.
+    find "\${_hub_model}" \\( -name '*_.gstmp' -o -name '*.gstmp' -o -name '*.incomplete' \\) -delete
     hf_ok=0
     sleep 15
   done
@@ -595,7 +598,7 @@ elif [[ -n "${HF_CACHE_GCS}" ]]; then
     # hardlinks; vLLM reads snapshots/ and the bytes are unchanged.
     bash "\$HOME/dedupe_hf_snapshot.sh" "${REMOTE_HF_HOME}/hub/${HF_MODEL_DIR}" 2>/dev/null | tail -1
   else
-    _n="\$(find "${REMOTE_HF_HOME}/hub" \( -name '*_.gstmp' -o -name '*.incomplete' \) -delete -print 2>/dev/null | wc -l)"
+    _n="\$(find "\${_hub_model}" \( -name '*_.gstmp' -o -name '*.incomplete' \) -delete -print 2>/dev/null | wc -l)"
     echo "HF cache restore FAILED after 3 tries; purged \$_n partial file(s)" >&2
   fi
   if ! hf_snapshot_ready && [[ "\${HF_HUB_OFFLINE}" == "1" ]]; then
