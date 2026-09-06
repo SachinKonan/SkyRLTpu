@@ -157,6 +157,8 @@ def test_tunix_checkpoint_write_through_runs_on_multihost_owner():
     assert '["gcloud", "storage", "cp", str(local_path), destination]' in mirror
     assert '"objects",\n            "describe"' in mirror
     assert "remote_size != str(local_size)" in mirror
+    assert "restore_checkpoint_from_gcs" in backend
+    assert "Restored missing trainer-rank checkpoint" in backend
     assert 'self._mirror_checkpoint(output_path, model_id, "sampler_weights")' in backend
     assert "request_data.sampling_session_seq_id is None or bool(checkpoint_mirror)" in engine
     assert '"checkpoint_mirror_gcs": "${SKYRL_CKPT_GCS}"' in launcher

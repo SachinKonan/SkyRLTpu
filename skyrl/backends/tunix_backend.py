@@ -55,7 +55,10 @@ from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
 from skyrl.tinker.loss_fns import LOSS_FUNCTIONS, LossFnConfig
 from skyrl.tinker.types import LOSS_TYPES
-from skyrl.utils.checkpoint_mirror import mirror_checkpoint_to_gcs
+from skyrl.utils.checkpoint_mirror import (
+    mirror_checkpoint_to_gcs,
+    restore_checkpoint_from_gcs,
+)
 from skyrl.utils.log import logger
 from skyrl.utils.storage import download_and_unpack, pack_and_upload
 
@@ -2466,7 +2469,15 @@ class TunixBackend(AbstractBackend):
 
     def load_checkpoint(self, checkpoint_path: AnyPath, model_id: str) -> None:
         slot = self.models[model_id]
-        payload = self._read_checkpoint_archive(AnyPath(checkpoint_path))
+        local_checkpoint = Path(str(checkpoint_path))
+        if not local_checkpoint.is_file() and self.config.checkpoint_mirror_gcs:
+            source = restore_checkpoint_from_gcs(
+                local_checkpoint,
+                self.config.checkpoint_mirror_gcs,
+                model_id,
+            )
+            logger.info("Restored missing trainer-rank checkpoint from %s", source)
+        payload = self._read_checkpoint_archive(AnyPath(local_checkpoint))
         if "lora_weights" not in payload:
             raise FileNotFoundError(f"Training checkpoint not found or incomplete at {checkpoint_path}")
 
