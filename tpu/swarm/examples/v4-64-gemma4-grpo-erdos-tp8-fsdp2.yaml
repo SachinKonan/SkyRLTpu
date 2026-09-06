@@ -20,8 +20,8 @@ envs:
   ZONE: us-central2-b
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v41.tar.gz
-  TPUSWARM_BUNDLE_ID: v41-gemma4-v4-64-tp8-fsdp2-r32-s22528-b45056-s16-u090
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v42.tar.gz
+  TPUSWARM_BUNDLE_ID: v42-gemma4-v4-64-tp8-fsdp2-r32-s22528-b45056-s16-u090
 
   # Match the running Qwen GRPO/Erdos arm except for model-specific learning
   # rate, renderer, weights, caches, and the measured Gemma serving settings.
