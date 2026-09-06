@@ -182,7 +182,7 @@ def test_v4_64_muse_comparison_contract():
     assert env["VLLM_MAX_NUM_SEQS"] == "16"
     assert env["VLLM_SKIP_JAX_PRECOMPILE"] == "1"
     assert "--max-num-batched-tokens 4096" in env["VLLM_EXTRA_ARGS"]
-    assert "--gpu-memory-utilization 0.95" in env["VLLM_EXTRA_ARGS"]
+    assert "--gpu-memory-utilization 0.85" in env["VLLM_EXTRA_ARGS"]
     assert env["HF_CACHE_GCS"].endswith("/hf-cache-muse-glimmer-v1")
     assert env["TUNIX_JAX_CACHE_GCS"].endswith(
         "/jax-compile-cache-v4-muse-glimmer-tp8-fsdp2-r32-s22528-b45056-v1"
