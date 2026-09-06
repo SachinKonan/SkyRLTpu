@@ -17,9 +17,9 @@ def test_vllm_rejects_partial_qwen_hf_snapshot():
 def test_vllm_hf_cache_restore_uses_resumable_sequential_gcloud_copy():
     source = (REPO / "tpu/start_vllm_tpu.sh").read_text()
 
-    assert "export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0" in source
-    assert "export CLOUDSDK_STORAGE_PROCESS_COUNT=1" in source
-    assert "export CLOUDSDK_STORAGE_THREAD_COUNT=1" in source
+    assert '${CACHE_DOWNLOAD_SLICED_THRESHOLD:-0}' in source
+    assert '${CACHE_DOWNLOAD_PROCESSES:-1}' in source
+    assert '${CACHE_DOWNLOAD_THREADS:-1}' in source
     assert 'gcloud storage cp --recursive --no-clobber' in source
     assert 'gsutil -m -q rsync -r "${HF_CACHE_GCS}/${HF_MODEL_DIR}"' not in source
 

@@ -585,19 +585,28 @@ exit 1
   tpu_vm_ssh "$worker" "$remote_cmd"
 }
 
-if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
+wait_for_vllm() {
+  local vllm_worker engine engine_label
+  local -a ready_pids=()
+  local failed=0 pid
   for vllm_worker in "${vllm_workers[@]}"; do
-    for ((engine = 0; engine < VLLM_ENGINES_PER_HOST; engine++)); do
-      engine_label="vLLM worker ${vllm_worker}"
-      if (( VLLM_ENGINES_PER_HOST > 1 )); then
-        engine_label+=" engine ${engine}"
-      fi
-      # Poll on the engine host itself so the fatal-log check below inspects
-      # the same host that owns the vLLM process.
-      wait_from_worker "$vllm_worker" "http://127.0.0.1:$((VLLM_PORT + engine))/v1/models" "$engine_label" 1
-    done
+    (
+      for ((engine = 0; engine < VLLM_ENGINES_PER_HOST; engine++)); do
+        engine_label="vLLM worker ${vllm_worker}"
+        if (( VLLM_ENGINES_PER_HOST > 1 )); then
+          engine_label+=" engine ${engine}"
+        fi
+        # Engines on one host share bootstrap/cleanup; poll those serially.
+        wait_from_worker "$vllm_worker" "http://127.0.0.1:$((VLLM_PORT + engine))/v1/models" "$engine_label" 1 || exit 1
+      done
+    ) &
+    ready_pids+=("$!")
   done
-fi
+  for pid in "${ready_pids[@]}"; do
+    wait "$pid" || failed=1
+  done
+  return "$failed"
+}
 
 backend_config="$(
   python3 - <<PY
@@ -980,6 +989,12 @@ EOF
   tpu_vm_ssh "$train_coord_worker" 'mkdir -p ~/skyrl-logs; tmux new-session -d -c "$HOME" -s skyrl-tinker "SKYRL_TRAIN_SKIP_PROVISION=1 bash ~/start_colocated_skyrl_api.sh 2>&1 | tee ~/skyrl-logs/tinker-api.log"'
 
   wait_from_worker "$train_coord_worker" "http://127.0.0.1:${API_PORT}/api/v1/get_server_capabilities" "Tinker API"
+fi
+
+# Inference hosts can download/load while independent trainer hosts provision.
+# Keep the readiness barrier before returning control to the client launcher.
+if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
+  wait_for_vllm
 fi
 
 echo "Colocated vLLM/Tinker split is up."

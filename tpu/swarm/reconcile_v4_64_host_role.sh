@@ -22,7 +22,12 @@ stop_pids() {
   local raw_pids="$1" pid
   local -a pids=() active=()
   [[ -z "$raw_pids" ]] && return 0
-  read -r -a pids <<< "$raw_pids"
+  # ps emits one PID per line; read -a would silently keep only the first.
+  while read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    pids+=("$pid")
+  done <<< "$raw_pids"
+  (( ${#pids[@]} > 0 )) || return 0
   kill -TERM "${pids[@]}" 2>/dev/null || true
   for _ in $(seq 1 10); do
     active=()
@@ -107,8 +112,8 @@ reconcile_compile_caches() {
     fi
     marker="$path/.tpuswarm-model"
     last="$(cat "$marker" 2>/dev/null || true)"
-    if [[ "$last" != "$MAXTEXT_MODEL_DIR" ]]; then
-      evict_tree "unmarked or foreign compile cache (${last:-unknown})" "$path"
+    if [[ -n "$last" && "$last" != "$MAXTEXT_MODEL_DIR" ]]; then
+      evict_tree "foreign compile cache ($last)" "$path"
     fi
   done
   mkdir -p "$keep"

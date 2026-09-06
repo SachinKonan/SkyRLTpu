@@ -88,9 +88,10 @@ fi
 stage_pids=()
 for rank in "${train_workers[@]}"; do
   printf -v command \
-    'export JOBMAN_WORKER_ID=%q TRAIN_WORKERS=%q CELL=%q MODEL_NAME=%q TUNIX_MAXTEXT_MODEL_NAME=%q TUNIX_MAXTEXT_CKPT_CACHE=%q TUNIX_MAXTEXT_CKPT_CACHE_GCS=%q; bash %q' \
+    'export JOBMAN_WORKER_ID=%q TRAIN_WORKERS=%q CELL=%q MODEL_NAME=%q TUNIX_MAXTEXT_MODEL_NAME=%q TUNIX_MAXTEXT_CKPT_CACHE=%q TUNIX_MAXTEXT_CKPT_CACHE_GCS=%q CACHE_DOWNLOAD_PROCESSES=%q CACHE_DOWNLOAD_THREADS=%q CACHE_DOWNLOAD_SLICED_THRESHOLD=%q; bash %q' \
     "$rank" "$TRAIN_WORKERS" "${CELL:-grpo-n}" "$MODEL_NAME" "$MAXTEXT_MODEL" "$CKPT_ROOT" \
     "${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts}" \
+    "${CACHE_DOWNLOAD_PROCESSES:-1}" "${CACHE_DOWNLOAD_THREADS:-1}" "${CACHE_DOWNLOAD_SLICED_THRESHOLD:-0}" \
     "$REPO/tpu/jobman/ensure_orbax_ckpt.sh"
   remote "$rank" "$command" &
   stage_pids+=("$!")
