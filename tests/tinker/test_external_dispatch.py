@@ -16,7 +16,9 @@ from __future__ import annotations
 import asyncio
 import gc
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
+import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -30,6 +32,7 @@ from skyrl.tinker.dispatch import (
     complete_external_future,
     replay_request_from_sample_input,
 )
+from skyrl.tinker.extra.external_inference import ExternalInferenceClient
 
 pytestmark = pytest.mark.asyncio
 
@@ -196,6 +199,72 @@ async def test_watchdog_recovers_a_dropped_request(db_engine):
     future = await read_future(db_engine, request_id)
     assert future.result_data["sequences"][0]["tokens"] == [client.marker]
     assert future.completed_at is not None
+
+
+@pytest.mark.parametrize("failure", ["connection", "http_503"])
+async def test_engine_failure_is_retried_on_another_engine(db_engine, monkeypatch, tmp_path, failure):
+    """Exercise the real inference client, dispatcher, and durable future together."""
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        if request.url.host == "engine-a":
+            if failure == "connection":
+                raise httpx.ConnectError("engine restarting", request=request)
+            return httpx.Response(503, json={"error": "engine restarting"})
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{
+                    "token_ids": [42],
+                    "logprobs": {"token_logprobs": [-0.1]},
+                    "finish_reason": "stop",
+                }],
+            },
+        )
+
+    async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: async_client(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    config = SimpleNamespace(
+        external_inference_url="http://engine-a,http://engine-b",
+        external_inference_api_key="test",
+        external_inference_timeout_sec=1,
+        external_inference_prompt_logprobs=False,
+        checkpoints_base=tmp_path / "checkpoints",
+        external_inference_lora_base=tmp_path / "loras",
+    )
+    client = ExternalInferenceClient(config, db_engine)
+    dispatcher = ExternalDispatcher(client, db_engine, stale_after_sec=0, max_redispatch=3)
+    sample_input = make_sample_input().model_copy(update={"base_model": "test-model"})
+    request_id = await insert_external_future(db_engine, sample_input)
+    try:
+        task = dispatcher.dispatch(
+            request_id,
+            replay_request_from_sample_input(sample_input),
+            "model_test",
+            "ckpt0",
+            base_model="test-model",
+        )
+        expected_error = httpx.ConnectError if failure == "connection" else httpx.HTTPStatusError
+        with pytest.raises(expected_error):
+            await task
+        assert (await read_future(db_engine, request_id)).status == RequestStatus.PENDING
+
+        report = await dispatcher.sweep_once()
+        assert report.redispatched == [request_id]
+        await asyncio.gather(*dispatcher._inflight.values())
+        future = await read_future(db_engine, request_id)
+        assert future.status == RequestStatus.COMPLETED
+        assert future.result_data["sequences"][0]["tokens"] == [42]
+        assert [request.url.host for request in requests] == ["engine-a", "engine-b"]
+        assert requests[0].content == requests[1].content
+        assert (await dispatcher.sweep_once()).redispatched == []
+    finally:
+        await dispatcher.aclose()
 
 
 async def test_orphan_from_a_previous_api_process_is_redispatched(db_engine):
