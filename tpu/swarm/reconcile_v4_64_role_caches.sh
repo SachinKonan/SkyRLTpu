@@ -101,4 +101,26 @@ if (( failed )); then
   exit 1
 fi
 
+# ensure_orbax_ckpt.sh may reclaim a trainer host's complete HF model cache
+# when the root disk cannot hold both it and Orbax. Restore the small offline
+# tokenizer/config snapshot after that reclamation, before trainer startup.
+metadata_pids=()
+for rank in "${train_workers[@]}"; do
+  printf -v command \
+    'python3 %q %q %q' \
+    "$REPO/tpu/swarm/stage_hf_metadata_cache.py" \
+    "$HF_CACHE_GCS/$HF_MODEL_DIR" "$HF_ROOT/hub/$HF_MODEL_DIR"
+  remote "$rank" "$command" &
+  metadata_pids+=("$!")
+done
+
+failed=0
+for pid in "${metadata_pids[@]}"; do
+  wait "$pid" || failed=1
+done
+if (( failed )); then
+  echo "v4-64 trainer HF metadata restaging failed" >&2
+  exit 1
+fi
+
 echo "v4-64 role caches reconciled and trainer checkpoints verified"

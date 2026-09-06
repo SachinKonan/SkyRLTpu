@@ -335,6 +335,18 @@ def test_v4_64_launcher_reconciles_roles_before_cell_worker():
     assert "*_.gstmp" in host_reconcile
 
 
+def test_v4_64_reconciler_restages_hf_metadata_after_orbax():
+    repo = Path(__file__).resolve().parents[2]
+    reconcile = (
+        repo / "tpu/swarm/reconcile_v4_64_role_caches.sh"
+    ).read_text()
+
+    orbax_stage = reconcile.index("ensure_orbax_ckpt.sh")
+    metadata_restage = reconcile.rindex("stage_hf_metadata_cache.py")
+    assert orbax_stage < metadata_restage
+    assert "v4-64 trainer HF metadata restaging failed" in reconcile
+
+
 def test_v4_64_host_reconcile_uses_runtime_compatible_awk(tmp_path):
     repo = Path(__file__).resolve().parents[2]
     fake_bin = tmp_path / "bin"
