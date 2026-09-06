@@ -167,6 +167,12 @@ restart_vllm_worker() {
      bash \"\$HOME/start_vllm_tpu_bootstrap.sh\"" || return 1
   for ((attempt = 1; attempt <= VLLM_RESTART_READY_ATTEMPTS; attempt++)); do
     if vllm_worker_ready "$worker" "$ip"; then
+      # Health checks cover the base engine, not the sampler adapter lost on
+      # restart. Reload from this host's completed upload before declaring it ready.
+      timeout "$((VLLM_ENGINES_PER_HOST * 1260))" ssh "${SSHO[@]}" "$REMOTE_USER@$ip" \
+        "python3 - --port '$VLLM_PORT' --engines '$VLLM_ENGINES_PER_HOST' \
+         --lora-dir '${VLLM_LOCAL_LORA_DIR:-}'" \
+        < "$SCRIPT_DIR/restore_vllm_adapters.py" || return 1
       echo "in-place vLLM restart recovered worker=$worker after $attempt readiness checks"
       return 0
     fi
