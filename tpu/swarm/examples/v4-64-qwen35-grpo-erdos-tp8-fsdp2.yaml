@@ -20,8 +20,8 @@ envs:
   ZONE: us-central2-b
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v37.tar.gz
-  TPUSWARM_BUNDLE_ID: v37-qwen35-v4-64-tp8-fsdp2-r32-s22528-b45056-clean-retry
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v38.tar.gz
+  TPUSWARM_BUNDLE_ID: v38-qwen35-v4-64-tp8-fsdp2-r32-s22528-b45056-clean-retry
 
   # Parallel GRPO arm: same workload as the TP4/FSDP4 run, with more tensor
   # parallelism and full rematerialization on the 16-chip trainer half.
