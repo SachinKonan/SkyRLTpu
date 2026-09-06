@@ -353,15 +353,17 @@ def test_v4_64_launcher_reconciles_roles_before_cell_worker():
     wrapper = (repo / "tpu/swarm/run_qwen35_v4_64_grpo.sh").read_text()
 
     reconcile = wrapper.index("reconcile_v4_64_role_caches.sh")
+    bundle_barrier = wrapper.index("bundle generation $bundle_generation ready on all eight hosts")
     bringup = wrapper.index("tpu/jobman/cell_worker.sh")
     monitor = wrapper.index("tpu/jobman/cell_monitor.sh")
-    assert reconcile < bringup < monitor
+    assert bundle_barrier < reconcile < bringup < monitor
     assert "V4_64_TOPOLOGY_FINGERPRINT" in wrapper
     assert "reusing cached v4-64 topology" in wrapper
     assert 'REPO=$(readlink -f "${SKYRL_REPO_DIR:-$PWD}")' in wrapper
     assert 'export TPUSWARM_BUNDLE_ID=' in wrapper
     assert "cleanup_v4_64_worker.sh" in wrapper
     assert "requesting SkyPilot recovery" in wrapper
+    assert 'test -r \\"\\$target/tpu/swarm/cleanup_v4_64_worker.sh\\"' in wrapper
     assert 'exit "${SETUP_RETRY_EXIT_CODE:-33}"' in wrapper
     assert 'monitor_rc="${RUNTIME_RETRY_EXIT_CODE:-34}"' in wrapper
 

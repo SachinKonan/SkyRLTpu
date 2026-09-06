@@ -35,6 +35,37 @@ REPO=$(readlink -f "${SKYRL_REPO_DIR:-$PWD}")
 export SKYRL_REPO_DIR="$REPO"
 export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-$(basename "$REPO")}" # Runtime generation identity.
 
+# SkyPilot starts the run command independently on all eight TPU VMs. A warm
+# head can reach this wrapper while a cold rank is still downloading/extracting
+# the bundle; cross-host cleanup then fails because its script is not present
+# yet. Require every rank to expose this exact generation before touching any
+# process or cache on the slice.
+bundle_generation=$(basename "$REPO")
+IFS=',' read -r -a bundle_ips <<< "$JOBMAN_TPU_INTERNAL_IPS"
+for ip in "${bundle_ips[@]}"; do
+  ready=0
+  for _attempt in $(seq 1 "${BUNDLE_READY_ATTEMPTS:-180}"); do
+    observed=$(timeout 30 ssh -F /dev/null -i "$SSH_KEY_FILE" \
+      -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 \
+      "$REMOTE_USER@$ip" \
+      "target=\$(readlink -f '$SKYRL_REPO_DIR' 2>/dev/null); \
+       test \"\$target\" = '$REPO' && \
+       test -r \"\$target/tpu/swarm/cleanup_v4_64_worker.sh\" && \
+       printf '%s' '$bundle_generation'" 2>/dev/null || true)
+    if [[ "$observed" == "$bundle_generation" ]]; then
+      ready=1
+      break
+    fi
+    sleep "${BUNDLE_READY_INTERVAL_SECONDS:-5}"
+  done
+  if [[ "$ready" != "1" ]]; then
+    echo "bundle generation $bundle_generation did not become ready on $ip; requesting recovery" >&2
+    exit "${SETUP_RETRY_EXIT_CODE:-33}"
+  fi
+done
+echo "bundle generation $bundle_generation ready on all eight hosts"
+
 # A SkyPilot recovery starts a new internal job on an existing pool worker.
 # Stop the previous attempt's client before any backend is reconciled; otherwise
 # it can continue sending requests while vLLM/trainer are being replaced.
