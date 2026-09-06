@@ -1,9 +1,9 @@
-# Ten independent v4-32 Spot slices for trainer and inference smoke tests.
+# Four independent v4-32 Spot slices for trainer and inference smoke tests.
 # Each pool worker is one four-VM, 16-chip TPU slice in us-central2-b.
 pool:
-  workers: 10
-  min_workers: 10
-  max_workers: 10
+  workers: 4
+  min_workers: 4
+  max_workers: 4
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200
