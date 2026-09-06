@@ -1,9 +1,9 @@
-# Seven independent v4-64 Spot slices for mixed Qwen training and inference.
+# Ten independent v4-64 Spot slices for mixed-model training and inference.
 # Each pool worker is one eight-VM, 32-chip TPU slice in us-central2-b.
 pool:
-  workers: 7
-  min_workers: 7
-  max_workers: 7
+  workers: 10
+  min_workers: 10
+  max_workers: 10
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200
