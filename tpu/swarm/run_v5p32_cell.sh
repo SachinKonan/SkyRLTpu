@@ -24,6 +24,14 @@ export SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/ray_bootstrap_key.pem}"
 mkdir -p "$HOME/.ssh" "$HOME/skyrl-runs" "$HOME/skyrl-logs"
 chmod 700 "$HOME/.ssh"
 
+# Pool workers are reused across jobs and models. Before anything else, on
+# EVERY rank, drop the other models' HF/orbax caches and superseded bundle
+# generations (a gemma cell on an ex-muse head could not fit its 44 GB orbax
+# restore next to 40 GB of muse orbax: jobs 200/212, 2026-09-05). Best effort:
+# a failure here must not take the cell down with it.
+bash "${SKYRL_REPO_DIR:-$PWD}/tpu/swarm/reconcile_v5p32_worker.sh" \
+  || echo "worker reconcile failed (continuing)" >&2
+
 # SkyPilot invokes a multi-node run command on every TPU VM.  The cell is
 # deliberately head-driven and reaches the other ranks over the internal
 # network, so only rank 0 does anything here.

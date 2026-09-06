@@ -127,3 +127,18 @@ def test_vllm_passes_multimodal_limits_as_one_typed_argument():
         in source
     )
     assert r'"\${limit_mm_args[@]}"' in source
+
+
+def test_multi_engine_runner_defines_its_log_suffix_before_the_log_setup():
+    # feca01c4 moved the runner's log/history setup to the top of the template,
+    # ahead of the engine env block that defined engine_log_suffix. With set -u
+    # the two-engines-per-host runner (muse) died on line 4 before any log
+    # existed; every muse cell from bundle v5 on failed bring-up (jobs 241/254).
+    source = (REPO / "tpu/start_vllm_tpu.sh").read_text()
+    template = source.index('cat > "$runner_script" <<EOF')
+    define = source.index('engine_log_suffix=""\nif [ "\\${VLLM_ENGINE_INDEX:-0}" != "0" ]', template)
+    log_path = source.index('runner_log_path="\\$HOME/skyrl-logs/${runner_log_name}"', template)
+    env_block = source.index("${engine_env_block}", template)
+    assert template < define < log_path < env_block
+    # the multi-engine log name really does depend on that variable
+    assert "runner_log_name='vllm-tpu${engine_log_suffix}.log'" in source

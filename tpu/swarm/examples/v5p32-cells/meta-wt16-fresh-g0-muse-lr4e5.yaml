@@ -1,6 +1,6 @@
-name: meta-wt16-fresh-g0-qwen
+name: meta-wt16-fresh-g0-muse-lr4e5
 
-# Meta-tree arm gen-0, qwen member (qwen-best seed), start from the 48-state seed.
+# Meta-tree arm gen-0, muse member (qwen-best seed), resume: 8 rows banked.
 # One complete four-host tpu-v5p-32 slice from pool tpuswarm-v5p32-east5a-erdos:
 # rank 0 = trainer + client + grader Ray head, ranks 1-3 = vLLM engines
 # (cell_worker.sh per-model defaults; CELL prefix selects the model).
@@ -27,22 +27,12 @@ envs:
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
   TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v16.tar.gz
-  # The identity string must change with the trainer config: a relaunch that
-  # lands on the same worker otherwise reuses the running trainer (same bundle
-  # ID) and env changes like TUNIX_FREE_BASE_STATE never take effect (job 192).
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-meta-qwen-fbs1
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-m-meta-lr4e5
 
-  # cell_worker.sh defaults qwen to gs://.../hf-cache/models--Qwen--Qwen3.5-27B,
-  # which holds only 4 GB of metadata (jobman engines fetched the rest from
-  # HuggingFace). Pool workers are offline: use the complete 55.6 GB snapshot.
-  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1
-  # Trainer fb program OOMs at warmup on this runtime (job 191, 2026-09-05), as
-  # gemma did; free the duplicate base-weight copy (RUNBOOK 4.4, memory-only).
-  TUNIX_FREE_BASE_STATE: "1"
-  CELL: meta-qwen
-  RUN_DIR_NAME: meta-wt16-fresh-g0-qwen
-  EXPERIMENT_NAME: meta-wt16-fresh-g0-qwen
-  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/meta-wt16-fresh-g0-qwen
+  CELL: m-meta4
+  RUN_DIR_NAME: meta-wt16-fresh-g0-muse-lr4e5
+  EXPERIMENT_NAME: meta-wt16-fresh-g0-muse-lr4e5
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/meta-wt16-fresh-g0-muse-lr4e5
   # Every rank installs the same bundle generation in `run`, so the head must
   # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
   CELL_START_VLLM: "1"
@@ -54,7 +44,7 @@ envs:
   GROUPS_PER_BATCH: "16"
   GROUP_SIZE: "32"
   NUM_EPOCHS: "15"
-  LEARNING_RATE: "1.5e-4"
+  LEARNING_RATE: "4e-5"
   LORA_RANK: "32"
   KL_PENALTY_COEF: "0"
   TTD_RESTART_RATIO: "0"

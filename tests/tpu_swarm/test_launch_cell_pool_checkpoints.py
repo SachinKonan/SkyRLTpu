@@ -160,3 +160,22 @@ def test_tunix_checkpoint_write_through_runs_on_multihost_owner():
     assert 'self._mirror_checkpoint(output_path, model_id, "sampler_weights")' in backend
     assert "request_data.sampling_session_seq_id is None or bool(checkpoint_mirror)" in engine
     assert '"checkpoint_mirror_gcs": "${SKYRL_CKPT_GCS}"' in launcher
+
+
+def test_launch_cell_carries_a_foreign_init_state_on_pool_workers():
+    # Meta weights-carry: the init state lives under another run's model id, so
+    # nothing in this run's checkpoints.jsonl restores or registers it, and pool
+    # hosts have no gcsfuse. The launcher must restore + register the named
+    # state before the client starts, then pass it as TTD_INIT_STATE_PATH_<TAG>.
+    source = (REPO / "tpu/launch_cell.sh").read_text()
+    own_rereg = source.index('_rereg "$_jsonl"')
+    carry = source.index('if [ -n "${META_INIT_STATE_PATH:-}" ]; then', own_rereg)
+    restore = source.index('_restore_ckpts "$_carry_jsonl"', carry)
+    rereg = source.index('_rereg "$_carry_jsonl"', restore)
+    env = source.index('TTD_INIT_STATE_PATH_${_carry_tag}=$META_INIT_STATE_PATH', rereg)
+    client = source.index('tmux new-session -d -s "$SESSION"', env)
+    assert own_rereg < carry < restore < rereg < env < client
+    # the tag is the member metric prefix (member_gemma -> GEMMA), matching ensemble.py
+    assert '${MEMBER_DIR#member_}' in source[carry:client]
+    # the carried path must reach the client through the EXTRA_TTD_ENV passthrough
+    assert '${EXTRA_TTD_ENV:-}' in source[client:client + 6000]

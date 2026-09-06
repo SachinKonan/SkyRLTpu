@@ -138,7 +138,7 @@ ROUTE_PREFIX=0
 UNSET_PLUGINS=0
 BATCHED_RPA_KERNEL=0
 JAX_RAGGED_CONV1D=0
-VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
+VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.90"
 LIMIT_MM_PER_PROMPT=""
 HF_OFFLINE=0
 case "$CELL" in
@@ -148,8 +148,14 @@ case "$CELL" in
     VLLM_LEN=16384
     # Cells use Gemma for text only. Keep prefix caching enabled, use the
     # default RPA kernel, and avoid allocating or chunking empty MM inputs.
-    VLLM_XARGS='--max-num-batched-tokens 8192 --disable-chunked-mm-input --gpu-memory-utilization 0.85'
+    VLLM_XARGS='--max-num-batched-tokens 8192 --disable-chunked-mm-input --gpu-memory-utilization 0.90'
     LIMIT_MM_PER_PROMPT='{"image":0,"audio":0,"video":0}'
+    # gemma-4-31B at TP=4 reports a 303k-token KV cache ("Maximum concurrency
+    # for 16,384 tokens per request: 18.50x"): ~30 resident sequences at our
+    # ~8.6k-token generations. The 128 default admitted 128, pinned KV at 100%
+    # with 100+ waiting, and paid preemption recompute (gemma cells on v5p-32,
+    # 2026-09-05). 32 is what fits; the scheduler stops thrashing.
+    MAX_NUM_SEQS=32
     XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k"
     JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-gemma4-10k"
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"
@@ -244,7 +250,7 @@ case "$CELL" in
     # anyone tries this again. Re-enable with ROUTE_PREFIX=1 only with a
     # windowed hit-rate measurement to prove it.
     ROUTE_PREFIX=0
-    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.85"
+    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.90"
     TP_SIZE=2; ENGINES_PER_HOST=2
     # 64/engine x 6 engines = 384 pooled scheduler slots, under the measured
     # 222-sequence KV capacity per host pair and matched to the RL burst:
