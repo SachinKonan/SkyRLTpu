@@ -154,7 +154,7 @@ def test_v4_64_gemma4_comparison_contract():
         "/jax-compile-cache-v4-gemma4-tp8-fsdp2-r32-s22528-b45056-v1"
     )
     assert env["TPUSWARM_SKYRL_BUNDLE_URL"].endswith(
-        "/tpuswarm-skyrl-v4-mixed-v37.tar.gz"
+        "/tpuswarm-skyrl-v4-mixed-v38.tar.gz"
     )
     assert 'test -r "$staging/tpu/dedupe_hf_snapshot.sh"' in config["run"]
 
@@ -191,7 +191,7 @@ def test_v4_64_muse_comparison_contract():
         "/vllm-xla-cache-v4-muse-glimmer-tp4-s22528-chunk4096-sweep-v1"
     )
     assert env["TPUSWARM_SKYRL_BUNDLE_URL"].endswith(
-        "/tpuswarm-skyrl-v4-mixed-v37.tar.gz"
+        "/tpuswarm-skyrl-v4-mixed-v38.tar.gz"
     )
 
 
@@ -573,8 +573,8 @@ def test_v4_64_tasks_use_checkpoint_durable_bundle():
 
     for task_path in task_paths:
         source = task_path.read_text()
-        assert "tpuswarm-skyrl-v4-mixed-v37.tar.gz" in source
-        assert "TPUSWARM_BUNDLE_ID: v37-" in source
+        assert "tpuswarm-skyrl-v4-mixed-v38.tar.gz" in source
+        assert "TPUSWARM_BUNDLE_ID: v38-" in source
         assert 'VLLM_INPLACE_RESTART_LIMIT: "2"' in source
         assert (
             "SKYRL_CKPT_GCS: "
