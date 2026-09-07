@@ -186,7 +186,7 @@ Timeline from QR creation (`19:58:55Z`):
 |---|---|
 | 15m22s | QR **ACTIVE** (922 s waiting for spot capacity) |
 | 15m40s | ssh up; host provisioned (uv 0.12.3, gcsfuse mounted) |
-| 17m51s | 55.5 GiB of weights on local SSD — `gcloud storage rsync`, **1m20s** |
+| 17m51s | 55.5 GiB of weights on local SSD via the compatible GCS rsync path, **1m20s** |
 | 24m13s | venv built; **ARCH-REGISTERED-OK**, transformers 5.16.0.dev0, vllm 0.23.0 |
 | 27m43s | **ENGINE LIVE** — answered a real completion, not just `/health` |
 | 29m00s | all phases done, teardown |

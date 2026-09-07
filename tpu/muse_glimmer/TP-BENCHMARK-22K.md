@@ -77,8 +77,8 @@ number — see below — just smaller, because everything else here is warmed.)
 1. **Prefill was not measured cold.** The 3847-token and (synthetic
    concatenation) 7693-token probes returned ~0.03 s medians — that is vLLM's
    **prefix cache** answering, primed by the probe's own warm runs. Cold
-   prefill needs `--no-enable-prefix-caching` or per-repeat unique prompts;
-   next slice. (The decode ladder is unaffected: generated-token KV is
+   prefill must use per-repeat unique prompts while keeping prefix caching
+   enabled; next slice. (The decode ladder is unaffected: generated-token KV is
    per-sequence regardless of shared prompt blocks, and differencing removes
    the prefill term entirely.)
 2. Requests cycle 10 unique prompts, so above c=10 the prompt KV is shared via
