@@ -226,7 +226,7 @@ fi
 
 set +e
 timeout --foreground --signal=TERM --kill-after=60s "${SMOKE_TIMEOUT_SECONDS}s" \
-  "$REPO/.venv/bin/python" "$REPO/tpu/v6e_tunix_smoke.py" "${SMOKE_ARGS[@]}" \
+  "$REPO/.venv/bin/python" "$REPO/${TUNIX_SMOKE_SCRIPT:-tpu/v6e_tunix_smoke.py}" "${SMOKE_ARGS[@]}" \
   2>&1 | tee "$HOME/v6e-tunix-smoke.log"
 SMOKE_RC=${PIPESTATUS[0]}
 set -e

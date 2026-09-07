@@ -1,0 +1,38 @@
+{
+  "verified_at_utc": "2026-09-07T01:59:25+00:00",
+  "job_id": 326,
+  "job_status": "SUCCEEDED",
+  "job_completed_at_utc": "2026-09-07T01:56:34.820351+00:00",
+  "result_gcs": "gs://sk7524-tinker-tpu-us-central2/gradient-conflict/20260906-qwen-v4-64-v1/result.json",
+  "input_sha256": "2004a9dcccc1a69389e30fa4b52fab00edb24c60284e7cdef180b137d1a36d55",
+  "result_sha256": "d6b7593931ac141898facbf9b84c04a94fed94eb185e40433bc15d914bdb1607",
+  "groups_completed": 6,
+  "samples": 192,
+  "selected_samples_excluded": 0,
+  "accelerator": "tpu-v4-64",
+  "train_workers": "0,2,4,5",
+  "mesh": {
+    "tp": 8,
+    "fsdp": 2
+  },
+  "parameter_sha256": "9e6aff9c4637970f4167465b9df2a4f07fcce67293d043027a7a4e9210890dd9",
+  "live_exports": 25,
+  "durable_gradient_partitions": 24,
+  "total_exported_sample_contributions_including_preflight_and_reconstruction": 226,
+  "reconstruction_status": "passed",
+  "reconstruction_relative_error": 0.005445141757575472,
+  "geometry_and_per_leaf_totals": "passed",
+  "cache_counts_and_live_metadata_match": "passed",
+  "negative_cosine_groups": 6,
+  "median_cosine": -0.3401550231217216,
+  "cosine_range": [
+    -0.48157524020627934,
+    -0.2807765653486433
+  ],
+  "invalid_to_valid_norm_range": [
+    0.5716211502938306,
+    1.4340548675505205
+  ],
+  "combined_direction_adverse_valid_groups": 0,
+  "combined_direction_adverse_invalid_groups": 0
+}
