@@ -2,7 +2,7 @@
 
 Status as of **2026-09-07 22:36Z**. Pool `tpuswarm-v5p32-east5a-erdos`, 19 READY
 workers, all in use (18 ours + the other session's job 384); 29 more provisioning
-on spot. One of ours (404) is waiting for a worker.
+on spot. All of ours are placed.
 
 Every cell is one tpu-v5p-32 slice: rank 0 runs the Tinker trainer, the TTD client
 and the grader Ray head; ranks 1–3 serve vLLM. All cells use 16 groups × 32
@@ -112,7 +112,7 @@ rule was rejected on 2026-09-07; 331 and 336 still run under it).
 
 | Cell | Job | Model | Objective | Weights | Step | Best | Val | Tok | State |
 |---|---|---|---|---|---|---|---|---|---|
-| meta-wt16-carry-g0-muse | 362 | muse | GRPO | carried from muse GRPO step 9 | 14/15 | 0.380858717 | 1.00 | 4243 | last step running, best gen-1 arm |
+| meta-wt16-carry-g0-muse | 362 | muse | GRPO | carried from muse GRPO step 9 | 15/15 | 0.380858715 | 0.99 | 4090 | finished 22:43Z, best gen-1 arm |
 | meta-wt16-fresh-g0-qwen | 363 | qwen | GRPO | fresh | 14/15 | 0.380858844 | 0.97 | 11516 | finished 16:14Z: flatline stop (5 zero gains), flat since step 7. A qwen CARRY on its own tree was not run (user: reuses the experiment); it exists only as the Ray v2 mix control |
 | meta-wt16-carry-g0-gemma-ttd | 331 | gemma | TTD | carried from gemma TTD (8×32 run) | 10/15 | 0.380858785 | 0.77 | 5997 | running, old rule, ~1e-9/step |
 | meta-wt16-fresh-g0-gemma-ttd | 336 | gemma | TTD | fresh | 14/15 | 0.380858858 | 0.94 | 5992 | last step running |
@@ -135,7 +135,7 @@ nothing banked; the user preferred model mixing.
 |---|---|---|---|
 | qwen (wt16, best 0.3808618) | fresh only, 363 done | carried, 331 | carried, 362 |
 | gemma (stageB2-g-pw-n s15, 0.380865312) | **403**: step 1 0.380864726, val 0.75 | cancelled (397) | **405**: step 1 0.380865312 (= seed), val 0.75 |
-| muse (stageB-m-grpo-n s15, 0.380866934) | **402**: step 1 0.380866919, val 0.80 | **404**: waiting for a worker | cancelled (395) |
+| muse (stageB-m-grpo-n s15, 0.380866934) | **402**: step 1 0.380866919, val 0.80 | **410** (404 failed: head disk 54 GB < 56 GB needed; pruned 15 GB of old tarballs, relaunched 23:10Z) | cancelled (395) |
 
 First-step reading: qwen improved the gemma tree by 5.9e-7 in one step, barely
 moved the muse tree (1.5e-8), and muse did nothing to the gemma tree. Carried
@@ -176,7 +176,7 @@ uncommitted because those files also carry the other session's WIP.
 | Rank | Value | Cell |
 |---|---|---|
 | 1 | 0.380857842 | stageC-pwc-n (qwen centered, gen 0) @10, running |
-| 2 | 0.380858717 | meta-wt16-carry-g0-muse @14 |
+| 2 | 0.380858715 | meta-wt16-carry-g0-muse @15 (final) |
 | 3 | 0.380858785 | meta-wt16-carry-g0-gemma-ttd @10 |
 | 4 | 0.380858844 | meta-wt16-fresh-g0-qwen @7 (final) |
 | 5 | 0.380858858 | meta-wt16-fresh-g0-gemma-ttd @12 |
