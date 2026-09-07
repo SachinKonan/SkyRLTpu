@@ -287,7 +287,13 @@ class Ingress:
 
 def deploy(config, prepared, catalog, head):
     serving = {ip: info for ip, info in prepared.items() if info["role"] == "inference"}
-    engines = Engine.options(num_replicas=len(serving)).bind(config.to_dict(), serving, catalog, head)
+    options = {"num_replicas": len(serving)}
+    if len(serving) == 1:
+        # Keep single-host diagnostics on their prepared host even when Ray
+        # detects additional TPU devices elsewhere on the reserved slice.
+        ip = next(iter(serving))
+        options["ray_actor_options"] = {"num_cpus": 8, "resources": {"TPU": 4, f"node:{ip}": 0.01}}
+    engines = Engine.options(**options).bind(config.to_dict(), serving, catalog, head)
     ingress = Ingress.options(ray_actor_options={"num_cpus": 1, "resources": {f"node:{head}": 0.01}})
     serve.start(proxy_location="HeadOnly", http_options={"host": "0.0.0.0", "port": config.ports.inference})
     return serve.run_many([serve.RunTarget(

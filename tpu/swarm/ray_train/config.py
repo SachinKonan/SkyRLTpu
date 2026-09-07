@@ -56,11 +56,20 @@ class Trainer:
     maxtext_model: str = "qwen3.5-27b"
     maxtext_spec: str = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939977ac0ab79a4e64d21730936f253567"
     lora_rank: int = 32
+    # Largest adapter rank the trainer backend accepts; 0 means lora_rank.
+    # The learnable carried/fresh LoRA mix (skyrl.backends.lora_mix) stores
+    # both halves in one rank-2r adapter, so it needs 2 x lora_rank here and
+    # on the inference side.
+    max_lora_rank: int = 0
     sequence_length: int = 22528
     token_budget: int = 45056
     flce_tile: int = 512
     remat: str = "full"
     logical_kv_heads: int = 8
+
+    @property
+    def effective_max_lora_rank(self):
+        return self.max_lora_rank or self.lora_rank
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,7 @@ class Inference:
     max_lora_rank: int = 32
     request_timeout: int = 21600
     restart_limit: int = 3
+    max_loras: int = 1
 
 
 @dataclass(frozen=True)
@@ -88,6 +98,7 @@ class Config:
     model: str = "Qwen/Qwen3.5-27B"
     root: str = "~/.cache/skyrl-ray"
     inference_only: bool = False
+    inference_only_ranks: list[int] | None = None
     ports: Ports = field(default_factory=Ports)
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
@@ -95,7 +106,13 @@ class Config:
     log_seconds: int = 30
     setup_timeout: int = 7200
     ready_timeout: int = 3600
+    checkpoint_cleanup_timeout: int = 600
+    client_context_window: int = 18432
+    client_phase1_max_tokens: int = 13824
     client_env: dict[str, str] = field(default_factory=dict)
+    # Extra environment for the trainer (Tinker API server) process only,
+    # e.g. TUNIX_LORA_MIX_GAMMA. Applied after the launcher's own settings.
+    trainer_env: dict[str, str] = field(default_factory=dict)
     retired_task_ids: list[str] = field(default_factory=list)
     retired_processes: dict = field(default_factory=dict)
 
@@ -117,6 +134,14 @@ class Config:
         return asdict(self)
 
     def validate(self):
+        if self.inference_only_ranks is not None:
+            ranks = self.inference_only_ranks
+            if (not self.inference_only or not isinstance(ranks, list) or not ranks
+                    or any(type(r) is not int or not 0 <= r < self.hosts for r in ranks)
+                    or len(set(ranks)) != len(ranks)):
+                raise ValueError("inference_only_ranks requires unique valid ranks in inference-only mode")
+        if type(self.checkpoint_cleanup_timeout) is not int or self.checkpoint_cleanup_timeout < 0:
+            raise ValueError("checkpoint_cleanup_timeout must be a nonnegative integer (0 disables)")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}", self.run_id):
             raise ValueError("run_id must be a safe unique name")
         expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4}
@@ -136,10 +161,19 @@ class Config:
             raise ValueError("require independent four-chip engines and a memory reserve")
         if self.inference.backend != "ray_serve":
             raise ValueError("native vLLM DP is not validated; no silent backend substitution")
+        if type(self.inference.max_loras) is not int or self.inference.max_loras < 1:
+            raise ValueError("inference.max_loras must be a positive integer")
         if self.inference.max_sequences < 1 or self.inference.restart_limit < 0:
             raise ValueError("invalid inference limits")
-        if self.trainer.lora_rank > self.inference.max_lora_rank:
+        if self.trainer.max_lora_rank < 0 or 0 < self.trainer.max_lora_rank < self.trainer.lora_rank:
+            raise ValueError("trainer max_lora_rank must be 0 (= lora_rank) or >= lora_rank")
+        if self.trainer.effective_max_lora_rank > self.inference.max_lora_rank:
             raise ValueError("inference cannot load the requested trainer LoRA rank")
+        if self.trainer_env.get("TUNIX_LORA_MIX_GAMMA") and (
+            self.trainer.effective_max_lora_rank < 2 * self.trainer.lora_rank
+        ):
+            raise ValueError("the LoRA mix stores two rank-r halves: set trainer.max_lora_rank and "
+                             "inference.max_lora_rank to at least 2 x lora_rank")
         if self.trainer.sequence_length > self.inference.max_model_length:
             raise ValueError("inference context must cover trainer context")
         if min(self.cache.trainer_gib, self.cache.inference_gib) < 64 or self.cache.reserve_gib < 128:
@@ -164,6 +198,20 @@ class Config:
             raise ValueError("ports overlap worker range or existing workload/SkyPilot Ray")
         if any(str(k) != k or str(v) != v for k, v in self.client_env.items()):
             raise ValueError("client environment must contain strings")
+        if any(str(k) != k or str(v) != v for k, v in self.trainer_env.items()):
+            raise ValueError("trainer environment must contain strings")
+        if not self.inference_only:
+            budget = {key: int(value) for key, value in self.client_sampling_environment().items()}
+            context = budget["TTD_M0_CONTEXT_WINDOW"]
+            phase1 = budget["TTD_M0_PHASE1_MAX_TOKENS"]
+            train_max = budget["TTD_M0_TRAIN_MAX_SEQ"]
+            if not 0 < context <= train_max <= self.trainer.sequence_length:
+                raise ValueError("client context must fit the client training limit and trainer sequence length")
+            if not 0 < budget["CONTEXT_WINDOW"] <= self.inference.max_model_length:
+                raise ValueError("global client context must fit inference context")
+            # The two-phase completer adds a closing cue and a 50-token buffer.
+            if phase1 <= 0 or context - phase1 < 128:
+                raise ValueError("phase-one cap must reserve at least 128 tokens for the answer cue and buffer")
         if not isinstance(self.retired_task_ids, list) or any(
             not isinstance(task, str) or not re.fullmatch(r"sky-managed-[A-Za-z0-9_.-]+_\d+-\d+", task)
             for task in self.retired_task_ids
@@ -182,7 +230,18 @@ class Config:
 
     @property
     def inference_hosts(self):
+        if self.inference_only_ranks is not None:
+            return len(self.inference_only_ranks)
         return self.hosts - self.trainer.hosts
+
+    def client_sampling_environment(self):
+        defaults = {
+            "CONTEXT_WINDOW": str(self.client_context_window),
+            "TTD_M0_CONTEXT_WINDOW": str(self.client_context_window),
+            "TTD_M0_TRAIN_MAX_SEQ": str(self.client_context_window),
+            "TTD_M0_PHASE1_MAX_TOKENS": str(self.client_phase1_max_tokens),
+        }
+        return {key: self.client_env.get(key, value) for key, value in defaults.items()}
 
     @property
     def run_gcs(self):

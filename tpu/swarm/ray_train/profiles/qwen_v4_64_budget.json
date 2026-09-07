@@ -1,0 +1,37 @@
+{
+  "run_id": "qwen-ray-v4-64-budget-003",
+  "accelerator": "tpu-v4-64",
+  "hosts": 8,
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v42.tar.gz",
+  "base_bundle_sha256": "a048e63fdcf870d5ed7b56810ef276cd966fb33281c1924fc06c9c7406645c32",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-v4-qwen35-tp8-fsdp2-r32-s22528-b45056-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq16-mem80-chunk4096-ray-v1",
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq16-mem87-chunk4096-ray-v1",
+    "trainer_gib": 128,
+    "inference_gib": 96,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "trainer": {
+    "hosts": 4,
+    "tp": 8,
+    "fsdp": 2,
+    "process_bounds": "1,1,4",
+    "remat": "full"
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "max_sequences": 16,
+    "memory_utilization": 0.8,
+    "restart_limit": 3
+  },
+  "client_context_window": 18432,
+  "client_phase1_max_tokens": 13824
+}

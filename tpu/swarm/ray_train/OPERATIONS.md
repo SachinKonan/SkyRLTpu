@@ -28,7 +28,18 @@ not submit that profile for the v4 training comparison. The v4-64 topology selec
 used by the eight-host profile. The four-host profiles isolate the trainer
 to rank 0 and inference to ranks 1-3.
 
-Defaults: full rematerialization, LoRA rank 32, sequence length 22528,
+The corrected `qwen_v5p_32_budget.json` and `qwen_v4_64_budget.json` profiles
+use fresh run IDs with 13824 prompt-plus-thinking tokens and 18432 total
+client tokens. This reserves 4608 tokens before the closing cue and buffer.
+The earlier Ray client hardcoded phase one to 20480 even after the v5p client
+context was reduced to 18432; job 370 therefore skipped phase-two answers on
+budget exhaustion. Do not use that run as an equivalent-budget comparison.
+Effective client environment overrides are validated before launch; model and
+compilation caches are reused, but old LoRA/optimizer/PUCT state is not restored
+into the corrected run IDs. The v4 trainer retains its 22528 uniform compile
+shape while client trajectories are capped at 18432.
+
+Defaults: full rematerialization, LoRA rank 32, trainer sequence length 22528,
 16 groups of 32 samples, learning rate 1.5e-4, 15 epochs, grader timeout 1100s.
 The v5p-32 trainer overrides this with the proven 18432-token uniform rows
 and a 73728-token budget (4 x 18432 for FSDP4). Its client context and training

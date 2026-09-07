@@ -104,6 +104,10 @@ class Host:
             if any(arg.endswith("/vllm_tpu_server.py") or arg.startswith("VLLM::") for arg in args):
                 raise RuntimeError(f"host {self.rank} has an existing inference PID {process.pid}")
         self.clear_previous_adapter_exports()
+        from .checkpoint_retention import reclaim_checkpoints
+        reclaim_checkpoints(self.root, self.config.run_id, self.gcs, self.log,
+                            timeout=self.config.checkpoint_cleanup_timeout,
+                            stopping=self.stopping.is_set)
         if shutil.disk_usage(self.root).free < 10 * 1024**3:
             raise RuntimeError("need 10 GiB disk for isolated code/envs; refusing unrelated cache deletion")
         self.phase = "preflight_complete"

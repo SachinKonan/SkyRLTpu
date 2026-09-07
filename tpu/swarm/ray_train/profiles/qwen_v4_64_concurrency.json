@@ -1,0 +1,29 @@
+{
+  "run_id": "qwen-ray-v4-64-concurrency-001",
+  "accelerator": "tpu-v4-64",
+  "hosts": 8,
+  "inference_only": true,
+  "inference_only_ranks": [0],
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-v4-concurrency-diag-20260907-01.tar.gz",
+  "base_bundle_sha256": "6c953d89b93d9fa4fcf8f1065077b65f8042b998b1fe5112d8d0641988bd168a",
+  "trainer": {"hosts": 0},
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/maxtext-cache-qwen35-v1",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-unused-inference-only",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq16-mem80-chunk4096-ray-v1",
+    "inference_gib": 96,
+    "trainer_gib": 96,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "inference": {
+    "tp": 4,
+    "max_sequences": 16,
+    "memory_utilization": 0.8,
+    "restart_limit": 3
+  }
+}

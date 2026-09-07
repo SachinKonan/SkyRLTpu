@@ -182,3 +182,51 @@ def test_v4_64_trainer_shape_is_unchanged():
     cfg = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64.json")
     assert (cfg.trainer.tp, cfg.trainer.fsdp) == (8, 2)
     assert (cfg.trainer.sequence_length, cfg.trainer.token_budget) == (22528, 45056)
+
+
+def _mix_config(**overrides):
+    raw = dict(run_id="ray-mix", accelerator="tpu-v5p-32", hosts=4,
+        bucket="gs://test", base_bundle="gs://test/base.tar.gz", base_bundle_sha256="a"*64,
+        cache=dict(hf="gs://test/hf", orbax="gs://test/orbax", trainer_compile="gs://test/train",
+                   inference_compile="gs://test/infer"),
+        trainer=dict(hosts=1, tp=1, fsdp=4, process_bounds="1,1,1", sequence_length=18432,
+                     token_budget=73728, max_lora_rank=64),
+        inference=dict(max_lora_rank=64),
+        client_context_window=18432, client_phase1_max_tokens=13824,
+        trainer_env={"TUNIX_LORA_MIX_GAMMA": "0.9", "TUNIX_LORA_MIX_GAMMA_LR": "0.02"})
+    raw.update(overrides)
+    return Config.from_dict(raw)
+
+
+def test_trainer_env_reaches_only_the_trainer_process():
+    cfg = _mix_config()
+    env = trainer_environment(cfg, ROOT, ROOT / "runs/ray-mix", IPS[:1], 0)
+    assert env["TUNIX_LORA_MIX_GAMMA"] == "0.9" and env["TUNIX_LORA_MIX_GAMMA_LR"] == "0.02"
+    assert env["TUNIX_ROW_SHARD"] == "4"  # launcher settings still present
+    client = client_environment(cfg, ROOT, IPS[0])
+    assert "TUNIX_LORA_MIX_GAMMA" not in client
+    assert "TUNIX_LORA_MIX_GAMMA" not in inference_environment(cfg, ROOT, ROOT / "runs/ray-mix")
+
+
+def test_trainer_max_lora_rank_defaults_to_lora_rank_and_covers_the_mix():
+    plain = config()
+    assert plain.trainer.effective_max_lora_rank == plain.trainer.lora_rank
+    assert trainer_backend_config(plain, ROOT, IPS[0], IPS[:4])["max_lora_rank"] == plain.trainer.lora_rank
+    mix = _mix_config()
+    assert trainer_backend_config(mix, ROOT, IPS[0], IPS[:1])["max_lora_rank"] == 64
+    assert "--max-lora-rank" in inference_command(mix, ROOT, ROOT / "src", ROOT / "snap", ROOT / "run")
+    idx = inference_command(mix, ROOT, ROOT / "src", ROOT / "snap", ROOT / "run").index("--max-lora-rank")
+    assert inference_command(mix, ROOT, ROOT / "src", ROOT / "snap", ROOT / "run")[idx + 1] == "64"
+
+
+def test_mix_requires_doubled_rank_on_both_sides():
+    with pytest.raises(ValueError, match="2 x lora_rank"):
+        _mix_config(trainer=dict(hosts=1, tp=1, fsdp=4, process_bounds="1,1,1", sequence_length=18432,
+                                 token_budget=73728, max_lora_rank=0), inference=dict(max_lora_rank=64))
+    with pytest.raises(ValueError, match="inference cannot load"):
+        _mix_config(inference=dict(max_lora_rank=32))
+    with pytest.raises(ValueError, match="max_lora_rank must be"):
+        _mix_config(trainer=dict(hosts=1, tp=1, fsdp=4, process_bounds="1,1,1", sequence_length=18432,
+                                 token_budget=73728, max_lora_rank=16), trainer_env={})
+    with pytest.raises(ValueError, match="trainer environment"):
+        _mix_config(trainer_env={"TUNIX_LORA_MIX_GAMMA": 0.9})

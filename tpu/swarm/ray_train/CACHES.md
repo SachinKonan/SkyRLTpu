@@ -55,6 +55,40 @@ again. LoRA/optimizer checkpoints, sampler state, and the client run directory
 use the separate run/checkpoint persistence paths; they are not compilation
 caches and must not depend on this mechanism.
 
+## Local Checkpoint Retention
+
+Downloaded base weights and compilation caches use tmpfs. Generated training
+checkpoint archives still use disk under `runs/RUN_ID/checkpoints`, with the
+trainer's synchronous, verified GCS mirror providing durability.
+
+`checkpoint_retention.py` reclaims old local checkpoint replicas during host
+preflight, before the 10 GiB free-disk check. Bootstrap records the exact run,
+managed task and checkpoint GCS prefix in `.checkpoint-owner.json`, and holds
+`.checkpoint-owner.lock` until services and final writebacks stop. Cleanup:
+
+- Excludes the current run, held leases, live task/namespace processes, and
+  processes whose ownership cannot be inspected safely.
+- Only considers executor-owned `checkpoints/**/*.tar.gz`. It rejects symlink
+  paths and hardlinked files. Unknown/legacy runs without ownership records are
+  preserved; it does not infer ownership from a directory name.
+- Verifies each candidate's size and checksum against the recorded GCS prefix,
+  rechecks remote generations after hashing, and checks local inode/timestamps
+  before unlinking. Missing, mismatched, changing or inaccessible copies stay.
+- Never deletes GCS objects, client/PUCT state, databases, model/compile caches,
+  or current-run checkpoints. Per-file audit events include GCS generation and
+  reclaimed bytes. Metadata errors are logged and skipped, not deletion authority.
+
+`checkpoint_cleanup_timeout` defaults to 600 seconds; `0` disables cleanup.
+Cancellation/time-budget checks stop further deletion. An outstanding GCS
+metadata call can take up to its existing 300-second timeout; preflight allows
+that additional time. If disk is still insufficient, the ordinary preflight
+refusal remains. This is startup retention, not eviction during active training;
+a single long-running job can still need a separate active-checkpoint policy.
+
+This behavior applies to newly built Ray v2 bundles on v4 and v5p. Existing
+immutable job bundles are not patched or restarted, and legacy run directories
+require an explicit ownership audit before any local checkpoint removal.
+
 ## CPU Tests
 
 Use an isolated Python 3.12 environment with `pytest`, `ray[serve]==2.58.0`,

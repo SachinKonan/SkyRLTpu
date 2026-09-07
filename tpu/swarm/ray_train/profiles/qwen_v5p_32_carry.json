@@ -1,0 +1,48 @@
+{
+  "run_id": "qwen-ray-v5p-32-carry-001",
+  "accelerator": "tpu-v5p-32",
+  "hosts": 4,
+  "bucket": "gs://sk7524-tinker-tpu-us-east5",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
+  "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-qwen35-tp1-fsdp4-r32-s18432-ray-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq32-mem90-chunk4096-ray-v1",
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq16-mem90-chunk4096-ray-v1",
+    "trainer_gib": 128,
+    "inference_gib": 96,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "trainer": {
+    "hosts": 1,
+    "tp": 1,
+    "fsdp": 4,
+    "process_bounds": "1,1,1",
+    "sequence_length": 18432,
+    "token_budget": 73728,
+    "logical_kv_heads": 4,
+    "remat": "full"
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "max_sequences": 32,
+    "memory_utilization": 0.9,
+    "restart_limit": 3
+  },
+  "client_context_window": 18432,
+  "client_phase1_max_tokens": 13824,
+  "client_env": {
+    "TTD_INIT_STATE_PATH_QWEN": "tinker://model_6a19f0fb/weights/000015",
+    "TTD_FLATLINE_STOP": "1",
+    "TTD_FLATLINE_EPS": "1e-12",
+    "TTD_FLATLINE_CONSEC": "5",
+    "TTD_FLATLINE_MIN_STEPS": "4",
+    "TTD_RESTART_AT_STEP": "-1"
+  }
+}
