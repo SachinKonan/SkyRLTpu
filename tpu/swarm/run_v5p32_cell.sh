@@ -73,9 +73,28 @@ export TRAIN_WORKERS="${TRAIN_WORKERS:-0}"
 echo "cell $CELL on v5p-32: trainer/client host ${ordered[0]} (rank 0); engine hosts ${ordered[*]:1}"
 
 REPO="${SKYRL_REPO_DIR:-$PWD}"
+
+# Whatever way the cell dies (orbax restore, engine bring-up, client death,
+# sick engines, an unexpected error under set -e), leave all four hosts clean
+# for the next job: the pool fork never re-places a failed job, so the next
+# arrival is a different job on the same worker. A clean exit keeps the
+# engines and trainer warm for an identity-matched relaunch, as before.
+cleanup_on_failure() {
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    bash "$REPO/tpu/swarm/cleanup_v5p32_worker.sh" "$rc" 2>&1 \
+      || echo "cleanup_v5p32_worker.sh itself failed (rc=$?)" >&2
+  fi
+  exit "$rc"
+}
+trap cleanup_on_failure EXIT
+
 # The trainer's MaxText/orbax checkpoint must be complete BEFORE any engine
 # starts (RUNBOOK: a torn restore surfaces two layers down as DATA_LOSS or
 # RESOURCE_EXHAUSTED).  Model is derived from CELL; no-op off the trainer host.
 bash "$REPO/tpu/jobman/ensure_orbax_ckpt.sh"
 bash "$REPO/tpu/jobman/cell_worker.sh"
-exec bash "$REPO/tpu/jobman/cell_monitor.sh"
+# Not exec: an exec would replace this shell and drop the EXIT trap above.
+monitor_rc=0
+bash "$REPO/tpu/jobman/cell_monitor.sh" || monitor_rc=$?
+exit "$monitor_rc"
