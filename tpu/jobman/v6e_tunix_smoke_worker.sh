@@ -156,7 +156,7 @@ env \
   START_VLLM=0 \
   START_TINKER=1 \
   TINKER_BACKEND=tunix \
-  TRAIN_WORKERS=0,1,2,3 \
+  TRAIN_WORKERS="${TRAIN_WORKERS:-0,1,2,3}" \
   VLLM_WORKERS= \
   VLLM_BASE_URL_OVERRIDE=http://127.0.0.1:1 \
   EXTERNAL_SAMPLING=1 \
@@ -193,7 +193,7 @@ env \
 CACHE_PUBLISHER_PID=$!
 
 set +e
-"$REPO/.venv/bin/python" "$REPO/tpu/v6e_tunix_smoke.py" \
+"$REPO/.venv/bin/python" "$REPO/${TUNIX_SMOKE_SCRIPT:-tpu/v6e_tunix_smoke.py}" \
   --base-model "$MODEL_NAME" \
   --rank "$LORA_RANK" \
   --rows "$SMOKE_ROWS" \

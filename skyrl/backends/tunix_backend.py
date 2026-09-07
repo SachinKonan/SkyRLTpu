@@ -1696,6 +1696,33 @@ class TunixBackend(AbstractBackend):
 
     def optim_step(self, model_id: str, request_data: types.OptimStepInput) -> types.OptimStepOutput:
         slot = self.models[model_id]
+        probe_dir = os.environ.get("TUNIX_GRADIENT_PROBE_DIR")
+        if probe_dir:
+            # Dedicated diagnostic jobs only. Do not touch Adam, its moments,
+            # the step counter, or model weights when draining the accumulator.
+            from skyrl.backends.gradient_probe import export_probe
+
+            if request_data.adam_params.learning_rate != 0 or request_data.adam_params.weight_decay != 0:
+                raise ValueError("Frozen gradient probe requires zero learning rate and weight decay")
+            if slot.accum_count <= 0 or slot.accum_grads is None:
+                raise ValueError("Frozen gradient probe has no accumulated samples")
+            gradients = self._flat_numpy(slot.accum_grads)
+            parameters = self._flat_numpy(slot.lora_state)
+            index = slot.diagnostic_grad_index
+            # TPU runtime rank zero need not be the API coordinator. The
+            # launcher marks the API host so its client can read local exports.
+            writer = os.environ.get("TUNIX_GRADIENT_PROBE_WRITER")
+            is_writer = writer == "1" if writer is not None else jax.process_index() == 0
+            if is_writer:
+                export_probe(probe_dir, model_id, index, gradients, parameters, slot.accum_count)
+            norm = self._host_global_norm(gradients) / slot.accum_count
+            slot.diagnostic_grad_index += 1
+            slot.accum_grads = None
+            slot.accum_count = 0
+            return types.OptimStepOutput(metrics={
+                "skyrl.ai/grad_norm": norm, "skyrl.ai/learning_rate": 0.0,
+                "gradient_probe/index": index,
+            })
         template = self.templates[slot.template_key]
         adam = request_data.adam_params
 
