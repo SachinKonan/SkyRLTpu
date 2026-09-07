@@ -112,7 +112,7 @@ rule was rejected on 2026-09-07; 331/335/336 still run under it).
 | meta-wt16-fresh-g0-qwen | 363 | qwen | GRPO | fresh | 14/15 | 0.380858844 | 0.97 | 11516 | finished 16:14Z: flatline stop, flat since step 7 |
 | meta-wt16-carry-g0-gemma-ttd | 331 | gemma | TTD | carried from gemma TTD (8×32 run) | 8/15 | 0.380858787 | 0.70 | 5912 | running, old rule, gaining ~1e-9/step |
 | meta-wt16-fresh-g0-gemma-ttd | 336 | gemma | TTD | fresh | 11/15 | 0.380858891 | 0.96 | 6015 | running, old rule |
-| meta-wt16-fresh-g0-muse-lr4e5 | 335 | muse | GRPO | fresh | 8/15 | 0.380858919 | 0.57 | 10767 | running, flat 2 steps, old rule |
+| meta-wt16-fresh-g0-muse-lr4e5 | 399 | muse | GRPO | fresh | 9/15 | 0.380858919 | 0.62 | 10923 | 335 stopped 17:23Z on the old rule (3 zero gains); relaunched 17:32Z under the relaxed rule, resumes from step 9 |
 
 Reading: the basin spans 2e-7. Carried weights lead on both models (muse carry is
 the overall best at 0.380858726; gemma carry 0.380858787 vs fresh 0.380858891).
