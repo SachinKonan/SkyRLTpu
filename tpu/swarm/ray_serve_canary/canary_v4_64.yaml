@@ -1,0 +1,34 @@
+name: v4-64-ray-serve-direct-lora-canary-007
+resources:
+  cloud: gcp
+  region: us-central2
+  zone: us-central2-b
+  accelerators: tpu-v4-64
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 0
+envs:
+  CANARY_HOST_COUNT: "8"
+  CANARY_RAM_CACHE_GIB: "96"
+  CANARY_RAM_RESERVE_GIB: "128"
+  CANARY_GCLOUD_PROCESSES: "4"
+  CANARY_GCLOUD_THREADS: "8"
+  CANARY_RAY_TMPDIR: /home/gcpuser/.rsc-v464-v3
+  BASE_BUNDLE: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v42.tar.gz
+  CANARY_BUNDLE: gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-serve-direct-lora-canary-v10.tar.gz
+  MODEL_NAME: Qwen/Qwen3.5-27B
+  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1
+  XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-chunk4096-v1
+  RESULT_GCS: gs://sk7524-tinker-tpu-us-central2/ray-serve-canary/direct-lora-v4-64-v3
+run: |
+  set -euo pipefail
+  export CANARY_ROOT="$HOME/ray-serve-canary-v4-64-v3"
+  mkdir -p "$CANARY_ROOT/code"
+  gcloud storage cp "$CANARY_BUNDLE" "$CANARY_ROOT/code.tar.gz"
+  tar -xzf "$CANARY_ROOT/code.tar.gz" -C "$CANARY_ROOT/code"
+  exec bash "$CANARY_ROOT/code/run.sh"
