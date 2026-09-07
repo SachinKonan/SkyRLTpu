@@ -27,11 +27,11 @@ envs:
   ZONE: us-east5-a
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v16.tar.gz
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v20.tar.gz
   # The identity string must change with the trainer config: a relaunch that
   # lands on the same worker otherwise reuses the running trainer (same bundle
   # ID) and env changes like TUNIX_FREE_BASE_STATE never take effect (job 192).
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-g-meta-lr4e5
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v20-g-meta-lr4e5
 
   # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
   # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the
@@ -75,7 +75,7 @@ envs:
   # the tmux command because a reused tmux server keeps its creator's env.
   TINKER_API_KEY: tml-local-skyrl-no-auth
   TINKER_BASE_URL: http://127.0.0.1:8000
-  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_FLATLINE_STOP=1 TTD_FLATLINE_EPS=1e-9 TTD_FLATLINE_CONSEC=3 TTD_FLATLINE_MIN_STEPS=4 TTD_RESTART_AT_STEP=-1
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_FLATLINE_STOP=1 TTD_FLATLINE_EPS=1e-12 TTD_FLATLINE_CONSEC=5 TTD_FLATLINE_MIN_STEPS=4 TTD_RESTART_AT_STEP=-1
 
 run: |
   set -euo pipefail
