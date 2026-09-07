@@ -1,0 +1,137 @@
+{
+  "run_id": "qwen-ray-v5p-32-001",
+  "accelerator": "tpu-v5p-32",
+  "hosts": 4,
+  "retired_processes": {
+    "10.202.0.51": {
+      "boot_id": "4de46640-4ae9-43b4-b2a8-94bd81d749da",
+      "processes": [
+        {"pid": 39448, "created": 1788743132.03, "command_sha256": "3c13c55ca234a90291e63bf63238639cf455f83c813b6a729e3ff49df7cbeefe"},
+        {"pid": 49126, "created": 1788744343.07, "command_sha256": "8bd156c2f2c654c4c89145ec82d67bef3d2ab8087f2edb24f0515737f02d0895"},
+        {"pid": 49513, "created": 1788744351.86, "command_sha256": "66b7cfeed6421a36f03bafb81c69eab7aee1c47a4dfbac161b254486da06ce93"},
+        {"pid": 54167, "created": 1788744443.33, "command_sha256": "ed04683928855f9f443ce49acdfab594677d54f8b1bf9d2c2a151567ed185d9b"}
+      ]
+    },
+    "10.202.0.122": {
+      "boot_id": "50606ace-b977-4b75-8b54-d0b591795945",
+      "processes": [
+        {"pid": 18738, "created": 1788743872.44, "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"}
+      ]
+    },
+    "10.202.0.123": {
+      "boot_id": "b2ecaab6-ad6d-4491-93c0-e910abce973a",
+      "processes": [
+        {"pid": 18132, "created": 1788743854.66, "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"}
+      ]
+    },
+    "10.202.0.83": {
+      "boot_id": "80f59b19-dd1d-4a4d-bf4f-e35cc09f610b",
+      "processes": [
+        {"pid": 24601, "created": 1788743928.24, "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"}
+      ]
+    },
+    "10.202.0.157": {
+      "boot_id": "b8d21c3e-8ebb-489d-9d9d-7a53eac27442",
+      "processes": [
+        {
+          "pid": 43513,
+          "created": 1788676904.58,
+          "command_sha256": "3c13c55ca234a90291e63bf63238639cf455f83c813b6a729e3ff49df7cbeefe"
+        },
+        {
+          "pid": 47986,
+          "created": 1788677637.49,
+          "command_sha256": "e4a898e4b0c69f9d1867b0252a2566a7167bfe570edd258029fc2f66fa8965a5"
+        },
+        {
+          "pid": 48564,
+          "created": 1788677645.12,
+          "command_sha256": "7d3b139de287ae3c9fba9b064f579f05b30bd4ca13ab0cc280a30a6f597856f9"
+        },
+        {
+          "pid": 52853,
+          "created": 1788677724.63,
+          "command_sha256": "dca58b82d1aceb2caa1491b2a838dd18da6de64a11a415f2bea5d5a258d370eb"
+        }
+      ]
+    },
+    "10.202.0.159": {
+      "boot_id": "77ee6ac8-1857-4eb8-b47f-c65d2a006496",
+      "processes": [
+        {
+          "pid": 20512,
+          "created": 1788677471.77,
+          "command_sha256": "238994fbfcc7533d990e3fd0cb76bbb4ff952a55a8a1e8bff30ca4358921682a"
+        },
+        {
+          "pid": 20563,
+          "created": 1788677472.09,
+          "command_sha256": "21a6099c8969095b5e4787c87483ae05b4449cf45cfe84048283e8f9111608eb"
+        }
+      ]
+    },
+    "10.202.0.160": {
+      "boot_id": "a8248dfe-9a2c-4dfe-a921-8432933e4e22",
+      "processes": [
+        {
+          "pid": 19948,
+          "created": 1788677487.55,
+          "command_sha256": "238994fbfcc7533d990e3fd0cb76bbb4ff952a55a8a1e8bff30ca4358921682a"
+        },
+        {
+          "pid": 19997,
+          "created": 1788677487.87,
+          "command_sha256": "21a6099c8969095b5e4787c87483ae05b4449cf45cfe84048283e8f9111608eb"
+        }
+      ]
+    },
+    "10.202.0.161": {
+      "boot_id": "9c3e31c0-c916-4680-8d87-2489bbdc0cb3",
+      "processes": [
+        {
+          "pid": 19982,
+          "created": 1788677506.94,
+          "command_sha256": "238994fbfcc7533d990e3fd0cb76bbb4ff952a55a8a1e8bff30ca4358921682a"
+        },
+        {
+          "pid": 20030,
+          "created": 1788677507.26,
+          "command_sha256": "21a6099c8969095b5e4787c87483ae05b4449cf45cfe84048283e8f9111608eb"
+        }
+      ]
+    }
+  },
+  "bucket": "gs://sk7524-tinker-tpu-us-east5",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v42.tar.gz",
+  "base_bundle_sha256": "a048e63fdcf870d5ed7b56810ef276cd966fb33281c1924fc06c9c7406645c32",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-qwen35-tp1-fsdp4-r32-s18432-ray-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq32-mem90-chunk4096-ray-v1",
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq16-mem90-chunk4096-ray-v1",
+    "trainer_gib": 128,
+    "inference_gib": 96,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "trainer": {
+    "hosts": 1,
+    "tp": 1,
+    "fsdp": 4,
+    "process_bounds": "1,1,1",
+    "sequence_length": 18432,
+    "token_budget": 73728,
+    "logical_kv_heads": 4,
+    "remat": "full"
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "max_sequences": 32,
+    "memory_utilization": 0.9,
+    "restart_limit": 3
+  }
+}

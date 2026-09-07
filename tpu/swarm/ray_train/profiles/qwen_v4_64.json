@@ -1,0 +1,82 @@
+{
+  "run_id": "qwen-ray-v4-64-001",
+  "accelerator": "tpu-v4-64",
+  "hosts": 8,
+  "retired_processes": {
+    "10.130.0.244": {
+      "boot_id": "d6475087-e69d-4c47-881f-54420735ba48",
+      "processes": [
+        {
+          "pid": 156646,
+          "created": 1788739508.89,
+          "command_sha256": "357924c450939369c31092e9c267f8346db828107990f5f988e5d0266c7391dc"
+        },
+        {
+          "pid": 157195,
+          "created": 1788739540.6,
+          "command_sha256": "0a034fed5a10ec97b04433e6ebd25978f039292dc1609dae0fac0508b1792f54"
+        }
+      ]
+    },
+    "10.130.1.2": {
+      "boot_id": "b364a163-b448-4046-9793-8aa9ee247a11",
+      "processes": [
+        {
+          "pid": 46938,
+          "created": 1788739495.77,
+          "command_sha256": "2658e3cb4931f05045ddb623c62c7465b67ce6d613fbfb3de8a5b81e3917f48a"
+        }
+      ]
+    },
+    "10.130.1.44": {
+      "boot_id": "e5b68f2a-f202-40ca-b0e8-2cb3d65bd55a",
+      "processes": [
+        {
+          "pid": 44193,
+          "created": 1788739499.78,
+          "command_sha256": "02fb81d889d91b33408ef7f4733cc91403487bc0c1cd8831e20653f0613026a9"
+        }
+      ]
+    },
+    "10.130.1.13": {
+      "boot_id": "3988d7c2-1649-4551-8d96-9bc745e6eaa0",
+      "processes": [
+        {
+          "pid": 43109,
+          "created": 1788739502.28,
+          "command_sha256": "6aa141799337193591b1261cfa652c8887c29758cc3bb08e8f1b7cefcdc4c005"
+        }
+      ]
+    }
+  },
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v42.tar.gz",
+  "base_bundle_sha256": "a048e63fdcf870d5ed7b56810ef276cd966fb33281c1924fc06c9c7406645c32",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-v4-qwen35-tp8-fsdp2-r32-s22528-b45056-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq16-mem87-chunk4096-ray-v1",
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq16-mem90-chunk4096-ray-v1",
+    "trainer_gib": 128,
+    "inference_gib": 96,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "trainer": {
+    "hosts": 4,
+    "tp": 8,
+    "fsdp": 2,
+    "process_bounds": "1,1,4",
+    "remat": "full"
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "max_sequences": 16,
+    "memory_utilization": 0.87,
+    "restart_limit": 3
+  }
+}
