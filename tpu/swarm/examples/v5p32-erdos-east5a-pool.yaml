@@ -1,9 +1,9 @@
-# Forty-five independent v5p-32 Spot slices in us-east5-a. Each pool worker is
+# Forty-eight independent v5p-32 Spot slices in us-east5-a. Each pool worker is
 # one complete four-host TPU slice and owns one GCP queued-resource request.
 pool:
-  workers: 45
-  min_workers: 45
-  max_workers: 45
+  workers: 48
+  min_workers: 48
+  max_workers: 48
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200
