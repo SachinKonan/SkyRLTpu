@@ -148,7 +148,7 @@ deadline_check
 
 # ------------------------------------------------------- 2. provision -------
 log "provisioning host (apt/uv/gcsfuse)"
-timeout 60 scp $SSHO "$REPO/tpu/provision_tpu_worker.sh" ${USER_R}@"$HOST":~/ >/dev/null 2>&1
+timeout 60 scp $SSHO "$REPO/tpu/provision_tpu_worker.sh" "$REPO/tpu/gcs_rsync.sh" ${USER_R}@"$HOST":~/ >/dev/null 2>&1
 rsh 'for i in $(seq 1 60); do sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1||break; sleep 5; done; bash ~/provision_tpu_worker.sh' 900 | tail -3 | tee -a "$PROG"
 log "disk:"; rsh 'df -h / /dev/shm 2>/dev/null | tail -3' 60 | tee -a "$PROG"
 log "chips:"; rsh 'ls /dev/accel* 2>/dev/null | wc -l' 60 | tee -a "$PROG"
@@ -164,8 +164,8 @@ rsh "export PATH=\$HOME/google-cloud-sdk/bin:/usr/lib/google-cloud-sdk/bin:\$PAT
 mkdir -p ${REMOTE_MODEL}
 echo 'disk before:'; df -BG --output=avail / | tail -1
 if command -v gcloud >/dev/null 2>&1; then
-  echo 'transfer: gcloud storage rsync'
-  time gcloud storage rsync -r ${GCS_MODEL} ${REMOTE_MODEL} 2>&1 | tail -3
+  echo 'transfer: compatible GCS rsync'
+  time bash ~/gcs_rsync.sh -r ${GCS_MODEL} ${REMOTE_MODEL} 2>&1 | tail -3
 elif command -v gsutil >/dev/null 2>&1; then
   echo 'transfer: gsutil -m rsync'
   time gsutil -m -q rsync -r ${GCS_MODEL} ${REMOTE_MODEL} 2>&1 | tail -3
