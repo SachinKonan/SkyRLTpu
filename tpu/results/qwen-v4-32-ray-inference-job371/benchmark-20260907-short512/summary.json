@@ -1,0 +1,13 @@
+[
+  {
+    "round": "first",
+    "seconds": 600.176890034003,
+    "successes": 55,
+    "failures": 9,
+    "output_tokens": 28160,
+    "output_tokens_per_second": 46.91950067988222,
+    "prompt_tokens": 1375,
+    "latency_median": 557.4867143970041,
+    "latency_p95": 589.9932482470031
+  }
+]
