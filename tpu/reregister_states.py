@@ -66,7 +66,9 @@ def main():
         print("reregister: no entries")
         return
 
-    db = sqlite3.connect(args.db)
+    # Match the API/engine busy timeout: its short-lived writer transactions
+    # can outlast sqlite3's default five seconds during model startup.
+    db = sqlite3.connect(args.db, timeout=30)
     db.execute(
         "INSERT OR IGNORE INTO sessions (session_id, tags, user_metadata, sdk_version,"
         " status, created_at, heartbeat_count) VALUES (?, '[]', '{}', 'reregister',"
