@@ -108,3 +108,37 @@ wait_from_worker() {
 def test_trainer_provisioning_precedes_final_vllm_readiness_barrier():
     source = (REPO / "tpu/start_colocated_vllm_tinker.sh").read_text()
     assert source.index("SKYRL_TRAIN_SETUP_ONLY=1 bash") < source.index("\n  wait_for_vllm\n")
+
+
+@pytest.mark.parametrize("overrides", [
+    {},
+    {
+        "SKYRL_EXTERNAL_WATCHDOG_ENABLED": "1",
+        "SKYRL_EXTERNAL_WATCHDOG_POLL_SEC": "30",
+        "SKYRL_EXTERNAL_WATCHDOG_STALE_SEC": "30",
+        "SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC": "0",
+        "SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH": "4",
+        "SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC": "28800",
+    },
+    {"SKYRL_EXTERNAL_WATCHDOG_ENABLED": "0", "SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC": "7200"},
+])
+def test_generated_trainer_exports_watchdog_settings_to_a_clean_shell(overrides):
+    source = (REPO / "tpu/start_colocated_vllm_tinker.sh").read_text()
+    function = re.search(r"^render_external_watchdog_env\(\) \{.*?^\}", source, re.M | re.S).group()
+    template = source.split('cat > "$api_script" <<EOF\n', 1)[1].split('\nEOF', 1)[0]
+    assert "$(render_external_watchdog_env)" in template
+    assert template.index("$(render_external_watchdog_env)") < template.index('-m skyrl.tinker.api')
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("SKYRL_EXTERNAL_WATCHDOG_")}
+    rendered = subprocess.run(
+        ["bash", "-c", function + "\nrender_external_watchdog_env"],
+        env={**clean_env, **overrides}, capture_output=True, text=True, check=True,
+    )
+    # Model the fresh SSH/tmux environment: only the rendered startup script
+    # can carry the settings across, not inheritance from the launch process.
+    started = subprocess.run(
+        ["bash", "-c", rendered.stdout + "\nenv -0"],
+        env=clean_env, capture_output=True, text=True, check=True,
+    )
+    actual = dict(item.split("=", 1) for item in started.stdout.split("\0")
+                  if item.startswith("SKYRL_EXTERNAL_WATCHDOG_"))
+    assert actual == overrides
