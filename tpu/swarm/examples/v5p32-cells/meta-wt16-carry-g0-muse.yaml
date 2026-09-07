@@ -26,8 +26,8 @@ envs:
   ZONE: us-east5-a
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v16.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v16-m-meta-carry
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v20.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v20-m-meta-carry
 
   CELL: m-meta-c
   RUN_DIR_NAME: meta-wt16-carry-g0-muse
@@ -71,7 +71,7 @@ envs:
   # the tmux command because a reused tmux server keeps its creator's env.
   TINKER_API_KEY: tml-local-skyrl-no-auth
   TINKER_BASE_URL: http://127.0.0.1:8000
-  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_FLATLINE_STOP=1 TTD_FLATLINE_EPS=1e-9 TTD_FLATLINE_CONSEC=3 TTD_FLATLINE_MIN_STEPS=4 TTD_RESTART_AT_STEP=-1
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_FLATLINE_STOP=1 TTD_FLATLINE_EPS=1e-12 TTD_FLATLINE_CONSEC=5 TTD_FLATLINE_MIN_STEPS=4 TTD_RESTART_AT_STEP=-1
 
 run: |
   set -euo pipefail
