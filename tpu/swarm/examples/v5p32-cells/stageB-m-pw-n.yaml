@@ -1,6 +1,6 @@
 name: stageB-m-pw-n
 
-# Muse piecewise (Stage B), fresh: third arm beside stageB-m-grpo-n / stageB-m-ttd-n
+# Muse piecewise (Stage B), resume on v23 (LOO nv=2 fix): 8 rows banked.
 # (16x32, LR 4e-5, elite 2).
 # piecewise_valid_entropic: A = (r - mean r) + alpha*(w - 1)*[valid]; GRPO carries validity,
 # the one-bit entropic LOO weight ranks the valid cluster only (beta solved on that subset).
@@ -29,8 +29,8 @@ envs:
   ZONE: us-east5-a
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v20.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v20-m-pw-n
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v23.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v23-m-pw-n
 
   CELL: m-pw-n
   RUN_DIR_NAME: stageB-m-pw-n
