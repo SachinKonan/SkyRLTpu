@@ -92,7 +92,10 @@ REQUIRED_BUNDLE_FILES=(
   tpu/swarm/run_qwen35_v6e32_grpo.sh
   tpu/swarm/run_v5p32_cell.sh
   tpu/swarm/reconcile_v5p32_worker.sh
+  tpu/swarm/cleanup_v5p32_worker.sh
   tpu/dedupe_hf_snapshot.sh
+  tpu/swarm/bench/run_v5p32_bench.sh
+  tpu/swarm/bench/realistic_bench.py
   tpu/swarm/select_v4_64_topology.py
   tpu/swarm/stage_hf_metadata_cache.py
 )

@@ -502,6 +502,26 @@ elif ! tinker_healthy && vllm_healthy; then
   echo "trainer restarted (vLLM untouched)"
 else
   echo "engine bring-up ($MAXTEXT_MODEL uniform=$UNIFORM budget=$BUDGET)..."
+  # Engines left behind by a previous job on this worker (its failure cleanup
+  # never ran, or could not reach these hosts) still answer /v1/models, so the
+  # launcher reports success while engines_healthy then fails on the bundle
+  # identity -- exit 33 with nothing wrong on our side (job 287, 2026-09-06).
+  # Evict any engine whose TPUSWARM_BUNDLE_ID is not ours before launching.
+  if [[ -n "$EXPECTED_BUNDLE_ID" && -n "$VLLM_IDXS" ]]; then
+    for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+      ip="$(worker_ip "$worker")"
+      timeout 60 ssh $SSHO "$REMOTE_USER"@"$ip" \
+        "for pid in \$(pgrep -u \"\$USER\" -f '[p]ython.*vllm_tpu_server\\.py'); do \
+           actual=\$(tr '\\0' '\\n' < /proc/\$pid/environ | sed -n 's/^TPUSWARM_BUNDLE_ID=//p' | head -1); \
+           if [ \"\$actual\" != '$EXPECTED_BUNDLE_ID' ]; then \
+             echo \"evicting stale vLLM engines (bundle \${actual:-unmarked}, expected $EXPECTED_BUNDLE_ID)\"; \
+             for s in \$(tmux ls 2>/dev/null | cut -d: -f1); do case \"\$s\" in vllm-tpu|vllm-tpu-e*) tmux kill-session -t \"=\$s\";; esac; done; \
+             pkill -u \"\$USER\" -f '[v]llm_tpu_server\\.py|[V]LLM::EngineCore' 2>/dev/null; \
+             break; \
+           fi; \
+         done" 2>/dev/null | sed "s/^/  [$ip] /" || true
+    done
+  fi
   # Erdos cells (long sequences, 18432-class fb buckets) OOM'd at compile with
   # the league tiles on these builds: HLO temporaries 111G vs 95.7G/chip, every
   # train step, silently caught by the ensemble guard -- the cells sampled
