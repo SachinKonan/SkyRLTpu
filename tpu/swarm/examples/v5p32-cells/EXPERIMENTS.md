@@ -90,7 +90,7 @@ after step 4 (the earlier 1e-9 / 3-step rule was rejected on 2026-09-07).
 | Cell | Job | Model | Objective | Weights | Step | Best | Val | Tok | State |
 |---|---|---|---|---|---|---|---|---|---|
 | meta-wt16-carry-g0-muse | 362 | muse | GRPO | carried from muse GRPO step 9 | 12/15 | **0.380858726** | 1.00 | 4421 | running, new flatline rule |
-| meta-wt16-fresh-g0-qwen | 363 | qwen | GRPO | fresh | 13/15 | 0.380858844 | 0.96 | 11601 | running, flat since step 7 |
+| meta-wt16-fresh-g0-qwen | 363 | qwen | GRPO | fresh | 14/15 | 0.380858844 | 0.97 | 11516 | finished 16:14Z: flatline stop (5 zero gains), flat since step 7 |
 | meta-wt16-carry-g0-gemma-ttd | 331 | gemma | TTD | carried from gemma TTD | 7/15 | 0.380858788 | 0.68 | 5857 | running, old flatline rule |
 | meta-wt16-fresh-g0-gemma-ttd | 336 | gemma | TTD | fresh | 10/15 | 0.380858892 | 0.96 | 5979 | running, old flatline rule |
 | meta-wt16-fresh-g0-muse-lr4e5 | 335 | muse | GRPO | fresh | 8/15 | 0.380858919 | 0.57 | 10767 | running, flat 2 steps, old rule |
@@ -110,6 +110,52 @@ the floor of this basin.
 | 4 | 0.380858892 | meta-wt16-fresh-g0-gemma-ttd @10 |
 | 5 | 0.380858919 | meta-wt16-fresh-g0-muse-lr4e5 @6 |
 | 6 | 0.380859355 | stageC-lr-n (qwen GRPO, gen-0 seed) @15 |
+
+## Next suite (staged 2026-09-07 16:30Z, NOT launched)
+
+Three additions requested on 2026-09-07. All configs, seeds and carried weights are
+staged; nothing has been submitted.
+
+**A. Matched validity on gemma and muse** (legacy cell launcher, bundle v21, lr 4e-5):
+`stageB2-g-v32-grpo-n`, `stageB2-g-v32-ttd-n`, `stageB-m-v32-grpo-n`, `stageB-m-v32-ttd-n`.
+Same oversampling settings as the qwen pair. Note the qwen pair runs 4 to 5 h per step
+(oversampling), not 2 to 2.5 h.
+
+**B. Gen 1 from the gemma and muse trees** (legacy launcher, bundle v21, top-48
+winner seeds built with `tpu/meta/build_meta_seed.py`, already uploaded as
+`puct_sampler_step_000000.json` into the new run dirs):
+
+| Cell | Seed tree | Carried weights | Objective |
+|---|---|---|---|
+| meta-gtree48-carry-g0-gemma-pw | stageB2-g-pw-n step 15 (best 0.380865312) | tinker://model_92a979f3/weights/000015 | piecewise LOO |
+| meta-mtree48-carry-g0-muse | stageB-m-grpo-n step 15 (best 0.380866934) | tinker://model_d789e3e9/weights/000015 | GRPO |
+
+**C. Learnable carried/fresh LoRA mix** (`skyrl/backends/lora_mix.py`, bundle v22,
+Ray v2 executor profiles `tpu/swarm/ray_train/profiles/qwen_v5p_32_{mix090,mix050,carry}.json`):
+
+    W = W_base + (alpha/r) * [ gamma * B_new A_new + (1 - gamma) * B_old A_old ]
+
+One learnable gamma per adapter (per projection per layer), Adam lr 0.02, clamped to
+[0, 1]; the old half is the carried qwen GRPO step-15 LoRA and never trains; the fresh
+half starts at B = 0. Both halves live in one rank-64 adapter (alpha doubled so the
+qwix scale is unchanged), exported to vLLM as an ordinary rank-64 PEFT adapter.
+gamma = 1 is "fresh" (meta-wt16-fresh-g0-qwen, 0.380858844), gamma = 0 is "carry".
+Cells: gamma_0 = 0.9, gamma_0 = 0.5, and a plain carry control (qwen carry did not
+exist yet). All three use the same 48-state wt16 seed and the same carried weights
+(stageC-lr-n step 15, `tinker://model_6a19f0fb/weights/000015`). gamma statistics are
+logged per optimizer step as `lora_mix/gamma_{mean,min,max,std}`.
+
+Ray v2 staging per run id under `gs://sk7524-tinker-tpu-us-east5/ray-training/<run_id>/`:
+`client/tinker_log/<run_id>/puct_sampler_step_000000.json` (seed),
+`checkpoints/model_6a19f0fb/{000015,sampler_weights/000015}.tar.gz` (carried weights),
+`tinker-backup.db` (registry rows so `create_training_client_from_state` resolves).
+Task yamls are built with `python -m tpu.swarm.ray_train.build <profile> --output <dir> --upload`.
+
+Why A and B are on the legacy launcher: the Ray v2 executor is qwen-only today
+(serving env pins PyPI vllm-tpu 0.23.0 without the muse modeling code; the client
+member spec is hardcoded to `Qwen/Qwen3.5-27B:qwen3:qwen`; gemma untested there).
+Its preflight also refuses workers that still hold warm engines from finished legacy
+cells, so every Ray v2 placement on this pool needs an audited retirement manifest.
 
 ## Open follow-ups
 

@@ -41,6 +41,7 @@ from jax.experimental import multihost_utils
 from pydantic import BaseModel, Field
 from transformers import AutoConfig, AutoTokenizer
 
+from skyrl.backends import lora_mix
 from skyrl.backends.backend import AbstractBackend
 from skyrl.backends.renderer import render_model_input
 from skyrl.backends.rpc import (
@@ -72,6 +73,7 @@ _NATIVE_ATTN_REGEX = r".*q_proj|.*k_proj|.*v_proj|.*o_proj"
 _NATIVE_MLP_REGEX = r".*gate_proj|.*up_proj|.*down_proj"
 
 _SELF_CHECKPOINT_FILE = "tunix_lora_checkpoint.msgpack.npz"
+_LORA_MIX_GAMMA_FILE = "lora_mix_gamma.npz"
 _CHECKPOINT_META_FILE = "tunix_checkpoint_meta.json"
 _EPHEMERAL_MARKER_FILE = "tunix_ephemeral_marker.json"
 
@@ -540,6 +542,11 @@ class ModelSlot:
     loaded_sampler_checkpoint_id: str | None = None
     sampler_lora_states: dict = field(default_factory=dict)  # checkpoint_id -> lora state
     diagnostic_grad_index: int = 0
+    # Learnable carried/fresh LoRA mix (skyrl.backends.lora_mix). When set,
+    # lora_state holds BOTH halves at rank 2r and lora_config stays the
+    # client-facing rank r; template_key / exports use the rank-2r config.
+    mix: lora_mix.MixState | None = None
+    export_lora_config: types.LoraConfig | None = None
 
 
 @dataclass
@@ -970,6 +977,13 @@ class TunixBackend(AbstractBackend):
         model = self._wrap_with_lora(lora_config, seed=lora_config.seed)
         return nnx.state(model, nnx.LoRAParam)
 
+    @staticmethod
+    def _pass_lora_state(slot: ModelSlot) -> nnx.State:
+        """The LoRA state the model actually runs with (gamma-mixed when mixing)."""
+        if slot.mix is None:
+            return slot.lora_state
+        return lora_mix.effective_state(slot.lora_state, slot.mix.gamma, slot.mix.rank)
+
     # ------------------------------------------------------------------ jitted model passes
 
     @staticmethod
@@ -1197,8 +1211,30 @@ class TunixBackend(AbstractBackend):
         if lora_config.train_unembed:
             raise ValueError("TunixBackend does not support train_unembed=True yet")
 
-        template = self._get_template(lora_config)
-        lora_state = self._init_lora_state(lora_config)
+        mix_settings = lora_mix.mix_settings_from_env()
+        mix: lora_mix.MixState | None = None
+        template_config = lora_config
+        if mix_settings is not None:
+            # Carried/fresh mix: both halves live in ONE rank-2r adapter with
+            # doubled alpha so qwix's alpha / rank scale is unchanged.
+            if 2 * lora_config.rank > self.config.max_lora_rank:
+                raise ValueError(
+                    f"LoRA mix needs rank {2 * lora_config.rank} (2 x {lora_config.rank}) "
+                    f"but max_lora_rank is {self.config.max_lora_rank}"
+                )
+            template_config = lora_config.model_copy(
+                update={"rank": 2 * lora_config.rank, "alpha": 2.0 * lora_config.alpha}
+            )
+        template = self._get_template(template_config)
+        lora_state = self._init_lora_state(template_config)
+        if mix_settings is not None:
+            gamma_init, gamma_lr = mix_settings
+            mix = lora_mix.MixState(
+                rank=lora_config.rank,
+                gamma=lora_mix.init_gamma(lora_state, gamma_init),
+                gamma_lr=gamma_lr,
+                gamma_init=gamma_init,
+            )
 
         # hyperparam_dtype must be float32: inject_hyperparams otherwise follows
         # the (possibly bfloat16) param dtype, which NaNs adamw's bias correction.
@@ -1207,10 +1243,17 @@ class TunixBackend(AbstractBackend):
 
         self.models[model_id] = ModelSlot(
             lora_config=lora_config,
-            template_key=self._template_key(lora_config),
+            template_key=self._template_key(template_config),
             lora_state=lora_state,
             optimizer=optimizer,
+            mix=mix,
+            export_lora_config=template_config,
         )
+        if mix is not None:
+            logger.info(
+                "LoRA mix enabled for %s: rank %d + %d (old half frozen), gamma init %.3f, gamma lr %.4g, %d adapters",
+                model_id, lora_config.rank, lora_config.rank, mix.gamma_init, mix.gamma_lr, len(mix.gamma),
+            )
         # Reclaim the two full-model copies this path leaves behind. Measured on
         # muse-glimmer-30b (v5p, fsdp=4): HBM in_use 12.97 GiB after load ->
         # 49.79 GiB after create_model, +36.8 GiB that is rank-INDEPENDENT (rank 4
@@ -1584,7 +1627,7 @@ class TunixBackend(AbstractBackend):
                     if template.kind == "maxtext":
                         # Swap this model's LoRA values into the shared template
                         # and run the module-passing (nnx-lifted) fns.
-                        nnx.update(template.model, slot.lora_state)
+                        nnx.update(template.model, self._pass_lora_state(slot))
                         if with_grads:
                             # In-jit donated accumulation (see forward_backward_fn).
                             # slot.accum_grads carries across fb REQUESTS until the
@@ -1607,8 +1650,9 @@ class TunixBackend(AbstractBackend):
                                 lambda: pass_fn(template.model, *common_args), "model_pass"
                             )
                     else:
+                        pass_state = self._pass_lora_state(slot)
                         per_token_losses, target_logprobs, lora_grads = self._with_oom_recovery(
-                            lambda: pass_fn(slot.lora_state, template.rest_state, *common_args),
+                            lambda: pass_fn(pass_state, template.rest_state, *common_args),
                             "model_pass",
                         )
                         # Non-maxtext (plain jax.jit) path keeps python-side
@@ -1939,11 +1983,27 @@ class TunixBackend(AbstractBackend):
                 }
             )
 
+        mix_metrics: dict[str, float] = {}
+        if slot.mix is not None:
+            # Gradients were accumulated in the gamma-mixed (effective) space;
+            # map them back onto the trainable half and gamma (chain rule).
+            mean_grads, gamma_grads = lora_mix.split_gradients(
+                mean_grads, slot.lora_state, slot.mix.gamma, slot.mix.rank
+            )
+            if adam.learning_rate != 0:
+                lora_mix.gamma_step(slot.mix, gamma_grads)
+            mix_metrics = slot.mix.metrics()
+            previous_state = slot.lora_state
+
         # Swap this model's LoRA values into the shared template, apply the
         # update in place, then snapshot the new state back into the slot.
         nnx.update(template.model, slot.lora_state)
         slot.optimizer.update(template.model, mean_grads)
         slot.lora_state = nnx.state(template.model, nnx.LoRAParam)
+        if slot.mix is not None:
+            # The old half got zero gradient; write it back verbatim so weight
+            # decay / Adam bookkeeping can never touch the carried weights.
+            slot.lora_state = lora_mix.restore_old_half(slot.lora_state, previous_state, slot.mix.rank)
 
         slot.accum_grads = None
         slot.accum_count = 0
@@ -1951,6 +2011,7 @@ class TunixBackend(AbstractBackend):
         metrics = {
             "skyrl.ai/grad_norm": grad_norm,
             "skyrl.ai/learning_rate": adam.learning_rate,
+            **mix_metrics,
         }
         logger.info(f"Applied optimizer step for model {model_id}, metrics={metrics}")
         return types.OptimStepOutput(metrics=metrics)
@@ -2617,19 +2678,28 @@ class TunixBackend(AbstractBackend):
         optimizer_flat = self._flat_numpy(optimizer_state)
         if jax.process_index() != 0:
             return
+        meta: dict[str, Any] = {
+            "lora_config": slot.lora_config.model_dump(),
+            "format": "tunix_backend_v2",
+            "lora_layouts": lora_layouts,
+            "optimizer_layouts": optimizer_layouts,
+        }
+        if slot.mix is not None:
+            # The weights file holds the rank-2r adapter; record the mix so a
+            # resume restores gamma and knows the client-facing rank.
+            meta["lora_mix"] = {
+                "rank": slot.mix.rank,
+                "gamma_lr": slot.mix.gamma_lr,
+                "gamma_init": slot.mix.gamma_init,
+                "old_loaded": slot.mix.old_loaded,
+                "template_lora_config": slot.export_lora_config.model_dump(),
+            }
         with pack_and_upload(AnyPath(output_path)) as tmp:
             self._write_npz(tmp / "lora_weights.npz", lora_flat)
             self._write_npz(tmp / "optimizer_state.npz", optimizer_flat)
-            (tmp / _CHECKPOINT_META_FILE).write_text(
-                json.dumps(
-                    {
-                        "lora_config": slot.lora_config.model_dump(),
-                        "format": "tunix_backend_v2",
-                        "lora_layouts": lora_layouts,
-                        "optimizer_layouts": optimizer_layouts,
-                    }
-                )
-            )
+            if slot.mix is not None:
+                self._write_npz(tmp / _LORA_MIX_GAMMA_FILE, lora_mix.gamma_to_flat(slot.mix.gamma))
+            (tmp / _CHECKPOINT_META_FILE).write_text(json.dumps(meta))
         self._mirror_checkpoint(output_path, model_id)
         logger.info(f"Saved training checkpoint to {output_path}")
 
@@ -2650,6 +2720,9 @@ class TunixBackend(AbstractBackend):
             opt_file = tmp / "optimizer_state.npz"
             if opt_file.exists():
                 payload["optimizer_state"] = self._read_npz(opt_file)
+            gamma_file = tmp / _LORA_MIX_GAMMA_FILE
+            if gamma_file.exists():
+                payload["lora_mix_gamma"] = self._read_npz(gamma_file)
             return payload
 
     def load_checkpoint(self, checkpoint_path: AnyPath, model_id: str) -> None:
@@ -2674,11 +2747,47 @@ class TunixBackend(AbstractBackend):
                 f"Rank mismatch: checkpoint has rank {ckpt_rank}, model configured with rank {slot.lora_config.rank}"
             )
 
+        if slot.mix is not None and "lora_mix" not in payload:
+            # A PLAIN rank-r checkpoint (the carried generation): it becomes the
+            # frozen OLD half; the fresh half keeps its template init (random A,
+            # zero B) and gamma restarts at gamma_init. No optimizer state can
+            # apply -- the carried run's Adam moments have the wrong shape and
+            # belong to weights that are frozen here anyway.
+            template_flat = self._flat_numpy(slot.lora_state)
+            merged = lora_mix.merge_plain_checkpoint(template_flat, payload["lora_weights"], slot.mix.rank)
+            slot.lora_state = self._state_from_flat(slot.lora_state, merged, None)
+            slot.mix.gamma = lora_mix.init_gamma(slot.lora_state, slot.mix.gamma_init)
+            slot.mix.opt_state = None
+            slot.mix.old_loaded = True
+            slot.accum_grads = None
+            slot.accum_count = 0
+            logger.info(
+                "LoRA mix: carried rank-%d checkpoint %s loaded into the frozen old half; gamma reset to %.3f",
+                slot.mix.rank, checkpoint_path, slot.mix.gamma_init,
+            )
+            return
+        if slot.mix is not None:
+            saved = payload["lora_mix"]
+            if int(saved.get("rank", -1)) != slot.mix.rank:
+                raise ValueError(
+                    f"LoRA mix rank mismatch: checkpoint half-rank {saved.get('rank')}, model {slot.mix.rank}"
+                )
+            if "lora_mix_gamma" not in payload:
+                raise FileNotFoundError(f"LoRA mix checkpoint at {checkpoint_path} has no gamma file")
+        elif "lora_mix" in payload:
+            raise ValueError(
+                f"Checkpoint {checkpoint_path} was saved with the LoRA mix; set {lora_mix.GAMMA_ENV} to load it"
+            )
+
         slot.lora_state = self._state_from_flat(
             slot.lora_state,
             payload["lora_weights"],
             payload.get("lora_layouts"),
         )
+        if slot.mix is not None:
+            slot.mix.gamma = lora_mix.gamma_from_flat(payload["lora_mix_gamma"])
+            slot.mix.opt_state = None  # Adam moments of gamma are not persisted (tiny, restart cold)
+            slot.mix.old_loaded = bool(payload["lora_mix"].get("old_loaded", True))
         if "optimizer_state" in payload:
             opt_state = self._state_from_flat(
                 nnx.state(slot.optimizer),
@@ -2695,14 +2804,17 @@ class TunixBackend(AbstractBackend):
         output_path = AnyPath(output_path)
         checkpoint_id = output_path.name.removesuffix(".tar.gz")
 
-        # Snapshot the current LoRA state in memory for the native sampler hot path.
-        slot.sampler_lora_states[checkpoint_id] = slot.lora_state
+        # Snapshot the current LoRA state in memory for the native sampler hot
+        # path. With the mix this is the gamma-mixed EFFECTIVE adapter: what
+        # the sampler must run is exactly what the trainer's forward ran.
+        sampler_state = self._pass_lora_state(slot)
+        slot.sampler_lora_states[checkpoint_id] = sampler_state
         slot.loaded_sampler_checkpoint_id = checkpoint_id
 
         # Gather once, collectively, before gating external side effects. The
         # same complete map feeds both PEFT export and the durable NPZ.
-        lora_layouts = self._checkpoint_layouts(slot.lora_state)
-        lora_flat = self._flat_numpy(slot.lora_state)
+        lora_layouts = self._checkpoint_layouts(sampler_state)
+        lora_flat = self._flat_numpy(sampler_state)
 
         if jax.process_index() != 0:
             return
@@ -2729,7 +2841,9 @@ class TunixBackend(AbstractBackend):
                 (tmp / _CHECKPOINT_META_FILE).write_text(
                     json.dumps(
                         {
-                            "lora_config": slot.lora_config.model_dump(),
+                            # The sampler adapter is the exported (rank-2r when
+                            # mixing) tensor layout, so describe THAT config.
+                            "lora_config": (slot.export_lora_config or slot.lora_config).model_dump(),
                             "format": "tunix_backend_v2",
                             "lora_layouts": lora_layouts,
                         }
@@ -2822,6 +2936,10 @@ class TunixBackend(AbstractBackend):
         """
         import safetensors.numpy as st_numpy
 
+        if flat_lora is None:
+            # Export what the model RUNS with (the gamma-mixed adapter when
+            # mixing); never the raw stacked halves.
+            flat_lora = self._flat_numpy(self._pass_lora_state(slot))
         if self.config.model_source == "maxtext":
             if self._is_gptoss_lora(slot):
                 tensors, moe_tensors, moe_meta = self._peft_tensors_gptoss(slot, flat_lora)
@@ -2836,11 +2954,12 @@ class TunixBackend(AbstractBackend):
         st_numpy.save_file(tensors, str(out_dir / "adapter_model.safetensors"))
         # ...self_attn.q_proj.lora_A.weight -> "q_proj"
         target_modules = sorted({k.rsplit(".", 2)[0].rsplit(".", 1)[-1] for k in tensors})
+        export_config = slot.export_lora_config or slot.lora_config
         adapter_config = {
             "peft_type": "LORA",
             "base_model_name_or_path": self.base_model,
-            "r": slot.lora_config.rank,
-            "lora_alpha": slot.lora_config.alpha,
+            "r": export_config.rank,
+            "lora_alpha": export_config.alpha,
             "lora_dropout": 0.0,
             "bias": "none",
             "target_modules": target_modules,
