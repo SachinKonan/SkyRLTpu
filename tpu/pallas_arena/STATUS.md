@@ -88,13 +88,13 @@ meaningful milestone. It does not change the beat-the-seed count.
 
 | cell | passed | best reward | seed bar | beat seed? |
 |---|---|---|---|---|
-| qwen · splash | 10/32 | **0.39** | 0.40 | no |
+| qwen · splash | 10/32 | **0.349** | 0.40 | no |
 | gemma · splash | 7/32 | **0.27** | 0.40 | no |
 | qwen · rg_lru | 4/32 | **2.02** | 1.99 | **1 of 4** |
 | gemma · rg_lru | 3/31 | **2.03** | 1.99 | **1 of 3** |
 
 **The v1 finding, now on trustworthy hardware and a beatable baseline:** on
-**splash**, neither model reaches the seed (best 0.39 vs 0.40) — they write
+**splash**, neither model reaches the seed (best 0.349 vs 0.40) — they write
 working kernels slower than the one handed to them. On **rg_lru**, each model
 squeaks exactly one candidate marginally past the seed (~2.02 vs 1.99). The XLA
 scale reveals the rg_lru "ties" (all 1.000 under production) were actually a
@@ -119,15 +119,34 @@ Per-cell signals are **task-specific, not model-specific**: gemma·rg_lru is
 16/32 the same tile error; gemma·splash is 9/32 `if`-on-traced; qwen fails
 diffusely (long-program collapse). splash → control-flow, rg_lru → tiling.
 
-### V2 — generation COMPLETE (all 4 cells); XLA grading IN PROGRESS
+### V2 — XLA-graded results (3 of 4 cells)
 
-The four v2 cells are being re-graded on v6e against the XLA denominator
-(`regrade_v2only.sh` on the live judge). Not yet complete: v6e-8 spot slices
-keep getting **preempted mid-grade** (judge13 at 23h, judge14 at 12h), so v2
-cells came back partial (14/32, 2/32) and are being re-run. **No v2 conclusion
-until each cell is a full 32/32** — the partials were preemption damage, not a
-v2 property. The generation-side effects below ARE complete and hardware-
-independent.
+| cell | v1 passed | v2 passed | v1 best | v2 best | seed | status |
+|---|---|---|---|---|---|---|
+| qwen · rg_lru | 4/32 | **7/32** | 2.02 | 1.97 | 1.99 | complete |
+| qwen · splash | 10/32 | **12/32** | 0.349 | 0.378 | 0.40 | complete |
+| gemma · rg_lru | 3/31 | **10/20** | 2.03 | **2.15** | 1.99 | partial (11 missing) |
+| gemma · splash | 7/32 | — | 0.27 | — | 0.40 | not yet graded |
+
+**THE FINDING: v2 raises VALIDITY in every cell measured; it does not make the
+best kernel faster.** Peak reward moved -0.05 / +0.03 / +0.12 across the three
+cells — noise-level and mixed — while pass counts rose in all three.
+
+**The cleanest causal case is gemma · rg_lru.** gemma never used lib-imports
+(0/64), so its v2 delta isolates the CONSTRAINTS BLOCK alone; that cell had the
+worst tile-(8,128) problem in v1; and under v2 its tile failures dropped
+**7 -> 1** while validity roughly tripled (9.7% -> 50%, and >=32% even if all 11
+ungraded candidates were to fail). A named constraint removed the specific
+failure it named.
+
+Note v2's rg_lru passers cluster tightly (1.65, 1.70, 1.70, 1.70, 1.71) --
+consistent with the constraints block herding candidates toward one safe,
+unremarkable solution rather than toward faster ones.
+
+Caveat: four consecutive judges (13-16) were preempted at ~23h mid-grade, which
+is why gemma · rg_lru is 20/32 and gemma · splash is ungraded. Both gemma
+findings above are robust to the missing verdicts (more grading can only add
+passers, never remove the observed best).
 
 ### V2 — generation-side (complete) and the superseded v5p grade
 
