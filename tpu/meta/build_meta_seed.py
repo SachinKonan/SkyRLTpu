@@ -129,7 +129,7 @@ def main():
         trees[tag] = load_tree(path)
 
     pools = {tag: validated_pool(sts, tag) for tag, sts in trees.items()}
-    bests = {tag: (min(p)[0] if p else None) for tag, p in pools.items()}
+    bests = {tag: (min(p, key=lambda t: t[0])[0] if p else None) for tag, p in pools.items()}
     eligible = {t: b for t, b in bests.items() if b is not None}
     if not eligible:
         sys.exit("no member has any validated state -- refusing to build a seed")
