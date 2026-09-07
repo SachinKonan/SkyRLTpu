@@ -118,16 +118,26 @@ Reading: the basin spans 2e-7. Carried weights lead on both models (muse carry i
 the overall best at 0.380858726; gemma carry 0.380858787 vs fresh 0.380858891).
 Gains are 1e-9 per step or less, so the tree is near the floor of this basin.
 
-### From each model's own tree (top-48 seeds, launched 2026-09-07 16:29Z, bundle v21)
+### Cross-model tree carry (launched 2026-09-07 18:30Z, bundle v23)
 
-| Cell | Job | Model | Seed tree | Carried weights | Objective | State |
-|---|---|---|---|---|---|---|
-| meta-gtree48-carry-g0-gemma-pw | 397 | gemma | stageB2-g-pw-n step 15 (best 0.380865312) | tinker://model_92a979f3/weights/000015 | piecewise LOO | relaunched 16:58Z on v23 (LOO fix), bring-up |
-| meta-mtree48-carry-g0-muse | 395 | muse | stageB-m-grpo-n step 15 (best 0.380866934) | tinker://model_d789e3e9/weights/000015 | GRPO | engine bring-up |
+Question: is a tree found by one model a good starting basin for a *different*
+model? The qwen-tree row above already answers it for gemma and muse; these fill
+the matrix. Each member carries its own gen-0 weights and keeps the objective that
+produced them (qwen GRPO 1.5e-4, gemma piecewise LOO 4e-5, muse GRPO 4e-5). The
+same-model recarry cells (397 gemma on gemma, 395 muse on muse) were cancelled with
+nothing banked; the user preferred model mixing.
 
-Seeds were built with `tpu/meta/build_meta_seed.py --op winner-top16 --k 48` and
-uploaded as `puct_sampler_step_000000.json`; `META_SEED_ONLY=1` guards the first
-launch.
+| Seed tree | qwen member | gemma member | muse member |
+|---|---|---|---|
+| qwen (wt16, best 0.3808618) | fresh only, 363 done | carried, 331 | carried, 362 |
+| gemma (stageB2-g-pw-n s15, 0.380865312) | **403** meta-gtree48-carry-g0-qwen | cancelled (397) | **405** meta-gtree48-carry-g0-muse |
+| muse (stageB-m-grpo-n s15, 0.380866934) | **402** meta-mtree48-carry-g0-qwen | **404** meta-mtree48-carry-g0-gemma-pw | cancelled (395) |
+
+Carried weights: qwen `tinker://model_6a19f0fb/weights/000015`, gemma
+`tinker://model_92a979f3/weights/000015`, muse `tinker://model_d789e3e9/weights/000015`.
+Seeds built with `tpu/meta/build_meta_seed.py --op winner-top16 --k 48` and uploaded as
+`puct_sampler_step_000000.json`; `META_SEED_ONLY=1` guards the first launch. At launch
+402 and 403 placed (workers 174, 190), 404 was starting, 405 pending on capacity.
 
 ### Learnable carried/fresh LoRA mix (qwen, Ray v2 executor, staged, NOT launched)
 
@@ -177,7 +187,7 @@ manifest first.
 | v20 | cell scripts through stale-engine eviction; all wt16 gen-1 arms and 290/291/330–336 |
 | v21 | + centered piecewise estimator; 340–342, 390–395 |
 | v22 | + LoRA mix backend (Ray v2 base bundle for the mix profiles) |
-| v23 | + LOO nv = 2 fix and weight clamp (sha256 38c2a12f…); 397, 398 |
+| v23 | + LOO nv = 2 fix and weight clamp (sha256 38c2a12f…); 398, 402–405 |
 
 ## Open follow-ups
 
