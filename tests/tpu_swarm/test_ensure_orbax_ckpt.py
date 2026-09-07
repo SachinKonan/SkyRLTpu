@@ -15,7 +15,9 @@ def test_orbax_restore_evicts_sibling_model_checkpoints_before_its_own_hf_weight
     remove = source.index('rm -rf "$_other"', keep_own)
     recheck = source.index('free_kb=$(df -Pk "$DST" | awk \'NR==2 {print $4}\')', remove)
     hf_drop = source.index('hf_dir="$HOME/.cache/huggingface/hub/models--${HF_MODEL//\\//--}"', recheck)
-    copy = source.index('"$GCS_CLI" storage rsync -r "$SRC" "$DST"', hf_drop)
+    # The gpt-oss marker-aware restore threads rsync_extra (CHECKPOINT_COMPLETE
+    # exclusion) between -r and the source; the ordering contract is unchanged.
+    copy = source.index('"$GCS_CLI" storage rsync -r "${rsync_extra[@]}" "$SRC" "$DST"', hf_drop)
     assert need < evict < keep_own < remove < recheck < hf_drop < copy
 
 
