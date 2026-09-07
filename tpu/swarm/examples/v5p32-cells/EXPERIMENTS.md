@@ -45,7 +45,7 @@ and does the answer depend on the model?
 | stageB2-g-pwc-n | 341 | gemma | piecewise centered | 8/15 | 0.380897315 | 0.79 | 5952 | running |
 | stageB-m-grpo-n | 332 | muse | GRPO | 15/15 | 0.380866934 | 0.99 | 6438 | finished |
 | stageB-m-ttd-n | 333 | muse | TTD | 7/15 | 0.380872316 | 0.76 | 13638 | running (resumed from step 6) |
-| stageB-m-pw-n | 334 | muse | piecewise LOO | 8/15 | 0.380864268 | 0.82 | 13207 | running on v21 (exposed to the LOO bug) |
+| stageB-m-pw-n | 398 | muse | piecewise LOO | 8/15 | 0.380864268 | 0.82 | 13207 | relaunched 16:59Z on v23 (LOO fix), resumes from step 8 |
 | stageB-m-pwc-n | 342 | muse | piecewise centered | 7/15 | 0.380917491 | 0.79 | 13056 | running |
 
 Reading so far:
@@ -72,9 +72,8 @@ exactly two valid rollouts 2.5e-5 apart. With two samples the one-bit target
 KL ≥ ln2 is unreachable, `_solve_one_bit_beta` returns β_max = 1e6, and the
 winner's leave-one-out weight is e^{β_max·gap}. The centered form is bounded by nv
 and cannot do this. Fix (discover commit 530c4ea, bundle **v23**): nv = 2 reduces
-to GRPO, and w is clamped to nv. Runs on v21 with `piecewise_valid_entropic` stay
-exposed: 330 (1 step left), 334 (7 left), 394 (just launched). Relaunching 394 on
-v23 costs nothing while it is still in bring-up.
+to GRPO, and w is clamped to nv. 334 and 394 were relaunched on v23 as 398 and 397 (2026-09-07 16:59Z); only 330
+(one step left) still runs the unfixed estimator.
 
 ## Matched validity, exactly 32 valid rollouts per group
 
@@ -123,7 +122,7 @@ Gains are 1e-9 per step or less, so the tree is near the floor of this basin.
 
 | Cell | Job | Model | Seed tree | Carried weights | Objective | State |
 |---|---|---|---|---|---|---|
-| meta-gtree48-carry-g0-gemma-pw | 394 | gemma | stageB2-g-pw-n step 15 (best 0.380865312) | tinker://model_92a979f3/weights/000015 | piecewise LOO | engine bring-up; exposed to the LOO bug (v21) |
+| meta-gtree48-carry-g0-gemma-pw | 397 | gemma | stageB2-g-pw-n step 15 (best 0.380865312) | tinker://model_92a979f3/weights/000015 | piecewise LOO | relaunched 16:58Z on v23 (LOO fix), bring-up |
 | meta-mtree48-carry-g0-muse | 395 | muse | stageB-m-grpo-n step 15 (best 0.380866934) | tinker://model_d789e3e9/weights/000015 | GRPO | engine bring-up |
 
 Seeds were built with `tpu/meta/build_meta_seed.py --op winner-top16 --k 48` and
@@ -178,12 +177,12 @@ manifest first.
 | v20 | cell scripts through stale-engine eviction; all wt16 gen-1 arms and 290/291/330–336 |
 | v21 | + centered piecewise estimator; 340–342, 390–395 |
 | v22 | + LoRA mix backend (Ray v2 base bundle for the mix profiles) |
-| v23 | + LOO nv = 2 fix and weight clamp (sha256 38c2a12f…) |
+| v23 | + LOO nv = 2 fix and weight clamp (sha256 38c2a12f…); 397, 398 |
 
 ## Open follow-ups
 
-- Relaunch 394 (and 334 if its remaining steps matter) on v23 to remove the LOO
-  blow-up exposure; point the mix profiles at v23 too.
+- Point the Ray v2 mix profiles at v23 (they pin v22, which lacks the LOO fix; the
+  mix cells use GRPO so it does not affect them).
 - qwen piecewise at lr 4e-5 or α = 0.25, to test the step-size explanation.
 - LOO at α ≈ 0.65 (scale-matched to centered), to separate scale from zero-mean.
 - Scale-matched TTD in the matched-validity pair.
