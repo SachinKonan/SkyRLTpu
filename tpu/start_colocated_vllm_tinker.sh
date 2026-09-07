@@ -491,6 +491,19 @@ fi
 # Remove an old trainer before the potentially long vLLM startup. Otherwise a
 # stale API can keep answering port-8000 probes while the new samplers compile,
 # allowing an external monitor to launch a client against mixed generations.
+render_external_watchdog_env() {
+  local name
+  # SSH/tmux do not inherit the job's environment. Render explicit overrides,
+  # including zero, while leaving unspecified values to the API's defaults.
+  for name in SKYRL_EXTERNAL_WATCHDOG_ENABLED SKYRL_EXTERNAL_WATCHDOG_POLL_SEC \
+    SKYRL_EXTERNAL_WATCHDOG_STALE_SEC SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC \
+    SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC; do
+    if [[ -v "$name" ]]; then
+      printf 'export %s=%q\n' "$name" "${!name}"
+    fi
+  done
+}
+
 if [[ "$START_TINKER" == "1" ]]; then
   cleanup_cmd='mkdir -p ~/skyrl-logs; tmux kill-session -t =skyrl-tinker 2>/dev/null || true; tmux list-sessions -F "#{session_name}" 2>/dev/null | awk "/^skyrl-tinker-worker-/ {print}" | xargs -r -n1 tmux kill-session -t; pkill -TERM -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true; sleep 5; pkill -KILL -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true'
   for worker in "${train_workers[@]}"; do
@@ -722,6 +735,7 @@ export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export TINKER_API_KEY="${TINKER_API_KEY}"
 export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-}"
+$(render_external_watchdog_env)
 export SKYRL_TRAIN_PROCESS_ID="\${SKYRL_TRAIN_PROCESS_ID:-0}"
 # Persist the TRAINER's JAX compiles (fb at the uniform length, optimizer
 # graphs). Without this every fresh node re-JITs them from scratch -- 10-20 min
