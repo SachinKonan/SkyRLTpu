@@ -198,3 +198,48 @@ Run the five `tests/tpu_swarm/test_ray_train_*.py` files on `srun -p cpu`, using
 the shared `~/.cache/skyrl-ray-tests/venv` environment. Avoid viz-node `/tmp`
 paths as Slurm test inputs: `/tmp` is node-local. Tests mock TPU execution;
 they do not establish device memory fit or training correctness.
+
+## Legacy-parity defaults and model presets (2026-09-08)
+
+The executor's defaults now reproduce the legacy v5p-32 cell launcher for the
+configured `model_preset` (`qwen3.5-27b`, `gemma4-31b`, `muse-glimmer-30b`,
+`gpt-oss-120b`; see `config.PRESETS`). A profile that names only the preset
+gets the same vLLM command line (prefix caching on, 8192 batched tokens, no
+chunked-prefill flag, 8 LoRA slots, per-model `--max-num-seqs`, `--download-dir`),
+the same engine environment (precompile at boot, RPA/ragged-conv kernels off for
+qwen/gemma, on for muse), the same trainer contract (MaxText `max_target_length`
+22528 over 18432-token rows for qwen, `TUNIX_SEQ_BUCKETS`, `TUNIX_MINIMAL_FB_OUTPUT`,
+client-side round robin straight to every engine with 256 in flight / 300 s
+requests / 3 x 2 s adapter retries) and the same client environment (member spec,
+learning rate, phase budgets, HF online). Both venvs pin the exact package
+versions read off legacy job 340: trainer jax 0.11.1 / libtpu 0.0.46, engine
+vllm-tpu 0.23.0 / jax 0.10.1 / libtpu 0.0.41 / torch 2.10.0 / torchax 0.0.11.
+`tests/tpu_swarm/test_ray_train_commands.py` pins this parity. The 2026-09-07
+qwen profiles carry their previous values explicitly (`inference.routing:
+ingress`, chunked prefill, 4096 tokens, one LoRA slot, lazy compile), so their
+runs are unchanged. Known non-parity: muse serves one TP4 engine per host here,
+not the legacy 2 x TP2.
+
+`inference.routing = direct` hands the trainer the engine URLs; the Ray Serve
+ingress stays up for health and engine replacement only. 32-core slices accept
+`trainer.hosts = 2` (process grid `1,1,2`).
+
+### GPT-OSS 120B on v5p-32
+
+Profiles `gptoss120b_v5p_32_{grpo,ttd,pwc}.json`: two trainer hosts (TP4/FSDP2,
+8 chips) and two TP4 engines. Trainer weights are the orbax export at
+`gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts-gptoss120b-bf16-d388`
+(82 GB, copied from asia-northeast1 with its `CHECKPOINT_COMPLETE` marker;
+`trainer.ckpt_require_marker` enforces it). The engines load the native MXFP4
+checkpoint from `hf-cache-gptoss120b` (content-addressed layout built from a
+`snapshot_download`; 65 GB) and requantize the experts at load:
+`MOE_REQUANTIZE_WEIGHT_DTYPE=fp8` first (fp8 storage, BF16 math; v5p has no FP8
+MXU), `bf16` as the fallback if the GMM kernel rejects fp8 on v5p. The MaxText
+fork pin is `d388c5478` (sparse expert LoRA); the qwen pin is a different branch,
+which is why `maxtext_spec` lives in the preset. 120B training has not passed a
+gate anywhere yet; treat the first run as the acceptance test.
+
+Placement on this pool: preflight refuses workers that still hold warm legacy
+engines. List the finished legacy job's task id (`sky-managed-<ts>_<name>_<job>-0`,
+from `sky jobs logs --controller <job>`) in `retired_task_ids`, rebuild, and
+launch right after that worker frees. Only list jobs that are terminal.
