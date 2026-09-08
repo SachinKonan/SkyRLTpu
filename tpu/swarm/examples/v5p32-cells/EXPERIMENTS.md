@@ -93,7 +93,7 @@ still descend faster than TTD, or was GRPO's qwen win coming from the validity t
 | stageB2-g-v32-grpo-n | 433 | gemma | GRPO whitened | 10/15 | 0.380871109 | 0.75 | 5978 | waiting; ran through the outage to step 10 (was 390) |
 | stageB2-g-v32-ttd-n | 425 | gemma | TTD | 4/15 | 0.380910353 | 0.78 | 6000 | waiting; led GRPO by 3.1e-5 at equal step 4 (was 391) |
 | stageB-m-v32-grpo-n | 392 | muse | GRPO whitened | 4/15 | 0.380898666 | 0.68 | 11116 | waiting after preemption at 15:25Z |
-| stageB-m-v32-ttd-n | 393 | muse | TTD | 1/15 | 0.381036950 | 0.76 | 14333 | running |
+| stageB-m-v32-ttd-n | 426 | muse | TTD | 2/15 | 0.380913341 | 0.74 | 12642 | waiting (was 393) |
 
 Raw validity is the fraction of drawn rollouts that were valid before filtering
 (kept validity is 1.0 by construction). On qwen GRPO led by 1.2e-5 at step 3 and
