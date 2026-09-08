@@ -841,7 +841,7 @@ class TunixBackend(AbstractBackend):
             )
             for x in sorted(leaves, key=lambda a: -int(_np.prod(a.shape)))[:3]:
                 logger.info(f"PARAM DIAG: shape={tuple(x.shape)} sharding={x.sharding}")
-            for d in jax.devices()[:2]:
+            for d in jax.local_devices()[:2]:
                 s = d.memory_stats() or {}
                 lim = s.get("bytes_limit") or s.get("bytes_reservable_limit") or 0
                 logger.info(
@@ -887,6 +887,17 @@ class TunixBackend(AbstractBackend):
                 "built. Disable that option to use more than one LoRA config."
             )
         model = nnx.merge(self.base_graphdef, self.base_state)
+        if self.config.free_base_state_after_template:
+            # The merged module now holds the only reference this code needs to
+            # the base arrays. Dropping self.base_state here (instead of at the
+            # end of create_model) lets qwix's private copy replace the base
+            # arrays as soon as this function returns, and steers
+            # _init_lora_state onto its template-copy path, so no second whole
+            # model is ever wrapped. 120B on 8 v5p chips: each copy is 29 GiB
+            # per chip; four copies do not fit in 95 GiB (job 414).
+            self.base_state = None
+            gc.collect()
+        self._log_hbm("template/merged")
         if (
             self.config.model_source == "maxtext"
             and "gpt-oss" in self._maxtext_model_name()
@@ -906,6 +917,7 @@ class TunixBackend(AbstractBackend):
                 rngs=nnx.Rngs(seed),
             )
             logger.info("Installed sparse expert LoRA on %d GPT-OSS MoE layer groups", installed)
+            self._log_hbm("template/sparse_expert_lora")
         provider = qwix.LoraProvider(
             module_path=self._module_path_regex(lora_config),
             rank=lora_config.rank,
@@ -913,6 +925,7 @@ class TunixBackend(AbstractBackend):
         )
         model_input = model.get_model_input()
         model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+        self._log_hbm("template/qwix_applied")
         if self.config.model_source == "maxtext":
             repaired = _repair_maxtext_scanned_lora_metadata(model)
             if repaired:
@@ -942,6 +955,8 @@ class TunixBackend(AbstractBackend):
             kind=kind,
         )
         self.templates[key] = template
+        gc.collect()
+        self._log_hbm("template/ready")
         logger.info(f"Created LoRA template for key={key}")
         return template
 
@@ -1227,6 +1242,7 @@ class TunixBackend(AbstractBackend):
             )
         template = self._get_template(template_config)
         lora_state = self._init_lora_state(template_config)
+        self._log_hbm("create_model/lora_state")
         if mix_settings is not None:
             gamma_init, gamma_lr = mix_settings
             mix = lora_mix.MixState(
@@ -1271,6 +1287,7 @@ class TunixBackend(AbstractBackend):
                 "Released the pristine base parameter state (the template holds its own "
                 "copy); additional LoRA configs are unavailable for this process."
             )
+        self._log_hbm("create_model/done")
         logger.info(f"Created model {model_id} with lora rank={lora_config.rank}, alpha={lora_config.alpha}")
 
     def delete_model(self, model_id: str) -> None:
@@ -1685,7 +1702,7 @@ class TunixBackend(AbstractBackend):
                 _mb_dt = time.time() - _mb_t0
                 _mb_el = time.time() - _mb_start
                 try:
-                    _ms = jax.devices()[0].memory_stats() or {}
+                    _ms = jax.local_devices()[0].memory_stats() or {}
                     _mem = (
                         f" hbm={_ms.get('bytes_in_use', 0) / 1e9:.1f}G"
                         f"/peak={_ms.get('peak_bytes_in_use', 0) / 1e9:.1f}G"
@@ -2344,7 +2361,7 @@ class TunixBackend(AbstractBackend):
     def _log_hbm(self, tag: str) -> None:
         """One-line per-device HBM telemetry (in_use/peak), best-effort."""
         try:
-            s = jax.devices()[0].memory_stats() or {}
+            s = jax.local_devices()[0].memory_stats() or {}
             logger.info(
                 f"HBM[{tag}] in_use={s.get('bytes_in_use', 0) / 1e9:.2f}G "
                 f"peak={s.get('peak_bytes_in_use', 0) / 1e9:.2f}G "
