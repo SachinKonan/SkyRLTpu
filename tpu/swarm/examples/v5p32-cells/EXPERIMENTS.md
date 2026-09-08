@@ -171,6 +171,20 @@ legacy cells (needs the other session's retirement manifests); the executor is
 qwen-only; the trainer-env passthrough in `ray_train/config.py` + `commands.py` is
 uncommitted because those files also carry the other session's WIP.
 
+## gpt-oss 120B on the Ray v2 executor (2 trainer hosts + 2 engine hosts per v5p-32)
+
+Goal: test the objective ranking (GRPO vs TTD vs centered piecewise) on a second model family. gpt-oss-120b (MXFP4 experts) needs two hosts for the MaxText trainer (tp 4, fsdp 2) and two for vLLM (tp 4), so this is the first Ray v2 topology with `trainer.hosts=2`. Profiles: `tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_{grpo,ttd,pwc}.json` (worktree `SkyRLTpu-gptoss`, branch `agent/tunix-multihost-gptoss`). Executor defaults were first made identical to the legacy v5p cell launcher (prefix caching, 8192 batched tokens, seq buckets, direct routing, exact package pins incl. jax 0.11.1 trainer / 0.10.1 engine).
+
+| job | profile | worker | status | note |
+|---|---|---|---|---|
+| 411 | grpo | 127 | FAILED 00:31Z | executor bug: orbax CHECKPOINT_COMPLETE preflight probed the marker path with `/**` (a file can never match). Teardown also published 712 stale Qwen compile entries from the hosts' leftover tmpfs into the new gpt-oss compile prefixes (`-ray-v1`, abandoned; delete when convenient). |
+| 412 | grpo | 127 | FAILED 02:17Z | marker fixed, tmpfs grown to 200G, 77 GB orbax restored, trainer venv built; then `trainer-flce-contract` failed: the gpt-oss MaxText fork (d388c547) spells the vLLM guard as a tuple and adds an expert_indices return, so the exact-block FLCE patcher failed closed. |
+| 413 | grpo | 127 | RUNNING (launched 02:19Z) | patcher anchored on the tail shared by all forks (verified on the installed d388 file); foreign tmpfs trees are evicted and the compile cache is scoped to its prefix; caches were cleared by hand on all 4 hosts of worker 127 first. |
+| - | ttd | 177 (idle) | not launched | waits for 413 to clear prepare (trainer + engines started), then launch. |
+| - | pwc | - | not launched | next free worker after ttd. |
+
+Fixes: `0b5bf349` (marker, eviction, compile scoping, tmpfs remount-resize, 200G caps), `8111cbd8` (retire 336 leftovers on 177), `72a1a5c3` (FLCE patch for the gpt-oss fork). Ray v2 tests: 160 pass.
+
 ## Overall best values
 
 | Rank | Value | Cell |
