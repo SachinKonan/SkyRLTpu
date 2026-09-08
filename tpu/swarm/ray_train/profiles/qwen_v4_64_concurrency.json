@@ -3,11 +3,25 @@
   "accelerator": "tpu-v4-64",
   "hosts": 8,
   "inference_only": true,
-  "inference_only_ranks": [0],
+  "inference_only_ranks": [
+    0
+  ],
   "bucket": "gs://sk7524-tinker-tpu-us-central2",
   "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-v4-concurrency-diag-20260907-01.tar.gz",
   "base_bundle_sha256": "6c953d89b93d9fa4fcf8f1065077b65f8042b998b1fe5112d8d0641988bd168a",
-  "trainer": {"hosts": 0},
+  "trainer": {
+    "hosts": 0,
+    "sequence_length": 22528,
+    "max_target_length": 22528,
+    "seq_buckets": "",
+    "minimal_fb_output": false,
+    "lora_load_retries": 3,
+    "lora_load_retry_sleep": 10.0,
+    "request_timeout": 21600,
+    "max_concurrent_requests": 64,
+    "token_budget": 45056,
+    "flce_tile": 512
+  },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
     "orbax": "gs://sk7524-tinker-tpu-us-central2/maxtext-cache-qwen35-v1",
@@ -24,6 +38,18 @@
     "tp": 4,
     "max_sequences": 16,
     "memory_utilization": 0.8,
-    "restart_limit": 3
-  }
+    "restart_limit": 3,
+    "chunk_tokens": 4096,
+    "chunked_prefill": true,
+    "prefix_caching": false,
+    "max_loras": 1,
+    "skip_precompile": true,
+    "batched_rpa_kernel": true,
+    "ragged_conv1d": true,
+    "routing": "ingress",
+    "max_model_length": 22528
+  },
+  "client_hf_offline": true,
+  "client_learning_rate": "1.5e-4",
+  "client_member_spec": "Qwen/Qwen3.5-27B:qwen3:qwen"
 }

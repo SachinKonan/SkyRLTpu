@@ -27,7 +27,15 @@
     "token_budget": 73728,
     "logical_kv_heads": 4,
     "remat": "full",
-    "max_lora_rank": 64
+    "max_lora_rank": 64,
+    "max_target_length": 18432,
+    "seq_buckets": "",
+    "minimal_fb_output": false,
+    "lora_load_retries": 3,
+    "lora_load_retry_sleep": 10.0,
+    "request_timeout": 21600,
+    "max_concurrent_requests": 64,
+    "flce_tile": 512
   },
   "inference": {
     "backend": "ray_serve",
@@ -35,7 +43,16 @@
     "max_sequences": 32,
     "memory_utilization": 0.9,
     "restart_limit": 3,
-    "max_lora_rank": 64
+    "max_lora_rank": 64,
+    "chunk_tokens": 4096,
+    "chunked_prefill": true,
+    "prefix_caching": false,
+    "max_loras": 1,
+    "skip_precompile": true,
+    "batched_rpa_kernel": true,
+    "ragged_conv1d": true,
+    "routing": "ingress",
+    "max_model_length": 22528
   },
   "client_context_window": 18432,
   "client_phase1_max_tokens": 13824,
@@ -50,5 +67,8 @@
   "trainer_env": {
     "TUNIX_LORA_MIX_GAMMA": "0.5",
     "TUNIX_LORA_MIX_GAMMA_LR": "0.02"
-  }
+  },
+  "client_hf_offline": true,
+  "client_learning_rate": "1.5e-4",
+  "client_member_spec": "Qwen/Qwen3.5-27B:qwen3:qwen"
 }

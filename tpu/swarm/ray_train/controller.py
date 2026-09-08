@@ -48,8 +48,8 @@ class TrainerRank:
     def reserved(self):
         return self.rank
 
-    def start(self, ranks):
-        return ray.get(self.host.start_trainer.remote(ranks))
+    def start(self, ranks, inference_ips=None):
+        return ray.get(self.host.start_trainer.remote(ranks, inference_ips))
 
 
 class Controller:
@@ -171,7 +171,12 @@ class Controller:
             self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
                               for r in train_ranks], 300)
         else:
-            train_ranks, inference_ranks = [0], list(range(1, self.config.hosts))
+            # 32-core slices: the first trainer.hosts ranks train (rank 0 also
+            # hosts the API server and client), the rest serve. The v5p-32
+            # topology is 2x2x4 with one 2x2 host per row, so a two-host
+            # trainer is a contiguous 1,1,2 process grid; no probe needed.
+            train_ranks = list(range(self.config.trainer.hosts))
+            inference_ranks = list(range(self.config.trainer.hosts, self.config.hosts))
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks)
         prepared_ranks = sorted(train_ranks + inference_ranks)
         prepared = self.checked_get([self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
@@ -187,7 +192,8 @@ class Controller:
         self.checked_get([trainer.reserved.remote() for trainer in self.trainers], 120)
         self.catalog = Catalog.options(name="inference-catalog").remote(
             [self.ips[r] for r in inference_ranks], self.config.inference.restart_limit)
-        trainer_starts = [trainer.start.remote(train_ranks) for trainer in self.trainers]
+        inference_ips = [self.ips[r] for r in inference_ranks]
+        trainer_starts = [trainer.start.remote(train_ranks, inference_ips) for trainer in self.trainers]
         # Both services start concurrently; our readiness loop owns the deadline.
         deploy(self.config, self.prepared, self.catalog, self.ips[0])
         self.checked_get(trainer_starts, self.config.ready_timeout)

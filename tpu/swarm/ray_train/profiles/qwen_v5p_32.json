@@ -6,28 +6,56 @@
     "10.202.0.51": {
       "boot_id": "4de46640-4ae9-43b4-b2a8-94bd81d749da",
       "processes": [
-        {"pid": 39448, "created": 1788743132.03, "command_sha256": "3c13c55ca234a90291e63bf63238639cf455f83c813b6a729e3ff49df7cbeefe"},
-        {"pid": 49126, "created": 1788744343.07, "command_sha256": "8bd156c2f2c654c4c89145ec82d67bef3d2ab8087f2edb24f0515737f02d0895"},
-        {"pid": 49513, "created": 1788744351.86, "command_sha256": "66b7cfeed6421a36f03bafb81c69eab7aee1c47a4dfbac161b254486da06ce93"},
-        {"pid": 54167, "created": 1788744443.33, "command_sha256": "ed04683928855f9f443ce49acdfab594677d54f8b1bf9d2c2a151567ed185d9b"}
+        {
+          "pid": 39448,
+          "created": 1788743132.03,
+          "command_sha256": "3c13c55ca234a90291e63bf63238639cf455f83c813b6a729e3ff49df7cbeefe"
+        },
+        {
+          "pid": 49126,
+          "created": 1788744343.07,
+          "command_sha256": "8bd156c2f2c654c4c89145ec82d67bef3d2ab8087f2edb24f0515737f02d0895"
+        },
+        {
+          "pid": 49513,
+          "created": 1788744351.86,
+          "command_sha256": "66b7cfeed6421a36f03bafb81c69eab7aee1c47a4dfbac161b254486da06ce93"
+        },
+        {
+          "pid": 54167,
+          "created": 1788744443.33,
+          "command_sha256": "ed04683928855f9f443ce49acdfab594677d54f8b1bf9d2c2a151567ed185d9b"
+        }
       ]
     },
     "10.202.0.122": {
       "boot_id": "50606ace-b977-4b75-8b54-d0b591795945",
       "processes": [
-        {"pid": 18738, "created": 1788743872.44, "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"}
+        {
+          "pid": 18738,
+          "created": 1788743872.44,
+          "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"
+        }
       ]
     },
     "10.202.0.123": {
       "boot_id": "b2ecaab6-ad6d-4491-93c0-e910abce973a",
       "processes": [
-        {"pid": 18132, "created": 1788743854.66, "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"}
+        {
+          "pid": 18132,
+          "created": 1788743854.66,
+          "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"
+        }
       ]
     },
     "10.202.0.83": {
       "boot_id": "80f59b19-dd1d-4a4d-bf4f-e35cc09f610b",
       "processes": [
-        {"pid": 24601, "created": 1788743928.24, "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"}
+        {
+          "pid": 24601,
+          "created": 1788743928.24,
+          "command_sha256": "c5b5131d575494d656ec1ba90ec79d7e8bc06a58b1a8ca9ebf6b766086cd1bcc"
+        }
       ]
     },
     "10.202.0.157": {
@@ -125,13 +153,33 @@
     "sequence_length": 18432,
     "token_budget": 73728,
     "logical_kv_heads": 4,
-    "remat": "full"
+    "remat": "full",
+    "max_target_length": 18432,
+    "seq_buckets": "",
+    "minimal_fb_output": false,
+    "lora_load_retries": 3,
+    "lora_load_retry_sleep": 10.0,
+    "request_timeout": 21600,
+    "max_concurrent_requests": 64,
+    "flce_tile": 512
   },
   "inference": {
     "backend": "ray_serve",
     "tp": 4,
     "max_sequences": 32,
     "memory_utilization": 0.9,
-    "restart_limit": 3
-  }
+    "restart_limit": 3,
+    "chunk_tokens": 4096,
+    "chunked_prefill": true,
+    "prefix_caching": false,
+    "max_loras": 1,
+    "skip_precompile": true,
+    "batched_rpa_kernel": true,
+    "ragged_conv1d": true,
+    "routing": "ingress",
+    "max_model_length": 22528
+  },
+  "client_hf_offline": true,
+  "client_learning_rate": "1.5e-4",
+  "client_member_spec": "Qwen/Qwen3.5-27B:qwen3:qwen"
 }

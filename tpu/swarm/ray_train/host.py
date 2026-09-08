@@ -183,9 +183,28 @@ class Host:
             raise RuntimeError("topology probe did not produce one result")
         return json.loads(lines[0])
 
+    # Exact versions read off a live legacy v5p-32 qwen cell (job 340, 2026-09-08):
+    # trainer = tpu/tunix_runtime uv.lock + the MaxText fork + these extras;
+    # engine = what `vllm-tpu==0.23.0` resolved there. Pinned so the executor's
+    # environments are the legacy environments, not what resolves next week.
+    TRAINER_PINS = ["aqtp==0.9.0", "pathwaysutils==0.1.11", "tokamax==0.0.13", "tiktoken==0.14.0",
+                    "jax==0.11.1", "jaxlib==0.11.1", "libtpu==0.0.46", "transformers==5.8.0"]
+    SERVING_PINS = ["vllm-tpu==0.23.0", "jax==0.10.1", "jaxlib==0.10.1", "libtpu==0.0.41",
+                    "torch==2.10.0", "torchax==0.0.11", "tokenizers==0.22.2", "numpy==2.3.5",
+                    "ray[serve]==2.58.0", "httpx", "psutil"]
+
+    def serving_pins(self):
+        pins = list(self.SERVING_PINS)
+        version = self.config.inference.transformers_version
+        if version:
+            pins.append(f"transformers=={version}")
+        return pins
+
     def install_role(self, role):
         folder = self.root / "envs" / ("trainer" if role == "trainer" else "serving")
-        identity = self.config.base_bundle_sha256 + (self.config.trainer.maxtext_spec if role == "trainer" else "vllm-0.23.0-jax0.10.1-tf5.8.0")
+        identity = self.config.base_bundle_sha256 + (
+            self.config.trainer.maxtext_spec + "|" + " ".join(self.TRAINER_PINS) if role == "trainer"
+            else " ".join(self.serving_pins()))
         marker = folder / ".complete"
         if marker.exists() and marker.read_text() == identity:
             if role == "trainer":
@@ -201,17 +220,20 @@ class Host:
             self.checked("trainer-source", ["uv", "pip", "install", "--python", python,
                                            "--no-deps", "--editable", str(self.source)])
             self.checked("trainer-maxtext", ["uv", "pip", "install", "--python", python,
-                self.config.trainer.maxtext_spec, "aqtp", "pathwaysutils", "tokamax", "tiktoken",
-                "jax==0.11.1", "jaxlib==0.11.1", "libtpu==0.0.46", "transformers==5.8.0"], cwd=self.root)
+                self.config.trainer.maxtext_spec, *self.TRAINER_PINS], cwd=self.root)
             self.checked("trainer-import", [python, "-c", "import jax,skyrl.backends.tunix_backend; assert jax.__version__ == '0.11.1'"],
                          env=dict(os.environ, JAX_PLATFORMS="cpu"))
             self.checked("trainer-flce-contract", [python, str(Path(__file__).with_name("patch_maxtext.py"))])
         else:
             self.checked("serving-venv", ["uv", "venv", "--python", "3.12", str(folder)])
-            self.checked("serving-install", ["uv", "pip", "install", "--python", python,
-                "vllm-tpu==0.23.0", "ray[serve]==2.58.0", "transformers==5.8.0", "jax==0.10.1", "httpx", "psutil"])
+            self.checked("serving-install", ["uv", "pip", "install", "--python", python, *self.serving_pins()])
             self.checked("serving-overlay", ["uv", "pip", "install", "--python", python, "--no-deps",
-                                             str(self.source / "third_party/tpu-inference")])
+                                             "--force-reinstall", str(self.source / "third_party/tpu-inference")])
+            self.checked("serving-import", [python, "-c",
+                "import jax, vllm; from tpu_inference.worker.tpu_worker import TPUWorker; "
+                "assert jax.__version__ == '0.10.1'; "
+                "missing = [n for n in ('add_lora','remove_lora','list_loras','pin_lora') if not hasattr(TPUWorker, n)]; "
+                "assert not missing, missing"], env=dict(os.environ, JAX_PLATFORMS="cpu"))
         marker.write_text(identity)
 
     def install_client(self):
@@ -250,8 +272,12 @@ class Host:
         self.store = CacheStore(ram, self.gcs)
         self.store.reconcile_role(role)
         if role == "trainer":
-            self.store.restore_tree(self.config.cache.orbax.rstrip("/") + "/" + self.config.trainer.maxtext_model,
-                                    "orbax/" + self.config.trainer.maxtext_model)
+            orbax = self.config.cache.orbax.rstrip("/") + "/" + self.config.trainer.maxtext_model
+            if self.config.trainer.ckpt_require_marker and not self.gcs.list(orbax + "/CHECKPOINT_COMPLETE", allow_empty=True):
+                # gpt-oss 120B conversion contract (tpu/swarm/prepare_gptoss120b_v6e32.sh):
+                # never restore a checkpoint whose upload did not finish.
+                raise RuntimeError(f"orbax checkpoint {orbax} has no CHECKPOINT_COMPLETE marker")
+            self.store.restore_tree(orbax, "orbax/" + self.config.trainer.maxtext_model)
         self.snapshot = self.store.restore_hf(self.config.cache.hf, self.config.model, weights=role == "inference")
         if role == "inference" and self.config.cache.inference_compile_seed:
             self.store.restore_compile(self.config.cache.inference_compile_seed)
@@ -283,12 +309,13 @@ class Host:
         finally:
             self.compile_sync_lock.release()
 
-    def start_trainer(self, train_ranks):
+    def start_trainer(self, train_ranks, inference_ips=None):
         if self.phase != "prepared" or self.role != "trainer" or self.rank not in train_ranks:
             raise RuntimeError("trainer host was not prepared for this role")
         ips = [self.ips[r] for r in train_ranks]
         process_id = train_ranks.index(self.rank)
-        self.start("trainer", trainer_command(self.config, self.root, self.source, self.ips[0], ips, process_id),
+        self.start("trainer", trainer_command(self.config, self.root, self.source, self.ips[0], ips, process_id,
+                                              inference_ips),
                    trainer_environment(self.config, self.root, self.run, ips, process_id), self.source)
         self.phase = "trainer_started"
         return self.heartbeat()

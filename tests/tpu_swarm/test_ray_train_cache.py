@@ -23,7 +23,8 @@ def test_v4_profile_matches_requested_split_and_inference():
     config = Config.from_dict(config_dict())
     assert config.trainer.hosts == config.inference_hosts == 4
     assert (config.trainer.tp, config.trainer.fsdp, config.trainer.remat) == (8, 2, "full")
-    assert (config.inference.max_sequences, config.inference.memory_utilization) == (16, 0.9)
+    # Defaults follow the legacy v5p-32 qwen cell since 2026-09-08: 128 sequences.
+    assert (config.inference.max_sequences, config.inference.memory_utilization) == (128, 0.9)
     assert Config.from_dict(config.to_dict()) == config
 
 
