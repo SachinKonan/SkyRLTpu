@@ -215,18 +215,18 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
             "the release raises instead of silently retraining from nothing."
         ),
     )
-    qwix_jit_init: bool = Field(
-        default=True,
+    qwix_init_mode: str = Field(
+        default="abstract",
         description=(
-            "Run qwix.apply_lora_to_model's one tracing forward pass under nnx.jit "
-            "(MaxText models only). Eagerly, MaxText's layer scan is its own TPU "
-            "program: measured on gpt-oss-120b with 8 v5p chips (29.2 GiB of base "
-            "weights per chip) it held three whole-model copies (peak 89 GiB) and "
-            "then asked for a fourth as scoped memory -- which cannot fit. Under jit "
-            "XLA reads the base weights in place and emits one output copy. LoRA "
-            "factors created inside the trace are then placed on the physical "
-            "sharding their logical axes imply (qwix's eager device_put does that "
-            "only outside jit)."
+            "How qwix discovers where to insert LoRA (MaxText models only). qwix "
+            "runs one tracing forward pass; 'eager' executes it for real, and on "
+            "MaxText the layer scan is then its own TPU program that held three "
+            "whole-model copies and asked for a fourth (gpt-oss-120b on 8 v5p chips: "
+            "peak 89 GiB of 102.8, job 416); under jit XLA still wanted 104 GiB of "
+            "temporaries (job 417). 'abstract' runs the same trace under "
+            "nnx.eval_shape (no compute, no HBM), keeps the existing base arrays in "
+            "place, and initialises only the LoRA factors (he_uniform A, zero B) on "
+            "the sharding their logical axes resolve to. Base weights are never copied."
         ),
     )
     coordinator_address: str | None = Field(
@@ -256,18 +256,6 @@ def round_up_seq_len(seq_len: int) -> int:
 def _keystr_map(state) -> dict[str, Any]:
     """Flatten a pytree/nnx.State into {path-string: leaf}."""
     return {jax.tree_util.keystr(p): v for p, v in jax.tree.flatten_with_path(state)[0]}
-
-
-def _mesh_context(mesh):
-    """Enter ``mesh`` as the current mesh across JAX versions (set_mesh / use_mesh / Mesh.__enter__)."""
-    for attr in ("set_mesh",):
-        fn = getattr(jax, attr, None)
-        if fn is not None:
-            return fn(mesh)
-    fn = getattr(jax.sharding, "use_mesh", None) or getattr(jax.sharding, "set_mesh", None)
-    if fn is not None:
-        return fn(mesh)
-    return mesh
 
 
 def _repair_maxtext_scanned_lora_metadata(model: nnx.Module) -> int:
@@ -950,80 +938,92 @@ class TunixBackend(AbstractBackend):
             alpha=lora_config.alpha,
         )
         model_input = model.get_model_input()
-        use_jit = self.config.model_source == "maxtext" and self.config.qwix_jit_init
+        mode = self.config.qwix_init_mode if self.config.model_source == "maxtext" else "eager"
+        if mode not in ("eager", "abstract"):
+            raise ValueError(f"unknown qwix_init_mode {mode!r}")
         self._log_hbm("template/before_qwix", full=True)
         try:
-            if use_jit:
-                model = self._apply_qwix_jit(model, provider, seed, model_input)
+            if mode == "abstract":
+                model = self._apply_qwix_abstract(model, provider, seed, model_input)
             else:
                 model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+                if self.config.model_source == "maxtext":
+                    repaired = _repair_maxtext_scanned_lora_metadata(model)
+                    if repaired:
+                        logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
         except Exception:
             self._log_hbm("template/qwix_failed", full=True)
             raise
         self._log_hbm("template/qwix_applied")
-        if self.config.model_source == "maxtext":
-            repaired = _repair_maxtext_scanned_lora_metadata(model)
-            if repaired:
-                logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
-            if use_jit:
-                moved = self._place_lora_on_logical_sharding(model)
-                logger.info("Placed %d LoRA factors on their logical sharding", moved)
-                self._log_hbm("template/lora_placed")
         return model
 
-    def _apply_qwix_jit(self, model, provider, seed: int, model_input: dict):
-        """qwix's tracing forward as ONE compiled program (see qwix_jit_init)."""
-        import qwix
+    def _apply_qwix_abstract(self, model, provider, seed: int, model_input: dict):
+        """qwix's tracing forward under nnx.eval_shape; base arrays are reused, not copied.
 
-        mesh = getattr(self, "_mesh", None)
-
-        @nnx.jit
-        def wrap(module):
-            return qwix.apply_lora_to_model(module, provider, rngs=nnx.Rngs(seed), **model_input)
-
-        if mesh is not None:
-            with _mesh_context(mesh):
-                return wrap(model)
-        return wrap(model)
-
-    def _place_lora_on_logical_sharding(self, model) -> int:
-        """device_put every LoRAParam onto the NamedSharding its logical axes map to.
-
-        Outside jit qwix does this itself (device_put with the base kernel's spec
-        transposed); inside a trace the new factors come out with whatever XLA
-        chose. The logical axes are the ones _repair_maxtext_scanned_lora_metadata
-        just fixed, resolved through MaxText's logical_axis_rules on the loaded
-        mesh -- the same mapping every jitted training pass constrains to.
+        1. Trace qwix.apply_lora_to_model abstractly: yields the wrapped module's
+           graph and abstract state (ShapeDtypeStructs), including the stacked
+           per-layer LoRA factors MaxText's scan emits. No TPU program runs.
+        2. Repair the scan-aware logical axes of the new factors (same helper as
+           the eager path; it only reads shapes).
+        3. Fill the state: every leaf that already exists in the input module
+           (base kernels, sparse expert LoRA installed eagerly just before)
+           takes that real array; every new leaf is a qwix factor and is
+           initialised the way qwix would (he_uniform A, zeros B, dtype of the
+           base kernel) directly onto the NamedSharding its logical axes map to.
         """
+        import qwix
         from flax import linen as flax_linen
         from jax.sharding import NamedSharding, PartitionSpec as P
 
+        def trace(module):
+            return qwix.apply_lora_to_model(module, provider, rngs=nnx.Rngs(seed), **model_input)
+
+        abstract = nnx.eval_shape(trace, model)
+        repaired = _repair_maxtext_scanned_lora_metadata(abstract)
+        if repaired:
+            logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
+
+        graphdef, abstract_state = nnx.split(abstract)
+        real = {tuple(path): leaf for path, leaf in nnx.to_flat_state(nnx.state(model))}
         mesh = getattr(self, "_mesh", None)
-        rules = getattr(model, "logical_axis_rules", None)
-        if mesh is None or not rules:
-            return 0
-        moved = 0
-        state = nnx.state(model, nnx.LoRAParam)
-        flat = nnx.to_flat_state(state)
+        rules = tuple(getattr(model, "logical_axis_rules", ()) or ())
+        flat = nnx.to_flat_state(abstract_state)
+        filled, created, reused = [], 0, 0
+        key = jax.random.key(seed)
         for path, leaf in flat:
-            value = leaf.value if hasattr(leaf, "value") else leaf
-            if not hasattr(value, "ndim") or not hasattr(value, "sharding"):
-                continue
-            meta = leaf.get_metadata() if hasattr(leaf, "get_metadata") else {}
-            axes = next((meta[k] for k in ("out_sharding", "sharding_names", "sharding")
-                         if isinstance(meta.get(k), (tuple, list, P))), None)
-            if axes is None or len(axes) != value.ndim:
-                continue
-            target = flax_linen.logical_to_mesh_sharding(P(*axes), mesh, rules)
-            if not isinstance(target, NamedSharding):
-                continue
-            if value.sharding == target:
-                continue
-            leaf.value = jax.device_put(value, target)
-            moved += 1
-        if moved:
-            nnx.update(model, nnx.from_flat_state(flat))
-        return moved
+            tpath = tuple(path)
+            shape, dtype = tuple(leaf.value.shape), leaf.value.dtype
+            existing = real.get(tpath)
+            if existing is not None:
+                value = existing.value
+                if tuple(value.shape) != shape or value.dtype != dtype:
+                    raise RuntimeError(f"qwix changed base leaf {tpath}: {value.shape}/{value.dtype} -> {shape}/{dtype}")
+                leaf.value = value
+                reused += 1
+            else:
+                name = str(tpath[-1])
+                if not name.endswith(("_lora_a", "_lora_b")):
+                    raise RuntimeError(f"unexpected new leaf from qwix trace: {tpath}")
+                meta = leaf.get_metadata() if hasattr(leaf, "get_metadata") else {}
+                axes = next((meta[k] for k in ("out_sharding", "sharding_names", "sharding")
+                             if isinstance(meta.get(k), (tuple, list, P))), None)
+                target = None
+                if mesh is not None and rules and axes is not None and len(axes) == len(shape):
+                    candidate = flax_linen.logical_to_mesh_sharding(P(*axes), mesh, rules)
+                    if isinstance(candidate, NamedSharding):
+                        target = candidate
+                if name.endswith("_lora_b"):
+                    init = lambda k, sh=shape, dt=dtype: jnp.zeros(sh, dt)
+                else:
+                    he = jax.nn.initializers.he_uniform()
+                    init = lambda k, sh=shape, dt=dtype, he=he: he(k, sh, dt)
+                key, sub = jax.random.split(key)
+                leaf.value = jax.jit(init, out_shardings=target)(sub)
+                created += 1
+            filled.append((path, leaf))
+        logger.info("qwix abstract init: reused %d base leaves, created %d LoRA factors (mesh=%s)",
+                    reused, created, mesh is not None)
+        return nnx.merge(graphdef, nnx.from_flat_state(filled))
 
     def _get_template(self, lora_config: types.LoraConfig) -> _Template:
         key = self._template_key(lora_config)
