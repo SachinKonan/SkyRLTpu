@@ -44,7 +44,7 @@ and does the answer depend on the model?
 | stageB2-g-pw-n | 294 | gemma | piecewise LOO | 15/15 | 0.380865312 | 0.75 | 5977 | finished |
 | stageB2-g-pwc-n | 341 | gemma | piecewise centered | 11/15 | 0.380865377 | 0.87 | 5919 | running; 6.5e-8 from the LOO final, three large steps 9–11 |
 | stageB-m-grpo-n | 332 | muse | GRPO | 15/15 | 0.380866934 | 0.99 | 6438 | finished |
-| stageB-m-ttd-n | 333 | muse | TTD | 10/15 | 0.380866999 | 0.39 | 13446 | running; validity collapsed 0.86 → 0.39 over steps 6–10 |
+| stageB-m-ttd-n | 333 | muse | TTD | 13/15 | 0.380865601 | 0.18 | 13255 | running; validity collapsed 0.86 → 0.18 over steps 6–13; **step 13 logged advantage max 6.25e10** (see LOO note: TTD is LOO-normalised over the full group; not reproduced offline from the archived rewards, open) |
 | stageB-m-pw-n | 398 | muse | piecewise LOO | 9/15 | 0.380860445 | 0.84 | 13248 | running on v23 (resumed from 8 at 16:59Z) |
 | stageB-m-pwc-n | 342 | muse | piecewise centered | 10/15 | 0.380892892 | 0.79 | 13149 | running |
 
@@ -114,8 +114,8 @@ rule was rejected on 2026-09-07; 331 and 336 still run under it).
 |---|---|---|---|---|---|---|---|---|---|
 | meta-wt16-carry-g0-muse | 362 | muse | GRPO | carried from muse GRPO step 9 | 15/15 | 0.380858715 | 0.99 | 4090 | finished 22:43Z, best gen-1 arm |
 | meta-wt16-fresh-g0-qwen | 363 | qwen | GRPO | fresh | 14/15 | 0.380858844 | 0.97 | 11516 | finished 16:14Z: flatline stop (5 zero gains), flat since step 7. A qwen CARRY on its own tree was not run (user: reuses the experiment); it exists only as the Ray v2 mix control |
-| meta-wt16-carry-g0-gemma-ttd | 331 | gemma | TTD | carried from gemma TTD (8×32 run) | 10/15 | 0.380858785 | 0.77 | 5997 | running, old rule, ~1e-9/step |
-| meta-wt16-fresh-g0-gemma-ttd | 336 | gemma | TTD | fresh | 14/15 | 0.380858858 | 0.94 | 5992 | last step running |
+| meta-wt16-carry-g0-gemma-ttd | 418 | gemma | TTD | carried from gemma TTD (8×32 run) | 12/15 | 0.380858785 | 0.83 | 5984 | 331 stopped 03:29Z on the old rule (flat 10–12); relaunched 03:33Z under the relaxed rule on worker 127, resumes from step 12 |
+| meta-wt16-fresh-g0-gemma-ttd | 336 | gemma | TTD | fresh | 15/15 | 0.380858858 | 0.95 | 6018 | finished 00:56Z, flat over its last four steps |
 | meta-wt16-fresh-g0-muse-lr4e5 | 399 | muse | GRPO | fresh | 11/15 | 0.380858919 | 0.68 | 10969 | 335 stopped 17:23Z on the old rule; relaunched 17:32Z, flat since step 7, stops at 13 if no gain |
 
 Reading: the basin spans 2e-7. Carried weights lead on both models (muse carry
