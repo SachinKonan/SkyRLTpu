@@ -9,8 +9,7 @@ from tpu.swarm.ray_train.commands import client_environment
 from tpu.swarm.ray_train.config import Config
 
 
-@pytest.mark.parametrize("profile", ["qwen_v5p_32", "qwen_v4_64_retry",
-                                    "qwen_v5p_32_budget", "qwen_v4_64_budget"])
+@pytest.mark.parametrize("profile", ["qwen_v5p_32", "qwen_v5p_32_budget"])
 def test_proven_two_phase_budget_leaves_answer_space(profile, monkeypatch):
     monkeypatch.setenv("TTD_M0_PHASE1_MAX_TOKENS", "20480")
     cfg = Config.load(f"tpu/swarm/ray_train/profiles/{profile}.json")
@@ -55,7 +54,6 @@ def test_explicit_valid_budget_overrides_are_preserved():
 def test_corrected_runs_keep_hardware_layout_and_isolate_mutable_state():
     for profile, previous, trainer_shape in (
         ("qwen_v5p_32_budget", "qwen_v5p_32", (1, 1, 4, 18432)),
-        ("qwen_v4_64_budget", "qwen_v4_64_retry", (4, 8, 2, 22528)),
     ):
         cfg = Config.load(f"tpu/swarm/ray_train/profiles/{profile}.json")
         old = Config.load(f"tpu/swarm/ray_train/profiles/{previous}.json")

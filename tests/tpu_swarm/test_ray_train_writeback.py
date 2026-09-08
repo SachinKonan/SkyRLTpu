@@ -9,9 +9,9 @@ from tpu.swarm.ray_train.config import Config
 
 
 def controller(tmp_path):
-    cfg = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64.json").to_dict()
+    cfg = Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json").to_dict()
     cfg["root"] = str(tmp_path)
-    instance = module.Controller(Config.from_dict(cfg), [f"10.0.0.{i}" for i in range(8)])
+    instance = module.Controller(Config.from_dict(cfg), [f"10.0.0.{i}" for i in range(4)])
     instance.events = []
     instance.report = lambda event, **fields: instance.events.append((event, fields))
     instance.prepared = {"ready": True}

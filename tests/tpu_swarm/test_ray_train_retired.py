@@ -2,6 +2,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
+from dataclasses import replace
 
 pytest.importorskip("psutil")
 from tpu.swarm.ray_train import retired
@@ -107,7 +108,7 @@ def test_engine_without_task_is_covered_by_audited_parent(monkeypatch):
 
 def test_bootstrap_retires_before_checking_ports(monkeypatch, tmp_path):
     from tpu.swarm.ray_train import bootstrap
-    config = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64.json")
+    config = replace(Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json"), retired_task_ids=[TASK])
     calls = []
     monkeypatch.setattr(retired, "retire_workloads", lambda *args: calls.append("retire") or [])
     monkeypatch.setattr(bootstrap, "check_ports_available", lambda ports: calls.append("ports"))
@@ -117,7 +118,7 @@ def test_bootstrap_retires_before_checking_ports(monkeypatch, tmp_path):
 
 def test_bootstrap_refuses_unknown_workload_before_port_check(monkeypatch, tmp_path):
     from tpu.swarm.ray_train import bootstrap
-    config = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64_retry.json")
+    config = replace(Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json"), retired_task_ids=[TASK])
     calls = []
     def refuse(*args):
         raise RuntimeError("existing inference is not explicitly retired")
@@ -126,16 +127,6 @@ def test_bootstrap_refuses_unknown_workload_before_port_check(monkeypatch, tmp_p
     with pytest.raises(RuntimeError, match="not explicitly retired"):
         bootstrap.retire_before_port_check(config, "10.130.0.244", tmp_path / "bootstrap.jsonl")
     assert not calls
-
-
-def test_v4_retry_preserves_training_and_uses_lower_memory_inference():
-    old = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64.json")
-    retry = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64_retry.json")
-    assert retry.trainer == old.trainer
-    assert retry.run_id != old.run_id
-    assert retry.inference.memory_utilization == 0.8
-    assert retry.inference_hosts == 4
-    assert "mem80" in retry.cache.inference_compile
 
 
 def test_retirement_wait_does_not_require_pidfd(monkeypatch):

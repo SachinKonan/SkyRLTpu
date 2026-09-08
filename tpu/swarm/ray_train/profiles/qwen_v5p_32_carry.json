@@ -9,8 +9,7 @@
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1",
     "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts",
     "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-qwen35-tp1-fsdp4-r32-s18432-ray-v1",
-    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq32-mem90-chunk4096-ray-v1",
-    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq16-mem90-chunk4096-ray-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq128-mem90-chunk8192-ray-v2",
     "trainer_gib": 128,
     "inference_gib": 96,
     "reserve_gib": 128,
@@ -26,31 +25,13 @@
     "sequence_length": 18432,
     "token_budget": 73728,
     "logical_kv_heads": 4,
-    "remat": "full",
-    "max_target_length": 18432,
-    "seq_buckets": "",
-    "minimal_fb_output": false,
-    "lora_load_retries": 3,
-    "lora_load_retry_sleep": 10.0,
-    "request_timeout": 21600,
-    "max_concurrent_requests": 64,
-    "flce_tile": 512
+    "remat": "full"
   },
   "inference": {
     "backend": "ray_serve",
     "tp": 4,
-    "max_sequences": 32,
     "memory_utilization": 0.9,
-    "restart_limit": 3,
-    "chunk_tokens": 4096,
-    "chunked_prefill": true,
-    "prefix_caching": false,
-    "max_loras": 1,
-    "skip_precompile": true,
-    "batched_rpa_kernel": true,
-    "ragged_conv1d": true,
-    "routing": "ingress",
-    "max_model_length": 22528
+    "restart_limit": 3
   },
   "client_context_window": 18432,
   "client_phase1_max_tokens": 13824,
@@ -62,7 +43,5 @@
     "TTD_FLATLINE_MIN_STEPS": "4",
     "TTD_RESTART_AT_STEP": "-1"
   },
-  "client_hf_offline": true,
-  "client_learning_rate": "1.5e-4",
-  "client_member_spec": "Qwen/Qwen3.5-27B:qwen3:qwen"
+  "model_preset": "qwen3.5-27b"
 }

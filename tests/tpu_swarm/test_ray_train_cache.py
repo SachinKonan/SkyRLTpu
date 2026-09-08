@@ -12,17 +12,17 @@ from tpu.swarm.ray_train.config import Config
 
 
 def config_dict():
-    return dict(run_id="test-v4", accelerator="tpu-v4-64", hosts=8,
+    return dict(run_id="test-v5p", accelerator="tpu-v5p-32", hosts=4,
                 bucket="gs://test", base_bundle="gs://test/code/base.tar.gz",
                 base_bundle_sha256="a" * 64,
                 cache=dict(hf="gs://test/hf", orbax="gs://test/orbax",
                            trainer_compile="gs://test/train", inference_compile="gs://test/infer"))
 
 
-def test_v4_profile_matches_requested_split_and_inference():
+def test_default_profile_is_the_legacy_v5p_cell_split():
     config = Config.from_dict(config_dict())
-    assert config.trainer.hosts == config.inference_hosts == 4
-    assert (config.trainer.tp, config.trainer.fsdp, config.trainer.remat) == (8, 2, "full")
+    assert (config.trainer.hosts, config.inference_hosts) == (1, 3)
+    assert (config.trainer.tp, config.trainer.fsdp, config.trainer.remat) == (1, 4, "full")
     # Defaults follow the legacy v5p-32 qwen cell since 2026-09-08: 128 sequences.
     assert (config.inference.max_sequences, config.inference.memory_utilization) == (128, 0.9)
     assert Config.from_dict(config.to_dict()) == config

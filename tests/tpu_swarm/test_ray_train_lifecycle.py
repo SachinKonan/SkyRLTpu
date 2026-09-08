@@ -130,7 +130,7 @@ class Request:
 
 
 def ingress(tmp_path, transport):
-    raw = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64.json").to_dict()
+    raw = Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json").to_dict()
     raw["root"] = str(tmp_path)
     commits = []
 
@@ -264,7 +264,7 @@ def test_replacement_engine_restores_direct_adapter_before_generation(tmp_path):
 
         cls = serving.Engine.func_or_class
         engine = cls.__new__(cls)
-        engine.config = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64.json")
+        engine.config = Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json")
         engine.version, engine.lock, engine.run = None, asyncio.Lock(), tmp_path
         engine.url, engine.head = "http://engine:19801", "http://head:19800"
         engine.http = httpx.AsyncClient(transport=httpx.MockTransport(transport))

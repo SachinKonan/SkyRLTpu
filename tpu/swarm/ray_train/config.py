@@ -57,10 +57,12 @@ class Cache:
 
 @dataclass(frozen=True)
 class Trainer:
-    hosts: int = 4
-    tp: int = 8
-    fsdp: int = 2
-    process_bounds: str = "1,1,4"
+    # Legacy v5p-32 cell shape: one trainer host (4 chips, fsdp 4) and three
+    # single-host engines. Multi-host trainers (gpt-oss) override these.
+    hosts: int = 1
+    tp: int = 1
+    fsdp: int = 4
+    process_bounds: str = "1,1,1"
     chip_bounds: str = "2,2,1"
     maxtext_model: str = "qwen3.5-27b"
     maxtext_spec: str = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939977ac0ab79a4e64d21730936f253567"

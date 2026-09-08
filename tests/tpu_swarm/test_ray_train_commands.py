@@ -13,7 +13,8 @@ from tpu.swarm.ray_train.build import build
 
 
 def config(**overrides):
-    raw = dict(run_id="ray-test", accelerator="tpu-v4-64", hosts=8,
+    """A v5p-32 profile with executor defaults only (the legacy qwen cell shape)."""
+    raw = dict(run_id="ray-test", accelerator="tpu-v5p-32", hosts=4,
         bucket="gs://test", base_bundle="gs://test/base.tar.gz", base_bundle_sha256="a"*64,
         cache=dict(hf="gs://test/hf", orbax="gs://test/orbax", trainer_compile="gs://test/train",
                    inference_compile="gs://test/infer"))
@@ -38,8 +39,6 @@ ENGINE_IPS = IPS[1:]
 
 
 @pytest.mark.parametrize("profile,zone,hosts", [
-    ("qwen_v4_32", "us-central2-b", 4),
-    ("qwen_v4_64", "us-central2-b", 8),
     ("qwen_v5p_32", "us-east5-a", 4),
 ])
 def test_profile_build_targets_correct_tpu_family(tmp_path, profile, zone, hosts):
@@ -50,8 +49,7 @@ def test_profile_build_targets_correct_tpu_family(tmp_path, profile, zone, hosts
     assert cfg.hosts == hosts
     assert task["resources"]["zone"] == zone
     assert task["resources"]["accelerators"] == cfg.accelerator
-    if "v4" in profile:
-        assert task["resources"]["accelerator_args"]["runtime_version"] == "tpu-ubuntu2204-base"
+    assert task["resources"]["accelerator_args"]["runtime_version"] == "v2-alpha-tpuv5"
     if hosts == 4:
         assert (cfg.trainer.hosts, cfg.trainer.tp, cfg.trainer.fsdp) == (1, 1, 4)
         assert cfg.inference_hosts == 3
@@ -60,27 +58,21 @@ def test_profile_build_targets_correct_tpu_family(tmp_path, profile, zone, hosts
         assert env["TPU_PROCESS_ADDRESSES"] == "10.0.0.1:19804"
 
 
-@pytest.mark.parametrize("profile,sequences,memory,cache_tag", [
-    ("qwen_v5p_32", 32, 0.9, "seq32-mem90"),
-    ("qwen_v4_64", 16, 0.87, "seq16-mem87"),
-])
-def test_tuned_profiles_preserve_training_and_checkpoint_identity(profile, sequences, memory, cache_tag):
-    cfg = Config.load(f"tpu/swarm/ray_train/profiles/{profile}.json")
+def test_v5p_profile_preserves_training_and_checkpoint_identity():
+    cfg = Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json")
     cmd = inference_command(cfg, ROOT, ROOT / "source", ROOT / "model", ROOT / "run")
-    assert cmd[cmd.index("--max-num-seqs") + 1] == str(sequences)
-    assert cmd[cmd.index("--gpu-memory-utilization") + 1] == str(memory)
-    assert cache_tag in cfg.cache.inference_compile
-    assert "seq16-mem90" in cfg.cache.inference_compile_seed
-    if profile == "qwen_v4_64":
-        assert cfg.run_id == "qwen-ray-v4-64-001"
-        assert (cfg.trainer.hosts, cfg.trainer.tp, cfg.trainer.fsdp, cfg.inference_hosts) == (4, 8, 2, 4)
-    else:
-        assert cfg.run_id == "qwen-ray-v5p-32-001"
-        assert (cfg.trainer.hosts, cfg.trainer.tp, cfg.trainer.fsdp, cfg.inference_hosts) == (1, 1, 4, 3)
+    # Legacy v5p-32 qwen engine: 128 sequences, 90% HBM, 8192-token batches.
+    assert cmd[cmd.index("--max-num-seqs") + 1] == "128"
+    assert cmd[cmd.index("--gpu-memory-utilization") + 1] == "0.9"
+    assert cmd[cmd.index("--max-num-batched-tokens") + 1] == "8192"
+    assert "seq128-mem90-chunk8192" in cfg.cache.inference_compile
+    assert cfg.cache.inference_compile_seed is None or cfg.cache.inference_compile_seed == ""
+    assert cfg.run_id == "qwen-ray-v5p-32-001"
+    assert (cfg.trainer.hosts, cfg.trainer.tp, cfg.trainer.fsdp, cfg.inference_hosts) == (1, 1, 4, 3)
     assert cfg.trainer.remat == "full"
 
 
-@pytest.mark.parametrize("profile", ["qwen_v4_32", "qwen_v4_64", "qwen_v5p_32"])
+@pytest.mark.parametrize("profile", ["qwen_v5p_32", "gptoss120b_v5p_32_grpo"])
 def test_launch_checkpoint_path_matches_synchronous_mirror(tmp_path, monkeypatch, profile):
     from skyrl.utils.checkpoint_mirror import mirror_checkpoint_to_gcs
     cfg = Config.load(f"tpu/swarm/ray_train/profiles/{profile}.json")
@@ -108,27 +100,29 @@ def test_launch_checkpoint_path_matches_synchronous_mirror(tmp_path, monkeypatch
 
 def test_trainer_has_proven_qwen_mesh_and_direct_upload():
     cfg = config()
-    backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS)
-    assert backend["maxtext_kwargs"] == dict(ici_tensor_parallelism=8, ici_fsdp_parallelism=2,
+    backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS[:1])
+    # Legacy single-host v5p-32 qwen cell: tp 1 x fsdp 4 on one host.
+    assert backend["maxtext_kwargs"] == dict(ici_tensor_parallelism=1, ici_fsdp_parallelism=4,
         ici_context_parallelism=1, remat_policy="full", num_vocab_tiling=64,
-        attention="autoselected", use_tokamax_splash=True, allow_split_physical_axes=True,
-        override_model_config=True, base_num_kv_heads=8, jax_cache_dir=str(ROOT / "ram/compile"))
+        attention="autoselected", use_tokamax_splash=True, jax_cache_dir=str(ROOT / "ram/compile"))
     assert backend["vllm_lora_upload_endpoint"] == "/skyrl/v1/upload_lora_adapter"
-    assert backend["num_processes"] == 4
-    cmd = trainer_command(cfg, ROOT, ROOT / "source", IPS[0], IPS, 0)
+    assert backend.get("num_processes", 1) == 1
+    cmd = trainer_command(cfg, ROOT, ROOT / "source", IPS[0], IPS[:1], 0)
     assert cmd[cmd.index("--checkpoints-base")+1] == str(ROOT / "runs" / cfg.run_id / "checkpoints")
     assert backend["checkpoint_mirror_gcs"] == cfg.run_gcs + "/checkpoints"
     assert json.loads(cmd[-1]) == backend
 
 
 def test_trainer_rank_and_bounds_use_selected_physical_row():
-    env = trainer_environment(config(), ROOT, ROOT / "run", IPS, 2)
-    assert env["CLOUD_TPU_TASK_ID"] == "2"
-    assert env["TPU_PROCESS_ADDRESSES"] == ",".join(ip+":19804" for ip in IPS)
-    assert env["TPU_PROCESS_BOUNDS"] == "1,1,4"
-    cmd = trainer_command(config(), ROOT, ROOT / "source", IPS[0], IPS, 2)
+    # Two-host trainer (gpt-oss shape): rank 1 of a 1,1,2 process grid.
+    cfg = config(trainer=dict(hosts=2, tp=4, fsdp=2, process_bounds="1,1,2"))
+    env = trainer_environment(cfg, ROOT, ROOT / "run", IPS[:2], 1)
+    assert env["CLOUD_TPU_TASK_ID"] == "1"
+    assert env["TPU_PROCESS_ADDRESSES"] == ",".join(ip+":19804" for ip in IPS[:2])
+    assert env["TPU_PROCESS_BOUNDS"] == "1,1,2"
+    cmd = trainer_command(cfg, ROOT, ROOT / "source", IPS[0], IPS[:2], 1)
     assert "skyrl.backends.rpc" in cmd
-    assert cmd[cmd.index("--process-id")+1] == "2"
+    assert cmd[cmd.index("--process-id")+1] == "1"
 
 
 def test_inference_isolation_and_explicit_overrides(monkeypatch):
@@ -182,42 +176,40 @@ def test_v5p_profile_preserves_single_host_fsdp_and_memory_saving():
     env = trainer_environment(cfg, ROOT, ROOT / "run", IPS[:1], 0)
     assert env["TUNIX_ROW_SHARD"] == "4"
     assert env["TUNIX_UNIFORM_SEQ_LEN"] == "18432"
-    assert backend["maxtext_max_target_length"] == 18432
+    # Legacy qwen cell: 18432-token rows on a 22528 MaxText length.
+    assert backend["maxtext_max_target_length"] == 22528
     assert backend["train_token_budget"] == 4 * 18432
     assert "s18432" in cfg.cache.trainer_compile
     client = client_environment(cfg, ROOT, IPS[0])
     assert client["TTD_M0_TRAIN_MAX_SEQ"] == "18432"
     assert client["TTD_M0_CONTEXT_WINDOW"] == "18432"
     assert cfg.inference.max_model_length == 22528
-    assert (cfg.inference.max_sequences, cfg.inference.memory_utilization) == (32, 0.9)
+    assert (cfg.inference.max_sequences, cfg.inference.memory_utilization) == (128, 0.9)
 
 
-def test_v4_64_trainer_shape_is_unchanged():
-    cfg = Config.load("tpu/swarm/ray_train/profiles/qwen_v4_64.json")
-    assert (cfg.trainer.tp, cfg.trainer.fsdp) == (8, 2)
-    assert (cfg.trainer.sequence_length, cfg.trainer.token_budget) == (22528, 45056)
-
-
-@pytest.mark.parametrize("profile", sorted(p.stem for p in Path("tpu/swarm/ray_train/profiles").glob("qwen_*.json")))
-def test_existing_qwen_profiles_pin_their_pre_parity_behaviour(profile):
-    """The 2026-09-07 profiles ran without prefix caching, with chunked prefill at
-    4096 tokens, one LoRA slot, lazy engine compilation, ingress routing and no
-    seq buckets. Those values are now written into the profiles explicitly so the
-    legacy-parity defaults do not silently change what they launch."""
+@pytest.mark.parametrize("profile", sorted(p.stem for p in Path("tpu/swarm/ray_train/profiles").glob("qwen_v5p_32*.json")))
+def test_v5p_profiles_inherit_the_legacy_cell_defaults(profile):
+    """Every v5p-32 qwen profile is the legacy v5p-32 cell plus only what defines
+    its experiment (mix rank, carry source, bundle). No profile may re-enable the
+    pre-parity executor behaviour (ingress routing, no prefix caching, 4096-token
+    chunked prefill, one LoRA slot, experimental kernels, no seq buckets)."""
     cfg = Config.load(f"tpu/swarm/ray_train/profiles/{profile}.json")
-    assert cfg.inference.routing == "ingress"
-    assert not cfg.inference.prefix_caching and cfg.inference.chunked_prefill
-    assert cfg.inference.chunk_tokens == 4096 and cfg.inference.max_loras == 1
-    assert cfg.inference.skip_precompile and cfg.inference.batched_rpa_kernel and cfg.inference.ragged_conv1d
-    assert cfg.trainer.seq_buckets == "" and not cfg.trainer.minimal_fb_output
-    assert cfg.trainer.max_target_length == cfg.trainer.sequence_length
-    assert (cfg.trainer.lora_load_retries, cfg.trainer.lora_load_retry_sleep, cfg.trainer.request_timeout) == (3, 10.0, 21600)
-    assert cfg.trainer.max_concurrent_requests == 64
-    assert cfg.client_hf_offline
-    if not cfg.inference_only:
-        backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS[:cfg.trainer.hosts], ENGINE_IPS)
-        assert backend["vllm_base_url"] == "http://10.0.0.1:19800"
-        assert not backend["vllm_client_side_round_robin"]
+    assert cfg.model_preset == "qwen3.5-27b"
+    assert cfg.inference.routing == "direct"
+    assert cfg.inference.prefix_caching and not cfg.inference.chunked_prefill
+    assert cfg.inference.chunk_tokens == 8192 and cfg.inference.max_loras == 8
+    assert not (cfg.inference.skip_precompile or cfg.inference.batched_rpa_kernel or cfg.inference.ragged_conv1d)
+    assert cfg.inference.max_sequences == 128
+    assert cfg.trainer.seq_buckets == "4096,8192,12288,16384,20480" and cfg.trainer.minimal_fb_output
+    assert cfg.trainer.effective_max_target_length == 22528
+    assert (cfg.trainer.lora_load_retries, cfg.trainer.lora_load_retry_sleep, cfg.trainer.request_timeout) == (3, 2.0, 300)
+    assert cfg.trainer.max_concurrent_requests == 256
+    assert not cfg.client_hf_offline
+    assert (cfg.trainer.hosts, cfg.trainer.tp, cfg.trainer.fsdp, cfg.trainer.process_bounds) == (1, 1, 4, "1,1,1")
+    assert "v5p32-cells" in cfg.base_bundle
+    backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS[:cfg.trainer.hosts], ENGINE_IPS)
+    assert backend["vllm_base_url"] == ",".join(f"http://{ip}:19801" for ip in ENGINE_IPS)
+    assert backend["vllm_client_side_round_robin"]
 
 
 # ---------------------------------------------------------------- legacy parity
