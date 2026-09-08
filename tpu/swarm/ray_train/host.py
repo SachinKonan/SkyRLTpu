@@ -214,7 +214,8 @@ class Host:
     def install_role(self, role):
         folder = self.root / "envs" / ("trainer" if role == "trainer" else "serving")
         identity = self.config.base_bundle_sha256 + (
-            self.config.trainer.maxtext_spec + "|" + " ".join(self.TRAINER_PINS) if role == "trainer"
+            self.config.trainer.maxtext_spec + "|" + " ".join(self.TRAINER_PINS + self.config.trainer.extra_pins)
+            if role == "trainer"
             else " ".join(self.serving_pins()))
         marker = folder / ".complete"
         if marker.exists() and marker.read_text() == identity:
@@ -231,8 +232,13 @@ class Host:
             self.checked("trainer-source", ["uv", "pip", "install", "--python", python,
                                            "--no-deps", "--editable", str(self.source)])
             self.checked("trainer-maxtext", ["uv", "pip", "install", "--python", python,
-                self.config.trainer.maxtext_spec, *self.TRAINER_PINS], cwd=self.root)
-            self.checked("trainer-import", [python, "-c", "import jax,skyrl.backends.tunix_backend; assert jax.__version__ == '0.11.1'"],
+                self.config.trainer.maxtext_spec, *self.TRAINER_PINS, *self.config.trainer.extra_pins], cwd=self.root)
+            # Import what the backend imports at model creation, so a MaxText
+            # fork with an unpinned transitive dependency (job 413: drjax) fails
+            # here instead of in the trainer process.
+            self.checked("trainer-import", [python, "-c",
+                "import jax,skyrl.backends.tunix_backend; from maxtext.utils import model_creation_utils; "
+                "assert jax.__version__ == '0.11.1'"],
                          env=dict(os.environ, JAX_PLATFORMS="cpu"))
             self.checked("trainer-flce-contract", [python, str(Path(__file__).with_name("patch_maxtext.py"))])
         else:

@@ -4,6 +4,8 @@ Job 411 (gpt-oss 120B on v5p-32) failed because the check listed the marker's
 own path with a "/**" suffix, which can never match a file. The preflight now
 lists the checkpoint tree and looks for the marker among its objects.
 """
+import pytest
+
 from tpu.swarm.ray_train.cache import Object
 from tpu.swarm.ray_train.host import orbax_marker_present
 
@@ -78,3 +80,27 @@ def test_scope_compile_discards_cache_when_prefix_changes(tmp_path):
     store.scope_compile("gs://b/gptoss-compile")
     assert not (root / "compile").exists()
     assert (root / "compile.prefix").read_text() == "gs://b/gptoss-compile"
+
+
+# --- gpt-oss trainer extra pins (job 413: drjax) ----------------------------
+from tpu.swarm.ray_train.config import Config
+
+
+def _cfg(preset, **trainer):
+    return Config.from_dict({"run_id": "r", "accelerator": "tpu-v5p-32", "hosts": 4,
+                             "bucket": "gs://b", "base_bundle": "gs://b/c.tar.gz",
+                             "base_bundle_sha256": "0" * 64, "model_preset": preset,
+                             "cache": {"hf": "gs://b/hf", "orbax": "gs://b/orbax",
+                                       "trainer_compile": "gs://b/tc", "inference_compile": "gs://b/ic"},
+                             "trainer": dict(hosts=2, tp=4, fsdp=2, process_bounds="1,1,2", **trainer),
+                             "inference": {"backend": "ray_serve", "tp": 4}})
+
+
+def test_gptoss_preset_pins_drjax_and_qwen_does_not():
+    assert _cfg("gpt-oss-120b").trainer.extra_pins == ["drjax==0.2.1"]
+    assert _cfg("qwen3.5-27b").trainer.extra_pins == []
+
+
+def test_extra_pins_must_be_exact():
+    with pytest.raises(ValueError, match="extra_pins"):
+        _cfg("gpt-oss-120b", extra_pins=["drjax>=0.1.4"])

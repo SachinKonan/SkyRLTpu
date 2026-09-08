@@ -100,6 +100,11 @@ class Trainer:
     request_timeout: int = 300
     # Require the orbax CHECKPOINT_COMPLETE marker (gpt-oss 120B conversion contract).
     ckpt_require_marker: bool = False
+    # Extra exact pins installed with the MaxText fork. The legacy launcher adds
+    # drjax next to MaxText because the d388 fork's DiLoCo sharding helper
+    # imports it unconditionally on the model-creation path; the Qwen pin does
+    # not need it, so it stays a preset choice rather than a global pin.
+    extra_pins: list = field(default_factory=list)
 
     @property
     def effective_max_lora_rank(self):
@@ -208,7 +213,7 @@ PRESETS = {
                      flce_tile=512, num_vocab_tiling=64, tokamax_splash=False,
                      maxtext_kwargs={"sparse_matmul": True, "megablox": True,
                                      "allow_split_physical_axes": True},
-                     ckpt_require_marker=True),
+                     ckpt_require_marker=True, extra_pins=["drjax==0.2.1"]),
         inference=dict(max_sequences=32, max_model_length=22528, chunk_tokens=8192,
                        limit_mm_per_prompt="",
                        engine_env={"MOE_REQUANTIZE_WEIGHT_DTYPE": "fp8",
@@ -349,6 +354,9 @@ class Config:
             raise ValueError("trainer request/retry settings must be positive")
         if not isinstance(self.trainer.maxtext_kwargs, dict):
             raise ValueError("trainer.maxtext_kwargs must be a mapping")
+        if not isinstance(self.trainer.extra_pins, list) or not all(
+                isinstance(p, str) and "==" in p for p in self.trainer.extra_pins):
+            raise ValueError("trainer.extra_pins must be a list of exact 'name==version' pins")
         if min(self.cache.trainer_gib, self.cache.inference_gib) < 64 or self.cache.reserve_gib < 128:
             raise ValueError("RAM cache requires >=64 GiB cap and >=128 GiB runtime reserve")
         if min(self.cache.process_count, self.cache.thread_count, self.cache.sync_seconds,
