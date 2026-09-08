@@ -127,8 +127,9 @@ class Inference:
     max_model_length: int = 22528
     chunk_tokens: int = 8192
     max_lora_rank: int = 32
-    # Server-side hop timeout (ingress / engine actors), not the trainer's.
-    request_timeout: int = 21600
+    # --external-inference-timeout-sec on the trainer API (legacy v5p-32 cell:
+    # EXTERNAL_INFERENCE_TIMEOUT_SEC=7200; 21600 was the v4-64 launcher's).
+    request_timeout: int = 7200
     restart_limit: int = 3
     max_loras: int = 8
     # Legacy start_vllm_tpu.sh always passes --enable-prefix-caching and never

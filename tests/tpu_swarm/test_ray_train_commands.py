@@ -234,6 +234,21 @@ def test_qwen_preset_reproduces_the_legacy_vllm_command_line():
     assert "VLLM_WORKER_MULTIPROC_METHOD" not in env
 
 
+def test_trainer_and_engine_match_the_live_v5p_cell_process_environment():
+    """Diffed 2026-09-08 against legacy cell 390 (gemma) on worker 154: the
+    trainer API ran with --external-inference-timeout-sec 7200 and no
+    SKYRL_EXTERNAL_WATCHDOG_* overrides; the engine ran with
+    VLLM_USE_RAY_EXECUTOR=0 and MODEL_IMPL_TYPE=vllm."""
+    cfg = v5p_config(model_preset="gemma4-31b")
+    cmd = trainer_command(cfg, ROOT, ROOT / "source", IPS[0], IPS[:1], 0, ENGINE_IPS)
+    assert cmd[cmd.index("--external-inference-timeout-sec") + 1] == "7200"
+    env = trainer_environment(cfg, ROOT, ROOT / "run", IPS[:1], 0)
+    assert not any(k.startswith("SKYRL_EXTERNAL_WATCHDOG_") for k in env)
+    engine = inference_environment(cfg, ROOT, ROOT / "run")
+    assert engine["VLLM_USE_RAY_EXECUTOR"] == "0" and engine["MODEL_IMPL_TYPE"] == "vllm"
+    assert (engine["SKIP_JAX_PRECOMPILE"], engine["USE_BATCHED_RPA_KERNEL"], engine["USE_JAX_RAGGED_CONV1D"]) == ("0", "0", "0")
+
+
 def test_qwen_preset_reproduces_the_legacy_trainer_contract():
     """start_colocated_vllm_tinker.sh backend config for a qwen cell: 22528 MaxText
     length over 18432-token rows, 73728 budget, tile 512, client-side round robin to

@@ -9,10 +9,6 @@ Ray Serve over independent per-host vLLM engines, not native vLLM Ray DP.
 | Profile | Trainer | Inference | Pool |
 | --- | --- | --- | --- |
 | qwen_v5p_32.json | 1 host, TP1/FSDP4 | 3 hosts, TP4 each | tpuswarm-v5p32-east5a-erdos |
-| qwen_v4_32.json | 1 host, TP1/FSDP4 | 3 hosts, TP4 each | tpuswarm-v4-32-central2-smoke |
-| qwen_v4_64.json | 4 hosts, TP8/FSDP2 | 4 hosts, TP4 each | tpuswarm-v4-64-central2-qwen35-erdos |
-| qwen_v4_64_retry.json | 4 hosts, TP8/FSDP2 | 4 hosts, TP4 each, s16/u0.80 | tpuswarm-v4-64-central2-qwen35-erdos |
-| qwen_v4_32_inference.json | None | 4 hosts, TP4 each, s16/u0.80 | tpuswarm-v4-32-central2-smoke |
 
 The inference-only profile starts no trainer, client, grading, or automatic
 generation. It waits with all engines serving until stopped, with normal
@@ -20,7 +16,7 @@ health monitoring and compilation-cache writeback. The head also runs an
 engine; `/health`, `/status` and `/v1/completions` are on head port 19800.
 This is a bring-up test, not evidence that long generation is stable.
 
-The active v4 training target is v4-64: four trainer hosts with TP8/FSDP2
+(v4 profiles were removed 2026-09-08; this worktree recreates the v5p-32 cell only.) The former v4 training target was v4-64: four trainer hosts with TP8/FSDP2
 and full rematerialization, plus four independent TP4 inference hosts. The
 v4-32 profile is retained only as a failed reproduction: job 349 exhausted
 HBM during initial LoRA template creation, before sampling or training. Do

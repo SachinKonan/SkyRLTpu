@@ -52,8 +52,9 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         TPU_VISIBLE_CHIPS="0,1,2,3", TINKER_API_KEY="tml-local-skyrl-no-auth",
         SKYRL_DATABASE_URL="sqlite:///" + str(run / "tinker.db"),
         TPUSWARM_BUNDLE_ID=config.base_bundle_sha256,
-        SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC="0", SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC="28800",
-        SKYRL_EXTERNAL_WATCHDOG_STALE_SEC="30", SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH="4",
+        # No SKYRL_EXTERNAL_WATCHDOG_* overrides: the legacy v5p-32 cell runs the
+        # dispatch defaults (stale 300 s, inflight 3600 s, 2 redispatches,
+        # abandon 7200 s); the 0/28800/30/4 set belonged to the v4-64 launcher.
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     env.update(config.trainer_env)
     return env
@@ -136,6 +137,7 @@ def inference_environment(config, root, run):
         JAX_ENABLE_COMPILATION_CACHE="true",
         JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS="0", JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES="0",
         # Legacy start_vllm_tpu.sh exports (per-model values from the preset).
+        VLLM_USE_RAY_EXECUTOR="0",
         SKIP_JAX_PRECOMPILE=_flag(v.skip_precompile), USE_BATCHED_RPA_KERNEL=_flag(v.batched_rpa_kernel),
         USE_JAX_RAGGED_CONV1D=_flag(v.ragged_conv1d),
         VLLM_PLUGINS="lora_filesystem_resolver", VLLM_LORA_RESOLVER_CACHE_DIR=str(run / "loras"),
