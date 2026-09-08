@@ -179,11 +179,17 @@ Goal: test the objective ranking (GRPO vs TTD vs centered piecewise) on a second
 |---|---|---|---|---|
 | 411 | grpo | 127 | FAILED 00:31Z | executor bug: orbax CHECKPOINT_COMPLETE preflight probed the marker path with `/**` (a file can never match). Teardown also published 712 stale Qwen compile entries from the hosts' leftover tmpfs into the new gpt-oss compile prefixes (`-ray-v1`, abandoned; delete when convenient). |
 | 412 | grpo | 127 | FAILED 02:17Z | marker fixed, tmpfs grown to 200G, 77 GB orbax restored, trainer venv built; then `trainer-flce-contract` failed: the gpt-oss MaxText fork (d388c547) spells the vLLM guard as a tuple and adds an expert_indices return, so the exact-block FLCE patcher failed closed. |
-| 413 | grpo | 127 | RUNNING (launched 02:19Z) | patcher anchored on the tail shared by all forks (verified on the installed d388 file); foreign tmpfs trees are evicted and the compile cache is scoped to its prefix; caches were cleared by hand on all 4 hosts of worker 127 first. |
-| - | ttd | 177 (idle) | not launched | waits for 413 to clear prepare (trainer + engines started), then launch. |
-| - | pwc | - | not launched | next free worker after ttd. |
+| 413 | grpo | 127 | FAILED 02:22Z | all 4 hosts prepared, trainer started; rank-1 model load died `No module named 'drjax'` (the d388 fork's DiLoCo helper imports it; legacy installs `drjax>=0.1.4`, the Ray v2 pins read off a Qwen cell did not). Preset now pins drjax==0.2.1; import check covers model creation. |
+| 414 | grpo | 127 | FAILED 02:43Z | model loaded (29.2 GB/chip, correctly sharded fsdp2 x tp4), both engines up, first create_model: HBM `RESOURCE_EXHAUSTED` in qwix's LoRA install (jit_scan wants 29.19G). |
+| 415 | grpo | 127 | FAILED 03:00Z | base state released before the qwix copy; same error with telemetry: 30 GB in use of 102.8 on both trainer hosts. |
+| 416 | grpo | 127 | FAILED 03:14Z | allocator dump: qwix's eager tracing forward through MaxText's layer scan holds THREE whole-model copies (peak 89.1 GB) then wants a 4th 29.2 GB as scoped memory. |
+| 417 | grpo | 127 | FAILED 03:35Z | same forward under nnx.jit: XLA needs 104 GB of temporaries (scan re-emits the parameter stack). |
+| - | grpo | held | ready (bundle gptoss-v5) | fix: qwix trace under `nnx.eval_shape` (no compute), base arrays reused by identity, only LoRA factors initialised on their logical sharding (`qwix_init_mode="abstract"`, commit 7c8ff264; CPU-verified equal to eager on 1 and 4 devices). Held since 03:45Z: spot preemption wave took the pool to 2/52 READY; user to prioritise vs queued legacy cells. |
+| - | ttd / pwc | - | ready | yamls built; profiles retire 336 (177) and 331 (178). |
 
-Fixes: `0b5bf349` (marker, eviction, compile scoping, tmpfs remount-resize, 200G caps), `8111cbd8` (retire 336 leftovers on 177), `72a1a5c3` (FLCE patch for the gpt-oss fork). Ray v2 tests: 160 pass.
+Fixes (branch agent/tunix-multihost-gptoss): `0b5bf349` marker/eviction/compile scoping/tmpfs 200G; `72a1a5c3` FLCE patch for the gpt-oss fork; `cf3f1a6c` drjax pin + import check; `cb393072`/`7c8ff264` create_model memory (base state released early; abstract qwix init); profiles on bundle gptoss-v5 (`a9d9b1d5`). Ray v2 tests: 166 pass; MaxText CPU tests pass.
+
+**Pool event 03:39Z-:** spot preemption wave, erdos pool 2/52 READY at 03:45Z; 340/341/342/402 RECOVERING, 333/391/393/398/399/403/405/410/418 PENDING, only 390/392 RUNNING. Recovery is automatic (resume from last checkpoint).
 
 ## Overall best values
 
