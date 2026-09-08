@@ -215,6 +215,20 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
             "the release raises instead of silently retraining from nothing."
         ),
     )
+    qwix_jit_init: bool = Field(
+        default=True,
+        description=(
+            "Run qwix.apply_lora_to_model's one tracing forward pass under nnx.jit "
+            "(MaxText models only). Eagerly, MaxText's layer scan is its own TPU "
+            "program: measured on gpt-oss-120b with 8 v5p chips (29.2 GiB of base "
+            "weights per chip) it held three whole-model copies (peak 89 GiB) and "
+            "then asked for a fourth as scoped memory -- which cannot fit. Under jit "
+            "XLA reads the base weights in place and emits one output copy. LoRA "
+            "factors created inside the trace are then placed on the physical "
+            "sharding their logical axes imply (qwix's eager device_put does that "
+            "only outside jit)."
+        ),
+    )
     coordinator_address: str | None = Field(
         default=None,
         description="JAX coordinator address (host:port) for multi-process Tunix training.",
@@ -242,6 +256,18 @@ def round_up_seq_len(seq_len: int) -> int:
 def _keystr_map(state) -> dict[str, Any]:
     """Flatten a pytree/nnx.State into {path-string: leaf}."""
     return {jax.tree_util.keystr(p): v for p, v in jax.tree.flatten_with_path(state)[0]}
+
+
+def _mesh_context(mesh):
+    """Enter ``mesh`` as the current mesh across JAX versions (set_mesh / use_mesh / Mesh.__enter__)."""
+    for attr in ("set_mesh",):
+        fn = getattr(jax, attr, None)
+        if fn is not None:
+            return fn(mesh)
+    fn = getattr(jax.sharding, "use_mesh", None) or getattr(jax.sharding, "set_mesh", None)
+    if fn is not None:
+        return fn(mesh)
+    return mesh
 
 
 def _repair_maxtext_scanned_lora_metadata(model: nnx.Module) -> int:
@@ -924,9 +950,13 @@ class TunixBackend(AbstractBackend):
             alpha=lora_config.alpha,
         )
         model_input = model.get_model_input()
+        use_jit = self.config.model_source == "maxtext" and self.config.qwix_jit_init
         self._log_hbm("template/before_qwix", full=True)
         try:
-            model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+            if use_jit:
+                model = self._apply_qwix_jit(model, provider, seed, model_input)
+            else:
+                model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
         except Exception:
             self._log_hbm("template/qwix_failed", full=True)
             raise
@@ -935,7 +965,65 @@ class TunixBackend(AbstractBackend):
             repaired = _repair_maxtext_scanned_lora_metadata(model)
             if repaired:
                 logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
+            if use_jit:
+                moved = self._place_lora_on_logical_sharding(model)
+                logger.info("Placed %d LoRA factors on their logical sharding", moved)
+                self._log_hbm("template/lora_placed")
         return model
+
+    def _apply_qwix_jit(self, model, provider, seed: int, model_input: dict):
+        """qwix's tracing forward as ONE compiled program (see qwix_jit_init)."""
+        import qwix
+
+        mesh = getattr(self, "_mesh", None)
+
+        @nnx.jit
+        def wrap(module):
+            return qwix.apply_lora_to_model(module, provider, rngs=nnx.Rngs(seed), **model_input)
+
+        if mesh is not None:
+            with _mesh_context(mesh):
+                return wrap(model)
+        return wrap(model)
+
+    def _place_lora_on_logical_sharding(self, model) -> int:
+        """device_put every LoRAParam onto the NamedSharding its logical axes map to.
+
+        Outside jit qwix does this itself (device_put with the base kernel's spec
+        transposed); inside a trace the new factors come out with whatever XLA
+        chose. The logical axes are the ones _repair_maxtext_scanned_lora_metadata
+        just fixed, resolved through MaxText's logical_axis_rules on the loaded
+        mesh -- the same mapping every jitted training pass constrains to.
+        """
+        from flax import linen as flax_linen
+        from jax.sharding import NamedSharding, PartitionSpec as P
+
+        mesh = getattr(self, "_mesh", None)
+        rules = getattr(model, "logical_axis_rules", None)
+        if mesh is None or not rules:
+            return 0
+        moved = 0
+        state = nnx.state(model, nnx.LoRAParam)
+        flat = nnx.to_flat_state(state)
+        for path, leaf in flat:
+            value = leaf.value if hasattr(leaf, "value") else leaf
+            if not hasattr(value, "ndim") or not hasattr(value, "sharding"):
+                continue
+            meta = leaf.get_metadata() if hasattr(leaf, "get_metadata") else {}
+            axes = next((meta[k] for k in ("out_sharding", "sharding_names", "sharding")
+                         if isinstance(meta.get(k), (tuple, list, P))), None)
+            if axes is None or len(axes) != value.ndim:
+                continue
+            target = flax_linen.logical_to_mesh_sharding(P(*axes), mesh, rules)
+            if not isinstance(target, NamedSharding):
+                continue
+            if value.sharding == target:
+                continue
+            leaf.value = jax.device_put(value, target)
+            moved += 1
+        if moved:
+            nnx.update(model, nnx.from_flat_state(flat))
+        return moved
 
     def _get_template(self, lora_config: types.LoraConfig) -> _Template:
         key = self._template_key(lora_config)
