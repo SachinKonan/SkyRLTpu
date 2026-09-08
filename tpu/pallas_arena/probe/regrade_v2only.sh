@@ -38,14 +38,14 @@ for spec in "${ITEMS[@]}"; do
   # re-grade only if MISSING or has no-verdict rows; else skip (simple, robust)
   if [ -s "$out" ]; then
     if python3 -c "import json,sys;d=json.load(open(sys.argv[1]));r=d.get('rows') or [x for c in d.values() for x in c.get('rows',[])];sys.exit(0 if any('no verdict' in str(x.get('gate') or x.get('outcome') or '') for x in r) else 1)" "$out" 2>/dev/null; then
-      echo "$(date +%H:%M:%S) [$name] partial -> re-grade"; rm -f "$out"
+      echo "$(date +%H:%M:%S) [$name] partial -> RESUMING (keeping prior verdicts)"
     else
       echo "$(date +%H:%M:%S) [$name] complete -> skip"; continue
     fi
   fi
   echo "$(date +%H:%M:%S) [$name] grading $(wc -l < "$gens") items"
   uv run --isolated --extra jax --with fastapi python "$S/grade_gens_via_queue.py" \
-    --gens "$gens" --queue "$url" --out "$out" --seed-file "$seed" --max-wait-s 43200 \
+    --gens "$gens" --queue "$url" --out "$out" --seed-file "$seed" --resume --max-wait-s 43200 \
     > "runs/pallas_arena/${name}.log" 2>&1 && echo "$(date +%H:%M:%S) [$name] done" || echo "$(date +%H:%M:%S) [$name] FAILED"
 done
 echo "$(date +%H:%M:%S) V2 REGRADE DONE"

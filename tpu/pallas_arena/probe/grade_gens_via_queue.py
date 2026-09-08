@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -54,6 +55,8 @@ def main() -> None:
     ap.add_argument("--queue", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--max-wait-s", type=float, default=14400.0)
+    ap.add_argument("--resume", action="store_true",
+                    help="keep verdicts already in --out and grade only the rest")
     ap.add_argument("--seed-file", default="",
                     help="seed program backing `from lib import ...`; required only "
                          "if the cell was generated with --lib-imports")
@@ -61,6 +64,31 @@ def main() -> None:
     base = args.queue.rstrip("/")
 
     rows = [json.loads(l) for l in open(args.gens) if l.strip()]
+
+    # RESUME WITHIN A CELL. A slow cell can need more grading hours than a spot
+    # judge survives (gemma-splash v2: ~1h/candidate => ~32h for 32, vs a ~23h
+    # judge lifetime), and without this every attempt restarted from scratch and
+    # accumulated nothing across four judges. Load any verdicts already on disk
+    # and skip those idx, so successive sessions ADD to the file instead of
+    # replacing it. Only real verdicts are kept -- a "no verdict before
+    # deadline" row is treated as still-owed and re-submitted.
+    done_rows: dict = {}
+    if args.resume and os.path.exists(args.out):
+        try:
+            prev = json.load(open(args.out))
+            prev_rows = prev.get("rows") or [
+                x for c in prev.values() if isinstance(c, dict) for x in c.get("rows", [])]
+            for r0 in prev_rows:
+                if "no verdict" in str(r0.get("gate") or r0.get("outcome") or ""):
+                    continue
+                if r0.get("idx") is not None:
+                    done_rows[r0["idx"]] = r0
+            if done_rows:
+                print(f"[resume] {len(done_rows)} verdicts already on disk; "
+                      f"grading the remaining {len(rows) - len(done_rows)}", flush=True)
+        except Exception as e:  # noqa: BLE001 -- a bad prior file must not block grading
+            print(f"[resume] could not read {args.out}: {type(e).__name__}; starting fresh",
+                  flush=True)
     wids: dict[str, tuple[str, str, int]] = {}   # wid -> (task, variant, idx)
     cells: dict[str, dict] = defaultdict(lambda: {
         "n": 0, "gen_errors": 0, "no_program": 0, "rows": []})
@@ -68,6 +96,9 @@ def main() -> None:
     for r in rows:
         cell = f"{r.get('task')}:{r.get('variant')}"
         cells[cell]["n"] += 1
+        if r.get("idx") in done_rows:            # already graded in a prior session
+            cells[cell]["rows"].append(done_rows[r["idx"]])
+            continue
         if "text" not in r:
             cells[cell]["gen_errors"] += 1
             cells[cell]["rows"].append({"idx": r.get("idx"),
