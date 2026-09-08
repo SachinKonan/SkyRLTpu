@@ -44,7 +44,7 @@ and does the answer depend on the model?
 | stageB2-g-pw-n | 294 | gemma | piecewise LOO | 15/15 | 0.380865312 | 0.75 | 5977 | finished |
 | stageB2-g-pwc-n | 341 | gemma | piecewise centered | 11/15 | 0.380865377 | 0.87 | 5919 | running; 6.5e-8 from the LOO final, three large steps 9–11 |
 | stageB-m-grpo-n | 332 | muse | GRPO | 15/15 | 0.380866934 | 0.99 | 6438 | finished |
-| stageB-m-ttd-n | 333 | muse | TTD | 13/15 | 0.380865601 | 0.18 | 13255 | running; validity collapsed 0.86 → 0.18 over steps 6–13; **step 13 logged advantage max 6.25e10** (see LOO note: TTD is LOO-normalised over the full group; not reproduced offline from the archived rewards, open) |
+| stageB-m-ttd-n | 333 | muse | TTD | 13/15 | 0.380865601 | 0.18 | 13255 | **cancelled 03:58Z by the user** (degenerate: validity 0.86 → 0.18 over steps 6–13; step 13 logged advantage max 6.25e10, not reproduced offline from the archived rewards, open). Counts as the muse TTD result. |
 | stageB-m-pw-n | 398 | muse | piecewise LOO | 9/15 | 0.380860445 | 0.84 | 13248 | running on v23 (resumed from 8 at 16:59Z) |
 | stageB-m-pwc-n | 342 | muse | piecewise centered | 10/15 | 0.380892892 | 0.79 | 13149 | running |
 
