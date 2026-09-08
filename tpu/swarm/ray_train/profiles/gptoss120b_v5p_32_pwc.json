@@ -36,5 +36,8 @@
     "TTD_ADV_ESTIMATOR": "piecewise_valid_entropic_centered",
     "TTD_ELITE_SLOTS": "2",
     "TTD_ADV_PIECEWISE_ALPHA": "1.0"
-  }
+  },
+  "retired_task_ids": [
+    "sky-managed-2026-09-06-21-05-29-712480_meta-wt16-fresh-g0-gemma-ttd_336-0"
+  ]
 }

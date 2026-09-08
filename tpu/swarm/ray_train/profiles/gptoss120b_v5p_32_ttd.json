@@ -35,5 +35,8 @@
   "client_env": {
     "TTD_ADV_ESTIMATOR": "entropic_adaptive_beta",
     "TTD_ELITE_SLOTS": "2"
-  }
+  },
+  "retired_task_ids": [
+    "sky-managed-2026-09-06-21-05-29-712480_meta-wt16-fresh-g0-gemma-ttd_336-0"
+  ]
 }
