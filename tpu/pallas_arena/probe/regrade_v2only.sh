@@ -8,13 +8,14 @@ export PYTHONPATH="$REPO/tpu:${PYTHONPATH:-}"
 S=$REPO/tpu/pallas_arena/probe
 URL_FILE="${URL_FILE:-runs/pallas_arena/rl-queue-url.txt}"
 ITEMS=(
-  # v1-qwen-splash: deleted by the broken recovery, regenerate it
-  "runs/pallas_arena/evolve-smoke-gens-3761157.jsonl:runs/pallas_arena/xla-v1-qwen-splash.json:$S/seed_splash_flash.py"
-  # the 4 v2 cells -- the actual goal
+  # ORDER MATTERS: gemma-splash goes FIRST. It failed 3x (judges 15/16/17)
+  # purely because it sat last in the list and only ever got the tail end of a
+  # judge's ~23h life before preemption -- never a fresh window. Splash cells
+  # take ~3h; first in line, it completes comfortably.
+  "runs/pallas_arena/coserve-gens-gemma-splash-3783641.jsonl:runs/pallas_arena/xla-v2-gemma-splash.json:$S/seed_splash_flash.py"
+  "runs/pallas_arena/v6e-arm-gens-gemma-rglru.jsonl:runs/pallas_arena/xla-v2-gemma-rglru.json:$S/seed_rglru_active.py"
   "runs/pallas_arena/coserve-gens-qwen-rglru-3783640.jsonl:runs/pallas_arena/xla-v2-qwen-rglru.json:$S/seed_rglru_active.py"
   "runs/pallas_arena/coserve-gens-qwen-splash-3783639.jsonl:runs/pallas_arena/xla-v2-qwen-splash.json:$S/seed_splash_flash.py"
-  "runs/pallas_arena/v6e-arm-gens-gemma-rglru.jsonl:runs/pallas_arena/xla-v2-gemma-rglru.json:$S/seed_rglru_active.py"
-  "runs/pallas_arena/coserve-gens-gemma-splash-3783641.jsonl:runs/pallas_arena/xla-v2-gemma-splash.json:$S/seed_splash_flash.py"
 )
 queue_url() {
   local cand; cand=$(cat "$URL_FILE" 2>/dev/null); [ -n "$cand" ] || return 1
