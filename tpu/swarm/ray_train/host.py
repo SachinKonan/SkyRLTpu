@@ -21,6 +21,17 @@ from .process import Process
 CLIENT_ENV = Path(__file__).with_name("client_env")
 
 
+def orbax_marker_present(gcs, orbax):
+    """True when the orbax tree carries the top-level CHECKPOINT_COMPLETE marker.
+
+    GCS.list() enumerates a prefix (it appends "/**"), so probing the marker's
+    own path finds nothing: the marker is an object, not a directory. List the
+    checkpoint tree once and look for the marker among its objects instead.
+    """
+    objects = gcs.list(orbax, allow_empty=True)
+    return any(o.relative == "CHECKPOINT_COMPLETE" for o in objects)
+
+
 class Host:
     def __init__(self, config, rank, ips):
         self.config = Config.from_dict(config)
@@ -273,12 +284,13 @@ class Host:
         self.store.reconcile_role(role)
         if role == "trainer":
             orbax = self.config.cache.orbax.rstrip("/") + "/" + self.config.trainer.maxtext_model
-            if self.config.trainer.ckpt_require_marker and not self.gcs.list(orbax + "/CHECKPOINT_COMPLETE", allow_empty=True):
+            if self.config.trainer.ckpt_require_marker and not orbax_marker_present(self.gcs, orbax):
                 # gpt-oss 120B conversion contract (tpu/swarm/prepare_gptoss120b_v6e32.sh):
                 # never restore a checkpoint whose upload did not finish.
                 raise RuntimeError(f"orbax checkpoint {orbax} has no CHECKPOINT_COMPLETE marker")
             self.store.restore_tree(orbax, "orbax/" + self.config.trainer.maxtext_model)
         self.snapshot = self.store.restore_hf(self.config.cache.hf, self.config.model, weights=role == "inference")
+        self.store.scope_compile(self.compile_prefix())
         if role == "inference" and self.config.cache.inference_compile_seed:
             self.store.restore_compile(self.config.cache.inference_compile_seed)
         self.store.restore_compile(self.compile_prefix())

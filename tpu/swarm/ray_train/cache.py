@@ -138,8 +138,18 @@ def mount_cache(root, cap_gib, reserve_gib):
                         "tmpfs", str(root)], check=True, timeout=30)
     info = json.loads(subprocess.check_output([
         "findmnt", "--json", "--mountpoint", str(root), "--output", "FSTYPE,TARGET"]))
+    if info["filesystems"][0]["fstype"] != "tmpfs":
+        raise RuntimeError("unexpected filesystem type for RAM cache")
     stat = os.statvfs(root)
-    if info["filesystems"][0]["fstype"] != "tmpfs" or stat.f_blocks * stat.f_frsize > cap_gib * GIB:
+    if stat.f_blocks * stat.f_frsize < cap_gib * GIB:
+        # A mount left by an earlier run keeps that run's capacity; tmpfs
+        # resizes in place, so grow it to this profile's budget (data is kept).
+        if mem["MemAvailable"] < (cap_gib + reserve_gib) * GIB - stat.f_bfree * stat.f_frsize:
+            raise RuntimeError("not enough available memory to grow the RAM cache")
+        subprocess.run(["sudo", "-n", "mount", "-o", f"remount,size={cap_gib}G", str(root)],
+                       check=True, timeout=30)
+        stat = os.statvfs(root)
+    if stat.f_blocks * stat.f_frsize > cap_gib * GIB:
         raise RuntimeError("unexpected filesystem type or cache capacity")
     if mem["MemAvailable"] < reserve_gib * GIB:
         raise RuntimeError("runtime memory reserve is unavailable")
@@ -228,6 +238,38 @@ class CacheStore:
                 self.clear(name)
         previous.write_text(json.dumps({"role": role}))
 
+    def prune_siblings(self, name):
+        """Evict other models' trees that share this tree's parent directory.
+
+        The tmpfs budget is per host and a host that keeps its role across runs
+        keeps its private cache too; a Qwen orbax tree left behind by an earlier
+        run would otherwise be charged against the next model's restore.
+        """
+        target = self.owned(name)
+        parent = target.parent
+        if parent == self.root or not parent.exists():
+            return
+        keep = {target.name, target.name + "-partial"}
+        for child in parent.iterdir():
+            if child.name not in keep:
+                self.clear(str(Path(name).parent / child.name))
+                emit(self.gcs.events, "tree_evicted", tree=str(Path(name).parent / child.name), kept=name)
+
+    def scope_compile(self, prefix, name="compile"):
+        """Bind the private compile cache to one publish prefix.
+
+        Entries compiled for another model must never be published into this
+        prefix, so a prefix change discards the cache before it is restored.
+        """
+        marker = self.owned(name + ".prefix")
+        previous = marker.read_text().strip() if marker.exists() else None
+        if previous != prefix:
+            if previous is not None:
+                emit(self.gcs.events, "compile_cache_rescoped", previous=previous, prefix=prefix)
+            self.clear(name)
+            self.clear(name + "-upload")
+        marker.write_text(prefix)
+
     def restore_tree(self, prefix, name):
         """Reuse fully verified immutable trees; restart incomplete copies cleanly."""
         objects = self.gcs.list(prefix)
@@ -237,6 +279,7 @@ class CacheStore:
             # An Orbax source must itself be complete, never an interrupted mirror.
             raise RuntimeError(f"model cache contains temporary objects: {prefix}")
         destination = self.owned(name)
+        self.prune_siblings(name)
         marker = destination / ".complete.json"
         identity = fingerprint(objects)
         if marker.exists():
