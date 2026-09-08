@@ -924,7 +924,12 @@ class TunixBackend(AbstractBackend):
             alpha=lora_config.alpha,
         )
         model_input = model.get_model_input()
-        model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+        self._log_hbm("template/before_qwix", full=True)
+        try:
+            model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+        except Exception:
+            self._log_hbm("template/qwix_failed", full=True)
+            raise
         self._log_hbm("template/qwix_applied")
         if self.config.model_source == "maxtext":
             repaired = _repair_maxtext_scanned_lora_metadata(model)
@@ -2358,8 +2363,14 @@ class TunixBackend(AbstractBackend):
             model, input_ids, positions, attn_mask, target_ids
         )
 
-    def _log_hbm(self, tag: str) -> None:
-        """One-line per-device HBM telemetry (in_use/peak), best-effort."""
+    def _log_hbm(self, tag: str, full: bool = False) -> None:
+        """One-line per-device HBM telemetry (in_use/peak), best-effort.
+
+        full=True dumps every allocator counter for every local device (largest
+        free block, reservable limit, ...): the TPU runtime refuses a program's
+        scoped reservation against those, not against bytes_in_use (job 415:
+        30 GiB in use of 102.8, "12.72G free" for a 29 GiB jit_scan reservation).
+        """
         try:
             s = jax.local_devices()[0].memory_stats() or {}
             logger.info(
@@ -2367,6 +2378,12 @@ class TunixBackend(AbstractBackend):
                 f"peak={s.get('peak_bytes_in_use', 0) / 1e9:.2f}G "
                 f"limit={(s.get('bytes_limit') or 0) / 1e9:.2f}G"
             )
+            if full:
+                for d in jax.local_devices():
+                    stats = d.memory_stats() or {}
+                    logger.info("HBM[%s] dev%s %s", tag, d.id,
+                                " ".join(f"{k}={v / 1e9:.2f}G" if isinstance(v, int) and v > 4096 else f"{k}={v}"
+                                         for k, v in sorted(stats.items())))
         except Exception:
             pass
 
