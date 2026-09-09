@@ -285,9 +285,19 @@ def _engine_on_existing_ray(engine_args, hosts: list[str]):
     import ray
     from ray.util.placement_group import placement_group
 
+    from ray.runtime_env import RuntimeEnv
+
     env_vars = {k: os.environ[k] for k in _WORKER_ENV_KEYS if k in os.environ}
+    runtime_env = {"py_executable": sys.executable, "env_vars": env_vars}
     ray.init(address=os.environ.get("RAY_ADDRESS", "auto"), ignore_reinit_error=True,
-             runtime_env={"py_executable": sys.executable, "env_vars": env_vars})
+             runtime_env=runtime_env)
+    # vLLM forks its engine-core subprocess by default and only forces spawn
+    # inside a Ray actor; forking this driver after ray.init deadlocks the
+    # child (job 523: EngineCore asleep on a futex with three threads, the
+    # placement group reserved but no worker ever created). Spawn a fresh
+    # interpreter instead; it reconnects to Ray on RAY_ADDRESS with the same
+    # runtime env through parallel_config.ray_runtime_env.
+    os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
     chips = int(engine_args.tensor_parallel_size)
     bundles = [{"TPU": chips, f"node:{host}": 0.001} for host in hosts]
     group = placement_group(bundles, strategy="STRICT_SPREAD")
@@ -295,6 +305,7 @@ def _engine_on_existing_ray(engine_args, hosts: list[str]):
     logger.info("placement group ready on %s (%d TPU each)", hosts, chips)
     vllm_config = engine_args.create_engine_config(usage_context=UsageContext.OPENAI_API_SERVER)
     vllm_config.parallel_config.placement_group = group
+    vllm_config.parallel_config.ray_runtime_env = RuntimeEnv(**runtime_env)
     return AsyncLLMEngine.from_vllm_config(vllm_config, usage_context=UsageContext.OPENAI_API_SERVER)
 
 

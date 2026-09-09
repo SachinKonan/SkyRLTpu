@@ -159,7 +159,10 @@ def inference_environment(config, root, run, head=None, group=None):
             env.pop(key, None)
         env.update(TPU_MULTIHOST_BACKEND="ray", VLLM_USE_RAY_EXECUTOR="1",
                    RAY_ADDRESS=f"{head}:{config.ports.ray}",
-                   SKYRL_RAY_PLACEMENT_HOSTS=",".join(group))
+                   SKYRL_RAY_PLACEMENT_HOSTS=",".join(group),
+                   # The server connects to Ray as a driver before vLLM starts
+                   # its engine core; a forked core deadlocks (job 523).
+                   VLLM_WORKER_MULTIPROC_METHOD="spawn")
     return env
 
 

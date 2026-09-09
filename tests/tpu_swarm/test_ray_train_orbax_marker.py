@@ -174,6 +174,8 @@ def test_pair_engine_command_and_environment(tmp_path):
     single = inference_environment(cfg, tmp_path, tmp_path / "run", head="10.0.0.1", group=["10.0.0.5"])
     assert single["TPU_PROCESS_BOUNDS"] == "1,1,1" and "TPU_MULTIHOST_BACKEND" not in single
     assert "--pipeline-parallel-size" not in inference_command(cfg, tmp_path, tmp_path / "src", tmp_path / "snap", tmp_path / "run")
+    assert env["VLLM_WORKER_MULTIPROC_METHOD"] == "spawn"  # fork after ray.init deadlocks (job 523)
+
 
 
 def test_hosts_per_engine_validation():
