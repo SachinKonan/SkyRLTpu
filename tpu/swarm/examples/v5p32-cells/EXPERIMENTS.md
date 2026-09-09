@@ -270,7 +270,8 @@ Executor parity was verified against live legacy cell 390 (gemma) from /proc: en
 | v21 | + centered piecewise estimator; 340–342, 390–393 |
 | v22 | + LoRA mix backend (Ray v2 base bundle for the mix profiles) |
 | v23 | + LOO nv = 2 fix and weight clamp (sha256 38c2a12f…); 398, 402–405 |
-| v24 | + Erdős context-mixing prompt (exemplar library, honest record line; discover 6787dc3); Stage F cells. Built from the ctxmix worktree at ba5d6665: gen 1788971556711566, sha256 3217a6c0… |
+| v24 | + Erdős context-mixing prompt (exemplar library, honest record line; discover 6787dc3). Built from the ctxmix worktree at ba5d6665: gen 1788971556711566, sha256 3217a6c0…; superseded by v25 before any launch |
+| v25 | prompt shows all four solutions to every model, method-only summaries (discover 47e22fc); Stage F cells. Built at e5a53f33: gen 1788994829856576, sha256 4874f28f… |
 
 ## Open follow-ups
 
