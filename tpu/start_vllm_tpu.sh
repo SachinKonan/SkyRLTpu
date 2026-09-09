@@ -96,6 +96,9 @@ HF_MODEL_DIR="models--${MODEL_NAME//\//--}"
 # Kept OFF the gcsfuse mount deliberately (matches VLLM_XLA_CACHE_GCS): the
 # engine only ever reads a LOCAL path; GCS is purely the seed/restore source.
 HF_CACHE_GCS="${HF_CACHE_GCS:-}"
+# Space-separated KEY=VALUE pairs exported inside every engine process
+# (gpt-oss: MOE_REQUANTIZE_WEIGHT_DTYPE etc.). Empty renders nothing.
+VLLM_ENGINE_EXTRA_ENV="${VLLM_ENGINE_EXTRA_ENV:-}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
 # Persist the JAX/XLA compile cache on the GCS mount so precompiled kernels
 # survive spot VM recreation (vLLM defaults to local ~/.cache/vllm/xla_cache).
@@ -239,6 +242,13 @@ extra_engine_cleanup=""
 extra_engine_start=""
 engine_env_block=""
 extra_pip_block=""
+engine_extra_env_block=""
+for _kv in ${VLLM_ENGINE_EXTRA_ENV}; do
+  case "$_kv" in
+    [A-Za-z_]*=*) engine_extra_env_block+=$'\n'"export ${_kv}" ;;
+    *) echo "VLLM_ENGINE_EXTRA_ENV entries must be KEY=VALUE: ${_kv}" >&2; exit 2 ;;
+  esac
+done
 runner_http_port="$VLLM_PORT"
 runner_log_name="vllm-tpu.log"
 if (( VLLM_ENGINES_PER_HOST > 1 )); then
@@ -671,7 +681,7 @@ if [[ -n "${VLLM_TPU_VISIBLE_CHIPS}" ]]; then
   export TPU_VISIBLE_CHIPS="${VLLM_TPU_VISIBLE_CHIPS}"
 else
   unset TPU_VISIBLE_CHIPS
-fi${engine_env_block}
+fi${engine_env_block}${engine_extra_env_block}
 if [[ "${VLLM_DISABLE_SHARDY}" == "1" || "${VLLM_DISABLE_SHARDY}" == "true" || \\
       ( "${VLLM_DISABLE_SHARDY}" == "auto" && "${MODEL_NAME}" == *"Qwen3.5-4B"* ) ]]; then
   export JAX_USE_SHARDY_PARTITIONER=false

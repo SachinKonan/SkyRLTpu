@@ -890,23 +890,24 @@ fi
 # above. Idempotent; only when FLCE is enabled.
 if [[ "${TUNIX_FLCE_TILE_SIZE}" -gt 0 ]]; then
   "${REMOTE_SKYRL_DIR}/.venv/bin/python" - <<'PYPATCH'
-import glob, os, sys
+import glob, os, re, sys
+# Same contract as tpu/swarm/ray_train/patch_maxtext.py: every pinned fork ends
+# each Transformer wrapper with `return hidden_state, kv_caches` / blank /
+# `return logits`, whatever the vLLM guard above looks like (the gpt-oss fork
+# spells it as a tuple and adds an expert_indices return). Anchor on that
+# shared tail and fail closed if the layout is unknown.
+TAIL = "      return hidden_state, kv_caches\n\n"
+RET = "    return logits"
+COND = "    if self.config.num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN:\n      return hidden_state\n\n"
+unpatched = re.compile(re.escape(TAIL) + re.escape(RET))
+patched = re.compile(re.escape(TAIL) + re.escape(COND) + re.escape(RET))
 for mt in glob.glob(os.path.join(sys.prefix, "lib/python*/site-packages/maxtext/models/models.py")):
     src = open(mt).read()
-    if "num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN" in src:
-        continue
-    old = ('    if self.config.attention == "vllm_rpa":\n'
-           '      # In vLLM, logits are computed separately after updating the KV cache.\n'
-           '      return hidden_state, kv_caches\n\n'
-           '    return logits')
-    new = ('    if self.config.attention == "vllm_rpa":\n'
-           '      # In vLLM, logits are computed separately after updating the KV cache.\n'
-           '      return hidden_state, kv_caches\n\n'
-           '    if self.config.num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN:\n'
-           '      return hidden_state\n\n'
-           '    return logits')
-    if old in src:
-        open(mt, "w").write(src.replace(old, new))
+    remaining, applied = len(unpatched.findall(src)), len(patched.findall(src))
+    if remaining + applied not in (1, 2):
+        sys.exit(f"FLCE patch: pinned MaxText {mt} does not match the wrapper contract")
+    if remaining:
+        open(mt, "w").write(unpatched.sub(lambda m: TAIL + COND + RET, src))
         print("FLCE-patched", mt, flush=True)
 PYPATCH
 fi

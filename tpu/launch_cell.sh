@@ -70,6 +70,14 @@ case "$CELL" in
     MEMBER_DIR=member_muse
     HF_OFFLINE=0
     CTX=18432; PHASE1=13824 ;;   # qwen-matching: see cell_worker m-* BUDGET comment
+  o-*)
+    # gpt-oss-120b: discover's gpt_oss_high_reasoning renderer; context matches
+    # the cell_worker o-* row length (10240) on the first v6e-32 cell.
+    MODEL_HF=openai/gpt-oss-120b
+    MEMBER_SPEC='openai/gpt-oss-120b:gpt_oss_high_reasoning:gptoss'
+    MEMBER_DIR=member_gptoss
+    HF_OFFLINE=0
+    CTX=10240; PHASE1=6656 ;;
   *)
     MODEL_HF=Qwen/Qwen3.5-27B
     MEMBER_SPEC='Qwen/Qwen3.5-27B:qwen3:qwen'

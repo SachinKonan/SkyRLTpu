@@ -1,0 +1,91 @@
+name: gptoss120b-v6e32-grpo-n
+# gpt-oss-120b GRPO cell on a v6e-32 (8 hosts x 4 chips, 32 GiB HBM/chip):
+# 4 trainer hosts (tp 8 x fsdp 2, the validated qwen v6e-32 split) + 4 engines.
+# First cell shape: 10240-token rows, 2 rows per fb tile (see cell_worker o-*).
+resources:
+  cloud: gcp
+  region: us-east5
+  zone: us-east5-b
+  accelerators: tpu-v6e-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv6e
+  use_spot: true
+  disk_size: 150
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 3
+    recover_on_exit_codes: [33, 34]
+envs:
+  PROJECT: vision-mix
+  ZONE: us-east5-b
+  REMOTE_USER: gcpuser
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-gptoss-v7.tar.gz
+  TPUSWARM_BUNDLE_ID: gptoss-v7-o-grpo-n
+  CELL: o-grpo-n
+  RUN_DIR_NAME: gptoss120b-v6e32-grpo-n
+  EXPERIMENT_NAME: gptoss120b-v6e32-grpo-n
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/gptoss120b-v6e32-grpo-n
+  TRAIN_WORKERS: 0,1,2,3
+  VLLM_WORKERS: 4,5,6,7
+  TRAIN_TP_SIZE: "8"
+  TRAIN_FSDP_SIZE: "2"
+  TUNIX_ROW_SHARD: "2"
+  TRAIN_TPU_PROCESS_BOUNDS: 2,2,1
+  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
+  VLLM_TP_SIZE: "4"
+  VLLM_ENGINES_PER_HOST: "1"
+  CELL_START_VLLM: "1"
+  CELL_SYNC_SKYRL: "0"
+  VLLM_RAY_EXECUTOR: "0"
+  VLLM_CLIENT_SIDE_ROUND_ROBIN: "1"
+  TUNIX_FREE_BASE_STATE: "1"
+  TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts-gptoss120b-bf16-d388
+  TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER: "1"
+  TTD_ENV: erdos_min_overlap
+  TTD_ADV_ESTIMATOR: mean_baseline
+  TTD_ELITE_SLOTS: "2"
+  GROUPS_PER_BATCH: "16"
+  GROUP_SIZE: "32"
+  NUM_EPOCHS: "15"
+  LEARNING_RATE: "4e-5"
+  LORA_RANK: "32"
+  KL_PENALTY_COEF: "0"
+  TTD_RESTART_RATIO: "0"
+  TTD_CROSS_WEIGHT: "0"
+  TTD_KL_MEASURE_EVERY: "0"
+  TTD_LEAGUE_PIPELINE: "1"
+  TTD_ALLOW_SINGLE_MEMBER: "1"
+  TTD_SAMPLING_PROGRESS_TIMEOUT: "0"
+  EVAL_TIMEOUT: "1100"
+  WANDB_MODE: offline
+  MONITOR_INTERVAL_SECONDS: "30"
+  SYNC_EVERY_SECONDS: "300"
+  TINKER_FAILURE_LIMIT: "4"
+  TINKER_API_KEY: tml-local-skyrl-no-auth
+  TINKER_BASE_URL: http://127.0.0.1:8000
+run: |
+  set -euo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/swarm/run_qwen35_v6e32_grpo.sh"
+    test -r "$staging/tpu/jobman/cell_worker.sh"
+    test -r "$staging/tpu/jobman/ensure_orbax_ckpt.sh"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  exec bash "$SKYRL_REPO_DIR/tpu/swarm/run_qwen35_v6e32_grpo.sh"

@@ -130,6 +130,7 @@ TP_SIZE=4; ENGINES_PER_HOST=1
 MAX_NUM_SEQS=128
 SKIP_PRECOMPILE=0
 EXTRA_PIP=""
+ENGINE_EXTRA_ENV=""
 LORA_RETRIES=3; LORA_RETRY_SLEEP=2
 REQ_TIMEOUT=300
 TPU_BACKEND=torchax
@@ -284,6 +285,26 @@ case "$CELL" in
     HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
     HF_OFFLINE=0
     ;;
+  o-*)
+    # gpt-oss-120b (MXFP4 experts). Trainer = the d388 MaxText fork with
+    # sparse expert LoRA (docs/gpt-oss-mxfp4-lora.md); sparse_matmul/megablox
+    # are mandatory there. Row length 10240 / 2 rows per fb tile is the first
+    # v6e-32 cell shape (16 trainer chips x 32 GiB: 14.6 GiB of weights per
+    # chip); raise after the first fb step's HBM is measured.
+    MODEL_NAME=openai/gpt-oss-120b; MAXTEXT_MODEL=gpt-oss-120b
+    PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
+    MAXTGT=10240; BUDGET=20480; UNIFORM=10240
+    VLLM_LEN=16384
+    VLLM_XARGS='--max-num-batched-tokens 8192 --disable-chunked-mm-input --gpu-memory-utilization 0.90'
+    LIMIT_MM_PER_PROMPT='{"image":0,"audio":0,"video":0}'
+    MAX_NUM_SEQS=32
+    # v5p/v6e have no FP8 MXU; fp8 storage halves the requantized expert
+    # footprint at load (MOE_REQUANTIZE_WEIGHT_DTYPE=bf16 is the fallback).
+    ENGINE_EXTRA_ENV="MOE_REQUANTIZE_WEIGHT_DTYPE=fp8 MOE_REQUANTIZE_BLOCK_SIZE=512 USE_MOE_EP_KERNEL=0"
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v6e-gptoss120b-tp4-s16384-seq32-v1"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-gptoss120b-tp8-fsdp2-r32-s10240-v1"
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gptoss120b"
+    ;;
   *)
     MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b
     # These optimization cells serve text only. Qwen3.5 advertises a vision
@@ -339,6 +360,7 @@ JAX_CACHE_GCS="${TUNIX_JAX_CACHE_GCS:-$JAX_CACHE_GCS}"
 HF_GCS="${HF_CACHE_GCS:-$HF_GCS}"
 PIP="${TUNIX_MAXTEXT_PIP_SPEC:-$PIP}"
 VLLM_XARGS="${VLLM_EXTRA_ARGS:-$VLLM_XARGS}"
+ENGINE_EXTRA_ENV="${VLLM_ENGINE_EXTRA_ENV:-$ENGINE_EXTRA_ENV}"
 LIMIT_MM_PER_PROMPT="${VLLM_LIMIT_MM_PER_PROMPT:-$LIMIT_MM_PER_PROMPT}"
 pick_tiles() {
   case "$MAXTEXT_MODEL" in
@@ -352,6 +374,9 @@ pick_tiles() {
       else
         MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"allow_split_physical_axes\": true, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
       fi ;;
+    gpt-oss-120b)
+      FLCE_TILE=512; VOCAB_TILING=64
+      MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"sparse_matmul\": true, \"megablox\": true, \"allow_split_physical_axes\": true, \"attention\": \"autoselected\"}" ;;
     muse-glimmer-30b)
       # nvt 32, not the RL spec's 8: the fb arena measured a ~41G
       # seq-independent constant (60.47G @22528 vs 56.99G @18432 -- only the
@@ -557,6 +582,7 @@ else
     HF_CACHE_GCS="$HF_GCS" \
     VLLM_EXTRA_ARGS="$VLLM_XARGS" \
     VLLM_LIMIT_MM_PER_PROMPT="$LIMIT_MM_PER_PROMPT" \
+    VLLM_ENGINE_EXTRA_ENV="$ENGINE_EXTRA_ENV" \
     REMOTE_SKYRL_DIR="$REPO" \
     READY_ATTEMPTS=900 SYNC_SKYRL="$CELL_SYNC_SKYRL" START_VLLM="$START_LOCAL_VLLM" START_TINKER=1 \
     bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || bringup_rc=$?
