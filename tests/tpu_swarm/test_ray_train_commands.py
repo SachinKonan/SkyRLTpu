@@ -22,6 +22,14 @@ def config(**overrides):
     return Config.from_dict(raw)
 
 
+def test_pooled_client_uses_physical_trainer_leader_and_keeps_ray_ingress_on_head():
+    cfg = Config.load('tpu/swarm/ray_train/profiles/qwen35_v6e_32_stacked_lora_asia.json')
+    env = client_environment(cfg, Path('/cache'), '10.0.0.1', trainer_head='10.0.0.8')
+    assert env['TINKER_BASE_URL'] == f'http://10.0.0.8:{cfg.ports.trainer}'
+    assert env['TTD_M0_BASE_URL'] == env['TTD_M1_BASE_URL'] == env['TINKER_BASE_URL']
+    assert env['RAY_ADDRESS'] == f'10.0.0.1:{cfg.ports.ray}'
+
+
 def v5p_config(**overrides):
     """A v5p-32 profile that names only the model preset: must equal a legacy cell."""
     raw = dict(run_id="ray-v5p", accelerator="tpu-v5p-32", hosts=4,

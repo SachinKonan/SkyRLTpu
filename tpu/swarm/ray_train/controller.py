@@ -67,6 +67,7 @@ class Controller:
         self.prepared = {}
         self.catalog = None
         self.runtime_status = None
+        self.trainer_leader = 0
 
     def report(self, event, **fields):
         return emit(self.log, event, run_id=self.config.run_id, **fields)
@@ -102,7 +103,7 @@ class Controller:
         active = set(self.sync_refs.values())
         now = time.monotonic()
         for rank, host in enumerate(self.hosts):
-            for kind in (("compile", "run") if rank == 0 else ("compile",)):
+            for kind in (("compile", "run") if rank in (0, self.trainer_leader) else ("compile",)):
                 key = (rank, kind)
                 if key in active or now - self.last_sync.get(key, float("-inf")) < self.config.cache.sync_seconds:
                     continue
@@ -190,7 +191,10 @@ class Controller:
             # legacy cell trains on (validated), 4-7 serve.
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = list(range(self.config.trainer.hosts, self.config.hosts))
-        self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks)
+        self.trainer_leader = train_ranks[0] if train_ranks else 0
+        self.checked_get([host.set_trainer_leader.remote(self.trainer_leader) for host in self.hosts], 30)
+        self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
+                    trainer_leader=self.trainer_leader)
         prepared_ranks = sorted(train_ranks + inference_ranks)
         prepared = self.checked_get([self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
                                     for rank in prepared_ranks], self.config.setup_timeout)
@@ -202,7 +206,7 @@ class Controller:
         engine_ips = [group[0] for group in groups]
         self.report("cache_barrier_complete", hosts=len(prepared), engines=groups)
         if not self.config.inference_only:
-            self.checked_get([self.hosts[0].restore_run.remote()], 600)
+            self.checked_get([self.hosts[r].restore_run.remote() for r in sorted({0, self.trainer_leader})], 600)
         for rank in train_ranks:
             self.trainers.append(TrainerRank.options(
                 scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[self.ips[rank]]["NodeID"], soft=False))
@@ -219,12 +223,12 @@ class Controller:
             while time.monotonic() < deadline:
                 if self.failure or self.stopping.is_set():
                     raise RuntimeError(self.failure or "controller interrupted")
-                trainer_ready = self.config.inference_only or ray.get(self.hosts[0].trainer_ready.remote(), timeout=10)
+                trainer_ready = self.config.inference_only or ray.get(self.hosts[self.trainer_leader].trainer_ready.remote(), timeout=10)
                 state = ray.get(self.catalog.snapshot.remote(), timeout=10)
                 try:
                     api_ready = self.config.inference_only
                     if not self.config.inference_only:
-                        response = client.get(f"http://{self.ips[0]}:{self.config.ports.trainer}/api/v1/get_server_capabilities")
+                        response = client.get(f"http://{self.ips[self.trainer_leader]}:{self.config.ports.trainer}/api/v1/get_server_capabilities")
                         api_ready = response.status_code == 200
                     inference_ready = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/health").status_code == 200
                 except httpx.HTTPError:
@@ -274,7 +278,8 @@ class Controller:
             # hosts. Host-local locks serialize final and periodic writeback.
             self.drain_phase({host.sync_compile.remote(): rank for rank, host in enumerate(self.hosts)},
                              "final_compile_writeback", timeout=360)
-            self.drain_phase({self.hosts[0].sync_run.remote(): 0}, "final_run_writeback", timeout=360)
+            self.drain_phase({self.hosts[r].sync_run.remote(): r for r in sorted({0, self.trainer_leader})},
+                             "final_run_writeback", timeout=360)
 
     def drain_phase(self, refs, phase, timeout):
         deadline = time.monotonic() + timeout

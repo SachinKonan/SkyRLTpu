@@ -31,6 +31,7 @@ def test_block_contains_rank0_is_contiguous_and_x_fastest(grid, seed):
     block = [pos_of[r] for r in train]
     xs = sorted({p[0] for p in block}); ys = sorted({p[1] for p in block})
     assert len(xs) == 2 and len(ys) == 2 and xs[1] - xs[0] == 1 and ys[1] - ys[0] == 1
+    assert xs[0] % 2 == 0 and ys[0] % 2 == 0
     # task id = local_x + 2*local_y
     assert block == [(x, y) for y in ys for x in xs]
 
@@ -51,3 +52,11 @@ def test_rejects_non_v6e_shapes():
         select_split([{"process_id": r, "coords": [[r, 0, 0], [r, 1, 0], [r, 2, 0], [r, 3, 0]]} for r in range(8)])
     with pytest.raises(ValueError):
         select_split(_records((4, 2), {(x, y): x + 4 * y for x in range(4) for y in range(2)})[:7])
+
+
+def test_replica65_head_on_inner_row_uses_aligned_block_and_distinct_leader():
+    rank_of = {(0, 1): 0, (0, 2): 1, (1, 1): 2, (1, 0): 3,
+               (0, 3): 4, (1, 2): 5, (1, 3): 6, (0, 0): 7}
+    train, serving = select_split(_records((2, 4), rank_of))
+    assert train == [7, 3, 0, 2]
+    assert serving == [1, 4, 5, 6]

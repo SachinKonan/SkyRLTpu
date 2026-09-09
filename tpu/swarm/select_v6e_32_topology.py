@@ -50,8 +50,11 @@ def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
     x0, y0 = by_rank[0]
     width = max(p[0] for p in by_rank.values()) + 1
     height = max(p[1] for p in by_rank.values()) + 1
-    x1 = x0 + 1 if x0 + 1 < width else x0 - 1
-    y1 = y0 + 1 if y0 + 1 < height else y0 - 1
+    # A contiguous window crossing the middle of the long axis (host rows
+    # 1..2) is not a valid aligned 4x4-chip subslice. Replica 65's head sat
+    # on row 1 and the old forward-neighbor choice aborted libtpu.
+    x0, y0 = (x0 // 2) * 2, (y0 // 2) * 2
+    x1, y1 = x0 + 1, y0 + 1
     block = {(x, y) for x in (x0, x1) for y in (y0, y1)}
     at = {pos: rank for rank, pos in by_rank.items()}
     # TPU_PROCESS_BOUNDS=2,2,1: task id = local_x + 2 * local_y.

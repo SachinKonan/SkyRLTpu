@@ -46,6 +46,7 @@ class Host:
         self.source = self.root / "sources" / self.source_identity
         self.log = self.run / f"host-{rank}.jsonl"
         self.role = None
+        self.trainer_leader = 0
         self.phase = "created"
         self.processes = {}
         self.lock = threading.RLock()
@@ -334,6 +335,12 @@ class Host:
         finally:
             self.compile_sync_lock.release()
 
+    def set_trainer_leader(self, rank):
+        if not 0 <= rank < len(self.ips):
+            raise ValueError("invalid trainer leader rank")
+        self.trainer_leader = rank
+        return rank
+
     def start_trainer(self, train_ranks, inference_ips=None):
         if self.phase != "prepared" or self.role != "trainer" or self.rank not in train_ranks:
             raise RuntimeError("trainer host was not prepared for this role")
@@ -354,13 +361,14 @@ class Host:
             command = [command[0], str(Path(__file__).with_name("stacked_probe.py")),
                        "--source", str(self.source), "--model", self.config.model]
         self.start("client", command,
-                   client_environment(self.config, self.root, self.ips[0]), self.source)
+                   client_environment(self.config, self.root, self.ips[0],
+                                      trainer_head=self.ips[self.trainer_leader]), self.source)
         self.phase = "client_running"
         return self.heartbeat()
 
     def trainer_ready(self):
         import re
-        if self.rank != 0:
+        if self.rank != self.trainer_leader:
             return self.processes.get("trainer") is not None and self.processes["trainer"].poll() is None
         log = self.run / "trainer.log"
         process = self.processes.get("trainer")
@@ -371,19 +379,19 @@ class Host:
             return re.search(rb"Initialized\s+TinkerEngine\s+with\s+backend=", stream.read()) is not None
 
     def restore_run(self):
-        if self.rank != 0:
+        if self.rank not in (0, self.trainer_leader):
             return
         local = self.run / "client"
-        if not local.exists() and self.gcs.list(self.config.run_gcs + "/client", allow_empty=True):
+        if self.rank == 0 and not local.exists() and self.gcs.list(self.config.run_gcs + "/client", allow_empty=True):
             self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(self.run)], "restore-run", self.run)
         db = self.run / "tinker.db"
-        if not db.exists():
+        if self.rank == self.trainer_leader and not db.exists():
             listing = self.gcs.metadata("ls", "--json", self.config.run_gcs + "/tinker-backup.db", allow_empty=True)
             if json.loads(listing):
                 self.gcs.transfer(["cp", self.config.run_gcs + "/tinker-backup.db", str(db)], "restore-database", self.run)
 
     def sync_run(self):
-        if self.rank != 0:
+        if self.rank not in (0, self.trainer_leader):
             return
         if not self.run_sync_lock.acquire(timeout=330):
             raise TimeoutError("previous run-state writeback is still running")
@@ -395,17 +403,20 @@ class Host:
     def _sync_run(self):
         gcs = GCS(self.run / "run-writeback", self.config.cache)
         client = self.run / "client"
-        if client.exists() and any(client.iterdir()):
+        if self.rank == 0 and client.exists() and any(client.iterdir()):
             gcs.transfer(["cp", "--recursive", str(client), self.config.run_gcs + "/"], "client-writeback", timeout=300)
         db = self.run / "tinker.db"
-        if db.exists():
+        if self.rank == self.trainer_leader and db.exists():
             backup = self.run / "tinker-backup.db"
             with sqlite3.connect(db) as source, sqlite3.connect(backup) as destination:
                 source.backup(destination)
             gcs.transfer(["cp", str(backup), self.config.run_gcs + "/tinker-backup.db"], "database-writeback", timeout=120)
         logs = [str(path) for pattern in ("*.jsonl", "*.log") for path in self.run.glob(pattern)]
         if logs:
-            gcs.transfer(["cp", *logs, self.config.run_gcs + "/logs/"], "logs-writeback", timeout=300)
+            destination = self.config.run_gcs + "/logs/"
+            if self.rank != 0:
+                destination += f"host-{self.rank}/"
+            gcs.transfer(["cp", *logs, destination], "logs-writeback", timeout=300)
 
     def stop(self):
         self.stopping.set()

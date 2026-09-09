@@ -191,13 +191,14 @@ def inference_command(config, root, source, snapshot, run, group=None):
     return command
 
 
-def client_environment(config, root, head, inference_ips=None):
+def client_environment(config, root, head, inference_ips=None, trainer_head=None):
     config.validate()
     env = dict(os.environ)
     t = config.trainer
+    trainer_head = trainer_head or head
     defaults = dict(
-        TINKER_API_KEY="tml-local-skyrl-no-auth", TINKER_BASE_URL=f"http://{head}:{config.ports.trainer}",
-        TTD_M0_BASE_URL=f"http://{head}:{config.ports.trainer}",
+        TINKER_API_KEY="tml-local-skyrl-no-auth", TINKER_BASE_URL=f"http://{trainer_head}:{config.ports.trainer}",
+        TTD_M0_BASE_URL=f"http://{trainer_head}:{config.ports.trainer}",
         HF_HOME=str(root / "ram/hf"), HF_HUB_OFFLINE=_flag(config.client_hf_offline), JAX_PLATFORMS="cpu",
         TTD_RUN_DIR=str(root / "runs" / config.run_id / "client"), EXPERIMENT_NAME=config.run_id,
         TTD_ENV="erdos_min_overlap", TTD_PROBLEM_TYPE="", TTD_FCALGO_MAX_CASES="0",
@@ -226,7 +227,7 @@ def client_environment(config, root, head, inference_ips=None):
             SAVE_EVERY="1", TEMPERATURE="1.0")
         for i in range(config.adapter_count):
             defaults.update({
-                f"TTD_M{i}_BASE_URL": f"http://{head}:{config.ports.trainer}",
+                f"TTD_M{i}_BASE_URL": f"http://{trainer_head}:{config.ports.trainer}",
                 f"TTD_M{i}_LORA_SEED": str(i + 1),
                 f"TTD_M{i}_CONTEXT_WINDOW": defaults["TTD_M0_CONTEXT_WINDOW"],
                 f"TTD_M{i}_TRAIN_MAX_SEQ": defaults["TTD_M0_TRAIN_MAX_SEQ"],

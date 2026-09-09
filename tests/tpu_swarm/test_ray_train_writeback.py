@@ -89,3 +89,16 @@ def test_final_flush_reaches_healthy_hosts_after_peer_failure(tmp_path, monkeypa
     assert completed == [0, 1, 3, 4, 5, 6, 7]
     assert any(event == "final_compile_writeback_error" and fields["rank"] == 2
                for event, fields in control.events)
+
+
+def test_api_leader_database_and_head_client_both_get_writeback(tmp_path, monkeypatch):
+    control = controller(tmp_path)
+    control.trainer_leader = 7
+    control.writeback_tick()
+    assert {r for r, kind, _ in control.calls if kind == 'run'} == {0, 7}
+    monkeypatch.setattr(module.serve, 'shutdown', lambda: None)
+    monkeypatch.setattr(module.ray, 'wait', lambda refs, **kw: (refs[:1], refs[1:]))
+    monkeypatch.setattr(module.ray, 'get', lambda ref: 1)
+    control.calls.clear()
+    control.close()
+    assert {r for r, kind, _ in control.calls if kind == 'run'} == {0, 7}
