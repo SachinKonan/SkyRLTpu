@@ -1,5 +1,5 @@
 {
-  "run_id": "gptoss120b-ray-v6e-32-grpo-002",
+  "run_id": "gptoss120b-ray-v6e-32-ttd-001",
   "accelerator": "tpu-v6e-32",
   "hosts": 8,
   "zone": "us-east5-b",
@@ -42,7 +42,7 @@
   "client_context_window": 10240,
   "client_phase1_max_tokens": 6656,
   "client_env": {
-    "TTD_ADV_ESTIMATOR": "mean_baseline",
+    "TTD_ADV_ESTIMATOR": "entropic_adaptive_beta",
     "TTD_ELITE_SLOTS": "2"
   }
 }
