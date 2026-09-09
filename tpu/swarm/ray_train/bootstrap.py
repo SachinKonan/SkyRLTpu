@@ -23,8 +23,45 @@ def workload_resources(config, rank):
     return {"TPU": 4}
 
 
+_STALE_RAY_NAMES = ("gcs_server", "raylet", "log_monitor", "dashboard", "ray::")
+
+
+def evict_stale_ray_listener(port):
+    """Stop a leftover executor Ray daemon of ours that still owns `port`.
+
+    A cancelled job's Ray head (gcs_server on the executor's Ray port) can
+    outlive the job; job 548 then failed bootstrap with "TCP port 19679 is
+    unavailable". Only processes of this user whose name or command line is
+    a Ray daemon are touched; the SkyPilot runtime uses other ports.
+    """
+    import psutil
+    victims = []
+    for conn in psutil.net_connections(kind="tcp"):
+        if conn.laddr and conn.laddr.port == port and conn.status == psutil.CONN_LISTEN and conn.pid:
+            try:
+                process = psutil.Process(conn.pid)
+                text = " ".join([process.name(), *process.cmdline()])
+                if process.uids().real == os.getuid() and any(name in text for name in _STALE_RAY_NAMES):
+                    victims.append(process)
+            except psutil.Error:
+                pass
+    for process in victims:
+        try:
+            process.terminate()
+        except psutil.Error:
+            pass
+    psutil.wait_procs(victims, timeout=15)
+    for process in victims:
+        try:
+            process.kill()
+        except psutil.Error:
+            pass
+    return [p.pid for p in victims]
+
+
 def check_ports_available(ports, timeout=60):
     deadline = time.monotonic() + timeout
+    evicted = False
     while True:
         try:
             for port in ports:
@@ -35,6 +72,10 @@ def check_ports_available(ports, timeout=60):
                     sock.bind(("0.0.0.0", port))
             return
         except OSError as exc:
+            if not evicted:
+                evicted = True
+                if evict_stale_ray_listener(port):
+                    continue
             if time.monotonic() >= deadline:
                 raise RuntimeError(f"TCP port {port} is unavailable after {timeout}s") from exc
             time.sleep(1)

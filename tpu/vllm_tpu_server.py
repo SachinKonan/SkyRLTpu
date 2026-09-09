@@ -333,7 +333,26 @@ def _remove_on_hosts(path: Path, hosts: list[str]) -> None:
         logger.warning("could not remove %s on %s: %r", path.name, hosts, exc)
 
 
-def _engine_on_existing_ray(engine_args, hosts: list[str]):
+def _mkdir_on_hosts(path: Path, hosts: list[str]) -> None:
+    """Create `path` on the given hosts through the executor's Ray cluster.
+
+    The lora_filesystem_resolver plugin loads in every vLLM worker and
+    requires its cache dir to exist locally; only the engine head created it
+    (job 550: partner workers died on "must be set to a valid directory").
+    """
+    if not hosts:
+        return
+    import ray
+
+    @ray.remote(num_cpus=0)
+    def _mk(root: str) -> str:
+        Path(root).mkdir(parents=True, exist_ok=True)
+        return root
+
+    ray.get([_mk.options(resources={f"node:{host}": 0.001}).remote(str(path)) for host in hosts], timeout=120)
+
+
+def _engine_on_existing_ray(engine_args, hosts: list[str], lora_dir: Path | None = None):
     """Pipeline-parallel engine over `hosts` on an already-running Ray cluster.
 
     Joins the cluster named by RAY_ADDRESS as a driver whose job runtime_env
@@ -373,6 +392,8 @@ def _engine_on_existing_ray(engine_args, hosts: list[str]):
     group = placement_group(bundles, strategy="STRICT_SPREAD")
     ray.get(group.ready(), timeout=300)
     logger.info("placement group ready on %s (%d TPU each)", hosts, chips)
+    if lora_dir is not None:
+        _mkdir_on_hosts(lora_dir, hosts[1:])
     vllm_config = engine_args.create_engine_config(usage_context=UsageContext.OPENAI_API_SERVER)
     vllm_config.parallel_config.placement_group = group
     vllm_config.parallel_config.ray_runtime_env = RuntimeEnv(**runtime_env)
@@ -393,7 +414,7 @@ async def _serve(args) -> None:
     engine_args = AsyncEngineArgs.from_cli_args(args)
     placement_hosts = [h for h in (args.skyrl_ray_placement_hosts or "").split(",") if h]
     if placement_hosts:
-        engine = _engine_on_existing_ray(engine_args, placement_hosts)
+        engine = _engine_on_existing_ray(engine_args, placement_hosts, Path(args.skyrl_lora_dir))
     else:
         engine = AsyncLLMEngine.from_engine_args(
             engine_args=engine_args,
