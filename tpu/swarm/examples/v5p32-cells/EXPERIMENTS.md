@@ -1,11 +1,14 @@
 # Erdős v5p-32 cells: experiment status
 
-Status as of **2026-09-09 00:45Z**. A spot preemption wave at 03:39Z took 17 of 19
+Status as of **2026-09-09 00:55Z**. A spot preemption wave at 03:39Z took 17 of 19
 workers; the SkyPilot API server and pool controller were restarted twice since
 (~10:30 and ~18:08 local), which killed eight job controllers (resubmitted). Overnight, per the user's gpt-oss-first call, every waiting cell was cancelled so the
 gpt-oss job could take the first slice; gpt-oss 456 (fixed bundle) is starting on
 worker 198, gemma-on-muse-tree 410 is starting on worker 189, and our other 15 cells
-were requeued at 00:41Z as 457–471 to compete for further workers. Pool: 1 READY,
+were requeued at 00:41Z as 457–471, then **cancelled again at 00:52Z on the user's
+instruction: only gpt-oss stays in the queue while it is iterated (multiple
+resubmissions expected). Resubmit the 15 from their yamls when the user says so;
+each resumes from the step shown.** Pool: 1 READY,
 1 more coming up, 46 provisioning against refused spot capacity. Nothing is lost: every cell
 resumes from its last banked step in GCS. Job ids below are the CURRENT ones.
 
