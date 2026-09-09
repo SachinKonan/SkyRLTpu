@@ -1,0 +1,48 @@
+{
+  "run_id": "gptoss120b-ray-v6e-32-ttd-asia-001",
+  "accelerator": "tpu-v6e-32",
+  "hosts": 8,
+  "zone": "asia-northeast1-b",
+  "bucket": "gs://sk7524-tinker-tpu-asia-northeast1",
+  "base_bundle": "gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss-v10.tar.gz",
+  "base_bundle_sha256": "cb461426b387c3b6b1994dd7e0d77a6b549cfaec9c663531b960cb69d95d582d",
+  "model_preset": "gpt-oss-120b",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-asia-northeast1/hf-cache-gptoss120b",
+    "orbax": "gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts-gptoss120b-bf16-d388",
+    "trainer_compile": "gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e-gptoss120b-tp8-fsdp2-r32-s10240-ray-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-asia-northeast1/vllm-xla-cache-v6e-gptoss120b-tp4pp2-s16384-seq32-mem90-chunk8192-fp8-ray-v1",
+    "trainer_gib": 200,
+    "inference_gib": 200,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "trainer": {
+    "hosts": 4,
+    "tp": 8,
+    "fsdp": 2,
+    "process_bounds": "2,2,1",
+    "chip_bounds": "2,2,1",
+    "remat": "full",
+    "sequence_length": 10240,
+    "max_target_length": 10240,
+    "token_budget": 20480
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "memory_utilization": 0.9,
+    "restart_limit": 3,
+    "max_sequences": 32,
+    "max_model_length": 16384,
+    "hosts_per_engine": 2
+  },
+  "client_context_window": 10240,
+  "client_phase1_max_tokens": 6656,
+  "client_env": {
+    "TTD_ADV_ESTIMATOR": "entropic_adaptive_beta",
+    "TTD_ELITE_SLOTS": "2"
+  }
+}
