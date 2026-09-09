@@ -11,7 +11,7 @@
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-gptoss120b",
     "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts-gptoss120b-bf16-d388",
     "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-gptoss120b-tp8-fsdp2-r32-s10240-ray-v1",
-    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v6e-gptoss120b-tp4pp2-s16384-seq32-mem90-chunk8192-fp8-ray-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v6e-gptoss120b-tp4pp2-s16384-seq128-mem90-chunk8192-fp8-ray-v1",
     "trainer_gib": 200,
     "inference_gib": 200,
     "reserve_gib": 128,
@@ -35,7 +35,7 @@
     "tp": 4,
     "memory_utilization": 0.9,
     "restart_limit": 3,
-    "max_sequences": 32,
+    "max_sequences": 128,
     "max_model_length": 16384,
     "hosts_per_engine": 2
   },
