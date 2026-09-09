@@ -44,8 +44,9 @@ from vllm.utils.system_utils import set_ulimit
 logger = logging.getLogger(__name__)
 
 
-def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
+def _add_upload_endpoint(app, lora_dir: Path, engine, partner_hosts: list[str] | None = None) -> None:
     lora_dir.mkdir(parents=True, exist_ok=True)
+    partner_hosts = list(partner_hosts or [])
 
     @app.post("/skyrl/v1/upload_lora_adapter")
     async def _upload_lora_adapter(request: Request):
@@ -92,6 +93,9 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 shutil.rmtree(staging, ignore_errors=True)
                 raise HTTPException(status_code=400, detail="tar does not contain adapter_config.json at its root")
             staging.replace(target)
+            if partner_hosts:
+                await asyncio.get_running_loop().run_in_executor(
+                    None, _replicate_adapter, target, partner_hosts)
         else:
             # The adapter is already extracted (a retry after a lost ACK), but
             # the body must still be drained: responding with megabytes of
@@ -112,6 +116,9 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 UnloadLoRAAdapterRequest(lora_name=previous))
             # Not-loaded is fine (server restart, first sync).
             shutil.rmtree(lora_dir / previous, ignore_errors=True)
+            if partner_hosts:
+                await asyncio.get_running_loop().run_in_executor(
+                    None, _remove_on_hosts, lora_dir / previous, partner_hosts)
 
         was_loaded = lora_name in models.lora_requests
         resp = await models.load_lora_adapter(
@@ -269,7 +276,61 @@ _WORKER_ENV_KEYS = (
     "MODEL_IMPL_TYPE", "TPU_MULTIHOST_BACKEND", "SKIP_JAX_PRECOMPILE", "USE_BATCHED_RPA_KERNEL",
     "USE_JAX_RAGGED_CONV1D", "USE_MOE_EP_KERNEL", "MOE_REQUANTIZE_WEIGHT_DTYPE",
     "MOE_REQUANTIZE_BLOCK_SIZE", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+    # The lora_filesystem_resolver plugin loads in every worker and refuses to
+    # start without its cache dir (job 532); vLLM's own VLLM_* copy missed it.
+    "VLLM_LORA_RESOLVER_CACHE_DIR", "VLLM_PLUGINS", "VLLM_ALLOW_RUNTIME_LORA_UPDATING",
 )
+
+
+def _replicate_adapter(target: Path, hosts: list[str]) -> None:
+    """Copy an extracted adapter directory to the other hosts of a
+    pipeline-parallel engine, at the same path.
+
+    Every vLLM worker loads the PEFT adapter from `lora_path` on its own disk
+    and the expert-factor RPC reads a local safetensors path too, so a pair's
+    second host must hold the files before load_lora_adapter runs. Shipped
+    through the executor's Ray cluster (tasks pinned to each host) so no ssh
+    assumptions are made.
+    """
+    if not hosts:
+        return
+    import ray
+
+    @ray.remote(num_cpus=0)
+    def _write(root: str, files: dict) -> int:
+        dest = Path(root)
+        staging = dest.with_name(dest.name + ".staging")
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(parents=True)
+        for rel, data in files.items():
+            out = staging / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(data)
+        shutil.rmtree(dest, ignore_errors=True)
+        staging.replace(dest)
+        return len(files)
+
+    files = {str(f.relative_to(target)): f.read_bytes() for f in sorted(target.rglob("*")) if f.is_file()}
+    payload = ray.put(files)
+    del files
+    written = ray.get([_write.options(resources={f"node:{host}": 0.001}).remote(str(target), payload)
+                       for host in hosts], timeout=900)
+    logger.info("replicated adapter %s (%d files) to %s", target.name, written[0], hosts)
+
+
+def _remove_on_hosts(path: Path, hosts: list[str]) -> None:
+    if not hosts:
+        return
+    import ray
+
+    @ray.remote(num_cpus=0)
+    def _rm(root: str) -> None:
+        shutil.rmtree(root, ignore_errors=True)
+
+    try:
+        ray.get([_rm.options(resources={f"node:{host}": 0.001}).remote(str(path)) for host in hosts], timeout=120)
+    except Exception as exc:  # disk hygiene only; never fail an upload over it
+        logger.warning("could not remove %s on %s: %r", path.name, hosts, exc)
 
 
 def _engine_on_existing_ray(engine_args, hosts: list[str]):
@@ -339,7 +400,7 @@ async def _serve(args) -> None:
             usage_context=UsageContext.OPENAI_API_SERVER,
         )
 
-    _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine)
+    _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine, partner_hosts=placement_hosts[1:])
     await init_app_state(engine, app.state, args)
 
     config = uvicorn.Config(
