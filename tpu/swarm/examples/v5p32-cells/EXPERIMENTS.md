@@ -1,14 +1,15 @@
 # Erdős v5p-32 cells: experiment status
 
-Status as of **2026-09-09 00:55Z**. A spot preemption wave at 03:39Z took 17 of 19
+Status as of **2026-09-09 12:50Z**. A spot preemption wave at 03:39Z took 17 of 19
 workers; the SkyPilot API server and pool controller were restarted twice since
 (~10:30 and ~18:08 local), which killed eight job controllers (resubmitted). Overnight, per the user's gpt-oss-first call, every waiting cell was cancelled so the
 gpt-oss job could take the first slice; gpt-oss 456 (fixed bundle) is starting on
 worker 198, gemma-on-muse-tree 410 is starting on worker 189, and our other 15 cells
-were requeued at 00:41Z as 457–471, then **cancelled again at 00:52Z on the user's
-instruction: only gpt-oss stays in the queue while it is iterated (multiple
-resubmissions expected). Resubmit the 15 from their yamls when the user says so;
-each resumes from the step shown.** Pool: 1 READY,
+were requeued at 00:41Z as 457–471, then cancelled again at 00:52Z (gpt-oss-only hold). Capacity returned 09:00–11:30Z
+(8 workers). **12:47Z: user relaunched the six matched-validity cells (483–489,
+all placed on their own workers); gpt-oss 486 (tracer fix, bundle gptoss-v9) holds
+worker 213. Still cancelled and resumable from GCS: the three centered cells, muse
+LOO, gemma carry gen-1, muse fresh gen-1, and the four cross-model arms.** Pool: 1 READY,
 1 more coming up, 46 provisioning against refused spot capacity. Nothing is lost: every cell
 resumes from its last banked step in GCS. Job ids below are the CURRENT ones.
 
@@ -93,12 +94,12 @@ still descend faster than TTD, or was GRPO's qwen win coming from the validity t
 
 | Cell | Job | Model | Objective | Step | Best | Raw validity | Tok | State |
 |---|---|---|---|---|---|---|---|---|
-| stageC-v32-grpo-n | 460 | qwen | GRPO whitened | 6/15 | 0.380870379 | 0.57 | 12109 | waiting (was 290/423) |
-| stageC-v32-ttd-n | 459 | qwen | TTD | 6/15 | 0.380866576 | 0.58 | 10890 | waiting; **leads GRPO by 3.8e-6 at equal step** (was 291/422) |
-| stageB2-g-v32-grpo-n | 462 | gemma | GRPO whitened | 11/15 | 0.380870881 | 0.78 | 5979 | waiting; the orphaned 390 cell kept training on its VM to step 11 |
-| stageB2-g-v32-ttd-n | 463 | gemma | TTD | 4/15 | 0.380910353 | 0.78 | 6000 | waiting; led GRPO by 3.1e-5 at equal step 4 (was 391) |
-| stageB-m-v32-grpo-n | 465 | muse | GRPO whitened | 4/15 | 0.380898666 | 0.68 | 11116 | waiting after preemption at 15:25Z |
-| stageB-m-v32-ttd-n | 466 | muse | TTD | 2/15 | 0.380913341 | 0.74 | 12642 | waiting (was 393) |
+| stageC-v32-grpo-n | 484 | qwen | GRPO whitened | 6/15 | 0.380870379 | 0.57 | 12109 | waiting (was 290/423) |
+| stageC-v32-ttd-n | 483 | qwen | TTD | 6/15 | 0.380866576 | 0.58 | 10890 | waiting; **leads GRPO by 3.8e-6 at equal step** (was 291/422) |
+| stageB2-g-v32-grpo-n | 487 | gemma | GRPO whitened | 11/15 | 0.380870881 | 0.78 | 5979 | waiting; the orphaned 390 cell kept training on its VM to step 11 |
+| stageB2-g-v32-ttd-n | 485 | gemma | TTD | 4/15 | 0.380910353 | 0.78 | 6000 | waiting; led GRPO by 3.1e-5 at equal step 4 (was 391) |
+| stageB-m-v32-grpo-n | 489 | muse | GRPO whitened | 4/15 | 0.380898666 | 0.68 | 11116 | waiting after preemption at 15:25Z |
+| stageB-m-v32-ttd-n | 488 | muse | TTD | 2/15 | 0.380913341 | 0.74 | 12642 | waiting (was 393) |
 
 Raw validity is the fraction of drawn rollouts that were valid before filtering
 (kept validity is 1.0 by construction). On qwen GRPO led by 1.2e-5 at step 3 and
