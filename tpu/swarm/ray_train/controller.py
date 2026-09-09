@@ -195,7 +195,12 @@ class Controller:
         prepared = self.checked_get([self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
                                     for rank in prepared_ranks], self.config.setup_timeout)
         self.prepared = {self.ips[rank]: info for rank, info in zip(prepared_ranks, prepared)}
-        self.report("cache_barrier_complete", hosts=len(prepared))
+        groups = self.config.engine_groups([self.ips[r] for r in inference_ranks])
+        for group in groups:
+            for ip in group:
+                self.prepared[ip] = dict(self.prepared[ip], group=list(group))
+        engine_ips = [group[0] for group in groups]
+        self.report("cache_barrier_complete", hosts=len(prepared), engines=groups)
         if not self.config.inference_only:
             self.checked_get([self.hosts[0].restore_run.remote()], 600)
         for rank in train_ranks:
@@ -203,9 +208,8 @@ class Controller:
                 scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[self.ips[rank]]["NodeID"], soft=False))
                 .remote(self.hosts[rank], rank))
         self.checked_get([trainer.reserved.remote() for trainer in self.trainers], 120)
-        self.catalog = Catalog.options(name="inference-catalog").remote(
-            [self.ips[r] for r in inference_ranks], self.config.inference.restart_limit)
-        inference_ips = [self.ips[r] for r in inference_ranks]
+        self.catalog = Catalog.options(name="inference-catalog").remote(engine_ips, self.config.inference.restart_limit)
+        inference_ips = engine_ips
         trainer_starts = [trainer.start.remote(train_ranks, inference_ips) for trainer in self.trainers]
         # Both services start concurrently; our readiness loop owns the deadline.
         deploy(self.config, self.prepared, self.catalog, self.ips[0])

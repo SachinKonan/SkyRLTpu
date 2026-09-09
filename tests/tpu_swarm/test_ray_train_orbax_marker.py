@@ -139,3 +139,72 @@ def test_v6e_rejects_other_trainer_splits_and_unknown_zones():
     assert Config.from_dict(ok).effective_zone == "us-east5-b"
     default = dict(raw); default.pop("zone")
     assert Config.from_dict(default).effective_zone == "asia-northeast1-b"
+
+
+# --- pipeline-parallel engine pairs on the executor's Ray cluster (v6e-32) ----
+from tpu.swarm.ray_train.commands import inference_command, inference_environment
+
+
+def _v6e():
+    return Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v6e_32_grpo.json")
+
+
+def test_v6e_profile_pairs_hosts_into_two_engines():
+    cfg = _v6e()
+    assert (cfg.inference.hosts_per_engine, cfg.inference.tp, cfg.inference_hosts) == (2, 4, 4)
+    ips = ["10.0.0.5", "10.0.0.6", "10.0.0.7", "10.0.0.8"]
+    assert cfg.engine_groups(ips) == [["10.0.0.5", "10.0.0.6"], ["10.0.0.7", "10.0.0.8"]]
+
+
+def test_pair_engine_command_and_environment(tmp_path):
+    cfg = _v6e()
+    group = ["10.0.0.5", "10.0.0.6"]
+    cmd = inference_command(cfg, tmp_path, tmp_path / "src", tmp_path / "snap", tmp_path / "run", group=group)
+    assert cmd[cmd.index("--tensor-parallel-size") + 1] == "4"
+    assert cmd[cmd.index("--pipeline-parallel-size") + 1] == "2"
+    assert cmd[cmd.index("--distributed-executor-backend") + 1] == "ray"
+    assert cmd[cmd.index("--skyrl-ray-placement-hosts") + 1] == "10.0.0.5,10.0.0.6"
+    env = inference_environment(cfg, tmp_path, tmp_path / "run", head="10.0.0.1", group=group)
+    assert env["TPU_MULTIHOST_BACKEND"] == "ray" and env["VLLM_USE_RAY_EXECUTOR"] == "1"
+    assert env["RAY_ADDRESS"] == "10.0.0.1:19679" and env["SKYRL_RAY_PLACEMENT_HOSTS"] == "10.0.0.5,10.0.0.6"
+    # tpu-inference sets the per-host TPU process variables itself in Ray mode.
+    assert not any(k in env for k in ("TPU_PROCESS_BOUNDS", "TPU_PROCESS_ADDRESSES", "TPU_VISIBLE_CHIPS", "CLOUD_TPU_TASK_ID"))
+    assert env["MOE_REQUANTIZE_WEIGHT_DTYPE"] == "fp8"
+    # Single-host engines are untouched.
+    single = inference_environment(cfg, tmp_path, tmp_path / "run", head="10.0.0.1", group=["10.0.0.5"])
+    assert single["TPU_PROCESS_BOUNDS"] == "1,1,1" and "TPU_MULTIHOST_BACKEND" not in single
+    assert "--pipeline-parallel-size" not in inference_command(cfg, tmp_path, tmp_path / "src", tmp_path / "snap", tmp_path / "run")
+
+
+def test_hosts_per_engine_validation():
+    raw = json.loads(Path("tpu/swarm/ray_train/profiles/gptoss120b_v6e_32_grpo.json").read_text())
+    bad = dict(raw); bad["inference"] = dict(raw["inference"], hosts_per_engine=3)
+    with pytest.raises(ValueError, match="hosts_per_engine"):
+        Config.from_dict(bad)
+    v5p = Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_grpo.json")
+    assert v5p.inference.hosts_per_engine == 1 and v5p.engine_groups(["a", "b"]) == [["a"], ["b"]]
+
+
+def test_deploy_creates_one_pinned_engine_per_pair(monkeypatch):
+    pytest.importorskip("ray.serve")
+    from unittest.mock import Mock
+    from tpu.swarm.ray_train import serving
+    cfg = _v6e()
+    engine, ingress, serve = Mock(), Mock(), Mock()
+    serve.run_many.return_value = ["handle"]
+    monkeypatch.setattr(serving, "Engine", engine)
+    monkeypatch.setattr(serving, "Ingress", ingress)
+    monkeypatch.setattr(serving, "serve", serve)
+    prepared = {}
+    for ip, group in (("10.0.0.5", ["10.0.0.5", "10.0.0.6"]), ("10.0.0.6", ["10.0.0.5", "10.0.0.6"]),
+                      ("10.0.0.7", ["10.0.0.7", "10.0.0.8"]), ("10.0.0.8", ["10.0.0.7", "10.0.0.8"])):
+        prepared[ip] = {"role": "inference", "group": group}
+    assert serving.deploy(cfg, prepared, Mock(), "10.0.0.1") == "handle"
+    calls = engine.options.call_args_list
+    assert len(calls) == 2
+    for call, head in zip(calls, ("10.0.0.5", "10.0.0.7")):
+        opts = call.kwargs
+        assert opts["num_replicas"] == 1
+        assert opts["ray_actor_options"] == {"num_cpus": 8, "resources": {f"node:{head}": 0.01}}
+    # Ingress addresses the two engine heads only.
+    assert ingress.options.return_value.bind.call_args.args[-1] == ["10.0.0.5", "10.0.0.7"]

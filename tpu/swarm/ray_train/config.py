@@ -127,6 +127,13 @@ class Inference:
     max_model_length: int = 22528
     chunk_tokens: int = 8192
     max_lora_rank: int = 32
+    # Hosts per vLLM engine. 1 = one single-host engine per inference host
+    # (tp over its 4 chips). 2 = pipeline-parallel pairs: each host runs tp
+    # over its own chips as an independent JAX cluster and vLLM's Ray executor
+    # hands activations between the two (tpu-inference's TPU_MULTIHOST_BACKEND=ray
+    # is pipeline parallelism, not cross-host tensor parallelism). gpt-oss-120b
+    # needs 8 chips on 32 GiB v6e; 4 chips hold it on 95 GiB v5p.
+    hosts_per_engine: int = 1
     # --external-inference-timeout-sec on the trainer API (legacy v5p-32 cell:
     # EXTERNAL_INFERENCE_TIMEOUT_SEC=7200; 21600 was the v4-64 launcher's).
     request_timeout: int = 7200
@@ -344,6 +351,10 @@ class Config:
             raise ValueError("v6e-32 profiles use the validated four-host 2,2,1 trainer block")
         if not self.inference_only and self.trainer.tp * self.trainer.fsdp != self.trainer.hosts * 4:
             raise ValueError("trainer TP x FSDP must cover exactly the trainer chips")
+        if type(self.inference.hosts_per_engine) is not int or self.inference.hosts_per_engine not in (1, 2):
+            raise ValueError("inference.hosts_per_engine must be 1 or 2")
+        if self.inference_hosts % self.inference.hosts_per_engine:
+            raise ValueError("inference hosts must form whole engines (hosts_per_engine)")
         if not self.inference_only:
             bounds = [int(x) for x in self.trainer.process_bounds.split(",")]
             if len(bounds) != 3 or bounds[0] * bounds[1] * bounds[2] != self.trainer.hosts:
@@ -442,6 +453,12 @@ class Config:
                     not isinstance(process.get("created"), (float, int)) or process["created"] <= 0 or
                     not re.fullmatch(r"[a-f0-9]{64}", process.get("command_sha256", ""))):
                     raise ValueError("retired processes require exact PID, start time and command hash")
+
+    def engine_groups(self, inference_ips):
+        """Inference hosts grouped into engines, in order; each group's first
+        host runs the vLLM server and is the engine's address."""
+        n = self.inference.hosts_per_engine
+        return [list(inference_ips[i:i + n]) for i in range(0, len(inference_ips), n)]
 
     @property
     def effective_zone(self):

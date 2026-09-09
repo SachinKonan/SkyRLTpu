@@ -16,6 +16,8 @@ Compatible with vllm==0.23 (mirrors skyrl's GPU vllm_server_actor pattern).
 
 import argparse
 import asyncio
+import sys
+import os
 import inspect
 import logging
 import shutil
@@ -257,6 +259,45 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
         }
 
 
+# Environment the second host's vLLM worker needs verbatim (vLLM itself only
+# copies VLLM_* and the TPU platform's additional_env_vars to Ray workers).
+_WORKER_ENV_KEYS = (
+    "HF_HOME", "HF_HUB_OFFLINE", "JAX_PLATFORMS", "JAX_COMPILATION_CACHE_DIR",
+    "JAX_ENABLE_COMPILATION_CACHE", "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS",
+    "JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "VLLM_XLA_CACHE_PATH", "TPU_BACKEND_TYPE",
+    "MODEL_IMPL_TYPE", "TPU_MULTIHOST_BACKEND", "SKIP_JAX_PRECOMPILE", "USE_BATCHED_RPA_KERNEL",
+    "USE_JAX_RAGGED_CONV1D", "USE_MOE_EP_KERNEL", "MOE_REQUANTIZE_WEIGHT_DTYPE",
+    "MOE_REQUANTIZE_BLOCK_SIZE", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+)
+
+
+def _engine_on_existing_ray(engine_args, hosts: list[str]):
+    """Pipeline-parallel engine over `hosts` on an already-running Ray cluster.
+
+    Joins the cluster named by RAY_ADDRESS as a driver whose job runtime_env
+    runs every actor under THIS interpreter (the serving venv; the cluster's
+    raylets were started from another venv), reserves TPU:4 on exactly the
+    given hosts with a placement group, and hands that group to vLLM so its
+    Ray executor does not try to span every TPU node in the cluster. One
+    worker per host: pipeline stage i on hosts[i], tensor-parallel over that
+    host's own chips (tpu-inference's Ray multihost mode).
+    """
+    import ray
+    from ray.util.placement_group import placement_group
+
+    env_vars = {k: os.environ[k] for k in _WORKER_ENV_KEYS if k in os.environ}
+    ray.init(address=os.environ.get("RAY_ADDRESS", "auto"), ignore_reinit_error=True,
+             runtime_env={"py_executable": sys.executable, "env_vars": env_vars})
+    chips = int(engine_args.tensor_parallel_size)
+    bundles = [{"TPU": chips, f"node:{host}": 0.001} for host in hosts]
+    group = placement_group(bundles, strategy="STRICT_SPREAD")
+    ray.get(group.ready(), timeout=300)
+    logger.info("placement group ready on %s (%d TPU each)", hosts, chips)
+    vllm_config = engine_args.create_engine_config(usage_context=UsageContext.OPENAI_API_SERVER)
+    vllm_config.parallel_config.placement_group = group
+    return AsyncLLMEngine.from_vllm_config(vllm_config, usage_context=UsageContext.OPENAI_API_SERVER)
+
+
 async def _serve(args) -> None:
     # This module logs under "__main__"; without an explicit level its INFO
     # records (notably the "MoE LoRA merge-on-load ... -> {...}" success
@@ -268,10 +309,15 @@ async def _serve(args) -> None:
     set_ulimit()
     app = build_app(args)
 
-    engine = AsyncLLMEngine.from_engine_args(
-        engine_args=AsyncEngineArgs.from_cli_args(args),
-        usage_context=UsageContext.OPENAI_API_SERVER,
-    )
+    engine_args = AsyncEngineArgs.from_cli_args(args)
+    placement_hosts = [h for h in (args.skyrl_ray_placement_hosts or "").split(",") if h]
+    if placement_hosts:
+        engine = _engine_on_existing_ray(engine_args, placement_hosts)
+    else:
+        engine = AsyncLLMEngine.from_engine_args(
+            engine_args=engine_args,
+            usage_context=UsageContext.OPENAI_API_SERVER,
+        )
 
     _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine)
     await init_app_state(engine, app.state, args)
@@ -296,6 +342,13 @@ def main() -> None:
         type=str,
         default=str(Path.home() / "skyrl-local-loras"),
         help="Local directory where uploaded adapters are extracted.",
+    )
+    parser.add_argument(
+        "--skyrl-ray-placement-hosts",
+        type=str,
+        default="",
+        help="Comma-separated host IPs of a pipeline-parallel engine on an existing Ray "
+             "cluster (RAY_ADDRESS); one TPU worker per host, this host first.",
     )
     parser = make_arg_parser(parser)
     # Newer vllm defines the `model_tag` positional itself; adding a second

@@ -121,11 +121,16 @@ def trainer_command(config, root, source, head, train_ips, process_id, inference
             "--backend-config", json.dumps(trainer_backend_config(config, root, head, train_ips, inference_ips))]
 
 
-def inference_environment(config, root, run):
+def inference_environment(config, root, run, head=None, group=None):
+    """Engine process environment. group = the engine's host IPs (pairs run
+    pipeline-parallel over vLLM's Ray executor on the executor's own Ray
+    cluster at head:ports.ray; the worker for the second host runs under the
+    serving venv via the job runtime_env set in tpu/vllm_tpu_server.py)."""
     v = config.inference
     env = dict(os.environ)
     for key in ("JAX_COORDINATOR_ADDRESS", "TPU_MULTIHOST_BACKEND", "TPU_MULTIPROCESS_DP"):
         env.pop(key, None)
+    pair = bool(group) and len(group) > 1
     env.update(
         JAX_PLATFORMS="tpu,cpu", HF_HOME=str(root / "ram/hf"), HF_HUB_OFFLINE="1",
         TPU_PROCESS_BOUNDS="1,1,1", TPU_CHIPS_PER_PROCESS_BOUNDS="2,2,1",
@@ -143,10 +148,22 @@ def inference_environment(config, root, run):
         VLLM_PLUGINS="lora_filesystem_resolver", VLLM_LORA_RESOLVER_CACHE_DIR=str(run / "loras"),
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     env.update(v.engine_env)
+    if pair:
+        if not head:
+            raise ValueError("pipeline-parallel engines need the executor Ray head address")
+        # tpu-inference (multihost=ray) isolates each host as its own JAX
+        # cluster and sets the TPU process variables itself; leave them unset
+        # so they do not describe a single-host slice to a two-host engine.
+        for key in ("TPU_PROCESS_BOUNDS", "TPU_CHIPS_PER_PROCESS_BOUNDS", "TPU_PROCESS_ADDRESSES",
+                    "TPU_PROCESS_PORT", "CLOUD_TPU_TASK_ID", "TPU_VISIBLE_CHIPS"):
+            env.pop(key, None)
+        env.update(TPU_MULTIHOST_BACKEND="ray", VLLM_USE_RAY_EXECUTOR="1",
+                   RAY_ADDRESS=f"{head}:{config.ports.ray}",
+                   SKYRL_RAY_PLACEMENT_HOSTS=",".join(group))
     return env
 
 
-def inference_command(config, root, source, snapshot, run):
+def inference_command(config, root, source, snapshot, run, group=None):
     v = config.inference
     command = [str(root / "envs/serving/bin/python"), str(source / "tpu/vllm_tpu_server.py"),
                str(snapshot), "--served-model-name", config.model, "--skyrl-lora-dir", str(run / "loras"),
@@ -164,6 +181,9 @@ def inference_command(config, root, source, snapshot, run):
                 "--gpu-memory-utilization", str(v.memory_utilization)]
     if v.chunked_prefill:
         command.append("--enable-chunked-prefill")
+    if group and len(group) > 1:
+        command += ["--pipeline-parallel-size", str(len(group)), "--distributed-executor-backend", "ray",
+                    "--skyrl-ray-placement-hosts", ",".join(group)]
     command += list(v.extra_args)
     return command
 

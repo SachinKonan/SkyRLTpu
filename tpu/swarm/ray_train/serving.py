@@ -69,6 +69,10 @@ class Engine:
             raise RuntimeError("inference was scheduled outside its designated role")
         await catalog.claim.remote(self.ip)
         info = prepared[self.ip]
+        group = list(info.get("group") or [self.ip])
+        if group[0] != self.ip:
+            raise RuntimeError("engine replica must run on its group's first host")
+        self.group = group
         self.root, self.source = Path(info["root"]), Path(info["source"])
         self.run = self.root / "runs" / self.config.run_id
         (self.run / "loras").mkdir(exist_ok=True)
@@ -78,8 +82,10 @@ class Engine:
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.head = f"http://{head}:{self.config.ports.inference}"
         self.url = f"http://127.0.0.1:{self.config.ports.engine}"
-        self.process = Process(inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.run),
-            self.run / f"engine-{self.instance}.log", inference_environment(self.config, self.root, self.run), self.source)
+        self.process = Process(
+            inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.run, group=self.group),
+            self.run / f"engine-{self.instance}.log",
+            inference_environment(self.config, self.root, self.run, head=head, group=self.group), self.source)
         deadline = time.monotonic() + self.config.ready_timeout
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
@@ -150,7 +156,11 @@ app = FastAPI()
 class Ingress:
     def __init__(self, raw_config, engines, catalog, inference_ips):
         self.config = Config.from_dict(raw_config)
-        self.engines, self.catalog = engines, catalog
+        # One handle (single-host engines: Serve balances across replicas) or
+        # one handle per engine group (pairs: round-robin here).
+        self.engines = list(engines) if isinstance(engines, (list, tuple)) else [engines]
+        self.next_engine = 0
+        self.catalog = catalog
         self.ips = inference_ips
         self.run = Path(self.config.root).expanduser() / "runs" / self.config.run_id
         self.archives = self.run / "uploads"
@@ -278,7 +288,9 @@ class Ingress:
                 raise HTTPException(400, "model is required")
             self.active += 1
         try:
-            return await self.engines.generate.remote(payload)
+            handle = self.engines[self.next_engine % len(self.engines)]
+            self.next_engine += 1
+            return await handle.generate.remote(payload)
         finally:
             async with self.condition:
                 self.active -= 1
@@ -287,15 +299,24 @@ class Ingress:
 
 def deploy(config, prepared, catalog, head):
     serving = {ip: info for ip, info in prepared.items() if info["role"] == "inference"}
-    options = {"num_replicas": len(serving)}
-    if len(serving) == 1:
-        # Keep single-host diagnostics on their prepared host even when Ray
-        # detects additional TPU devices elsewhere on the reserved slice.
-        ip = next(iter(serving))
-        options["ray_actor_options"] = {"num_cpus": 8, "resources": {"TPU": 4, f"node:{ip}": 0.01}}
-    engines = Engine.options(**options).bind(config.to_dict(), serving, catalog, head)
+    heads = sorted(ip for ip, info in serving.items() if (info.get("group") or [ip])[0] == ip)
+    if config.inference.hosts_per_engine == 1:
+        options = {"num_replicas": len(serving)}
+        if len(serving) == 1:
+            # Keep single-host diagnostics on their prepared host even when Ray
+            # detects additional TPU devices elsewhere on the reserved slice.
+            ip = next(iter(serving))
+            options["ray_actor_options"] = {"num_cpus": 8, "resources": {"TPU": 4, f"node:{ip}": 0.01}}
+        engines = Engine.options(**options).bind(config.to_dict(), serving, catalog, head)
+    else:
+        # One deployment per engine group, pinned to the group's first host and
+        # claiming NO TPU: vLLM's Ray executor takes TPU:4 on both hosts of the
+        # group through the placement group tpu/vllm_tpu_server.py creates.
+        engines = [Engine.options(name=f"engine-{i}", num_replicas=1,
+                                  ray_actor_options={"num_cpus": 8, "resources": {f"node:{ip}": 0.01}})
+                   .bind(config.to_dict(), serving, catalog, head) for i, ip in enumerate(heads)]
     ingress = Ingress.options(ray_actor_options={"num_cpus": 1, "resources": {f"node:{head}": 0.01}})
     serve.start(proxy_location="HeadOnly", http_options={"host": "0.0.0.0", "port": config.ports.inference})
     return serve.run_many([serve.RunTarget(
-        target=ingress.bind(config.to_dict(), engines, catalog, sorted(serving)), name="skyrl-training")],
+        target=ingress.bind(config.to_dict(), engines, catalog, heads), name="skyrl-training")],
         wait_for_ingress_deployment_creation=False, wait_for_applications_running=False)[0]
