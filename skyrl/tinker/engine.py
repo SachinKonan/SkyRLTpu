@@ -342,6 +342,14 @@ class TinkerEngine:
                     )
                 session.commit()
 
+    def _multi_lora_cutoff(self, session: Session):
+        # A bundled request touches several models. Use a conservative global
+        # queue barrier so neither look-ahead batching nor an optimizer can
+        # cross it. Ordinary scheduling is unchanged when no bundle is pending.
+        return session.exec(select(func.min(FutureDB.request_id)).where(
+            FutureDB.request_type == types.RequestType.MULTI_LORA_TRAINING,
+            FutureDB.status == RequestStatus.PENDING)).one()
+
     def _find_destructive_barriers(self, session: Session) -> dict[str, int]:
         """Find the earliest pending destructive operation (optim_step/load_weights) per model.
 
@@ -386,7 +394,10 @@ class TinkerEngine:
         ops = session.exec(query).all()
 
         # Filter: only include ops that come before their model's barrier
-        batchable = [op for op in ops if op.model_id not in barriers or op.request_id < barriers[op.model_id]]
+        cutoff = self._multi_lora_cutoff(session)
+        batchable = [op for op in ops
+                     if (cutoff is None or op.request_id < cutoff)
+                     and (op.model_id not in barriers or op.request_id < barriers[op.model_id])]
 
         return {
             str(f.request_id): (f.model_id, types.ForwardBackwardInput.model_validate(f.request_data))
@@ -416,6 +427,9 @@ class TinkerEngine:
             .order_by(FutureDB.request_id)
         )
         sample_ops = session.exec(sample_query).all()
+        cutoff = self._multi_lora_cutoff(session)
+        if cutoff is not None:
+            sample_ops = [op for op in sample_ops if op.request_id < cutoff]
 
         batchable = []
         model_checkpoints = {}  # Map from model_id to checkpoint_id of first request to that model
@@ -472,6 +486,14 @@ class TinkerEngine:
             .order_by(FutureDB.request_id)
         )
         other_futures = session.exec(statement).all()
+        cutoff = self._multi_lora_cutoff(session)
+        if cutoff is not None:
+            earlier = session.exec(select(FutureDB.request_id).where(
+                FutureDB.status == RequestStatus.PENDING,
+                FutureDB.request_type != types.RequestType.EXTERNAL,
+                FutureDB.request_id < cutoff).limit(1)).first()
+            other_futures = [op for op in other_futures
+                             if op.request_id < cutoff or (op.request_id == cutoff and earlier is None)]
 
         # Filter: only include ops that come before the first blocked pass for their model
         other_futures = [
@@ -600,6 +622,39 @@ class TinkerEngine:
         prepared = prepare_model_pass_batch(requests)
         return self.backend.forward_backward(prepared)
 
+    def process_multi_lora_training(self, request: types.MultiLoraTrainingRequest):
+        if not hasattr(self.backend, "abort_multi_lora_training"):
+            raise ValueError("MultiLoraTrainingRequest requires a backend with population failure handling")
+        for model_id in request.model_ids:
+            if not self.backend.has_model(model_id):
+                raise ValueError(f"Target adapter {model_id} is not loaded")
+        outputs, metrics = {}, {}
+        started = time.perf_counter()
+        tokens = sum(len(d.loss_fn_inputs.target_tokens.data) for d in request.forward_backward_input.data)
+        try:
+            for index, model_id in enumerate(request.model_ids):
+                begin = time.perf_counter()
+                # Only one adapter's prepared batch is materialized at a time.
+                result = self.process_forward_backward({"shared": (model_id, request.forward_backward_input)})["shared"]
+                if isinstance(result, types.ErrorResponse):
+                    raise RuntimeError(result.error)
+                elapsed = time.perf_counter() - begin
+                metrics[f"adapter_{index}/forward_backward_seconds"] = elapsed
+                metrics[f"adapter_{index}/training_tokens_per_second"] = tokens / max(elapsed, 1e-9)
+                outputs[model_id] = result
+        except Exception:
+            # Donated accumulation buffers cannot be rolled back by retaining
+            # references. Discard the whole population's accumulation and block
+            # subsequent training/steps until checkpoint reload or recreation.
+            self.backend.abort_multi_lora_training(request.model_ids)
+            raise
+        elapsed = time.perf_counter() - started
+        metrics.update(forward_backward_seconds=elapsed, shared_rows=len(request.forward_backward_input.data),
+                       target_adapters=len(request.model_ids), training_token_evaluations=tokens * len(request.model_ids),
+                       training_tokens_per_second=tokens * len(request.model_ids) / max(elapsed, 1e-9))
+        logger.info("MultiLoRA training completed: cohort=%s metrics=%s", request.cohort_id, metrics)
+        return types.MultiLoraTrainingOutput(results=outputs, metrics=metrics, cohort_id=request.cohort_id)
+
     def process_forward(self, requests: dict[str, tuple[str, types.ForwardBackwardInput]]) -> dict:
         """Run forward-only pass on a batch of requests."""
         prepared = prepare_model_pass_batch(requests)
@@ -721,6 +776,8 @@ class TinkerEngine:
         match request_type:
             case types.RequestType.CREATE_MODEL:
                 return self.process_create_model(model_id, types.CreateModelInput.model_validate(request_data))
+            case types.RequestType.MULTI_LORA_TRAINING:
+                return self.process_multi_lora_training(types.MultiLoraTrainingRequest.model_validate(request_data))
             case types.RequestType.OPTIM_STEP:
                 return self.process_optim_step(model_id, types.OptimStepInput.model_validate(request_data))
             case types.RequestType.SAVE_WEIGHTS_FOR_SAMPLER:
@@ -748,7 +805,16 @@ class TinkerEngine:
         for request_id, (model_id, request_type, request_data) in requests.items():
             with log_timing(f"process_single_request({request_type.value})"):
                 try:
+                    queue_seconds = None
+                    if request_type == types.RequestType.MULTI_LORA_TRAINING:
+                        with Session(self.db_engine) as session:
+                            created = session.get(FutureDB, int(request_id)).created_at
+                            if created.tzinfo is None:
+                                created = created.replace(tzinfo=timezone.utc)
+                            queue_seconds = (datetime.now(timezone.utc) - created).total_seconds()
                     result = self.process_single_request(request_type, model_id, request_data)
+                    if queue_seconds is not None:
+                        result.metrics["queue_wait_seconds"] = max(0., queue_seconds)
                 except Exception as e:
                     logger.exception(f"Error processing request {request_id}: {e}")
                     result = types.ErrorResponse(error=str(e), status="failed")

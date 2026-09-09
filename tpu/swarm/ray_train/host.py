@@ -39,7 +39,11 @@ class Host:
         self.root = Path(self.config.root).expanduser().resolve()
         self.run = self.root / "runs" / self.config.run_id
         self.run.mkdir(parents=True, exist_ok=True)
-        self.source = self.root / "sources" / self.config.base_bundle_sha256
+        self.source_identity = self.config.base_bundle_sha256
+        if self.config.adapter_count > 1:
+            from .overlay import identity
+            self.source_identity += "-" + identity(Path(__file__).with_name("source_overlay"))
+        self.source = self.root / "sources" / self.source_identity
         self.log = self.run / f"host-{rank}.jsonl"
         self.role = None
         self.phase = "created"
@@ -140,7 +144,7 @@ class Host:
 
     def source_ready(self):
         marker = self.source / ".source-complete"
-        if marker.exists() and marker.read_text() == self.config.base_bundle_sha256:
+        if marker.exists() and marker.read_text() == self.source_identity:
             return str(self.source)
         archive = self.root / "base-download.tar.gz"
         self.gcs.transfer(["cp", self.config.base_bundle, str(archive)], "base-code", self.root)
@@ -154,6 +158,9 @@ class Host:
         staging.mkdir(parents=True)
         with tarfile.open(archive) as bundle:
             bundle.extractall(staging, filter="data")
+        if self.config.adapter_count > 1:
+            from .overlay import install
+            install(Path(__file__).with_name("source_overlay"), staging)
         for path in ("tpu/probe_topology.py", "skyrl/backends/tunix_backend.py",
                      "skyrl/utils/checkpoint_mirror.py", "tpu/vllm_tpu_server.py"):
             if not (staging / path).is_file():
@@ -161,7 +168,7 @@ class Host:
         if self.source.exists():
             shutil.rmtree(self.source)
         staging.rename(self.source)
-        marker.write_text(actual)
+        marker.write_text(self.source_identity)
         archive.unlink()
         return str(self.source)
 
@@ -213,7 +220,7 @@ class Host:
 
     def install_role(self, role):
         folder = self.root / "envs" / ("trainer" if role == "trainer" else "serving")
-        identity = self.config.base_bundle_sha256 + (
+        identity = self.source_identity + (
             self.config.trainer.maxtext_spec + "|" + " ".join(self.TRAINER_PINS + self.config.trainer.extra_pins)
             if role == "trainer"
             else " ".join(self.serving_pins()))
@@ -256,7 +263,7 @@ class Host:
     def install_client(self):
         folder = self.root / "envs/client"
         marker = folder / ".complete"
-        identity = hashlib.sha256(self.config.base_bundle_sha256.encode()
+        identity = hashlib.sha256(self.source_identity.encode()
             + (CLIENT_ENV / "pyproject.toml").read_bytes()
             + (CLIENT_ENV / "uv.lock").read_bytes()
             + b"client-frozen-v1").hexdigest()

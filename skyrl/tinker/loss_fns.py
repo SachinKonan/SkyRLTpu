@@ -70,10 +70,14 @@ def cispo_loss(
     loss_fn_config: LossFnConfig,
 ) -> jax.Array:
     "CISPO clipped-ratio policy gradient loss."
-    prob_ratio = jnp.exp(target_logprobs - sampling_logprobs)
     clip_low_threshold = loss_fn_config.clip_low_threshold
     clip_high_threshold = loss_fn_config.clip_high_threshold
-    clipped_ratio = jnp.clip(prob_ratio, clip_low_threshold, clip_high_threshold)
+    # Cap in log space before exponentiation: distant adapters can overflow
+    # exp(logp_i - logp_j), even though their final importance weight is bounded.
+    log_ratio = target_logprobs - sampling_logprobs
+    clipped_ratio = jnp.maximum(
+        jnp.exp(jnp.minimum(log_ratio, jnp.log(clip_high_threshold))), clip_low_threshold
+    )
     cispo_objective = jax.lax.stop_gradient(clipped_ratio) * target_logprobs * advantages
     return -safe_loss_mask(cispo_objective, loss_mask)
 

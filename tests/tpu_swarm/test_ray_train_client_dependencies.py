@@ -25,7 +25,7 @@ def fake_host(tmp_path, monkeypatch):
         calls.append((name, command, kwargs))
         marker.parent.mkdir(parents=True, exist_ok=True)
 
-    obj = SimpleNamespace(root=root, source=tmp_path / "source",
+    obj = SimpleNamespace(root=root, source=tmp_path / "source", source_identity="frozen-source",
                           config=SimpleNamespace(base_bundle_sha256="frozen-source"), checked=checked)
     return obj, calls, marker, project
 
@@ -132,3 +132,17 @@ def test_real_frozen_client_install(tmp_path, monkeypatch):
     host.Host.install_client(obj)
     host.Host.install_client(obj)
     assert (obj.root / "envs/client/.complete").exists()
+
+
+def test_changed_source_overlay_reinstalls_client(tmp_path, monkeypatch):
+    obj, calls, marker, _ = fake_host(tmp_path, monkeypatch)
+    host.Host.install_client(obj)
+    first = marker.read_text()
+    calls.clear()
+    host.Host.install_client(obj)
+    assert [name for name, _, _ in calls] == ['client-lock-check']
+    obj.source_identity += '-changed-overlay'
+    calls.clear()
+    host.Host.install_client(obj)
+    assert marker.read_text() != first
+    assert any(name == 'client-install' for name, _, _ in calls)

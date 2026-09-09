@@ -33,6 +33,7 @@ class Catalog:
         self.expected = set(expected_ips)
         self.replicas = {}
         self.version = None
+        self.versions = set()
         self.starts = {}
         self.restart_limit = restart_limit
 
@@ -44,14 +45,20 @@ class Catalog:
         if self.starts[ip] > self.restart_limit + 1:
             raise RuntimeError(f"inference restart budget exhausted on {ip}")
 
-    def register(self, ip, instance):
+    def register(self, ip, instance, versions=None):
+        if versions is not None and set(versions) != self.versions:
+            return False
         self.replicas[ip] = dict(ip=ip, instance=instance, registered=time.time())
+        return True
 
-    def commit(self, version):
+    def commit(self, version, previous=None):
         self.version = version
+        if previous:
+            self.versions.discard(previous)
+        self.versions.add(version)
 
     def snapshot(self):
-        return dict(version=self.version, replicas=list(self.replicas.values()), starts=self.starts,
+        return dict(version=self.version, versions=sorted(self.versions), replicas=list(self.replicas.values()), starts=self.starts,
                     exhausted=[ip for ip, count in self.starts.items() if count > self.restart_limit+1])
 
 
@@ -82,10 +89,8 @@ class Engine:
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.head = f"http://{head}:{self.config.ports.inference}"
         self.url = f"http://127.0.0.1:{self.config.ports.engine}"
-        self.process = Process(
-            inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.run, group=self.group),
-            self.run / f"engine-{self.instance}.log",
-            inference_environment(self.config, self.root, self.run, head=head, group=self.group), self.source)
+        self.process = Process(inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.run, group=self.group),
+            self.run / f"engine-{self.instance}.log", inference_environment(self.config, self.root, self.run, head=head, group=self.group), self.source)
         deadline = time.monotonic() + self.config.ready_timeout
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
@@ -99,10 +104,13 @@ class Engine:
             await asyncio.sleep(2)
         else:
             raise RuntimeError("vLLM startup deadline exceeded")
-        state = await catalog.snapshot.remote()
-        if state["version"]:
-            await self.ensure_adapter(state["version"])
-        await catalog.register.remote(self.ip, self.instance)
+        while True:
+            state = await catalog.snapshot.remote()
+            versions = state["versions"]
+            for version in versions:
+                await self.ensure_adapter(version)
+            if await catalog.register.remote(self.ip, self.instance, versions):
+                break
         emit(self.run / "inference-events.jsonl", "engine_ready", ip=self.ip, instance=self.instance)
 
     async def ensure_adapter(self, version):
@@ -156,8 +164,6 @@ app = FastAPI()
 class Ingress:
     def __init__(self, raw_config, engines, catalog, inference_ips):
         self.config = Config.from_dict(raw_config)
-        # One handle (single-host engines: Serve balances across replicas) or
-        # one handle per engine group (pairs: round-robin here).
         self.engines = list(engines) if isinstance(engines, (list, tuple)) else [engines]
         self.next_engine = 0
         self.catalog = catalog
@@ -166,6 +172,8 @@ class Ingress:
         self.archives = self.run / "uploads"
         self.archives.mkdir(parents=True, exist_ok=True)
         self.version = None
+        self.versions = set()
+        self.retired = set()
         self.active = 0
         self.updating = False
         self.condition = asyncio.Condition()
@@ -175,7 +183,8 @@ class Ingress:
     @app.get("/status")
     async def status(self):
         result = await self.catalog.snapshot.remote()
-        result.update(active=self.active, updating=self.updating, committed=self.version)
+        result.update(active=self.active, updating=self.updating, committed=self.version,
+                      committed_adapters=sorted(self.versions))
         return result
 
     @app.get("/health")
@@ -193,7 +202,7 @@ class Ingress:
 
     @app.get("/v1/models")
     async def models(self):
-        names = [self.config.model] + ([self.version] if self.version else [])
+        names = [self.config.model] + sorted(self.versions)
         return {"object": "list", "data": [{"id": n, "object": "model", "owned_by": "skyrl"} for n in names]}
 
     @app.get("/adapters/{version}/archive")
@@ -215,6 +224,18 @@ class Ingress:
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         async with self.upload_lock:
+            # Single-adapter clients historically omit the previous name.
+            previous = previous_lora_name
+            if self.config.inference.max_loras == 1 and version != self.version:
+                previous = previous or self.version
+            if version in self.retired:
+                raise HTTPException(409, "retired adapter version cannot be republished")
+            if previous == version:
+                raise HTTPException(400, "replacement requires a new version name")
+            if previous and previous not in self.versions and version not in self.versions:
+                raise HTTPException(409, "previous adapter is not committed")
+            if len((self.versions - {previous}) | {version}) > self.config.inference.max_loras:
+                raise HTTPException(409, "adapter capacity reached; specify previous_lora_name")
             target = self.archives / (version + ".tar")
             stage = target.with_suffix(".partial")
             digest = hashlib.sha256()
@@ -223,8 +244,8 @@ class Ingress:
                 with stage.open("wb") as output:
                     async for chunk in request.stream():
                         size += len(chunk)
-                        if size > 2 * 1024**3:
-                            raise HTTPException(413, "adapter exceeds 2 GiB limit")
+                        if size > self.config.inference.max_adapter_upload_bytes:
+                            raise HTTPException(413, "adapter exceeds configured upload limit")
                         output.write(chunk)
                         digest.update(chunk)
                 identity = digest.hexdigest()
@@ -250,8 +271,8 @@ class Ingress:
                                 yield chunk
                     try:
                         params = {"lora_name": version}
-                        if previous_lora_name:
-                            params["previous_lora_name"] = previous_lora_name
+                        if previous:
+                            params["previous_lora_name"] = previous
                         result = await self.http.post(f"http://{ip}:{self.config.ports.engine}/skyrl/v1/upload_lora_adapter",
                                                       params=params, content=chunks(),
                                                       timeout=min(300, max(1, deadline-time.monotonic())))
@@ -266,8 +287,15 @@ class Ingress:
             loaded = await asyncio.gather(*(load(ip) for ip in self.ips), return_exceptions=True)
             if any(isinstance(result, Exception) for result in loaded):
                 raise HTTPException(503, "adapter fanout failed; generation remains paused until retry")
-            await self.catalog.commit.remote(version)
+            if previous:
+                await self.catalog.commit.remote(version, previous)
+            else:
+                await self.catalog.commit.remote(version)
             async with self.condition:
+                if previous:
+                    self.versions.discard(previous)
+                    self.retired.add(previous)
+                self.versions.add(version)
                 self.version, self.updating = version, False
                 self.condition.notify_all()
             emit(self.run / "inference-events.jsonl", "adapter_committed", version=version,
@@ -282,7 +310,7 @@ class Ingress:
         if payload.get("seed") is not None:
             raise HTTPException(400, "TPU backend does not support per-request seeds")
         async with self.condition:
-            if self.updating or payload.get("model") not in (self.version, self.config.model):
+            if self.updating or payload.get("model") not in self.versions | {self.config.model}:
                 raise HTTPException(409, "adapter update in progress or uncommitted model")
             if not payload.get("model"):
                 raise HTTPException(400, "model is required")

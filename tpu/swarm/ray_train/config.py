@@ -139,6 +139,7 @@ class Inference:
     request_timeout: int = 7200
     restart_limit: int = 3
     max_loras: int = 8
+    max_adapter_upload_bytes: int = 2 * 1024**3
     # Legacy start_vllm_tpu.sh always passes --enable-prefix-caching and never
     # --enable-chunked-prefill; the 2026-09-07 profiles had the opposite.
     prefix_caching: bool = True
@@ -261,6 +262,9 @@ class Config:
     zone: str = ""
     model: str = "Qwen/Qwen3.5-27B"
     root: str = "~/.cache/skyrl-ray"
+    adapter_count: int = 1
+    pooled_group_size: int = 32
+    importance_cap: float = 2.0
     inference_only: bool = False
     inference_only_ranks: list[int] | None = None
     ports: Ports = field(default_factory=Ports)
@@ -320,6 +324,28 @@ class Config:
         return asdict(self)
 
     def validate(self):
+        import math
+        if type(self.adapter_count) is not int or self.adapter_count < 1:
+            raise ValueError("adapter_count must be a positive integer")
+        if (type(self.pooled_group_size) is not int or self.pooled_group_size < self.adapter_count
+                or self.pooled_group_size % self.adapter_count):
+            raise ValueError("pooled_group_size must be divisible by adapter_count")
+        if not math.isfinite(self.importance_cap) or self.importance_cap < 1:
+            raise ValueError("importance_cap must be finite and >= 1")
+        if self.inference.max_loras < self.adapter_count:
+            raise ValueError("inference max_loras must cover every sampling adapter")
+        if self.adapter_count > 1:
+            if self.model not in ("Qwen/Qwen3.5-27B", "openai/gpt-oss-120b", "openai/gpt-oss-20b"):
+                raise ValueError("pooled multi-LoRA supports Qwen3.5 and GPT-OSS")
+            if self.trainer.minimal_fb_output or self.trainer_env.get("TUNIX_MINIMAL_FB_OUTPUT", "0") != "0":
+                raise ValueError("pooled multi-LoRA requires full backward logprobs; set trainer.minimal_fb_output=false")
+            if self.inference.routing != "ingress":
+                raise ValueError("pooled multi-LoRA requires ingress routing for adapter publication")
+            if self.trainer_env.get("TUNIX_LORA_MIX_GAMMA", "").strip():
+                raise ValueError("pooled multi-LoRA cannot be combined with the carried/fresh LoRA mix")
+            fields = self.client_member_spec.split(":")
+            if len(fields) != 3 or fields[0] != self.model:
+                raise ValueError("pooled multi-LoRA requires one model:renderer:tag member spec")
         if self.inference_only_ranks is not None:
             ranks = self.inference_only_ranks
             if (not self.inference_only or not isinstance(ranks, list) or not ranks
@@ -367,6 +393,8 @@ class Config:
             raise ValueError("inference.routing must be 'direct' or 'ingress'")
         if type(self.inference.max_loras) is not int or self.inference.max_loras < 1:
             raise ValueError("inference.max_loras must be a positive integer")
+        if type(self.inference.max_adapter_upload_bytes) is not int or self.inference.max_adapter_upload_bytes < 1:
+            raise ValueError("max_adapter_upload_bytes must be a positive integer")
         if self.inference.max_sequences < 1 or self.inference.restart_limit < 0:
             raise ValueError("invalid inference limits")
         if self.inference.chunk_tokens < 1:

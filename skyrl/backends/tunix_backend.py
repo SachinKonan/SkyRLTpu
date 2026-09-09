@@ -119,6 +119,9 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
         "'vllm' forwards sampling to a vLLM server with inflight LoRA updates.",
     )
     max_lora_rank: int = Field(default=32, description="Maximum LoRA rank accepted from clients")
+    independent_lora_init: bool = Field(
+        default=False, description="Seed adapters directly from template shapes without copying base weights"
+    )
     lora_attn_regex: str | None = Field(
         default=None,
         description="Override for the qwix module_path regex used for attention projections.",
@@ -553,6 +556,7 @@ class ModelSlot:
     optimizer: nnx.Optimizer
     accum_grads: Any = None  # pytree matching lora_state, or None
     accum_count: int = 0
+    training_failed: bool = False
     loaded_sampler_checkpoint_id: str | None = None
     sampler_lora_states: dict = field(default_factory=dict)  # checkpoint_id -> lora state
     diagnostic_grad_index: int = 0
@@ -587,6 +591,7 @@ class TunixBackend(AbstractBackend):
         self.base_model = base_model
         self.config = config
         self.metrics = types.EngineMetrics()
+        self._repeated_kv_heads = None
 
         self.vllm_client: VllmSamplingClient | None = None
         if config.inference_backend == "vllm" and jax.process_index() == 0:
@@ -810,6 +815,16 @@ class TunixBackend(AbstractBackend):
 
         with _maxtext_config_cwd():
             maxtext_config = pyconfig.initialize(argv)
+            if mt_name.startswith("qwen3.5"):
+                from skyrl.backends.lora_init import RepeatedKVHeads
+
+                hf = AutoConfig.from_pretrained(self.base_model)
+                hf = getattr(hf, "text_config", hf)
+                logical_heads = maxtext_config.num_kv_heads
+                if logical_heads != hf.num_key_value_heads:
+                    self._repeated_kv_heads = RepeatedKVHeads(
+                        hf.num_key_value_heads, logical_heads, hf.head_dim)
+                    logger.info("Tying repeated K/V LoRA heads: %s", self._repeated_kv_heads)
             model = model_creation_utils.from_pretrained(
                 maxtext_config, mesh=None, wrap_with_tunix_adapter=True
             )
@@ -1094,11 +1109,15 @@ class TunixBackend(AbstractBackend):
         already holds a qwix-initialised LoRA state of exactly the right
         structure, sharding and dtype, so copy that instead.
 
-        Caveat, deliberate: the template is built at seed 0, so a non-zero
-        lora_config.seed cannot be honoured on this path and is logged. It is
-        immaterial for our runs -- one model config per cell, and a resuming
-        client overwrites these values from its checkpoint anyway.
+        With independent_lora_init enabled, initialize only the adapter factors
+        from template shapes using the requested seed, including sparse expert
+        factors. Otherwise the legacy released-base path copies the seed-0
+        template and logs that a nonzero seed was ignored.
         """
+        if getattr(self.config, "independent_lora_init", False):
+            from skyrl.backends.lora_init import initialize_lora
+            template = self.templates[self._template_key(lora_config)]
+            return initialize_lora(template.lora_shape, lora_config.seed)
         if self.base_state is None:
             template = self.templates.get(self._template_key(lora_config))
             if template is None:
@@ -1352,6 +1371,8 @@ class TunixBackend(AbstractBackend):
         mix_settings = lora_mix.mix_settings_from_env()
         mix: lora_mix.MixState | None = None
         template_config = lora_config
+        if mix_settings is not None and getattr(self.config, "independent_lora_init", False):
+            raise ValueError("Independent pooled adapters cannot use the carried/fresh LoRA mix")
         if mix_settings is not None:
             # Carried/fresh mix: both halves live in ONE rank-2r adapter with
             # doubled alpha so qwix's alpha / rank scale is unchanged.
@@ -1374,6 +1395,9 @@ class TunixBackend(AbstractBackend):
                 gamma_lr=gamma_lr,
                 gamma_init=gamma_init,
             )
+        repeated_kv = getattr(self, "_repeated_kv_heads", None)
+        if repeated_kv is not None:
+            repeated_kv.validate(lora_state)
 
         # hyperparam_dtype must be float32: inject_hyperparams otherwise follows
         # the (possibly bfloat16) param dtype, which NaNs adamw's bias correction.
@@ -1581,6 +1605,8 @@ class TunixBackend(AbstractBackend):
 
         for model_id, indices in groups.items():
             slot = self.models[model_id]
+            if with_grads and slot.training_failed:
+                raise RuntimeError("Prior population training failed; reload a checkpoint before training")
             template = self.templates[slot.template_key]
             pass_fn = template.forward_backward_fn if with_grads else template.forward_fn
 
@@ -2036,8 +2062,17 @@ class TunixBackend(AbstractBackend):
             stream.write(json.dumps(record, sort_keys=True) + "\n")
         logger.info("Wrote gradient replay diagnostic %s to %s", index, output)
 
+    def abort_multi_lora_training(self, model_ids: list[str]) -> None:
+        for model_id in model_ids:
+            slot = self.models[model_id]
+            slot.accum_grads = None
+            slot.accum_count = 0
+            slot.training_failed = True
+
     def optim_step(self, model_id: str, request_data: types.OptimStepInput) -> types.OptimStepOutput:
         slot = self.models[model_id]
+        if slot.training_failed:
+            raise RuntimeError("Prior population training failed; reload a checkpoint before optimizer step")
         probe_dir = os.environ.get("TUNIX_GRADIENT_PROBE_DIR")
         if probe_dir:
             # Dedicated diagnostic jobs only. Do not touch Adam, its moments,
@@ -2075,6 +2110,11 @@ class TunixBackend(AbstractBackend):
             count = float(slot.accum_count)
             mean_grads = jax.tree.map(lambda g: g / count, slot.accum_grads)
 
+        repeated_kv = getattr(self, "_repeated_kv_heads", None)
+        canonical_grad_norm = None
+        if repeated_kv is not None:
+            mean_grads, canonical_grad_norm = repeated_kv.tie_gradients_and_norm(mean_grads)
+
         hp = slot.optimizer.opt_state.hyperparams
         hp["learning_rate"][...] = adam.learning_rate
         hp["b1"][...] = adam.beta1
@@ -2093,7 +2133,8 @@ class TunixBackend(AbstractBackend):
             # anyway.  Gather once, compute the norm without launching more
             # TPU programs, and pass the same arrays to the recorder.
             flat_grads = self._flat_numpy(mean_grads)
-            grad_norm = self._host_global_norm(flat_grads)
+            grad_norm = (float(canonical_grad_norm) if canonical_grad_norm is not None
+                         else self._host_global_norm(flat_grads))
             self._record_gradient_diagnostics(
                 model_id,
                 mean_grads,
@@ -2104,7 +2145,8 @@ class TunixBackend(AbstractBackend):
             # A single compiled program keeps every JAX controller on the same
             # launch ID.  Calling optax.global_norm eagerly here emits hundreds
             # of independent integer_pow reductions for a rank-32 adapter.
-            grad_norm = float(jax.device_get(_jitted_global_norm(mean_grads)))
+            grad_norm = float(jax.device_get(canonical_grad_norm if canonical_grad_norm is not None
+                                            else _jitted_global_norm(mean_grads)))
 
         if not np.isfinite(grad_norm):
             # Belt-and-braces: never apply non-finite gradients (they would
@@ -2139,7 +2181,7 @@ class TunixBackend(AbstractBackend):
         # update in place, then snapshot the new state back into the slot.
         nnx.update(template.model, slot.lora_state)
         slot.optimizer.update(template.model, mean_grads)
-        slot.lora_state = nnx.state(template.model, nnx.LoRAParam)
+        slot.lora_state = jax.tree.map(jnp.copy, nnx.state(template.model, nnx.LoRAParam))
         if slot.mix is not None:
             # The old half got zero gradient; write it back verbatim so weight
             # decay / Adam bookkeeping can never touch the carried weights.
@@ -2931,7 +2973,7 @@ class TunixBackend(AbstractBackend):
                 f"Checkpoint {checkpoint_path} was saved with the LoRA mix; set {lora_mix.GAMMA_ENV} to load it"
             )
 
-        slot.lora_state = self._state_from_flat(
+        lora_state = self._state_from_flat(
             slot.lora_state,
             payload["lora_weights"],
             payload.get("lora_layouts"),
@@ -2940,15 +2982,26 @@ class TunixBackend(AbstractBackend):
             slot.mix.gamma = lora_mix.gamma_from_flat(payload["lora_mix_gamma"])
             slot.mix.opt_state = None  # Adam moments of gamma are not persisted (tiny, restart cold)
             slot.mix.old_loaded = bool(payload["lora_mix"].get("old_loaded", True))
+        repeated_kv = getattr(self, "_repeated_kv_heads", None)
+        if repeated_kv is not None:
+            repeated_kv.validate(lora_state)
+        opt_state = None
         if "optimizer_state" in payload:
             opt_state = self._state_from_flat(
                 nnx.state(slot.optimizer),
                 payload["optimizer_state"],
                 payload.get("optimizer_layouts"),
             )
+            if repeated_kv is not None:
+                repeated_kv.validate(opt_state)
+        # Validate both trees before mutating the slot, including old checkpoints
+        # whose logical K/V heads were independently optimized.
+        slot.lora_state = lora_state
+        if opt_state is not None:
             nnx.update(slot.optimizer, opt_state)
         slot.accum_grads = None
         slot.accum_count = 0
+        slot.training_failed = False
         logger.info(f"Loaded training checkpoint from {checkpoint_path}")
 
     def save_sampler_checkpoint(self, output_path: AnyPath, model_id: str, persist: bool = True) -> None:
@@ -3285,6 +3338,9 @@ class TunixBackend(AbstractBackend):
             if arr.ndim != 3:
                 logger.warning("Unexpected MaxText LoRA shape %s for %s; skipping", arr.shape, keystr)
                 continue
+            repeated_kv = getattr(self, "_repeated_kv_heads", None)
+            if repeated_kv is not None and hf_proj in ("k_proj", "v_proj") and not is_a:
+                arr = repeated_kv.collapse_numpy(arr)
             if inner is not None:
                 inner_ids.add(inner)
             # qwen3.5's HF checkpoints are ConditionalGeneration wrappers: the
@@ -3452,6 +3508,9 @@ class DistributedTunixBackend(TunixBackend):
 
     def forward(self, prepared_batch: types.PreparedModelPassBatch):
         return self._broadcast_and_call("forward", prepared_batch=prepared_batch)
+
+    def abort_multi_lora_training(self, model_ids: list[str]) -> None:
+        return self._broadcast_and_call("abort_multi_lora_training", model_ids=model_ids)
 
     def optim_step(self, model_id: str, request_data: types.OptimStepInput):
         return self._broadcast_and_call("optim_step", model_id=model_id, request_data=request_data)

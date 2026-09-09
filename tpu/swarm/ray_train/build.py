@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
+import json
 from pathlib import Path
 import subprocess
 import tarfile
@@ -30,6 +32,16 @@ def build(profile, output):
         for name in ("select_v4_64_topology.py", "select_v6e_32_topology.py"):
             selector = repo / "tpu/swarm" / name
             bundle.add(selector, arcname=str(selector.relative_to(repo)))
+        if config.adapter_count > 1:
+            from .overlay import manifest
+            records = manifest(repo)
+            prefix = "tpu/swarm/ray_train/source_overlay/"
+            for name in records:
+                bundle.add(repo / name, arcname=prefix + name, recursive=False)
+            data = json.dumps(records, sort_keys=True).encode()
+            info = tarfile.TarInfo(prefix + "manifest.json")
+            info.size = len(data)
+            bundle.addfile(info, io.BytesIO(data))
     with archive.open("rb") as data:
         digest = hashlib.file_digest(data, "sha256").hexdigest()
     uri = config.bucket.rstrip("/") + "/code-bundles/ray-training-" + digest + ".tar.gz"

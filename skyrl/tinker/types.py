@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Annotated, Any, Literal, TypedDict
 from urllib.parse import urlparse
 
-from pydantic import Base64Bytes, BaseModel, Discriminator, Field
+from pydantic import Base64Bytes, BaseModel, Discriminator, Field, model_validator
 
 
 class RequestType(str, Enum):
@@ -17,6 +17,7 @@ class RequestType(str, Enum):
 
     CREATE_MODEL = "create_model"
     FORWARD_BACKWARD = "forward_backward"
+    MULTI_LORA_TRAINING = "multi_lora_training"
     FORWARD = "forward"
     OPTIM_STEP = "optim_step"
     SAVE_WEIGHTS_FOR_SAMPLER = "save_weights_for_sampler"
@@ -168,6 +169,34 @@ class ForwardBackwardOutput(BaseModel):
     loss_fn_output_type: str
     loss_fn_outputs: list[dict]
     metrics: dict
+
+
+class MultiLoraTrainingRequest(BaseModel):
+    """One shared batch, accumulated sequentially into independent adapters."""
+    model_ids: list[str] = Field(min_length=2)
+    forward_backward_input: ForwardBackwardInput
+    cohort_id: str = ""
+    source_model_ids: list[str] = Field(default_factory=list)
+    source_versions: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_population(self):
+        if any(not name for name in self.model_ids) or len(set(self.model_ids)) != len(self.model_ids):
+            raise ValueError("target adapter IDs must be nonempty and unique")
+        rows = len(self.forward_backward_input.data)
+        if not rows:
+            raise ValueError("shared training batch must not be empty")
+        for sources in (self.source_model_ids, self.source_versions):
+            if sources and len(sources) != rows:
+                raise ValueError("source metadata must align with shared batch rows")
+        return self
+
+
+class MultiLoraTrainingOutput(BaseModel):
+    type: str = "multi_lora_training"
+    results: dict[str, ForwardBackwardOutput]
+    metrics: dict[str, float]
+    cohort_id: str = ""
 
 
 class ErrorResponse(BaseModel):

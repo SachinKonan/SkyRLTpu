@@ -83,6 +83,7 @@ def trainer_backend_config(config, root, head, train_ips, inference_ips=None):
         model_source="maxtext", maxtext_model_name=t.maxtext_model,
         maxtext_max_target_length=t.effective_max_target_length, train_token_budget=t.token_budget,
         flce_tile_size=t.flce_tile, max_lora_rank=t.effective_max_lora_rank,
+        independent_lora_init=config.adapter_count > 1,
         train_micro_batch_size=1, sample_max_num_sequences=256,
         param_dtype="bfloat16", free_base_state_after_template=t.free_base_state,
         maxtext_ckpt_cache_dir=str(root / "ram/orbax"), maxtext_kwargs=maxtext_kwargs(config, root),
@@ -211,5 +212,24 @@ def client_environment(config, root, head, inference_ips=None):
         WANDB_PROJECT="tpu-tinker-exps", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     defaults.update(config.client_sampling_environment())
     defaults.update(config.client_env)
+    if config.adapter_count > 1:
+        renderer = config.client_member_spec.split(":")[1]
+        defaults.update(
+            TTD_ENSEMBLE_MODELS=",".join(f"{config.model}:{renderer}:adapter{i}" for i in range(config.adapter_count)),
+            TTD_POOLED_MULTI_LORA="1", GROUP_SIZE=str(config.pooled_group_size),
+            TTD_LOSS_FN="cispo", TTD_IS_CAP=str(config.importance_cap),
+            TTD_CROSS_WEIGHT="0", TTD_LEAGUE_PIPELINE="1", TTD_DISTILL_ENABLED="0",
+            TTD_WARMUP_FB="0", TTD_RESUME_STRICT="1", KL_PENALTY_COEF="0",
+            TTD_MIN_VALID_PER_GROUP="0", TTD_REJECT_TRUNCATED="0", TTD_RESTART_RATIO="0",
+            SAVE_EVERY="1", TEMPERATURE="1.0")
+        for i in range(config.adapter_count):
+            defaults.update({
+                f"TTD_M{i}_BASE_URL": f"http://{head}:{config.ports.trainer}",
+                f"TTD_M{i}_LORA_SEED": str(i + 1),
+                f"TTD_M{i}_CONTEXT_WINDOW": defaults["TTD_M0_CONTEXT_WINDOW"],
+                f"TTD_M{i}_TRAIN_MAX_SEQ": defaults["TTD_M0_TRAIN_MAX_SEQ"],
+                f"TTD_M{i}_PHASE1_MAX_TOKENS": defaults["TTD_M0_PHASE1_MAX_TOKENS"],
+                f"TTD_M{i}_KL_PENALTY_COEF": "0",
+            })
     env.update(defaults)
     return env

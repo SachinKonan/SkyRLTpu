@@ -43,7 +43,7 @@ from vllm.utils.system_utils import set_ulimit
 logger = logging.getLogger(__name__)
 
 
-def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
+def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1) -> None:
     lora_dir.mkdir(parents=True, exist_ok=True)
 
     @app.post("/skyrl/v1/upload_lora_adapter")
@@ -56,8 +56,10 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
         # The trainer-side client is recreated when only the trainer restarts,
         # while this vLLM process may stay alive. Persist the last upload here
         # so a fresh client cannot leak old adapters by forgetting their name.
+        # Multiple adapters need explicit replacement: a global last-upload
+        # marker cannot distinguish a peer adapter from an older version.
         latest_marker = lora_dir / ".skyrl-latest-lora"
-        if not previous:
+        if not previous and max_loras == 1:
             try:
                 candidate = latest_marker.read_text().strip()
                 if candidate and "/" not in candidate and not candidate.startswith("."):
@@ -241,11 +243,10 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             logger.info("Cleared MXFP4 expert LoRA factors for %s", lora_name)
             moe_update = res
 
-        # Remember the adapter that is now live so a restarted trainer client can
-        # name it as `previous_lora_name` instead of leaking it (see top of handler).
-        marker_tmp = latest_marker.with_suffix(".tmp")
-        marker_tmp.write_text(f"{lora_name}\n")
-        marker_tmp.replace(latest_marker)
+        if max_loras == 1:
+            marker_tmp = latest_marker.with_suffix(".tmp")
+            marker_tmp.write_text(f"{lora_name}\n")
+            marker_tmp.replace(latest_marker)
 
         # Returning the worker result makes the live acceptance gate capable
         # of proving that all MXFP4 expert buffers were updated (or cleared),
@@ -319,7 +320,7 @@ async def _serve(args) -> None:
             usage_context=UsageContext.OPENAI_API_SERVER,
         )
 
-    _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine)
+    _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine, max_loras=args.max_loras)
     await init_app_state(engine, app.state, args)
 
     config = uvicorn.Config(

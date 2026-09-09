@@ -124,6 +124,7 @@ def main() -> None:
             tinker_base_url=os.environ.get(f"TTD_M{i}_BASE_URL") or None,
             context_window=_env_optional_int(f"TTD_M{i}_CONTEXT_WINDOW"),
             train_max_seq=_env_optional_int(f"TTD_M{i}_TRAIN_MAX_SEQ"),
+            lora_seed=_env_int(f"TTD_M{i}_LORA_SEED", i + 1),
         ))
 
     # Single-member runs are legitimate for the Stage-A single-model cells, but a
@@ -169,6 +170,8 @@ def main() -> None:
         cross_max_imports_per_seed=_env_int("TTD_CROSS_MAX_IMPORTS", 4),
         # v2 dataflow executor (stream per-group fb + per-problem cross-CE)
         pipeline_dataflow=os.environ.get("TTD_LEAGUE_PIPELINE", "0") == "1",
+        pooled_multi_lora=os.environ.get("TTD_POOLED_MULTI_LORA", "0") == "1",
+        importance_cap=_env_float("TTD_IS_CAP", 2.0),
         # Cross-model contrastive distillation (symmetric; off by default)
         distill_enabled=os.environ.get("TTD_DISTILL_ENABLED", "0") == "1",
         distill_pairs_per_step=_env_int("TTD_DISTILL_PAIRS_PER_STEP", 16),
