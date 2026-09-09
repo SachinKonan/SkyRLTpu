@@ -272,7 +272,8 @@ Executor parity was verified against live legacy cell 390 (gemma) from /proc: en
 | v23 | + LOO nv = 2 fix and weight clamp (sha256 38c2a12f…); 398, 402–405 |
 | v24 | + Erdős context-mixing prompt (exemplar library, honest record line; discover 6787dc3). Built from the ctxmix worktree at ba5d6665: gen 1788971556711566, sha256 3217a6c0…; superseded by v25 before any launch |
 | v25 | prompt shows all four solutions to every model, method-only summaries (discover 47e22fc). Built at e5a53f33: gen 1788994829856576, sha256 4874f28f…; superseded by v26 before any launch |
-| v26 | + one-line shape summary per construction in the prompt, `TTD_EXEMPLARS_INLINE_VALUES` opt-in (discover 41a6493); Stage F cells. Built at 21c9884b: gen 1788995086374211, sha256 e2baf0ac… |
+| v26 | + one-line shape summary per construction in the prompt, `TTD_EXEMPLARS_INLINE_VALUES` opt-in (discover 41a6493). Built at 21c9884b: gen 1788995086374211, sha256 e2baf0ac…; superseded by v27 before any launch |
+| v27 | shape line off by default: same design as the original prompt, constructions sandbox-only (discover c5984a2); Stage F cells. Built at 8e01e9fb: gen 1788995388522100, sha256 f1dc2baa… |
 
 ## Open follow-ups
 
