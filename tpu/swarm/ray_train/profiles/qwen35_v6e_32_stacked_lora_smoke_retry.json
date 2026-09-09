@@ -45,7 +45,8 @@
     "hosts_per_engine": 1,
     "max_loras": 2,
     "routing": "ingress",
-    "max_adapter_upload_bytes": 2147483648
+    "max_adapter_upload_bytes": 2147483648,
+    "skip_precompile": true
   },
   "client_context_window": 512,
   "client_phase1_max_tokens": 256,
