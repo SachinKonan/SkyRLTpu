@@ -119,3 +119,23 @@ def test_http_endpoint_persists_one_shared_payload_and_rejects_bad_targets(tmp_p
         finally:
             api.app.dependency_overrides.clear();await db.dispose()
     asyncio.run(run())
+
+
+def test_stacked_dispatch_prepares_shared_rows_once_and_aborts_incomplete_result():
+    e = engine()
+    calls, aborted = [], []
+    def stacked(prepared, names):
+        calls.append((prepared, names))
+        return {name: types.ForwardBackwardOutput(loss_fn_output_type='scalar', loss_fn_outputs=[], metrics={})
+                for name in names}
+    e.backend = SimpleNamespace(config=SimpleNamespace(stacked_lora_training=True), has_model=lambda name: True,
+        forward_backward_multi_lora=stacked, abort_multi_lora_training=lambda names: aborted.append(names))
+    result = e.process_multi_lora_training(request())
+    assert len(calls) == 1 and len(calls[0][0].all_model_inputs) == 1
+    assert calls[0][1] == ['a', 'b']
+    assert result.metrics['stacked_adapter_execution'] == 1
+    assert result.metrics['training_token_evaluations'] == 4
+    e.backend.forward_backward_multi_lora = lambda prepared, names: {'a': result.results['a']}
+    with pytest.raises(RuntimeError, match='every target'):
+        e.process_multi_lora_training(request())
+    assert aborted == [['a', 'b']]

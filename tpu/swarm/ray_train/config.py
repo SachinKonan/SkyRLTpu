@@ -66,6 +66,8 @@ class Trainer:
     chip_bounds: str = "2,2,1"
     maxtext_model: str = "qwen3.5-27b"
     maxtext_spec: str = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939977ac0ab79a4e64d21730936f253567"
+    stacked_lora_training: bool = False
+    stacked_lora_verify: bool = False
     lora_rank: int = 32
     # Largest adapter rank the trainer backend accepts; 0 means lora_rank.
     # The learnable carried/fresh LoRA mix (skyrl.backends.lora_mix) stores
@@ -334,6 +336,10 @@ class Config:
             raise ValueError("importance_cap must be finite and >= 1")
         if self.inference.max_loras < self.adapter_count:
             raise ValueError("inference max_loras must cover every sampling adapter")
+        if self.trainer.stacked_lora_training and self.adapter_count < 2:
+            raise ValueError("stacked training requires multiple adapters")
+        if self.trainer.stacked_lora_verify and not self.trainer.stacked_lora_training:
+            raise ValueError("stacked replay verification requires stacked training")
         if self.adapter_count > 1:
             if self.model not in ("Qwen/Qwen3.5-27B", "openai/gpt-oss-120b", "openai/gpt-oss-20b"):
                 raise ValueError("pooled multi-LoRA supports Qwen3.5 and GPT-OSS")

@@ -84,6 +84,8 @@ def trainer_backend_config(config, root, head, train_ips, inference_ips=None):
         maxtext_max_target_length=t.effective_max_target_length, train_token_budget=t.token_budget,
         flce_tile_size=t.flce_tile, max_lora_rank=t.effective_max_lora_rank,
         independent_lora_init=config.adapter_count > 1,
+        stacked_lora_training=t.stacked_lora_training,
+        stacked_lora_verify=t.stacked_lora_verify,
         train_micro_batch_size=1, sample_max_num_sequences=256,
         param_dtype="bfloat16", free_base_state_after_template=t.free_base_state,
         maxtext_ckpt_cache_dir=str(root / "ram/orbax"), maxtext_kwargs=maxtext_kwargs(config, root),

@@ -1,5 +1,5 @@
 {
-  "run_id": "qwen35-ray-v6e-32-multi-lora-asia-001",
+  "run_id": "qwen35-ray-v6e-32-stacked-lora-asia-001",
   "accelerator": "tpu-v6e-32",
   "hosts": 8,
   "zone": "asia-northeast1-b",
@@ -10,7 +10,7 @@
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-asia-northeast1/hf-cache-qwen35-v1",
     "orbax": "gs://sk7524-tinker-tpu-asia-northeast1/skyrl-maxtext-ckpts",
-    "trainer_compile": "gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e-qwen35-tp8-fsdp2-r32-s10240-multi-lora-v1",
+    "trainer_compile": "gs://sk7524-tinker-tpu-asia-northeast1/jax-compile-cache-v6e-qwen35-tp8-fsdp2-r32-s10240-stacked-lora2-v1",
     "inference_compile": "gs://sk7524-tinker-tpu-asia-northeast1/vllm-xla-cache-v6e-qwen35-tp4-s16384-seq8-mem80-chunk8192-lora2-multi-lora-v1",
     "trainer_gib": 96,
     "inference_gib": 96,
@@ -31,7 +31,9 @@
     "max_target_length": 10240,
     "token_budget": 20480,
     "minimal_fb_output": false,
-    "logical_kv_heads": 8
+    "logical_kv_heads": 8,
+    "stacked_lora_training": true,
+    "stacked_lora_verify": true
   },
   "inference": {
     "backend": "ray_serve",

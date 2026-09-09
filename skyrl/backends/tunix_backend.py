@@ -122,6 +122,12 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
     independent_lora_init: bool = Field(
         default=False, description="Seed adapters directly from template shapes without copying base weights"
     )
+    stacked_lora_training: bool = Field(
+        default=False, description="Vectorize pooled MaxText forward/backward over independent adapters"
+    )
+    stacked_lora_verify: bool = Field(
+        default=False, description="Compare stacked gradients/logprobs against sequential replay on the same TPU batch"
+    )
     lora_attn_regex: str | None = Field(
         default=None,
         description="Override for the qwix module_path regex used for attention projections.",
@@ -1287,7 +1293,7 @@ class TunixBackend(AbstractBackend):
             return forward_backward_fn, forward_fn
         return jax.jit(forward_backward_fn), jax.jit(forward_fn)
 
-    def _build_model_pass_fns_nnx(self) -> tuple[Callable, Callable]:
+    def _build_model_pass_fns_nnx(self, stacked: bool = False) -> tuple[Callable, Callable]:
         """nnx-lifted model-pass fns (module-passing) for MaxText models.
 
         The MaxText pure-NNX decoder mutates its own state during forward
@@ -1349,6 +1355,9 @@ class TunixBackend(AbstractBackend):
             _, (target_logprobs, per_token_losses) = loss_fn(model, *args)
             return per_token_losses, target_logprobs, None
 
+        if stacked:
+            from skyrl.backends.stacked_lora import vectorized_backward
+            return vectorized_backward(forward_backward_fn, eager=self.config.enforce_eager), None
         if self.config.enforce_eager:
             return forward_backward_fn, forward_fn
         return nnx.jit(forward_backward_fn, donate_argnums=1), nnx.jit(forward_fn)
@@ -1573,6 +1582,7 @@ class TunixBackend(AbstractBackend):
         self,
         prepared_batch: types.PreparedModelPassBatch,
         with_grads: bool,
+        cohort: list[str] | None = None,
     ) -> dict[str, types.ForwardBackwardOutput | types.ErrorResponse]:
         if not prepared_batch.all_model_inputs:
             return {}
@@ -1591,6 +1601,7 @@ class TunixBackend(AbstractBackend):
 
         all_input_ids = [r.prompt_ids for r in render_model_input(prepared_batch.all_model_inputs)]
         n_examples = len(all_input_ids)
+        population = len(cohort) if cohort else 1
         seq_lens = [len(seq) for seq in all_input_ids]
         loss_fn_config = self._build_loss_fn_config(prepared_batch.all_loss_fn_configs)
         loss_fn_types = np.array([LOSS_TYPES[name] for name in prepared_batch.all_loss_fns], dtype=np.int32)
@@ -1600,8 +1611,8 @@ class TunixBackend(AbstractBackend):
         for i, model_id in enumerate(prepared_batch.all_model_ids):
             groups.setdefault(model_id, []).append(i)
 
-        token_losses_out: list[np.ndarray | None] = [None] * n_examples
-        logprobs_out: list[np.ndarray | None] = [None] * n_examples
+        token_losses_out: list[np.ndarray | None] = [None] * (n_examples * population)
+        logprobs_out: list[np.ndarray | None] = [None] * (n_examples * population)
 
         for model_id, indices in groups.items():
             slot = self.models[model_id]
@@ -1609,6 +1620,20 @@ class TunixBackend(AbstractBackend):
                 raise RuntimeError("Prior population training failed; reload a checkpoint before training")
             template = self.templates[slot.template_key]
             pass_fn = template.forward_backward_fn if with_grads else template.forward_fn
+            cohort_model = None
+            cohort_accum = None
+            if cohort:
+                from skyrl.backends.stacked_lora import stack_states, stacked_model, unstack_state
+                slots = [self.models[name] for name in cohort]
+                cohort_model = stacked_model(template.model, [s.lora_state for s in slots])
+                cohort_accum = stack_states([
+                    s.accum_grads if s.accum_grads is not None else jax.tree.map(jnp.zeros_like, s.lora_state)
+                    for s in slots
+                ])
+                # Keep a stable Python function across requests for JAX caching.
+                if not hasattr(self, "_stacked_backward_fn"):
+                    self._stacked_backward_fn, _ = self._build_model_pass_fns_nnx(stacked=True)
+                pass_fn = self._stacked_backward_fn
 
             budget = self.config.train_token_budget
             # Uniform-shape mode: TUNIX_UNIFORM_SEQ_LEN>0 forces EVERY microbatch to
@@ -1790,7 +1815,13 @@ class TunixBackend(AbstractBackend):
                     mb_config,
                 )
                 with self._jit_timing_context(max_len, mode="train"):
-                    if template.kind == "maxtext":
+                    if cohort:
+                        per_token_losses, target_logprobs, cohort_accum = pass_fn(
+                            cohort_model, cohort_accum, common_args
+                        )
+                        for member in slots:
+                            member.accum_count += len(mb_idx)
+                    elif template.kind == "maxtext":
                         # Swap this model's LoRA values into the shared template
                         # and run the module-passing (nnx-lifted) fns.
                         nnx.update(template.model, self._pass_lora_state(slot))
@@ -1843,9 +1874,12 @@ class TunixBackend(AbstractBackend):
                     per_token_losses, target_logprobs = jax.device_get(
                         (per_token_losses, target_logprobs)
                     )
-                for row, i in enumerate(mb_idx):
-                    token_losses_out[i] = per_token_losses[row, : seq_lens[i]].astype(np.float32)
-                    logprobs_out[i] = target_logprobs[row, : seq_lens[i]].astype(np.float32)
+                for adapter in range(population):
+                    losses = per_token_losses[adapter] if cohort else per_token_losses
+                    logps = target_logprobs[adapter] if cohort else target_logprobs
+                    for row, i in enumerate(mb_idx):
+                        token_losses_out[adapter * n_examples + i] = losses[row, : seq_lens[i]].astype(np.float32)
+                        logprobs_out[adapter * n_examples + i] = logps[row, : seq_lens[i]].astype(np.float32)
                 # device_get above forces JAX's async dispatch to finish, so this
                 # elapsed time is the tile's real cost (not just enqueue time).
                 _mb_dt = time.time() - _mb_t0
@@ -1860,7 +1894,7 @@ class TunixBackend(AbstractBackend):
                     _mem = ""
                 logger.info(
                     f"{'fb' if with_grads else 'fwd'} tile {_mb_n}/{_mb_total} "
-                    f"shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
+                    f"adapters={population} shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
                     f"(elapsed {_mb_el:.1f}s, eta {(_mb_el / _mb_n) * (_mb_total - _mb_n):.0f}s){_mem}"
                 )
                 if template.kind == "maxtext":
@@ -1911,6 +1945,13 @@ class TunixBackend(AbstractBackend):
                     except Exception:
                         pass
 
+            if cohort:
+                for adapter, member in enumerate(slots):
+                    member.accum_grads = unstack_state(cohort_accum, adapter, member.lora_state)
+                # The shared template and independent optimizer states were never
+                # replaced with stacked objects. Only gradients cross this boundary.
+                del cohort_model, cohort_accum
+
         # A training fb over a large batch returns per-token elementwise_loss +
         # logprobs for EVERY datum (e.g. 376 datums x ~10k tokens = millions of
         # floats). Serialized to JSON that is a huge REST body, and the client's
@@ -1923,7 +1964,11 @@ class TunixBackend(AbstractBackend):
         # logprob consumer, e.g. KL scoring).
         _minimal_out = with_grads and os.environ.get("TUNIX_MINIMAL_FB_OUTPUT", "0") == "1"
         results: dict[str, types.ForwardBackwardOutput | types.ErrorResponse] = {}
-        for request_id, _, start_idx, end_idx in prepared_batch.request_batch_slices:
+        output_slices = prepared_batch.request_batch_slices
+        if cohort:
+            output_slices = [(name, name, index * n_examples, (index + 1) * n_examples)
+                             for index, name in enumerate(cohort)]
+        for request_id, _, start_idx, end_idx in output_slices:
             loss_fn_outputs = []
             for i in range(start_idx, end_idx):
                 if _minimal_out:
@@ -1958,6 +2003,59 @@ class TunixBackend(AbstractBackend):
                 metrics={},
             )
         return results
+
+    def forward_backward_multi_lora(
+        self, prepared_batch: types.PreparedModelPassBatch, model_ids: list[str]
+    ) -> dict[str, types.ForwardBackwardOutput | types.ErrorResponse]:
+        if len(model_ids) < 2 or len(set(model_ids)) != len(model_ids):
+            raise ValueError("Stacked training requires at least two unique adapters")
+        slots = [self.models[name] for name in model_ids]
+        if any(s.training_failed for s in slots):
+            raise RuntimeError("Prior population training failed; reload a checkpoint before training")
+        if len({s.template_key for s in slots}) != 1 or any(s.mix is not None for s in slots):
+            raise ValueError("Stacked training requires identical adapter layouts without carried/fresh mixing")
+        if self.templates[slots[0].template_key].kind != "maxtext":
+            raise ValueError("Stacked training currently requires the MaxText NNX backend")
+        if set(prepared_batch.all_model_ids) != {model_ids[0]}:
+            raise ValueError("Stacked training expects one shared batch prepared for the first adapter")
+        verify = getattr(self.config, "stacked_lora_verify", False)
+        if verify and any(s.accum_grads is not None or s.accum_count for s in slots):
+            raise ValueError("Stacked replay verification requires empty initial accumulators")
+        started = time.perf_counter()
+        result = self._model_pass(prepared_batch, with_grads=True, cohort=model_ids)
+        stacked_seconds = time.perf_counter() - started
+        if verify:
+            # Diagnostic replay only: preserve the stacked gradients for the
+            # actual optimizer steps, and never update parameters during replay.
+            saved = [(s.accum_grads, s.accum_count) for s in slots]
+            started = time.perf_counter()
+            for name, slot, (stacked_grads, count) in zip(model_ids, slots, saved, strict=True):
+                slot.accum_grads, slot.accum_count = None, 0
+                replay = prepared_batch.model_copy(update={
+                    "all_model_ids": [name] * len(prepared_batch.all_model_ids),
+                    "request_batch_slices": [(name, name, 0, len(prepared_batch.all_model_ids))],
+                })
+                sequential = self._model_pass(replay, with_grads=True)[name]
+                from skyrl.backends.stacked_lora import gradient_relative_error
+                error = float(gradient_relative_error(stacked_grads, slot.accum_grads))
+                if slot.accum_count != count or not np.isfinite(error) or error > .02:
+                    raise RuntimeError(f"Stacked gradient replay mismatch for {name}: relative_l2={error}")
+                max_lp_error = 0.0
+                for actual, expected in zip(result[name].loss_fn_outputs, sequential.loss_fn_outputs, strict=True):
+                    a, b = np.asarray(actual["logprobs"]["data"]), np.asarray(expected["logprobs"]["data"])
+                    max_lp_error = max(max_lp_error, float(np.max(np.abs(a - b), initial=0)))
+                if not np.isfinite(max_lp_error) or max_lp_error > .05:
+                    raise RuntimeError(f"Stacked logprob replay mismatch for {name}: max_abs={max_lp_error}")
+                result[name].metrics.update(stacked_gradient_relative_l2=error, stacked_logprob_max_abs=max_lp_error)
+                slot.accum_grads, slot.accum_count = stacked_grads, count
+            sequential_seconds = time.perf_counter() - started
+            for output in result.values():
+                output.metrics.update(stacked_replay_verified=1, stacked_seconds=stacked_seconds,
+                                      sequential_replay_seconds=sequential_seconds)
+            logger.info("Stacked TPU replay verified: adapters=%d stacked=%.3fs sequential=%.3fs metrics=%s",
+                        len(slots), stacked_seconds, sequential_seconds,
+                        {name: output.metrics for name, output in result.items()})
+        return result
 
     def forward_backward(
         self, prepared_batch: types.PreparedModelPassBatch
@@ -3505,6 +3603,9 @@ class DistributedTunixBackend(TunixBackend):
 
     def forward_backward(self, prepared_batch: types.PreparedModelPassBatch):
         return self._broadcast_and_call("forward_backward", prepared_batch=prepared_batch)
+
+    def forward_backward_multi_lora(self, prepared_batch: types.PreparedModelPassBatch, model_ids: list[str]):
+        return self._broadcast_and_call("forward_backward_multi_lora", prepared_batch=prepared_batch, model_ids=model_ids)
 
     def forward(self, prepared_batch: types.PreparedModelPassBatch):
         return self._broadcast_and_call("forward", prepared_batch=prepared_batch)

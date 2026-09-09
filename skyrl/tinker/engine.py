@@ -632,16 +632,26 @@ class TinkerEngine:
         started = time.perf_counter()
         tokens = sum(len(d.loss_fn_inputs.target_tokens.data) for d in request.forward_backward_input.data)
         try:
-            for index, model_id in enumerate(request.model_ids):
-                begin = time.perf_counter()
-                # Only one adapter's prepared batch is materialized at a time.
-                result = self.process_forward_backward({"shared": (model_id, request.forward_backward_input)})["shared"]
-                if isinstance(result, types.ErrorResponse):
-                    raise RuntimeError(result.error)
-                elapsed = time.perf_counter() - begin
-                metrics[f"adapter_{index}/forward_backward_seconds"] = elapsed
-                metrics[f"adapter_{index}/training_tokens_per_second"] = tokens / max(elapsed, 1e-9)
-                outputs[model_id] = result
+            if getattr(getattr(self.backend, "config", None), "stacked_lora_training", False):
+                prepared = prepare_model_pass_batch({"shared": (request.model_ids[0], request.forward_backward_input)})
+                outputs = self.backend.forward_backward_multi_lora(prepared, request.model_ids)
+                if set(outputs) != set(request.model_ids):
+                    raise RuntimeError("Stacked backend did not return every target adapter")
+                for result in outputs.values():
+                    if isinstance(result, types.ErrorResponse):
+                        raise RuntimeError(result.error)
+                metrics["stacked_adapter_execution"] = 1
+            else:
+                for index, model_id in enumerate(request.model_ids):
+                    begin = time.perf_counter()
+                    # Only one adapter's prepared batch is materialized at a time.
+                    result = self.process_forward_backward({"shared": (model_id, request.forward_backward_input)})["shared"]
+                    if isinstance(result, types.ErrorResponse):
+                        raise RuntimeError(result.error)
+                    elapsed = time.perf_counter() - begin
+                    metrics[f"adapter_{index}/forward_backward_seconds"] = elapsed
+                    metrics[f"adapter_{index}/training_tokens_per_second"] = tokens / max(elapsed, 1e-9)
+                    outputs[model_id] = result
         except Exception:
             # Donated accumulation buffers cannot be rolled back by retaining
             # references. Discard the whole population's accumulation and block

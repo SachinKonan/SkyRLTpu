@@ -1,7 +1,7 @@
 # Pooled multi-LoRA on the GPT-OSS v6e executor
 
 Integration branch: `agent/gptoss-multi-lora`, based on
-`agent/tunix-multihost-gptoss` at `0350d6b1`. The original multi-LoRA work was
+`agent/tunix-multihost-gptoss` at `0f341111`. The original multi-LoRA work was
 uncommitted in `SkyRLTpu-multi-lora` (base `86db6ec4`); this port carries its
 feature changes onto the current executor rather than replacing the executor.
 The Discover client has a companion `agent/gptoss-multi-lora-client` branch.
@@ -19,7 +19,9 @@ importance correction. Prompt and forced tokens have zero advantage.
 `POST /api/v1/multi_lora_training` stores one `MultiLoraTrainingRequest` with
 shared datums and source model/version metadata. A queue barrier drains earlier
 operations and prevents later operations from crossing the bundle. The backend
-executes forward/backward sequentially for each target over one frozen base.
+executes forward/backward sequentially by default. With
+`trainer.stacked_lora_training=true`, NNX vmap batches the independent adapter
+losses and gradients over one shared frozen base.
 Adapters retain separate weights, Adam states, and gradient accumulators. The
 client drains all results before stepping any adapter. A failed bundle clears
 all target accumulators and blocks training until restore/recreation; optimizer
@@ -27,9 +29,40 @@ updates are not a multi-model transaction.
 
 The shared request reduces duplicated queue payloads. It still performs k
 learner passes over G trajectories. Adapter weights, optimizer states and
-accumulated gradients grow with k; the base and sequential activation workspace
-are shared. The v6e profile keeps the base executor's 20,480-token microbatch
+accumulated gradients grow with k; the base is shared. Stacked execution also
+increases activation workspace with k. The v6e profile keeps the base executor's 20,480-token microbatch
 budget (2 x 10,240), not the earlier Qwen v4 budget of 2 x 22,528.
+
+## Stacked Qwen validation on Asia v6e-32
+
+`profiles/qwen35_v6e_32_stacked_lora_asia.json` enables k=2 vectorized
+forward/backward, with independent optimizer objects and per-adapter clipping,
+normalization, repeated-K/V corrections and Adam moments. Two rows per adapter
+means four active 10,240-token rows. The existing FSDP=2 layout still partitions
+the row dimension within each adapter; the adapter dimension is replicated.
+It does not yet repartition FSDP over the adapter dimension.
+
+The profile enables `stacked_lora_verify`: each real pooled batch is also replayed
+sequentially without any optimizer update. It requires gradient relative L2
+error <= 0.02 and maximum target-logprob absolute error <= 0.05, and restores
+the stacked gradients for the actual independent updates. Failures poison the
+whole cohort through the existing bundle failure handler. Trainer logs record
+paired durations and errors. Verification doubles the training work, so use
+the separate `stacked_seconds` and `sequential_replay_seconds` measurements;
+whole-request throughput includes validation. First-call timings include JIT.
+
+Both Qwen profiles use the checksum-verified v9 source bundle, existing Asia HF
+and Orbax caches, and seed inference compilation from
+`vllm-xla-cache-v6e-qwen35-tp4-s22528-v1`. Newly compiled inference programs are
+shared via `vllm-xla-cache-v6e-qwen35-tp4-s16384-seq8-mem80-chunk8192-lora2-multi-lora-v1`.
+The new stacked trainer graph has its own reusable compile prefix. JAX cache
+keys determine compatibility; seeding does not guarantee all graphs hit.
+
+CPU tests execute the production NNX/FLCE backward and complete microbatch
+driver on a tiny shared-base model, including padding, accumulation, distinct
+adapter outputs and optimizer updates with different hyperparameters. These
+tests do not establish Qwen TPU kernel support or HBM fit; the runtime trial
+must establish those separately.
 
 Sampling clients switch to the next population only after all checkpoints are
 published. `multi_lora_cohort.json` records the last complete population for

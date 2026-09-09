@@ -7,6 +7,7 @@ import shutil
 FILES = (
     "skyrl/backends/tunix_backend.py",
     "skyrl/backends/lora_init.py",
+    "skyrl/backends/stacked_lora.py",
     "skyrl/tinker/loss_fns.py",
     "skyrl/tinker/types.py",
     "skyrl/tinker/api.py",
