@@ -87,3 +87,17 @@ def test_readiness_counts_engines_not_hosts():
     assert (v6e.inference_hosts, v6e.inference.hosts_per_engine, v6e.engine_count) == (4, 2, 2)
     v5p = Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_grpo.json")
     assert (v5p.inference_hosts, v5p.engine_count) == (2, 2)
+
+
+
+def test_pair_engine_command_disables_async_scheduling(tmp_path):
+    """Async scheduling only works when every rank sees the sampled tokens;
+    the first stage of a two-host engine does not (job 568)."""
+    from tpu.swarm.ray_train.commands import inference_command
+    cfg = Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v6e_32_grpo.json")
+    root = tmp_path
+    pair = inference_command(cfg, root, root / "source", root / "model", root / "run", group=["10.0.0.3", "10.0.0.4"])
+    assert pair[pair.index("--pipeline-parallel-size") + 1] == "2"
+    assert "--no-async-scheduling" in pair
+    single = inference_command(cfg, root, root / "source", root / "model", root / "run")
+    assert "--no-async-scheduling" not in single and "--pipeline-parallel-size" not in single

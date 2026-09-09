@@ -185,8 +185,13 @@ def inference_command(config, root, source, snapshot, run, group=None):
     if v.chunked_prefill:
         command.append("--enable-chunked-prefill")
     if group and len(group) > 1:
+        # Async scheduling needs every rank to see the previous step's sampled
+        # tokens, which only the last pipeline stage has: the first stage of a
+        # tp4/pp2 engine dies in persistent_batch_manager.update_states with
+        # IndexError on its second step (job 568). Synchronous scheduling
+        # carries the tokens in the scheduler output.
         command += ["--pipeline-parallel-size", str(len(group)), "--distributed-executor-backend", "ray",
-                    "--skyrl-ray-placement-hosts", ",".join(group)]
+                    "--skyrl-ray-placement-hosts", ",".join(group), "--no-async-scheduling"]
     command += list(v.extra_args)
     return command
 
