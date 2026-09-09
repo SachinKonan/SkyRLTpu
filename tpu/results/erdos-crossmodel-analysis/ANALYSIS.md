@@ -180,6 +180,12 @@ Files: `examples/erdos_min_overlap/env.py`,
   `TTD_EXEMPLARS_INLINE_VALUES=k` lists every value rounded to k decimals.
 - The record line becomes: "Published record: C₅ ≤ 0.380875323. Best construction
   known to this project: C₅ = <min over exemplars and record>. Our goal is 0.38080."
+- A fresh tree's step-0 state is a random seed (n in 40..99, C₅ ≈ 0.5). While the tree
+  state is worse than the best reference, the construction sentence says so and names
+  the best `reference_constructions` entry as the starting point instead of
+  `initial_h_values`; once the tree beats every reference the original sentence returns.
+  (Also fixed upstream: `State.to_prompt` said "higher is better" at step 0 even for
+  minimisation.)
 
 Library contents (one clean gen-0 best per model):
 
@@ -202,8 +208,8 @@ the objective that won its own gen-0 round; everything else matches its gen-0 ce
 | `stageF-m-ctx-n.yaml` | muse | piecewise LOO (nv ≥ 3 fix), 4e-5 | stageB-m-pw-n (0.380860445 @8) | all four, summary mode |
 | `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json` | gpt-oss-120b | centered piecewise (Ray v2) | 502/511 GRPO/TTD gen-0 | all four, code mode |
 
-All three yamls pin bundle **v27** (`tpuswarm-skyrl-v5p32-cells-v27.tar.gz`, generation
-1788995388522100, sha256 f1dc2baa…, built from this worktree with discover c5984a2) and pass the
+All three yamls pin bundle **v28** (`tpuswarm-skyrl-v5p32-cells-v28.tar.gz`, generation
+1788995718280416, sha256 65993360…, built from this worktree with discover 1900881) and pass the
 exemplar variables through `EXTRA_TTD_ENV` (a reused tmux server keeps its creator's
 env, so plain `envs:` entries are not enough). The gpt-oss profile carries the same
 variables in `client_env` but points at the gpt-oss branch's current bundle (v12 at
