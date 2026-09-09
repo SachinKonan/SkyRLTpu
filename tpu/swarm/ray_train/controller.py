@@ -14,8 +14,8 @@ from ray import serve
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from tpu.swarm.select_v4_64_topology import select_split
-from tpu.swarm.select_v6e_32_topology import select_split as select_v6e_32_split
-from tpu.swarm.select_v5p_32_topology import select_split as select_v5p_32_split
+from tpu.swarm.select_v6e_32_topology import candidate_splits as v6e_32_candidates
+from tpu.swarm.select_v5p_32_topology import candidate_splits as v5p_32_candidates
 from .config import Config
 from .events import emit
 from .host import Host
@@ -71,6 +71,25 @@ class Controller:
 
     def report(self, event, **fields):
         return emit(self.log, event, run_id=self.config.run_id, **fields)
+
+    def validated_block(self, candidates):
+        """Probe candidate trainer blocks in order; keep the first whose hosts
+        form a libtpu mesh. A host that fails the mesh check is left to serve
+        (single-host init works there)."""
+        errors = []
+        for train_ranks, inference_ranks in candidates:
+            try:
+                self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                                  for r in train_ranks], 300)
+            except (RuntimeError, ray.exceptions.RayError) as exc:
+                if self.failure or self.stopping.is_set():
+                    raise
+                detail = str(exc)[-400:]
+                errors.append((train_ranks, detail))
+                self.report("topology_block_rejected", train_ranks=train_ranks, detail=detail)
+                continue
+            return train_ranks, inference_ranks
+        raise RuntimeError(f"no candidate trainer block formed a mesh: {errors}")
 
     def checked_get(self, refs, timeout):
         deadline = time.monotonic() + timeout
@@ -179,9 +198,7 @@ class Controller:
             # ranks 0-3 were physically scattered, 2026-09-09).
             full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
                                      for host in self.hosts], 300)
-            train_ranks, inference_ranks = select_v6e_32_split(full)
-            self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
-                              for r in train_ranks], 300)
+            train_ranks, inference_ranks = self.validated_block(v6e_32_candidates(full))
         elif self.config.accelerator == "tpu-v5p-32" and self.config.trainer.hosts == 2:
             # v5p-32 = four 2x2 host layers stacked along z. Sky ranks are not
             # the layer order (job 482, worker 200: ranks 0/1 two layers apart,
@@ -189,15 +206,18 @@ class Controller:
             # rank 0, ordered by z for TPU_PROCESS_BOUNDS=1,1,2.
             full = self.checked_get([host.probe.remote(list(range(4)), self.config.ports.topology_jax)
                                      for host in self.hosts], 300)
-            train_ranks, inference_ranks = select_v5p_32_split(full)
-            self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
-                              for r in train_ranks], 300)
+            train_ranks, inference_ranks = self.validated_block(v5p_32_candidates(full))
         else:
             # Single-host trainers (legacy v5p-32 cell shape): rank 0 trains
             # and hosts the API server and client, the rest serve.
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = list(range(self.config.trainer.hosts, self.config.hosts))
-        self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks)
+        self.train_ranks = train_ranks
+        # The trainer API (process 0) runs on the block's first host, which is
+        # not necessarily the SkyPilot head (v6e blocks are x-fastest, v5p
+        # pairs z-ordered); the client and readiness must talk to it.
+        self.api_host = self.ips[train_ranks[0]] if train_ranks else self.ips[0]
+        self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks, api_host=self.api_host)
         prepared_ranks = sorted(train_ranks + inference_ranks)
         prepared = self.checked_get([self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
                                     for rank in prepared_ranks], self.config.setup_timeout)
@@ -226,12 +246,13 @@ class Controller:
             while time.monotonic() < deadline:
                 if self.failure or self.stopping.is_set():
                     raise RuntimeError(self.failure or "controller interrupted")
-                trainer_ready = self.config.inference_only or ray.get(self.hosts[0].trainer_ready.remote(), timeout=10)
+                trainer_ready = self.config.inference_only or ray.get(
+                    self.hosts[self.train_ranks[0]].trainer_ready.remote(), timeout=10)
                 state = ray.get(self.catalog.snapshot.remote(), timeout=10)
                 try:
                     api_ready = self.config.inference_only
                     if not self.config.inference_only:
-                        response = client.get(f"http://{self.ips[0]}:{self.config.ports.trainer}/api/v1/get_server_capabilities")
+                        response = client.get(f"http://{self.api_host}:{self.config.ports.trainer}/api/v1/get_server_capabilities")
                         api_ready = response.status_code == 200
                     inference_ready = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/health").status_code == 200
                 except httpx.HTTPError:
@@ -250,7 +271,7 @@ class Controller:
                 if self.failure:
                     raise RuntimeError(self.failure)
             return 143
-        self.checked_get([self.hosts[0].start_client.remote()], 30)
+        self.checked_get([self.hosts[0].start_client.remote(self.api_host)], 30)
         self.report("client_started")
         while not self.stopping.wait(5):
             if self.failure:

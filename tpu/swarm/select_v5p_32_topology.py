@@ -40,15 +40,26 @@ def host_layers(records: list[dict]) -> dict[int, int]:
     return by_rank
 
 
-def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
+def candidate_splits(records: list[dict]) -> list[tuple[list[int], list[int]]]:
+    """Every z-adjacent host pair, best first (the pair holding Sky rank 0,
+    then the rest), so the controller can fall back when a host cannot join
+    a multi-host mesh. Task id = local_z; the trainer API lives on the pair's
+    first host."""
     by_rank = host_layers(records)
     z0 = by_rank[0]
-    z1 = z0 + 1 if z0 + 1 < HOSTS else z0 - 1
     at = {z: rank for rank, z in by_rank.items()}
-    # TPU_PROCESS_BOUNDS=1,1,2: task id = local_z.
-    train = [at[z] for z in sorted((z0, z1))]
-    serving = sorted(set(range(HOSTS)) - set(train))
-    return train, serving
+    ordered = []
+    for z in range(HOSTS - 1):
+        train = [at[z], at[z + 1]]
+        serving = sorted(set(range(HOSTS)) - set(train))
+        key = (0 if 0 in train else 1, abs(z - z0))
+        ordered.append((key, train, serving))
+    ordered.sort(key=lambda item: item[0])
+    return [(train, serving) for _, train, serving in ordered]
+
+
+def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
+    return candidate_splits(records)[0]
 
 
 def main() -> None:

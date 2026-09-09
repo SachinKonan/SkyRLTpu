@@ -191,13 +191,17 @@ def inference_command(config, root, source, snapshot, run, group=None):
     return command
 
 
-def client_environment(config, root, head, inference_ips=None):
+def client_environment(config, root, head, inference_ips=None, api_host=None):
+    """`head` is the executor Ray head; `api_host` is where the trainer API
+    (trainer process 0) listens, which differs from the head whenever the
+    trainer block does not start at Sky rank 0."""
     config.validate()
     env = dict(os.environ)
     t = config.trainer
+    api_host = api_host or head
     defaults = dict(
-        TINKER_API_KEY="tml-local-skyrl-no-auth", TINKER_BASE_URL=f"http://{head}:{config.ports.trainer}",
-        TTD_M0_BASE_URL=f"http://{head}:{config.ports.trainer}",
+        TINKER_API_KEY="tml-local-skyrl-no-auth", TINKER_BASE_URL=f"http://{api_host}:{config.ports.trainer}",
+        TTD_M0_BASE_URL=f"http://{api_host}:{config.ports.trainer}",
         HF_HOME=str(root / "ram/hf"), HF_HUB_OFFLINE=_flag(config.client_hf_offline), JAX_PLATFORMS="cpu",
         TTD_RUN_DIR=str(root / "runs" / config.run_id / "client"), EXPERIMENT_NAME=config.run_id,
         TTD_ENV="erdos_min_overlap", TTD_PROBLEM_TYPE="", TTD_FCALGO_MAX_CASES="0",

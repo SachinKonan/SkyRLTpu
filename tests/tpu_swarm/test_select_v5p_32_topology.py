@@ -44,3 +44,13 @@ def test_rejects_non_v5p_shapes():
                       for r in range(4)])
     with pytest.raises(ValueError):
         select_split(_records({0: 0, 1: 1, 2: 2, 3: 3})[:3])
+
+
+def test_candidates_are_all_adjacent_pairs_head_first():
+    from tpu.swarm.select_v5p_32_topology import candidate_splits
+    cands = candidate_splits(_records({0: 2, 1: 0, 2: 3, 3: 1}))  # rank 0 on layer 1
+    assert len(cands) == 3
+    assert [0 in t for t, _ in cands] == [True, True, False]
+    assert cands[0] == select_split(_records({0: 2, 1: 0, 2: 3, 3: 1}))
+    for train, serving in cands:
+        assert sorted(train + serving) == list(range(4)) and len(train) == 2

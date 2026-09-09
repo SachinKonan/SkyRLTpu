@@ -45,22 +45,38 @@ def host_positions(records: list[dict]) -> dict[int, tuple[int, int]]:
     return by_rank
 
 
-def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
+def candidate_splits(records: list[dict]) -> list[tuple[list[int], list[int]]]:
+    """Every contiguous 2x2 host block, best first.
+
+    The block containing Sky rank 0 (the executor head) comes first; the
+    others follow so the controller can fall back when a host refuses to
+    join a multi-host mesh (asia workers 74/65, 2026-09-09: one host per
+    worker fails libtpu's ``index_on_host() == i`` check only inside a
+    process grid, and with a two-column host grid every block that holds
+    the head also holds that host's row-mate). Task ids run x-fastest
+    within each block; the trainer API lives on the block's first host.
+    """
     by_rank = host_positions(records)
-    x0, y0 = by_rank[0]
     width = max(p[0] for p in by_rank.values()) + 1
     height = max(p[1] for p in by_rank.values()) + 1
-    x1 = x0 + 1 if x0 + 1 < width else x0 - 1
-    y1 = y0 + 1 if y0 + 1 < height else y0 - 1
-    block = {(x, y) for x in (x0, x1) for y in (y0, y1)}
     at = {pos: rank for rank, pos in by_rank.items()}
-    # TPU_PROCESS_BOUNDS=2,2,1: task id = local_x + 2 * local_y.
-    xs, ys = sorted((x0, x1)), sorted((y0, y1))
-    train = [at[(x, y)] for y in ys for x in xs]
-    if 0 not in train or len(block) != 4:
-        raise ValueError("could not form a 2x2 host block containing Sky rank 0")
-    serving = sorted(set(range(8)) - set(train))
-    return train, serving
+    x0, y0 = by_rank[0]
+    ordered = []
+    for ys0 in range(height - 1):
+        for xs0 in range(width - 1):
+            xs, ys = (xs0, xs0 + 1), (ys0, ys0 + 1)
+            train = [at[(x, y)] for y in ys for x in xs]
+            serving = sorted(set(range(8)) - set(train))
+            holds_head = 0 in train
+            # Prefer the head's block, then blocks nearest the head.
+            key = (0 if holds_head else 1, abs(ys0 - y0) + abs(xs0 - x0))
+            ordered.append((key, train, serving))
+    ordered.sort(key=lambda item: item[0])
+    return [(train, serving) for _, train, serving in ordered]
+
+
+def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
+    return candidate_splits(records)[0]
 
 
 def main() -> None:

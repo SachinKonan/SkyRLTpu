@@ -340,12 +340,12 @@ class Host:
         self.phase = "trainer_started"
         return self.heartbeat()
 
-    def start_client(self):
+    def start_client(self, api_host=None):
         if self.rank != 0:
             raise RuntimeError("client belongs on the head")
         (self.run / "client").mkdir(exist_ok=True)
         self.start("client", [str(self.root / "envs/client/bin/python"), str(self.source / "tpu/run_ttd_ensemble.py")],
-                   client_environment(self.config, self.root, self.ips[0]), self.source)
+                   client_environment(self.config, self.root, self.ips[0], api_host=api_host), self.source)
         self.phase = "client_running"
         return self.heartbeat()
 

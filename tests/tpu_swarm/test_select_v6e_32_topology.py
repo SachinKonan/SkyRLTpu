@@ -51,3 +51,17 @@ def test_rejects_non_v6e_shapes():
         select_split([{"process_id": r, "coords": [[r, 0, 0], [r, 1, 0], [r, 2, 0], [r, 3, 0]]} for r in range(8)])
     with pytest.raises(ValueError):
         select_split(_records((4, 2), {(x, y): x + 4 * y for x in range(4) for y in range(2)})[:7])
+
+
+def test_candidates_cover_every_block_head_first():
+    from tpu.swarm.select_v6e_32_topology import candidate_splits
+    # asia worker 65 (2026-09-09): 2x4 host grid, rank 0 at (0,1); host (1,1)
+    # fails the mesh check, so the usable block is rows 2-3 without the head.
+    rank_of = {(0, 1): 0, (1, 1): 2, (0, 2): 1, (1, 2): 5, (1, 3): 6, (0, 3): 4, (1, 0): 3, (0, 0): 7}
+    cands = candidate_splits(_records((2, 4), rank_of))
+    assert len(cands) == 3  # 2-wide grid: three row pairs
+    assert 0 in cands[0][0] and cands[0][0] == select_split(_records((2, 4), rank_of))[0]
+    assert all(0 in t for t, _ in cands[:2]) and 0 not in cands[2][0]
+    assert cands[2][0] == [rank_of[(0, 2)], rank_of[(1, 2)], rank_of[(0, 3)], rank_of[(1, 3)]]
+    for train, serving in cands:
+        assert sorted(train + serving) == list(range(8)) and len(train) == 4
