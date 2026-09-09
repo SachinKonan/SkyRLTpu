@@ -43,6 +43,11 @@ envs:
   TUNIX_FREE_BASE_STATE: "1"
   TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts-gptoss120b-bf16-d388
   TUNIX_MAXTEXT_CKPT_REQUIRE_MARKER: "1"
+  # v6e replicas have a 97 GB root disk; the 82 GB orbax export lives in RAM
+  # (708 GB hosts) and is restored by ensure_orbax_ckpt.sh below (marker-aware,
+  # gcloud storage) before the cell starts, so start_colocated skips its
+  # inline gsutil restore.
+  TUNIX_MAXTEXT_CKPT_CACHE: /dev/shm/skyrl-maxtext-ckpts-local
   TTD_ENV: erdos_min_overlap
   TTD_ADV_ESTIMATOR: mean_baseline
   TTD_ELITE_SLOTS: "2"
@@ -88,4 +93,8 @@ run: |
     trap - EXIT
   fi
   ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  # ensure_orbax_ckpt.sh is a no-op on nodes outside TRAIN_WORKERS.
+  JOBMAN_WORKER_ID="${SKYPILOT_NODE_RANK:-0}" CACHE_DOWNLOAD_PROCESSES=4 CACHE_DOWNLOAD_THREADS=8 \
+    TUNIX_MAXTEXT_MODEL_NAME=gpt-oss-120b MODEL_NAME=openai/gpt-oss-120b \
+    bash "$SKYRL_REPO_DIR/tpu/jobman/ensure_orbax_ckpt.sh"
   exec bash "$SKYRL_REPO_DIR/tpu/swarm/run_qwen35_v6e32_grpo.sh"
