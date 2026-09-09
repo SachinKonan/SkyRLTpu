@@ -1,10 +1,12 @@
 # Erdős v5p-32 cells: experiment status
 
-Status as of **2026-09-08 18:20Z**. A spot preemption wave at 03:39Z took 17 of 19
+Status as of **2026-09-09 00:45Z**. A spot preemption wave at 03:39Z took 17 of 19
 workers; the SkyPilot API server and pool controller were restarted twice since
-(~10:30 and ~18:08 local), which killed eight job controllers (resubmitted). Pool
-`tpuswarm-v5p32-east5a-erdos`: **1 of 49 READY**, 17 of our jobs plus the other
-session's gpt-oss 419 waiting for spot capacity. Nothing is lost: every cell
+(~10:30 and ~18:08 local), which killed eight job controllers (resubmitted). Overnight, per the user's gpt-oss-first call, every waiting cell was cancelled so the
+gpt-oss job could take the first slice; gpt-oss 456 (fixed bundle) is starting on
+worker 198, gemma-on-muse-tree 410 is starting on worker 189, and our other 15 cells
+were requeued at 00:41Z as 457–471 to compete for further workers. Pool: 1 READY,
+1 more coming up, 46 provisioning against refused spot capacity. Nothing is lost: every cell
 resumes from its last banked step in GCS. Job ids below are the CURRENT ones.
 
 Every cell is one tpu-v5p-32 slice: rank 0 runs the Tinker trainer, the TTD client
@@ -41,15 +43,15 @@ and does the answer depend on the model?
 | stageC-lr-n | done | qwen | GRPO | 15/15 | 0.380859355 | 0.95 | 13173 | finished |
 | stageC-tlr-n | done | qwen | TTD | 14/15 | 0.380864756 | 0.79 | 13341 | finished (14 banked) |
 | stageC-pw-n | 330 | qwen | piecewise LOO | 15/15 | 0.380862309 | 0.73 | 3312 | finished 18:47Z; step 14 hit the LOO blow-up, no gain after |
-| stageC-pwc-n | 429 | qwen | piecewise centered | 12/15 | **0.380857586** | 0.66 | 4967 | waiting; **overall best**, five descending steps 8–12 (was 340/420) |
+| stageC-pwc-n | 457 | qwen | piecewise centered | 12/15 | **0.380857586** | 0.66 | 4967 | waiting; **overall best**, five descending steps 8–12 (was 340/420) |
 | stageB2-g-grpo-n | done | gemma | GRPO | 15/15 | 0.380911409 | 0.75 | 6031 | finished |
 | stageB2-g-ttd-n | 282 | gemma | TTD | 15/15 | 0.380900374 | 0.68 | 5900 | finished |
 | stageB2-g-pw-n | 294 | gemma | piecewise LOO | 15/15 | 0.380865312 | 0.75 | 5977 | finished |
-| stageB2-g-pwc-n | 430 | gemma | piecewise centered | 13/15 | 0.380863427 | 0.80 | 5910 | waiting; passed the gemma LOO final at step 12 (was 341/421) |
+| stageB2-g-pwc-n | 458 | gemma | piecewise centered | 13/15 | 0.380863427 | 0.80 | 5910 | waiting; passed the gemma LOO final at step 12 (was 341/421) |
 | stageB-m-grpo-n | 332 | muse | GRPO | 15/15 | 0.380866934 | 0.99 | 6438 | finished |
 | stageB-m-ttd-n | 333 | muse | TTD | 13/15 | 0.380865601 | 0.18 | 13255 | **cancelled 03:58Z by the user** (degenerate: validity 0.86 → 0.18 over steps 6–13; step 13 logged advantage max 6.25e10, not reproduced offline from the archived rewards, open). Counts as the muse TTD result. |
-| stageB-m-pw-n | 434 | muse | piecewise LOO | 11/15 | 0.380860445 | 0.93 | 13067 | waiting; best muse objective (was 398/424) |
-| stageB-m-pwc-n | 435 | muse | piecewise centered | 12/15 | 0.380876406 | 0.71 | 13147 | waiting; four consecutive gains 9–12 (was 342/427) |
+| stageB-m-pw-n | 461 | muse | piecewise LOO | 11/15 | 0.380860445 | 0.93 | 13067 | waiting; best muse objective (was 398/424) |
+| stageB-m-pwc-n | 464 | muse | piecewise centered | 12/15 | 0.380876406 | 0.71 | 13147 | waiting; four consecutive gains 9–12 (was 342/427) |
 
 Reading:
 
@@ -88,12 +90,12 @@ still descend faster than TTD, or was GRPO's qwen win coming from the validity t
 
 | Cell | Job | Model | Objective | Step | Best | Raw validity | Tok | State |
 |---|---|---|---|---|---|---|---|---|
-| stageC-v32-grpo-n | 432 | qwen | GRPO whitened | 6/15 | 0.380870379 | 0.57 | 12109 | waiting (was 290/423) |
-| stageC-v32-ttd-n | 431 | qwen | TTD | 6/15 | 0.380866576 | 0.58 | 10890 | waiting; **leads GRPO by 3.8e-6 at equal step** (was 291/422) |
-| stageB2-g-v32-grpo-n | 433 | gemma | GRPO whitened | 10/15 | 0.380871109 | 0.75 | 5978 | waiting; ran through the outage to step 10 (was 390) |
-| stageB2-g-v32-ttd-n | 425 | gemma | TTD | 4/15 | 0.380910353 | 0.78 | 6000 | waiting; led GRPO by 3.1e-5 at equal step 4 (was 391) |
-| stageB-m-v32-grpo-n | 392 | muse | GRPO whitened | 4/15 | 0.380898666 | 0.68 | 11116 | waiting after preemption at 15:25Z |
-| stageB-m-v32-ttd-n | 426 | muse | TTD | 2/15 | 0.380913341 | 0.74 | 12642 | waiting (was 393) |
+| stageC-v32-grpo-n | 460 | qwen | GRPO whitened | 6/15 | 0.380870379 | 0.57 | 12109 | waiting (was 290/423) |
+| stageC-v32-ttd-n | 459 | qwen | TTD | 6/15 | 0.380866576 | 0.58 | 10890 | waiting; **leads GRPO by 3.8e-6 at equal step** (was 291/422) |
+| stageB2-g-v32-grpo-n | 462 | gemma | GRPO whitened | 11/15 | 0.380870881 | 0.78 | 5979 | waiting; the orphaned 390 cell kept training on its VM to step 11 |
+| stageB2-g-v32-ttd-n | 463 | gemma | TTD | 4/15 | 0.380910353 | 0.78 | 6000 | waiting; led GRPO by 3.1e-5 at equal step 4 (was 391) |
+| stageB-m-v32-grpo-n | 465 | muse | GRPO whitened | 4/15 | 0.380898666 | 0.68 | 11116 | waiting after preemption at 15:25Z |
+| stageB-m-v32-ttd-n | 466 | muse | TTD | 2/15 | 0.380913341 | 0.74 | 12642 | waiting (was 393) |
 
 Raw validity is the fraction of drawn rollouts that were valid before filtering
 (kept validity is 1.0 by construction). On qwen GRPO led by 1.2e-5 at step 3 and
@@ -117,9 +119,9 @@ rule was rejected on 2026-09-07; 331 and 336 still run under it).
 |---|---|---|---|---|---|---|---|---|---|
 | meta-wt16-carry-g0-muse | 362 | muse | GRPO | carried from muse GRPO step 9 | 15/15 | 0.380858715 | 0.99 | 4090 | finished 22:43Z, best gen-1 arm |
 | meta-wt16-fresh-g0-qwen | 363 | qwen | GRPO | fresh | 14/15 | 0.380858844 | 0.97 | 11516 | finished 16:14Z: flatline stop (5 zero gains), flat since step 7. A qwen CARRY on its own tree was not run (user: reuses the experiment); it exists only as the Ray v2 mix control |
-| meta-wt16-carry-g0-gemma-ttd | 418 | gemma | TTD | carried from gemma TTD (8×32 run) | 12/15 | 0.380858785 | 0.83 | 5984 | waiting; 331 stopped 03:29Z on the old rule, relaunched under the relaxed rule, resumes from step 12 |
+| meta-wt16-carry-g0-gemma-ttd | 467 | gemma | TTD | carried from gemma TTD (8×32 run) | 12/15 | 0.380858785 | 0.83 | 5984 | waiting; 331 stopped 03:29Z on the old rule, relaunched under the relaxed rule, resumes from step 12 |
 | meta-wt16-fresh-g0-gemma-ttd | 336 | gemma | TTD | fresh | 15/15 | 0.380858858 | 0.95 | 6018 | finished 00:56Z, flat over its last four steps |
-| meta-wt16-fresh-g0-muse-lr4e5 | 436 | muse | GRPO | fresh | 13/15 | 0.380858919 | 0.65 | 11480 | waiting; flat since step 7 (7 steps), stops after one more (was 335/399/428) |
+| meta-wt16-fresh-g0-muse-lr4e5 | 471 | muse | GRPO | fresh | 13/15 | 0.380858919 | 0.65 | 11480 | waiting; flat since step 7 (7 steps), stops after one more (was 335/399/428) |
 
 Reading: the basin spans 2e-7. Carried weights lead on both models (muse carry
 0.380858717 vs fresh 0.380858919; gemma carry 0.380858785 vs fresh 0.380858858).
@@ -137,8 +139,8 @@ nothing banked; the user preferred model mixing.
 | Seed tree | qwen member | gemma member | muse member |
 |---|---|---|---|
 | qwen (wt16, best 0.3808618) | fresh only, 363 done | carried, 331 | carried, 362 |
-| gemma (stageB2-g-pw-n s15, 0.380865312) | **403**: step 4 0.380864695 (one real step, then flat) | cancelled (397) | **405**: step 3, still exactly at the seed |
-| muse (stageB-m-grpo-n s15, 0.380866934) | **402**: step 3 0.380866881, flatlined (adv max 0.02, val 0.95) | **410**: step 1 0.380866800 (404 failed on head disk, pruned, relaunched) | cancelled (395) |
+| gemma (stageB2-g-pw-n s15, 0.380865312) | **468** (was 403): step 4 0.380864695 (one real step, then flat) | cancelled (397) | **470** (was 405): step 3, still exactly at the seed |
+| muse (stageB-m-grpo-n s15, 0.380866934) | **469** (was 402): step 3 0.380866881, flatlined (adv max 0.02, val 0.95) | **410**: step 1 0.380866800 (404 failed on head disk, pruned, relaunched) | cancelled (395) |
 
 First-step reading: qwen improved the gemma tree by 5.9e-7 in one step, barely
 moved the muse tree (1.5e-8), and muse did nothing to the gemma tree. Carried
