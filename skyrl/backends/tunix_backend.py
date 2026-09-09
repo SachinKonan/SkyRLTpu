@@ -992,34 +992,43 @@ class TunixBackend(AbstractBackend):
         key = jax.random.key(seed)
         for path, leaf in flat:
             tpath = tuple(path)
-            shape, dtype = tuple(leaf.value.shape), leaf.value.dtype
+            value = leaf.value
+            is_array = hasattr(value, "shape") and hasattr(value, "dtype")
             existing = real.get(tpath)
             if existing is not None:
-                value = existing.value
-                if tuple(value.shape) != shape or value.dtype != dtype:
-                    raise RuntimeError(f"qwix changed base leaf {tpath}: {value.shape}/{value.dtype} -> {shape}/{dtype}")
-                leaf.value = value
+                # Anything the input module already holds is reused verbatim:
+                # base kernels, the eagerly installed sparse expert LoRA, and
+                # non-array variables (gpt-oss carries tuple-valued state that
+                # the Qwen CPU fixture does not; job 437).
+                real_value = existing.value
+                if is_array and hasattr(real_value, "shape") and (
+                        tuple(real_value.shape) != tuple(value.shape) or real_value.dtype != value.dtype):
+                    raise RuntimeError(f"qwix changed base leaf {tpath}: {real_value.shape}/{real_value.dtype}"
+                                       f" -> {value.shape}/{value.dtype}")
+                leaf.value = real_value
                 reused += 1
+                filled.append((path, leaf))
+                continue
+            name = str(tpath[-1])
+            if not name.endswith(("_lora_a", "_lora_b")) or not is_array:
+                raise RuntimeError(f"unexpected new leaf from qwix trace: {tpath} ({type(value).__name__})")
+            shape, dtype = tuple(value.shape), value.dtype
+            meta = leaf.get_metadata() if hasattr(leaf, "get_metadata") else {}
+            axes = next((meta[k] for k in ("out_sharding", "sharding_names", "sharding")
+                         if isinstance(meta.get(k), (tuple, list, P))), None)
+            target = None
+            if mesh is not None and rules and axes is not None and len(axes) == len(shape):
+                candidate = flax_linen.logical_to_mesh_sharding(P(*axes), mesh, rules)
+                if isinstance(candidate, NamedSharding):
+                    target = candidate
+            if name.endswith("_lora_b"):
+                init = lambda k, sh=shape, dt=dtype: jnp.zeros(sh, dt)
             else:
-                name = str(tpath[-1])
-                if not name.endswith(("_lora_a", "_lora_b")):
-                    raise RuntimeError(f"unexpected new leaf from qwix trace: {tpath}")
-                meta = leaf.get_metadata() if hasattr(leaf, "get_metadata") else {}
-                axes = next((meta[k] for k in ("out_sharding", "sharding_names", "sharding")
-                             if isinstance(meta.get(k), (tuple, list, P))), None)
-                target = None
-                if mesh is not None and rules and axes is not None and len(axes) == len(shape):
-                    candidate = flax_linen.logical_to_mesh_sharding(P(*axes), mesh, rules)
-                    if isinstance(candidate, NamedSharding):
-                        target = candidate
-                if name.endswith("_lora_b"):
-                    init = lambda k, sh=shape, dt=dtype: jnp.zeros(sh, dt)
-                else:
-                    he = jax.nn.initializers.he_uniform()
-                    init = lambda k, sh=shape, dt=dtype, he=he: he(k, sh, dt)
-                key, sub = jax.random.split(key)
-                leaf.value = jax.jit(init, out_shardings=target)(sub)
-                created += 1
+                he = jax.nn.initializers.he_uniform()
+                init = lambda k, sh=shape, dt=dtype, he=he: he(k, sh, dt)
+            key, sub = jax.random.split(key)
+            leaf.value = jax.jit(init, out_shardings=target)(sub)
+            created += 1
             filled.append((path, leaf))
         logger.info("qwix abstract init: reused %d base leaves, created %d LoRA factors (mesh=%s)",
                     reused, created, mesh is not None)
