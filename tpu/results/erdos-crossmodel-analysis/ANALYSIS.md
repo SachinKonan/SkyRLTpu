@@ -162,13 +162,15 @@ Files: `examples/erdos_min_overlap/env.py`,
 - `TTD_EXEMPLARS_PATH` (absolute, or relative to the discover repo root) points at a
   JSON list of `{label, model, c5, n_points, approach, code, construction, source}`.
   Off when unset: the prompt is unchanged except for the honest record line.
-- `TTD_EXEMPLARS_EXCLUDE=<model>` drops the model's own entry (each model sees the
-  other three); `TTD_EXEMPLARS_MAX` caps the count (best by C₅ first).
+- Every model sees all four entries, its own included (user's call: the prompt should
+  carry the full set of best solutions). `TTD_EXEMPLARS_EXCLUDE=<model>` exists for
+  ablations; `TTD_EXEMPLARS_MAX` caps the count (best by C₅ first).
 - `TTD_EXEMPLARS_MODE=summary` (default) injects, per exemplar, one header line
-  (label, model, C₅, n) and the approach paragraph: ~680 tokens for three exemplars,
-  so it fits gemma's 10240-token context. `code` mode adds a head/tail excerpt of the
-  program (`TTD_EXEMPLARS_MAX_CODE_CHARS`, default 2500): ~2560 tokens, for gpt-oss
-  (32k context) or qwen (18k).
+  (label, model, C₅, n) and a method paragraph with no RL provenance (no objective,
+  tree or step numbers): ~800 tokens for four exemplars, so it fits gemma's
+  10240-token context. `code` mode adds a head/tail excerpt of the program
+  (`TTD_EXEMPLARS_MAX_CODE_CHARS`, default 2500): ~3400 tokens, for gpt-oss (32k
+  context) or qwen (18k).
 - The sandbox prelude defines `reference_constructions[label]` as feasible numpy
   arrays next to `initial_h_values`, and the rules bullet says so; programs can start
   from, blend, or ignore them.
@@ -191,10 +193,10 @@ the objective that won its own gen-0 round; everything else matches its gen-0 ce
 
 | Cell yaml | Model | Objective / lr | Compare against | Exemplars seen |
 |---|---|---|---|---|
-| `stageF-q-ctx-n.yaml` | qwen | centered piecewise, 1.5e-4 | stageC-pwc-n (0.380857586 @11) | gemma, muse, gpt-oss |
-| `stageF-g-ctx-n.yaml` | gemma | centered piecewise, 4e-5 | stageB2-g-pwc-n (0.380863427 @12), stageB-g-ttd-n | qwen, muse, gpt-oss |
-| `stageF-m-ctx-n.yaml` | muse | piecewise LOO (nv ≥ 3 fix), 4e-5 | stageB-m-pw-n (0.380860445 @8) | qwen, gemma, gpt-oss |
-| `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json` | gpt-oss-120b | centered piecewise (Ray v2) | 502/511 GRPO/TTD gen-0 | qwen, muse, gemma, code mode |
+| `stageF-q-ctx-n.yaml` | qwen | centered piecewise, 1.5e-4 | stageC-pwc-n (0.380857586 @11) | all four, summary mode |
+| `stageF-g-ctx-n.yaml` | gemma | centered piecewise, 4e-5 | stageB2-g-pwc-n (0.380863427 @12), stageB-g-ttd-n | all four, summary mode |
+| `stageF-m-ctx-n.yaml` | muse | piecewise LOO (nv ≥ 3 fix), 4e-5 | stageB-m-pw-n (0.380860445 @8) | all four, summary mode |
+| `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json` | gpt-oss-120b | centered piecewise (Ray v2) | 502/511 GRPO/TTD gen-0 | all four, code mode |
 
 All three yamls pin bundle **v24** (`tpuswarm-skyrl-v5p32-cells-v24.tar.gz`, generation
 1788971556711566, sha256 3217a6c0…, built from this worktree with discover 6787dc3) and pass the

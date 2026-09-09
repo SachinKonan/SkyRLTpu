@@ -1,8 +1,8 @@
 name: stageF-m-ctx-n
 
 # Muse, gen-0 CONTEXT-MIXED refinement (Stage F): a FRESH PUCT tree (no carried
-# states, no carried weights) with the prompt carrying the other models' best
-# gen-0 solutions (qwen 0.380857586 n=500, gemma 0.380863196 n=536,
+# states, no carried weights) with the prompt carrying every model's best
+# gen-0 solutions (qwen 0.380857586 n=500, gemma 0.380863196 n=536, muse 0.380860445 n=512,
 # gpt-oss-120b 0.380887659 n=144) as text summaries, and their constructions
 # pre-imported in the sandbox as `reference_constructions[label]`. The mixing
 # channel is context only: not weights (LoRA mix), not data (tree carry).
@@ -10,7 +10,7 @@ name: stageF-m-ctx-n
 # stageB-m-pw-n; centered trailed it on muse), on the v23+ LOO nv>=3 fix;
 # 16x32, LR 4e-5, elite 2, 15 steps.
 # TTD_EXEMPLARS_PATH is relative to the discover repo root inside the bundle
-# (env.py resolves it); TTD_EXEMPLARS_EXCLUDE drops muse's own entry.
+# (env.py resolves it); all four solutions are shown, including muse's own.
 # One complete four-host tpu-v5p-32 slice from pool tpuswarm-v5p32-east5a-erdos:
 # rank 0 = trainer + client + grader Ray head, ranks 1-3 = vLLM engines
 # (cell_worker.sh per-model defaults; CELL prefix selects the model).
@@ -36,8 +36,8 @@ envs:
   ZONE: us-east5-a
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v24.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v24-m-ctx-n
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v25.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v25-m-ctx-n
 
   CELL: m-pw-n
   RUN_DIR_NAME: stageF-m-ctx-n
@@ -75,7 +75,7 @@ envs:
   TINKER_API_KEY: tml-local-skyrl-no-auth
   TINKER_BASE_URL: http://127.0.0.1:8000
   # Exemplar env goes through EXTRA_TTD_ENV for the same tmux reason.
-  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0 TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json TTD_EXEMPLARS_EXCLUDE=muse TTD_EXEMPLARS_MAX=3 TTD_EXEMPLARS_MODE=summary
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0 TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json TTD_EXEMPLARS_MAX=4 TTD_EXEMPLARS_MODE=summary
 
 run: |
   set -euo pipefail

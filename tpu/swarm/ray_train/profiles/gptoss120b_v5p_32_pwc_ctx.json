@@ -37,8 +37,7 @@
     "TTD_ELITE_SLOTS": "2",
     "TTD_ADV_PIECEWISE_ALPHA": "1.0",
     "TTD_EXEMPLARS_PATH": "examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json",
-    "TTD_EXEMPLARS_EXCLUDE": "gptoss",
-    "TTD_EXEMPLARS_MAX": "3",
+    "TTD_EXEMPLARS_MAX": "4",
     "TTD_EXEMPLARS_MODE": "code",
     "TTD_EXEMPLARS_MAX_CODE_CHARS": "2500"
   },

@@ -195,16 +195,17 @@ analysis of what each model found and did: `tpu/results/erdos-crossmodel-analysi
 
 | Cell | Job | Model | Objective | Exemplars seen | Compare against | State |
 |---|---|---|---|---|---|---|
-| stageF-q-ctx-n | - | qwen | centered piecewise, lr 1.5e-4 | gemma 0.380863196 (n=536), muse 0.380860445 (n=512), gpt-oss-120b 0.380887659 (n=144) | stageC-pwc-n 0.380857586 @11 | yaml ready, bundle v24 |
-| stageF-g-ctx-n | - | gemma | centered piecewise, lr 4e-5 | qwen 0.380857586 (n=500), muse, gpt-oss | stageB2-g-pwc-n 0.380863427 @12 | yaml ready, bundle v24 |
-| stageF-m-ctx-n | - | muse | piecewise LOO, lr 4e-5 | qwen, gemma, gpt-oss | stageB-m-pw-n 0.380860445 @8 | yaml ready, bundle v24 |
-| gptoss120b pwc ctx | - | gpt-oss-120b | centered piecewise (Ray v2) | qwen, muse, gemma (code mode) | 502/511 | profile `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json`; needs the gpt-oss bundle rebuilt with the exemplar env.py first |
+| stageF-q-ctx-n | - | qwen | centered piecewise, lr 1.5e-4 | all four: qwen 0.380857586 (n=500), muse 0.380860445 (n=512), gemma 0.380863196 (n=536), gpt-oss-120b 0.380887659 (n=144) | stageC-pwc-n 0.380857586 @11 | yaml ready, bundle v25 |
+| stageF-g-ctx-n | - | gemma | centered piecewise, lr 4e-5 | all four | stageB2-g-pwc-n 0.380863427 @12 | yaml ready, bundle v25 |
+| stageF-m-ctx-n | - | muse | piecewise LOO, lr 4e-5 | all four | stageB-m-pw-n 0.380860445 @8 | yaml ready, bundle v25 |
+| gptoss120b pwc ctx | - | gpt-oss-120b | centered piecewise (Ray v2) | all four (code mode) | 502/511 | profile `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json`; needs the gpt-oss bundle rebuilt with the exemplar env.py first |
 
 Env (discover `examples/erdos_min_overlap/env.py`, via `EXTRA_TTD_ENV`):
 `TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json`
-(relative to the discover root in the bundle), `TTD_EXEMPLARS_EXCLUDE=<own model>`,
-`TTD_EXEMPLARS_MAX=3`, `TTD_EXEMPLARS_MODE=summary` (~680 tokens; `code` adds
-2500-char excerpts, ~2560 tokens, for gpt-oss). Off when the path is unset.
+(relative to the discover root in the bundle), `TTD_EXEMPLARS_MAX=4` (every model
+sees all four solutions, its own included; summaries carry the method only, no
+objective/tree/step provenance), `TTD_EXEMPLARS_MODE=summary` (~800 tokens; `code`
+adds 2500-char excerpts, ~3400 tokens, for gpt-oss). Off when the path is unset.
 
 ## gpt-oss 120B on the Ray v2 executor (2 trainer hosts + 2 engine hosts per v5p-32)
 
