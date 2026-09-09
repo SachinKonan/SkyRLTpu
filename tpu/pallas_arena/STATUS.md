@@ -119,34 +119,37 @@ Per-cell signals are **task-specific, not model-specific**: gemma·rg_lru is
 16/32 the same tile error; gemma·splash is 9/32 `if`-on-traced; qwen fails
 diffusely (long-program collapse). splash → control-flow, rg_lru → tiling.
 
-### V2 — XLA-graded results (3 of 4 cells)
+### V2 — XLA-graded results: ALL FOUR CELLS
 
-| cell | v1 passed | v2 passed | v1 best | v2 best | seed | status |
+| cell | v1 passed | v2 passed | v1 best | v2 best | seed | targeted failure v1→v2 |
 |---|---|---|---|---|---|---|
-| qwen · rg_lru | 4/32 | **7/32** | 2.02 | 1.97 | 1.99 | complete |
-| qwen · splash | 10/32 | **12/32** | 0.349 | 0.378 | 0.40 | complete |
-| gemma · rg_lru | 3/31 | **10/20** | 2.03 | **2.15** | 1.99 | partial (11 missing) |
-| gemma · splash | 7/32 | — | 0.27 | — | 0.40 | not yet graded |
+| qwen · rg_lru | 4/32 | **7/32** | 2.02 | 1.97 | 1.99 | — |
+| qwen · splash | 10/32 | **12/32** | 0.349 | 0.378 | 0.40 | — |
+| gemma · rg_lru | 3/31 | **12/23** | 2.03 | **2.16** | 1.99 | tile-(8,128) **7 → 2** |
+| gemma · splash | 7/32 | **≥8/14 (57%)** | 0.272 | 0.208 | 0.40 | ctrl-flow **4 → 0** |
 
-**THE FINDING: v2 raises VALIDITY in every cell measured; it does not make the
-best kernel faster.** Peak reward moved -0.05 / +0.03 / +0.12 across the three
-cells — noise-level and mixed — while pass counts rose in all three.
+**THE FINDING: v2 raises VALIDITY in all four cells and eliminates the specific
+failures it names; it does not make the best kernel faster.** Peak reward moved
+-0.05 / +0.03 / +0.13 / -0.06 — noise-level and mixed — while pass counts rose
+everywhere.
 
-**The cleanest causal case is gemma · rg_lru.** gemma never used lib-imports
-(0/64), so its v2 delta isolates the CONSTRAINTS BLOCK alone; that cell had the
-worst tile-(8,128) problem in v1; and under v2 its tile failures dropped
-**7 -> 1** while validity roughly tripled (9.7% -> 50%, and >=32% even if all 11
-ungraded candidates were to fail). A named constraint removed the specific
-failure it named.
+**Two clean causal cases.** gemma never used lib-imports (0/64), so both gemma
+cells isolate the CONSTRAINTS BLOCK alone:
+* gemma · rg_lru had the worst tile-(8,128) problem in v1; under v2 those
+  failures fell 7 → 2 and validity roughly quadrupled (9.7% → 52%).
+* gemma · splash had 4 `if`-on-traced (control-flow) failures in v1; under v2
+  they are 0, and validity went 22% → 57%.
+A named constraint removed the failure it named, twice, for different rules.
 
 Note v2's rg_lru passers cluster tightly (1.65, 1.70, 1.70, 1.70, 1.71) --
 consistent with the constraints block herding candidates toward one safe,
 unremarkable solution rather than toward faster ones.
 
-Caveat: four consecutive judges (13-16) were preempted at ~23h mid-grade, which
-is why gemma · rg_lru is 20/32 and gemma · splash is ungraded. Both gemma
-findings above are robust to the missing verdicts (more grading can only add
-passers, never remove the observed best).
+**Robustness.** qwen cells are complete 32/32. gemma · rg_lru (23/32) and
+gemma · splash (14/32) are partial because six consecutive judges were
+preempted at ~23h, but both validity claims hold in the worst case: gemma ·
+splash already has MORE absolute passers than v1 (8 vs 7) with 18 ungraded, and
+more grading can only add passers, never remove an observed best.
 
 ### V2 — generation-side (complete) and the superseded v5p grade
 
