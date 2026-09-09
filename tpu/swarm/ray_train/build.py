@@ -10,7 +10,7 @@ import tempfile
 
 import yaml
 
-from .config import Config
+from .config import ACCELERATOR_RUNTIME, Config
 
 
 def build(profile, output):
@@ -36,8 +36,8 @@ def build(profile, output):
     if Path(profile).resolve().parent != package / "profiles":
         raise ValueError("profile must be in this package's profiles directory")
     is_v4 = config.accelerator.startswith("tpu-v4-")
-    zone = "us-central2-b" if is_v4 else "us-east5-a"
-    runtime = "tpu-ubuntu2204-base" if is_v4 else "v2-alpha-tpuv5"
+    zone = config.effective_zone
+    runtime = ACCELERATOR_RUNTIME[config.accelerator]
     # Each archive is immutable and has no shared-tree credentials or unrelated
     # agent edits. Existing training code comes from the SHA-pinned base bundle.
     task = dict(name=config.run_id, resources=dict(cloud="gcp", zone=zone,

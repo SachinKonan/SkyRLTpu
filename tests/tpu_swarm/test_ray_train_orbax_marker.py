@@ -4,6 +4,8 @@ Job 411 (gpt-oss 120B on v5p-32) failed because the check listed the marker's
 own path with a "/**" suffix, which can never match a file. The preflight now
 lists the checkpoint tree and looks for the marker among its objects.
 """
+from pathlib import Path
+import json
 import pytest
 
 from tpu.swarm.ray_train.cache import Object
@@ -104,3 +106,36 @@ def test_gptoss_preset_pins_drjax_and_qwen_does_not():
 def test_extra_pins_must_be_exact():
     with pytest.raises(ValueError, match="extra_pins"):
         _cfg("gpt-oss-120b", extra_pins=["drjax>=0.1.4"])
+
+
+# --- v6e-32 (8 hosts x 4 chips, 32 GiB HBM): the validated legacy 4+4 split --
+from tpu.swarm.ray_train.build import build
+
+
+def test_gptoss_v6e_profile_uses_the_validated_four_host_block(tmp_path):
+    import yaml
+    path = Path("tpu/swarm/ray_train/profiles/gptoss120b_v6e_32_grpo.json")
+    cfg = Config.load(path)
+    assert (cfg.accelerator, cfg.hosts, cfg.trainer.hosts, cfg.inference_hosts) == ("tpu-v6e-32", 8, 4, 4)
+    assert (cfg.trainer.tp, cfg.trainer.fsdp, cfg.trainer.process_bounds) == (8, 2, "2,2,1")
+    assert cfg.effective_zone == "asia-northeast1-b"
+    assert cfg.bucket.endswith("asia-northeast1") and "asia-northeast1" in cfg.cache.hf
+    _, _, task_path = build(path, tmp_path)
+    task = yaml.safe_load(task_path.read_text())
+    assert task["resources"]["zone"] == "asia-northeast1-b"
+    assert task["resources"]["accelerator_args"]["runtime_version"] == "v2-alpha-tpuv6e"
+    assert task["resources"]["accelerators"] == "tpu-v6e-32"
+
+
+def test_v6e_rejects_other_trainer_splits_and_unknown_zones():
+    raw = json.loads(Path("tpu/swarm/ray_train/profiles/gptoss120b_v6e_32_grpo.json").read_text())
+    bad = dict(raw); bad["trainer"] = dict(raw["trainer"], hosts=2, tp=4, fsdp=2, process_bounds="1,1,2")
+    with pytest.raises(ValueError, match="v6e-32"):
+        Config.from_dict(bad)
+    bad = dict(raw); bad["zone"] = "us-east5-a"
+    with pytest.raises(ValueError, match="zone"):
+        Config.from_dict(bad)
+    ok = dict(raw); ok["zone"] = "us-east5-b"
+    assert Config.from_dict(ok).effective_zone == "us-east5-b"
+    default = dict(raw); default.pop("zone")
+    assert Config.from_dict(default).effective_zone == "asia-northeast1-b"

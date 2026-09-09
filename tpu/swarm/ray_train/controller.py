@@ -175,6 +175,8 @@ class Controller:
             # hosts the API server and client), the rest serve. The v5p-32
             # topology is 2x2x4 with one 2x2 host per row, so a two-host
             # trainer is a contiguous 1,1,2 process grid; no probe needed.
+            # v6e-32 (8 hosts x 4 chips): hosts 0-3 form the 2,2,1 block the
+            # legacy cell trains on (validated), 4-7 serve.
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = list(range(self.config.trainer.hosts, self.config.hosts))
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks)

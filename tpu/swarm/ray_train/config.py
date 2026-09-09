@@ -170,6 +170,20 @@ _QWEN_SPEC = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@0fd409939
 _MUSE_SPEC = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509"
 _GPTOSS_SPEC = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
 
+# Zones each accelerator is launched in (first = default) and the TPU VM runtime.
+ACCELERATOR_ZONES = {
+    "tpu-v4-64": ("us-central2-b",),
+    "tpu-v4-32": ("us-central2-b",),
+    "tpu-v5p-32": ("us-east5-a",),
+    "tpu-v6e-32": ("asia-northeast1-b", "us-east5-b", "europe-west4-a"),
+}
+ACCELERATOR_RUNTIME = {
+    "tpu-v4-64": "tpu-ubuntu2204-base",
+    "tpu-v4-32": "tpu-ubuntu2204-base",
+    "tpu-v5p-32": "v2-alpha-tpuv5",
+    "tpu-v6e-32": "v2-alpha-tpuv6e",
+}
+
 # Values transcribed from tpu/jobman/cell_worker.sh (model cases + pick_tiles)
 # and tpu/launch_cell.sh (member spec, context, phase-1 budget). Single-trainer
 # v5p-32 shapes; multi-host profiles override tp/fsdp/bounds.
@@ -235,6 +249,9 @@ class Config:
     base_bundle: str
     base_bundle_sha256: str
     model_preset: str = "qwen3.5-27b"
+    # GCP zone the task targets; empty selects the accelerator's default
+    # (ACCELERATOR_ZONES[accelerator][0]).
+    zone: str = ""
     model: str = "Qwen/Qwen3.5-27B"
     root: str = "~/.cache/skyrl-ray"
     inference_only: bool = False
@@ -306,9 +323,11 @@ class Config:
             raise ValueError("checkpoint_cleanup_timeout must be a nonnegative integer (0 disables)")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}", self.run_id):
             raise ValueError("run_id must be a safe unique name")
-        expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4}
+        expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4, "tpu-v6e-32": 8}
         if expected.get(self.accelerator) != self.hosts:
             raise ValueError("accelerator/host count mismatch")
+        if self.zone and self.zone not in ACCELERATOR_ZONES.get(self.accelerator, ()):
+            raise ValueError(f"zone {self.zone!r} is not a known zone for {self.accelerator}")
         if self.inference_only and self.trainer.hosts != 0:
             raise ValueError("inference-only profiles must declare zero trainer hosts")
         if not self.inference_only and not 0 < self.trainer.hosts < self.hosts:
@@ -317,6 +336,12 @@ class Config:
             raise ValueError("v4-64 currently requires the validated four-host row")
         if not self.inference_only and self.accelerator in ("tpu-v5p-32", "tpu-v4-32") and self.trainer.hosts not in (1, 2):
             raise ValueError("32-core profiles support one or two trainer hosts")
+        if not self.inference_only and self.accelerator == "tpu-v6e-32" and (
+                self.trainer.hosts != 4 or self.trainer.process_bounds != "2,2,1"):
+            # The legacy v6e-32 cell (tpu/jobman/cell_worker.sh via
+            # run_qwen35_v6e32_grpo.sh) trains on hosts 0-3 as a 2,2,1 process
+            # grid and serves on 4-7; that is the only split validated on v6e.
+            raise ValueError("v6e-32 profiles use the validated four-host 2,2,1 trainer block")
         if not self.inference_only and self.trainer.tp * self.trainer.fsdp != self.trainer.hosts * 4:
             raise ValueError("trainer TP x FSDP must cover exactly the trainer chips")
         if not self.inference_only:
@@ -417,6 +442,10 @@ class Config:
                     not isinstance(process.get("created"), (float, int)) or process["created"] <= 0 or
                     not re.fullmatch(r"[a-f0-9]{64}", process.get("command_sha256", ""))):
                     raise ValueError("retired processes require exact PID, start time and command hash")
+
+    @property
+    def effective_zone(self):
+        return self.zone or ACCELERATOR_ZONES[self.accelerator][0]
 
     @property
     def inference_hosts(self):
