@@ -169,7 +169,8 @@ class Host:
         self.source_ready()
         folder = self.root / "envs/topology"
         if not (folder / ".complete").exists():
-            self.checked("topology-venv", ["uv", "venv", "--python", "3.12", str(folder)])
+            self.checked("topology-venv", ["uv", "venv", "--python", "3.12", str(folder)],
+                         env=dict(os.environ, UV_VENV_CLEAR="1"))
             self.checked("topology-install", ["uv", "pip", "install", "--python", str(folder / "bin/python"),
                 "jax==0.11.1", "jaxlib==0.11.1", "libtpu==0.0.46", "requests==2.32.5"])
             (folder / ".complete").touch()
@@ -242,7 +243,8 @@ class Host:
                          env=dict(os.environ, JAX_PLATFORMS="cpu"))
             self.checked("trainer-flce-contract", [python, str(Path(__file__).with_name("patch_maxtext.py"))])
         else:
-            self.checked("serving-venv", ["uv", "venv", "--python", "3.12", str(folder)])
+            self.checked("serving-venv", ["uv", "venv", "--python", "3.12", str(folder)],
+                         env=dict(os.environ, UV_VENV_CLEAR="1"))
             self.checked("serving-install", ["uv", "pip", "install", "--python", python, *self.serving_pins()])
             self.checked("serving-overlay", ["uv", "pip", "install", "--python", python, "--no-deps",
                                              "--force-reinstall", str(self.source / "third_party/tpu-inference")])

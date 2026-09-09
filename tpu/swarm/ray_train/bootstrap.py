@@ -111,7 +111,12 @@ def main():
         marker = runtime / ".complete"
         identity = "python3.12-ray2.58-serve-grading-v3"
         if not marker.exists() or marker.read_text() != identity:
-            subprocess.run(["uv", "venv", "--python", "3.12", str(runtime)], check=True, cwd=root)
+            # Newer uv refuses to replace an existing venv (job 531: "A virtual
+            # environment already exists" when a worker carried a stale
+            # controller env); UV_VENV_CLEAR restores the replace-in-place
+            # behaviour and is ignored by older uv.
+            subprocess.run(["uv", "venv", "--python", "3.12", str(runtime)], check=True, cwd=root,
+                           env=dict(os.environ, UV_VENV_CLEAR="1"))
             subprocess.run(["uv", "pip", "install", "--python", str(python), "ray[serve]==2.58.0",
                             "psutil", "httpx", "jinja2", "google-crc32c", "zstandard==0.25.0",
                             "numpy", "scipy", "shapely", "numba", "scikit-learn"], check=True, cwd=root)
