@@ -349,7 +349,11 @@ class Host:
         if self.rank != 0:
             raise RuntimeError("client belongs on the head")
         (self.run / "client").mkdir(exist_ok=True)
-        self.start("client", [str(self.root / "envs/client/bin/python"), str(self.source / "tpu/run_ttd_ensemble.py")],
+        command = [str(self.root / "envs/client/bin/python"), str(self.source / "tpu/run_ttd_ensemble.py")]
+        if self.config.stacked_probe:
+            command = [command[0], str(Path(__file__).with_name("stacked_probe.py")),
+                       "--source", str(self.source), "--model", self.config.model]
+        self.start("client", command,
                    client_environment(self.config, self.root, self.ips[0]), self.source)
         self.phase = "client_running"
         return self.heartbeat()

@@ -282,6 +282,7 @@ class Config:
     # TTD_ENSEMBLE_MODELS "model:renderer:tag" (from the preset unless set).
     client_member_spec: str = "Qwen/Qwen3.5-27B:qwen3:qwen"
     client_learning_rate: str = "1.5e-4"
+    stacked_probe: bool = False
     # Legacy launch_cell.sh runs the client with HF_HUB_OFFLINE=0 and fetches
     # the tokenizer; the executor's restored snapshot can serve it offline.
     client_hf_offline: bool = False
@@ -340,6 +341,8 @@ class Config:
             raise ValueError("stacked training requires multiple adapters")
         if self.trainer.stacked_lora_verify and not self.trainer.stacked_lora_training:
             raise ValueError("stacked replay verification requires stacked training")
+        if self.stacked_probe and (not self.trainer.stacked_lora_verify or self.adapter_count != 2):
+            raise ValueError("short stacked probe requires two adapters and replay verification")
         if self.adapter_count > 1:
             if self.model not in ("Qwen/Qwen3.5-27B", "openai/gpt-oss-120b", "openai/gpt-oss-20b"):
                 raise ValueError("pooled multi-LoRA supports Qwen3.5 and GPT-OSS")

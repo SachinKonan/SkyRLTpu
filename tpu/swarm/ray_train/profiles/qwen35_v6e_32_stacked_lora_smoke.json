@@ -59,5 +59,6 @@
   "root": "~/.cache/skyrl-ray-qwen35-multi-lora",
   "adapter_count": 2,
   "pooled_group_size": 4,
-  "importance_cap": 2.0
+  "importance_cap": 2.0,
+  "stacked_probe": true
 }
