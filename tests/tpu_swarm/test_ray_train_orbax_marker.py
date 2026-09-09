@@ -118,11 +118,11 @@ def test_gptoss_v6e_profile_uses_the_validated_four_host_block(tmp_path):
     cfg = Config.load(path)
     assert (cfg.accelerator, cfg.hosts, cfg.trainer.hosts, cfg.inference_hosts) == ("tpu-v6e-32", 8, 4, 4)
     assert (cfg.trainer.tp, cfg.trainer.fsdp, cfg.trainer.process_bounds) == (8, 2, "2,2,1")
-    assert cfg.effective_zone == "asia-northeast1-b"
-    assert cfg.bucket.endswith("asia-northeast1") and "asia-northeast1" in cfg.cache.hf
+    assert cfg.effective_zone == "us-east5-b"
+    assert cfg.bucket.endswith("us-east5") and "us-east5" in cfg.cache.hf
     _, _, task_path = build(path, tmp_path)
     task = yaml.safe_load(task_path.read_text())
-    assert task["resources"]["zone"] == "asia-northeast1-b"
+    assert task["resources"]["zone"] == "us-east5-b"
     assert task["resources"]["accelerator_args"]["runtime_version"] == "v2-alpha-tpuv6e"
     assert task["resources"]["accelerators"] == "tpu-v6e-32"
 
@@ -135,8 +135,8 @@ def test_v6e_rejects_other_trainer_splits_and_unknown_zones():
     bad = dict(raw); bad["zone"] = "us-east5-a"
     with pytest.raises(ValueError, match="zone"):
         Config.from_dict(bad)
-    ok = dict(raw); ok["zone"] = "us-east5-b"
-    assert Config.from_dict(ok).effective_zone == "us-east5-b"
+    ok = dict(raw); ok["zone"] = "asia-northeast1-b"
+    assert Config.from_dict(ok).effective_zone == "asia-northeast1-b"
     default = dict(raw); default.pop("zone")
     assert Config.from_dict(default).effective_zone == "asia-northeast1-b"
 
