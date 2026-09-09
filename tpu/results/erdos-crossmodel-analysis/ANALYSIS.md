@@ -208,7 +208,16 @@ the objective that won its own gen-0 round; everything else matches its gen-0 ce
 | `stageF-m-ctx-n.yaml` | muse | piecewise LOO (nv ≥ 3 fix), 4e-5 | stageB-m-pw-n (0.380860445 @8) | all four, summary mode |
 | `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json` | gpt-oss-120b | centered piecewise (Ray v2) | 502/511 GRPO/TTD gen-0 | all four, code mode |
 
-All three yamls pin bundle **v28** (`tpuswarm-skyrl-v5p32-cells-v28.tar.gz`, generation
+Weights-carry variants (`stageF-{q,g,m}-ctxw-n.yaml`, added at the user's request): same
+fresh tree and prompt, but the member LoRA is initialised from its own best gen-0 weights
+with a fresh optimizer (`META_INIT_STATE_PATH`; qwen stageC-pwc-n step 12, gemma
+stageB2-g-pwc-n step 13, muse stageB-m-pw-n step 11), and all three use centered
+piecewise. Two cautions: the carried policies were shaped by the old prompt, so the new
+prompt is a distribution shift for them; and muse's gen-0 centered cell trailed its LOO
+cell by 1.6e-5, so the muse carry arm confounds "centered" with "carried LOO weights"
+unless the fresh-weights muse cell (LOO) is run alongside it.
+
+All six yamls pin bundle **v28** (`tpuswarm-skyrl-v5p32-cells-v28.tar.gz`, generation
 1788995718280416, sha256 65993360…, built from this worktree with discover 1900881) and pass the
 exemplar variables through `EXTRA_TTD_ENV` (a reused tmux server keeps its creator's
 env, so plain `envs:` entries are not enough). The gpt-oss profile carries the same

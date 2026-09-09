@@ -1,0 +1,115 @@
+name: stageF-g-ctxw-n
+
+# Gemma, gen-0 CONTEXT-MIXED refinement, WEIGHTS-CARRY arm (Stage F): a FRESH PUCT tree
+# (no carried states) but the LoRA starts from this model's best gen-0 weights with the prompt carrying every model's best
+# gen-0 solutions (qwen 0.380857586 n=500, gemma 0.380863196 n=536, muse 0.380860445 n=512,
+# gpt-oss-120b 0.380887659 n=144) as text summaries, and their constructions
+# pre-imported in the sandbox as `reference_constructions[label]`. Cross-model
+# mixing is context only; the carried weights are this model's OWN (no LoRA mix).
+# Objective = centered piecewise (gemma's best gen-0 objective, 0.380863427 in
+# stageB2-g-pwc-n); 16x32, LR 4e-5, elite 2, 15 steps. Summary mode keeps the
+# section at ~800 tokens inside gemma's 10240-token context.
+# TTD_EXEMPLARS_PATH is relative to the discover repo root inside the bundle
+# (env.py resolves it); all four solutions are shown, including gemma's own.
+# One complete four-host tpu-v5p-32 slice from pool tpuswarm-v5p32-east5a-erdos:
+# rank 0 = trainer + client + grader Ray head, ranks 1-3 = vLLM engines
+# (cell_worker.sh per-model defaults; CELL prefix selects the model).
+# Reusing GCS_RUN means RESUME from the last durable snapshot, not a clean run.
+
+resources:
+  cloud: gcp
+  region: us-east5
+  zone: us-east5-a
+  accelerators: tpu-v5p-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv5
+  use_spot: true
+  disk_size: 150
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 3
+    recover_on_exit_codes: [33, 34]
+
+envs:
+  PROJECT: vision-mix
+  ZONE: us-east5-a
+  REMOTE_USER: gcpuser
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v28.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v28-g-ctxw-n
+
+  # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
+  # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the
+  # LoRA template is built (RUNBOOK 4.4: ~35 GiB, memory-only).
+  TUNIX_FREE_BASE_STATE: "1"
+
+  CELL: g-pwc-n
+  RUN_DIR_NAME: stageF-g-ctxw-n
+  EXPERIMENT_NAME: stageF-g-ctxw-n
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageF-g-ctxw-n
+  # Every rank installs the same bundle generation in `run`, so the head must
+  # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
+  CELL_START_VLLM: "1"
+  CELL_SYNC_SKYRL: "0"
+
+  # Weights carry: this member's LoRA starts from stageB2-g-pwc-n step 13 (gemma centered piecewise 4e-5, 16x32 elite 2; best 0.380863427),
+  # WEIGHTS ONLY with a fresh optimizer (ensemble.py TTD_INIT_STATE_PATH path;
+  # launch_cell.sh restores + registers the tarball). The PUCT tree is still fresh:
+  # no META_SEED_ONLY, no seed snapshot.
+  META_INIT_STATE_PATH: tinker://model_35ca8a17/weights/000013
+
+  TTD_ENV: erdos_min_overlap
+  TTD_ADV_ESTIMATOR: piecewise_valid_entropic_centered
+  TTD_ELITE_SLOTS: "2"
+  GROUPS_PER_BATCH: "16"
+  GROUP_SIZE: "32"
+  NUM_EPOCHS: "15"
+  LEARNING_RATE: "4e-5"
+  LORA_RANK: "32"
+  KL_PENALTY_COEF: "0"
+  TTD_RESTART_RATIO: "0"
+  TTD_CROSS_WEIGHT: "0"
+  TTD_KL_MEASURE_EVERY: "0"
+  TTD_LEAGUE_PIPELINE: "1"
+  TTD_ALLOW_SINGLE_MEMBER: "1"
+  TTD_SAMPLING_PROGRESS_TIMEOUT: "0"
+  EVAL_TIMEOUT: "1100"
+  WANDB_MODE: offline
+
+  MONITOR_INTERVAL_SECONDS: "30"
+  SYNC_EVERY_SECONDS: "300"
+  TINKER_FAILURE_LIMIT: "4"
+  # The local SkyRL Tinker-compatible API is unauthenticated; the upstream
+  # client only requires the variable to be nonempty. Passed explicitly into
+  # the tmux command because a reused tmux server keeps its creator's env.
+  TINKER_API_KEY: tml-local-skyrl-no-auth
+  TINKER_BASE_URL: http://127.0.0.1:8000
+  # Exemplar env goes through EXTRA_TTD_ENV for the same tmux reason.
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0 TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json TTD_EXEMPLARS_MAX=4 TTD_EXEMPLARS_MODE=summary
+
+run: |
+  set -euo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/swarm/run_v5p32_cell.sh"
+    test -r "$staging/tpu/jobman/cell_worker.sh"
+    test -r "$staging/tpu/jobman/ensure_orbax_ckpt.sh"
+    test -r "$staging/third_party/discover/examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  exec bash "$SKYRL_REPO_DIR/tpu/swarm/run_v5p32_cell.sh"
