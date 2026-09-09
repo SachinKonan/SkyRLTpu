@@ -72,6 +72,17 @@ class Host:
                         last_cache_sync=self.last_sync, cache_sync_error=self.sync_error,
                         stopped=self.stopping.is_set())
 
+    def stop_process(self, name):
+        """Terminate one owned process (used to abandon a probe whose peers
+        already failed); returns its exit status, or None if never started."""
+        with self.lock:
+            process = self.processes.get(name)
+        if process is None:
+            return None
+        if process.poll() is None:
+            process.stop()
+        return process.poll()
+
     def start(self, name, command, env=None, cwd=None):
         with self.lock:
             if self.stopping.is_set():

@@ -78,18 +78,31 @@ class Controller:
         (single-host init works there)."""
         errors = []
         for train_ranks, inference_ranks in candidates:
+            refs = [self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                    for r in train_ranks]
             try:
-                self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
-                                  for r in train_ranks], 300)
+                self.checked_get(refs, 300)
             except (RuntimeError, ray.exceptions.RayError) as exc:
                 if self.failure or self.stopping.is_set():
                     raise
                 detail = str(exc)[-400:]
                 errors.append((train_ranks, detail))
                 self.report("topology_block_rejected", train_ranks=train_ranks, detail=detail)
+                self.abandon_probe(train_ranks, refs)
                 continue
             return train_ranks, inference_ranks
         raise RuntimeError(f"no candidate trainer block formed a mesh: {errors}")
+
+    def abandon_probe(self, train_ranks, refs):
+        """A block probe fails as soon as one host raises; its peers are still
+        blocked in libtpu mesh formation (up to the probe timeout) and would
+        reject the next candidate with `owned process already active`. Kill
+        the leftover probes and wait for every call to settle first."""
+        try:
+            ray.get([self.hosts[r].stop_process.remote("topology-subset") for r in train_ranks], timeout=60)
+        except (RuntimeError, ray.exceptions.RayError) as exc:
+            self.report("topology_probe_stop_failed", train_ranks=train_ranks, detail=str(exc)[-200:])
+        ray.wait(refs, num_returns=len(refs), timeout=60)
 
     def checked_get(self, refs, timeout):
         deadline = time.monotonic() + timeout
