@@ -14,6 +14,7 @@ from ray import serve
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from tpu.swarm.select_v4_64_topology import select_split
+from tpu.swarm.select_v6e_32_topology import select_split as select_v6e_32_split
 from .config import Config
 from .events import emit
 from .host import Host
@@ -168,6 +169,16 @@ class Controller:
             full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
                                      for host in self.hosts], 300)
             train_ranks, inference_ranks = select_split(full)
+            self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                              for r in train_ranks], 300)
+        elif self.config.accelerator == "tpu-v6e-32":
+            # Ranks follow SkyPilot's node list, not the physical worker order:
+            # probe every host's chip coordinates and take the 2x2 host block
+            # that contains rank 0 (asia replica 72 aborted the slice when
+            # ranks 0-3 were physically scattered, 2026-09-09).
+            full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
+                                     for host in self.hosts], 300)
+            train_ranks, inference_ranks = select_v6e_32_split(full)
             self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
                               for r in train_ranks], 300)
         else:

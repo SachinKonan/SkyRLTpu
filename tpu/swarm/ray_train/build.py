@@ -27,8 +27,9 @@ def build(profile, output):
                 or path.parent == package / "client_env" and path.name in ("pyproject.toml", "uv.lock")
             ):
                 bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
-        selector = repo / "tpu/swarm/select_v4_64_topology.py"
-        bundle.add(selector, arcname=str(selector.relative_to(repo)))
+        for name in ("select_v4_64_topology.py", "select_v6e_32_topology.py"):
+            selector = repo / "tpu/swarm" / name
+            bundle.add(selector, arcname=str(selector.relative_to(repo)))
     with archive.open("rb") as data:
         digest = hashlib.file_digest(data, "sha256").hexdigest()
     uri = config.bucket.rstrip("/") + "/code-bundles/ray-training-" + digest + ".tar.gz"
