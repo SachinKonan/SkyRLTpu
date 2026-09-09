@@ -196,13 +196,15 @@ the objective that won its own gen-0 round; everything else matches its gen-0 ce
 | `stageF-m-ctx-n.yaml` | muse | piecewise LOO (nv ≥ 3 fix), 4e-5 | stageB-m-pw-n (0.380860445 @8) | qwen, gemma, gpt-oss |
 | `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json` | gpt-oss-120b | centered piecewise (Ray v2) | 502/511 GRPO/TTD gen-0 | qwen, muse, gemma, code mode |
 
-All three yamls pin bundle **v24** (this worktree: env.py + library) and pass the
+All three yamls pin bundle **v24** (`tpuswarm-skyrl-v5p32-cells-v24.tar.gz`, generation
+1788971556711566, sha256 3217a6c0…, built from this worktree with discover 6787dc3) and pass the
 exemplar variables through `EXTRA_TTD_ENV` (a reused tmux server keeps its creator's
 env, so plain `envs:` entries are not enough). The gpt-oss profile carries the same
-variables in `client_env` but still points at the gpt-oss branch's bundle v11, which
-predates env.py's exemplar support; that session must rebuild its bundle from a
-checkout containing discover commit `ctxmix` before launching, otherwise the
-variables are silently ignored.
+variables in `client_env` but points at the gpt-oss branch's current bundle (v12 at
+the time of writing), which predates env.py's exemplar support; that session must
+rebuild its bundle from a checkout containing discover commit 6787dc3
+(`agent/v5p32-cells-ctxmix`) and update `base_bundle`/`base_bundle_sha256` before
+launching, otherwise the variables are silently ignored.
 
 What to measure (all from the trees and gen tables, no extra instrumentation):
 
