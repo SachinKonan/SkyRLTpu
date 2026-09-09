@@ -199,6 +199,17 @@ Fixes (branch agent/tunix-multihost-gptoss): `0b5bf349` marker/eviction/compile 
 
 **Pool event 03:39Z-:** spot preemption wave, erdos pool 2/52 READY at 03:45Z; 340/341/342/402 RECOVERING, 333/391/393/398/399/403/405/410/418 PENDING, only 390/392 RUNNING. Recovery is automatic (resume from last checkpoint).
 
+### gpt-oss 120B: 2026-09-09 update (Ray v2, moving to v6e-32 asia)
+
+| job | where | status | note |
+|---|---|---|---|
+| 437 | v5p worker 198 | FAILED 00:39Z | all setup + model load + engines OK (bundle v5); abstract LoRA init tripped on a tuple-valued variable (fixed cb -> 16f3cbbf, bundle v6). |
+| 456 | v5p | PENDING since 01:07Z | bundle v6. Ran 4 min on 198 at 01:02Z, then the POOL CONTROLLER deleted the replica after API-server probe timeouts (not a preemption). v5p pool: 0 VMs, 46 launches waiting on GCP. |
+| 472 | v6e east5b (legacy cell) | CANCELLED | legacy launcher path; superseded by the Ray v2 v6e-32 profile. |
+| next | v6e-32 asia (Ray v2) | ready | `gptoss120b_v6e_32_grpo.json`: tp8 x fsdp2 on hosts 0-3, 10240-token rows, engines tp4 16k; waits only for the HF cache copy to the asia bucket. |
+
+Executor parity was verified against live legacy cell 390 (gemma) from /proc: engine command identical, client env identical apart from the cell's experiment vars, trainer fixed on three v4-64 leftovers (322f25a3). v4 profiles removed; v5p qwen profiles inherit the legacy defaults (d69a67b6). SkyPilot API server: probe-timeout replica teardowns come from 8 long workers vs 46 in-flight launches; restart sizing is the fix (user's call).
+
 ## Overall best values
 
 | Rank | Value | Cell |
