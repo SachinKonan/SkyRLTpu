@@ -17,6 +17,7 @@ Compatible with vllm==0.23 (mirrors skyrl's GPU vllm_server_actor pattern).
 import argparse
 import asyncio
 import sys
+import json
 import os
 import inspect
 import logging
@@ -298,6 +299,14 @@ def _engine_on_existing_ray(engine_args, hosts: list[str]):
     # interpreter instead; it reconnects to Ray on RAY_ADDRESS with the same
     # runtime env through parallel_config.ray_runtime_env.
     os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
+    # vLLM's parallel_config.ray_runtime_env does not survive into the
+    # spawned core (job 527: its Ray job had no py_executable and its workers
+    # died on `No module named tpu_inference`). Ray's job-config variable is
+    # read by every ray.init in a child process, so hand the runtime env over
+    # that way; RAY_OVERRIDE_JOB_RUNTIME_ENV lets it merge with whatever
+    # vLLM passes instead of raising on overlap.
+    os.environ["RAY_JOB_CONFIG_JSON_ENV_VAR"] = json.dumps({"runtime_env": runtime_env})
+    os.environ["RAY_OVERRIDE_JOB_RUNTIME_ENV"] = "1"
     chips = int(engine_args.tensor_parallel_size)
     bundles = [{"TPU": chips, f"node:{host}": 0.001} for host in hosts]
     group = placement_group(bundles, strategy="STRICT_SPREAD")
