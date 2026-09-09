@@ -270,7 +270,7 @@ class Controller:
                     inference_ready = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/health").status_code == 200
                 except httpx.HTTPError:
                     api_ready = inference_ready = False
-                if trainer_ready and api_ready and inference_ready and len(state["replicas"]) == self.config.inference_hosts:
+                if trainer_ready and api_ready and inference_ready and len(state["replicas"]) == self.config.engine_count:
                     self.report("services_ready", trainer=not self.config.inference_only, inference_replicas=len(state["replicas"]))
                     return self
                 time.sleep(5)

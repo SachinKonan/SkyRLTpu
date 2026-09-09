@@ -78,3 +78,12 @@ def test_all_blocks_rejected_raises_with_every_detail(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="boom-a.*boom-b"):
         instance.validated_block([([0, 5, 3, 4], [1, 2, 6, 7]), ([1, 2, 6, 7], [0, 5, 3, 4])])
     assert len([c for c in instance.calls if c[0] == "stop"]) == 8
+
+
+def test_readiness_counts_engines_not_hosts():
+    """Pair engines register one Serve replica per two hosts (job 563 sat at the
+    readiness gate with 2 replicas while the gate wanted 4)."""
+    v6e = Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v6e_32_grpo.json")
+    assert (v6e.inference_hosts, v6e.inference.hosts_per_engine, v6e.engine_count) == (4, 2, 2)
+    v5p = Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_grpo.json")
+    assert (v5p.inference_hosts, v5p.engine_count) == (2, 2)

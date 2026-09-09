@@ -470,6 +470,11 @@ class Config:
             return len(self.inference_only_ranks)
         return self.hosts - self.trainer.hosts
 
+    @property
+    def engine_count(self):
+        """Number of vLLM engines (Serve replicas): pair engines span two hosts."""
+        return self.inference_hosts // self.inference.hosts_per_engine
+
     def client_sampling_environment(self):
         defaults = {
             "CONTEXT_WINDOW": str(self.client_context_window),
