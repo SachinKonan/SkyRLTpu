@@ -15,6 +15,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
 from tpu.swarm.select_v4_64_topology import select_split
 from tpu.swarm.select_v6e_32_topology import select_split as select_v6e_32_split
+from tpu.swarm.select_v5p_32_topology import select_split as select_v5p_32_split
 from .config import Config
 from .events import emit
 from .host import Host
@@ -181,13 +182,19 @@ class Controller:
             train_ranks, inference_ranks = select_v6e_32_split(full)
             self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
                               for r in train_ranks], 300)
+        elif self.config.accelerator == "tpu-v5p-32" and self.config.trainer.hosts == 2:
+            # v5p-32 = four 2x2 host layers stacked along z. Sky ranks are not
+            # the layer order (job 482, worker 200: ranks 0/1 two layers apart,
+            # "Mesh build was incomplete"), so probe and take the layer next to
+            # rank 0, ordered by z for TPU_PROCESS_BOUNDS=1,1,2.
+            full = self.checked_get([host.probe.remote(list(range(4)), self.config.ports.topology_jax)
+                                     for host in self.hosts], 300)
+            train_ranks, inference_ranks = select_v5p_32_split(full)
+            self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                              for r in train_ranks], 300)
         else:
-            # 32-core slices: the first trainer.hosts ranks train (rank 0 also
-            # hosts the API server and client), the rest serve. The v5p-32
-            # topology is 2x2x4 with one 2x2 host per row, so a two-host
-            # trainer is a contiguous 1,1,2 process grid; no probe needed.
-            # v6e-32 (8 hosts x 4 chips): hosts 0-3 form the 2,2,1 block the
-            # legacy cell trains on (validated), 4-7 serve.
+            # Single-host trainers (legacy v5p-32 cell shape): rank 0 trains
+            # and hosts the API server and client, the rest serve.
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = list(range(self.config.trainer.hosts, self.config.hosts))
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks)
