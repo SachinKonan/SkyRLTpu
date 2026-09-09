@@ -183,6 +183,29 @@ legacy cells (needs the other session's retirement manifests); the executor is
 qwen-only; the trainer-env passthrough in `ray_train/config.py` + `commands.py` is
 uncommitted because those files also carry the other session's WIP.
 
+### Stage F: gen-0 CONTEXT-mixed refinement (staged 2026-09-09, NOT launched)
+
+Question: the third mixing channel. Weights (LoRA mix) and data (tree carry) have
+been tried or staged; here each model starts a **fresh** PUCT tree with fresh
+weights, and only the *prompt* carries the other models' best gen-0 solutions
+(text summary of what they did, C₅, n) while the sandbox pre-imports their
+constructions as `reference_constructions[label]`. The prompt's record line is also
+corrected (it used to say 0.38092; the published record is 0.380875323). Full
+analysis of what each model found and did: `tpu/results/erdos-crossmodel-analysis/ANALYSIS.md`.
+
+| Cell | Job | Model | Objective | Exemplars seen | Compare against | State |
+|---|---|---|---|---|---|---|
+| stageF-q-ctx-n | - | qwen | centered piecewise, lr 1.5e-4 | gemma 0.380863196 (n=536), muse 0.380860445 (n=512), gpt-oss-120b 0.380887659 (n=144) | stageC-pwc-n 0.380857586 @11 | yaml ready, bundle v24 |
+| stageF-g-ctx-n | - | gemma | centered piecewise, lr 4e-5 | qwen 0.380857586 (n=500), muse, gpt-oss | stageB2-g-pwc-n 0.380863427 @12 | yaml ready, bundle v24 |
+| stageF-m-ctx-n | - | muse | piecewise LOO, lr 4e-5 | qwen, gemma, gpt-oss | stageB-m-pw-n 0.380860445 @8 | yaml ready, bundle v24 |
+| gptoss120b pwc ctx | - | gpt-oss-120b | centered piecewise (Ray v2) | qwen, muse, gemma (code mode) | 502/511 | profile `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json`; needs the gpt-oss bundle rebuilt with the exemplar env.py first |
+
+Env (discover `examples/erdos_min_overlap/env.py`, via `EXTRA_TTD_ENV`):
+`TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json`
+(relative to the discover root in the bundle), `TTD_EXEMPLARS_EXCLUDE=<own model>`,
+`TTD_EXEMPLARS_MAX=3`, `TTD_EXEMPLARS_MODE=summary` (~680 tokens; `code` adds
+2500-char excerpts, ~2560 tokens, for gpt-oss). Off when the path is unset.
+
 ## gpt-oss 120B on the Ray v2 executor (2 trainer hosts + 2 engine hosts per v5p-32)
 
 Goal: test the objective ranking (GRPO vs TTD vs centered piecewise) on a second model family. gpt-oss-120b (MXFP4 experts) needs two hosts for the MaxText trainer (tp 4, fsdp 2) and two for vLLM (tp 4), so this is the first Ray v2 topology with `trainer.hosts=2`. Profiles: `tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_{grpo,ttd,pwc}.json` (worktree `SkyRLTpu-gptoss`, branch `agent/tunix-multihost-gptoss`). Executor defaults were first made identical to the legacy v5p cell launcher (prefix caching, 8192 batched tokens, seq buckets, direct routing, exact package pins incl. jax 0.11.1 trainer / 0.10.1 engine).
@@ -246,6 +269,7 @@ Executor parity was verified against live legacy cell 390 (gemma) from /proc: en
 | v21 | + centered piecewise estimator; 340–342, 390–393 |
 | v22 | + LoRA mix backend (Ray v2 base bundle for the mix profiles) |
 | v23 | + LOO nv = 2 fix and weight clamp (sha256 38c2a12f…); 398, 402–405 |
+| v24 | + Erdős context-mixing prompt (exemplar library, honest record line); Stage F cells (built from the ctxmix worktree, sha256 below) |
 
 ## Open follow-ups
 

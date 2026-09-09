@@ -1,0 +1,46 @@
+{
+  "run_id": "gptoss120b-ray-v5p-32-pwc-ctx-001",
+  "accelerator": "tpu-v5p-32",
+  "hosts": 4,
+  "bucket": "gs://sk7524-tinker-tpu-us-east5",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-gptoss-v11.tar.gz",
+  "base_bundle_sha256": "3542a08cbbaa624080d07461507d5a668a49c8099acb7a43377a9df9ff778049",
+  "model_preset": "gpt-oss-120b",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-gptoss120b",
+    "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts-gptoss120b-bf16-d388",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-gptoss120b-tp4-fsdp2-r32-s18432-ray-v2",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-gptoss120b-tp4-s22528-seq32-mem90-chunk8192-fp8-ray-v2",
+    "trainer_gib": 200,
+    "inference_gib": 200,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "trainer": {
+    "hosts": 2,
+    "tp": 4,
+    "fsdp": 2,
+    "process_bounds": "1,1,2",
+    "chip_bounds": "2,2,1",
+    "remat": "full"
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "memory_utilization": 0.9,
+    "restart_limit": 3
+  },
+  "client_env": {
+    "TTD_ADV_ESTIMATOR": "piecewise_valid_entropic_centered",
+    "TTD_ELITE_SLOTS": "2",
+    "TTD_ADV_PIECEWISE_ALPHA": "1.0",
+    "TTD_EXEMPLARS_PATH": "examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json",
+    "TTD_EXEMPLARS_EXCLUDE": "gptoss",
+    "TTD_EXEMPLARS_MAX": "3",
+    "TTD_EXEMPLARS_MODE": "code",
+    "TTD_EXEMPLARS_MAX_CODE_CHARS": "2500"
+  },
+  "retired_task_ids": []
+}
