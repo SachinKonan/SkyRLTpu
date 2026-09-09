@@ -951,11 +951,31 @@ class TunixBackend(AbstractBackend):
                     repaired = _repair_maxtext_scanned_lora_metadata(model)
                     if repaired:
                         logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
+                self._drop_sown_intermediates(model)
         except Exception:
             self._log_hbm("template/qwix_failed", full=True)
             raise
         self._log_hbm("template/qwix_applied")
         return model
+
+    @staticmethod
+    def _drop_sown_intermediates(module) -> int:
+        """Pop the values MaxText sows during the LoRA-install forward.
+
+        With num_vocab_tiling>1 the decoder returns no logits in train mode and
+        sows its final hidden state into the ``intermediates`` collection
+        instead (maxtext/layers/decoders.py). qwix's tracing forward therefore
+        leaves a tuple-valued nnx.Intermediate on the wrapped module that the
+        input module never had; the abstract fill rejected it as an unexpected
+        new leaf (job 456: ('adapter', 'base', 'decoder', 'hidden_states')).
+        Sown values are per-call scratch, never parameters, so they are removed
+        from the module before its state is filled or the model is used.
+        """
+        sown = nnx.pop(module, nnx.Intermediate)
+        count = len(nnx.to_flat_state(sown))
+        if count:
+            logger.info("Dropped %d sown intermediate(s) left by the LoRA-install forward", count)
+        return count
 
     def _apply_qwix_abstract(self, model, provider, seed: int, model_input: dict):
         """qwix's tracing forward under nnx.eval_shape; base arrays are reused, not copied.
@@ -979,6 +999,7 @@ class TunixBackend(AbstractBackend):
             return qwix.apply_lora_to_model(module, provider, rngs=nnx.Rngs(seed), **model_input)
 
         abstract = nnx.eval_shape(trace, model)
+        self._drop_sown_intermediates(abstract)
         repaired = _repair_maxtext_scanned_lora_metadata(abstract)
         if repaired:
             logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)

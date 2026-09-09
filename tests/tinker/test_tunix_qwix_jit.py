@@ -86,3 +86,47 @@ def test_abstract_install_is_default_for_maxtext():
     from skyrl.backends.tunix_backend import TunixBackendConfig
 
     assert TunixBackendConfig(model_source="maxtext").qwix_init_mode == "abstract"
+
+
+@pytest.fixture(scope="module")
+def tiled_backend():
+    """num_vocab_tiling>1: the decoder sows hidden_states in train mode (gpt-oss profiles)."""
+    from skyrl.backends.tunix_backend import TunixBackend, TunixBackendConfig
+
+    return TunixBackend(
+        BASE_MODEL,
+        TunixBackendConfig(model_source="maxtext", maxtext_max_target_length=64,
+                           free_base_state_after_template=False, qwix_init_mode="abstract",
+                           maxtext_kwargs={"num_vocab_tiling": 2}),
+    )
+
+
+def _hidden(model):
+    # The trainer's loss path: with num_vocab_tiling>1 __call__ returns the
+    # final hidden state [B, T, H] instead of logits.
+    hidden, _ = model(**model.get_model_input(), skip_lm_head=True)
+    assert hidden is not None, "vocab tiling must return the hidden state"
+    return np.asarray(jnp.asarray(hidden, jnp.float32))
+
+
+@pytest.mark.parametrize("mode", ["abstract", "eager"])
+def test_sown_intermediates_do_not_leak_into_the_adapter(tiled_backend, mode):
+    """Job 456: the tracing forward sowed decoder.hidden_states (a tuple) and the
+    abstract fill raised 'unexpected new leaf'. Both install paths must drop it."""
+    cfg = types.LoraConfig(rank=8, alpha=16.0, seed=3)
+    tiled_backend.config.qwix_init_mode = mode
+    model = tiled_backend._wrap_with_lora(cfg, seed=3)
+    sown = nnx.to_flat_state(nnx.state(model, nnx.Intermediate))
+    assert [tuple(p) for p, _ in sown] == []
+    assert len(nnx.to_flat_state(nnx.state(model, nnx.LoRAParam))) > 0
+    hidden = _hidden(model)
+    assert np.isfinite(hidden).all()
+
+
+def test_tiled_abstract_matches_eager(tiled_backend):
+    cfg = types.LoraConfig(rank=8, alpha=16.0, seed=3)
+    outs = {}
+    for mode in ("eager", "abstract"):
+        tiled_backend.config.qwix_init_mode = mode
+        outs[mode] = _hidden(tiled_backend._wrap_with_lora(cfg, seed=3))
+    np.testing.assert_allclose(outs["eager"], outs["abstract"], rtol=1e-5, atol=1e-5)
