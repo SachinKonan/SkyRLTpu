@@ -45,6 +45,11 @@ host_cleanup() {
   pkill -u "$(id -un)" -f '[v]llm_tpu_server|[s]kyrl\.tinker\.(api|engine)|[r]un_ttd_ensemble|[c]ell_monitor\.sh|[c]ell_worker\.sh|[s]tart_vllm_tpu|[s]idecar_' 2>/dev/null
   sleep 2
   pkill -9 -u "$(id -un)" -f '[v]llm_tpu_server|[s]kyrl\.tinker\.(api|engine)|[r]un_ttd_ensemble' 2>/dev/null
+  # vLLM's engine subprocess renames itself to "VLLM::EngineCore" and outlives
+  # its parent; it kept holding the chips on worker 242 after job 485 was
+  # cancelled (2026-09-09) and blocked the next job's preflight. Bracketed so
+  # the pattern never matches this shell itself.
+  pkill -9 -u "$(id -un)" -f 'VLLM::EngineCor[e]' 2>/dev/null
   # partial downloads and the trackers that would resume into them
   find "$HOME/.cache/huggingface" "$HOME/skyrl-maxtext-ckpts-local" "$HOME/gcs/skyrl-checkpoints" \
     \( -name '*_.gstmp' -o -name '*.gstmp' -o -name '*.incomplete' -o -name '*.partial' \) -delete 2>/dev/null
