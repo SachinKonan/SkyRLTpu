@@ -25,7 +25,8 @@ class Remote:
 
 
 @pytest.mark.parametrize("max_loras", [1, 2])
-def test_engine_upload_replaces_only_the_selected_adapter(tmp_path, max_loras):
+@pytest.mark.parametrize("expert_lora_slots", [False, True])
+def test_engine_upload_replaces_only_the_selected_adapter(tmp_path, max_loras, expert_lora_slots):
     # Execute the production endpoint without importing the TPU-only vLLM
     # engine. Fake only its load/unload API; exercise real HTTP and tar uploads.
     import ast
@@ -60,12 +61,14 @@ def test_engine_upload_replaces_only_the_selected_adapter(tmp_path, max_loras):
     app.state.openai_serving_models = models
     cleared_ids = []
     async def rpc(method, args):
+        assert expert_lora_slots, "Dense Qwen adapters must not call the GPT-OSS expert RPC"
         assert method == "set_moe_lora_factors"
         assert args[0] is None
         cleared_ids.append(args[2])
         # Two workers in the paired engine must acknowledge the same LoRA ID.
         return [dict(base_weights_mutated=False, cleared=True, lora_id=args[2]) for _ in range(2)]
-    scope["_add_upload_endpoint"](app, tmp_path, SimpleNamespace(collective_rpc=rpc), max_loras=max_loras)
+    scope["_add_upload_endpoint"](app, tmp_path, SimpleNamespace(collective_rpc=rpc),
+                                  max_loras=max_loras, expert_lora_slots=expert_lora_slots)
     # A leftover single-adapter marker must not affect a multi-adapter server.
     (tmp_path / ".skyrl-latest-lora").write_text("stale-adapter\n")
     body = io.BytesIO()
@@ -82,6 +85,7 @@ def test_engine_upload_replaces_only_the_selected_adapter(tmp_path, max_loras):
                     params["previous_lora_name"] = previous
                 response = await client.post("/skyrl/v1/upload_lora_adapter", params=params, content=body.getvalue())
                 assert response.status_code == 200, response.text
+                assert (response.json()["moe_update"] is not None) == expert_lora_slots
 
             await upload("A-0")
             await upload("B-0")
@@ -89,7 +93,8 @@ def test_engine_upload_replaces_only_the_selected_adapter(tmp_path, max_loras):
             await upload("B-1", "B-0")
             await upload("B-1", "B-0")  # Retry after a lost acknowledgement.
             assert loaded == ({"A-0", "B-1"} if max_loras == 2 else {"B-1"})
-            assert cleared_ids == ([1, 2, 2, 2] if max_loras == 2 else [1, 1, 1, 1])
+            expected_ids = ([1, 2, 2, 2] if max_loras == 2 else [1, 1, 1, 1]) if expert_lora_slots else []
+            assert cleared_ids == expected_ids
             assert not (tmp_path / "B-0").exists()
             assert (tmp_path / "A-0").exists() == (max_loras == 2)
 

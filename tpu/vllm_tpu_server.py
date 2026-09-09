@@ -43,7 +43,8 @@ from vllm.utils.system_utils import set_ulimit
 logger = logging.getLogger(__name__)
 
 
-def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1) -> None:
+def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
+                         expert_lora_slots: bool = False) -> None:
     lora_dir.mkdir(parents=True, exist_ok=True)
 
     @app.post("/skyrl/v1/upload_lora_adapter")
@@ -222,10 +223,11 @@ def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1) -> 
                 lora_name, n_tensors, result,
             )
             moe_update = result
-        else:
+        elif expert_lora_slots:
             # An attention/router-only adapter still owns a physical expert
             # slot. Explicitly zero it in case vLLM reused a formerly active
-            # expert slot.
+            # expert slot. Dense models such as Qwen have no such buffers;
+            # issuing this GPT-OSS RPC there fails an otherwise valid upload.
             try:
                 res = engine.collective_rpc(
                     "set_moe_lora_factors",
@@ -320,7 +322,10 @@ async def _serve(args) -> None:
             usage_context=UsageContext.OPENAI_API_SERVER,
         )
 
-    _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine, max_loras=args.max_loras)
+    _add_upload_endpoint(
+        app, Path(args.skyrl_lora_dir), engine, max_loras=args.max_loras,
+        expert_lora_slots=engine.model_config.hf_config.model_type == "gpt_oss",
+    )
     await init_app_state(engine, app.state, args)
 
     config = uvicorn.Config(
