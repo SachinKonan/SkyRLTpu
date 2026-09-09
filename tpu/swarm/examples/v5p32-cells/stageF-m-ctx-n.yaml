@@ -36,8 +36,8 @@ envs:
   ZONE: us-east5-a
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v25.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v25-m-ctx-n
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v26.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v26-m-ctx-n
 
   CELL: m-pw-n
   RUN_DIR_NAME: stageF-m-ctx-n

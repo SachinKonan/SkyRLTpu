@@ -173,7 +173,11 @@ Files: `examples/erdos_min_overlap/env.py`,
   context) or qwen (18k).
 - The sandbox prelude defines `reference_constructions[label]` as feasible numpy
   arrays next to `initial_h_values`, and the rules bullet says so; programs can start
-  from, blend, or ignore them.
+  from, blend, or ignore them. As in the original prompt, the numbers themselves are
+  not in the model's context (a 500-point construction is ~1000+ tokens); each entry
+  instead carries a one-line shape summary (fraction of entries at 0 / at 1 / interior,
+  40-bin mean profile, ~60 tokens). `TTD_EXEMPLARS_INLINE_VALUES=k` lists every value
+  rounded to k decimals for models with room (gpt-oss).
 - The record line becomes: "Published record: C₅ ≤ 0.380875323. Best construction
   known to this project: C₅ = <min over exemplars and record>. Our goal is 0.38080."
 
