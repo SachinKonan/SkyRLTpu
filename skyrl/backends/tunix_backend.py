@@ -2038,12 +2038,23 @@ class TunixBackend(AbstractBackend):
                 sequential = self._model_pass(replay, with_grads=True)[name]
                 from skyrl.backends.stacked_lora import gradient_relative_error
                 error = float(gradient_relative_error(stacked_grads, slot.accum_grads))
-                if slot.accum_count != count or not np.isfinite(error) or error > .02:
-                    raise RuntimeError(f"Stacked gradient replay mismatch for {name}: relative_l2={error}")
                 max_lp_error = 0.0
                 for actual, expected in zip(result[name].loss_fn_outputs, sequential.loss_fn_outputs, strict=True):
                     a, b = np.asarray(actual["logprobs"]["data"]), np.asarray(expected["logprobs"]["data"])
                     max_lp_error = max(max_lp_error, float(np.max(np.abs(a - b), initial=0)))
+                if slot.accum_count != count or not np.isfinite(error) or error > .02:
+                    from skyrl.backends.stacked_lora import gradient_comparison
+                    diagnostic = gradient_comparison(stacked_grads, slot.accum_grads)
+                    repeated_kv = getattr(self, "_repeated_kv_heads", None)
+                    if repeated_kv is not None:
+                        tied_actual, _ = repeated_kv.tie_gradients_and_norm(stacked_grads)
+                        tied_expected, _ = repeated_kv.tie_gradients_and_norm(slot.accum_grads)
+                        diagnostic["tied_kv_relative_l2"] = float(gradient_relative_error(tied_actual, tied_expected))
+                    logger.error("Stacked replay diagnostic: adapter=%s relative_l2=%s logprob_max_abs=%s "
+                                 "count=%s/%s matmul_precision=%s gradients=%s", name, error, max_lp_error,
+                                 slot.accum_count, count, jax.config.jax_default_matmul_precision, diagnostic)
+                    raise RuntimeError(f"Stacked gradient replay mismatch for {name}: relative_l2={error}, "
+                                       f"logprob_max_abs={max_lp_error}, cosine={diagnostic['cosine']}")
                 if not np.isfinite(max_lp_error) or max_lp_error > .05:
                     raise RuntimeError(f"Stacked logprob replay mismatch for {name}: max_abs={max_lp_error}")
                 result[name].metrics.update(stacked_gradient_relative_l2=error, stacked_logprob_max_abs=max_lp_error)

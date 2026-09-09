@@ -8,6 +8,7 @@ from functools import lru_cache
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax import nnx
 from jax.sharding import NamedSharding, PartitionSpec as P
 
@@ -41,6 +42,34 @@ def gradient_relative_error(actual, expected):
         errors.append(jnp.sum(jnp.square(a - b)))
         norms.append(jnp.sum(jnp.square(b)))
     return jnp.sqrt(sum(errors) / jnp.maximum(sum(norms), 1e-30))
+
+
+@jax.jit
+def _gradient_moments(actual, expected):
+    rows = []
+    for a, b in zip(jax.tree.leaves(actual), jax.tree.leaves(expected), strict=True):
+        a, b = a.astype(jnp.float32), b.astype(jnp.float32)
+        rows.append(jnp.stack((jnp.sum((a - b) ** 2), jnp.sum(a ** 2),
+                               jnp.sum(b ** 2), jnp.sum(a * b), jnp.max(jnp.abs(a - b)))))
+    return jnp.stack(rows)
+
+
+def gradient_comparison(actual, expected):
+    """Small global reductions for diagnosing replay failures on every host."""
+    moments = np.asarray(_gradient_moments(actual, expected))
+    error2, actual2, expected2, dot = moments[:, :4].sum(axis=0, dtype=np.float64)
+    denominator = np.sqrt(actual2 * expected2)
+    paths = [jax.tree_util.keystr(path) for path, _ in jax.tree_util.tree_flatten_with_path(actual)[0]]
+    return dict(
+        actual_norm=float(np.sqrt(actual2)), expected_norm=float(np.sqrt(expected2)),
+        error_norm=float(np.sqrt(error2)),
+        cosine=float(dot / denominator) if denominator else float(actual2 == expected2),
+        largest_error_leaves=[dict(path=paths[i], error_norm=float(np.sqrt(moments[i, 0])),
+                                  actual_norm=float(np.sqrt(moments[i, 1])),
+                                  expected_norm=float(np.sqrt(moments[i, 2])),
+                                  max_abs=float(moments[i, 4]))
+                              for i in np.argsort(-moments[:, 0])[:10]],
+    )
 
 
 def stacked_model(template, states):

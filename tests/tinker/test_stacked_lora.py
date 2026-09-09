@@ -25,6 +25,18 @@ from skyrl.backends.utils import pad_batch, pad_to_fsdp
 from jax.experimental import multihost_utils
 
 
+def test_gradient_comparison_reports_direction_and_largest_leaf():
+    from skyrl.backends.stacked_lora import gradient_comparison
+    actual = {'changed': jnp.array([3., 4.]), 'same': jnp.array([1.])}
+    expected = {'changed': jnp.array([3., -4.]), 'same': jnp.array([1.])}
+    report = gradient_comparison(actual, expected)
+    assert report['error_norm'] == 8.
+    assert report['actual_norm'] == pytest.approx(np.sqrt(26))
+    assert report['expected_norm'] == pytest.approx(np.sqrt(26))
+    assert report['cosine'] == pytest.approx(-6 / 26)
+    assert 'changed' in report['largest_error_leaves'][0]['path']
+
+
 def backend_functions():
     module = ast.parse(Path('skyrl/backends/tunix_backend.py').read_text())
     cls = next(n for n in module.body if isinstance(n, ast.ClassDef) and n.name == 'TunixBackend')
