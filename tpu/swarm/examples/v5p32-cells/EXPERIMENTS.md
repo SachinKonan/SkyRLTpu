@@ -208,9 +208,11 @@ helps" from "the carried weights help".
 
 | Cell | Job | Model | Objective | Weights from | Compare against | State |
 |---|---|---|---|---|---|---|
-| stageF-q-ctxw-n | - | qwen | centered piecewise, lr 1.5e-4 | stageC-pwc-n step 12 (`model_d09cea07/weights/000012`) | stageF-q-ctx-n, stageC-pwc-n | yaml ready, bundle v28 |
-| stageF-g-ctxw-n | - | gemma | centered piecewise, lr 4e-5 | stageB2-g-pwc-n step 13 (`model_35ca8a17/weights/000013`) | stageF-g-ctx-n, stageB2-g-pwc-n | yaml ready, bundle v28 |
-| stageF-m-ctxw-n | - | muse | **centered** piecewise, lr 4e-5 | stageB-m-pw-n step 11 (`model_df2f51fc/weights/000011`, LOO-trained) | stageF-m-ctx-n, stageB-m-pw-n, stageB-m-pwc-n | yaml ready, bundle v28; muse's gen-0 centered cell trailed LOO by 1.6e-5, so this arm also tests whether carried weights close that gap |
+| stageF-q-ctxw-n | **586** | qwen | centered piecewise, lr 1.5e-4 | stageC-pwc-n step 12 (`model_d09cea07/weights/000012`) | stageF-q-ctx-n, stageC-pwc-n | launched 2026-09-09 23:35Z, bundle v28 |
+| stageF-g-ctxw-n | **587** | gemma | centered piecewise, lr 4e-5 | stageB2-g-pwc-n step 13 (`model_35ca8a17/weights/000013`) | stageF-g-ctx-n, stageB2-g-pwc-n | launched 2026-09-09 23:35Z, bundle v28 |
+| stageF-m-ctxw-n | **588** | muse | **centered** piecewise, lr 4e-5 | stageB-m-pw-n step 11 (`model_df2f51fc/weights/000011`, LOO-trained) | stageF-m-ctx-n, stageB-m-pw-n, stageB-m-pwc-n | launched 2026-09-09 23:35Z, bundle v28; muse's gen-0 centered cell trailed LOO by 1.6e-5, so this arm also tests whether carried weights close that gap |
+
+The fresh-weights controls (stageF-{q,g,m}-ctx-n) remain unlaunched.
 
 Env (discover `examples/erdos_min_overlap/env.py`, via `EXTRA_TTD_ENV`):
 `TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json`
