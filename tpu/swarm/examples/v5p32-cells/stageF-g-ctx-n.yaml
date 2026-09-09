@@ -36,8 +36,8 @@ envs:
   ZONE: us-east5-a
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v27.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v27-g-ctx-n
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v28.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v28-g-ctx-n
 
   # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
   # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the

@@ -35,8 +35,8 @@ envs:
   ZONE: us-east5-a
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v27.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v27-q-ctx-n
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v28.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v28-q-ctx-n
 
   # cell_worker.sh defaults qwen to gs://.../hf-cache/models--Qwen--Qwen3.5-27B,
   # which holds only 4 GB of metadata (jobman engines fetched the rest from
