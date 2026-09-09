@@ -44,6 +44,9 @@
   },
   "retired_task_ids": [
     "sky-managed-2026-09-06-21-04-15-402509_meta-wt16-carry-g0-gemma-ttd_331-0",
-    "sky-managed-2026-09-06-21-05-29-712480_meta-wt16-fresh-g0-gemma-ttd_336-0"
+    "sky-managed-2026-09-06-21-05-29-712480_meta-wt16-fresh-g0-gemma-ttd_336-0",
+    "sky-managed-2026-09-09-09-00-14-913646_stageB2-g-v32-ttd-n_485-0",
+    "sky-managed-2026-09-09-09-00-34-973770_stageB-m-v32-grpo-n_489-0",
+    "sky-managed-2026-09-09-09-00-34-973770_stageB-m-v32-ttd-n_488-0"
   ]
 }
