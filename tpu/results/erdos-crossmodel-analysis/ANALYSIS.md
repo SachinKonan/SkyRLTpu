@@ -202,8 +202,8 @@ the objective that won its own gen-0 round; everything else matches its gen-0 ce
 | `stageF-m-ctx-n.yaml` | muse | piecewise LOO (nv ≥ 3 fix), 4e-5 | stageB-m-pw-n (0.380860445 @8) | all four, summary mode |
 | `ray_train/profiles/gptoss120b_v5p_32_pwc_ctx.json` | gpt-oss-120b | centered piecewise (Ray v2) | 502/511 GRPO/TTD gen-0 | all four, code mode |
 
-All three yamls pin bundle **v25** (`tpuswarm-skyrl-v5p32-cells-v25.tar.gz`, generation
-1788994829856576, sha256 4874f28f…, built from this worktree with discover 47e22fc) and pass the
+All three yamls pin bundle **v26** (`tpuswarm-skyrl-v5p32-cells-v26.tar.gz`, generation
+1788995086374211, sha256 e2baf0ac…, built from this worktree with discover 41a6493) and pass the
 exemplar variables through `EXTRA_TTD_ENV` (a reused tmux server keeps its creator's
 env, so plain `envs:` entries are not enough). The gpt-oss profile carries the same
 variables in `client_env` but points at the gpt-oss branch's current bundle (v12 at
