@@ -219,13 +219,22 @@ Spot churn log (us-east5-a, 2026-09-10): 586 was placed on 396 at ~14:40Z and pr
 Neither reached CELL-UP. New workers come READY and are reclaimed within minutes; pool
 oscillating 2–7/48. No cell error in any log; 587's step-2 lineage stays durable in GCS.
 
-Adoption after 587's step 1 (tree snapshot 2, 63 generated states): **100 % of programs use
-`reference_constructions`, 59/63 name `qwen-centered-n500`, every state is n = 500**, none use
-numba/FFT/multi-grid. Gemma copied qwen's LSE + SLSQP recipe (with an analytic gradient) and
-polished qwen's construction by 1.3e-9. The prompt's "best starting point is …" sentence steers
-every rollout to the single best reference; diversity across the four references is not being
-used yet. Watch whether later steps branch out; if not, a follow-up is to name a rotating or
-random reference (or none) in that sentence.
+Adoption in 587's tree (snapshots 1–2): the 16 seeds (timestep −1, random, 0.4859) were never
+built on; **all 31 step-0 states and all 32 step-1 states load `reference_constructions`
+(59/63 name `qwen-centered-n500`), every generated state is n = 500**, none use numba/FFT/
+multi-grid. The reference was adopted in the FIRST batch and polished by 1.3e-9 there; step 1
+added no further gain (0.380857584 → 0.380857584). The metrics row for batch 0 shows the
+pre-ingestion buffer (0.4859), which is why the jump looked like a step-1 event. Gemma copied
+qwen's LSE + SLSQP recipe from the text summary and added an analytic gradient. The prompt's
+"best starting point is …" sentence steers every rollout to the single best reference;
+diversity across the four references is not used yet. The metric that matters from here is
+the gain below 0.380857586; step 2's snapshot is the first evidence.
+
+**Cancelled 2026-09-10** on the user's "cancel everything in queue" instruction (relayed by the
+pool-managing session so the qwen multi-LoRA 615 could take the only free worker): 588 at
+~15:37Z, 586 at 17:39Z, 587 at 17:45Z; none held a worker at the time, 587's step-2 lineage is
+durable. User's order afterwards: context-mixing cells before the rest; the three yamls were
+handed to that session for resubmission (same GCS_RUN, so 587 resumes from step 2).
 
 Env (discover `examples/erdos_min_overlap/env.py`, via `EXTRA_TTD_ENV`):
 `TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json`

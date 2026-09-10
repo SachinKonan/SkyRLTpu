@@ -240,8 +240,13 @@ What to measure (all from the trees and gen tables, no extra instrumentation):
    that gpt-oss moves to n ≥ 500 when it sees the others' grids, and that the
    others try the multi-grid scan.
 
-Not launched: the pool's standing priority is gpt-oss GRPO/TTD, and the v5p pool was
-fully preempted when this fork started. Launch command when the user decides:
+First run (2026-09-09 23:35Z, jobs 586/587/588, weights-carry arms): the gemma cell reached
+step 2 before spot preemption; in its first batch all 31 surviving programs loaded
+`reference_constructions['qwen-centered-n500']` and polished it by 1.3e-9 (0.380857584),
+with no further gain at step 1. Context transfer is immediate and total; the "best starting
+point" sentence collapses diversity onto the single best reference. All three jobs were
+later cancelled during a capacity squeeze (user's call) and handed back for resubmission.
+Launch command:
 
 ```
 sky jobs launch --pool tpuswarm-v5p32-east5a-erdos tpu/swarm/examples/v5p32-cells/stageF-q-ctx-n.yaml -d -y
