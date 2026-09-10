@@ -70,4 +70,4 @@ def test_register_rows_only_for_present_tarballs(tmp_path):
 def test_ray_cpus_profile_field():
     from tpu.swarm.ray_train.config import Config
     assert Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json").ray_cpus == 32
-    assert Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_grpo.json").ray_cpus == 160
+    assert Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_grpo.json").ray_cpus == 120
