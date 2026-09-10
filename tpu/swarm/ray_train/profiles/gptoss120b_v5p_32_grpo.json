@@ -10,7 +10,7 @@
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-gptoss120b",
     "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts-gptoss120b-bf16-d388",
     "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-gptoss120b-tp4-fsdp2-r32-s18432-ray-v2",
-    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-gptoss120b-tp4-s22528-seq128-mem90-chunk8192-bf16-ray-v2",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-gptoss120b-tp4-s22528-seq128-mem92-chunk8192-bf16-ray-v2",
     "trainer_gib": 200,
     "inference_gib": 200,
     "reserve_gib": 128,
@@ -29,7 +29,7 @@
   "inference": {
     "backend": "ray_serve",
     "tp": 4,
-    "memory_utilization": 0.9,
+    "memory_utilization": 0.92,
     "restart_limit": 3,
     "max_sequences": 128,
     "engine_env": {
