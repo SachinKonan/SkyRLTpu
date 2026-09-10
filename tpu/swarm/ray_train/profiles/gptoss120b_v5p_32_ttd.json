@@ -3,8 +3,8 @@
   "accelerator": "tpu-v5p-32",
   "hosts": 4,
   "bucket": "gs://sk7524-tinker-tpu-us-east5",
-  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-gptoss-v17.tar.gz",
-  "base_bundle_sha256": "19f45284121a1d451420fa2770e19da5655154073eabaa64bd2a7a5ebf5b08cd",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-gptoss-v18.tar.gz",
+  "base_bundle_sha256": "83eaf87bd61747f4e29038757245fb1ad118f838324a85ae889f004c5c1669d3",
   "model_preset": "gpt-oss-120b",
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-gptoss120b",
