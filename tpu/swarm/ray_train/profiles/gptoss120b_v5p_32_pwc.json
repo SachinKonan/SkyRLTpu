@@ -9,7 +9,7 @@
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-gptoss120b",
     "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts-gptoss120b-bf16-d388",
-    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-gptoss120b-tp4-fsdp2-r32-s18432-ray-v2",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-gptoss120b-tp4-fsdp1-r32-s18432-ray-v2",
     "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-gptoss120b-tp4-s22528-seq128-mem90-chunk8192-bf16-ray-v2",
     "trainer_gib": 200,
     "inference_gib": 200,
@@ -19,10 +19,10 @@
     "sync_seconds": 60
   },
   "trainer": {
-    "hosts": 2,
+    "hosts": 1,
     "tp": 4,
-    "fsdp": 2,
-    "process_bounds": "1,1,2",
+    "fsdp": 1,
+    "process_bounds": "1,1,1",
     "chip_bounds": "2,2,1",
     "remat": "full"
   },
