@@ -214,6 +214,11 @@ helps" from "the carried weights help".
 
 The fresh-weights controls (stageF-{q,g,m}-ctx-n) remain unlaunched.
 
+Spot churn log (us-east5-a, 2026-09-10): 586 was placed on 396 at ~14:40Z and preempted at
+~15:15Z (7 min RUNNING); 587 was placed on 400 at ~15:10Z and preempted at ~15:23Z (13 min).
+Neither reached CELL-UP. New workers come READY and are reclaimed within minutes; pool
+oscillating 2–7/48. No cell error in any log; 587's step-2 lineage stays durable in GCS.
+
 Adoption after 587's step 1 (tree snapshot 2, 63 generated states): **100 % of programs use
 `reference_constructions`, 59/63 name `qwen-centered-n500`, every state is n = 500**, none use
 numba/FFT/multi-grid. Gemma copied qwen's LSE + SLSQP recipe (with an analytic gradient) and
