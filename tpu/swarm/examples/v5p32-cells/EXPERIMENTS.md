@@ -208,11 +208,19 @@ helps" from "the carried weights help".
 
 | Cell | Job | Model | Objective | Weights from | Compare against | State |
 |---|---|---|---|---|---|---|
-| stageF-q-ctxw-n | **586** | qwen | centered piecewise, lr 1.5e-4 | stageC-pwc-n step 12 (`model_d09cea07/weights/000012`) | stageF-q-ctx-n, stageC-pwc-n | launched 2026-09-09 23:35Z on w362, bundle v28; **worker preempted ~00:05Z during engine bring-up (nothing banked), PENDING in the recovery loop waiting for an idle replica** |
-| stageF-g-ctxw-n | **587** | gemma | centered piecewise, lr 4e-5 | stageB2-g-pwc-n step 13 (`model_35ca8a17/weights/000013`) | stageF-g-ctx-n, stageB2-g-pwc-n | launched 2026-09-09 23:35Z on w380, bundle v28; survived the 00:05Z wave; **CELL-UP 00:1xZ, weights-carry from model_35ca8a17/000013 confirmed in the log** |
+| stageF-q-ctxw-n | **586** | qwen | centered piecewise, lr 1.5e-4 | stageC-pwc-n step 12 (`model_d09cea07/weights/000012`) | stageF-q-ctx-n, stageC-pwc-n | launched 2026-09-09 23:35Z on w362, bundle v28; **worker preempted ~00:05Z during engine bring-up (nothing banked), PENDING in the recovery loop; ~03:40Z recovery selected replica 353, bring-up again from scratch** |
+| stageF-g-ctxw-n | **587** | gemma | centered piecewise, lr 4e-5 | stageB2-g-pwc-n step 13 (`model_35ca8a17/weights/000013`) | stageF-g-ctx-n, stageB2-g-pwc-n | launched 2026-09-09 23:35Z on w380, bundle v28; survived both waves; CELL-UP 00:1xZ, weights-carry from model_35ca8a17/000013 confirmed; **step 1 banked ~03:30Z: 0.380857584 (val 0.89, 5.0k tok) = the qwen reference adopted and refined by 1.3e-9 in one step** (step 0 seeds were 0.4859) |
 | stageF-m-ctxw-n | **588** | muse | **centered** piecewise, lr 4e-5 | stageB-m-pw-n step 11 (`model_df2f51fc/weights/000011`, LOO-trained) | stageF-m-ctx-n, stageB-m-pw-n, stageB-m-pwc-n | launched 2026-09-09 23:35Z on w381, bundle v28; **CELL-UP 00:1xZ, weights-carry from model_df2f51fc/000011 confirmed in the log; worker 381 preempted in the second wave ~01:25Z (pool 10 → 2 READY) before step 1 banked, PENDING in the recovery loop**; muse's gen-0 centered cell trailed LOO by 1.6e-5, so this arm also tests whether carried weights close that gap |
 
 The fresh-weights controls (stageF-{q,g,m}-ctx-n) remain unlaunched.
+
+Adoption after 587's step 1 (tree snapshot 2, 63 generated states): **100 % of programs use
+`reference_constructions`, 59/63 name `qwen-centered-n500`, every state is n = 500**, none use
+numba/FFT/multi-grid. Gemma copied qwen's LSE + SLSQP recipe (with an analytic gradient) and
+polished qwen's construction by 1.3e-9. The prompt's "best starting point is …" sentence steers
+every rollout to the single best reference; diversity across the four references is not being
+used yet. Watch whether later steps branch out; if not, a follow-up is to name a rotating or
+random reference (or none) in that sentence.
 
 Env (discover `examples/erdos_min_overlap/env.py`, via `EXTRA_TTD_ENV`):
 `TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json`
