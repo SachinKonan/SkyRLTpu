@@ -235,6 +235,9 @@ pool-managing session so the qwen multi-LoRA 615 could take the only free worker
 ~15:37Z, 586 at 17:39Z, 587 at 17:45Z; none held a worker at the time, 587's step-2 lineage is
 durable. User's order afterwards: context-mixing cells before the rest; the three yamls were
 handed to that session for resubmission (same GCS_RUN, so 587 resumes from step 2).
+**Resubmitted ~18:00Z 2026-09-10 as 625 (gemma, resumes step 2), 626 (qwen, clean), 627 (muse,
+clean)**; all PENDING behind 615/608/557 with 0 idle workers and 40 replicas waiting for
+resources.
 
 Env (discover `examples/erdos_min_overlap/env.py`, via `EXTRA_TTD_ENV`):
 `TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json`
