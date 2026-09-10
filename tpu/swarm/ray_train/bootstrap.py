@@ -81,6 +81,16 @@ def check_ports_available(ports, timeout=60):
             time.sleep(1)
 
 
+def spawn_reaper(ray_tmp, run, rank):
+    """Detached watcher that stops this run's Ray daemons after the bootstrap
+    exits, however it exits (SkyPilot's cancel ends in SIGKILL, which skips
+    the `finally` below; jobs 612/614 left gcs_server on the Ray port)."""
+    log = open(run / f"reaper-{rank}.log", "ab")
+    subprocess.Popen([sys.executable, "-m", __package__ + ".reaper", str(ray_tmp), str(os.getpid())],
+                     stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                     start_new_session=True, cwd=os.getcwd(), env=dict(os.environ))
+
+
 def stop_ray(ray_tmp):
     import psutil
     selected = {}
@@ -213,6 +223,7 @@ def main():
                 except OSError:
                     time.sleep(3)
         subprocess.run(command, check=True, timeout=180)
+        spawn_reaper(ray_tmp, run, rank)
         ray.init(address=f"{ips[0]}:{p.ray}", namespace=config.run_id)
         emit(log, "ray_node_ready", rank=rank, address=f"{ips[0]}:{p.ray}")
         if rank == 0:
