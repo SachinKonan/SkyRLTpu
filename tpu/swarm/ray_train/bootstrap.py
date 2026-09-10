@@ -150,7 +150,7 @@ def main():
     python = runtime / "bin/python"
     if not args.runtime_ready:
         marker = runtime / ".complete"
-        identity = "python3.12-ray2.58-serve-grading-v3"
+        identity = "python3.12-ray2.58-serve-grading-v4"
         if not marker.exists() or marker.read_text() != identity:
             # Newer uv refuses to replace an existing venv (job 531: "A virtual
             # environment already exists" when a worker carried a stale
@@ -160,8 +160,11 @@ def main():
                            env=dict(os.environ, UV_VENV_CLEAR="1"))
             subprocess.run(["uv", "pip", "install", "--python", str(python), "ray[serve]==2.58.0",
                             "psutil", "httpx", "jinja2", "google-crc32c", "zstandard==0.25.0",
-                            "numpy", "scipy", "shapely", "numba", "scikit-learn"], check=True, cwd=root)
-            subprocess.run([str(python), "-c", "import ray.serve,httpx,google_crc32c,zstandard,numpy,scipy,numba"], check=True, cwd=root)
+                            "numpy", "scipy", "shapely", "numba", "scikit-learn",
+                            # The Erdős prompts list cvxpy as allowed; 70 of 512 gpt-oss
+                            # step-0 programs died on `No module named 'cvxpy'` (job 578).
+                            "cvxpy", "cvxopt", "ecos", "scs", "osqp", "clarabel"], check=True, cwd=root)
+            subprocess.run([str(python), "-c", "import ray.serve,httpx,google_crc32c,zstandard,numpy,scipy,numba,cvxpy,cvxopt,ecos"], check=True, cwd=root)
             marker.write_text(identity)
         os.execv(str(python), [str(python), "-m", __package__ + ".bootstrap", args.config, "--runtime-ready"])
     import ray
