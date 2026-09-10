@@ -65,3 +65,9 @@ def test_register_rows_only_for_present_tarballs(tmp_path):
     assert register_rows(db, [("model_8b4c841f", "000001")], "x", {}, lambda *a: True) == [
         "model_8b4c841f/000001 TRAINING", "model_8b4c841f/000001 SAMPLER"]
     assert c.execute("SELECT count(*) FROM checkpoints").fetchone()[0] == 2
+
+
+def test_ray_cpus_profile_field():
+    from tpu.swarm.ray_train.config import Config
+    assert Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json").ray_cpus == 32
+    assert Config.load("tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_grpo.json").ray_cpus == 160

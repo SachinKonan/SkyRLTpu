@@ -205,7 +205,7 @@ def main():
             RAY_TMPDIR=str(ray_tmp), JAX_PLATFORMS="cpu", TPU_VISIBLE_CHIPS="0,1,2,3",
             OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", RAY_USAGE_STATS_ENABLED="0")
         command = [str(runtime / "bin/ray"), "start", f"--node-ip-address={ips[rank]}",
-            "--num-cpus=32", "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
+            f"--num-cpus={config.ray_cpus}", "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
             f"--object-manager-port={p.object_manager}", f"--node-manager-port={p.node_manager}",
             f"--dashboard-agent-listen-port={p.dashboard_agent}", f"--dashboard-agent-grpc-port={p.dashboard_agent_grpc}",
             f"--runtime-env-agent-port={p.runtime_env}", f"--metrics-export-port={p.metrics}",

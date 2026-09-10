@@ -270,6 +270,10 @@ class Config:
     log_seconds: int = 30
     setup_timeout: int = 7200
     ready_timeout: int = 3600
+    # CPUs each host advertises to the executor's Ray. Sandbox grading tasks
+    # reserve 2 each; at 32 only ~50 programs grade at once on 4 hosts with
+    # 208 cores each, which stretched gpt-oss rollouts by ~35 minutes.
+    ray_cpus: int = 32
     checkpoint_cleanup_timeout: int = 600
     client_context_window: int = 18432
     client_phase1_max_tokens: int = 13824
@@ -399,7 +403,7 @@ class Config:
         if min(self.cache.trainer_gib, self.cache.inference_gib) < 64 or self.cache.reserve_gib < 128:
             raise ValueError("RAM cache requires >=64 GiB cap and >=128 GiB runtime reserve")
         if min(self.cache.process_count, self.cache.thread_count, self.cache.sync_seconds,
-               self.log_seconds, self.setup_timeout, self.ready_timeout) <= 0:
+               self.log_seconds, self.setup_timeout, self.ready_timeout, self.ray_cpus) <= 0:
             raise ValueError("concurrency and timeouts must be positive")
         for path in (self.bucket, self.base_bundle, self.cache.hf, self.cache.orbax,
                      self.cache.trainer_compile, self.cache.inference_compile):
