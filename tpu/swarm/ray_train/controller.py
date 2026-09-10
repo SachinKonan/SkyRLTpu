@@ -64,6 +64,7 @@ class Controller:
         self.failure = None
         self.monitor = None
         self.sync_refs = {}
+        self.train_ranks = []
         self.last_sync = {}
         self.prepared = {}
         self.catalog = None
@@ -134,8 +135,9 @@ class Controller:
             return
         active = set(self.sync_refs.values())
         now = time.monotonic()
+        api_rank = self.train_ranks[0] if self.train_ranks else 0
         for rank, host in enumerate(self.hosts):
-            for kind in (("compile", "run") if rank == 0 else ("compile",)):
+            for kind in (("compile", "run") if rank in (0, api_rank) else ("compile",)):
                 key = (rank, kind)
                 if key in active or now - self.last_sync.get(key, float("-inf")) < self.config.cache.sync_seconds:
                     continue
@@ -242,7 +244,11 @@ class Controller:
         engine_ips = [group[0] for group in groups]
         self.report("cache_barrier_complete", hosts=len(prepared), engines=groups)
         if not self.config.inference_only:
-            self.checked_get([self.hosts[0].restore_run.remote()], 600)
+            api_rank = train_ranks[0]
+            restores = [self.hosts[0].restore_run.remote(database=api_rank == 0)]
+            if api_rank != 0:
+                restores.append(self.hosts[api_rank].restore_run.remote(database=True))
+            self.checked_get(restores, 600)
         for rank in train_ranks:
             self.trainers.append(TrainerRank.options(
                 scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[self.ips[rank]]["NodeID"], soft=False))
@@ -276,6 +282,19 @@ class Controller:
                 time.sleep(5)
         raise TimeoutError("trainer/inference readiness deadline exceeded")
 
+    def register_durable_checkpoints(self):
+        """A reclaimed VM loses the API server's sqlite registry; put back the
+        rows for every checkpoint the client recorded and the mirror holds."""
+        entries = self.checked_get([self.hosts[0].harvest_checkpoint_entries.remote()], 120)[0]
+        if not entries:
+            return
+        t = self.config.trainer
+        lora_config = {"rank": t.lora_rank, "alpha": float(t.lora_rank), "seed": 0,
+                       "train_attn": True, "train_mlp": True, "train_unembed": False}
+        registered = self.checked_get([self.hosts[self.train_ranks[0]].register_durable_checkpoints.remote(
+            entries, self.config.model, lora_config)], 600)[0]
+        self.report("checkpoints_registered", entries=entries, registered=registered)
+
     def run(self):
         self.setup()
         if self.config.inference_only:
@@ -284,6 +303,7 @@ class Controller:
                 if self.failure:
                     raise RuntimeError(self.failure)
             return 143
+        self.register_durable_checkpoints()
         self.checked_get([self.hosts[0].start_client.remote(self.api_host)], 30)
         self.report("client_started")
         while not self.stopping.wait(5):

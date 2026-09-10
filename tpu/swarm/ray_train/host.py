@@ -372,20 +372,45 @@ class Host:
             stream.seek(process.log_offset)
             return re.search(rb"Initialized\s+TinkerEngine\s+with\s+backend=", stream.read()) is not None
 
-    def restore_run(self):
-        if self.rank != 0:
-            return
-        local = self.run / "client"
-        if not local.exists() and self.gcs.list(self.config.run_gcs + "/client", allow_empty=True):
-            self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(self.run)], "restore-run", self.run)
+    def restore_run(self, database=None):
+        """Client state comes back on the head; the Tinker database on the
+        host that will run the API server (not necessarily the head once the
+        trainer block fallback picks another first rank)."""
+        if database is None:
+            database = self.rank == 0
+        if self.rank == 0:
+            local = self.run / "client"
+            if not local.exists() and self.gcs.list(self.config.run_gcs + "/client", allow_empty=True):
+                self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(self.run)], "restore-run", self.run)
         db = self.run / "tinker.db"
-        if not db.exists():
+        if database and not db.exists():
             listing = self.gcs.metadata("ls", "--json", self.config.run_gcs + "/tinker-backup.db", allow_empty=True)
             if json.loads(listing):
                 self.gcs.transfer(["cp", self.config.run_gcs + "/tinker-backup.db", str(db)], "restore-database", self.run)
 
+    def harvest_checkpoint_entries(self):
+        """(model_id, checkpoint_id) pairs the client recorded as saved."""
+        from .registry import harvest_entries
+        return harvest_entries(sorted((self.run / "client").rglob("checkpoints.jsonl"))) if (self.run / "client").exists() else []
+
+    def register_durable_checkpoints(self, entries, base_model, lora_config):
+        """Re-register checkpoints whose tarballs exist in the GCS mirror in this
+        host's Tinker database (the API server must have created the schema)."""
+        from .registry import register_rows
+        db = self.run / "tinker.db"
+        if not db.exists() or not entries:
+            return []
+        base = self.config.run_gcs + "/checkpoints"
+
+        def present(model_id, ckpt, subdir):
+            uri = "/".join(part for part in (base, model_id, subdir, f"{ckpt}.tar.gz") if part)
+            return bool(json.loads(self.gcs.metadata("ls", "--json", uri, allow_empty=True)))
+        registered = register_rows(db, entries, base_model, lora_config, present)
+        emit(self.log, "checkpoints_registered", rank=self.rank, registered=registered)
+        return registered
+
     def sync_run(self):
-        if self.rank != 0:
+        if self.rank != 0 and not (self.run / "tinker.db").exists():
             return
         if not self.run_sync_lock.acquire(timeout=330):
             raise TimeoutError("previous run-state writeback is still running")
@@ -395,18 +420,19 @@ class Host:
             self.run_sync_lock.release()
 
     def _sync_run(self):
+        from .registry import backup_database
         gcs = GCS(self.run / "run-writeback", self.config.cache)
         client = self.run / "client"
         if client.exists() and any(client.iterdir()):
             gcs.transfer(["cp", "--recursive", str(client), self.config.run_gcs + "/"], "client-writeback", timeout=300)
         db = self.run / "tinker.db"
         if db.exists():
+            # Only the API host has this file; fold the WAL in before upload.
             backup = self.run / "tinker-backup.db"
-            with sqlite3.connect(db) as source, sqlite3.connect(backup) as destination:
-                source.backup(destination)
+            backup_database(db, backup)
             gcs.transfer(["cp", str(backup), self.config.run_gcs + "/tinker-backup.db"], "database-writeback", timeout=120)
         logs = [str(path) for pattern in ("*.jsonl", "*.log") for path in self.run.glob(pattern)]
-        if logs:
+        if logs and self.rank == 0:
             gcs.transfer(["cp", *logs, self.config.run_gcs + "/logs/"], "logs-writeback", timeout=300)
 
     def stop(self):
