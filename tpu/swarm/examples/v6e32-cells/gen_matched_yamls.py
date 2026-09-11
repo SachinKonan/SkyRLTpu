@@ -26,8 +26,12 @@ BUCKET = "gs://sk7524-tinker-tpu-us-east5"
 MODEL_ENV = {
     "qwen": {
         # v5p: TP4 over 4 x 95 GB chips, 4 rows of 18432 per fb call (BUDGET 73728).
-        # v6e: TP8 over 8 x 32 GB chips, 2 rows per fb call.
-        "TUNIX_TRAIN_TOKEN_BUDGET": "36864",
+        # v6e: TP8 over 8 x 32 GB chips, ONE row per fb call. Two rows still
+        # overflowed: job 650 built its LoRA template and died loading jit_scan
+        # ("reserve 6.87G, 2.68G free"). One row halves the activation and
+        # scratch memory of that program; the step is unchanged (512 sequences
+        # accumulated before one update, in twice as many calls).
+        "TUNIX_TRAIN_TOKEN_BUDGET": "18432",
         # Engines: the v5p shape (128 seqs, 8192 batched tokens, 0.90 util) hit
         # CompileTimeHbmOom on the 32 GB v6e chip (31.37 of 31.25 GB, jobs
         # 631/632 at the 4096-token x 128-req prefill graph). Halve the
@@ -37,34 +41,32 @@ MODEL_ENV = {
         # same 31.38 of 31.25 GB: the KV pool sized at 0.90 leaves only ~3 GB
         # of compile headroom on a 32 GB chip (v5p at 0.90 leaves ~9.5 GB).
         # Reserve 20% and halve the prefill chunk again; KV drops to ~8 GB per
-        # chip (~11 full 22k sequences per engine, four engines).
+        # chip (~11 full 22k sequences per engine, six engines).
         "VLLM_MAX_NUM_SEQS": '"64"',
         "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 2048 --gpu-memory-utilization 0.80"',
-        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-qwen35-tp8-fsdp1-r32-s18432-b36864-cells-v1",
+        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-qwen35-tp8-fsdp1-r32-s18432-b18432-cells-v1",
         # The east5b pool's own qwen TP4 22k engine cache; a version miss just recompiles.
         "VLLM_XLA_CACHE_GCS": f"{BUCKET}/vllm-xla-cache-v6e-qwen35-tp4-s22528-v1",
     },
     "gemma": {
-        # v5p: TP4, 4 rows of 10240 (BUDGET 40960). v6e: TP8, 2 rows.
-        "TUNIX_TRAIN_TOKEN_BUDGET": "20480",
+        # v5p: TP4, 4 rows of 10240 (BUDGET 40960). v6e: TP8, ONE row (job 650).
+        "TUNIX_TRAIN_TOKEN_BUDGET": "10240",
         # Gemma already serves 32 seqs at 16k; only the prefill chunk shrinks.
         "VLLM_MAX_NUM_SEQS": '"32"',
         "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 2048 --disable-chunked-mm-input --gpu-memory-utilization 0.80"',
-        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-gemma4-tp8-fsdp1-r32-s10240-b20480-cells-v1",
+        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-gemma4-tp8-fsdp1-r32-s10240-b10240-cells-v1",
         "VLLM_XLA_CACHE_GCS": f"{BUCKET}/vllm-xla-cache-v6e-gemma4-31b-tp4-16k-v1",
     },
 }
 
-# The wrapper overrides TRAIN_WORKERS / VLLM_WORKERS / TRAIN_TPU_PROCESS_BOUNDS
-# from the physical topology; these are the shape it will produce.
 LAYOUT_ENV = {
     "ZONE": "us-east5-b",
-    "TRAIN_WORKERS": "0,1,2,3",
-    "VLLM_WORKERS": "4,5,6,7",
+    "TRAIN_WORKERS": "0,1",
+    "VLLM_WORKERS": "2,3,4,5,6,7",
     "TRAIN_TP_SIZE": '"8"',
-    "TRAIN_FSDP_SIZE": '"2"',
-    "TUNIX_ROW_SHARD": '"2"',
-    "TRAIN_TPU_PROCESS_BOUNDS": "2,2,1",
+    "TRAIN_FSDP_SIZE": '"1"',
+    "TUNIX_ROW_SHARD": '"1"',
+    "TRAIN_TPU_PROCESS_BOUNDS": "2,1,1",
     "TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS": "2,2,1",
     "VLLM_TP_SIZE": '"4"',
     "VLLM_ENGINES_PER_HOST": '"1"',
@@ -103,9 +105,8 @@ def port(name: str, model: str) -> str:
     head = re.sub(
         r"# One complete four-host tpu-v5p-32 slice.*?\n(# .*\n)*?# Reusing GCS_RUN",
         "# One complete eight-VM tpu-v6e-32 slice from pool tpuswarm-v6e32-east5b-qwen35,\n"
-        "# 4+4 layout: a 2x2 physical host block = TP8/FSDP2 trainer over 16 chips\n"
-        "# (its low-corner VM also runs the client + grader Ray head), the other four\n"
-        "# VMs = four TP4 vLLM engines (tpu/swarm/run_v6e32_cell.sh).\n"
+        "# 2+6 layout: VMs 0-1 = TP8/FSDP1 trainer (VM 0 also client + grader Ray head),\n"
+        "# VMs 2-7 = six TP4 vLLM engines (tpu/swarm/run_v6e32_cell.sh).\n"
         "# Reusing GCS_RUN",
         head,
         flags=re.S,
@@ -121,12 +122,12 @@ def port(name: str, model: str) -> str:
             line = "  ZONE: us-east5-b"
         out_env.append(line)
     out_env.append("")
-    out_env.append("  # v6e-32 layout: four trainer VMs (16 chips, TP8 x FSDP2), four engine VMs.")
+    out_env.append("  # v6e-32 layout: two trainer VMs (8 chips, TP8, no FSDP), six engine VMs.")
     for k, v in LAYOUT_ENV.items():
         if k == "ZONE":
             continue
         out_env.append(f"  {k}: {v}")
-    out_env.append("  # 32 GB chips: half the per-fb token budget (two rows, as on v5p); v6e-specific compile caches.")
+    out_env.append("  # 32 GB chips: ONE sequence per forward/backward call (v5p packed four); v6e-specific compile caches.")
     for k, v in MODEL_ENV[model].items():
         out_env.append(f"  {k}: {v}")
     envs_out = "\n".join(out_env) + "\n"
