@@ -165,17 +165,18 @@ run: |
   bash "$REPO/tpu/swarm/reconcile_v5p32_worker.sh" \
     || echo "worker reconcile failed (continuing)" >&2
 
-  # Every TRAINER VM needs the MaxText/orbax checkpoint locally before the
-  # multi-host trainer starts (each JAX process restores its own shards).
-  # ensure_orbax_ckpt.sh no-ops on VMs outside TRAIN_WORKERS.
-  bash "$REPO/tpu/jobman/ensure_orbax_ckpt.sh"
-
   # SkyPilot invokes the run command on every VM. The cell is head-driven and
   # reaches the other ranks over the internal network, so only rank 0 continues.
+  # Non-zero ranks must NOT stage the orbax checkpoint here: which VM partners
+  # the trainer is decided below from physical topology, and a 40 GB orbax copy
+  # on a VM that ends up serving filled its 150 GB disk to zero next to the HF
+  # weights (jobs 635/636, rank 1). Rank 0 stages its own copy and the chosen
+  # partner's over ssh after the selection.
   if [ "$JOBMAN_WORKER_ID" != "0" ]; then
     echo "rank $JOBMAN_WORKER_ID ready; rank 0 owns cell $CELL"
     exit 0
   fi
+  TRAIN_WORKERS=0 bash "$REPO/tpu/jobman/ensure_orbax_ckpt.sh"
   if [ ! -f "$SSH_KEY_FILE" ]; then
     echo "SkyPilot TPU pod key is missing: $SSH_KEY_FILE" >&2
     exit 2
