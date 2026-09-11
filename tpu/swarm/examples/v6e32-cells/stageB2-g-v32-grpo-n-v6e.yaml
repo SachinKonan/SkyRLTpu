@@ -273,9 +273,53 @@ run: |
   echo "cell $CELL on v6e-32 (2+6): trainer ranks $TRAIN_WORKERS (physical $w0,$partner_w; process grid $bounds; rank 0 = client/API); engine ranks $VLLM_WORKERS"
   # Rank 0 already staged the orbax checkpoint above; the chosen partner must
   # hold it too (it may not be rank 1, which is the one the yaml default staged).
-  timeout 3600 ssh "${SSHO[@]}" "$REMOTE_USER@$(cut -d, -f$((partner_rank + 1)) <<<"$ips")" \
+  partner_ip=$(cut -d, -f$((partner_rank + 1)) <<<"$ips")
+  timeout 3600 ssh "${SSHO[@]}" "$REMOTE_USER@$partner_ip" \
     "CELL='$CELL' TRAIN_WORKERS='$TRAIN_WORKERS' JOBMAN_WORKER_ID='$partner_rank' SKYRL_REPO_DIR='$REPO' TUNIX_MAXTEXT_CKPT_CACHE_GCS='${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-}' bash '$REPO/tpu/jobman/ensure_orbax_ckpt.sh'" 2>&1 | sed "s/^/[partner] /" \
     || { echo "topology: partner rank $partner_rank could not stage the orbax checkpoint" >&2; exit 33; }
+
+  # A resume also needs the RL checkpoint ARCHIVES on every trainer VM, not just
+  # rank 0. tunix_backend.load_checkpoint broadcasts the call and each process
+  # opens the same local path ($HOME/gcs/skyrl-checkpoints/<model>/<step>.tar.gz)
+  # itself; on v5p the trainer was one host so only rank 0 ever needed them, and
+  # here the partner's directory is empty, so the client's first load_weights
+  # dies with FileNotFoundError (job 658, 19:48Z, right after the LoRA template
+  # built). launch_cell.sh restores them on rank 0 from SKYRL_CKPT_GCS; mirror
+  # the newest row of the run's checkpoints.jsonl onto the partner first.
+  if [ -n "${GCS_RUN:-}" ]; then
+    ckpt_gcs="gs://$(cut -d/ -f3 <<<"$GCS_RUN")/skyrl-checkpoints"
+    latest=$(timeout 180 gcloud storage cat "$GCS_RUN/tinker_log/*/*/checkpoints.jsonl" 2>/dev/null | python3 -c '
+  import json, re, sys
+  pat = re.compile(r"tinker://(model_[0-9a-f]+)/weights/(\d+)")
+  last = ""
+  for line in sys.stdin:
+      try:
+          row = json.loads(line)
+      except ValueError:
+          continue
+      m = pat.match(row.get("state_path") or "")
+      if m:
+          last = m.group(1) + " " + m.group(2)
+  print(last)
+  ' || true)
+    if [ -n "$latest" ]; then
+      read -r ckpt_model ckpt_step <<<"$latest"
+      echo "resume: staging $ckpt_model/$ckpt_step archives on trainer rank $partner_rank"
+      timeout 1800 ssh "${SSHO[@]}" "$REMOTE_USER@$partner_ip" \
+        "set -e; d=\$HOME/gcs/skyrl-checkpoints/$ckpt_model; mkdir -p \$d/sampler_weights
+         for rel in $ckpt_step.tar.gz sampler_weights/$ckpt_step.tar.gz; do
+           if [ -s \"\$d/\$rel\" ]; then echo \"have \$rel\"; continue; fi
+           if gcloud storage cp '$ckpt_gcs/$ckpt_model'/\$rel \"\$d/\$rel\" >/dev/null 2>&1; then
+             echo \"staged \$rel (\$(du -h \"\$d/\$rel\" | cut -f1))\"
+           else
+             rm -f \"\$d/\$rel\"; echo \"MISSING \$rel in $ckpt_gcs/$ckpt_model\"
+           fi
+         done" 2>&1 | sed "s/^/[partner ckpt] /" \
+        || { echo "resume: could not stage RL checkpoints on rank $partner_rank" >&2; exit 33; }
+    else
+      echo "resume: no checkpoints.jsonl rows under $GCS_RUN -- fresh run, nothing to stage"
+    fi
+  fi
 
   # Whatever way the cell dies, leave all eight VMs clean for the next job (the
   # pool fork never re-places a failed job). cleanup_v5p32_worker.sh iterates
