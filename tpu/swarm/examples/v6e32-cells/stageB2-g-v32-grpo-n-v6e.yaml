@@ -1,0 +1,207 @@
+name: stageB2-g-v32-grpo-n-v6e
+
+# Gemma GRPO(std) (Stage B2), fresh, CONTROLLED VALIDITY: 16 seeds x sample-until-32-valid
+# (<=4 rounds of 32), train on exactly the 32 valid rollouts per seed (failures dropped from the
+# gradient; they still update the PUCT tree at env-step time). LR 4e-5, elite 2. Pair:
+# stageB2-g-v32-grpo-n (mean_baseline_std, per-group whitening, eps 1e-12) vs stageB2-g-v32-ttd-n
+# (entropic_adaptive_beta). Same-model references: stageB2-g-grpo-n / stageB2-g-ttd-n.
+# One complete eight-VM tpu-v6e-32 slice from pool tpuswarm-v6e32-east5b-qwen35,
+# 2+6 layout: VMs 0-1 = TP8/FSDP1 trainer (VM 0 also client + grader Ray head),
+# VMs 2-7 = six TP4 vLLM engines (tpu/swarm/run_v6e32_cell.sh).
+# Reusing GCS_RUN means RESUME from the last durable snapshot, not a clean run.
+
+resources:
+  cloud: gcp
+  accelerators: tpu-v6e-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv6e
+  use_spot: true
+  disk_size: 150
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 3
+    recover_on_exit_codes: [33, 34]
+
+envs:
+  PROJECT: vision-mix
+  ZONE: us-east5-b
+  REMOTE_USER: gcpuser
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v21.tar.gz
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v21-g-v32-grpo-n-v6e
+
+  # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
+  # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the
+  # LoRA template is built (RUNBOOK 4.4: ~35 GiB, memory-only).
+  TUNIX_FREE_BASE_STATE: "1"
+
+  CELL: g-v32-grpo-n
+  RUN_DIR_NAME: stageB2-g-v32-grpo-n
+  EXPERIMENT_NAME: stageB2-g-v32-grpo-n
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageB2-g-v32-grpo-n
+  # Every rank installs the same bundle generation in `run`, so the head must
+  # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
+  CELL_START_VLLM: "1"
+  CELL_SYNC_SKYRL: "0"
+
+  TTD_ENV: erdos_min_overlap
+  TTD_ADV_ESTIMATOR: mean_baseline_std
+  TTD_ELITE_SLOTS: "2"
+  GROUPS_PER_BATCH: "16"
+  GROUP_SIZE: "32"
+  NUM_EPOCHS: "15"
+  LEARNING_RATE: "4e-5"
+  LORA_RANK: "32"
+  KL_PENALTY_COEF: "0"
+  TTD_RESTART_RATIO: "0"
+  TTD_CROSS_WEIGHT: "0"
+  TTD_KL_MEASURE_EVERY: "0"
+  TTD_LEAGUE_PIPELINE: "1"
+  TTD_ALLOW_SINGLE_MEMBER: "1"
+  TTD_SAMPLING_PROGRESS_TIMEOUT: "0"
+  EVAL_TIMEOUT: "1100"
+  WANDB_MODE: offline
+
+  MONITOR_INTERVAL_SECONDS: "30"
+  SYNC_EVERY_SECONDS: "300"
+  TINKER_FAILURE_LIMIT: "4"
+  # The local SkyRL Tinker-compatible API is unauthenticated; the upstream
+  # client only requires the variable to be nonempty. Passed explicitly into
+  # the tmux command because a reused tmux server keeps its creator's env.
+  TINKER_API_KEY: tml-local-skyrl-no-auth
+  TINKER_BASE_URL: http://127.0.0.1:8000
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_MIN_VALID_PER_GROUP=32 TTD_VALID_OVERSAMPLE_CAP=64 TTD_VALID_OVERSAMPLE_MARGIN=1.15 TTD_VALID_EMA=0.3 TTD_TRAIN_VALID_ONLY=1 TTD_ADV_STD_EPS=1e-12
+
+  # v6e-32 layout: two trainer VMs (8 chips, TP8, no FSDP), six engine VMs.
+  TRAIN_WORKERS: 0,1
+  VLLM_WORKERS: 2,3,4,5,6,7
+  TRAIN_TP_SIZE: "8"
+  TRAIN_FSDP_SIZE: "1"
+  TUNIX_ROW_SHARD: "1"
+  TRAIN_TPU_PROCESS_BOUNDS: 2,1,1
+  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
+  VLLM_TP_SIZE: "4"
+  VLLM_ENGINES_PER_HOST: "1"
+  # 32 GB chips: half the per-fb token budget (two rows, as on v5p); v6e-specific compile caches.
+  TUNIX_TRAIN_TOKEN_BUDGET: 20480
+  TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-gemma4-tp8-fsdp1-r32-s10240-b20480-cells-v1
+  VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v6e-gemma4-31b-tp4-16k-v1
+
+run: |
+  set -euo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/jobman/cell_worker.sh"
+    test -r "$staging/tpu/jobman/ensure_orbax_ckpt.sh"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  # The v5p bundles predate the v6e wrapper; install it from this task.
+  cat > "$HOME/run_v6e32_cell.sh" <<'V6E_WRAPPER'
+  #!/usr/bin/env bash
+  # Runs ONE proven stage/meta Erdős cell on one eight-VM tpu-v6e-32 pool worker
+  # in the 2+6 layout: VMs 0-1 (one physical host, 8 chips) = trainer + RL client
+  # + grader Ray head on VM 0; VMs 2-7 = six TP=4 vLLM engines.
+  #
+  # The cell itself (cell_worker.sh -> start_colocated_vllm_tinker.sh ->
+  # cell_monitor.sh) is the unchanged jobman unit; like run_v5p32_cell.sh this
+  # wrapper only adapts SkyPilot's multi-node environment to it. Differences from
+  # the v5p-32 wrapper: 8 VMs, TRAIN_WORKERS spans two VMs, so every trainer VM
+  # stages the orbax checkpoint, and the IP list is NOT rotated (TRAIN_WORKERS
+  # indexes SKYPILOT_NODE_IPS positions and VMs 0,1 must stay physically adjacent
+  # for the 2,1,1 process grid); if this VM is rank 0 but not first in the list
+  # we exit 33 (recover_on_exit_codes) instead of guessing a topology.
+  #
+  # Layout knobs come from the task yaml: TRAIN_WORKERS=0,1 VLLM_WORKERS=2..7
+  # TRAIN_TP_SIZE=8 TRAIN_FSDP_SIZE=1 TUNIX_ROW_SHARD=1
+  # TRAIN_TPU_PROCESS_BOUNDS=2,1,1 TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1.
+  # The v6e chip has 32 GB HBM (v5p: 95 GB): TP 8 over 8 chips keeps the
+  # per-chip weight footprint under the v5p TP-4 value and the yaml halves the
+  # token budget so one fb call holds two rows, as on v5p.
+  set -euo pipefail
+  : "${SKYPILOT_NODE_RANK:=0}"
+  : "${SKYPILOT_NODE_IPS:?SkyPilot must provide all v6e-32 TPU VM IPs}"
+  : "${CELL:?CELL selects the model and cell knobs, e.g. g-v32-ttd-n}"
+
+  export JOBMAN_WORKER_ID="$SKYPILOT_NODE_RANK"
+  ips=$(printf '%s\n' "$SKYPILOT_NODE_IPS" | awk 'NF' | paste -sd, -)
+  node_count=$(awk -F, '{print NF}' <<<"$ips")
+  if [ "$node_count" -ne 8 ]; then
+    echo "a v6e-32 cell requires 8 TPU VMs; SkyPilot supplied $node_count" >&2
+    exit 2
+  fi
+  export JOBMAN_TPU_INTERNAL_IPS="$ips"
+  export TRAIN_WORKERS="${TRAIN_WORKERS:-0,1}"
+  export VLLM_WORKERS="${VLLM_WORKERS:-2,3,4,5,6,7}"
+
+  export REMOTE_USER="${REMOTE_USER:-$(id -un)}"
+  export SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/ray_bootstrap_key.pem}"
+  mkdir -p "$HOME/.ssh" "$HOME/skyrl-runs" "$HOME/skyrl-logs"
+  chmod 700 "$HOME/.ssh"
+  REPO="${SKYRL_REPO_DIR:-$PWD}"
+
+  # Pool workers are reused across jobs and models: drop the other models' caches
+  # and superseded bundle generations on EVERY VM first (best effort).
+  bash "$REPO/tpu/swarm/reconcile_v5p32_worker.sh" \
+    || echo "worker reconcile failed (continuing)" >&2
+
+  # Every TRAINER VM needs the MaxText/orbax checkpoint locally before the
+  # multi-host trainer starts (each JAX process restores its own shards).
+  # ensure_orbax_ckpt.sh no-ops on VMs outside TRAIN_WORKERS.
+  bash "$REPO/tpu/jobman/ensure_orbax_ckpt.sh"
+
+  # SkyPilot invokes the run command on every VM. The cell is head-driven and
+  # reaches the other ranks over the internal network, so only rank 0 continues.
+  if [ "$JOBMAN_WORKER_ID" != "0" ]; then
+    echo "rank $JOBMAN_WORKER_ID ready; rank 0 owns cell $CELL"
+    exit 0
+  fi
+  if [ ! -f "$SSH_KEY_FILE" ]; then
+    echo "SkyPilot TPU pod key is missing: $SSH_KEY_FILE" >&2
+    exit 2
+  fi
+  chmod 600 "$SSH_KEY_FILE"
+  ln -sfn "$SSH_KEY_FILE" "$HOME/.ssh/jobman_tpu_ed25519"
+
+  # cell_worker treats the FIRST address as the trainer/client host and
+  # TRAIN_WORKERS as positions in that list. Rank 0 must therefore be first.
+  first_ip=$(cut -d, -f1 <<<"$ips")
+  if ! hostname -I 2>/dev/null | tr ' ' '\n' | grep -qxF "$first_ip"; then
+    echo "rank 0 ($(hostname -I)) is not first in SKYPILOT_NODE_IPS ($ips); recovering onto another worker" >&2
+    exit 33
+  fi
+  echo "cell $CELL on v6e-32 (2+6): trainer VMs $(cut -d, -f1,2 <<<"$ips") (rank 0 = client/API); engine VMs $(cut -d, -f3- <<<"$ips")"
+
+  # Whatever way the cell dies, leave all eight VMs clean for the next job (the
+  # pool fork never re-places a failed job). cleanup_v5p32_worker.sh iterates
+  # over JOBMAN_TPU_INTERNAL_IPS, so it covers eight hosts unchanged.
+  cleanup_on_failure() {
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+      bash "$REPO/tpu/swarm/cleanup_v5p32_worker.sh" "$rc" 2>&1 \
+        || echo "cleanup_v5p32_worker.sh itself failed (rc=$?)" >&2
+    fi
+    exit "$rc"
+  }
+  trap cleanup_on_failure EXIT
+
+  bash "$REPO/tpu/jobman/cell_worker.sh"
+  monitor_rc=0
+  bash "$REPO/tpu/jobman/cell_monitor.sh" || monitor_rc=$?
+  exit "$monitor_rc"
+  V6E_WRAPPER
+  exec bash "$HOME/run_v6e32_cell.sh"
