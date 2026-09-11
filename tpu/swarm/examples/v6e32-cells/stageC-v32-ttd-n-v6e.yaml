@@ -90,7 +90,7 @@ envs:
   # 32 GB chips: half the per-fb token budget (two rows, as on v5p); v6e-specific compile caches.
   TUNIX_TRAIN_TOKEN_BUDGET: 36864
   VLLM_MAX_NUM_SEQS: "64"
-  VLLM_EXTRA_ARGS: "--max-num-batched-tokens 4096 --gpu-memory-utilization 0.90"
+  VLLM_EXTRA_ARGS: "--max-num-batched-tokens 2048 --gpu-memory-utilization 0.80"
   TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-qwen35-tp8-fsdp1-r32-s18432-b36864-cells-v1
   VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v6e-qwen35-tp4-s22528-v1
 

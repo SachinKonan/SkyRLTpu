@@ -33,8 +33,13 @@ MODEL_ENV = {
         # 631/632 at the 4096-token x 128-req prefill graph). Halve the
         # compiled batch shapes; KV pool stays at 0.90 (it, not max-num-seqs,
         # bounds concurrency: ~15 full 22k sequences per TP4 engine).
+        # Second OOM (job 638, 15:55Z) at the 4096-token x 64-req graph with the
+        # same 31.38 of 31.25 GB: the KV pool sized at 0.90 leaves only ~3 GB
+        # of compile headroom on a 32 GB chip (v5p at 0.90 leaves ~9.5 GB).
+        # Reserve 20% and halve the prefill chunk again; KV drops to ~8 GB per
+        # chip (~11 full 22k sequences per engine, six engines).
         "VLLM_MAX_NUM_SEQS": '"64"',
-        "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 4096 --gpu-memory-utilization 0.90"',
+        "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 2048 --gpu-memory-utilization 0.80"',
         "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-qwen35-tp8-fsdp1-r32-s18432-b36864-cells-v1",
         # The east5b pool's own qwen TP4 22k engine cache; a version miss just recompiles.
         "VLLM_XLA_CACHE_GCS": f"{BUCKET}/vllm-xla-cache-v6e-qwen35-tp4-s22528-v1",
@@ -44,7 +49,7 @@ MODEL_ENV = {
         "TUNIX_TRAIN_TOKEN_BUDGET": "20480",
         # Gemma already serves 32 seqs at 16k; only the prefill chunk shrinks.
         "VLLM_MAX_NUM_SEQS": '"32"',
-        "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 4096 --disable-chunked-mm-input --gpu-memory-utilization 0.90"',
+        "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 2048 --disable-chunked-mm-input --gpu-memory-utilization 0.80"',
         "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-gemma4-tp8-fsdp1-r32-s10240-b20480-cells-v1",
         "VLLM_XLA_CACHE_GCS": f"{BUCKET}/vllm-xla-cache-v6e-gemma4-31b-tp4-16k-v1",
     },
