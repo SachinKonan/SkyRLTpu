@@ -107,7 +107,10 @@ run: |
     archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
     staging=$(mktemp -d "$bundles/.extract.XXXXXX")
     trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
-    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    for _try in 1 2 3 4 5; do
+      gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive" && break
+      echo "bundle download failed (attempt $_try); retrying in 30s" >&2; sleep 30
+    done
     tar -xzf "$archive" -C "$staging"
     test -r "$staging/tpu/jobman/cell_worker.sh"
     test -r "$staging/tpu/jobman/ensure_orbax_ckpt.sh"

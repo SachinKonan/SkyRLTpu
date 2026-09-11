@@ -127,6 +127,18 @@ def port(name: str, model: str) -> str:
     run = run.replace(
         '    test -r "$staging/tpu/swarm/run_v5p32_cell.sh"\n', ""
     )
+    # One VM's transient GCS error during the bundle download fails the whole
+    # eight-VM attempt with exit 1 and burns one of the three application
+    # restarts (job 638 first attempt: rank 7 exit 1, ranks 0-6 fine). Retry
+    # the copy a few times before giving up.
+    run = run.replace(
+        '    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"\n',
+        '    for _try in 1 2 3 4 5; do\n'
+        '      gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive" && break\n'
+        '      echo "bundle download failed (attempt $_try); retrying in 30s" >&2; sleep 30\n'
+        '    done\n',
+    )
+    assert "bundle download failed" in run, name
     run = run.replace(
         '  exec bash "$SKYRL_REPO_DIR/tpu/swarm/run_v5p32_cell.sh"\n',
         "  # The v5p bundles predate the v6e wrapper; install it from this task.\n"
