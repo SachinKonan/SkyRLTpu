@@ -126,15 +126,16 @@ run: |
   # The cell itself (cell_worker.sh -> start_colocated_vllm_tinker.sh ->
   # cell_monitor.sh) is the unchanged jobman unit; like run_v5p32_cell.sh this
   # wrapper only adapts SkyPilot's multi-node environment to it. Differences from
-  # the v5p-32 wrapper: 8 VMs, TRAIN_WORKERS spans two VMs, so every trainer VM
-  # stages the orbax checkpoint, and the IP list is NOT rotated (TRAIN_WORKERS
-  # indexes SKYPILOT_NODE_IPS positions and VMs 0,1 must stay physically adjacent
-  # for the 2,1,1 process grid); if this VM is rank 0 but not first in the list
-  # we exit 33 (recover_on_exit_codes) instead of guessing a topology.
+  # the v5p-32 wrapper: 8 VMs, the trainer spans several of them so every trainer
+  # VM stages the orbax checkpoint and the resume archives, and the IP list is
+  # NOT rotated (TRAIN_WORKERS indexes SKYPILOT_NODE_IPS positions). The trainer
+  # VMs are chosen below from a chip-coordinate probe, not from the yaml; a
+  # placement this wrapper cannot use exits 33 (recover_on_exit_codes) so the
+  # pool re-places the job rather than building a broken slice.
   #
-  # Layout knobs come from the task yaml: TRAIN_WORKERS=0,1 VLLM_WORKERS=2..7
-  # TRAIN_TP_SIZE=8 TRAIN_FSDP_SIZE=1 TUNIX_ROW_SHARD=1
-  # TRAIN_TPU_PROCESS_BOUNDS=2,1,1 TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1.
+  # V6E_TRAINER_VMS picks the width: 2 (default, qwen) or 4 (gemma, which needs
+  # 16 chips). TRAIN_TP_SIZE / TRAIN_FSDP_SIZE / TUNIX_ROW_SHARD still come from
+  # the yaml; TRAIN_WORKERS, VLLM_WORKERS and TRAIN_TPU_PROCESS_BOUNDS do not.
   # The v6e chip has 32 GB HBM (v5p: 95 GB): TP 8 over 8 chips keeps the
   # per-chip weight footprint under the v5p TP-4 value, and the yaml sets the
   # token budget to ONE sequence per forward/backward call (v5p packed four).
@@ -209,118 +210,116 @@ run: |
     exit 33
   fi
 
-  # SkyPilot's rank order is NOT the physical host order (job 631: ranks 0,1 =
-  # physical workers 0,3, a diagonal pair; job 632: 0,7). A two-VM trainer must
-  # be an ICI-adjacent pair declared to libtpu as a 2,1,1 or 1,2,1 process grid
-  # with task 0 at the lower coordinate, or libtpu aborts with "Mesh build was
-  # incomplete". v6e-32 HOST_BOUNDS is 2,4,1 and GCE's agent-worker-number w
-  # is the physical host index, so host (x, y) = (w % 2, w / 2). Rank 0 (the
-  # API/client host) is always task 0, so its partner must sit at x+1 (2,1,1)
-  # or, failing that, at y+1 (1,2,1); the far corner host has neither -> 33.
+  # SkyPilot's rank order is not the physical host order, and NEITHER IS THE
+  # GCE agent-worker-number: a probe of an idle v6e-32 (worker 1862, 2026-09-11)
+  # read worker 0 at grid (1,3), 1 at (1,0), 2 at (0,1), 3 at (1,2), 4 at (1,1),
+  # 5 at (0,2), 6 at (0,0), 7 at (0,3) -- scrambled, and the scramble differs per
+  # slice. Selecting a trainer block from worker numbers therefore picks
+  # non-contiguous hosts, which libtpu kills with SLICE_FAILURE_CHIP_DRIVER_ERROR
+  # (jobs 671 and 672 on two different workers) or refuses in START_SESSION
+  # (job 643). The only reliable source is the chips themselves, so run
+  # tpu/probe_topology.py as an 8-process job and read each host's global chip
+  # coordinates. A v6e-32 is a 4x8 chip grid = 2x4 hosts of 2x2 chips, so host
+  # position = (min_x / 2, min_y / 2).
   SSHO=(-F /dev/null -i "$SSH_KEY_FILE" -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -o LogLevel=ERROR)
-  meta_url=http://metadata.google.internal/computeMetadata/v1/instance/attributes/agent-worker-number
-  declare -a phys=()
+  probe_py="$REPO/tpu/probe_topology.py"
+  if [ ! -r "$probe_py" ]; then
+    echo "topology: $probe_py missing from the bundle; recovering" >&2
+    exit 33
+  fi
+  # jax + libtpu only, in its own venv: the bundle's .venv is built later by
+  # cell_worker, and this must run before the split is known. Cached per VM.
+  topo_setup='export PATH="$HOME/.local/bin:$PATH"
+    if [ ! -x "$HOME/topo-venv/bin/python" ]; then
+      uv venv --python 3.12 "$HOME/topo-venv" >/dev/null 2>&1 \
+        && uv pip install --python "$HOME/topo-venv/bin/python" -q jax==0.11.1 jaxlib==0.11.1 libtpu==0.0.46 requests==2.32.5 >/dev/null 2>&1
+    fi
+    "$HOME/topo-venv/bin/python" -c "import jax" 2>/dev/null && echo TOPO_VENV_OK || echo TOPO_VENV_FAIL'
+  probe_dir=$(mktemp -d)
   rank=0
   for ip in ${ips//,/ }; do
-    if [ "$rank" -eq 0 ]; then
-      w=$(curl -sf -H 'Metadata-Flavor: Google' "$meta_url" || true)
-    else
-      w=$(timeout 40 ssh "${SSHO[@]}" "$REMOTE_USER@$ip" "curl -sf -H 'Metadata-Flavor: Google' $meta_url" 2>/dev/null || true)
-    fi
-    if ! [[ "$w" =~ ^[0-7]$ ]]; then
-      echo "topology: could not read agent-worker-number of rank $rank ($ip): '$w'; recovering" >&2
-      exit 33
-    fi
-    phys[$rank]=$w
+    ( if [ "$rank" -eq 0 ]; then out=$(bash -c "$topo_setup" 2>&1 | tail -1)
+      else out=$(timeout 600 ssh "${SSHO[@]}" "$REMOTE_USER@$ip" "$topo_setup" 2>&1 | tail -1); fi
+      echo "$out" > "$probe_dir/venv.$rank" ) &
     rank=$((rank + 1))
   done
-  w0=${phys[0]}; x0=$((w0 % 2)); y0=$((w0 / 2))
-
-  # How many VMs the trainer gets. TWO is the default and is what qwen needs:
-  # 8 chips, one sequence per fb call, six engines left for sampling (job 666
-  # resumed and trained that way). FOUR is for gemma-4-31B, whose create_model
-  # jit_scan asks for 6.87 GB and finds 2.68 GB free on 8 chips no matter what
-  # the token budget is -- identical numbers at two rows (job 650) and at one
-  # (job 668), so the overflow is weights plus the vocab workspace, not the
-  # batch. 16 chips halve the per-chip weights and leave room; the cost is two
-  # engines. V6E_TRAINER_VMS=4 selects it.
-  if [ "${V6E_TRAINER_VMS:-2}" = "4" ]; then
-    # 2x2 host block = 4x4 chips, the v6e-16 shape, declared as
-    # TPU_PROCESS_BOUNDS=2,2,1 with CLOUD_TPU_TASK_ID x-fastest, so task 0 is the
-    # block's (min x, min y) host. rank 0 runs the Tinker API and the client and
-    # cell_monitor health-checks 127.0.0.1:8000 there, so rank 0 must BE task 0:
-    # its physical host has to sit at x=0 with y<=2. In every placement observed
-    # so far SkyPilot rank 0 was physical worker 0, so this holds.
-    if [ "$x0" -ne 0 ] || [ "$y0" -gt 2 ]; then
-      echo "topology: rank 0 is physical worker $w0 (x=$x0,y=$y0); a 2x2 block with rank 0 as task 0 needs x=0,y<=2; recovering" >&2
-      exit 33
+  wait
+  for r in $(seq 0 7); do
+    if ! grep -q TOPO_VENV_OK "$probe_dir/venv.$r" 2>/dev/null; then
+      echo "topology: rank $r could not build the probe venv; recovering" >&2
+      rm -rf "$probe_dir"; exit 33
     fi
-    train_ranks=()
-    for yy in "$y0" "$((y0 + 1))"; do
-      for xx in 0 1; do
-        want=$((xx + 2 * yy)); found=""
-        for i in "${!phys[@]}"; do if [ "${phys[$i]}" = "$want" ]; then found=$i; fi; done
-        if [ -z "$found" ]; then
-          echo "topology: physical worker $want not among ranks (${phys[*]}); recovering" >&2
-          exit 33
-        fi
-        train_ranks+=("$found")
-      done
-    done
-    if [ "${train_ranks[0]}" != "0" ]; then
-      echo "topology: task 0 resolved to sky rank ${train_ranks[0]}, not rank 0; recovering" >&2
-      exit 33
-    fi
-    export TRAIN_WORKERS
-    TRAIN_WORKERS=$(IFS=,; echo "${train_ranks[*]}")
-    export TRAIN_TPU_PROCESS_BOUNDS="2,2,1"
-    export VLLM_WORKERS
-    VLLM_WORKERS=$(for r in 0 1 2 3 4 5 6 7; do
-      case ",$TRAIN_WORKERS," in *",$r,"*) ;; *) echo "$r" ;; esac
-    done | paste -sd, -)
-    echo "topology: sky rank -> physical worker: $(for r in "${!phys[@]}"; do printf '%s->%s ' "$r" "${phys[$r]}"; done)"
-    echo "cell $CELL on v6e-32 (4+4): trainer ranks $TRAIN_WORKERS = physical $(for r in "${train_ranks[@]}"; do printf '%s ' "${phys[$r]}"; done)(2x2 block, grid 2,2,1, rank 0 = task 0 = client/API); engine ranks $VLLM_WORKERS"
-    partner_ranks=("${train_ranks[@]:1}")
-  else
-  # Pair orientation. The two 2x2-chip hosts form either a 4x2 chip block
-  # (partner at x+1, process grid 2,1,1) or a 2x4 block (partner at y+1, grid
-  # 1,2,1). 2x4 is the shape of a real v6e-8 slice, so it is the default; the
-  # 4x2 attempt on job 643 died in libtpu's START_SESSION, though that worker's
-  # fabric later failed a whole-slice init too, so the verdict is still open.
-  # V6E_PAIR_AXIS=x forces the 4x2 orientation.
-  pick_partner() {
-    case "$1" in
-      y) [ "$y0" -lt 3 ] && { partner_w=$((w0 + 2)); bounds="1,2,1"; return 0; } ;;
-      x) [ "$x0" -eq 0 ] && { partner_w=$((w0 + 1)); bounds="2,1,1"; return 0; } ;;
-    esac
-    return 1
+  done
+  probe_cmd="env -u TPU_PROCESS_BOUNDS -u TPU_CHIPS_PER_PROCESS_BOUNDS -u TPU_PROCESS_ADDRESSES -u CLOUD_TPU_TASK_ID -u TPU_VISIBLE_CHIPS JAX_PLATFORMS=tpu \$HOME/topo-venv/bin/python $probe_py"
+  rank=0
+  for ip in ${ips//,/ }; do
+    ( if [ "$rank" -eq 0 ]; then out=$(bash -c "$probe_cmd $rank $(cut -d, -f1 <<<"$ips"):9917 8" 2>&1 | grep PROBE_RESULT || true)
+      else out=$(timeout 600 ssh "${SSHO[@]}" "$REMOTE_USER@$ip" "$probe_cmd $rank $(cut -d, -f1 <<<"$ips"):9917 8" 2>&1 | grep PROBE_RESULT || true); fi
+      echo "$out" > "$probe_dir/probe.$rank" ) &
+    rank=$((rank + 1))
+  done
+  wait
+  # The probe holds the chips until it exits; make sure none linger.
+  rank=0
+  for ip in ${ips//,/ }; do
+    if [ "$rank" -eq 0 ]; then pkill -9 -u "$(id -un)" -f '[p]robe_topology' 2>/dev/null || true
+    else timeout 40 ssh "${SSHO[@]}" "$REMOTE_USER@$ip" "pkill -9 -u \$(id -un) -f '[p]robe_topology' 2>/dev/null; true" >/dev/null 2>&1 || true; fi
+    rank=$((rank + 1))
+  done
+  split=$(cat "$probe_dir"/probe.* 2>/dev/null | sed 's/^PROBE_RESULT //' | python3 -c '
+  import json, sys
+  # host grid position from the chip coordinates a host reports
+  pos = {}
+  for line in sys.stdin:
+      line = line.strip()
+      if not line:
+          continue
+      d = json.loads(line)
+      c = d["coords"]
+      pos[int(d["process_id"])] = (min(p[0] for p in c) // 2, min(p[1] for p in c) // 2)
+  if len(pos) != 8:
+      sys.exit("probe returned %d of 8 hosts" % len(pos))
+  want = int(sys.argv[1]) if len(sys.argv) > 1 else 2
+  x0, y0 = pos[0]
+  at = {v: k for k, v in pos.items()}
+  if len(at) != 8:
+      sys.exit("two hosts reported the same grid position")
+  if want == 4:
+      # 2x2 block containing rank 0, with rank 0 at its low corner so that it is
+      # task 0 (CLOUD_TPU_TASK_ID is x-fastest: local_x + 2 * local_y).
+      if x0 != 0 or y0 > 2:
+          sys.exit("rank 0 at (%d,%d) cannot be the low corner of a 2x2 block" % (x0, y0))
+      ranks = [at[(x, y)] for y in (y0, y0 + 1) for x in (0, 1)]
+      bounds = "2,2,1"
+  else:
+      # adjacent pair with rank 0 at the lower coordinate: prefer the y neighbour
+      # (2x4 chips, the v6e-8 shape), else the x neighbour.
+      if (x0, y0 + 1) in at:
+          ranks, bounds = [at[(x0, y0)], at[(x0, y0 + 1)]], "1,2,1"
+      elif (x0 + 1, y0) in at:
+          ranks, bounds = [at[(x0, y0)], at[(x0 + 1, y0)]], "2,1,1"
+      else:
+          sys.exit("rank 0 at (%d,%d) has no neighbour at a higher coordinate" % (x0, y0))
+  if ranks[0] != 0:
+      sys.exit("task 0 resolved to sky rank %d, not 0" % ranks[0])
+  grid = " ".join("%d:(%d,%d)" % (r, pos[r][0], pos[r][1]) for r in sorted(pos))
+  print(",".join(str(r) for r in ranks), bounds, grid)
+  ' "${V6E_TRAINER_VMS:-2}") || {
+    echo "topology: $(cat "$probe_dir"/probe.* 2>/dev/null | wc -l) probe results; selection failed; recovering" >&2
+    rm -rf "$probe_dir"; exit 33
   }
-  partner_w=""; bounds=""
-  case "${V6E_PAIR_AXIS:-y}" in
-    x) pick_partner x || pick_partner y ;;
-    *) pick_partner y || pick_partner x ;;
-  esac
-  if [ -z "$partner_w" ]; then
-    echo "topology: rank 0 is physical worker $w0 (far corner); no partner with a higher coordinate; recovering" >&2
-    exit 33
-  fi
-  partner_rank=""
-  for r in "${!phys[@]}"; do [ "${phys[$r]}" = "$partner_w" ] && partner_rank=$r; done
-  if [ -z "$partner_rank" ]; then
-    echo "topology: physical worker $partner_w not found among ranks (${phys[*]}); recovering" >&2
-    exit 33
-  fi
-  export TRAIN_WORKERS="0,$partner_rank"
-  export TRAIN_TPU_PROCESS_BOUNDS="$bounds"
+  rm -rf "$probe_dir"
+  read -r TRAIN_WORKERS TRAIN_TPU_PROCESS_BOUNDS grid_map <<<"$split"
+  export TRAIN_WORKERS TRAIN_TPU_PROCESS_BOUNDS
   export VLLM_WORKERS
-  # `[ ] && echo` as the loop's last command returns 1 when rank 7 is the
-  # partner, and under set -e that killed the head with a silent exit 1 (jobs
-  # 638/639 on worker 1610, whose physical host 1 is Sky rank 7). Use if/then.
-  VLLM_WORKERS=$(for r in 1 2 3 4 5 6 7; do if [ "$r" -ne "$partner_rank" ]; then echo "$r"; fi; done | paste -sd, -)
-  echo "topology: sky rank -> physical worker: $(for r in "${!phys[@]}"; do printf '%s->%s ' "$r" "${phys[$r]}"; done)"
-  echo "cell $CELL on v6e-32 (2+6): trainer ranks $TRAIN_WORKERS (physical $w0,$partner_w; process grid $bounds; rank 0 = client/API); engine ranks $VLLM_WORKERS"
-  partner_ranks=("$partner_rank")
-  fi
+  VLLM_WORKERS=$(for r in 0 1 2 3 4 5 6 7; do
+    case ",$TRAIN_WORKERS," in *",$r,"*) ;; *) echo "$r" ;; esac
+  done | paste -sd, -)
+  IFS=, read -r -a train_ranks <<<"$TRAIN_WORKERS"
+  partner_ranks=("${train_ranks[@]:1}")
+  IFS=, read -r -a engine_ranks <<<"$VLLM_WORKERS"
+  echo "topology: sky rank -> host grid position: $grid_map"
+  echo "cell $CELL on v6e-32 (${#train_ranks[@]}+${#engine_ranks[@]}): trainer ranks $TRAIN_WORKERS (process grid $TRAIN_TPU_PROCESS_BOUNDS, rank 0 = task 0 = client/API); engine ranks $VLLM_WORKERS"
 
   # Rank 0 staged its own orbax copy above; every other trainer VM needs one too,
   # since each JAX process restores its own shards.
