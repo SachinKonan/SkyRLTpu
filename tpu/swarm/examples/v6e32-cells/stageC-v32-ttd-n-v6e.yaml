@@ -221,11 +221,25 @@ run: |
     rank=$((rank + 1))
   done
   w0=${phys[0]}; x0=$((w0 % 2)); y0=$((w0 / 2))
-  if [ "$x0" -eq 0 ]; then
-    partner_w=$((w0 + 1)); bounds="2,1,1"
-  elif [ "$y0" -lt 3 ]; then
-    partner_w=$((w0 + 2)); bounds="1,2,1"
-  else
+  # Pair orientation. The two 2x2-chip hosts form either a 4x2 chip block
+  # (partner at x+1, process grid 2,1,1) or a 2x4 block (partner at y+1, grid
+  # 1,2,1). 2x4 is the shape of a real v6e-8 slice, so it is the default; the
+  # 4x2 attempt on job 643 died in libtpu's START_SESSION, though that worker's
+  # fabric later failed a whole-slice init too, so the verdict is still open.
+  # V6E_PAIR_AXIS=x forces the 4x2 orientation.
+  pick_partner() {
+    case "$1" in
+      y) [ "$y0" -lt 3 ] && { partner_w=$((w0 + 2)); bounds="1,2,1"; return 0; } ;;
+      x) [ "$x0" -eq 0 ] && { partner_w=$((w0 + 1)); bounds="2,1,1"; return 0; } ;;
+    esac
+    return 1
+  }
+  partner_w=""; bounds=""
+  case "${V6E_PAIR_AXIS:-y}" in
+    x) pick_partner x || pick_partner y ;;
+    *) pick_partner y || pick_partner x ;;
+  esac
+  if [ -z "$partner_w" ]; then
     echo "topology: rank 0 is physical worker $w0 (far corner); no partner with a higher coordinate; recovering" >&2
     exit 33
   fi
