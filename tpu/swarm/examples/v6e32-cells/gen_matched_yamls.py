@@ -49,12 +49,24 @@ MODEL_ENV = {
         "VLLM_XLA_CACHE_GCS": f"{BUCKET}/vllm-xla-cache-v6e-qwen35-tp4-s22528-v1",
     },
     "gemma": {
-        # v5p: TP4, 4 rows of 10240 (BUDGET 40960). v6e: TP8, ONE row (job 650).
-        "TUNIX_TRAIN_TOKEN_BUDGET": "10240",
+        # Gemma needs FOUR trainer VMs. Its create_model jit_scan asks for
+        # 6.87 GB and finds 2.68 GB free on 8 chips, the same numbers at two
+        # rows (job 650) and at one (job 668), so the overflow is the 7.8 GB of
+        # bf16 weights per chip plus gemma's vocab workspace, not the batch.
+        # 16 chips halve the weights; the cost is two of the six engines.
+        # Qwen (27B, vocab tiling 64) fits on two VMs and keeps all six.
+        "V6E_TRAINER_VMS": '"4"',
+        "TRAIN_WORKERS": "0,1,2,3",
+        "VLLM_WORKERS": "4,5,6,7",
+        "TRAIN_FSDP_SIZE": '"2"',
+        "TUNIX_ROW_SHARD": '"2"',
+        "TRAIN_TPU_PROCESS_BOUNDS": "2,2,1",
+        # FSDP 2 shards the rows two ways, so the call carries two of them.
+        "TUNIX_TRAIN_TOKEN_BUDGET": "20480",
         # Gemma already serves 32 seqs at 16k; only the prefill chunk shrinks.
         "VLLM_MAX_NUM_SEQS": '"32"',
         "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 2048 --disable-chunked-mm-input --gpu-memory-utilization 0.80"',
-        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-gemma4-tp8-fsdp1-r32-s10240-b10240-cells-v1",
+        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-gemma4-tp8-fsdp2-r32-s10240-b20480-cells-v1",
         "VLLM_XLA_CACHE_GCS": f"{BUCKET}/vllm-xla-cache-v6e-gemma4-31b-tp4-16k-v1",
     },
 }
@@ -123,12 +135,17 @@ def port(name: str, model: str) -> str:
         out_env.append(line)
     out_env.append("")
     out_env.append("  # v6e-32 layout: two trainer VMs (8 chips, TP8, no FSDP), six engine VMs.")
-    for k, v in LAYOUT_ENV.items():
-        if k == "ZONE":
-            continue
+    # A per-model override replaces the layout default in place; emitting both
+    # would put duplicate keys in the yaml (gemma runs four trainer VMs).
+    layout = {k: v for k, v in LAYOUT_ENV.items() if k != "ZONE"}
+    model_env = dict(MODEL_ENV[model])
+    for k in list(model_env):
+        if k in layout:
+            layout[k] = model_env.pop(k)
+    for k, v in layout.items():
         out_env.append(f"  {k}: {v}")
-    out_env.append("  # 32 GB chips: ONE sequence per forward/backward call (v5p packed four); v6e-specific compile caches.")
-    for k, v in MODEL_ENV[model].items():
+    out_env.append("  # 32 GB chips: one sequence per forward/backward call per FSDP group (v5p packed four); v6e-specific compile caches.")
+    for k, v in model_env.items():
         out_env.append(f"  {k}: {v}")
     envs_out = "\n".join(out_env) + "\n"
 

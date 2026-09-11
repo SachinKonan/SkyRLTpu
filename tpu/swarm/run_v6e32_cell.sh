@@ -115,6 +115,53 @@ for ip in ${ips//,/ }; do
   rank=$((rank + 1))
 done
 w0=${phys[0]}; x0=$((w0 % 2)); y0=$((w0 / 2))
+
+# How many VMs the trainer gets. TWO is the default and is what qwen needs:
+# 8 chips, one sequence per fb call, six engines left for sampling (job 666
+# resumed and trained that way). FOUR is for gemma-4-31B, whose create_model
+# jit_scan asks for 6.87 GB and finds 2.68 GB free on 8 chips no matter what
+# the token budget is -- identical numbers at two rows (job 650) and at one
+# (job 668), so the overflow is weights plus the vocab workspace, not the
+# batch. 16 chips halve the per-chip weights and leave room; the cost is two
+# engines. V6E_TRAINER_VMS=4 selects it.
+if [ "${V6E_TRAINER_VMS:-2}" = "4" ]; then
+  # 2x2 host block = 4x4 chips, the v6e-16 shape, declared as
+  # TPU_PROCESS_BOUNDS=2,2,1 with CLOUD_TPU_TASK_ID x-fastest, so task 0 is the
+  # block's (min x, min y) host. rank 0 runs the Tinker API and the client and
+  # cell_monitor health-checks 127.0.0.1:8000 there, so rank 0 must BE task 0:
+  # its physical host has to sit at x=0 with y<=2. In every placement observed
+  # so far SkyPilot rank 0 was physical worker 0, so this holds.
+  if [ "$x0" -ne 0 ] || [ "$y0" -gt 2 ]; then
+    echo "topology: rank 0 is physical worker $w0 (x=$x0,y=$y0); a 2x2 block with rank 0 as task 0 needs x=0,y<=2; recovering" >&2
+    exit 33
+  fi
+  train_ranks=()
+  for yy in "$y0" "$((y0 + 1))"; do
+    for xx in 0 1; do
+      want=$((xx + 2 * yy)); found=""
+      for i in "${!phys[@]}"; do if [ "${phys[$i]}" = "$want" ]; then found=$i; fi; done
+      if [ -z "$found" ]; then
+        echo "topology: physical worker $want not among ranks (${phys[*]}); recovering" >&2
+        exit 33
+      fi
+      train_ranks+=("$found")
+    done
+  done
+  if [ "${train_ranks[0]}" != "0" ]; then
+    echo "topology: task 0 resolved to sky rank ${train_ranks[0]}, not rank 0; recovering" >&2
+    exit 33
+  fi
+  export TRAIN_WORKERS
+  TRAIN_WORKERS=$(IFS=,; echo "${train_ranks[*]}")
+  export TRAIN_TPU_PROCESS_BOUNDS="2,2,1"
+  export VLLM_WORKERS
+  VLLM_WORKERS=$(for r in 0 1 2 3 4 5 6 7; do
+    case ",$TRAIN_WORKERS," in *",$r,"*) ;; *) echo "$r" ;; esac
+  done | paste -sd, -)
+  echo "topology: sky rank -> physical worker: $(for r in "${!phys[@]}"; do printf '%s->%s ' "$r" "${phys[$r]}"; done)"
+  echo "cell $CELL on v6e-32 (4+4): trainer ranks $TRAIN_WORKERS = physical $(for r in "${train_ranks[@]}"; do printf '%s ' "${phys[$r]}"; done)(2x2 block, grid 2,2,1, rank 0 = task 0 = client/API); engine ranks $VLLM_WORKERS"
+  partner_ranks=("${train_ranks[@]:1}")
+else
 # Pair orientation. The two 2x2-chip hosts form either a 4x2 chip block
 # (partner at x+1, process grid 2,1,1) or a 2x4 block (partner at y+1, grid
 # 1,2,1). 2x4 is the shape of a real v6e-8 slice, so it is the default; the
@@ -152,12 +199,16 @@ export VLLM_WORKERS
 VLLM_WORKERS=$(for r in 1 2 3 4 5 6 7; do if [ "$r" -ne "$partner_rank" ]; then echo "$r"; fi; done | paste -sd, -)
 echo "topology: sky rank -> physical worker: $(for r in "${!phys[@]}"; do printf '%s->%s ' "$r" "${phys[$r]}"; done)"
 echo "cell $CELL on v6e-32 (2+6): trainer ranks $TRAIN_WORKERS (physical $w0,$partner_w; process grid $bounds; rank 0 = client/API); engine ranks $VLLM_WORKERS"
-# Rank 0 already staged the orbax checkpoint above; the chosen partner must
-# hold it too (it may not be rank 1, which is the one the yaml default staged).
-partner_ip=$(cut -d, -f$((partner_rank + 1)) <<<"$ips")
-timeout 3600 ssh "${SSHO[@]}" "$REMOTE_USER@$partner_ip" \
-  "CELL='$CELL' TRAIN_WORKERS='$TRAIN_WORKERS' JOBMAN_WORKER_ID='$partner_rank' SKYRL_REPO_DIR='$REPO' TUNIX_MAXTEXT_CKPT_CACHE_GCS='${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-}' bash '$REPO/tpu/jobman/ensure_orbax_ckpt.sh'" 2>&1 | sed "s/^/[partner] /" \
-  || { echo "topology: partner rank $partner_rank could not stage the orbax checkpoint" >&2; exit 33; }
+partner_ranks=("$partner_rank")
+fi
+
+# Rank 0 staged its own orbax copy above; every other trainer VM needs one too,
+# since each JAX process restores its own shards.
+for pr in "${partner_ranks[@]}"; do
+  timeout 3600 ssh "${SSHO[@]}" "$REMOTE_USER@$(cut -d, -f$((pr + 1)) <<<"$ips")" \
+    "CELL='$CELL' TRAIN_WORKERS='$TRAIN_WORKERS' JOBMAN_WORKER_ID='$pr' SKYRL_REPO_DIR='$REPO' TUNIX_MAXTEXT_CKPT_CACHE_GCS='${TUNIX_MAXTEXT_CKPT_CACHE_GCS:-}' bash '$REPO/tpu/jobman/ensure_orbax_ckpt.sh'" 2>&1 | sed "s/^/[train rank $pr] /" \
+    || { echo "topology: trainer rank $pr could not stage the orbax checkpoint" >&2; exit 33; }
+done
 
 # A resume also needs the RL checkpoint ARCHIVES on every trainer VM, not just
 # rank 0. tunix_backend.load_checkpoint broadcasts the call and each process
@@ -185,18 +236,20 @@ print(last)
 ' || true)
   if [ -n "$latest" ]; then
     read -r ckpt_model ckpt_step <<<"$latest"
-    echo "resume: staging $ckpt_model/$ckpt_step archives on trainer rank $partner_rank"
-    timeout 1800 ssh "${SSHO[@]}" "$REMOTE_USER@$partner_ip" \
-      "set -e; d=\$HOME/gcs/skyrl-checkpoints/$ckpt_model; mkdir -p \$d/sampler_weights
-       for rel in $ckpt_step.tar.gz sampler_weights/$ckpt_step.tar.gz; do
-         if [ -s \"\$d/\$rel\" ]; then echo \"have \$rel\"; continue; fi
-         if gcloud storage cp '$ckpt_gcs/$ckpt_model'/\$rel \"\$d/\$rel\" >/dev/null 2>&1; then
-           echo \"staged \$rel (\$(du -h \"\$d/\$rel\" | cut -f1))\"
-         else
-           rm -f \"\$d/\$rel\"; echo \"MISSING \$rel in $ckpt_gcs/$ckpt_model\"
-         fi
-       done" 2>&1 | sed "s/^/[partner ckpt] /" \
-      || { echo "resume: could not stage RL checkpoints on rank $partner_rank" >&2; exit 33; }
+    for pr in "${partner_ranks[@]}"; do
+      echo "resume: staging $ckpt_model/$ckpt_step archives on trainer rank $pr"
+      timeout 1800 ssh "${SSHO[@]}" "$REMOTE_USER@$(cut -d, -f$((pr + 1)) <<<"$ips")" \
+        "set -e; d=\$HOME/gcs/skyrl-checkpoints/$ckpt_model; mkdir -p \$d/sampler_weights
+         for rel in $ckpt_step.tar.gz sampler_weights/$ckpt_step.tar.gz; do
+           if [ -s \"\$d/\$rel\" ]; then echo \"have \$rel\"; continue; fi
+           if gcloud storage cp '$ckpt_gcs/$ckpt_model'/\$rel \"\$d/\$rel\" >/dev/null 2>&1; then
+             echo \"staged \$rel (\$(du -h \"\$d/\$rel\" | cut -f1))\"
+           else
+             rm -f \"\$d/\$rel\"; echo \"MISSING \$rel in $ckpt_gcs/$ckpt_model\"
+           fi
+         done" 2>&1 | sed "s/^/[ckpt rank $pr] /" \
+        || { echo "resume: could not stage RL checkpoints on rank $pr" >&2; exit 33; }
+    done
   else
     echo "resume: no checkpoints.jsonl rows under $GCS_RUN -- fresh run, nothing to stage"
   fi
