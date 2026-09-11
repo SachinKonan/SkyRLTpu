@@ -164,6 +164,19 @@ run: |
   bash "$REPO/tpu/swarm/reconcile_v5p32_worker.sh" \
     || echo "worker reconcile failed (continuing)" >&2
 
+  # vLLM's engine subprocess renames itself "VLLM::EngineCore" and outlives its
+  # parent; the v20/v21 bundles' cleanup_v5p32_worker.sh predates the fix that
+  # kills it, so every cell on a reused worker inherited the previous cell's
+  # engine cores holding the chips (job 648's trainer partner died with "TPU is
+  # already in use by process 17223", a 643 engine core). Nothing of ours runs
+  # on this VM yet, so any survivor is an orphan.
+  orphans=$(pgrep -u "$(id -un)" -fc 'VLLM::EngineCor[e]' || true)
+  if [ "${orphans:-0}" -gt 0 ]; then
+    echo "rank $JOBMAN_WORKER_ID: killing $orphans orphaned VLLM::EngineCore process(es)"
+    pkill -9 -u "$(id -un)" -f 'VLLM::EngineCor[e]' 2>/dev/null || true
+    sleep 2
+  fi
+
   # SkyPilot invokes the run command on every VM. The cell is head-driven and
   # reaches the other ranks over the internal network, so only rank 0 continues.
   # Non-zero ranks must NOT stage the orbax checkpoint here: which VM partners
