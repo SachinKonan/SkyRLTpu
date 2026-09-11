@@ -37,7 +37,7 @@ MODEL_ENV = {
         # same 31.38 of 31.25 GB: the KV pool sized at 0.90 leaves only ~3 GB
         # of compile headroom on a 32 GB chip (v5p at 0.90 leaves ~9.5 GB).
         # Reserve 20% and halve the prefill chunk again; KV drops to ~8 GB per
-        # chip (~11 full 22k sequences per engine, six engines).
+        # chip (~11 full 22k sequences per engine, four engines).
         "VLLM_MAX_NUM_SEQS": '"64"',
         "VLLM_EXTRA_ARGS": '"--max-num-batched-tokens 2048 --gpu-memory-utilization 0.80"',
         "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-qwen35-tp8-fsdp1-r32-s18432-b36864-cells-v1",
@@ -55,14 +55,16 @@ MODEL_ENV = {
     },
 }
 
+# The wrapper overrides TRAIN_WORKERS / VLLM_WORKERS / TRAIN_TPU_PROCESS_BOUNDS
+# from the physical topology; these are the shape it will produce.
 LAYOUT_ENV = {
     "ZONE": "us-east5-b",
-    "TRAIN_WORKERS": "0,1",
-    "VLLM_WORKERS": "2,3,4,5,6,7",
+    "TRAIN_WORKERS": "0,1,2,3",
+    "VLLM_WORKERS": "4,5,6,7",
     "TRAIN_TP_SIZE": '"8"',
-    "TRAIN_FSDP_SIZE": '"1"',
-    "TUNIX_ROW_SHARD": '"1"',
-    "TRAIN_TPU_PROCESS_BOUNDS": "2,1,1",
+    "TRAIN_FSDP_SIZE": '"2"',
+    "TUNIX_ROW_SHARD": '"2"',
+    "TRAIN_TPU_PROCESS_BOUNDS": "2,2,1",
     "TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS": "2,2,1",
     "VLLM_TP_SIZE": '"4"',
     "VLLM_ENGINES_PER_HOST": '"1"',
@@ -101,8 +103,9 @@ def port(name: str, model: str) -> str:
     head = re.sub(
         r"# One complete four-host tpu-v5p-32 slice.*?\n(# .*\n)*?# Reusing GCS_RUN",
         "# One complete eight-VM tpu-v6e-32 slice from pool tpuswarm-v6e32-east5b-qwen35,\n"
-        "# 2+6 layout: VMs 0-1 = TP8/FSDP1 trainer (VM 0 also client + grader Ray head),\n"
-        "# VMs 2-7 = six TP4 vLLM engines (tpu/swarm/run_v6e32_cell.sh).\n"
+        "# 4+4 layout: a 2x2 physical host block = TP8/FSDP2 trainer over 16 chips\n"
+        "# (its low-corner VM also runs the client + grader Ray head), the other four\n"
+        "# VMs = four TP4 vLLM engines (tpu/swarm/run_v6e32_cell.sh).\n"
         "# Reusing GCS_RUN",
         head,
         flags=re.S,
@@ -118,7 +121,7 @@ def port(name: str, model: str) -> str:
             line = "  ZONE: us-east5-b"
         out_env.append(line)
     out_env.append("")
-    out_env.append("  # v6e-32 layout: two trainer VMs (8 chips, TP8, no FSDP), six engine VMs.")
+    out_env.append("  # v6e-32 layout: four trainer VMs (16 chips, TP8 x FSDP2), four engine VMs.")
     for k, v in LAYOUT_ENV.items():
         if k == "ZONE":
             continue
