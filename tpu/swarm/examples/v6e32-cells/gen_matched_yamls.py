@@ -106,7 +106,7 @@ RESOURCES = """resources:
 """
 
 
-def port(name: str, model: str) -> str:
+def port(name: str, model: str, extra: dict[str, str] | None = None) -> str:
     src = (V5P / f"{name}.yaml").read_text()
     head, rest = src.split("\nresources:\n", 1)
     _, envs_and_run = rest.split("\nenvs:\n", 1)
@@ -139,6 +139,7 @@ def port(name: str, model: str) -> str:
     # would put duplicate keys in the yaml (gemma runs four trainer VMs).
     layout = {k: v for k, v in LAYOUT_ENV.items() if k != "ZONE"}
     model_env = dict(MODEL_ENV[model])
+    model_env.update(extra or {})
     for k in list(model_env):
         if k in layout:
             layout[k] = model_env.pop(k)
@@ -179,12 +180,43 @@ def port(name: str, model: str) -> str:
     return head + "\n" + RESOURCES + "\nenvs:\n" + envs_out + "\nrun: |\n" + run
 
 
+# TP4 variants. cell_worker.sh pads the KV heads to eight logical heads ONLY
+# when TRAIN_TP_SIZE == 8 (gemma global 4 -> 8, qwen 4 -> 8, muse 2 -> 8, via
+# override_model_config). The v5p banks were trained at the default TP4, so
+# their key/value lora_b arrays are (rank, 4, head_dim); the TP8 model wants
+# (rank, 8, head_dim) and the loader matches by name without checking shapes,
+# so every TP8 resume sampled for hours and then failed its first
+# forward_backward with "cannot reshape array of shape (32, 2048) into
+# (32, 8, 512)" (678 at step 11, 666 at step 6, 682 at step 7; 2026-09-12).
+# TP4 x FSDP keeps the bank's geometry. Per device it holds one row at a
+# quarter of the hidden dim instead of one row at an eighth, so the activation
+# footprint is that of the two-row TP8 config that overflowed at create_model
+# (job 650); untested until launched.
+TP4_ENV = {
+    "qwen": {  # 8 chips: TP4 x FSDP2, rows padded to 2 -> two rows per call
+        "TRAIN_TP_SIZE": '"4"',
+        "TRAIN_FSDP_SIZE": '"2"',
+        "TUNIX_ROW_SHARD": '"2"',
+        "TUNIX_TRAIN_TOKEN_BUDGET": "36864",
+        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-qwen35-tp4-fsdp2-r32-s18432-b36864-cells-v1",
+    },
+    "gemma": {  # 16 chips: TP4 x FSDP4, rows padded to 4 -> four rows per call
+        "TRAIN_TP_SIZE": '"4"',
+        "TRAIN_FSDP_SIZE": '"4"',
+        "TUNIX_ROW_SHARD": '"4"',
+        "TUNIX_TRAIN_TOKEN_BUDGET": "40960",
+        "TUNIX_JAX_CACHE_GCS": f"{BUCKET}/jax-compile-cache-v6e-gemma4-tp4-fsdp4-r32-s10240-b40960-cells-v1",
+    },
+}
+
+
 def main() -> None:
     for name, model in CELLS:
-        text = port(name, model)
-        dst = HERE / f"{name}-v6e.yaml"
-        dst.write_text(text)
-        print("wrote", dst.relative_to(ROOT))
+        for suffix, extra in (("", None), ("-tp4", TP4_ENV[model])):
+            text = port(name, model, extra)
+            dst = HERE / f"{name}{suffix}-v6e.yaml"
+            dst.write_text(text)
+            print("wrote", dst.relative_to(ROOT))
 
 
 if __name__ == "__main__":

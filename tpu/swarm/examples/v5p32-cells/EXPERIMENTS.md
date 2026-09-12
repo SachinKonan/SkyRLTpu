@@ -129,7 +129,30 @@ identical at one row), so it runs 4 trainer VMs (TP8/FSDP2, `TUNIX_ROW_SHARD 2`)
 + 4 engines (32 seqs). Inference is the bottleneck, so the 2+6 split is kept
 wherever it fits.
 
-What the port taught us, in order:
+**No v6e cell has completed a training step (found 08:28Z).** 678 sampled
+3.4 h at step 11, then every `forward_backward` failed and the client marked
+the engines sick:
+`TypeError: cannot reshape array of shape (32, 2048) into shape (32, 8, 512)`
+in qwix's LoRA delta. `cell_worker.sh pick_tiles()` applies
+`override_model_config` with `global_num_kv_heads: 8` (gemma; the base config
+is 4 × 512), `base_num_kv_heads: 8` (qwen; base 4) and muse 2 → 8 **only when
+`TRAIN_TP_SIZE == 8`**, so the KV axis can partition eight ways. The v5p
+trainers ran the default TP4, so the banks hold key/value `lora_b` of shape
+(rank, 4, head_dim); the TP8 trainer wants (rank, 8, head_dim), and
+`_state_from_flat` matches checkpoint arrays to template parameters by name
+without a shape check, so the resume "succeeds" and dies at the first matmul,
+hours later. 666's ENGINE-SICK at step 6 (00:40Z) and 682's step-7 restarts
+are the same failure; 682's "3.7 h of training" was sampling. Remedies:
+(A) TP4 on v6e — qwen TP4 × FSDP2, gemma TP4 × FSDP4 — keeps the bank's
+geometry with no bundle change; generated as `*-tp4-v6e.yaml`. Per device it
+means one row at a quarter of the hidden dim instead of an eighth, the same
+activation footprint as the two-row TP8 config that overflowed at
+create_model (job 650), so it may OOM; one launch tells. (B) Pad the
+four KV heads to eight in the LoRA loader (repeat, as the base aligner does)
+and fold back on save — exact, keeps TP8, needs a bundle rebuild. (C) Fresh
+v6e runs, losing banks 6/7/4/11.
+
+What the port taught us about placement, in order:
 
 1. **SkyPilot rank order ≠ physical host order, and neither is the GCE
    `agent-worker-number`**: the number → grid map is scrambled per slice.
