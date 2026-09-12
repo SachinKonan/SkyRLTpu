@@ -137,28 +137,35 @@ What the port taught us, in order:
    `SLICE_FAILURE_CHIP_DRIVER_ERROR`. The wrapper now runs
    `tpu/probe_topology.py` as an 8-process JAX job in a small per-VM venv
    and reads each host's chip coordinates (host = `(min_x/2, min_y/2)`).
-2. **A 4-host block must be aligned to its own height.** Every 2×2 block at
-   grid row 1 (chip rows 2–5) died in libtpu init with
-   `SLICE_FAILURE_SW_INJECT_ERROR` (677 ×3 on one slice, 678 ×1 on another);
-   the block at row 2 (chip rows 4–7) is the one training now. The three
-   partner workers die 3 s later as followers and any engine whose TPU init
-   overlaps the event is killed too, after which the launcher waits ~75 min
-   for it — so every gemma "engine bring-up FAILED (launcher_rc=1)" tonight
-   was this one event. Rule: rank 0 must sit at `(0,0)` or `(0,2)`.
-3. **The 2-host qwen pair fails on some placements** with
-   `TPU_RET_CHECK … GetChip(i)->location().index_on_host() == i (0 vs. 1)`
-   on task 0, **after** CELL-UP (the API comes up before TPU init), so the
-   cell dies 30 min in. Both failures (682 on w1749 and w1935) had the pair
-   at hosts (0,1)+(0,2); the 3.7 h success had it at (1,1)+(1,2).
-   Reproduced in 10 s with `jax.devices()` under `TPU_PROCESS_BOUNDS=1,2,1`:
-   task 0 fails, task 1 initialises with canonical chip order. Root cause
-   still open (column? that VM position? task-0 role?) — control tests
-   pending a free slice.
-4. Therefore the wrapper now **pre-flights** every candidate block (y pair,
-   then x pair for the 2-host case; the single aligned block for 4 hosts)
-   with the trainer's own sub-slice env for ~10 s before staging checkpoints
-   or starting engines, and falls through to the next candidate; none
-   passing exits 33. A bad block costs ~100 s instead of 30–75 min.
+2. **A multi-host sub-slice job must be a union of whole physical machines,
+   and a machine is the two VMs at rows {0,1} or {2,3} of one column.**
+   Measured on an idle slice (06:45Z–06:55Z, nine 10-second
+   `jax.devices()` runs under the trainer's `TPU_PROCESS_BOUNDS`): pairs at
+   rows 0–1 and 2–3 pass; pairs at rows 1–2 fail in both columns and both
+   task orders (`SLICE_FAILURE_CHIP_DRIVER_ERROR`, or
+   `TPU_RET_CHECK … index_on_host() == i`); a 2×2 block at rows 0–1 passes,
+   at rows 1–2 fails with `SLICE_FAILURE_SW_INJECT_ERROR` — gemma's
+   production signature, 677 ×3 and 678 ×1; an x pair cannot even
+   `START_SESSION` (job 643's error); single-host init passes anywhere. The
+   half-machine job is what libtpu calls an "anomalous TPUworker process".
+   In production the three partner workers die 3 s after the head as
+   followers, any engine whose TPU init overlaps is killed too, and the
+   launcher then waits ~75 min for it — every gemma "engine bring-up FAILED
+   (launcher_rc=1)" tonight was this one event.
+3. **libtpu numbers processes by physical position, not `CLOUD_TPU_TASK_ID`**
+   (a whole machine started in reversed order came up with task 0 as
+   process 1). Rank 0, which hosts the client and the API, must therefore be
+   the lower VM of its machine: qwen accepts rank 0 at rows 0 or 2 in either
+   column (4/8 positions), gemma at `(0,0)` or `(0,2)` (2/8). The qwen pair
+   at (0,1)+(0,2) that killed 682 twice — 30 min in, because the API answers
+   health checks before TPU init — is a split machine. One outlier remains:
+   682 trained 3.7 h at (1,1)+(1,2) on w1856, also a split by this rule.
+4. The wrapper also **pre-flights** the chosen block with the trainer's own
+   sub-slice env for ~10 s before staging checkpoints or starting engines;
+   a block libtpu rejects exits 33 in ~100 s instead of 30–75 min. A task
+   whose peer fails blocks in libtpu init and holds its chips, and such a
+   stuck process makes *other* jobs on the slice fail with `SLICE_FAILURE`,
+   so the pre-flight sweeps its own stragglers.
 5. Smaller lessons: replica ids are reused for different physical slices
    (identify a slice by its VM IPs); `pkill -9` of `VLLM::EngineCore`
    orphans on every VM at start (a job-643 core blocked a later trainer with
@@ -172,9 +179,10 @@ Spot waves 02:59Z (7→2 replicas), 03:49Z (3→1), 04:41Z, 06:09Z cost 682 its
 gemma-TTD placement before its trainer started.
 
 Job history (v6e): 631/632 → 659/661 → 666/667 → 671/672 → 677/678/682. State
-at 06:45Z: **678 training** (w1926); 677 on the old wrapper on w1935 with rank 0
-at (0,1) (will fail; cancel blocked); 666 and 682 cancelled; all four yamls
-regenerated with the pre-flight wrapper and ready to launch. Before the qwen TTD
+at 07:00Z: **678 training** (w1926, rows 2–3, whole machines by luck); 677 on
+the old wrapper on a fresh slice (w1939), which accepts row-1 blocks and so
+fails 3 placements in 8 slowly; 666 and 682 cancelled; all four yamls
+regenerated with the machine-rule + pre-flight wrapper and ready to launch. Before the qwen TTD
 relaunch its `checkpoints.jsonl` must drop the dangling step-7 row
 (`model_ab6f3eb8`, no objects under `skyrl-checkpoints/`); backup at
 `…/member_qwen/checkpoints.jsonl.bak-dangling7`.

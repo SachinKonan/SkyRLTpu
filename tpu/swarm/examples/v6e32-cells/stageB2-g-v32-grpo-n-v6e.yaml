@@ -284,30 +284,28 @@ run: |
   at = {v: k for k, v in pos.items()}
   if len(at) != 8:
       sys.exit("two hosts reported the same grid position")
+  # A v6e-32 is 4 physical machines of 8 chips, each exposed as the two VMs at
+  # rows {0,1} or {2,3} of one column. A multi-host sub-slice job must be a union
+  # of WHOLE machines: with TPU_PROCESS_BOUNDS spanning half a machine the
+  # machine-level monitor kills the job ("anomalous TPUworker process detected",
+  # SLICE_FAILURE_SW_INJECT_ERROR / _CHIP_DRIVER_ERROR, or a TPU_RET_CHECK on
+  # index_on_host), and an x pair cannot even START_SESSION. Measured on an idle
+  # slice 2026-09-12 06:45Z-06:55Z (rows 0-1 pass, 2-3 pass, 1-2 fail in both
+  # orders and both columns, 2x2 at rows 0-1 pass, at rows 1-2 fail, x pair
+  # START_SESSION failed); the same geometry explains 677/678/682 in production.
+  # libtpu also numbers processes by physical position whatever
+  # CLOUD_TPU_TASK_ID says, so rank 0 (client/API) must be the LOWER VM of its
+  # machine to be process 0.
+  if y0 not in (0, 2):
+      sys.exit("rank 0 at (%d,%d) is the upper VM of its machine" % (x0, y0))
   if want == 4:
-      # 2x2 block containing rank 0, with rank 0 at its low corner so that it is
-      # task 0 (CLOUD_TPU_TASK_ID is x-fastest: local_x + 2 * local_y).
-      # The block must also be ALIGNED to its own height: every 4-host block
-      # tried at y0=1 (chip rows 2-5) died in libtpu init with
-      # SLICE_FAILURE_SW_INJECT_ERROR (677 x3, 678 x1 on two different slices,
-      # 2026-09-12), while the 2-tall qwen blocks, which are always aligned,
-      # train. Restricting to y0 in {0,2} = chip rows 0-3 or 4-7.
-      if x0 != 0 or y0 not in (0, 2):
-          sys.exit("rank 0 at (%d,%d) is not the low corner of an aligned 2x2 block" % (x0, y0))
+      # both machines of a row pair, x-fastest task order
+      if x0 != 0:
+          sys.exit("rank 0 at (%d,%d) is not the low corner of a 2x2 block" % (x0, y0))
       cands = [([at[(x, y)] for y in (y0, y0 + 1) for x in (0, 1)], "2,2,1")]
   else:
-      # adjacent pair with rank 0 at the lower coordinate: prefer the y neighbour
-      # (2x4 chips, the v6e-8 shape), else the x neighbour. Both are emitted so
-      # the pre-flight below can fall back: the y pair in column 0 failed the
-      # libtpu index_on_host check on two different slices (682, 2026-09-12)
-      # while the same pair in column 1 trained for hours.
-      cands = []
-      if (x0, y0 + 1) in at:
-          cands.append(([at[(x0, y0)], at[(x0, y0 + 1)]], "1,2,1"))
-      if (x0 + 1, y0) in at:
-          cands.append(([at[(x0, y0)], at[(x0 + 1, y0)]], "2,1,1"))
-      if not cands:
-          sys.exit("rank 0 at (%d,%d) has no neighbour at a higher coordinate" % (x0, y0))
+      # rank 0 and the other VM of its machine (2x4 chips, the v6e-8 shape)
+      cands = [([at[(x0, y0)], at[(x0, y0 + 1)]], "1,2,1")]
   for ranks, bounds in cands:
       if ranks[0] != 0:
           sys.exit("task 0 resolved to sky rank %d, not 0" % ranks[0])
