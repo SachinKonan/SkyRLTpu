@@ -287,8 +287,13 @@ run: |
   if want == 4:
       # 2x2 block containing rank 0, with rank 0 at its low corner so that it is
       # task 0 (CLOUD_TPU_TASK_ID is x-fastest: local_x + 2 * local_y).
-      if x0 != 0 or y0 > 2:
-          sys.exit("rank 0 at (%d,%d) cannot be the low corner of a 2x2 block" % (x0, y0))
+      # The block must also be ALIGNED to its own height: every 4-host block
+      # tried at y0=1 (chip rows 2-5) died in libtpu init with
+      # SLICE_FAILURE_SW_INJECT_ERROR (677 x3, 678 x1 on two different slices,
+      # 2026-09-12), while the 2-tall qwen blocks, which are always aligned,
+      # train. Restricting to y0 in {0,2} = chip rows 0-3 or 4-7.
+      if x0 != 0 or y0 not in (0, 2):
+          sys.exit("rank 0 at (%d,%d) is not the low corner of an aligned 2x2 block" % (x0, y0))
       ranks = [at[(x, y)] for y in (y0, y0 + 1) for x in (0, 1)]
       bounds = "2,2,1"
   else:
