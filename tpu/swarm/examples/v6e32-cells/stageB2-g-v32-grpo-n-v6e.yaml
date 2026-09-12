@@ -294,27 +294,80 @@ run: |
       # train. Restricting to y0 in {0,2} = chip rows 0-3 or 4-7.
       if x0 != 0 or y0 not in (0, 2):
           sys.exit("rank 0 at (%d,%d) is not the low corner of an aligned 2x2 block" % (x0, y0))
-      ranks = [at[(x, y)] for y in (y0, y0 + 1) for x in (0, 1)]
-      bounds = "2,2,1"
+      cands = [([at[(x, y)] for y in (y0, y0 + 1) for x in (0, 1)], "2,2,1")]
   else:
       # adjacent pair with rank 0 at the lower coordinate: prefer the y neighbour
-      # (2x4 chips, the v6e-8 shape), else the x neighbour.
+      # (2x4 chips, the v6e-8 shape), else the x neighbour. Both are emitted so
+      # the pre-flight below can fall back: the y pair in column 0 failed the
+      # libtpu index_on_host check on two different slices (682, 2026-09-12)
+      # while the same pair in column 1 trained for hours.
+      cands = []
       if (x0, y0 + 1) in at:
-          ranks, bounds = [at[(x0, y0)], at[(x0, y0 + 1)]], "1,2,1"
-      elif (x0 + 1, y0) in at:
-          ranks, bounds = [at[(x0, y0)], at[(x0 + 1, y0)]], "2,1,1"
-      else:
+          cands.append(([at[(x0, y0)], at[(x0, y0 + 1)]], "1,2,1"))
+      if (x0 + 1, y0) in at:
+          cands.append(([at[(x0, y0)], at[(x0 + 1, y0)]], "2,1,1"))
+      if not cands:
           sys.exit("rank 0 at (%d,%d) has no neighbour at a higher coordinate" % (x0, y0))
-  if ranks[0] != 0:
-      sys.exit("task 0 resolved to sky rank %d, not 0" % ranks[0])
-  grid = " ".join("%d:(%d,%d)" % (r, pos[r][0], pos[r][1]) for r in sorted(pos))
-  print(",".join(str(r) for r in ranks), bounds, grid)
+  for ranks, bounds in cands:
+      if ranks[0] != 0:
+          sys.exit("task 0 resolved to sky rank %d, not 0" % ranks[0])
+      print("CAND", ",".join(str(r) for r in ranks), bounds)
+  print("GRID", " ".join("%d:(%d,%d)" % (r, pos[r][0], pos[r][1]) for r in sorted(pos)))
   ' "${V6E_TRAINER_VMS:-2}") || {
     echo "topology: $(cat "$probe_dir"/probe.* 2>/dev/null | wc -l) probe results; selection failed; recovering" >&2
     rm -rf "$probe_dir"; exit 33
   }
   rm -rf "$probe_dir"
-  read -r TRAIN_WORKERS TRAIN_TPU_PROCESS_BOUNDS grid_map <<<"$split"
+  grid_map=$(sed -n 's/^GRID //p' <<<"$split")
+
+  # Pre-flight: bring a candidate block up once with the trainer's own sub-slice
+  # environment (jax + libtpu only, ~10 s) BEFORE staging 40 GB of checkpoints
+  # onto it and starting engines. A block that libtpu rejects otherwise costs
+  # 30 min (qwen: TPU_RET_CHECK index_on_host()==i on the head after CELL-UP,
+  # 682 twice) or 75 min (gemma: SLICE_FAILURE_SW_INJECT_ERROR plus a launcher
+  # waiting on engines the event killed, 677/678). A task whose peer failed
+  # blocks forever, hence the timeout and the sweep afterwards.
+  preflight_block() {  # $1 = comma-separated sky ranks in task order, $2 = process bounds
+    local ranks=$1 bounds=$2 t r ip addrs="" pf_dir ok
+    local -a pf_ranks pf_ips
+    IFS=, read -r -a pf_ranks <<<"$ranks"
+    IFS=, read -r -a pf_ips <<<"$ips"
+    for r in "${pf_ranks[@]}"; do addrs="$addrs${addrs:+,}${pf_ips[$r]}:8478"; done
+    local py='import jax; ds=jax.devices(); print("PREFLIGHT_OK", len(ds))'
+    local cmd="env -u TPU_VISIBLE_CHIPS -u TPU_HOST_BOUNDS JAX_PLATFORMS=tpu TPU_PROCESS_BOUNDS=$bounds TPU_CHIPS_PER_PROCESS_BOUNDS=2,2,1 TPU_PROCESS_ADDRESSES=$addrs TPU_PROCESS_PORT=8478"
+    pf_dir=$(mktemp -d)
+    t=0
+    for r in "${pf_ranks[@]}"; do
+      ip=${pf_ips[$r]}
+      ( if [ "$r" -eq 0 ]; then out=$(timeout 100 bash -c "$cmd CLOUD_TPU_TASK_ID=$t \$HOME/topo-venv/bin/python -c '$py'" 2>&1)
+        else out=$(timeout 100 ssh "${SSHO[@]}" "$REMOTE_USER@$ip" "$cmd CLOUD_TPU_TASK_ID=$t \$HOME/topo-venv/bin/python -c '$py'" 2>&1); fi
+        grep -E 'PREFLIGHT_OK|RET_CHECK|SLICE_FAILURE|already in use|Error' <<<"$out" | head -1 > "$pf_dir/task.$t" ) &
+      t=$((t + 1))
+    done
+    wait
+    for r in "${pf_ranks[@]}"; do
+      ip=${pf_ips[$r]}
+      if [ "$r" -eq 0 ]; then pkill -u "$(id -un)" -f 'topo-venv/bin/python -c' 2>/dev/null || true
+      else timeout 40 ssh "${SSHO[@]}" "$REMOTE_USER@$ip" "pkill -u \$(id -un) -f 'topo-venv/bin/python -c' 2>/dev/null; true" >/dev/null 2>&1 || true; fi
+    done
+    for f in "$pf_dir"/task.*; do echo "preflight[block $ranks, task ${f##*.}]: $(head -c 200 "$f")"; done
+    ok=$(cat "$pf_dir"/task.* 2>/dev/null | grep -c "PREFLIGHT_OK $(( ${#pf_ranks[@]} * 4 ))\$" || true)
+    rm -rf "$pf_dir"
+    [ "${ok:-0}" -eq "${#pf_ranks[@]}" ]
+  }
+  TRAIN_WORKERS=""; TRAIN_TPU_PROCESS_BOUNDS=""
+  while read -r tag cand_ranks cand_bounds; do
+    [ "$tag" = CAND ] || continue
+    if preflight_block "$cand_ranks" "$cand_bounds"; then
+      TRAIN_WORKERS=$cand_ranks; TRAIN_TPU_PROCESS_BOUNDS=$cand_bounds; break
+    fi
+    echo "preflight: block $cand_ranks (process grid $cand_bounds) failed libtpu init; trying the next candidate"
+  done <<<"$split"
+  if [ -z "$TRAIN_WORKERS" ]; then
+    echo "topology: $grid_map"
+    echo "preflight: no candidate trainer block passes libtpu init on this slice; recovering" >&2
+    exit 33
+  fi
   export TRAIN_WORKERS TRAIN_TPU_PROCESS_BOUNDS
   export VLLM_WORKERS
   VLLM_WORKERS=$(for r in 0 1 2 3 4 5 6 7; do
