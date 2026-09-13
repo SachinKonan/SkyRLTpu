@@ -260,6 +260,24 @@ condition that otherwise kills the next cell in bring-up (FAILED_DRIVER).
 | # | Purpose | Cell | Job | Objective | Tree | Weights |
 |---|---|---|---|---|---|---|
 | 1 | muse on the BEST qwen tree | stageH-m-on-qpwc | **716** | LOO 4e-5 | top-48 of stageC-pwc-n s12 (0.380857586) | muse best |
+
+### NEW PROJECT RECORD, 2026-09-13 ~17:3xZ: C₅ = 0.380856776762 (job 716, step 3, n = 801)
+
+Independently recomputed from the raw construction in `puct_sampler_step_000004.json`: recomputed
+value equals the stored value exactly, h ∈ [0, 1], sum(h) = 400.5 = n/2 exactly. Archived with
+provenance and code at `tpu/results/erdos-crossmodel-analysis/best_construction_c5_0.380856777.json`.
+
+| Comparison | Delta |
+|---|---|
+| previous project best, stageC-pwc-n 0.3808575857 | **−8.09e-7** |
+| published record 0.3808753232 (n = 600) | **−1.855e-5** |
+| the prompt's 0.38080 target | +5.68e-5 |
+
+Found by **muse at step 3 of 15**, on the qwen tree it was handed, using its own carried weights.
+Two details make it more than a polish: the grid is **n = 801**, larger than anything in the
+reference library (qwen 500, gemma 536, muse 512, gpt-oss 144), so it moved to a new resolution;
+and the program is smooth-max + SLSQP, i.e. **qwen's method**, not muse's usual numba kernels — the
+method transferred along with the construction. The run still has 11 steps left.
 | 2 | qwen seed 1 | stageG-q-rep1 | **709** | centered 1.5e-4 | fresh | fresh |
 | 3 | qwen seed 2 | stageG-q-rep2 | **710** | centered 1.5e-4 | fresh | fresh |
 | 4 | gemma seed 1 | stageG-g-rep1 | **717** | centered 4e-5 | fresh | fresh |
