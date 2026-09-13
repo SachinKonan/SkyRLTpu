@@ -248,6 +248,44 @@ sees all four solutions, its own included; summaries carry the method only, no
 objective/tree/step provenance), `TTD_EXEMPLARS_MODE=summary` (~800 tokens; `code`
 adds 2500-char excerpts, ~3400 tokens, for gpt-oss). Off when the path is unset.
 
+## Mixture of Models (user, 2026-09-13): seed variance first, then transfer
+
+Every cross-model number we have quoted is **n = 1 per (model, config)**, so none of the deltas
+(tree carry +6.2e-7, context-mix polish 1.3e-9, gemma's 5.6e-6 context gain) can be separated
+from seed noise. The plan, in dependency order:
+
+### Stage G, gen-0 seed replication (launched 2026-09-13 00:3xZ)
+
+| Cell | Job | Model | Objective | LR | Tree | Weights |
+|---|---|---|---|---|---|---|
+| stageG-q-rep1 | **709** | qwen | centered piecewise | 1.5e-4 | fresh random | fresh |
+| stageG-q-rep2 | **710** | qwen | centered piecewise | 1.5e-4 | fresh random | fresh |
+| stageG-m-rep1 | **711** | muse | piecewise LOO | 4e-5 | fresh random | fresh |
+| stageG-m-rep2 | **712** | muse | piecewise LOO | 4e-5 | fresh random | fresh |
+
+Bundle v23, ORIGINAL prompt (no exemplars). Reference points: qwen stageC-pwc-n 0.380857586,
+muse stageB-m-pw-n 0.380860445. Deliverable: the same-config spread that any transfer effect
+must beat, plus matched parents for Stage H.
+
+### Stage H, muse on qwen (blocked on Stage G finishing)
+
+Two runs, each seeded from one qwen rep's final tree (`build_meta_seed.py --op winner-top16`),
+muse carrying its own best weights — the design of `meta-wt16-carry-g0-muse` (0.380858715) but
+now with a matched same-seed qwen parent to compare against.
+
+### Prompt variation on the best qwen (3 runs, not yet built)
+
+Hold model + objective fixed (qwen centered 1.5e-4, FRESH weights so the prompt is the only
+variable vs Stage G), vary the prompt: (P2) references in summary mode = the existing unlaunched
+`stageF-q-ctx-n.yaml`; (P3) references in code mode; (P4) references with no "start from the best
+one" steering, to test the diversity collapse seen in 587 (all 63 programs took the single top
+reference at n=500). P4 needs an env.py switch and a new bundle.
+
+**Objective confound to resolve:** the Stage F context cells all use centered piecewise (user's
+call), but muse's best is LOO by 1.6e-5, so 627 (muse, centered + context) is NOT comparable to
+711/712 (muse, LOO). Its correct baseline is the single `stageB-m-pwc-n` run (0.380876406), or a
+muse-centered seed rep has to be added.
+
 ## gpt-oss 120B on the Ray v2 executor (2 trainer hosts + 2 engine hosts per v5p-32)
 
 Goal: test the objective ranking (GRPO vs TTD vs centered piecewise) on a second model family. gpt-oss-120b (MXFP4 experts) needs two hosts for the MaxText trainer (tp 4, fsdp 2) and two for vLLM (tp 4), so this is the first Ray v2 topology with `trainer.hosts=2`. Profiles: `tpu/swarm/ray_train/profiles/gptoss120b_v5p_32_{grpo,ttd,pwc}.json` (worktree `SkyRLTpu-gptoss`, branch `agent/tunix-multihost-gptoss`). Executor defaults were first made identical to the legacy v5p cell launcher (prefix caching, 8192 batched tokens, seq buckets, direct routing, exact package pins incl. jax 0.11.1 trainer / 0.10.1 engine).
