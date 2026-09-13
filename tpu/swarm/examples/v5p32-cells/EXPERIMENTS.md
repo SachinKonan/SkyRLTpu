@@ -248,6 +248,42 @@ sees all four solutions, its own included; summaries carry the method only, no
 objective/tree/step provenance), `TTD_EXEMPLARS_MODE=summary` (~800 tokens; `code`
 adds 2500-char excerpts, ~3400 tokens, for gpt-oss). Off when the path is unset.
 
+## Stage I: the prompt redesign (2026-09-13 ~21:0xZ, bundle v29, discover 492b02c)
+
+**Why Stage F was replaced.** The three Stage F context cells (625 qwen, 626 gemma, 719 muse)
+produced **586 programs at exactly TWO grid sizes**, 500 and 512, both copied from the library,
+and all three flatlined at the library's own best value with per-step gains of 0 to 1e-10:
+
+| arm | programs | grids explored | on a library grid | final |
+|---|---|---|---|---|
+| qwen prompt (626) | 144 | {500} | 100 % | 0.380857583, flat from step 3 |
+| gemma prompt (625) | 241 | {500} | 100 % | 0.380857583, flat from step 3 |
+| muse prompt (719) | 201 | {500, 512} | 100 % | 0.380857008 |
+| muse on qwen TREE (716) | 161 | {512, 601, 800, 801, 481, …} | 17 % | **0.380856777 (record)** |
+| qwen unaided (709) | 313 | {82, 328, 512, 121, 200, …} | 9 % | 0.380875 |
+
+Diagnosis: **copying an array copies its length**. Handing every rollout the SAME construction in
+the SAME variable collapses the search onto one resolution. The arms fed through the PUCT tree see
+a different node per rollout, so they keep exploring — and the record came from n = 801, a grid no
+reference used. It is not a construction-vs-code issue: the tree arm reads qwen's code too (states
+carry their program) and still diverged.
+
+**Stage I (user's design).** Gen-0 setup — fresh random tree, ordinary `initial_h_values` — plus
+each model's own carried gen-0 weights, plus ~530 tokens saying what qwen/muse/gemma each REACHED
+and HOW. `TTD_EXEMPLARS_SANDBOX=0`: no `reference_constructions`, no code, no "start from this one"
+sentence, and an explicit note that the discretisation is the model's own choice. Prompt grows
+528 → 1090 tokens. Options rejected on length alone: full code or inlined numbers would add ~4.2k
+tokens, and gemma's context is 10240 with its programs needing 5-6k.
+
+| Cell | Job | Model | Objective | Weights | Compare against |
+|---|---|---|---|---|---|
+| stageI-q-insp-n | **772** | qwen | centered 1.5e-4 | qwen best | 709/710 (no context), 626 (context + arrays) |
+| stageI-g-insp-n | **773** | gemma | centered 4e-5 | gemma best | 717/718, 625 |
+| stageI-m-insp-n | **774** | muse | LOO 4e-5 | muse best | 719 |
+
+625/626/719 cancelled at their flatline; their workers (435, 461, 449) were process-killed and
+disk-swept (8-25 GB → 60-77 GB free) before 772/773/774 landed on them.
+
 ## Mixture of Models (user, 2026-09-13): THE critical set, everything else cancelled
 
 Per the user 2026-09-13 ~02:00Z ("make sure that everything running is our critical set"), the v5p
