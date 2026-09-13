@@ -237,7 +237,9 @@ durable. User's order afterwards: context-mixing cells before the rest; the thre
 handed to that session for resubmission (same GCS_RUN, so 587 resumes from step 2).
 **Resubmitted ~18:00Z 2026-09-10 as 625 (gemma, resumes step 2), 626 (qwen, clean), 627 (muse,
 clean)**; all PENDING behind 615/608/557 with 0 idle workers and 40 replicas waiting for
-resources.
+resources. The v5p pool then had **no live worker for ~2 days** (every job on it PENDING).
+**All three placed 2026-09-13 ~00:1xZ**: 627 muse on worker 406 (CELL-UP, weights-carry from
+`model_df2f51fc/000011` confirmed), 626 qwen on 418, 625 gemma on 425 (resumes from step 2).
 
 Env (discover `examples/erdos_min_overlap/env.py`, via `EXTRA_TTD_ENV`):
 `TTD_EXEMPLARS_PATH=examples/erdos_min_overlap/exemplars/erdos_gen0_exemplars.json`
