@@ -248,7 +248,34 @@ sees all four solutions, its own included; summaries carry the method only, no
 objective/tree/step provenance), `TTD_EXEMPLARS_MODE=summary` (~800 tokens; `code`
 adds 2500-char excerpts, ~3400 tokens, for gpt-oss). Off when the path is unset.
 
-## Mixture of Models (user, 2026-09-13): seed variance first, then transfer
+## Mixture of Models (user, 2026-09-13): THE critical set, everything else cancelled
+
+Per the user 2026-09-13 ~02:00Z ("make sure that everything running is our critical set"), the v5p
+pool now runs ONLY these eight. Cancelled to make room: gpt-oss 608/628/630, the pool session's
+615/616/617/620, and my own out-of-plan 627/711/712. Freed workers were swept before reuse
+(kill the detached tmux cell + vLLM EngineCore + grader Ray, then `reconcile_v5p32_worker.sh`
+with `RECONCILE_WIPE_ALL=1`): engine hosts went from 6–7 GB free to 74–77 GB, which is the
+condition that otherwise kills the next cell in bring-up (FAILED_DRIVER).
+
+| # | Purpose | Cell | Job | Objective | Tree | Weights |
+|---|---|---|---|---|---|---|
+| 1 | muse on the BEST qwen tree | stageH-m-on-qpwc | **716** | LOO 4e-5 | top-48 of stageC-pwc-n s12 (0.380857586) | muse best |
+| 2 | qwen seed 1 | stageG-q-rep1 | **709** | centered 1.5e-4 | fresh | fresh |
+| 3 | qwen seed 2 | stageG-q-rep2 | **710** | centered 1.5e-4 | fresh | fresh |
+| 4 | gemma seed 1 | stageG-g-rep1 | **717** | centered 4e-5 | fresh | fresh |
+| 5 | gemma seed 2 | stageG-g-rep2 | **718** | centered 4e-5 | fresh | fresh |
+| 6 | prompt, qwen | stageF-q-ctxw-n | **626** | centered 1.5e-4 | fresh | qwen best |
+| 7 | prompt, gemma | stageF-g-ctxw-n | **625** | centered 4e-5 | fresh (resumes step 2) | gemma best |
+| 8 | prompt, muse | stageF-m-ctxl-n | **719** | LOO 4e-5 | fresh | muse best |
+
+Note on 1: recomputing the old wt16 seed showed it was the top-48 of the qwen **GRPO** tree
+(best 0.380859355), not the best qwen — so `meta-wt16-carry-g0-muse` (0.380858715) was handicapped
+by 1.77e-6. Measured as gain over the source each channel was given, the old tree carry actually
+did MORE (6.4e-7 in 15 steps) than the context prompt (1.3e-9 in 2 steps); the prompt only looked
+better because it was handed the stronger construction. Both are plausibly inside seed noise,
+which is what rows 2–5 exist to measure.
+
+## Earlier framing of the same plan
 
 Every cross-model number we have quoted is **n = 1 per (model, config)**, so none of the deltas
 (tree carry +6.2e-7, context-mix polish 1.3e-9, gemma's 5.6e-6 context gain) can be separated
