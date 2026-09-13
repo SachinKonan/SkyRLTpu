@@ -1,6 +1,6 @@
 name: stageG-g-rep1
 
-Stage G seed replication 1/2: gemma centered piecewise, lr 4e-5, 16x32 elite 2
+# Stage G seed replication 1/2: gemma centered piecewise, lr 4e-5, 16x32 elite 2
 # (stageB2-g-pwc-n reached 0.380863427 @12). SAME config, SAME original prompt (no exemplars),
 # bundle v23; a fresh independent draw of the random initial states. Mixture-of-Models question 1:
 # what is the seed-to-seed spread any transfer effect has to beat?

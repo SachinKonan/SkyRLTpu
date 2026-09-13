@@ -1,6 +1,6 @@
 name: stageH-m-on-qpwc
 
-Stage H: muse on the BEST qwen tree. The PUCT tree is seeded with the top-48 of stageC-pwc-n
+# Stage H: muse on the BEST qwen tree. The PUCT tree is seeded with the top-48 of stageC-pwc-n
 # snapshot 12 (qwen centered, best 0.380857586); muse carries its own best weights
 # (stageB-m-pw-n step 11) with a fresh optimizer and keeps its best objective (piecewise LOO).
 # This is the fair rerun of meta-wt16-carry-g0-muse (0.380858715), which was seeded from the qwen
