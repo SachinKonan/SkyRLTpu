@@ -156,6 +156,10 @@ class Inference:
     extra_args: list[str] = field(default_factory=list)
     # Extra engine environment (e.g. MOE_REQUANTIZE_WEIGHT_DTYPE for gpt-oss).
     engine_env: dict[str, str] = field(default_factory=dict)
+    # Muse needs the native model registration plugin as well as LoRA plugins.
+    # Remove the allow-list after applying inherited/profile environment values.
+    unset_plugins: bool = False
+    native_thinking_budget: bool = False
     transformers_version: str = "5.8.0"
     # "direct": the trainer round-robins straight to the engines and pushes
     # adapters to each one (legacy). "ingress": every request and adapter goes
@@ -227,7 +231,8 @@ PRESETS = {
                      lora_load_retries=20, lora_load_retry_sleep=30.0, request_timeout=1800),
         inference=dict(max_sequences=64, max_model_length=22528, chunk_tokens=8192,
                        skip_precompile=True, batched_rpa_kernel=True, ragged_conv1d=True,
-                       tpu_backend="jax", limit_mm_per_prompt="", transformers_version=""),
+                       tpu_backend="jax", limit_mm_per_prompt="", transformers_version="",
+                       unset_plugins=True),
         client_context_window=18432, client_phase1_max_tokens=13824),
     "gpt-oss-120b": ModelPreset(
         # Trainer: orbax export from the d388 MaxText fork with sparse expert
@@ -269,6 +274,17 @@ class Config:
     importance_cap: float = 2.0
     inference_only: bool = False
     inference_only_ranks: list[int] | None = None
+    arena_samples: int = 0
+    frozen_benchmark: dict = field(default_factory=dict)
+    training_smoke: bool = False
+    arena_service_only: bool = False
+    # One independent base model on each inference rank, for arena comparisons.
+    # Each entry specifies model_preset plus its own inference/cache overrides.
+    arena_models: list[dict] = field(default_factory=list)
+    arena_replicas_per_model: int = 1
+    arena_concurrency: int = 8
+    arena_max_tokens: int = 8192
+    arena_thinking_tokens: int | None = None
     ports: Ports = field(default_factory=Ports)
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
@@ -292,6 +308,31 @@ class Config:
     trainer_env: dict[str, str] = field(default_factory=dict)
     retired_task_ids: list[str] = field(default_factory=list)
     retired_processes: dict = field(default_factory=dict)
+
+    @property
+    def is_recurrent_gemma(self):
+        return self.client_env.get("TTD_ENV") in (
+            "recurrent_gemma", "recurrentgemma", "pallas_rglru", "rg_lru")
+
+    @property
+    def requires_source_overlay(self):
+        return (self.adapter_count > 1 or self.is_recurrent_gemma or self.training_smoke
+                or self.has_problem_prompt_overlay or self.has_adaptive_pwc_overlay
+                or self.has_answer_only_overlay or (self.inference.native_thinking_budget and not self.inference_only))
+
+    @property
+    def has_answer_only_overlay(self):
+        return self.client_env.get("TTD_ANSWER_ONLY_CODE") == "1"
+
+    @property
+    def has_adaptive_pwc_overlay(self):
+        return self.client_env.get("TTD_ADV_ESTIMATOR") == "piecewise_valid_entropic_centered_adaptive"
+
+    @property
+    def has_problem_prompt_overlay(self):
+        env = self.client_env.get("TTD_ENV")
+        return (env == "circle_packing" or
+                env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") == "ac2")
 
     @classmethod
     def from_dict(cls, raw):
@@ -327,6 +368,54 @@ class Config:
         return asdict(self)
 
     def validate(self):
+        if self.has_answer_only_overlay:
+            if not (self.has_problem_prompt_overlay or self.is_recurrent_gemma):
+                raise ValueError("answer-only extraction is enabled only for AC2, circle packing and RG-LRU")
+            if self.client_env.get("TTD_ANSWER_MODEL_FAMILY") not in ("qwen", "gemma", "muse"):
+                raise ValueError("answer-only extraction requires an explicit model family")
+        if self.has_adaptive_pwc_overlay and not (self.has_problem_prompt_overlay or self.is_recurrent_gemma):
+            raise ValueError("adaptive PWC is enabled only for AC2, circle packing and RG-LRU")
+        if self.training_smoke and (self.inference_only or self.adapter_count != 1 or self.client_env.get('NUM_EPOCHS') != '1'):
+            raise ValueError('training smoke requires one adapter and exactly one training step')
+        if self.arena_service_only and (not self.inference_only or not self.arena_samples):
+            raise ValueError('arena service requires an inference-only judge profile')
+        if type(self.arena_samples) is not int or not 0 <= self.arena_samples <= 256:
+            raise ValueError("arena_samples must be an integer between 0 and 256")
+        if type(self.arena_replicas_per_model) is not int or self.arena_replicas_per_model not in (1, 2):
+            raise ValueError("arena_replicas_per_model must be 1 or 2")
+        arena_ranks = list(range(1, 3 * self.arena_replicas_per_model + 1))
+        if self.arena_samples and (not self.inference_only or self.trainer.hosts != 0
+                or self.inference_only_ranks != arena_ranks or self.hosts not in (4, 8)
+                or max(arena_ranks) >= self.hosts):
+            raise ValueError("Arena sampling requires one judge host and three equally replicated models")
+        if self.arena_models:
+            if not self.arena_samples or len(self.arena_models) != 3:
+                raise ValueError("arena_models requires three models and arena sampling")
+            names = [entry.get("model_preset") for entry in self.arena_models]
+            if len(set(names)) != 3 or any(n not in PRESETS for n in names):
+                raise ValueError("arena_models requires three distinct known presets")
+            for rank in self.inference_only_ranks:
+                child = self.for_inference_rank(rank)
+                if child.inference.hosts_per_engine != 1 or child.inference.tp != 4:
+                    raise ValueError("arena_models requires a single-host TP4 engine per model")
+                if self.arena_concurrency > child.inference.max_sequences:
+                    raise ValueError("arena concurrency exceeds engine capacity")
+        if (type(self.arena_concurrency) is not int or self.arena_concurrency < 1
+                or type(self.arena_max_tokens) is not int or self.arena_max_tokens < 1):
+            raise ValueError("arena concurrency and token limit must be positive integers")
+        if type(self.inference.native_thinking_budget) is not bool:
+            raise ValueError("native_thinking_budget must be a boolean")
+        if self.inference.native_thinking_budget:
+            if self.model_preset not in ("qwen3.5-27b", "gemma4-31b", "muse-glimmer-30b"):
+                raise ValueError("unsupported native thinking model")
+            if not self.inference_only and (self.adapter_count != 1 or self.client_env.get("TTD_MIN_THINK_TOKENS", "0") != "0"):
+                raise ValueError("native training currently requires one adapter and min_think_tokens=0")
+        if self.arena_thinking_tokens is not None:
+            if (type(self.arena_thinking_tokens) is not int or self.arena_thinking_tokens < 0
+                    or self.arena_thinking_tokens + 128 >= self.arena_max_tokens):
+                raise ValueError("thinking cap must reserve transition and answer tokens")
+            if not self.arena_samples or not self.inference.native_thinking_budget:
+                raise ValueError("arena thinking cap requires native thinking budget serving")
         import math
         if type(self.adapter_count) is not int or self.adapter_count < 1:
             raise ValueError("adapter_count must be a positive integer")
@@ -394,8 +483,11 @@ class Config:
             bounds = [int(x) for x in self.trainer.process_bounds.split(",")]
             if len(bounds) != 3 or bounds[0] * bounds[1] * bounds[2] != self.trainer.hosts:
                 raise ValueError("trainer process_bounds must multiply to the trainer host count")
-        if self.inference.tp != 4 or not 0 < self.inference.memory_utilization < 1:
-            raise ValueError("require independent four-chip engines and a memory reserve")
+        if self.inference.tp not in (2, 4) or not 0 < self.inference.memory_utilization < 1:
+            raise ValueError("require TP2/TP4 engines and a memory reserve")
+        if self.inference.tp == 2 and (self.model_preset != "muse-glimmer-30b" or self.accelerator != "tpu-v5p-32"
+                or self.inference.hosts_per_engine != 1 or self.inference.routing != "ingress" or self.arena_models):
+            raise ValueError("TP2 requires single-host Muse v5p-32 engines through ingress")
         if self.inference.backend != "ray_serve":
             raise ValueError("native vLLM DP is not validated; no silent backend substitution")
         if self.inference.routing not in ("direct", "ingress"):
@@ -410,6 +502,8 @@ class Config:
             raise ValueError("inference.chunk_tokens must be positive")
         if any(str(k) != k or str(v) != v for k, v in self.inference.engine_env.items()):
             raise ValueError("inference.engine_env must contain strings")
+        if type(self.inference.unset_plugins) is not bool:
+            raise ValueError("inference.unset_plugins must be a boolean")
         if not all(isinstance(a, str) for a in self.inference.extra_args):
             raise ValueError("inference.extra_args must contain strings")
         if self.trainer.max_lora_rank < 0 or 0 < self.trainer.max_lora_rank < self.trainer.lora_rank:
@@ -455,6 +549,20 @@ class Config:
             raise ValueError("ports overlap worker range or existing workload/SkyPilot Ray")
         if any(str(k) != k or str(v) != v for k, v in self.client_env.items()):
             raise ValueError("client environment must contain strings")
+        if self.is_recurrent_gemma:
+            from urllib.parse import urlsplit
+            url = urlsplit(self.client_env.get("ARENA_QUEUE_URL", ""))
+            if (url.scheme not in ("http", "https") or not url.hostname
+                    or url.username or url.password or url.query or url.fragment):
+                raise ValueError("RecurrentGemma requires an ARENA_QUEUE_URL HTTP(S) endpoint without credentials")
+            if self.client_env.get("TTD_PROBLEM_TYPE", "") not in ("", "rg_lru"):
+                raise ValueError("RecurrentGemma only supports rg_lru")
+            if self.stacked_probe or self.inference_only:
+                raise ValueError("RecurrentGemma requires a training client, not an inference/stacked probe")
+            timeout = float(self.client_env.get("EVAL_TIMEOUT", "3600"))
+            wait = float(self.client_env.get("ARENA_WAIT_TIMEOUT", str(timeout)))
+            if not 0 < wait <= timeout < float("inf"):
+                raise ValueError("Arena requires 0 < ARENA_WAIT_TIMEOUT <= EVAL_TIMEOUT < infinity")
         if any(str(k) != k or str(v) != v for k, v in self.trainer_env.items()):
             raise ValueError("trainer environment must contain strings")
         if len(self.client_member_spec.split(":")) != 3 or not self.client_member_spec.startswith(self.model + ":"):
@@ -490,6 +598,34 @@ class Config:
                     not isinstance(process.get("created"), (float, int)) or process["created"] <= 0 or
                     not re.fullmatch(r"[a-f0-9]{64}", process.get("command_sha256", ""))):
                     raise ValueError("retired processes require exact PID, start time and command hash")
+
+    def for_inference_rank(self, rank):
+        if not self.arena_models or rank not in self.inference_only_ranks:
+            return self
+        entry = self.arena_models[self.inference_only_ranks.index(rank) // self.arena_replicas_per_model]
+        raw = self.to_dict()
+        for key in ("model", "client_member_spec", "client_context_window",
+                    "client_phase1_max_tokens", "client_learning_rate"):
+            raw.pop(key)
+        raw.update(model_preset=entry["model_preset"], arena_models=[],
+                   trainer={"hosts": 0},
+                   inference=entry.get("inference", {}),
+                   cache={**raw["cache"], **entry.get("cache", {})})
+        return Config.from_dict(raw)
+
+    @property
+    def served_models(self):
+        return ([PRESETS[e["model_preset"]].hf_model for e in self.arena_models]
+                if self.arena_models else [self.model])
+
+    @property
+    def engines_per_host(self):
+        return 4 // self.inference.tp
+
+    def engine_slots(self, inference_ips):
+        return [dict(ip=ip, slot=slot, port=self.ports.engine + slot,
+                     key=ip if self.engines_per_host == 1 else f"{ip}:{self.ports.engine + slot}")
+                for ip in inference_ips for slot in range(self.engines_per_host)]
 
     def engine_groups(self, inference_ips):
         """Inference hosts grouped into engines, in order; each group's first

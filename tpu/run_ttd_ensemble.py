@@ -10,7 +10,7 @@ TRAIN_MAX_SEQ} (i = member index, 0-based).
 League mode (rl/cross_import.py): TTD_CROSS_WEIGHT (lambda, default 0.1; 0
 disables) + TTD_CROSS_MAX_IMPORTS (per problem/direction, default 4).
 Problem env via TTD_ENV (erdos_min_overlap | circle_packing | ac_inequalities |
-frontier_erdos_ud), matching run_ttd_smoke_gptoss20b.py.
+frontier_erdos_ud | recurrent_gemma), matching run_ttd_smoke_gptoss20b.py.
 """
 
 from __future__ import annotations
@@ -72,6 +72,9 @@ def main() -> None:
     ).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    # Local Arena modules are shipped in the pinned source overlay.
+    sys.path.insert(0, str(repo_root / "tpu"))
+
     # Problem env from TTD_ENV (default: Erdős), same map as the smoke runner.
     import importlib
     _ENVS = {
@@ -83,6 +86,8 @@ def main() -> None:
         # problem id via TTD_PROBLEM_TYPE (46=JSSP), knobs TTD_FCALGO_*
         "frontier_algo": ("examples.frontier_algo.env", "FrontierAlgoEnv"),
     }
+    _ENVS.update({name: ("pallas_arena.rl.env", "RecurrentGemmaEnv")
+                  for name in ("recurrent_gemma", "recurrentgemma", "pallas_rglru", "rg_lru")})
     _mod, _cls = _ENVS[os.environ.get("TTD_ENV", "erdos_min_overlap")]
     env_type = getattr(importlib.import_module(_mod), _cls)
 

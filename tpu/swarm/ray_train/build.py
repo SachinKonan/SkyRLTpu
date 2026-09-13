@@ -25,16 +25,17 @@ def build(profile, output):
     with tarfile.open(archive, "w:gz") as bundle:
         for path in sorted(package.rglob("*")):
             if path.is_file() and "__pycache__" not in path.parts and (
-                path.suffix in (".py", ".json", ".md")
+                path.suffix in (".py", ".json", ".md", ".patch")
                 or path.parent == package / "client_env" and path.name in ("pyproject.toml", "uv.lock")
             ):
                 bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
         for name in ("select_v4_64_topology.py", "select_v6e_32_topology.py"):
             selector = repo / "tpu/swarm" / name
             bundle.add(selector, arcname=str(selector.relative_to(repo)))
-        if config.adapter_count > 1:
+        if config.requires_source_overlay:
+            # Training overlays remain independent of the sampling-only judge.
             from .overlay import manifest
-            records = manifest(repo)
+            records = manifest(repo, config)
             prefix = "tpu/swarm/ray_train/source_overlay/"
             for name in records:
                 bundle.add(repo / name, arcname=prefix + name, recursive=False)
@@ -42,6 +43,13 @@ def build(profile, output):
             info = tarfile.TarInfo(prefix + "manifest.json")
             info.size = len(data)
             bundle.addfile(info, io.BytesIO(data))
+        if config.frozen_benchmark:
+            for path in sorted((repo / "tpu/swarm/bench").glob("*.py")):
+                bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
+        if config.arena_samples:
+            for path in sorted((repo / "tpu/pallas_arena").rglob("*.py")):
+                if "__pycache__" not in path.parts:
+                    bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
     with archive.open("rb") as data:
         digest = hashlib.file_digest(data, "sha256").hexdigest()
     uri = config.bucket.rstrip("/") + "/code-bundles/ray-training-" + digest + ".tar.gz"

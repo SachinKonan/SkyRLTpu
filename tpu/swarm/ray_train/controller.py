@@ -159,6 +159,16 @@ class Controller:
         self.monitor.start()
         self.checked_get([host.preflight.remote() for host in self.hosts],
                          self.config.checkpoint_cleanup_timeout + 420)
+        if self.config.arena_service_only:
+            self.checked_get([self.hosts[0].prepare_arena.remote()], self.config.setup_timeout)
+            self.report('arena_service_ready', endpoint=f'http://{self.ips[0]}:8791')
+            while not self.stopping.wait(5):
+                if self.failure:
+                    raise RuntimeError(self.failure)
+                state = ray.get(self.hosts[0].heartbeat.remote(), timeout=15)
+                if any(state['processes'].get(n) is not None for n in ('arena-queue', 'arena-pool')):
+                    raise RuntimeError('arena service process exited')
+            return 143
         if self.config.inference_only:
             inference_ranks = self.config.inference_only_ranks or list(range(self.config.hosts))
             self.checked_get([self.hosts[r].source_ready.remote() for r in inference_ranks], self.config.setup_timeout)
@@ -196,8 +206,21 @@ class Controller:
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
                     trainer_leader=self.trainer_leader)
         prepared_ranks = sorted(train_ranks + inference_ranks)
-        prepared = self.checked_get([self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
-                                    for rank in prepared_ranks], self.config.setup_timeout)
+        shared_frozen_head = bool(self.config.frozen_benchmark and 0 in inference_ranks)
+        arena_start = (None if shared_frozen_head else
+                       self.hosts[0].prepare_frozen.remote() if self.config.frozen_benchmark else
+                       self.hosts[0].prepare_arena.remote() if self.config.arena_samples else None)
+        preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
+                            for rank in prepared_ranks]
+        # Observe judge failure while cache/model preparation is still running,
+        # and require its readiness before starting any serving deployment.
+        if arena_start is not None:
+            preparation_refs.append(arena_start)
+        prepared = self.checked_get(preparation_refs, self.config.setup_timeout)[:len(prepared_ranks)]
+        if shared_frozen_head:
+            # One v4-32 host also runs the CPU client. Finish its model/cache
+            # preparation first; concurrent preparation would share GCS state.
+            self.checked_get([self.hosts[0].prepare_frozen.remote()], self.config.setup_timeout)
         self.prepared = {self.ips[rank]: info for rank, info in zip(prepared_ranks, prepared)}
         groups = self.config.engine_groups([self.ips[r] for r in inference_ranks])
         for group in groups:
@@ -212,7 +235,7 @@ class Controller:
                 scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[self.ips[rank]]["NodeID"], soft=False))
                 .remote(self.hosts[rank], rank))
         self.checked_get([trainer.reserved.remote() for trainer in self.trainers], 120)
-        self.catalog = Catalog.options(name="inference-catalog").remote(engine_ips, self.config.inference.restart_limit)
+        self.catalog = Catalog.options(name="inference-catalog").remote([s["key"] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
         inference_ips = engine_ips
         trainer_starts = [trainer.start.remote(train_ranks, inference_ips) for trainer in self.trainers]
         # Both services start concurrently; our readiness loop owns the deadline.
@@ -233,7 +256,7 @@ class Controller:
                     inference_ready = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/health").status_code == 200
                 except httpx.HTTPError:
                     api_ready = inference_ready = False
-                if trainer_ready and api_ready and inference_ready and len(state["replicas"]) == self.config.inference_hosts:
+                if trainer_ready and api_ready and inference_ready and len(state["replicas"]) == len(self.config.engine_slots(engine_ips)):
                     self.report("services_ready", trainer=not self.config.inference_only, inference_replicas=len(state["replicas"]))
                     return self
                 time.sleep(5)
@@ -241,18 +264,28 @@ class Controller:
 
     def run(self):
         self.setup()
-        if self.config.inference_only:
+        if self.config.frozen_benchmark:
+            self.checked_get([self.hosts[0].start_frozen.remote()], 30)
+        elif self.config.arena_samples:
+            self.checked_get([self.hosts[0].start_arena_sampling.remote()], 30)
+            self.report("arena_sampling_started", samples=self.config.arena_samples)
+        elif self.config.inference_only:
             self.report("inference_only_waiting", endpoint=f"http://{self.ips[0]}:{self.config.ports.inference}")
             while not self.stopping.wait(5):
                 if self.failure:
                     raise RuntimeError(self.failure)
             return 143
-        self.checked_get([self.hosts[0].start_client.remote()], 30)
+        else:
+            self.checked_get([self.hosts[0].start_client.remote()], 30)
         self.report("client_started")
         while not self.stopping.wait(5):
             if self.failure:
                 raise RuntimeError(self.failure)
             state = ray.get(self.hosts[0].heartbeat.remote(), timeout=15)
+            if self.config.arena_samples:
+                for name in ("arena-queue", "arena-pool"):
+                    if state["processes"].get(name) is not None:
+                        raise RuntimeError(f"{name} exited during sampling")
             code = state["processes"].get("client")
             if code is not None:
                 self.report("client_finished", exit_code=code)
@@ -307,7 +340,10 @@ def main():
     if len(ips) != config.hosts:
         raise SystemExit("SkyPilot host count does not match profile")
     ray.init(address=f"{ips[0]}:{config.ports.ray}", namespace=config.run_id)
-    status = RuntimeStatus.options(name="runtime-status", lifetime="detached").remote()
+    # Worker bootstraps stop their Ray nodes after acknowledging completion.
+    # Keep the terminal record on the head, which waits for all acknowledgments.
+    status = RuntimeStatus.options(name="runtime-status", lifetime="detached",
+                                   resources={f"node:{ips[0]}": 0.01}).remote()
     controller = Controller(config, ips)
     controller.runtime_status = status
     signal.signal(signal.SIGTERM, lambda *_: controller.stopping.set())

@@ -85,6 +85,39 @@ def retire_before_port_check(config, ip, log):
         config.ports.engine, config.ports.trainer, config.ports.inference))
 
 
+def ensure_controller_runtime(root, initial_behavior=False):
+    """Reuse or finish an environment while the caller holds owner.lock."""
+    runtime = root / "envs/controller"
+    python = runtime / "bin/python"
+    marker = runtime / ".complete"
+    identity = "python3.12-ray2.58-serve-grading-v5-cvxpy-tqdm-sympy-matplotlib"
+    # Ray payload graders run in this environment, not the client's venv.
+    check = [str(python), "-c",
+             "import ray.serve,httpx,google_crc32c,zstandard,numpy,scipy,shapely,numba,sklearn,cvxpy,tqdm,sympy,matplotlib; "
+             "solvers = cvxpy.installed_solvers(); "
+             "assert solvers, 'CVXPY has no installed solvers'; "
+             "print('Grader CVXPY', cvxpy.__version__, 'available solvers:', solvers)"]
+    if runtime.resolve() != runtime.absolute():
+        raise RuntimeError("controller environment must not redirect outside its owned path")
+    if python.exists() and marker.exists() and marker.read_text() == identity:
+        subprocess.run(check, check=True, cwd=root)
+        return python
+    if not python.exists():
+        env = dict(os.environ)
+        env.pop("UV_VENV_CLEAR", None)
+        subprocess.run(["uv", "venv", "--allow-existing", "--python", "3.12", str(runtime)],
+                       check=True, cwd=root, env=env)
+    # Never clear a warm environment just because an optional dependency was added.
+    subprocess.run([str(python), "-c", "import sys; assert sys.version_info[:2] == (3, 12)"],
+                   check=True, cwd=root)
+    packages = ["ray[serve]==2.58.0", "psutil", "httpx", "jinja2", "google-crc32c",
+                "zstandard==0.25.0", "numpy", "scipy", "shapely", "numba", "scikit-learn",
+                "cvxpy==1.9.2", "tqdm==4.70.0", "sympy==1.14.0", "matplotlib"]
+    subprocess.run(["uv", "pip", "install", "--python", str(python), *packages], check=True, cwd=root)
+    subprocess.run(check, check=True, cwd=root)
+    marker.write_text(identity)
+    return python
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
@@ -107,16 +140,22 @@ def main():
         os.environ["SKYRL_RAY_LOCK_FD"] = str(lock_fd)
     runtime = root / "envs/controller"
     python = runtime / "bin/python"
+    if not args.runtime_ready and config.frozen_benchmark:
+        import shutil
+        if shutil.disk_usage(root).free < 30 * 1024**3:
+            raise RuntimeError("frozen benchmark requires 30 GiB free disk; no automatic cache deletion")
+        mem = {k: int(v.split()[0]) for k, v in (l.split(":", 1) for l in Path("/proc/meminfo").read_text().splitlines())}
+        if mem["MemAvailable"] < (config.cache.inference_gib + config.cache.reserve_gib) * 1024**2:
+            raise RuntimeError("insufficient RAM headroom for cache and runtime")
+        devices = [str(p) for p in Path("/dev/vfio").glob("*") if p.name != "vfio"]
+        devices += [str(p) for p in Path("/dev").glob("accel*")]
+        if not devices:
+            raise RuntimeError("TPU device inventory is empty")
+        audit = subprocess.run(["sudo", "-n", "fuser", *devices], capture_output=True, text=True)
+        if audit.returncode != 1 or audit.stdout.strip() or audit.stderr.strip():
+            raise RuntimeError("TPU device audit failed or found existing owners: " + audit.stdout.strip() + audit.stderr.strip())
     if not args.runtime_ready:
-        marker = runtime / ".complete"
-        identity = "python3.12-ray2.58-serve-grading-v3"
-        if not marker.exists() or marker.read_text() != identity:
-            subprocess.run(["uv", "venv", "--python", "3.12", str(runtime)], check=True, cwd=root)
-            subprocess.run(["uv", "pip", "install", "--python", str(python), "ray[serve]==2.58.0",
-                            "psutil", "httpx", "jinja2", "google-crc32c", "zstandard==0.25.0",
-                            "numpy", "scipy", "shapely", "numba", "scikit-learn"], check=True, cwd=root)
-            subprocess.run([str(python), "-c", "import ray.serve,httpx,google_crc32c,zstandard,numpy,scipy,numba"], check=True, cwd=root)
-            marker.write_text(identity)
+        python = ensure_controller_runtime(root, bool(config.frozen_benchmark))
         os.execv(str(python), [str(python), "-m", __package__ + ".bootstrap", args.config, "--runtime-ready"])
     import ray
     from .events import emit

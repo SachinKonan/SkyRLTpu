@@ -1,0 +1,93 @@
+{
+  "run_id": "rglru-three-models-v4-32-005",
+  "accelerator": "tpu-v4-32",
+  "hosts": 4,
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
+  "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
+  "root": "~/.cache/skyrl-ray-rglru-v4-compare",
+  "model_preset": "qwen3.5-27b",
+  "inference_only": true,
+  "inference_only_ranks": [
+    1,
+    2,
+    3
+  ],
+  "arena_samples": 32,
+  "arena_models": [
+    {
+      "model_preset": "qwen3.5-27b",
+      "inference": {
+        "tp": 4,
+        "max_sequences": 16,
+        "memory_utilization": 0.8,
+        "routing": "ingress",
+        "restart_limit": 1,
+        "chunk_tokens": 4096,
+        "ragged_conv1d": true
+      },
+      "cache": {
+        "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+        "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq16-mem85-chunk4096-jaxconv-v1",
+        "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-qwen3.5-27b-tp4-seq16-mem80-chunk4096-jaxconv-v1"
+      }
+    },
+    {
+      "model_preset": "gemma4-31b",
+      "inference": {
+        "tp": 4,
+        "max_sequences": 16,
+        "memory_utilization": 0.8,
+        "routing": "ingress",
+        "restart_limit": 1,
+        "chunk_tokens": 1024
+      },
+      "cache": {
+        "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-gemma4-v1",
+        "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-gemma4-tp4-s16384-seq16-mem90-chunk1024-ray-v1",
+        "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-gemma4-31b-tp4-seq16-mem80-chunk1024-v1"
+      }
+    },
+    {
+      "model_preset": "muse-glimmer-30b",
+      "inference": {
+        "tp": 4,
+        "max_sequences": 16,
+        "memory_utilization": 0.8,
+        "routing": "ingress",
+        "restart_limit": 1,
+        "chunk_tokens": 1024
+      },
+      "cache": {
+        "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-muse-glimmer-v1",
+        "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-muse-tp4-s22528-seq16-mem85-chunk1024-native-ray-v1",
+        "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-muse-glimmer-30b-tp4-seq16-mem80-chunk1024-native-v2"
+      }
+    }
+  ],
+  "arena_concurrency": 8,
+  "arena_max_tokens": 8192,
+  "trainer": {
+    "hosts": 0
+  },
+  "inference": {
+    "tp": 4,
+    "max_sequences": 16,
+    "memory_utilization": 0.8,
+    "routing": "ingress",
+    "restart_limit": 1
+  },
+  "cache": {
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "inference_gib": 128,
+    "reserve_gib": 128,
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/unused-rglru-trainer",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/unused-rglru-head",
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "checkpoint_cleanup_timeout": 0,
+  "ready_timeout": 7200
+}

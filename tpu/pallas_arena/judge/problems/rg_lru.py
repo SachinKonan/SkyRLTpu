@@ -6,8 +6,8 @@ with gates a_t precomputed as inputs (per DESIGN.md task scope) and reset
 boundaries (h resets to 0 where reset_t = True; a_t is forced to 0 there so
 no state crosses a segment boundary). Kernel-vs-kernel against DeepMind's
 recurrentgemma Pallas scan on the TPU judge (importing recurrentgemma is
-banned for candidates); `lax.associative_scan` is a LEGAL candidate
-strategy, and doubles as the CPU-available stand-in baseline for the test
+banned for candidates). Pure `lax.associative_scan` candidates are rejected;
+it remains the CPU-available stand-in baseline for the test
 battery. Tolerance is calibrated vs the reference's own bf16 drift at long
 T, never a fixed atol.
 
@@ -53,7 +53,7 @@ def rg_lru_scan_reference(x, a, reset):
 
 
 def rg_lru_associative(x, a, reset):
-    """lax.associative_scan formulation — legal candidate strategy and the
+    """lax.associative_scan formulation — calibration implementation and the
     CPU stand-in baseline (the TPU judge binds recurrentgemma's Pallas scan)."""
     x32 = x.astype(jnp.float32)
     a32 = _apply_reset(a.astype(jnp.float32), reset)
@@ -70,11 +70,12 @@ def rg_lru_associative(x, a, reset):
 
 class RGLRUProblem(Problem):
     name = "rg_lru"
-    version = "1"
+    version = "3"  # v3: RG-LRU backward correctness is a hard gate
     # BACKWARD IS PART OF THE CONTRACT: recurrentgemma ships _lru_fwd AND
     # _lru_bwd, so the production scan is differentiable and a forward-only
     # candidate is not a replacement for it.
     has_bwd = True
+    bwd_gates = True
     # FLIPPED 2026-08-17 (was False, "associative_scan is explicitly legal").
     # As a kernel-writing RL env the old setting made the task winnable
     # without ever writing a kernel: all 16 sd-run winners were plain-XLA
@@ -110,6 +111,8 @@ class RGLRUProblem(Problem):
             # runs a complete scan over d/8 with no collective.
             ShapeCase("tp8-4x2048x2560", {"b": 4, "t": 2048, "d": 2560}, probe=True, tp=8),
             ShapeCase("tp8-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, probe=True, tp=8, holdout=True),
+            ShapeCase("tp4-4x2048x2560", {"b": 4, "t": 2048, "d": 2560}, probe=True, tp=4),
+            ShapeCase("tp4-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, probe=True, tp=4, holdout=True),
             ShapeCase(
                 "probe-holdout-2x1500x2560", {"b": 2, "t": 1500, "d": 2560}, holdout=True, probe=True
             ),

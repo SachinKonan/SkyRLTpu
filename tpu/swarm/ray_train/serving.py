@@ -66,7 +66,7 @@ class Catalog:
                   health_check_period_s=10, health_check_timeout_s=10,
                   ray_actor_options={"num_cpus": 8, "resources": {"TPU": 4}})
 class Engine:
-    async def __init__(self, raw_config, prepared, catalog, head):
+    async def __init__(self, raw_config, prepared, catalog, head, slot=0):
         self.config = Config.from_dict(raw_config)
         self.ip = ray.util.get_node_ip_address()
         self.catalog = catalog
@@ -74,7 +74,9 @@ class Engine:
         # This second check fails closed even if an unexpected placement occurs.
         if self.ip not in prepared or prepared[self.ip]["role"] != "inference":
             raise RuntimeError("inference was scheduled outside its designated role")
-        await catalog.claim.remote(self.ip)
+        self.slot = slot
+        self.key = self.ip if self.config.engines_per_host == 1 else f"{self.ip}:{self.config.ports.engine + slot}"
+        await catalog.claim.remote(self.key)
         info = prepared[self.ip]
         group = list(info.get("group") or [self.ip])
         if group[0] != self.ip:
@@ -82,15 +84,16 @@ class Engine:
         self.group = group
         self.root, self.source = Path(info["root"]), Path(info["source"])
         self.run = self.root / "runs" / self.config.run_id
-        (self.run / "loras").mkdir(exist_ok=True)
+        self.engine_run = self.run / f"engine-slot-{slot}"
+        (self.engine_run / "loras").mkdir(parents=True, exist_ok=True)
         self.instance = uuid.uuid4().hex
         self.version = None
         self.lock = asyncio.Lock()
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.head = f"http://{head}:{self.config.ports.inference}"
-        self.url = f"http://127.0.0.1:{self.config.ports.engine}"
-        self.process = Process(inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.run, group=self.group),
-            self.run / f"engine-{self.instance}.log", inference_environment(self.config, self.root, self.run, head=head, group=self.group), self.source)
+        self.url = f"http://127.0.0.1:{self.config.ports.engine + slot}"
+        self.process = Process(inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.engine_run, group=self.group, slot=slot),
+            self.run / f"engine-{self.instance}.log", inference_environment(self.config, self.root, self.engine_run, head=head, group=self.group, slot=slot), self.source)
         deadline = time.monotonic() + self.config.ready_timeout
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
@@ -109,9 +112,9 @@ class Engine:
             versions = state["versions"]
             for version in versions:
                 await self.ensure_adapter(version)
-            if await catalog.register.remote(self.ip, self.instance, versions):
+            if await catalog.register.remote(self.key, self.instance, versions):
                 break
-        emit(self.run / "inference-events.jsonl", "engine_ready", ip=self.ip, instance=self.instance)
+        emit(self.run / "inference-events.jsonl", "engine_ready", ip=self.ip, slot=slot, tp=self.config.inference.tp, instance=self.instance)
 
     async def ensure_adapter(self, version):
         if version == self.config.model:
@@ -123,7 +126,7 @@ class Engine:
             models = await self.http.get(self.url + "/v1/models")
             models.raise_for_status()
             if version not in {m["id"] for m in models.json()["data"]}:
-                archive = self.run / f"{version}.reload.tar"
+                archive = self.engine_run / f"{version}.reload.tar"
                 async with self.http.stream("GET", self.head + f"/adapters/{version}/archive") as response:
                     response.raise_for_status()
                     with archive.open("wb") as output:
@@ -145,6 +148,13 @@ class Engine:
         response.raise_for_status()
         return response.json()
 
+    async def tokenize(self, payload):
+        if payload.get("model") != self.config.model:
+            raise ValueError("tokenization model does not match engine")
+        response = await self.http.post(self.url + "/tokenize", json=payload)
+        response.raise_for_status()
+        return response.json()
+
     async def check_health(self):
         if self.process.poll() is not None:
             raise RuntimeError("vLLM subprocess died")
@@ -162,12 +172,15 @@ app = FastAPI()
 @serve.deployment(num_replicas=1, max_ongoing_requests=1024, ray_actor_options={"num_cpus": 1})
 @serve.ingress(app)
 class Ingress:
-    def __init__(self, raw_config, engines, catalog, inference_ips):
+    def __init__(self, raw_config, engines, catalog, inference_ips, engine_models=None):
         self.config = Config.from_dict(raw_config)
         self.engines = list(engines) if isinstance(engines, (list, tuple)) else [engines]
         self.next_engine = 0
+        self.next_model_engine = {}
+        self.engine_models = engine_models
         self.catalog = catalog
         self.ips = inference_ips
+        self.engine_urls = [f"http://{s['ip']}:{s['port']}" for s in self.config.engine_slots(inference_ips)]
         self.run = Path(self.config.root).expanduser() / "runs" / self.config.run_id
         self.archives = self.run / "uploads"
         self.archives.mkdir(parents=True, exist_ok=True)
@@ -190,19 +203,19 @@ class Ingress:
     @app.get("/health")
     async def health(self):
         state = await self.catalog.snapshot.remote()
-        if len(state["replicas"]) != len(self.ips) or state["exhausted"]:
+        if len(state["replicas"]) != len(self.engine_urls) or state["exhausted"]:
             raise HTTPException(503, "inference replicas not ready")
-        async def probe(ip):
-            result = await self.http.get(f"http://{ip}:{self.config.ports.engine}/health", timeout=5)
+        async def probe(url):
+            result = await self.http.get(url + "/health", timeout=5)
             result.raise_for_status()
-        results = await asyncio.gather(*(probe(ip) for ip in self.ips), return_exceptions=True)
+        results = await asyncio.gather(*(probe(url) for url in self.engine_urls), return_exceptions=True)
         if self.updating or any(isinstance(result, Exception) for result in results):
             raise HTTPException(503, "inference replica unavailable or adapter update in progress")
         return {"status": "ok"}
 
     @app.get("/v1/models")
     async def models(self):
-        names = [self.config.model] + sorted(self.versions)
+        names = self.config.served_models + sorted(self.versions)
         return {"object": "list", "data": [{"id": n, "object": "model", "owned_by": "skyrl"} for n in names]}
 
     @app.get("/adapters/{version}/archive")
@@ -217,6 +230,8 @@ class Ingress:
 
     @app.post("/skyrl/v1/upload_lora_adapter")
     async def upload(self, request: Request, lora_name: str, previous_lora_name: str | None = None):
+        if self.engine_models:
+            raise HTTPException(400, "multi-model arena is inference-only")
         try:
             version = adapter_name(lora_name)
             if previous_lora_name:
@@ -262,7 +277,7 @@ class Ingress:
                 await self.condition.wait_for(lambda: self.active == 0)
             started = time.monotonic()
 
-            async def load(ip):
+            async def load(url):
                 deadline = time.monotonic() + self.config.ready_timeout
                 while True:
                     async def chunks():
@@ -273,18 +288,18 @@ class Ingress:
                         params = {"lora_name": version}
                         if previous:
                             params["previous_lora_name"] = previous
-                        result = await self.http.post(f"http://{ip}:{self.config.ports.engine}/skyrl/v1/upload_lora_adapter",
+                        result = await self.http.post(url + "/skyrl/v1/upload_lora_adapter",
                                                       params=params, content=chunks(),
                                                       timeout=min(300, max(1, deadline-time.monotonic())))
                         result.raise_for_status()
-                        return ip
+                        return url
                     except httpx.HTTPError:
                         if time.monotonic() > deadline:
                             raise
                         await asyncio.sleep(5)
 
             # Failure leaves admission closed, never a mixed adapter version.
-            loaded = await asyncio.gather(*(load(ip) for ip in self.ips), return_exceptions=True)
+            loaded = await asyncio.gather(*(load(url) for url in self.engine_urls), return_exceptions=True)
             if any(isinstance(result, Exception) for result in loaded):
                 raise HTTPException(503, "adapter fanout failed; generation remains paused until retry")
             if previous:
@@ -302,6 +317,25 @@ class Ingress:
                  bytes=size, sha256=identity, hosts=loaded, load_seconds=time.monotonic()-started)
             return {"lora_name": version, "loaded": loaded, "sha256": identity}
 
+    def select_engine(self, model):
+        if self.engine_models:
+            if model not in self.engine_models:
+                raise HTTPException(400, "unknown base model")
+            indices = [i for i, name in enumerate(self.engine_models) if name == model]
+            cursor = self.next_model_engine.get(model, 0)
+            self.next_model_engine[model] = cursor + 1
+            return self.engines[indices[cursor % len(indices)]]
+        handle = self.engines[self.next_engine % len(self.engines)]
+        self.next_engine += 1
+        return handle
+
+    @app.post("/tokenize")
+    async def tokenize(self, request: Request):
+        payload = await request.json()
+        if payload.get("model") not in self.config.served_models:
+            raise HTTPException(400, "unknown base model")
+        return await self.select_engine(payload["model"]).tokenize.remote(payload)
+
     @app.post("/v1/completions")
     async def generate(self, request: Request):
         payload = await request.json()
@@ -310,14 +344,13 @@ class Ingress:
         if payload.get("seed") is not None:
             raise HTTPException(400, "TPU backend does not support per-request seeds")
         async with self.condition:
-            if self.updating or payload.get("model") not in self.versions | {self.config.model}:
+            if self.updating or payload.get("model") not in self.versions | set(self.config.served_models):
                 raise HTTPException(409, "adapter update in progress or uncommitted model")
             if not payload.get("model"):
                 raise HTTPException(400, "model is required")
             self.active += 1
         try:
-            handle = self.engines[self.next_engine % len(self.engines)]
-            self.next_engine += 1
+            handle = self.select_engine(payload["model"])
             return await handle.generate.remote(payload)
         finally:
             async with self.condition:
@@ -328,14 +361,18 @@ class Ingress:
 def deploy(config, prepared, catalog, head):
     serving = {ip: info for ip, info in prepared.items() if info["role"] == "inference"}
     heads = sorted(ip for ip, info in serving.items() if (info.get("group") or [ip])[0] == ip)
-    if config.inference.hosts_per_engine == 1:
-        options = {"num_replicas": len(serving)}
-        if len(serving) == 1:
-            # Keep single-host diagnostics on their prepared host even when Ray
-            # detects additional TPU devices elsewhere on the reserved slice.
-            ip = next(iter(serving))
-            options["ray_actor_options"] = {"num_cpus": 8, "resources": {"TPU": 4, f"node:{ip}": 0.01}}
-        engines = Engine.options(**options).bind(config.to_dict(), serving, catalog, head)
+    engine_models = None
+    if config.arena_models:
+        engine_models = [serving[ip]["config"]["model"] for ip in heads]
+        engines = [Engine.options(name=f"arena-engine-{i}", num_replicas=1,
+                    ray_actor_options={"num_cpus": 8, "resources": {"TPU": 4, f"node:{ip}": 0.01}})
+                   .bind(serving[ip]["config"], {ip: serving[ip]}, catalog, head)
+                   for i, ip in enumerate(heads)]
+    elif config.inference.hosts_per_engine == 1:
+        engines = [Engine.options(name=f"engine-{i}", num_replicas=1,
+                   ray_actor_options={"num_cpus": 8, "resources": {"TPU": config.inference.tp, f"node:{s['ip']}": 0.01}})
+                   .bind(config.to_dict(), {s["ip"]: serving[s["ip"]]}, catalog, head, slot=s["slot"])
+                   for i, s in enumerate(config.engine_slots(heads))]
     else:
         # One deployment per engine group, pinned to the group's first host and
         # claiming NO TPU: vLLM's Ray executor takes TPU:4 on both hosts of the
@@ -346,5 +383,5 @@ def deploy(config, prepared, catalog, head):
     ingress = Ingress.options(ray_actor_options={"num_cpus": 1, "resources": {f"node:{head}": 0.01}})
     serve.start(proxy_location="HeadOnly", http_options={"host": "0.0.0.0", "port": config.ports.inference})
     return serve.run_many([serve.RunTarget(
-        target=ingress.bind(config.to_dict(), engines, catalog, heads), name="skyrl-training")],
+        target=ingress.bind(config.to_dict(), engines, catalog, heads, engine_models=engine_models), name="skyrl-training")],
         wait_for_ingress_deployment_creation=False, wait_for_applications_running=False)[0]

@@ -1,4 +1,4 @@
-"""Explicit source overlay for opt-in multi-LoRA builds, isolated by digest."""
+"""Explicit source overlays for opt-in features, isolated by digest."""
 import hashlib
 import json
 from pathlib import Path
@@ -20,22 +20,79 @@ FILES = (
     "third_party/discover/ttt_discover/tinker_utils/completers.py",
 )
 
+ARENA_FILES = (
+    "tpu/run_ttd_ensemble.py",
+    "tpu/pallas_arena/__init__.py",
+    "tpu/pallas_arena/judge/__init__.py",
+    "tpu/pallas_arena/judge/client.py",
+    "tpu/pallas_arena/judge/observation.py",
+    "tpu/pallas_arena/judge/problems/rg_lru.py",
+    "tpu/pallas_arena/rl/__init__.py",
+    "tpu/pallas_arena/rl/task.py",
+    "tpu/pallas_arena/rl/env.py",
+    "tpu/pallas_arena/rl/seed_rglru.py",
+)
 
-def manifest(repo):
-    return {name: hashlib.sha256((Path(repo) / name).read_bytes()).hexdigest() for name in FILES}
+SMOKE_FILES = (
+    'tpu/run_ttd_ensemble.py',
+    'third_party/discover/ttt_discover/rl/ensemble.py',
+    'third_party/discover/ttt_discover/tinker_utils/completers.py',
+)
+
+PROBLEM_PROMPT_FILES = {
+    "ac_inequalities": "third_party/discover/examples/ac_inequalities/env.py",
+    "circle_packing": "third_party/discover/examples/circle_packing/env.py",
+}
+
+NATIVE_FILES = {"skyrl/tinker/extra/external_inference.py",
+                "skyrl/tinker/extra/skyrl_train_inference_forwarding.py", "skyrl/tinker/types.py", "skyrl/tinker/api.py", "skyrl/backends/vllm_sampling.py",
+                "skyrl/backends/native_completion.py", "third_party/discover/ttt_discover/rl/train.py",
+                "third_party/discover/ttt_discover/tinker_utils/completers.py"}
+
+ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
+ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
+
+
+def manifest(repo, config=None):
+    names = set(FILES) if config is None or config.adapter_count > 1 else set()
+    if config is not None and config.is_recurrent_gemma:
+        names.update(ARENA_FILES)
+    if config is not None and config.training_smoke:
+        names.update(SMOKE_FILES)
+    if config is not None and config.has_problem_prompt_overlay:
+        names.add(PROBLEM_PROMPT_FILES[config.client_env["TTD_ENV"]])
+    if config is not None and config.has_adaptive_pwc_overlay:
+        names.add(ADAPTIVE_PWC_FILE)
+    if config is not None and config.has_answer_only_overlay:
+        names.add(ANSWER_ONLY_FILE)
+        # Carry the validated Ray pipeline/shutdown-compatible ensemble path
+        # into full runs as well as one-step smokes.
+        names.update(SMOKE_FILES)
+    if config is not None and config.inference.native_thinking_budget and not config.inference_only:
+        names.update(NATIVE_FILES | set(SMOKE_FILES))
+    return {name: hashlib.sha256((Path(repo) / name).read_bytes()).hexdigest() for name in sorted(names)}
 
 
 def identity(directory):
     path = Path(directory) / "manifest.json"
     if not path.is_file():
-        raise RuntimeError("multi-LoRA requires a built, pinned source overlay")
+        raise RuntimeError("this feature requires a built, pinned source overlay")
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def install(directory, destination):
     directory, destination = Path(directory), Path(destination)
     records = json.loads((directory / "manifest.json").read_text())
-    if set(records) != set(FILES):
+    allowed = [set(FILES), set(ARENA_FILES), set(FILES) | set(ARENA_FILES),
+               set(SMOKE_FILES), set(SMOKE_FILES) | set(ARENA_FILES)]
+    # Each mathematical task gets only its own prompt file. Erdős retains
+    # the pinned base-bundle prompt and does not receive either override.
+    for name in PROBLEM_PROMPT_FILES.values():
+        allowed.extend([base | {name} for base in [set(), *allowed[:5]]])
+    allowed.extend([base | {ADAPTIVE_PWC_FILE} for base in [set(), *allowed]])
+    allowed.extend([base | {ANSWER_ONLY_FILE} for base in [set(), *allowed]])
+    allowed.extend([base | NATIVE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
+    if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")
     for name, expected in records.items():
         source = directory / name

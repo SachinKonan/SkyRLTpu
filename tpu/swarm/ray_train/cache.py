@@ -343,19 +343,33 @@ class CacheStore:
         revision = self.gcs.metadata("cat", source + "/refs/main").strip()
         if not re.fullmatch(r"[a-f0-9]{40,64}", revision):
             raise ValueError("HF cache revision is not a pinned commit")
-        manifest = json.loads(self.gcs.metadata("cat", source + f"/trees/{revision}.json"))
+        manifest = json.loads(self.gcs.metadata("cat", source + f"/trees/{revision}.json",
+                                                allow_empty=True))
         selected = {}
-        for name, meta in manifest["files"].items():
-            safe_relative(name)
-            if not weights and name.endswith((".safetensors", ".bin", ".pt", ".pth")):
-                continue
-            blob = meta.get("lfs_sha256") or meta.get("blob_id", "")
-            if not re.fullmatch(r"[a-f0-9]{40}|[a-f0-9]{64}", blob):
-                raise ValueError("invalid HF blob identifier")
-            selected[name] = (blob, int(meta["size"]))
+        if manifest == []:
+            # Legacy Muse mirrors contain materialized snapshot files, not
+            # trees/blobs. Only a missing manifest selects this path; denied
+            # access, malformed manifests and broken blob references still fail.
+            cloud = {obj.relative: obj for obj in self.gcs.list(source + f"/snapshots/{revision}")}
+            if any(not completed(name) for name in cloud):
+                raise ValueError("HF snapshot contains temporary objects")
+            for name, obj in cloud.items():
+                safe_relative(name)
+                if not weights and name.endswith((".safetensors", ".bin", ".pt", ".pth")):
+                    continue
+                selected[name] = (name, obj.size)
+        else:
+            for name, meta in manifest["files"].items():
+                safe_relative(name)
+                if not weights and name.endswith((".safetensors", ".bin", ".pt", ".pth")):
+                    continue
+                blob = meta.get("lfs_sha256") or meta.get("blob_id", "")
+                if not re.fullmatch(r"[a-f0-9]{40}|[a-f0-9]{64}", blob):
+                    raise ValueError("invalid HF blob identifier")
+                selected[name] = (blob, int(meta["size"]))
+            cloud = {obj.relative: obj for obj in self.gcs.list(source + "/blobs")}
         if not {"config.json", "tokenizer.json"}.issubset(selected):
             raise ValueError("HF cache lacks required model/tokenizer metadata")
-        cloud = {obj.relative: obj for obj in self.gcs.list(source + "/blobs")}
         blobs = {}
         for blob, size in selected.values():
             obj = cloud.get(blob)
@@ -378,13 +392,21 @@ class CacheStore:
             for attempt in range(3):
                 missing = [o for o in blobs.values() if not valid_file(folder / o.relative, o)]
                 try:
-                    for offset in range(0, len(missing), 64):
-                        batch = missing[offset:offset+64]
-                        for obj in batch:
-                            (folder / obj.relative).unlink(missing_ok=True)
-                            (folder / (obj.relative + "_.gstmp")).unlink(missing_ok=True)
-                        self.gcs.transfer(["cp", *[o.uri + "#" + o.generation for o in batch], str(folder)],
-                                          "hf-restore", folder)
+                    # Keep snapshot subdirectories, while one gcloud invocation
+                    # owns all transfer concurrency for each destination folder.
+                    groups = {}
+                    for obj in missing:
+                        groups.setdefault(str(PurePosixPath(obj.relative).parent), []).append(obj)
+                    for parent, objects in groups.items():
+                        target = folder / parent
+                        target.mkdir(parents=True, exist_ok=True)
+                        for offset in range(0, len(objects), 64):
+                            batch = objects[offset:offset+64]
+                            for obj in batch:
+                                (folder / obj.relative).unlink(missing_ok=True)
+                                (folder / (obj.relative + "_.gstmp")).unlink(missing_ok=True)
+                            self.gcs.transfer(["cp", *[o.uri + "#" + o.generation for o in batch], str(target)],
+                                              "hf-restore", folder)
                     if not all(valid_file(folder / blob, obj) for blob, obj in blobs.items()):
                         raise RuntimeError("HF cache checksum validation failed")
                     break

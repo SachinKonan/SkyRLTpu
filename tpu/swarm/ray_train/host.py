@@ -34,16 +34,24 @@ def orbax_marker_present(gcs, orbax):
 
 class Host:
     def __init__(self, config, rank, ips):
-        self.config = Config.from_dict(config)
+        self.config = Config.from_dict(config).for_inference_rank(rank)
         self.rank, self.ips = rank, ips
         self.root = Path(self.config.root).expanduser().resolve()
         self.run = self.root / "runs" / self.config.run_id
         self.run.mkdir(parents=True, exist_ok=True)
         self.source_identity = self.config.base_bundle_sha256
-        if self.config.adapter_count > 1:
+        if self.config.requires_source_overlay:
             from .overlay import identity
             self.source_identity += "-" + identity(Path(__file__).with_name("source_overlay"))
-        self.source = self.root / "sources" / self.source_identity
+        if self.config.inference.native_thinking_budget:
+            from .thinking_budget.install import identity as thinking_identity
+            self.source_identity += "-thinking-" + thinking_identity()
+            self.source_identity += "-sdk-" + hashlib.sha256(Path(__file__).with_name("native_sdk.py").read_bytes()).hexdigest()
+        # Multiple full digests can exceed NAME_MAX when concatenated. Keep
+        # the full identity in the marker but bound the directory component.
+        source_name = ("native-" + hashlib.sha256(self.source_identity.encode()).hexdigest()
+                       if self.config.inference.native_thinking_budget else self.source_identity)
+        self.source = self.root / "sources" / source_name
         self.log = self.run / f"host-{rank}.jsonl"
         self.role = None
         self.trainer_leader = 0
@@ -159,9 +167,12 @@ class Host:
         staging.mkdir(parents=True)
         with tarfile.open(archive) as bundle:
             bundle.extractall(staging, filter="data")
-        if self.config.adapter_count > 1:
+        if self.config.requires_source_overlay:
             from .overlay import install
             install(Path(__file__).with_name("source_overlay"), staging)
+        if self.config.inference.native_thinking_budget:
+            from .thinking_budget.install import install as install_thinking
+            install_thinking(staging)
         for path in ("tpu/probe_topology.py", "skyrl/backends/tunix_backend.py",
                      "skyrl/utils/checkpoint_mirror.py", "tpu/vllm_tpu_server.py"):
             if not (staging / path).is_file():
@@ -273,6 +284,8 @@ class Host:
                   str(CLIENT_ENV / "uv.lock")]
         if marker.exists() and marker.read_text() == identity:
             self.checked("client-lock-check", verify)
+            if self.config.inference.native_thinking_budget:
+                self.checked("client-native-sdk", [python, str(Path(__file__).with_name("native_sdk.py"))])
             return
         if folder.exists():
             shutil.rmtree(folder)
@@ -285,6 +298,8 @@ class Host:
             "--no-deps", "--no-build-isolation", str(self.source / "third_party/discover")])
         self.checked("client-deps-check", ["uv", "pip", "check", "--python", python])
         self.checked("client-lock-check", verify)
+        if self.config.inference.native_thinking_budget:
+            self.checked("client-native-sdk", [python, str(Path(__file__).with_name("native_sdk.py"))])
         self.checked("client-import", [python, "-c", "import ray,tinker,wandb,torch,ttt_discover; assert torch.version.cuda is None"])
         marker.write_text(identity)
 
@@ -314,7 +329,8 @@ class Host:
             self.install_client()
         self.phase = "prepared"
         emit(self.log, "host_prepared", rank=self.rank, role=role, snapshot=str(self.snapshot))
-        return dict(rank=self.rank, role=role, source=str(self.source), root=str(self.root), snapshot=str(self.snapshot))
+        return dict(rank=self.rank, role=role, source=str(self.source), root=str(self.root),
+                    snapshot=str(self.snapshot), config=self.config.to_dict())
 
     def compile_prefix(self):
         return self.config.cache.trainer_compile if self.role == "trainer" else self.config.cache.inference_compile
@@ -365,6 +381,22 @@ class Host:
                                       trainer_head=self.ips[self.trainer_leader]), self.source)
         self.phase = "client_running"
         return self.heartbeat()
+
+    def prepare_frozen(self):
+        from .frozen_benchmark import prepare_host
+        return prepare_host(self)
+
+    def start_frozen(self):
+        from .frozen_benchmark import start_host
+        return start_host(self)
+
+    def prepare_arena(self):
+        from .arena_sampling import prepare_host
+        return prepare_host(self)
+
+    def start_arena_sampling(self):
+        from .arena_sampling import start_sampling
+        return start_sampling(self)
 
     def trainer_ready(self):
         import re
@@ -424,6 +456,10 @@ class Host:
             processes = list(self.processes.values())
         for process in reversed(processes):
             process.stop()
+        if self.config.arena_samples and self.rank == 0:
+            from .arena_sampling import judge_ray_tmp
+            from .bootstrap import stop_ray
+            stop_ray(judge_ray_tmp(self.root))
         self.gcs.stop()
         self.phase = "stopped"
         return self.heartbeat()

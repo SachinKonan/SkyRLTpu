@@ -590,30 +590,6 @@ class ForwardBackwardRequest(BaseModel):
     forward_backward_input: ForwardBackwardInput
 
 
-class MultiLoraTrainingRequest(BaseModel):
-    model_ids: list[str] = Field(min_length=2)
-    forward_backward_input: ForwardBackwardInput
-    cohort_id: str = ""
-    source_model_ids: list[str] = Field(default_factory=list)
-    source_versions: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def validate_population(self):
-        if any(not name for name in self.model_ids) or len(set(self.model_ids)) != len(self.model_ids):
-            raise ValueError("target adapter IDs must be nonempty and unique")
-        rows = len(self.forward_backward_input.data)
-        if not rows:
-            raise ValueError("shared training batch must not be empty")
-        if any(values and len(values) != rows for values in (self.source_model_ids, self.source_versions)):
-            raise ValueError("source metadata must align with shared batch rows")
-        return self
-
-    def to_types(self):
-        return types.MultiLoraTrainingRequest(model_ids=self.model_ids,
-            forward_backward_input=self.forward_backward_input.to_types(), cohort_id=self.cohort_id,
-            source_model_ids=self.source_model_ids, source_versions=self.source_versions)
-
-
 class ForwardRequest(BaseModel):
     model_id: str
     forward_input: ForwardBackwardInput
@@ -889,6 +865,7 @@ class SaveWeightsForSamplerRequest(BaseModel):
 
 
 class SamplingParams(BaseModel):
+    thinking_token_budget: int | None = None
     max_tokens: int | None = None
     seed: int | None = None
     stop: list[int] | list[str] | None = None
@@ -927,6 +904,7 @@ class SamplingParams(BaseModel):
             stop_strings=stop_strings,
             top_k=self.top_k,
             top_p=self.top_p,
+            thinking_token_budget=self.thinking_token_budget,
         )
 
 
@@ -1332,18 +1310,6 @@ async def forward_backward(request: Request, session: AsyncSession = Depends(get
     return FutureResponse(future_id=str(request_id), status="pending", request_id=str(request_id))
 
 
-@app.post("/api/v1/multi_lora_training", response_model=FutureResponse)
-async def multi_lora_training(request: MultiLoraTrainingRequest, session: AsyncSession = Depends(get_session)):
-    """Persist the shared data once; the engine executes targets sequentially."""
-    models = [await get_model(session, model_id) for model_id in request.model_ids]
-    if len({model.base_model for model in models}) != 1:
-        raise HTTPException(400, "target adapters must share a base model")
-    request_id = await create_future(session, types.RequestType.MULTI_LORA_TRAINING,
-                                     None, request.to_types())
-    await session.commit()
-    return FutureResponse(future_id=str(request_id), status="pending", request_id=str(request_id))
-
-
 @app.post("/api/v1/forward", response_model=FutureResponse)
 async def forward(request: ForwardRequest, session: AsyncSession = Depends(get_session)):
     """Forward pass to obtain logprobs without accumulating gradients"""
@@ -1609,6 +1575,11 @@ async def retrieve_future(request: RetrieveFutureRequest, req: Request):
                     future = result.first()
 
                     if future.status == RequestStatus.COMPLETED:
+                        # The pinned SDK accepts JSON as well as protobuf. Its
+                        # protobuf schema has no native mask/audit fields.
+                        # Preserve these via the extended JSON reader instead.
+                        if any(seq.get("loss_mask") is not None for seq in future.result_data.get("sequences", [])):
+                            return future.result_data
                         if _PROTOBUF_CONTENT_TYPE in req.headers.get("accept", "").lower():
                             if future.request_type in (
                                 types.RequestType.FORWARD,

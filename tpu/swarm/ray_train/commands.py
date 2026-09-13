@@ -83,9 +83,6 @@ def trainer_backend_config(config, root, head, train_ips, inference_ips=None):
         model_source="maxtext", maxtext_model_name=t.maxtext_model,
         maxtext_max_target_length=t.effective_max_target_length, train_token_budget=t.token_budget,
         flce_tile_size=t.flce_tile, max_lora_rank=t.effective_max_lora_rank,
-        independent_lora_init=config.adapter_count > 1,
-        stacked_lora_training=t.stacked_lora_training,
-        stacked_lora_verify=t.stacked_lora_verify,
         train_micro_batch_size=1, sample_max_num_sequences=256,
         param_dtype="bfloat16", free_base_state_after_template=t.free_base_state,
         maxtext_ckpt_cache_dir=str(root / "ram/orbax"), maxtext_kwargs=maxtext_kwargs(config, root),
@@ -100,6 +97,11 @@ def trainer_backend_config(config, root, head, train_ips, inference_ips=None):
         vllm_request_timeout_sec=t.request_timeout,
         vllm_lora_load_retries=t.lora_load_retries, vllm_lora_load_retry_sleep_sec=t.lora_load_retry_sleep,
         checkpoint_mirror_gcs=config.run_gcs + "/checkpoints")
+    # The pinned single-adapter backend predates these optional fields.
+    if config.adapter_count > 1:
+        backend.update(independent_lora_init=True,
+                       stacked_lora_training=t.stacked_lora_training,
+                       stacked_lora_verify=t.stacked_lora_verify)
     if len(train_ips) > 1:
         backend.update(coordinator_address=f"{train_ips[0]}:{p.trainer_jax}", num_processes=len(train_ips))
     return backend
@@ -124,7 +126,7 @@ def trainer_command(config, root, source, head, train_ips, process_id, inference
             "--backend-config", json.dumps(trainer_backend_config(config, root, head, train_ips, inference_ips))]
 
 
-def inference_environment(config, root, run, head=None, group=None):
+def inference_environment(config, root, run, head=None, group=None, slot=0):
     """Engine process environment. group = the engine's host IPs (pairs run
     pipeline-parallel over vLLM's Ray executor on the executor's own Ray
     cluster at head:ports.ray; the worker for the second host runs under the
@@ -151,6 +153,9 @@ def inference_environment(config, root, run, head=None, group=None):
         VLLM_PLUGINS="lora_filesystem_resolver", VLLM_LORA_RESOLVER_CACHE_DIR=str(run / "loras"),
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     env.update(v.engine_env)
+    if v.unset_plugins:
+        # Empty still disables registration; the variable must be absent.
+        env.pop("VLLM_PLUGINS", None)
     if pair:
         if not head:
             raise ValueError("pipeline-parallel engines need the executor Ray head address")
@@ -163,14 +168,27 @@ def inference_environment(config, root, run, head=None, group=None):
         env.update(TPU_MULTIHOST_BACKEND="ray", VLLM_USE_RAY_EXECUTOR="1",
                    RAY_ADDRESS=f"{head}:{config.ports.ray}",
                    SKYRL_RAY_PLACEMENT_HOSTS=",".join(group))
+    if v.tp == 2:
+        if slot not in (0, 1) or pair:
+            raise ValueError("invalid TP2 engine slot")
+        port = config.ports.inference_tpu + slot
+        env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(slot * 2, slot * 2 + 2)),
+                   TPU_CHIPS_PER_PROCESS_BOUNDS="1,2,1", TPU_PROCESS_PORT=str(port),
+                   TPU_PROCESS_ADDRESSES=f"localhost:{port}")
+    if v.native_thinking_budget:
+        env["SKYRL_THINKING_FORMAT"] = config.model_preset
+    else:
+        env.pop("SKYRL_TPU_THINKING_BUDGET", None)
+        env.pop("SKYRL_THINKING_FORMAT", None)
     return env
 
 
-def inference_command(config, root, source, snapshot, run, group=None):
+def inference_command(config, root, source, snapshot, run, group=None, slot=0):
     v = config.inference
-    command = [str(root / "envs/serving/bin/python"), str(source / "tpu/vllm_tpu_server.py"),
+    server = "tpu/thinking_budget/server.py" if v.native_thinking_budget else "tpu/vllm_tpu_server.py"
+    command = [str(root / "envs/serving/bin/python"), str(source / server),
                str(snapshot), "--served-model-name", config.model, "--skyrl-lora-dir", str(run / "loras"),
-               "--host", "0.0.0.0", "--port", str(config.ports.engine),
+               "--host", "0.0.0.0", "--port", str(config.ports.engine + slot),
                "--tensor-parallel-size", str(v.tp), "--max-model-len", str(v.max_model_length),
                "--max-num-seqs", str(v.max_sequences)]
     if v.prefix_caching:
@@ -214,7 +232,11 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         TEMPERATURE="1.0", EVAL_TIMEOUT="1100", SAVE_EVERY="1", WANDB_MODE="offline",
         WANDB_PROJECT="tpu-tinker-exps", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     defaults.update(config.client_sampling_environment())
+    if config.is_recurrent_gemma:
+        defaults.update(TTD_PROBLEM_TYPE="rg_lru", EVAL_TIMEOUT="3600",
+                        GROUPS_PER_BATCH="1", GROUP_SIZE="8", TTD_EVAL_BACKEND="local")
     defaults.update(config.client_env)
+    defaults["TTD_NATIVE_THINKING_BUDGET"] = _flag(config.inference.native_thinking_budget)
     if config.adapter_count > 1:
         renderer = config.client_member_spec.split(":")[1]
         defaults.update(

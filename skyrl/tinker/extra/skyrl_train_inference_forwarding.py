@@ -10,6 +10,7 @@ import httpx
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from skyrl.backends.renderer import render_model_input
+from skyrl.backends.native_completion import validate_choice
 from skyrl.tinker import types
 from skyrl.tinker.config import EngineConfig
 from skyrl.tinker.db_models import EngineStateDB, RequestStatus
@@ -127,6 +128,9 @@ class SkyRLTrainInferenceForwardingClient:
             "stream": False,
             "return_token_ids": True,
         }
+        native_budget = getattr(sp, "thinking_token_budget", None)
+        if native_budget is not None:
+            payload["thinking_token_budget"] = native_budget
         # SamplingParams.stop is polymorphic (list[str] | list[int]).
         stop = getattr(sp, "stop", None)
         if stop:
@@ -156,6 +160,8 @@ class SkyRLTrainInferenceForwardingClient:
 
         sequences = []
         for choice in result.get("choices", []):
+            if native_budget is not None:
+                validate_choice(choice, native_budget, sp.max_tokens)
             tokens = choice.get("token_ids", [])
             lp = choice.get("logprobs") or {}
             logprobs = lp.get("token_logprobs") or []
@@ -172,6 +178,8 @@ class SkyRLTrainInferenceForwardingClient:
                     tokens=tokens,
                     logprobs=logprobs,
                     stop_reason=stop_reason,
+                    loss_mask=choice.get("loss_mask"),
+                    thinking_budget=choice.get("thinking_budget"),
                 )
             )
 

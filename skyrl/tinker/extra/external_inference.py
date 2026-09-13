@@ -8,6 +8,7 @@ import httpx
 from cloudpathlib import AnyPath
 
 from skyrl.backends.renderer import render_model_input
+from skyrl.backends.native_completion import validate_choice
 from skyrl.tinker import types
 from skyrl.tinker.config import EngineConfig
 from skyrl.tinker.db_models import RequestStatus
@@ -213,6 +214,9 @@ class ExternalInferenceClient:
             "stream": False,
             "return_token_ids": True,
         }
+        native_budget = getattr(request.sampling_params, "thinking_token_budget", None)
+        if native_budget is not None:
+            payload["thinking_token_budget"] = native_budget
         # Forward stop conditions (previously dropped: clients only stopped on
         # the model's EOS). Ints are token ids, strings are text stops.
         if request.sampling_params.stop:
@@ -239,12 +243,16 @@ class ExternalInferenceClient:
 
         sequences = []
         for choice in result["choices"]:
+            if native_budget is not None:
+                validate_choice(choice, native_budget, request.sampling_params.max_tokens)
             lp = choice["logprobs"]
             sequences.append(
                 types.GeneratedSequence(
                     tokens=choice["token_ids"],
                     logprobs=lp["token_logprobs"],
                     stop_reason=choice["finish_reason"],
+                    loss_mask=choice.get("loss_mask"),
+                    thinking_budget=choice.get("thinking_budget"),
                 )
             )
 

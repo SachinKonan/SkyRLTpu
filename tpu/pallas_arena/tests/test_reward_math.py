@@ -221,3 +221,99 @@ def test_blind_only_case_set_is_rejected():
 
     with pytest.raises(ValueError):
         final_reward([CaseTiming(case="b", pairs=[(1.0, 1.0)], blind=True)], noise_floor=0.0)
+
+
+# ------------------------------------------------------ backward geomean fold
+def test_fold_grad_reward_orders_none_slow_fast():
+    """The fold's whole job: no-backward < slow-correct-backward <
+    fast-backward, with no zero cliff (a literal 0 in the geomean would
+    re-create the hard gradient gate that produced a flat, unlearnable
+    reward surface)."""
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    frame = {"score": 0.5}
+    none_ = fold_grad_reward(frame, [None] * 6, noise_floor=0.02, n_scored=6)
+    slow = fold_grad_reward(frame, [0.2] * 6, noise_floor=0.02, n_scored=6)
+    fast = fold_grad_reward(frame, [0.9] * 6, noise_floor=0.02, n_scored=6)
+    assert 0 < none_ < slow < fast, (none_, slow, fast)
+    # absence is a haircut, not an execution
+    assert none_ > 0.2 * frame["score"], none_
+    # and a strong backward on a strong forward can still clear parity gating
+    assert fold_grad_reward({"score": 1.2}, [1.2] * 6, 0.02, 6) > 1.0
+
+
+def test_fold_grad_reward_swept_weight_is_one_factor_per_shape():
+    """Each swept backward shape is one geomean factor: with a full sweep
+    (m == n) the fwd:bwd aggregate log-weight is exactly 1:1 -- the
+    train-step reality, not the old 1/(n+1) afterthought."""
+    import math
+
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    n = 7
+    got = fold_grad_reward({"score": 0.4}, [0.8] * n, noise_floor=0.0, n_scored=n)
+    want = math.sqrt(0.4 * 0.8)  # (0.4^n * 0.8^n)^(1/2n)
+    assert abs(got - want) < 1e-12
+    # a partial sweep weights by its actual factor count
+    got_one = fold_grad_reward({"score": 0.4}, [0.8], noise_floor=0.0, n_scored=n)
+    want_one = math.exp((n * math.log(0.4) + math.log(0.8)) / (n + 1))
+    assert abs(got_one - want_one) < 1e-12
+
+
+def test_fold_grad_reward_empty_sweep_is_a_passthrough():
+    """An empty grad_scores list means the JUDGE could not time the (correct)
+    backward -- judge trouble must never haircut the candidate."""
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    assert fold_grad_reward({"score": 0.5}, [], noise_floor=0.0, n_scored=6) == 0.5
+
+
+def test_fold_never_punishes_a_correct_backward_below_absence():
+    """A correct-but-glacial backward must never total WORSE than shipping
+    none -- otherwise the fold pays candidates to delete working backwards.
+    Boundary: it ties the absence floor, never dips under it."""
+    from pallas_arena.judge.timing import fold_grad_reward
+
+    frame = {"score": 0.5}
+    absent = fold_grad_reward(frame, [None] * 6, noise_floor=0.05, n_scored=6)
+    glacial = fold_grad_reward(frame, [0.01] * 6, noise_floor=0.05, n_scored=6)
+    assert glacial >= absent, (glacial, absent)
+    # mixed: some shapes measured, some absent -- still never below all-absent
+    mixed = fold_grad_reward(frame, [0.3, None, 0.01], noise_floor=0.05, n_scored=6)
+    all_absent = fold_grad_reward(frame, [None] * 3, noise_floor=0.05, n_scored=6)
+    assert mixed >= all_absent, (mixed, all_absent)
+
+
+# ------------------------------------------- per-test dispatch: one case only
+def test_holdout_only_timing_scores_in_general_mode():
+    """A HOLDOUT-ONLY timing set is scoreable in general mode.
+
+    Under per-test dispatch each Ray task grades exactly ONE case, so a
+    holdout task's timing set contains nothing else. final_reward used to
+    demand a declared case and raised, which killed the task -- every holdout
+    (and every TP case whose control refused the measurement) died that way,
+    and the deaths read as a TPU fault because the exception was truncated
+    out of the verdict. General mode scores holdouts, so the guard belongs on
+    the SCORED set.
+    """
+    ho = tm.CaseTiming("probe-holdout-2x1500x2560", [(2e-4, 1e-4)] * 5, holdout=True)
+    out = tm.final_reward([ho], noise_floor=0.02, general=True)
+    assert out["score"] == pytest.approx(2.0)
+    assert out["holdout_scored"] is True
+    assert out["n_scored_cases"] == 1
+
+
+def test_holdout_only_timing_still_raises_when_not_general():
+    """Outside general mode a holdout pays nothing, so a holdout-only set
+    genuinely has nothing to score and must still raise rather than invent a
+    reward."""
+    ho = tm.CaseTiming("probe-holdout-2x1500x2560", [(2e-4, 1e-4)] * 5, holdout=True)
+    with pytest.raises(ValueError):
+        tm.final_reward([ho], noise_floor=0.02, general=False)
+
+
+def test_no_timings_at_all_raises():
+    """Zero timings is a judge failure in either mode (the worker converts it
+    into a judge_fault verdict so the collector can exclude the case)."""
+    with pytest.raises(ValueError):
+        tm.final_reward([], noise_floor=0.02, general=True)

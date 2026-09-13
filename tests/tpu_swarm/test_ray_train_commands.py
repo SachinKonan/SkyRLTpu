@@ -408,3 +408,38 @@ def test_mix_requires_doubled_rank_on_both_sides():
                                  token_budget=73728, max_lora_rank=16), trainer_env={})
     with pytest.raises(ValueError, match="trainer environment"):
         _mix_config(trainer_env={"TUNIX_LORA_MIX_GAMMA": 0.9})
+
+
+@pytest.mark.parametrize("accelerator,hosts,trainer", [
+    ("tpu-v5p-32", 4, {}),
+    ("tpu-v4-64", 8, dict(hosts=4, tp=8, fsdp=2, process_bounds="1,1,4")),
+])
+def test_muse_removes_parent_and_profile_plugin_restrictions(monkeypatch, accelerator, hosts, trainer):
+    monkeypatch.setenv("VLLM_PLUGINS", "stale_plugin")
+    cfg = v5p_config(model_preset="muse-glimmer-30b", accelerator=accelerator,
+                     hosts=hosts, trainer=trainer,
+                     inference=dict(engine_env={"VLLM_PLUGINS": "lora_filesystem_resolver"}))
+    cfg = Config.from_dict(cfg.to_dict())
+    env = inference_environment(cfg, ROOT, ROOT / "run")
+    assert "VLLM_PLUGINS" not in env
+    assert env["TPU_BACKEND_TYPE"] == "jax"
+    assert env["VLLM_ALLOW_RUNTIME_LORA_UPDATING"] == "True"
+    assert env["VLLM_LORA_RESOLVER_CACHE_DIR"] == str(ROOT / "run/loras")
+    import os
+    assert os.environ["VLLM_PLUGINS"] == "stale_plugin"
+
+
+@pytest.mark.parametrize("preset", ["qwen3.5-27b", "gemma4-31b", "gpt-oss-120b"])
+def test_other_models_keep_existing_plugin_allowlist(preset, monkeypatch):
+    monkeypatch.setenv("VLLM_PLUGINS", "stale_plugin")
+    cfg = v5p_config(model_preset=preset)
+    assert not cfg.inference.unset_plugins
+    assert inference_environment(cfg, ROOT, ROOT / "run")["VLLM_PLUGINS"] == "lora_filesystem_resolver"
+
+
+def test_plugin_unset_requires_boolean_and_can_be_explicitly_overridden():
+    with pytest.raises(ValueError, match="unset_plugins must be a boolean"):
+        v5p_config(inference=dict(unset_plugins="false"))
+    cfg = v5p_config(model_preset="muse-glimmer-30b",
+                     inference=dict(unset_plugins=False, engine_env={"VLLM_PLUGINS": "explicit_plugin"}))
+    assert inference_environment(cfg, ROOT, ROOT / "run")["VLLM_PLUGINS"] == "explicit_plugin"

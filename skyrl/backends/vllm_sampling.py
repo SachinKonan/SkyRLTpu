@@ -319,7 +319,8 @@ class VllmSamplingClient:
 
         finish_reason = choice.get("finish_reason")
         stop_reason = "stop" if finish_reason in ("stop", "stop_token") else "length"
-        return types.GeneratedSequence(tokens=tokens, logprobs=logprobs, stop_reason=stop_reason)
+        return types.GeneratedSequence(tokens=tokens, logprobs=logprobs, stop_reason=stop_reason,
+            loss_mask=choice.get("loss_mask"), thinking_budget=choice.get("thinking_budget"))
 
     def _completion_request(
         self,
@@ -353,6 +354,9 @@ class VllmSamplingClient:
             "stream": False,
             "return_token_ids": True,
         }
+        native_budget = sampling_params.thinking_token_budget
+        if native_budget is not None:
+            payload["thinking_token_budget"] = native_budget
         if sampling_params.stop_tokens:
             payload["stop_token_ids"] = sampling_params.stop_tokens
         if sampling_params.stop_strings:
@@ -369,6 +373,10 @@ class VllmSamplingClient:
         choices = sorted(choices, key=lambda choice: choice.get("index", 0))
 
         prompt_lps = self._prompt_logprobs_from_response(result, prompt_ids) if prompt_logprobs else None
+        if native_budget is not None:
+            from skyrl.backends.native_completion import validate_choice
+            for choice in choices:
+                validate_choice(choice, native_budget, sampling_params.max_tokens)
         return [self._sequence_from_choice(choice) for choice in choices], prompt_lps
 
     def sample_one(
