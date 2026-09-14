@@ -207,7 +207,7 @@ class Controller:
             # legacy cell trains on (validated), 4-7 serve.
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
-                               if r != self.config.arena_grader_rank]
+                               if r != self.config.arena_grader_rank and r not in self.config.placement_ranks]
         self.trainer_leader = train_ranks[0] if train_ranks else 0
         self.checked_get([host.set_trainer_leader.remote(self.trainer_leader) for host in self.hosts], 30)
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,

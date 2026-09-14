@@ -20,6 +20,9 @@ from .config import Config
 def workload_resources(config, rank):
     if config.arena_grader_rank == rank:
         return {"TPU": 4, "arena_grader": 4, "arena_pregate": 2}
+    if rank in config.placement_ranks:
+        from tpu.science.placement_slots import chips_from_env, host_resources
+        return host_resources(chips_from_env(config.client_env))
     if config.inference_only_ranks is not None and rank not in config.inference_only_ranks:
         # An omitted TPU key enables Ray's automatic hardware detection.
         return {"TPU": 0}
@@ -225,6 +228,9 @@ def main():
         os.environ.update(RAY_ADDRESS=f"{ips[0]}:{p.ray}", RAY_NAMESPACE=config.run_id,
             RAY_TMPDIR=str(ray_tmp), JAX_PLATFORMS="cpu", TPU_VISIBLE_CHIPS="0,1,2,3",
             OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", RAY_USAGE_STATS_ENABLED="0")
+        if rank in config.placement_ranks:
+            from tpu.science.placement_slots import chips_from_env
+            os.environ['TPU_VISIBLE_CHIPS'] = ','.join(map(str, chips_from_env(config.client_env)))
         command = [str(runtime / "bin/ray"), "start", f"--node-ip-address={ips[rank]}",
             "--num-cpus=32", "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
             f"--object-manager-port={p.object_manager}", f"--node-manager-port={p.node_manager}",

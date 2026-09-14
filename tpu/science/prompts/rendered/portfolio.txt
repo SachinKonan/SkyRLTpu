@@ -1,0 +1,135 @@
+Discover a learning algorithm for long-only portfolio allocation. Return one complete fenced Python module implementing:
+fit(train: dict, valid: dict, rng, *, time_budget_s: float) -> model
+act(model, obs: dict) -> weights
+
+train/valid provide features[T,N,F], subsequent returns[T,N], cash_returns[T], context_features[19,N,F]. Features are available through the decision day's close; trade at the next open and earn the following open-to-open return. The appended manifest fixes the actual features, assets, dates, data hashes, and costs. Do not use future data or externally obtained information.
+
+The inputs are ordinary Python dictionaries whose values are NumPy arrays. Access fields with train["features"], train["returns"], valid["features"], obs["features"] and obs["current_weights"]. For example, T, N, F = train["features"].shape; the features have exactly three dimensions. In this manifest N=29 and F=6. The training tensor has shape [1719,29,6], validation [250,29,6], and each inference feature window [20,29,6]. fit receives the entire training/validation dictionaries. act receives one observation dictionary at a time.
+
+act receives only causal features[20,N,F] and current_weights[N+1], the drifted holdings (cash first). Return finite nonnegative weights[N+1] summing to one. Floating-point tolerances: min >= -1e-7, abs(sum-1) <= 1e-5; tolerated roundoff is clipped and renormalized. The evaluator charges fee_rate * sum(abs(target_asset_weights-current_asset_weights)), deducting that wealth fraction before applying subsequent returns. Cash return is zero.
+
+fit may train or implement a heuristic. Return serializable fitted state, including NumPy arrays and/or scikit-learn estimators. The supplied RNG is numpy.random.Generator. The harness serializes state only within isolation; never access files yourself. fit and act run in separate isolated processes, with only the returned model transferred. act must be stateless. Every action starts from the same frozen model and module state; changes to globals or estimator state do not persist across observations.
+
+Reward = max(1e-6,sigmoid(S)), S=sqrt(252)*mean(net_excess_returns)/max(sample_std(net_excess_returns,ddof=1),1e-8). All-zero excess returns give S=0. Invalid code/actions/timeouts receive zero; poor performance remains valid. Only discovery-validation scores feed search; final test is not queried during search.
+
+Allowed third-party imports: numpy, scipy, pandas, sklearn, statsmodels, sympy, matplotlib, xgboost, cvxpy. scikit-learn is imported as sklearn. statsmodels.api and statsmodels.tsa are allowed. matplotlib uses the noninteractive Agg backend; plots do not affect reward.
+XGBoost: CPU-only build; use device="cpu", tree_method="hist" and n_jobs/nthread <= 4. CVXPY: installed solver allowlist is CLARABEL, OSQP, SCS, SCIPY, HIGHS. Set solver-specific time/iteration/thread options within the task budget when supported; there are no commercial, remote, or GPU solvers.
+Allowed standard-library imports: math, cmath, statistics, random, collections, itertools, functools, operator, typing, dataclasses, enum, decimal, fractions, heapq, bisect, array, copy, time, numbers, warnings.
+Resources: 4 CPU cores and 8 GiB shared by the complete candidate process tree. No accelerator. fit: 180 seconds including imports and training; inference/replay: 60 seconds; overall: 300 seconds. Serialized fitted model limit: 128 MiB.
+Parallelism: use n_jobs between 1 and 4 (or -1 to use the assigned CPUs). The harness defaults joblib to threading and native BLAS/OpenMP/NumExpr to one thread per worker, avoiding nested oversubscription. NumPy, SciPy, statsmodels and scikit-learn share these numerical thread pools; pandas may also use NumExpr. SymPy and matplotlib have no universal per-library memory/thread quota. All libraries share the same CPU, memory and time budget; they do not each receive another allocation. Do not override resource controls.
+JAX, Flax, Optax, PyTorch, network/filesystem access, downloads, external checkpoints and user-launched external processes are prohibited. Library-managed computational parallelism within the allocation is permitted. Use the supplied numpy.random.Generator.
+
+Pinned manifest:
+{
+  "version": "portfolio_v1",
+  "source_sha256": "f7f9eb49eb9cd45ae88e13f31c9bef43a53138ced40628d62121786b68450713",
+  "feature_names": [
+    "close_return_1",
+    "close_return_5",
+    "close_return_20",
+    "open_to_close",
+    "high_to_close",
+    "low_to_close"
+  ],
+  "asset_names": [
+    "AAPL",
+    "AMGN",
+    "AXP",
+    "BA",
+    "CAT",
+    "CRM",
+    "CSCO",
+    "CVX",
+    "DIS",
+    "GS",
+    "HD",
+    "HON",
+    "IBM",
+    "INTC",
+    "JNJ",
+    "JPM",
+    "KO",
+    "MCD",
+    "MMM",
+    "MRK",
+    "MSFT",
+    "NKE",
+    "PG",
+    "TRV",
+    "UNH",
+    "V",
+    "VZ",
+    "WBA",
+    "WMT"
+  ],
+  "hardware": "cpu",
+  "allowed_libraries": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "sklearn",
+    "statsmodels",
+    "sympy",
+    "matplotlib",
+    "xgboost",
+    "cvxpy"
+  ],
+  "execution_lag": "features through close[t]; trade open[t+1]; mark holdings open[t+2]",
+  "price_convention": "adjusted open = open * adjcp / close; fixed historical constituents",
+  "fee_rate": 0.001,
+  "fee_rule": "wealth fraction = 0.001 * sum(abs(target_assets - drifted_assets)); deducted before next return; no cash leg fee",
+  "cash_return": 0.0,
+  "initial_weights": "all cash",
+  "seeds": [
+    1
+  ],
+  "sample_std_ddof": 1,
+  "std_floor": 1e-08,
+  "annualization": 252,
+  "context_length": 20,
+  "splits": {
+    "train": {
+      "first_decision": "2012-02-29",
+      "last_decision": "2018-12-27",
+      "last_return_date": "2018-12-31",
+      "observations": 1719,
+      "sha256": "9fd3ad86f6b5a465d062de5ecaca6be81c508425f28291379c64e488a4e95bc1"
+    },
+    "valid": {
+      "first_decision": "2019-01-02",
+      "last_decision": "2019-12-27",
+      "last_return_date": "2019-12-31",
+      "observations": 250,
+      "sha256": "b8a5cb4813dec16b73684b4a4ab361d6f9b54cf6a52fbd71085c3fb2f918ca55"
+    },
+    "discovery": {
+      "first_decision": "2020-01-02",
+      "last_decision": "2020-12-29",
+      "last_return_date": "2020-12-31",
+      "observations": 251,
+      "sha256": "bb5c964984d9196b0f8cde69b5f555953a9a6b7d075c3728036f58c5c4d1f3c5"
+    },
+    "final": {
+      "first_decision": "2021-01-04",
+      "last_decision": "2021-12-29",
+      "last_return_date": "2021-12-31",
+      "observations": 250,
+      "sha256": "baae88b8e6dbe2462c09ea1a32ba5ee119e17f5f67c1a78cfdeb04eb7a5e6767"
+    }
+  }
+}
+Working equal-weight reference illustrating the exact interface:
+```python
+import numpy as np
+
+
+def fit(train, valid, rng, *, time_budget_s):
+    return {'n': train['features'].shape[1]}
+
+
+def act(model, obs):
+    n = model['n']
+    return np.r_[0., np.full(n, 1/n)]
+
+```
+Improve the allocation algorithm under the same contract. Your final answer must contain one complete fenced Python module with fit and act, all imports and helpers. Close the Python code fence.

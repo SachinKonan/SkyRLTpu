@@ -1,0 +1,241 @@
+asset_id,name_at_selection,year,expected_sessions,price_sessions,feature_ready_sessions,usable_label_sessions,sessions_with_news,news_items,news_sources,first_price_date,last_price_date
+AAPL,Apple,2019,252,252,232,250,61,41,kaggle_apple_archive_v1,2019-01-02,2019-12-31
+AAPL,Apple,2020,253,253,253,253,201,675,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+AAPL,Apple,2021,252,252,252,252,252,6968,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+AAPL,Apple,2022,251,251,251,251,251,10941,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+AAPL,Apple,2023,250,250,250,248,250,11595,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+AAPL,Apple,2024,252,252,252,250,235,5047,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+AAPL,Apple,2025,250,250,250,248,192,1895,defeatbeta_yahoo,2025-01-02,2025-12-31
+AAPL,Apple,2026,174,174,174,172,174,3171,defeatbeta_yahoo,2026-01-02,2026-09-11
+AXP,American Express,2019,252,252,232,250,250,582,fnspid_All_external,2019-01-02,2019-12-31
+AXP,American Express,2020,253,253,253,253,115,385,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+AXP,American Express,2021,252,252,252,252,132,65,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+AXP,American Express,2022,251,251,251,251,201,95,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+AXP,American Express,2023,250,250,250,248,235,141,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+AXP,American Express,2024,252,252,252,250,168,89,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+AXP,American Express,2025,250,250,250,248,182,554,defeatbeta_yahoo,2025-01-02,2025-12-31
+AXP,American Express,2026,174,174,174,172,174,847,defeatbeta_yahoo,2026-01-02,2026-09-11
+BA,Boeing,2019,252,252,232,250,250,1297,fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+BA,Boeing,2020,253,253,253,253,253,1929,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+BA,Boeing,2021,252,252,252,252,206,781,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+BA,Boeing,2022,251,251,251,251,222,973,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+BA,Boeing,2023,250,250,250,248,176,473,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+BA,Boeing,2024,252,252,252,250,87,41,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+BA,Boeing,2025,250,250,250,248,192,886,defeatbeta_yahoo,2025-01-02,2025-12-31
+BA,Boeing,2026,174,174,174,172,174,1210,defeatbeta_yahoo,2026-01-02,2026-09-11
+CAT,Caterpillar,2019,252,252,232,250,249,684,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+CAT,Caterpillar,2020,253,253,253,253,251,429,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+CAT,Caterpillar,2021,252,252,252,252,249,398,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+CAT,Caterpillar,2022,251,251,251,251,251,528,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+CAT,Caterpillar,2023,250,250,250,248,246,940,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+CAT,Caterpillar,2024,252,252,252,250,46,12,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+CAT,Caterpillar,2025,250,250,250,248,175,444,defeatbeta_yahoo,2025-01-02,2025-12-31
+CAT,Caterpillar,2026,174,174,174,172,174,893,defeatbeta_yahoo,2026-01-02,2026-09-11
+CSCO,Cisco,2019,252,252,232,250,210,444,fnspid_All_external,2019-01-02,2019-12-31
+CSCO,Cisco,2020,253,253,253,253,123,476,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+CSCO,Cisco,2021,252,252,252,252,149,58,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+CSCO,Cisco,2022,251,251,251,251,127,53,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+CSCO,Cisco,2023,250,250,250,248,160,55,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+CSCO,Cisco,2024,252,252,252,250,83,21,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+CSCO,Cisco,2025,250,250,250,248,186,586,defeatbeta_yahoo,2025-01-02,2025-12-31
+CSCO,Cisco,2026,174,174,174,172,174,1152,defeatbeta_yahoo,2026-01-02,2026-09-11
+CVX,Chevron,2019,252,252,232,250,251,720,fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+CVX,Chevron,2020,253,253,253,253,253,1019,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+CVX,Chevron,2021,252,252,252,252,252,993,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+CVX,Chevron,2022,251,251,251,251,251,1890,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+CVX,Chevron,2023,250,250,250,248,250,2079,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+CVX,Chevron,2024,252,252,252,250,149,59,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+CVX,Chevron,2025,250,250,250,248,192,824,defeatbeta_yahoo,2025-01-02,2025-12-31
+CVX,Chevron,2026,174,174,174,172,174,1574,defeatbeta_yahoo,2026-01-02,2026-09-11
+DIS,Walt Disney,2019,252,252,232,250,138,1019,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+DIS,Walt Disney,2020,253,253,253,253,253,2851,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+DIS,Walt Disney,2021,252,252,252,252,252,1923,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+DIS,Walt Disney,2022,251,251,251,251,251,2179,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+DIS,Walt Disney,2023,250,250,250,248,250,2237,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+DIS,Walt Disney,2024,252,252,252,250,98,40,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+DIS,Walt Disney,2025,250,250,250,248,179,772,defeatbeta_yahoo,2025-01-02,2025-12-31
+DIS,Walt Disney,2026,174,174,174,172,174,915,defeatbeta_yahoo,2026-01-02,2026-09-11
+DOW,Dow,2019,252,199,179,198,193,488,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-03-20,2019-12-31
+DOW,Dow,2020,253,253,253,253,242,449,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+DOW,Dow,2021,252,252,252,252,237,177,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+DOW,Dow,2022,251,251,251,251,247,318,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+DOW,Dow,2023,250,250,250,248,245,324,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+DOW,Dow,2024,252,252,252,250,10,2,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+DOW,Dow,2025,250,250,250,248,180,198,defeatbeta_yahoo,2025-01-02,2025-12-31
+DOW,Dow,2026,174,174,174,172,163,301,defeatbeta_yahoo,2026-01-02,2026-09-11
+GS,Goldman Sachs,2019,252,252,232,250,249,539,fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+GS,Goldman Sachs,2020,253,253,253,253,253,1000,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+GS,Goldman Sachs,2021,252,252,252,252,252,1430,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+GS,Goldman Sachs,2022,251,251,251,251,251,1433,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+GS,Goldman Sachs,2023,250,250,250,248,250,1767,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+GS,Goldman Sachs,2024,252,252,252,250,48,14,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+GS,Goldman Sachs,2025,250,250,250,248,170,658,defeatbeta_yahoo,2025-01-02,2025-12-31
+GS,Goldman Sachs,2026,174,174,174,172,174,1751,defeatbeta_yahoo,2026-01-02,2026-09-11
+HD,Home Depot,2019,252,252,232,250,251,1158,fnspid_All_external,2019-01-02,2019-12-31
+HD,Home Depot,2020,253,253,253,253,117,493,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+HD,Home Depot,2021,252,252,252,252,97,30,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+HD,Home Depot,2022,251,251,251,251,125,42,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+HD,Home Depot,2023,250,250,250,248,130,48,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+HD,Home Depot,2024,252,252,252,250,67,14,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+HD,Home Depot,2025,250,250,250,248,180,573,defeatbeta_yahoo,2025-01-02,2025-12-31
+HD,Home Depot,2026,174,174,174,172,174,676,defeatbeta_yahoo,2026-01-02,2026-09-11
+IBM,IBM,2019,252,252,232,250,231,221,fnspid_All_external,2019-01-02,2019-12-31
+IBM,IBM,2020,253,253,253,253,127,179,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+IBM,IBM,2021,252,252,252,252,151,76,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+IBM,IBM,2022,251,251,251,251,135,52,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+IBM,IBM,2023,250,250,250,248,115,53,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+IBM,IBM,2024,252,252,252,250,89,32,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+IBM,IBM,2025,250,250,250,248,166,736,defeatbeta_yahoo,2025-01-02,2025-12-31
+IBM,IBM,2026,174,174,174,172,174,1487,defeatbeta_yahoo,2026-01-02,2026-09-11
+INTC,Intel,2019,252,252,232,250,251,2600,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+INTC,Intel,2020,253,253,253,253,253,1547,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+INTC,Intel,2021,252,252,252,252,252,1381,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+INTC,Intel,2022,251,251,251,251,251,1573,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+INTC,Intel,2023,250,250,250,248,250,2244,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+INTC,Intel,2024,252,252,252,250,157,90,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+INTC,Intel,2025,250,250,250,248,187,1079,defeatbeta_yahoo,2025-01-02,2025-12-31
+INTC,Intel,2026,174,174,174,172,174,4301,defeatbeta_yahoo,2026-01-02,2026-09-11
+JNJ,Johnson & Johnson,2019,252,252,232,250,245,432,fnspid_All_external,2019-01-02,2019-12-31
+JNJ,Johnson & Johnson,2020,253,253,253,253,128,233,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+JNJ,Johnson & Johnson,2021,252,252,252,252,165,87,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+JNJ,Johnson & Johnson,2022,251,251,251,251,183,72,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+JNJ,Johnson & Johnson,2023,250,250,250,248,211,100,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+JNJ,Johnson & Johnson,2024,252,252,252,250,58,15,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+JNJ,Johnson & Johnson,2025,250,250,250,248,187,738,defeatbeta_yahoo,2025-01-02,2025-12-31
+JNJ,Johnson & Johnson,2026,174,174,174,172,174,1379,defeatbeta_yahoo,2026-01-02,2026-09-11
+JPM,JPMorgan Chase,2019,252,252,232,250,251,1696,fnspid_All_external,2019-01-02,2019-12-31
+JPM,JPMorgan Chase,2020,253,253,253,253,136,662,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+JPM,JPMorgan Chase,2021,252,252,252,252,184,87,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+JPM,JPMorgan Chase,2022,251,251,251,251,160,71,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+JPM,JPMorgan Chase,2023,250,250,250,248,197,91,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+JPM,JPMorgan Chase,2024,252,252,252,250,108,36,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+JPM,JPMorgan Chase,2025,250,250,250,248,187,905,defeatbeta_yahoo,2025-01-02,2025-12-31
+JPM,JPMorgan Chase,2026,174,174,174,172,174,2242,defeatbeta_yahoo,2026-01-02,2026-09-11
+KO,Coca-Cola,2019,252,252,232,250,250,792,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+KO,Coca-Cola,2020,253,253,253,253,253,823,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+KO,Coca-Cola,2021,252,252,252,252,252,640,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+KO,Coca-Cola,2022,251,251,251,251,251,1000,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+KO,Coca-Cola,2023,250,250,250,248,250,1338,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+KO,Coca-Cola,2024,252,252,252,250,166,84,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+KO,Coca-Cola,2025,250,250,250,248,177,680,defeatbeta_yahoo,2025-01-02,2025-12-31
+KO,Coca-Cola,2026,174,174,174,172,174,1160,defeatbeta_yahoo,2026-01-02,2026-09-11
+MCD,McDonald’s,2019,252,252,232,250,232,330,fnspid_All_external,2019-01-02,2019-12-31
+MCD,McDonald’s,2020,253,253,253,253,118,195,fnspid_All_external,2020-01-02,2020-12-31
+MCD,McDonald’s,2021,252,252,252,252,101,35,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+MCD,McDonald’s,2022,251,251,251,251,104,38,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+MCD,McDonald’s,2023,250,250,250,248,130,47,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+MCD,McDonald’s,2024,252,252,252,250,77,25,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+MCD,McDonald’s,2025,250,250,250,248,167,599,defeatbeta_yahoo,2025-01-02,2025-12-31
+MCD,McDonald’s,2026,174,174,174,172,174,849,defeatbeta_yahoo,2026-01-02,2026-09-11
+MMM,3M,2019,252,252,232,250,250,454,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+MMM,3M,2020,253,253,253,253,253,623,fnspid_All_external;fnspid_nasdaq_exteral_data,2020-01-02,2020-12-31
+MMM,3M,2021,252,252,252,252,252,400,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+MMM,3M,2022,251,251,251,251,251,513,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+MMM,3M,2023,250,250,250,248,246,744,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+MMM,3M,2024,252,252,252,250,20,4,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+MMM,3M,2025,250,250,250,248,162,205,defeatbeta_yahoo,2025-01-02,2025-12-31
+MMM,3M,2026,174,174,174,172,174,315,defeatbeta_yahoo,2026-01-02,2026-09-11
+MRK,Merck,2019,252,252,232,250,250,828,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+MRK,Merck,2020,253,253,253,253,253,790,fnspid_All_external;fnspid_nasdaq_exteral_data,2020-01-02,2020-12-31
+MRK,Merck,2021,252,252,252,252,252,868,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+MRK,Merck,2022,251,251,251,251,251,1071,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+MRK,Merck,2023,250,250,250,248,247,993,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+MRK,Merck,2024,252,252,252,250,33,7,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+MRK,Merck,2025,250,250,250,248,185,671,defeatbeta_yahoo,2025-01-02,2025-12-31
+MRK,Merck,2026,174,174,174,172,174,1204,defeatbeta_yahoo,2026-01-02,2026-09-11
+MSFT,Microsoft,2019,252,252,232,250,0,0,,2019-01-02,2019-12-31
+MSFT,Microsoft,2020,253,253,253,253,133,51,kaggle_apple_archive_v1,2020-01-02,2020-12-31
+MSFT,Microsoft,2021,252,252,252,252,251,1079,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+MSFT,Microsoft,2022,251,251,251,251,251,3244,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+MSFT,Microsoft,2023,250,250,250,248,250,6640,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+MSFT,Microsoft,2024,252,252,252,250,216,503,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+MSFT,Microsoft,2025,250,250,250,248,197,2482,defeatbeta_yahoo,2025-01-02,2025-12-31
+MSFT,Microsoft,2026,174,174,174,172,174,4876,defeatbeta_yahoo,2026-01-02,2026-09-11
+NKE,Nike,2019,252,252,232,250,250,519,fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+NKE,Nike,2020,253,253,253,253,253,678,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+NKE,Nike,2021,252,252,252,252,252,779,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+NKE,Nike,2022,251,251,251,251,251,967,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+NKE,Nike,2023,250,250,250,248,250,995,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+NKE,Nike,2024,252,252,252,250,72,15,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+NKE,Nike,2025,250,250,250,248,177,667,defeatbeta_yahoo,2025-01-02,2025-12-31
+NKE,Nike,2026,174,174,174,172,174,939,defeatbeta_yahoo,2026-01-02,2026-09-11
+PFE,Pfizer,2019,252,252,232,250,248,322,fnspid_All_external,2019-01-02,2019-12-31
+PFE,Pfizer,2020,253,253,253,253,116,201,fnspid_All_external,2020-01-02,2020-12-31
+PFE,Pfizer,2021,252,252,252,252,177,84,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+PFE,Pfizer,2022,251,251,251,251,104,35,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+PFE,Pfizer,2023,250,250,250,248,155,63,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+PFE,Pfizer,2024,252,252,252,250,22,4,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+PFE,Pfizer,2025,250,250,250,248,191,919,defeatbeta_yahoo,2025-01-02,2025-12-31
+PFE,Pfizer,2026,174,174,174,172,174,1164,defeatbeta_yahoo,2026-01-02,2026-09-11
+PG,Procter & Gamble,2019,252,252,232,250,182,146,fnspid_All_external,2019-01-02,2019-12-31
+PG,Procter & Gamble,2020,253,253,253,253,91,94,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+PG,Procter & Gamble,2021,252,252,252,252,88,29,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+PG,Procter & Gamble,2022,251,251,251,251,78,21,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+PG,Procter & Gamble,2023,250,250,250,248,107,38,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+PG,Procter & Gamble,2024,252,252,252,250,27,8,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+PG,Procter & Gamble,2025,250,250,250,248,168,435,defeatbeta_yahoo,2025-01-02,2025-12-31
+PG,Procter & Gamble,2026,174,174,174,172,174,802,defeatbeta_yahoo,2026-01-02,2026-09-11
+TRV,Travelers,2019,252,252,232,250,248,411,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+TRV,Travelers,2020,253,253,253,253,222,304,fnspid_All_external;fnspid_nasdaq_exteral_data,2020-01-02,2020-12-31
+TRV,Travelers,2021,252,252,252,252,207,143,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+TRV,Travelers,2022,251,251,251,251,245,306,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+TRV,Travelers,2023,250,250,250,248,239,311,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+TRV,Travelers,2024,252,252,252,250,10,2,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+TRV,Travelers,2025,250,250,250,248,167,278,defeatbeta_yahoo,2025-01-02,2025-12-31
+TRV,Travelers,2026,174,174,174,172,174,399,defeatbeta_yahoo,2026-01-02,2026-09-11
+UNH,UnitedHealth,2019,252,252,232,250,108,120,fnspid_All_external,2019-01-02,2019-12-31
+UNH,UnitedHealth,2020,253,253,253,253,121,281,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+UNH,UnitedHealth,2021,252,252,252,252,48,20,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+UNH,UnitedHealth,2022,251,251,251,251,115,66,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+UNH,UnitedHealth,2023,250,250,250,248,145,45,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+UNH,UnitedHealth,2024,252,252,252,250,51,12,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+UNH,UnitedHealth,2025,250,250,250,248,181,751,defeatbeta_yahoo,2025-01-02,2025-12-31
+UNH,UnitedHealth,2026,174,174,174,172,174,814,defeatbeta_yahoo,2026-01-02,2026-09-11
+UTX,United Technologies,2019,252,252,232,250,0,0,,2019-01-02,2019-12-31
+UTX,United Technologies,2020,253,253,253,253,5,1,kaggle_apple_archive_v1,2020-01-02,2020-12-31
+UTX,United Technologies,2021,252,252,252,252,10,2,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+UTX,United Technologies,2022,251,251,251,251,12,3,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+UTX,United Technologies,2023,250,250,250,248,73,19,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+UTX,United Technologies,2024,252,252,252,250,5,1,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+UTX,United Technologies,2025,250,250,250,248,162,454,defeatbeta_yahoo,2025-01-02,2025-12-31
+UTX,United Technologies,2026,174,174,174,172,174,757,defeatbeta_yahoo,2026-01-02,2026-09-11
+V,Visa,2019,252,252,232,250,250,437,fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+V,Visa,2020,253,253,253,253,253,637,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+V,Visa,2021,252,252,252,252,252,737,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+V,Visa,2022,251,251,251,251,251,926,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+V,Visa,2023,250,250,250,248,248,1248,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+V,Visa,2024,252,252,252,250,122,45,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+V,Visa,2025,250,250,250,248,179,666,defeatbeta_yahoo,2025-01-02,2025-12-31
+V,Visa,2026,174,174,174,172,174,1255,defeatbeta_yahoo,2026-01-02,2026-09-11
+VZ,Verizon,2019,252,252,232,250,229,195,fnspid_All_external,2019-01-02,2019-12-31
+VZ,Verizon,2020,253,253,253,253,125,120,fnspid_All_external;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+VZ,Verizon,2021,252,252,252,252,159,72,kaggle_apple_archive_v1,2021-01-04,2021-12-31
+VZ,Verizon,2022,251,251,251,251,122,33,kaggle_apple_archive_v1,2022-01-03,2022-12-30
+VZ,Verizon,2023,250,250,250,248,172,71,kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+VZ,Verizon,2024,252,252,252,250,27,7,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+VZ,Verizon,2025,250,250,250,248,180,627,defeatbeta_yahoo,2025-01-02,2025-12-31
+VZ,Verizon,2026,174,174,174,172,174,1076,defeatbeta_yahoo,2026-01-02,2026-09-11
+WBA,Walgreens Boots Alliance,2019,252,252,232,250,251,1232,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+WBA,Walgreens Boots Alliance,2020,253,253,253,253,253,680,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+WBA,Walgreens Boots Alliance,2021,252,252,252,252,252,583,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+WBA,Walgreens Boots Alliance,2022,251,251,251,251,251,636,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+WBA,Walgreens Boots Alliance,2023,250,250,250,248,246,791,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+WBA,Walgreens Boots Alliance,2024,252,252,252,250,28,7,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+WBA,Walgreens Boots Alliance,2025,250,163,163,161,0,0,,2025-01-02,2025-08-27
+WBA,Walgreens Boots Alliance,2026,174,0,0,0,0,0,,NaT,NaT
+WMT,Walmart,2019,252,252,232,250,250,1311,fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+WMT,Walmart,2020,253,253,253,253,253,1979,fnspid_All_external;fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2020-01-02,2020-12-31
+WMT,Walmart,2021,252,252,252,252,252,1485,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+WMT,Walmart,2022,251,251,251,251,251,1860,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+WMT,Walmart,2023,250,250,250,248,247,1840,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+WMT,Walmart,2024,252,252,252,250,76,18,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+WMT,Walmart,2025,250,250,250,248,190,1298,defeatbeta_yahoo,2025-01-02,2025-12-31
+WMT,Walmart,2026,174,174,174,172,174,1849,defeatbeta_yahoo,2026-01-02,2026-09-11
+XOM,Exxon Mobil,2019,252,252,232,250,246,537,fnspid_All_external;fnspid_nasdaq_exteral_data,2019-01-02,2019-12-31
+XOM,Exxon Mobil,2020,253,253,253,253,251,1487,fnspid_All_external;fnspid_nasdaq_exteral_data,2020-01-02,2020-12-31
+XOM,Exxon Mobil,2021,252,252,252,252,252,1201,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2021-01-04,2021-12-31
+XOM,Exxon Mobil,2022,251,251,251,251,247,1954,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1,2022-01-03,2022-12-30
+XOM,Exxon Mobil,2023,250,250,250,248,248,1989,fnspid_nasdaq_exteral_data;kaggle_apple_archive_v1;kaggle_polygon_sample_v1,2023-01-03,2023-12-29
+XOM,Exxon Mobil,2024,252,252,252,250,65,14,kaggle_apple_archive_v1,2024-01-02,2024-12-31
+XOM,Exxon Mobil,2025,250,250,250,248,197,730,defeatbeta_yahoo,2025-01-02,2025-12-31
+XOM,Exxon Mobil,2026,174,174,174,172,174,1376,defeatbeta_yahoo,2026-01-02,2026-09-11

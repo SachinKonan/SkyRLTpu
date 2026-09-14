@@ -1,0 +1,296 @@
+{
+  "scope": "CPU-only two-case upstream fallback pilot; not a 17-case leaderboard reproduction",
+  "runs": [
+    {
+      "method": "archgen",
+      "case": "ibm01",
+      "commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+      "valid": true,
+      "reward": 0.5481017537135482,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "MPLCONFIGDIR": "/tmp/matplotlib",
+        "MPLBACKEND": "Agg",
+        "XDG_CACHE_HOME": "/tmp/cache",
+        "XDG_CONFIG_HOME": "/tmp/config",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4",
+        "EVO_XRA_ENABLE": "0",
+        "PAD80_CD_TIME": "140",
+        "EVO_TARGET_TOTAL_TIME_S": "140",
+        "AUTODMP_TOTAL_TIME_LIMIT": "140",
+        "EVO_UNDER60_DEADLINE_S": "140",
+        "EVO_UNDER60_SCORE_SAFETY_S": "10"
+      },
+      "reused_completed_output": true,
+      "import_and_load_seconds": 3.645978958986234,
+      "candidate_seconds": 131.72977913200157,
+      "peak_rss_mib": 329.8203125,
+      "cuda_available": false,
+      "violations": [],
+      "metrics": {
+        "proxy_cost": 0.8244787454605103,
+        "wirelength_cost": 0.0822768285870552,
+        "density_cost": 0.5556046366691589,
+        "congestion_cost": 0.9287992240768873,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "grading_seconds": 2.167156929965131,
+      "total_seconds": 2.1677852619905025
+    },
+    {
+      "method": "archgen",
+      "case": "ibm18",
+      "commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+      "valid": false,
+      "reward": 0.0,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "MPLCONFIGDIR": "/tmp/matplotlib",
+        "MPLBACKEND": "Agg",
+        "XDG_CACHE_HOME": "/tmp/cache",
+        "XDG_CONFIG_HOME": "/tmp/config",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4",
+        "EVO_XRA_ENABLE": "0",
+        "PAD80_CD_TIME": "140",
+        "EVO_TARGET_TOTAL_TIME_S": "140",
+        "AUTODMP_TOTAL_TIME_LIMIT": "140",
+        "EVO_UNDER60_DEADLINE_S": "140",
+        "EVO_UNDER60_SCORE_SAFETY_S": "10"
+      },
+      "isolated_seconds": 160.96532754297368,
+      "import_and_load_seconds": 3.4663229130092077,
+      "candidate_seconds": 156.9550032769912,
+      "peak_rss_mib": 415.59765625,
+      "cuda_available": false,
+      "violations": [
+        "Macros outside vertical canvas bounds"
+      ],
+      "grading_seconds": 2.2922979349968955,
+      "total_seconds": 163.2815184960491
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm01",
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "valid": true,
+      "reward": 0.47607804594228786,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "MPLCONFIGDIR": "/tmp/matplotlib",
+        "MPLBACKEND": "Agg",
+        "XDG_CACHE_HOME": "/tmp/cache",
+        "XDG_CONFIG_HOME": "/tmp/config",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4"
+      },
+      "isolated_seconds": 6.700055618071929,
+      "import_and_load_seconds": 3.9357865219935775,
+      "candidate_seconds": 1.9255295229377225,
+      "peak_rss_mib": 242.6484375,
+      "cuda_available": false,
+      "violations": [],
+      "metrics": {
+        "proxy_cost": 1.1004959344863892,
+        "wirelength_cost": 0.06828062981367111,
+        "density_cost": 0.889373779296875,
+        "congestion_cost": 1.1750567740624844,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "grading_seconds": 3.12133204494603,
+      "total_seconds": 9.8517376530217
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm18",
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "valid": true,
+      "reward": 0.35874989939223073,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "MPLCONFIGDIR": "/tmp/matplotlib",
+        "MPLBACKEND": "Agg",
+        "XDG_CACHE_HOME": "/tmp/cache",
+        "XDG_CONFIG_HOME": "/tmp/config",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4"
+      },
+      "isolated_seconds": 7.561819756985642,
+      "import_and_load_seconds": 5.057707097032107,
+      "candidate_seconds": 1.5372201959835365,
+      "peak_rss_mib": 287.2421875,
+      "cuda_available": false,
+      "violations": [],
+      "metrics": {
+        "proxy_cost": 1.7874572277069092,
+        "wirelength_cost": 0.053216006606817245,
+        "density_cost": 1.0405701398849487,
+        "congestion_cost": 2.427912204080636,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "grading_seconds": 46.99807524296921,
+      "total_seconds": 54.5941918019671
+    }
+  ],
+  "suites": {
+    "archgen": {
+      "all_valid": false,
+      "mean_proxy_cost": null,
+      "reward": 0
+    },
+    "abuplace": {
+      "all_valid": true,
+      "mean_proxy_cost": 1.4439765810966492,
+      "reward": 0.40916922352475443
+    }
+  },
+  "seed_four_cases": [
+    {
+      "name": "ibm01",
+      "data_sha256": {
+        "netlist.pb.txt": "ca97cee4652966bc0afc16562ccc9aec224de31de1cfb317b61972a4ba1a4c96",
+        "initial.plc": "f5202ce7295ba2ae38781a6a658b5affaa0ee933110ec071f41dd14961b133ad"
+      },
+      "hard": 246,
+      "soft": 894,
+      "nets": 5993,
+      "endpoints": 16815,
+      "nonunit_weights": 684,
+      "input_bytes": 520868,
+      "solve_seconds": 4.1365619549760595,
+      "grading_seconds": 1.6242272689705715,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.0715302228927612,
+        "wirelength_cost": 0.06664804369211197,
+        "density_cost": 0.8503214120864868,
+        "congestion_cost": 1.1594429667181945,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.06664793883941578,
+      "reward": 0.4827349313801288,
+      "invalid_output_checks_passed": true
+    },
+    {
+      "name": "ibm04",
+      "data_sha256": {
+        "netlist.pb.txt": "347924f72a646c0295f32858b4e58c41b1f18739286e8e5c8250226222ca188a",
+        "initial.plc": "94aa5b8956d87b8851cf5bc156d4b0a14a8bdcfcdb6282bc41ed281ce7671f0b"
+      },
+      "hard": 295,
+      "soft": 1085,
+      "nets": 9642,
+      "endpoints": 27504,
+      "nonunit_weights": 1446,
+      "input_bytes": 840196,
+      "solve_seconds": 3.6330033050035127,
+      "grading_seconds": 4.137499213044066,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.357283353805542,
+        "wirelength_cost": 0.07111144065856934,
+        "density_cost": 0.8365685343742371,
+        "congestion_cost": 1.7357754001789572,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.07111138685191391,
+      "reward": 0.42421713893055063,
+      "invalid_output_checks_passed": true
+    },
+    {
+      "name": "ibm08",
+      "data_sha256": {
+        "netlist.pb.txt": "68d592796012b4885a5d65d2df646597061f77c245ce92a2bb85334ffc0138de",
+        "initial.plc": "243811e78c80c71e268b8143d94a6f3ac25230f105e38f60c2be190d50c2f5eb"
+      },
+      "hard": 301,
+      "soft": 1030,
+      "nets": 15042,
+      "endpoints": 46509,
+      "nonunit_weights": 2322,
+      "input_bytes": 1381875,
+      "solve_seconds": 3.758240829978604,
+      "grading_seconds": 11.442030287988018,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.4680721759796143,
+        "wirelength_cost": 0.06845136731863022,
+        "density_cost": 0.8177465200424194,
+        "congestion_cost": 1.9814951019202387,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.0684514337973334,
+      "reward": 0.40517453651981844,
+      "invalid_output_checks_passed": true
+    },
+    {
+      "name": "ibm18",
+      "data_sha256": {
+        "netlist.pb.txt": "7e2bc08b5c1ff6ad659df9e1c639a1b6f8e9f867e4446a367fd1d9d8fccab773",
+        "initial.plc": "75a04aae366df17b34f2089ddc0f19e475fb4c6bcae4229842b60310eadeff96"
+      },
+      "hard": 285,
+      "soft": 1029,
+      "nets": 26184,
+      "endpoints": 82319,
+      "nonunit_weights": 5000,
+      "input_bytes": 2419186,
+      "solve_seconds": 2.400578214030247,
+      "grading_seconds": 37.01870699500432,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.786726474761963,
+        "wirelength_cost": 0.05319457873702049,
+        "density_cost": 1.0404595136642456,
+        "congestion_cost": 2.4266043425232513,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.05319446467705906,
+      "reward": 0.3588439730474151,
+      "invalid_output_checks_passed": true
+    }
+  ],
+  "janert": "source not located; not downloaded or executed",
+  "ray_qwen": "not launched from this side thread"
+}

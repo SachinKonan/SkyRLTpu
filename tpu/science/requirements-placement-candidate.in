@@ -1,0 +1,6 @@
+jax[tpu]==0.10.1
+libtpu==0.0.41
+optax
+numpy==2.4.6
+scipy==1.17.1
+networkx==3.6.1

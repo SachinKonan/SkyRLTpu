@@ -127,3 +127,5 @@ tx/tinker/alembic/__pycache__/
 
 # claude settings
 .claude/settings.json
+
+.science/

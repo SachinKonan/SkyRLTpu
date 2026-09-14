@@ -1,0 +1,223 @@
+Design a chip macro-placement algorithm using JAX for numerical optimization where useful. Return one complete fenced
+Python module implementing:
+
+```python
+def place(problem: dict, seed: int, *, time_budget_s: float) -> dict:
+    # Return all hard-macro and soft-cluster centers, in input order.
+    return {"positions": positions}  # numeric array [M, 2], x then y
+```
+
+Optimize the Partcl/TILOS Tier 1 proxy:
+
+    cost = wirelength + 0.5 * density + 0.5 * congestion
+
+The evaluator computes these normalized components with its pinned TILOS
+implementation. Lower cost is better. Across the supplied evaluation cases,
+reward = max(1e-6, 1 / (1 + mean(cost))). Any invalid case makes the whole
+submission's reward zero. A cost of 1 gives reward 0.5; cost 2 gives 1/3.
+No baseline division is applied. Feedback includes each component, legality
+errors, case runtimes, and the suite's mean proxy cost.
+
+All coordinates and sizes are in microns. Positions are continuous rectangle
+CENTERS, not grid-cell IDs. The metric grid does not restrict legal centers.
+The first H = problem["num_hard"] rows are hard macros; the remaining M-H rows
+are soft standard-cell clusters. You may move either kind when not fixed.
+There is no automatic soft-cluster completion after your algorithm returns.
+
+Hard constraints:
+- Return exactly M finite (x, y) centers in the original order.
+- Keep the entire rectangle of EVERY macro and cluster inside the canvas.
+- Preserve fixed positions exactly. Ports are fixed and are not returned.
+- Hard macros must have zero overlap with every other hard macro, including
+  fixed hard macros. Soft-cluster overlap is permitted and affects the proxy.
+- Dimensions and the supplied pin offsets are fixed. This interface optimizes
+  positions only; do not return flips, rotations, or resized soft clusters.
+- Initial positions are a starting point and are not guaranteed legal.
+  Leave a small positive margin to avoid float32 rounding violations.
+
+Input schema (all arrays are NumPy arrays; all indices are zero based):
+- canvas: float[2], width and height.
+- initial_positions: float[M,2]; sizes: float[M,2], width and height.
+- fixed: bool[M]; num_hard: integer H.
+- port_positions: float[P,2].
+- net_offsets: int[K+1], compressed offsets into the endpoint arrays below.
+- pin_owner: int[L]; pin_offset: float[L,2]; net_weights: float[K].
+  Net k contains endpoints [net_offsets[k]:net_offsets[k+1]], driver first,
+  followed by sinks. Preserve this order for routing calculations. An owner
+  below M refers to a macro/cluster; owner M+j refers to port j. A pin's
+  location is its owner's center plus its offset. Multi-pin nets, repeated
+  owners, and non-unit net weights are preserved.
+- wirelength_normalizer: positive float used by the native weighted HPWL.
+- grid_shape: int[2], rows and columns used for density and congestion.
+- routes_per_micron: float[2], horizontal and vertical routing capacities.
+- macro_routing_allocation: float[2]; congestion_smoothing_range: integer.
+- schema_version: "partcl_cpu_positions_v1".
+
+Allowed imports: numpy, scipy, networkx, jax,
+jax.numpy, jax.scipy, optax, and these standard-library modules:
+math, random, time, itertools, functools, collections, heapq, bisect, array,
+statistics, dataclasses, typing, enum, copy, operator, __future__. Seed your random choices
+from the supplied seed. Use time.monotonic() to manage the supplied budget.
+Use JAX JIT compilation, automatic differentiation, and vectorized candidate
+evaluation where they improve results within the budget. NumPy/SciPy remain
+available for CPU preprocessing and final legalization. Compile outside inner
+Python loops, avoid unnecessary host/device transfers, and return completed
+finite positions. JIT compilation and device synchronization count against
+your time budget. JAX does not compile the trusted Python grader.
+No PyTorch, external placer, external compiler process, filesystem, network,
+external process, dynamic Python code execution, or instance-name lookup is allowed.
+
+Execution profile: 4 CPU cores and 16 GiB total host RAM per candidate, plus
+one exclusive physical TPU v5p chip. Up to four candidates run concurrently on separate chips of the grading host.
+Each candidate has its own four-core CPU set and 16 GiB host-memory limit.
+Candidate runs never share that chip with
+model inference or another placement candidate. Only the assigned chip is visible.
+The chip's physical HBM capacity is shared by all JAX arrays and compiler state;
+there is no additional per-library memory allowance. Use the visible JAX device(s).
+JAX and jaxlib 0.10.1; libtpu 0.0.41; Optax 0.2.8; NumPy 2.4.6;
+SciPy 1.17.1; NetworkX 3.6.1; candidate Python 3.12.12.
+
+Each case has a hard 180-second candidate deadline including imports, initialization,
+JIT compilation, and completed device work. The supplied time_budget_s is slightly
+smaller to reserve worker startup and serialization time. Return before it expires.
+Trusted CPU grading has a separate 90-second cap; a case has a 300-second total cap.
+The four-case suite has a 1,200-second execution cap, excluding queue wait.
+NumPy/SciPy BLAS and OpenMP pools are capped at four threads, within the same
+four-core allocation. Memory is a shared process-tree allowance, not 16 GiB
+per library. Respect time_budget_s; reserve time to return your best legal
+placement. Final independent grading has a separate allowance.
+
+This initial scaffold provides no in-process proxy helper. You can implement
+cheap wirelength, density, or congestion estimates from the supplied data;
+the independent evaluator determines the actual reward. Optimize generally
+across problems, without embedded solutions or benchmark-specific branches.
+
+
+Prefer JAX implementations of smooth wirelength/density objectives, batched
+move evaluation, or parallel restarts. Preserve exact hard-macro legality in
+the final result; a better surrogate cost never overrides the trusted score.
+
+
+You may treat congestion and density as spatial fields and apply image-processing
+methods, including Gaussian smoothing, convolutions, multiscale analysis, and
+spatial gradients to guide placement. Use the allowed numerical libraries for
+these operations. All preprocessing and optimization count against the same
+runtime and memory limits. Final placements must satisfy every legality
+constraint and are scored by the trusted evaluator.
+
+Starting implementation (replace with your improved algorithm):
+```python
+"""Simple deterministic legalizer; no external placer or scoring dependency."""
+import time
+import numpy as np
+
+
+def legalize(problem: dict, seed: int, *, time_budget_s: float) -> dict:
+    deadline = time.monotonic() + time_budget_s
+    p = problem
+    pos = np.array(p['initial_positions'], dtype=np.float64, copy=True)
+    sizes = np.asarray(p['sizes'], dtype=np.float64)
+    fixed = np.asarray(p['fixed'], dtype=bool)
+    canvas = np.asarray(p['canvas'], dtype=np.float64)
+    hard = int(p['num_hard'])
+    gap = max(1e-4, float(canvas.max()) * 1e-5)
+    lo, hi = sizes / 2 + gap, canvas - sizes / 2 - gap
+    if (lo > hi).any():
+        raise ValueError('macro cannot fit in canvas with numerical margin')
+    pos[~fixed] = np.clip(pos[~fixed], lo[~fixed], hi[~fixed])
+    occupied = list(np.flatnonzero(fixed[:hard]))
+    order = sorted(np.flatnonzero(~fixed[:hard]), key=lambda i: -float(np.prod(sizes[i])))
+    for i in order:
+        if time.monotonic() > deadline:
+            raise TimeoutError('seed legalizer budget exhausted')
+        # Candidate centers align with canvas edges and already placed edges.
+        # Test nearest candidates first; this is a greedy heuristic, not a
+        # guarantee that every geometrically feasible instance can be packed.
+        xs = [lo[i, 0], hi[i, 0], pos[i, 0]]
+        ys = [lo[i, 1], hi[i, 1], pos[i, 1]]
+        for j in occupied:
+            delta = (sizes[i] + sizes[j]) / 2 + gap
+            xs.extend([pos[j, 0] - delta[0], pos[j, 0] + delta[0]])
+            ys.extend([pos[j, 1] - delta[1], pos[j, 1] + delta[1]])
+        xs = np.unique(np.clip(xs, lo[i, 0], hi[i, 0]))
+        ys = np.unique(np.clip(ys, lo[i, 1], hi[i, 1]))
+        xx, yy = np.meshgrid(xs, ys)
+        candidates = np.column_stack([xx.ravel(), yy.ravel()])
+        ranking = np.argsort(np.sum((candidates - pos[i]) ** 2, axis=1))
+        chosen = None
+        for start in range(0, len(ranking), 256):
+            if time.monotonic() > deadline:
+                raise TimeoutError('seed legalizer budget exhausted')
+            batch = candidates[ranking[start:start+256]]
+            if occupied:
+                delta = np.abs(batch[:, None, :] - pos[occupied][None, :, :])
+                overlaps = (delta < (sizes[i] + sizes[occupied])[None, :, :] / 2 + gap/2).all(axis=2)
+                legal = ~overlaps.any(axis=1)
+            else:
+                legal = np.ones(len(batch), dtype=bool)
+            if legal.any():
+                chosen = batch[np.flatnonzero(legal)[0]]
+                break
+        if chosen is None:
+            raise ValueError('greedy legalizer could not fit a hard macro')
+        pos[i] = chosen
+        occupied.append(i)
+    pos[fixed] = p['initial_positions'][fixed]
+    return {'positions': pos.astype(np.float32)}
+
+
+def place(problem: dict, seed: int, *, time_budget_s: float) -> dict:
+    started = time.monotonic()
+    pos = legalize(problem, seed, time_budget_s=min(40, time_budget_s))['positions']
+    import jax
+    import jax.numpy as jnp
+    import optax
+    p = problem
+    canvas = jnp.asarray(p['canvas'], dtype=jnp.float32)
+    ports = jnp.asarray(p['port_positions'], dtype=jnp.float32) / canvas
+    owners = jnp.asarray(p['pin_owner'], dtype=jnp.int32)
+    offsets = jnp.asarray(p['pin_offset'], dtype=jnp.float32) / canvas
+    weights = jnp.asarray(p['net_weights'], dtype=jnp.float32)
+    net_ids = jnp.asarray(np.repeat(np.arange(len(weights)), np.diff(p['net_offsets'])), dtype=jnp.int32)
+    k = len(weights)
+    mask = jnp.asarray((~p['fixed']) & (np.arange(len(pos)) >= p['num_hard']))[:,None]
+    sizes = jnp.asarray(p['sizes'], dtype=jnp.float32) / canvas
+    fixed_pos = jnp.asarray(pos) / canvas
+    # Smooth occupancy at a small public grid; this is a search surrogate.
+    gx, gy = jnp.meshgrid(jnp.linspace(.025,.975,20),jnp.linspace(.025,.975,20))
+    centers = jnp.stack([gx.ravel(),gy.ravel()],axis=1)
+    area = jnp.prod(sizes,axis=1)
+    def objective(x):
+        pins = jnp.concatenate([x, ports])[owners] + offsets
+        xmax = jax.ops.segment_max(pins, net_ids, k)
+        xmin = jax.ops.segment_min(pins, net_ids, k)
+        wire = jnp.sum(weights * jnp.sum((xmax-xmin)*canvas,axis=1)) / p['wirelength_normalizer']
+        delta = (x[:,None,:]-centers[None,:,:]) / .055
+        occupancy = jnp.sum(jnp.exp(-.5*jnp.sum(delta*delta,axis=2))*area[:,None],axis=0)
+        density = jnp.mean((occupancy/(jnp.mean(occupancy)+1e-8))**2)
+        return wire + .12*density
+    optimizer=optax.adam(.0005)
+    @jax.jit
+    def step(x,state):
+        value,grad = jax.value_and_grad(objective)(x)
+        updates,state=optimizer.update(jnp.where(mask,grad,0),state,x)
+        x=optax.apply_updates(x,updates)
+        x=jnp.where(mask,jnp.clip(x,sizes/2+1e-5,1-sizes/2-1e-5),fixed_pos)
+        return x,state,value
+    x=fixed_pos;state=optimizer.init(x);best=pos.copy();best_value=float('inf')
+    # Synchronize each iteration so the timer includes completed device work.
+    for _ in range(400):
+        if time.monotonic()-started > time_budget_s-15:break
+        previous=x
+        x,state,value=step(x,state)
+        score=float(value)
+        if np.isfinite(score) and score<best_value:
+            best_value=score;best=np.array(previous*canvas,dtype=np.float32,copy=True)
+    best[:p['num_hard']]=pos[:p['num_hard']]
+    best[p['fixed']]=p['initial_positions'][p['fixed']]
+    # Restore a generous physical margin after float32 accelerator arithmetic.
+    gap=max(1e-4,float(np.max(p['canvas']))*1e-5)
+    soft=(~p['fixed']) & (np.arange(len(pos))>=p['num_hard'])
+    best[soft]=np.clip(best[soft],p['sizes'][soft]/2+gap,p['canvas']-p['sizes'][soft]/2-gap)
+    return {'positions':best}
+```

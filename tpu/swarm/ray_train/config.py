@@ -467,6 +467,21 @@ class Config:
                     or any(type(r) is not int or not 0 <= r < self.hosts for r in ranks)
                     or len(set(ranks)) != len(ranks)):
                 raise ValueError("inference_only_ranks requires unique valid ranks in inference-only mode")
+        placement_ranks = self.placement_ranks
+        if placement_ranks:
+            if self.arena_grader_rank is not None:
+                raise ValueError("cannot combine RG-LRU and placement grading roles in one profile")
+            from tpu.science.placement_slots import chips_from_env
+            chips_from_env(self.client_env)
+            if len(set(placement_ranks)) != len(placement_ranks) or any(r < 0 or r >= self.hosts for r in placement_ranks):
+                raise ValueError("placement ranks must be unique valid host ranks")
+            if self.inference_only:
+                if not self.inference_only_ranks or set(placement_ranks) & set(self.inference_only_ranks):
+                    raise ValueError("placement requires explicit disjoint inference ranks")
+            elif self.accelerator != "tpu-v5p-32" or any(r < self.trainer.hosts for r in placement_ranks):
+                raise ValueError("training with placement requires disjoint v5p-32 grading hosts")
+            if self.inference_hosts < 1:
+                raise ValueError("placement must leave at least one inference host")
         if type(self.checkpoint_cleanup_timeout) is not int or self.checkpoint_cleanup_timeout < 0:
             raise ValueError("checkpoint_cleanup_timeout must be a nonnegative integer (0 disables)")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}", self.run_id):
@@ -655,10 +670,16 @@ class Config:
         return self.zone or ACCELERATOR_ZONES[self.accelerator][0]
 
     @property
+    def placement_ranks(self):
+        value = self.client_env.get("PLACEMENT_TPU_RANKS", "")
+        return [int(r) for r in value.split(",")] if value else []
+
+    @property
     def inference_hosts(self):
         if self.inference_only_ranks is not None:
             return len(self.inference_only_ranks)
-        return self.hosts - self.trainer.hosts - int(self.arena_grader_rank is not None)
+        return (self.hosts - self.trainer.hosts - int(self.arena_grader_rank is not None)
+                - len(self.placement_ranks))
 
     def client_sampling_environment(self):
         defaults = {

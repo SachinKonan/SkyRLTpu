@@ -1,0 +1,17 @@
+{
+  "source_hashes_verified": 15,
+  "construction_hashes_verified": 3,
+  "cards_match_data": true,
+  "coverage_matches_data": true,
+  "discovery_final_exports_match": true,
+  "rows_by_split": {
+    "context": 7560,
+    "discovery": 7500,
+    "final": 5220,
+    "train": 30180,
+    "valid": 7560
+  },
+  "frame_deep_mib": 85.03911018371582,
+  "peak_rss_mib": 654.5390625,
+  "seconds": 14.610728222993203
+}

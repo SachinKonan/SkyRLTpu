@@ -1,0 +1,128 @@
+{
+  "host": "della-h14n10",
+  "cases": [
+    {
+      "name": "ibm01",
+      "data_sha256": {
+        "netlist.pb.txt": "ca97cee4652966bc0afc16562ccc9aec224de31de1cfb317b61972a4ba1a4c96",
+        "initial.plc": "f5202ce7295ba2ae38781a6a658b5affaa0ee933110ec071f41dd14961b133ad"
+      },
+      "hard": 246,
+      "soft": 894,
+      "nets": 5993,
+      "endpoints": 16815,
+      "nonunit_weights": 684,
+      "input_bytes": 520868,
+      "solve_seconds": 4.1365619549760595,
+      "grading_seconds": 1.6242272689705715,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.0715302228927612,
+        "wirelength_cost": 0.06664804369211197,
+        "density_cost": 0.8503214120864868,
+        "congestion_cost": 1.1594429667181945,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.06664793883941578,
+      "reward": 0.4827349313801288,
+      "invalid_output_checks_passed": true
+    },
+    {
+      "name": "ibm04",
+      "data_sha256": {
+        "netlist.pb.txt": "347924f72a646c0295f32858b4e58c41b1f18739286e8e5c8250226222ca188a",
+        "initial.plc": "94aa5b8956d87b8851cf5bc156d4b0a14a8bdcfcdb6282bc41ed281ce7671f0b"
+      },
+      "hard": 295,
+      "soft": 1085,
+      "nets": 9642,
+      "endpoints": 27504,
+      "nonunit_weights": 1446,
+      "input_bytes": 840196,
+      "solve_seconds": 3.6330033050035127,
+      "grading_seconds": 4.137499213044066,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.357283353805542,
+        "wirelength_cost": 0.07111144065856934,
+        "density_cost": 0.8365685343742371,
+        "congestion_cost": 1.7357754001789572,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.07111138685191391,
+      "reward": 0.42421713893055063,
+      "invalid_output_checks_passed": true
+    },
+    {
+      "name": "ibm08",
+      "data_sha256": {
+        "netlist.pb.txt": "68d592796012b4885a5d65d2df646597061f77c245ce92a2bb85334ffc0138de",
+        "initial.plc": "243811e78c80c71e268b8143d94a6f3ac25230f105e38f60c2be190d50c2f5eb"
+      },
+      "hard": 301,
+      "soft": 1030,
+      "nets": 15042,
+      "endpoints": 46509,
+      "nonunit_weights": 2322,
+      "input_bytes": 1381875,
+      "solve_seconds": 3.758240829978604,
+      "grading_seconds": 11.442030287988018,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.4680721759796143,
+        "wirelength_cost": 0.06845136731863022,
+        "density_cost": 0.8177465200424194,
+        "congestion_cost": 1.9814951019202387,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.0684514337973334,
+      "reward": 0.40517453651981844,
+      "invalid_output_checks_passed": true
+    },
+    {
+      "name": "ibm18",
+      "data_sha256": {
+        "netlist.pb.txt": "7e2bc08b5c1ff6ad659df9e1c639a1b6f8e9f867e4446a367fd1d9d8fccab773",
+        "initial.plc": "75a04aae366df17b34f2089ddc0f19e475fb4c6bcae4229842b60310eadeff96"
+      },
+      "hard": 285,
+      "soft": 1029,
+      "nets": 26184,
+      "endpoints": 82319,
+      "nonunit_weights": 5000,
+      "input_bytes": 2419186,
+      "solve_seconds": 2.400578214030247,
+      "grading_seconds": 37.01870699500432,
+      "valid": true,
+      "metrics": {
+        "proxy_cost": 1.786726474761963,
+        "wirelength_cost": 0.05319457873702049,
+        "density_cost": 1.0404595136642456,
+        "congestion_cost": 2.4266043425232513,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "adapter_wirelength": 0.05319446467705906,
+      "reward": 0.3588439730474151,
+      "invalid_output_checks_passed": true
+    }
+  ],
+  "cpu_cores": 4,
+  "job_memory_gib": 16,
+  "peak_rss_mib": 323.125
+}

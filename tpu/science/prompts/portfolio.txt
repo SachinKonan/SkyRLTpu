@@ -1,0 +1,15 @@
+Discover a learning algorithm for long-only portfolio allocation. Return one complete fenced Python module implementing:
+fit(train: dict, valid: dict, rng, *, time_budget_s: float) -> model
+act(model, obs: dict) -> weights
+
+train/valid provide features[T,N,F], subsequent returns[T,N], cash_returns[T], context_features[19,N,F]. Features are available through the decision day's close; trade at the next open and earn the following open-to-open return. The appended manifest fixes the actual features, assets, dates, data hashes, and costs. Do not use future data or externally obtained information.
+
+The inputs are ordinary Python dictionaries whose values are NumPy arrays. Access fields with train["features"], train["returns"], valid["features"], obs["features"] and obs["current_weights"]. For example, T, N, F = train["features"].shape; the features have exactly three dimensions. In this manifest N=29 and F=6. The training tensor has shape [1719,29,6], validation [250,29,6], and each inference feature window [20,29,6]. fit receives the entire training/validation dictionaries. act receives one observation dictionary at a time.
+
+act receives only causal features[20,N,F] and current_weights[N+1], the drifted holdings (cash first). Return finite nonnegative weights[N+1] summing to one. Floating-point tolerances: min >= -1e-7, abs(sum-1) <= 1e-5; tolerated roundoff is clipped and renormalized. The evaluator charges fee_rate * sum(abs(target_asset_weights-current_asset_weights)), deducting that wealth fraction before applying subsequent returns. Cash return is zero.
+
+fit may train or implement a heuristic. Return serializable fitted state, including NumPy arrays and/or scikit-learn estimators. The supplied RNG is numpy.random.Generator. The harness serializes state only within isolation; never access files yourself. fit and act run in separate isolated processes, with only the returned model transferred. act must be stateless. Every action starts from the same frozen model and module state; changes to globals or estimator state do not persist across observations.
+
+Reward = max(1e-6,sigmoid(S)), S=sqrt(252)*mean(net_excess_returns)/max(sample_std(net_excess_returns,ddof=1),1e-8). All-zero excess returns give S=0. Invalid code/actions/timeouts receive zero; poor performance remains valid. Only discovery-validation scores feed search; final test is not queried during search.
+
+{resource_contract}

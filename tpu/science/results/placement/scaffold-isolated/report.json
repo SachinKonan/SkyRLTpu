@@ -1,0 +1,26 @@
+[
+  {
+    "case": "ibm01",
+    "valid": true,
+    "identical_to_direct_seed": true,
+    "isolated_seconds": 4.029547946993262
+  },
+  {
+    "case": "ibm04",
+    "valid": true,
+    "identical_to_direct_seed": true,
+    "isolated_seconds": 3.528395340021234
+  },
+  {
+    "case": "ibm08",
+    "valid": true,
+    "identical_to_direct_seed": true,
+    "isolated_seconds": 3.5792647060006857
+  },
+  {
+    "case": "ibm18",
+    "valid": true,
+    "identical_to_direct_seed": true,
+    "isolated_seconds": 2.327862860984169
+  }
+]

@@ -32,6 +32,12 @@ def build(profile, output):
         for name in ("select_v4_64_topology.py", "select_v6e_32_topology.py"):
             selector = repo / "tpu/swarm" / name
             bundle.add(selector, arcname=str(selector.relative_to(repo)))
+        if config.placement_ranks:
+            # Bootstrap/configuration must know chip resources before the
+            # placement payload prepares candidate and grader dependencies.
+            for name in ("__init__.py", "placement_slots.py"):
+                path = repo / "tpu/science" / name
+                bundle.add(path, arcname=str(path.relative_to(repo)))
         if config.requires_source_overlay:
             # Training overlays remain independent of the sampling-only judge.
             from .overlay import manifest

@@ -1,0 +1,14 @@
+{
+  "job_id": "13857007",
+  "case": "ibm18",
+  "requested_gpu": "a100:1",
+  "cpus": 16,
+  "memory_gib": 100,
+  "candidate_limit_seconds": 3600,
+  "batch_allocation_limit_hours": 4,
+  "setup_outside_candidate_timer": true,
+  "status_at_submission": "PENDING",
+  "source_commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+  "xplace_commit": "49cf66bc75ba9908f145bb6686f03cde692367cf",
+  "script": "tpu/science/archgen_cuda_once.sbatch"
+}
