@@ -68,6 +68,8 @@ class Controller:
         self.catalog = None
         self.runtime_status = None
         self.trainer_leader = 0
+        self.science_group = None
+        self.science_refs = []
 
     def report(self, event, **fields):
         return emit(self.log, event, run_id=self.config.run_id, **fields)
@@ -208,10 +210,16 @@ class Controller:
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
                                if r != self.config.arena_grader_rank and r not in self.config.placement_ranks]
+        science_grading_rank = None
+        if self.config.science_task:
+            from tpu.science.training_setup import split_roles
+            train_ranks, inference_ranks, science_grading_rank = split_roles(
+                self.config.science_task, train_ranks, inference_ranks)
         self.trainer_leader = train_ranks[0] if train_ranks else 0
         self.checked_get([host.set_trainer_leader.remote(self.trainer_leader) for host in self.hosts], 30)
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
-                    trainer_leader=self.trainer_leader, grader_rank=self.config.arena_grader_rank)
+                    trainer_leader=self.trainer_leader,
+                    grader_rank=science_grading_rank if self.config.science_task else self.config.arena_grader_rank)
         prepared_ranks = sorted(train_ranks + inference_ranks)
         shared_frozen_head = bool(self.config.frozen_benchmark and 0 in inference_ranks)
         arena_start = (self.hosts[self.config.arena_grader_rank].prepare_arena.remote()
@@ -225,7 +233,16 @@ class Controller:
         # and require its readiness before starting any serving deployment.
         if arena_start is not None:
             preparation_refs.append(arena_start)
-        prepared = self.checked_get(preparation_refs, self.config.setup_timeout)[:len(prepared_ranks)]
+        if self.config.science_task:
+            from tpu.science.training_setup import prepare, check_references
+            self.science_group, self.science_refs = prepare(self.config, self.ips, nodes, science_grading_rank)
+            self.report('science_reference_started', task=self.config.science_task, grader_rank=science_grading_rank)
+        preparation_results = self.checked_get(preparation_refs + self.science_refs, self.config.setup_timeout)
+        prepared = preparation_results[:len(prepared_ranks)]
+        if self.config.science_task:
+            result = check_references(self.config.science_task, preparation_results[len(preparation_refs):])
+            self.report('science_reference_passed', **result)
+            self.science_refs = []
         if self.config.arena_grader_rank is not None:
             from .grader_tasks import self_test
             rank = self.config.arena_grader_rank
@@ -326,6 +343,11 @@ class Controller:
         # before bootstrap shuts down the private Ray runtime.
         if self.hosts:
             self.drain_phase({self.hosts[0].stop_client.remote(): 0}, "client_stop", timeout=40)
+        for ref in self.science_refs:
+            ray.cancel(ref, force=True)
+        if self.science_group is not None:
+            from ray.util.placement_group import remove_placement_group
+            remove_placement_group(self.science_group)
         try:
             serve.shutdown()
         except Exception as exc:

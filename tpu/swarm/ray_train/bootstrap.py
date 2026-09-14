@@ -18,6 +18,10 @@ from .config import Config
 
 
 def workload_resources(config, rank):
+    if config.science_task == "placement":
+        # Topology chooses the grading host later. Only its pinned placement
+        # group consumes these tokens; trainer and inference reserve their TPUs.
+        return {"TPU": 4, "placement_tpu_host": 4}
     if config.arena_grader_rank == rank:
         return {"TPU": 4, "arena_grader": 4, "arena_pregate": 2}
     if rank in config.placement_ranks:

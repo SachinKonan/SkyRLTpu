@@ -95,7 +95,7 @@ def device_paths(chip, accelerator, dev_root=Path('/dev')):
     validate_chip(chip)
     if accelerator in ('tpu-v4-64', 'tpu-v4-32'):
         paths = [dev_root / f'accel{chip}']
-    elif accelerator == 'tpu-v5p-32':
+    elif accelerator in ('tpu-v5p-32', 'tpu-v6e-32'):
         paths = [dev_root / 'vfio' / str(chip), dev_root / 'vfio' / 'vfio']
     else:
         raise ValueError('unsupported placement accelerator')
@@ -107,7 +107,7 @@ def device_paths(chip, accelerator, dev_root=Path('/dev')):
 
 def tpu_environment(chip, accelerator):
     validate_chip(chip)
-    if accelerator not in ('tpu-v4-64', 'tpu-v4-32', 'tpu-v5p-32'):
+    if accelerator not in ('tpu-v4-64', 'tpu-v4-32', 'tpu-v5p-32', 'tpu-v6e-32'):
         raise ValueError('unsupported placement accelerator')
     port = str(8476 + chip)
     return dict(JAX_PLATFORMS='tpu', TPU_VISIBLE_CHIPS=str(chip),

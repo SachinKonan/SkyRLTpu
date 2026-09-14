@@ -74,6 +74,7 @@ def main() -> None:
 
     # Local Arena modules are shipped in the pinned source overlay.
     sys.path.insert(0, str(repo_root / "tpu"))
+    sys.path.insert(0, str(repo_root))
 
     # Problem env from TTD_ENV (default: Erdős), same map as the smoke runner.
     import importlib
@@ -85,11 +86,16 @@ def main() -> None:
         # Frontier-CS algorithmic track (ported from the frontiercs worktree);
         # problem id via TTD_PROBLEM_TYPE (46=JSSP), knobs TTD_FCALGO_*
         "frontier_algo": ("examples.frontier_algo.env", "FrontierAlgoEnv"),
+        "science_routing": ("tpu.science.training_env", "RoutingTrainingEnv"),
+        "science_placement": ("tpu.science.training_env", "PlacementTrainingEnv"),
     }
     _ENVS.update({name: ("pallas_arena.rl.env", "RecurrentGemmaEnv")
                   for name in ("recurrent_gemma", "recurrentgemma", "pallas_rglru", "rg_lru")})
     _mod, _cls = _ENVS[os.environ.get("TTD_ENV", "erdos_min_overlap")]
     env_type = getattr(importlib.import_module(_mod), _cls)
+    if _mod == "tpu.science.training_env":
+        from tpu.science.training_env import connect
+        connect()
 
     from ttt_discover.rl.ensemble import (
         EnsembleConfig,

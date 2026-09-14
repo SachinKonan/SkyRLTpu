@@ -1,0 +1,104 @@
+import asyncio
+from concurrent.futures import Future
+from dataclasses import replace
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from tpu.swarm.ray_train.config import Config
+from tpu.swarm.ray_train.bootstrap import workload_resources
+from tpu.science.training_setup import split_roles, check_references
+from tpu.science.placement_slots import device_paths, tpu_environment
+
+
+class ScienceTopologyTest(unittest.TestCase):
+    def test_shuffled_physical_training_block_is_preserved(self):
+        train, infer, grader = split_roles('placement', [6, 0, 7, 2], [1, 3, 4, 5])
+        self.assertEqual(train, [6, 0, 7, 2])
+        self.assertEqual(infer, [1, 3, 4])
+        self.assertEqual(grader, 5)
+        self.assertNotIn(grader, train)
+        self.assertEqual(split_roles('routing', train, [1, 3, 4, 5])[1], [1, 3, 4, 5])
+
+    def test_profiles_keep_training_and_native_sampling(self):
+        for task, count in [('routing', 4), ('placement', 3)]:
+            c = Config.load(f'tpu/swarm/ray_train/profiles/science-{task}-v6e-muse-grpo-001.json')
+            self.assertFalse(c.inference_only)
+            self.assertEqual((c.trainer.hosts, c.trainer.tp, c.trainer.fsdp), (4, 4, 4))
+            self.assertEqual(c.inference_hosts, count)
+            self.assertTrue(c.inference.native_thinking_budget)
+            self.assertEqual(c.client_env['TTD_LOSS_FN'], 'importance_sampling')
+            self.assertEqual(c.client_env['GROUP_SIZE'], '8')
+            if task == 'placement':
+                self.assertEqual(workload_resources(c, 0), {'TPU': 4, 'placement_tpu_host': 4})
+                with self.assertRaises(ValueError):
+                    replace(c, client_env={**c.client_env, 'PLACEMENT_TPU_RANKS': '7'}).validate()
+
+    def test_v6e_exposes_only_assigned_chip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); (root / 'vfio').mkdir()
+            for name in ('0', '1', '2', '3', 'vfio'):
+                (root / 'vfio' / name).symlink_to('/dev/null')
+            self.assertEqual(device_paths(3, 'tpu-v6e-32', root), [root/'vfio/3', root/'vfio/vfio'])
+        self.assertEqual(tpu_environment(3, 'tpu-v6e-32')['TPU_VISIBLE_CHIPS'], '3')
+
+    def test_reference_failure_blocks_training(self):
+        good = [{'correctness': 1, 'reward': .5, 'metrics': {'case_count': 72}} for _ in range(8)]
+        check_references('routing', good)
+        good[3]['correctness'] = 0
+        with self.assertRaises(RuntimeError):
+            check_references('routing', good)
+
+
+class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_reward_and_state_direction_from_real_environment(self):
+        from tpu.science import training_env as env
+        from tpu.science.rewards import valid
+        from ttt_discover import State
+        e = object.__new__(env.RoutingTrainingEnv)
+        e.problem_type = 'routing'; e.log_path = '/tmp'; e.eval_timeout = 7200
+        e.num_cpus_per_task = 4; e.eval_backend = 'local'; e.state = State(timestep=-1, construction=None, code='', value=0.)
+        result = valid(.53, {'swaps': 123, 'case_count': 72})
+        async def evaluate(*args):
+            return result
+        with patch.object(env, 'evaluate', evaluate):
+            verdict = await e._safe_grade('RUST_CODE="policy"', 0)
+        state = e._create_next_state(0, 'RUST_CODE="policy"', verdict)
+        self.assertEqual(state.value, .53)
+        self.assertIn('123', state.observation)
+        self.assertEqual(verdict.correctness, 1.)
+
+    async def test_infrastructure_failure_is_fatal_and_cancels_ray(self):
+        from tpu.science import training_env as env
+        from tpu.science import ray_cpu
+        future = Future(); future.set_exception(RuntimeError('host lost'))
+        class Ref:
+            def future(self): return future
+        ref = Ref()
+        with patch.object(env, 'connect'), patch.dict('os.environ', SCIENCE_WORKER_ROOT='/payload'), \
+                patch.object(ray_cpu.grade, 'options') as opts, patch.object(env.ray, 'cancel') as cancel:
+            opts.return_value.remote.return_value = ref
+            with self.assertRaises(env.ScienceInfrastructureError) as error:
+                await env.evaluate('routing', 'code', 1)
+            self.assertTrue(error.exception.abort_training_step)
+            cancel.assert_called_once_with(ref, force=True)
+
+    async def test_cancellation_stops_underlying_ray_task(self):
+        from tpu.science import training_env as env
+        from tpu.science import ray_cpu
+        future = Future()
+        class Ref:
+            def future(self): return future
+        ref = Ref()
+        with patch.object(env, 'connect'), patch.dict('os.environ', SCIENCE_WORKER_ROOT='/payload'), \
+                patch.object(ray_cpu.grade, 'options') as opts, patch.object(env.ray, 'cancel') as cancel:
+            opts.return_value.remote.return_value = ref
+            task = asyncio.create_task(env.evaluate('routing', 'code', 60))
+            await asyncio.sleep(.01); task.cancel()
+            with self.assertRaises(asyncio.CancelledError): await task
+            cancel.assert_called_once_with(ref, force=True)
+
+
+if __name__ == '__main__':
+    unittest.main()

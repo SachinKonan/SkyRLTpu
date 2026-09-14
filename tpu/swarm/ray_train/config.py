@@ -314,6 +314,10 @@ class Config:
     retired_processes: dict = field(default_factory=dict)
 
     @property
+    def science_task(self):
+        return {"science_routing": "routing", "science_placement": "placement"}.get(self.client_env.get("TTD_ENV"))
+
+    @property
     def is_recurrent_gemma(self):
         return self.client_env.get("TTD_ENV") in (
             "recurrent_gemma", "recurrentgemma", "pallas_rglru", "rg_lru")
@@ -373,8 +377,8 @@ class Config:
 
     def validate(self):
         if self.has_answer_only_overlay:
-            if not (self.has_problem_prompt_overlay or self.is_recurrent_gemma):
-                raise ValueError("answer-only extraction is enabled only for AC2, circle packing and RG-LRU")
+            if not (self.has_problem_prompt_overlay or self.is_recurrent_gemma or self.science_task):
+                raise ValueError("answer-only extraction requires a supported math, RG-LRU or science environment")
             if self.client_env.get("TTD_ANSWER_MODEL_FAMILY") not in ("qwen", "gemma", "muse"):
                 raise ValueError("answer-only extraction requires an explicit model family")
         if self.has_adaptive_pwc_overlay and not (self.has_problem_prompt_overlay or self.is_recurrent_gemma):
@@ -468,6 +472,12 @@ class Config:
                     or len(set(ranks)) != len(ranks)):
                 raise ValueError("inference_only_ranks requires unique valid ranks in inference-only mode")
         placement_ranks = self.placement_ranks
+        if self.science_task:
+            if (self.inference_only or self.accelerator != "tpu-v6e-32" or self.trainer.hosts != 4
+                    or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
+                raise ValueError("Science training requires v6e-32, four trainer hosts and dynamically assigned grading")
+            if self.client_env.get("TTD_EVAL_BACKEND") != "local" or self.client_env.get("NUM_CPUS_PER_TASK") != "4":
+                raise ValueError("Science environments dispatch their own Ray tasks; use local outer evaluation and four CPUs")
         if placement_ranks:
             if self.arena_grader_rank is not None:
                 raise ValueError("cannot combine RG-LRU and placement grading roles in one profile")
@@ -679,7 +689,7 @@ class Config:
         if self.inference_only_ranks is not None:
             return len(self.inference_only_ranks)
         return (self.hosts - self.trainer.hosts - int(self.arena_grader_rank is not None)
-                - len(self.placement_ranks))
+                - len(self.placement_ranks) - int(self.science_task == "placement"))
 
     def client_sampling_environment(self):
         defaults = {

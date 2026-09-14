@@ -63,6 +63,14 @@ ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 
+SCIENCE_FILES = {'tpu/run_ttd_ensemble.py'} | {
+    'tpu/science/' + name for name in (
+        '__init__.py', 'training_env.py', 'training_setup.py', 'ray_cpu.py', 'worker.py',
+        'routing.py', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py',
+        'placement_ray.py', 'placement_slots.py', 'placement_task.py', 'challenge_contract.py',
+        'seed_routing.py', 'challenge_seed.py', 'challenge_seed_jax.py', 'requirements-cpu.lock',
+        'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt')}
+
 
 def manifest(repo, config=None):
     names = set(FILES) if config is None or config.adapter_count > 1 else set()
@@ -73,6 +81,8 @@ def manifest(repo, config=None):
         names.update(SMOKE_FILES)  # Propagate fatal grader errors through the training loop.
     if config is not None and config.training_smoke:
         names.update(SMOKE_FILES)
+    if config is not None and config.science_task:
+        names.update(SCIENCE_FILES | set(SMOKE_FILES))
     if config is not None and config.has_problem_prompt_overlay:
         names.add(PROBLEM_PROMPT_FILES[config.client_env["TTD_ENV"]])
     if config is not None and config.has_adaptive_pwc_overlay:
@@ -107,6 +117,7 @@ def install(directory, destination):
     allowed.extend([base | {ANSWER_ONLY_FILE} for base in [set(), *allowed]])
     allowed.extend([base | NATIVE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
     allowed.extend([base | DATABASE_FILES for base in [set(), *allowed]])
+    allowed.extend([base | SCIENCE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
     if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")
     for name, expected in records.items():
