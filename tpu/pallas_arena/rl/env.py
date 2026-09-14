@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import uuid
+import threading
 
 from ttt_discover import BaseRewardEvaluator, Environment, State
 from pallas_arena.judge.client import ArenaQueueClient
@@ -16,11 +17,16 @@ from pallas_arena.rl.task import (
 
 
 class RecurrentGemmaRewardEvaluator(BaseRewardEvaluator):
+    # get_reward runs concurrently in asyncio.to_thread across completions.
+    # Ray initialization is process-wide, not evaluator-instance-wide.
+    _ray_init_lock = threading.Lock()
+
     def __init__(self, problem_type, log_dir, eval_timeout=3600, **kwargs):
         if problem_type not in ("", "rg_lru"):
             raise ValueError("RecurrentGemma currently supports only problem_type=rg_lru")
         self.actor_name = os.environ.get("ARENA_RAY_ACTOR", "")
-        self.url = None if self.actor_name else validate_queue_url(os.environ.get("ARENA_QUEUE_URL", ""))
+        self.task_mode = os.environ.get("ARENA_RAY_TASKS", "") == "1"
+        self.url = None if self.actor_name or self.task_mode else validate_queue_url(os.environ.get("ARENA_QUEUE_URL", ""))
         self.timeout = float(os.environ.get("ARENA_WAIT_TIMEOUT", str(eval_timeout)))
         if not 0 < self.timeout <= eval_timeout:
             raise ValueError("ARENA_WAIT_TIMEOUT must be positive and <= EVAL_TIMEOUT")
@@ -31,21 +37,31 @@ class RecurrentGemmaRewardEvaluator(BaseRewardEvaluator):
         # imported or executed on the training/inference hosts.
         tag = uuid.uuid4().hex
         cases = [name for name, _ in public_contract()[1]]
-        if self.actor_name:
+        if self.actor_name or self.task_mode:
             import ray
             ref = None
             try:
-                if not ray.is_initialized():
-                    ray.init(address=os.environ["RAY_ADDRESS"], namespace=os.environ["RAY_NAMESPACE"])
-                actor = ray.get_actor(self.actor_name, namespace=os.environ["RAY_NAMESPACE"])
-                ref = actor.grade.remote(dict(problem="rg_lru", code=code, cases=cases,
-                                              enforce_pallas=True, tag=tag), timeout_s=self.timeout)
+                with self._ray_init_lock:
+                    if not ray.is_initialized():
+                        ray.init(address=os.environ["RAY_ADDRESS"], namespace=os.environ["RAY_NAMESPACE"],
+                                 ignore_reinit_error=True)
                 work_id = tag
-                result = ray.get(ref, timeout=self.timeout + 30)
+                payload = dict(problem="rg_lru", code=code, cases=cases, enforce_pallas=True, tag=tag)
+                if self.task_mode:
+                    from tpu.swarm.ray_train.grader_tasks import grade_candidate
+                    result = grade_candidate(os.environ["ARENA_RAY_ROOT"], os.environ["RAY_NAMESPACE"],
+                                             payload, timeout_s=self.timeout)
+                else:
+                    actor = ray.get_actor(self.actor_name, namespace=os.environ["RAY_NAMESPACE"])
+                    ref = actor.grade.remote(payload, timeout_s=self.timeout)
+                    result = ray.get(ref, timeout=self.timeout + 30)
             except Exception as exc:
                 if ref is not None:
-                    ray.cancel(ref)
-                raise ArenaInfrastructureError(f"RG grader actor failed: {exc}") from exc
+                    try:
+                        ray.cancel(ref)
+                    except Exception:
+                        pass  # Preserve the original transport error.
+                raise ArenaInfrastructureError(f"RG grader {'tasks' if self.task_mode else 'actor'} failed: {exc}") from exc
         else:
             client = ArenaQueueClient(self.url, timeout_s=min(30.0, self.timeout))
             work_id = client.submit("rg_lru", code, mode="full", smoke=False,

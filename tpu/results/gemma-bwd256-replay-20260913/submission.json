@@ -1,0 +1,9 @@
+{
+  "run_id": "gemma-v5p-bwd256-replay-001",
+  "pool": "tpuswarm-v5p32-east5a-erdos",
+  "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-22ee3e25c45e49cba45076f2a11c5fe56b4b9349c4f56b6711ea9771738adf85.tar.gz",
+  "sha256": "22ee3e25c45e49cba45076f2a11c5fe56b4b9349c4f56b6711ea9771738adf85",
+  "submitted_at": "2026-09-14T00:42:39.246069+00:00",
+  "launch_exit": 0,
+  "job_id": 807
+}

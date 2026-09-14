@@ -29,7 +29,8 @@ def test_single_adapter_arena_is_in_frozen_worker_source(tmp_path):
 
 def test_multi_adapter_arena_combines_both_overlays():
     config = dataclasses.replace(Config.load(PROFILE), adapter_count=2)
-    assert set(manifest(Path.cwd(), config)) == set(ARENA_FILES) | set(FILES)
+    from tpu.swarm.ray_train.overlay import DATABASE_FILES
+    assert set(manifest(Path.cwd(), config)) == set(ARENA_FILES) | set(FILES) | DATABASE_FILES
 
 
 @pytest.mark.parametrize("changes", [

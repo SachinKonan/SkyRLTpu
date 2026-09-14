@@ -18,25 +18,27 @@ import re
 
 @dataclass(frozen=True)
 class Ports:
-    ray: int = 19679
-    dashboard: int = 19680
-    client: int = 19681
-    object_manager: int = 19700
-    node_manager: int = 19701
-    dashboard_agent: int = 19702
-    dashboard_agent_grpc: int = 19703
-    runtime_env: int = 19704
-    metrics: int = 19705
-    worker_min: int = 42000
-    worker_max: int = 42999
-    inference: int = 19800
-    engine: int = 19801
-    trainer: int = 19802
-    trainer_jax: int = 19803
-    trainer_tpu: int = 19804
-    inference_tpu: int = 19805
-    topology_jax: int = 19806
-    topology_subset: int = 19807
+    # Above SkyPilot workers (11002-19999), below Linux ephemeral ports.
+    # Bootstrap validates the actual host ranges before starting Ray.
+    ray: int = 24679
+    dashboard: int = 24680
+    client: int = 24681
+    object_manager: int = 24700
+    node_manager: int = 24701
+    dashboard_agent: int = 24702
+    dashboard_agent_grpc: int = 24703
+    runtime_env: int = 24704
+    metrics: int = 24705
+    worker_min: int = 22000
+    worker_max: int = 22999
+    inference: int = 24800
+    engine: int = 24801
+    trainer: int = 24802
+    trainer_jax: int = 24803
+    trainer_tpu: int = 24804
+    inference_tpu: int = 24805
+    topology_jax: int = 24806
+    topology_subset: int = 24807
 
 
 @dataclass(frozen=True)
@@ -278,6 +280,7 @@ class Config:
     frozen_benchmark: dict = field(default_factory=dict)
     training_smoke: bool = False
     arena_service_only: bool = False
+    arena_grader_rank: int | None = None
     # One independent base model on each inference rank, for arena comparisons.
     # Each entry specifies model_preset plus its own inference/cache overrides.
     arena_models: list[dict] = field(default_factory=list)
@@ -299,6 +302,7 @@ class Config:
     client_member_spec: str = "Qwen/Qwen3.5-27B:qwen3:qwen"
     client_learning_rate: str = "1.5e-4"
     stacked_probe: bool = False
+    attention_replay: bool = False
     # Legacy launch_cell.sh runs the client with HF_HUB_OFFLINE=0 and fetches
     # the tokenizer; the executor's restored snapshot can serve it offline.
     client_hf_offline: bool = False
@@ -316,7 +320,7 @@ class Config:
 
     @property
     def requires_source_overlay(self):
-        return (self.adapter_count > 1 or self.is_recurrent_gemma or self.training_smoke
+        return (not self.inference_only or self.adapter_count > 1 or self.is_recurrent_gemma or self.training_smoke
                 or self.has_problem_prompt_overlay or self.has_adaptive_pwc_overlay
                 or self.has_answer_only_overlay or (self.inference.native_thinking_budget and not self.inference_only))
 
@@ -377,6 +381,15 @@ class Config:
             raise ValueError("adaptive PWC is enabled only for AC2, circle packing and RG-LRU")
         if self.training_smoke and (self.inference_only or self.adapter_count != 1 or self.client_env.get('NUM_EPOCHS') != '1'):
             raise ValueError('training smoke requires one adapter and exactly one training step')
+        if self.arena_grader_rank is not None:
+            if (type(self.arena_grader_rank) is not int or self.arena_grader_rank != 1
+                    or self.accelerator != "tpu-v5p-32" or self.hosts != 4
+                    or self.trainer.hosts != 1 or not self.is_recurrent_gemma
+                    or self.inference_only or self.inference_only_ranks is not None
+                    or self.arena_samples or self.arena_service_only or self.frozen_benchmark):
+                raise ValueError("Dedicated RG grader requires v5p-32 training: trainer 0, grader 1, inference 2/3")
+            if self.client_env.get("ARENA_QUEUE_URL"):
+                raise ValueError("Dedicated RG grader uses workload Ray tasks; remove ARENA_QUEUE_URL")
         if self.arena_service_only and (not self.inference_only or not self.arena_samples):
             raise ValueError('arena service requires an inference-only judge profile')
         if type(self.arena_samples) is not int or not 0 <= self.arena_samples <= 256:
@@ -432,6 +445,10 @@ class Config:
             raise ValueError("stacked replay verification requires stacked training")
         if self.stacked_probe and (not self.trainer.stacked_lora_verify or self.adapter_count != 2):
             raise ValueError("short stacked probe requires two adapters and replay verification")
+        if self.attention_replay and (self.adapter_count != 1 or self.inference_only
+                                      or self.stacked_probe or self.is_recurrent_gemma
+                                      or self.model_preset != "gemma4-31b"):
+            raise ValueError("attention replay requires one Gemma adapter and a training executor")
         if self.adapter_count > 1:
             if self.model not in ("Qwen/Qwen3.5-27B", "openai/gpt-oss-120b", "openai/gpt-oss-20b"):
                 raise ValueError("pooled multi-LoRA supports Qwen3.5 and GPT-OSS")
@@ -552,7 +569,7 @@ class Config:
         if self.is_recurrent_gemma:
             from urllib.parse import urlsplit
             url = urlsplit(self.client_env.get("ARENA_QUEUE_URL", ""))
-            if (url.scheme not in ("http", "https") or not url.hostname
+            if self.arena_grader_rank is None and (url.scheme not in ("http", "https") or not url.hostname
                     or url.username or url.password or url.query or url.fragment):
                 raise ValueError("RecurrentGemma requires an ARENA_QUEUE_URL HTTP(S) endpoint without credentials")
             if self.client_env.get("TTD_PROBLEM_TYPE", "") not in ("", "rg_lru"):
@@ -641,7 +658,7 @@ class Config:
     def inference_hosts(self):
         if self.inference_only_ranks is not None:
             return len(self.inference_only_ranks)
-        return self.hosts - self.trainer.hosts
+        return self.hosts - self.trainer.hosts - int(self.arena_grader_rank is not None)
 
     def client_sampling_environment(self):
         defaults = {

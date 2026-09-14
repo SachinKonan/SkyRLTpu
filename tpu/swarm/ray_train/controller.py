@@ -126,6 +126,12 @@ class Controller:
                         self.failure = f"host {status['rank']} stopped"
                     if status["processes"].get("trainer") is not None:
                         self.failure = f"trainer rank {status['rank']} exited"
+                if self.config.arena_grader_rank is not None:
+                    available = ray.available_resources()
+                    self.report('grader_status', transport='ray_tasks',
+                                active_cases=4 - available.get('arena_grader', 0),
+                                free_chips=available.get('arena_grader', 0),
+                                active_pregates=2 - available.get('arena_pregate', 0))
                 if self.catalog:
                     state = ray.get(self.catalog.snapshot.remote(), timeout=10)
                     self.report("inference_status", **state)
@@ -200,14 +206,17 @@ class Controller:
             # v6e-32 (8 hosts x 4 chips): hosts 0-3 form the 2,2,1 block the
             # legacy cell trains on (validated), 4-7 serve.
             train_ranks = list(range(self.config.trainer.hosts))
-            inference_ranks = list(range(self.config.trainer.hosts, self.config.hosts))
+            inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
+                               if r != self.config.arena_grader_rank]
         self.trainer_leader = train_ranks[0] if train_ranks else 0
         self.checked_get([host.set_trainer_leader.remote(self.trainer_leader) for host in self.hosts], 30)
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
-                    trainer_leader=self.trainer_leader)
+                    trainer_leader=self.trainer_leader, grader_rank=self.config.arena_grader_rank)
         prepared_ranks = sorted(train_ranks + inference_ranks)
         shared_frozen_head = bool(self.config.frozen_benchmark and 0 in inference_ranks)
-        arena_start = (None if shared_frozen_head else
+        arena_start = (self.hosts[self.config.arena_grader_rank].prepare_arena.remote()
+                       if self.config.arena_grader_rank is not None else
+                       None if shared_frozen_head else
                        self.hosts[0].prepare_frozen.remote() if self.config.frozen_benchmark else
                        self.hosts[0].prepare_arena.remote() if self.config.arena_samples else None)
         preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
@@ -217,6 +226,23 @@ class Controller:
         if arena_start is not None:
             preparation_refs.append(arena_start)
         prepared = self.checked_get(preparation_refs, self.config.setup_timeout)[:len(prepared_ranks)]
+        if self.config.arena_grader_rank is not None:
+            from .grader_tasks import self_test
+            rank = self.config.arena_grader_rank
+            resources = nodes[self.ips[rank]]["Resources"]
+            if resources.get('arena_grader') != 4 or resources.get('arena_pregate') != 2:
+                raise RuntimeError('Dedicated grader Ray task resources are missing')
+            self.report("arena_service_ready", transport="ray_tasks", grader_rank=rank)
+            self.report("grader_self_test_started", grader_rank=rank)
+            probe = self_test.remote(str(self.root), self.config.run_id)
+            try:
+                result = self.checked_get([probe], 7200)[0]
+            finally:
+                # Also cancel its pending case tasks if setup is interrupted.
+                ray.cancel(probe, force=False, recursive=True)
+            self.report("grader_self_test_passed", grader_rank=rank, result=result)
+            self.checked_get([self.hosts[0].check_grader_client.remote()], 240)
+            self.report("grader_client_check_passed", grader_rank=rank)
         if shared_frozen_head:
             # One v4-32 host also runs the CPU client. Finish its model/cache
             # preparation first; concurrent preparation would share GCS state.

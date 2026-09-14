@@ -3,7 +3,6 @@
 import gzip
 import json
 import os
-import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -53,22 +52,13 @@ def enable_sqlite_wal(engine) -> None:
 # same local file). Transparent to callers — they still read/write plain dicts.
 _FUTURE_BLOB_DIR = Path(os.environ.get("SKYRL_FUTURE_BLOB_DIR", "/tmp/skyrl-future-blobs"))
 _FUTURE_BLOB_THRESHOLD = 256 * 1024  # spill payloads whose JSON exceeds this many bytes
-_FUTURE_BLOB_TTL_SEC = 2 * 3600      # opportunistically GC blob files older than this
+# Age is not proof that a payload is unused: pending requests can survive long
+# compilations and recovery, and completed results can still be retrieved.
+# Retain files with their run; never collect live database references by TTL.
 
 
-def _gc_future_blobs() -> None:
-    """Best-effort delete of stale blob files. A request/result blob is consumed
-    within a step (~minutes), so anything older than the TTL is safe to remove."""
-    try:
-        cutoff = time.time() - _FUTURE_BLOB_TTL_SEC
-        for p in _FUTURE_BLOB_DIR.glob("*.json.gz"):
-            try:
-                if p.stat().st_mtime < cutoff:
-                    p.unlink()
-            except OSError:
-                pass
-    except OSError:
-        pass
+class MissingFuturePayloadError(RuntimeError):
+    """A persisted request/result references an unreadable local payload."""
 
 
 class OffloadedJSON(TypeDecorator):
@@ -89,9 +79,10 @@ class OffloadedJSON(TypeDecorator):
             return value  # small: store inline as ordinary JSON
         _FUTURE_BLOB_DIR.mkdir(parents=True, exist_ok=True)
         path = _FUTURE_BLOB_DIR / f"{uuid.uuid4().hex}.json.gz"
-        with gzip.open(path, "wt", encoding="utf-8", compresslevel=1) as f:
+        staging = path.with_suffix(".partial")
+        with gzip.open(staging, "wt", encoding="utf-8", compresslevel=1) as f:
             f.write(payload)
-        _gc_future_blobs()
+        staging.replace(path)
         return {"__blobref__": str(path)}
 
     def process_result_value(self, value, dialect):
@@ -99,8 +90,11 @@ class OffloadedJSON(TypeDecorator):
             try:
                 with gzip.open(value["__blobref__"], "rt", encoding="utf-8") as f:
                     return json.load(f)
-            except (OSError, ValueError):
-                return None  # blob missing/corrupt (GC'd stale future) -> treat as gone
+            except (OSError, ValueError, EOFError) as exc:
+                raise MissingFuturePayloadError(
+                    f"Cannot read future payload {value['__blobref__']}; "
+                    "restore a complete database/payload snapshot before replaying requests"
+                ) from exc
         return value
 
 

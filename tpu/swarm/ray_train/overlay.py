@@ -22,9 +22,19 @@ FILES = (
 
 ARENA_FILES = (
     "tpu/run_ttd_ensemble.py",
+    # The frozen client's ray_train package shadows the executor bundle's
+    # package. Ship task definitions/cleanup plus legacy actor compatibility
+    # so both drivers and workers import the same grading implementation.
+    "tpu/swarm/ray_train/__init__.py",
+    "tpu/swarm/ray_train/grader_actor.py",
+    "tpu/swarm/ray_train/grader_tasks.py",
+    "tpu/swarm/ray_train/grader_child.py",
+    "tpu/swarm/ray_train/process.py",
     "tpu/pallas_arena/__init__.py",
     "tpu/pallas_arena/judge/__init__.py",
     "tpu/pallas_arena/judge/client.py",
+    "tpu/pallas_arena/judge/collect.py",
+    "tpu/pallas_arena/judge/timing.py",
     "tpu/pallas_arena/judge/observation.py",
     "tpu/pallas_arena/judge/problems/rg_lru.py",
     "tpu/pallas_arena/rl/__init__.py",
@@ -44,19 +54,23 @@ PROBLEM_PROMPT_FILES = {
     "circle_packing": "third_party/discover/examples/circle_packing/env.py",
 }
 
-NATIVE_FILES = {"skyrl/tinker/extra/external_inference.py",
+NATIVE_FILES = {"skyrl/tinker/dispatch.py", "skyrl/tinker/extra/external_inference.py",
                 "skyrl/tinker/extra/skyrl_train_inference_forwarding.py", "skyrl/tinker/types.py", "skyrl/tinker/api.py", "skyrl/backends/vllm_sampling.py",
                 "skyrl/backends/native_completion.py", "third_party/discover/ttt_discover/rl/train.py",
                 "third_party/discover/ttt_discover/tinker_utils/completers.py"}
 
 ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
+DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 
 
 def manifest(repo, config=None):
     names = set(FILES) if config is None or config.adapter_count > 1 else set()
+    if config is None or not config.inference_only:
+        names.update(DATABASE_FILES)
     if config is not None and config.is_recurrent_gemma:
         names.update(ARENA_FILES)
+        names.update(SMOKE_FILES)  # Propagate fatal grader errors through the training loop.
     if config is not None and config.training_smoke:
         names.update(SMOKE_FILES)
     if config is not None and config.has_problem_prompt_overlay:
@@ -92,6 +106,7 @@ def install(directory, destination):
     allowed.extend([base | {ADAPTIVE_PWC_FILE} for base in [set(), *allowed]])
     allowed.extend([base | {ANSWER_ONLY_FILE} for base in [set(), *allowed]])
     allowed.extend([base | NATIVE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
+    allowed.extend([base | DATABASE_FILES for base in [set(), *allowed]])
     if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")
     for name, expected in records.items():

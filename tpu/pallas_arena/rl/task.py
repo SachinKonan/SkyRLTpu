@@ -97,6 +97,8 @@ Close the code fence after the complete program and end your answer.
 class ArenaInfrastructureError(RuntimeError):
     """No trustworthy candidate verdict was produced."""
 
+    abort_training_step = True
+
 
 def translate_verdict(result: dict) -> dict:
     from pallas_arena.judge.observation import build_observation

@@ -237,6 +237,7 @@ class ReplaySamplingParams:
     temperature: float
     top_k: int
     top_p: float
+    thinking_token_budget: int | None = None
 
 
 @dataclass(frozen=True)
@@ -245,7 +246,7 @@ class ReplaySampleRequest:
 
     Must expose exactly the attributes the inference clients read:
     ``prompt.to_types()``, ``sampling_params.{max_tokens,seed,stop,temperature,
-    top_k,top_p}``, ``num_samples``, ``prompt_logprobs``, ``sampling_session_id``
+    top_k,top_p,thinking_token_budget}``, ``num_samples``, ``prompt_logprobs``, ``sampling_session_id``
     and ``seq_id``.
     """
 
@@ -274,6 +275,7 @@ def replay_request_from_sample_input(sample_input: types.SampleInput) -> ReplayS
             temperature=sp.temperature,
             top_k=sp.top_k,
             top_p=sp.top_p,
+            thinking_token_budget=sp.thinking_token_budget,
         ),
         prompt_logprobs=bool(sample_input.prompt_logprobs),
         sampling_session_id=sample_input.sampling_session_id,

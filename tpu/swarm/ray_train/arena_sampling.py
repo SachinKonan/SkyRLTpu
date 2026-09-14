@@ -28,11 +28,16 @@ def judge_env(host):
 
 
 def prepare_host(host):
-    if host.rank != 0 or not host.config.arena_samples:
-        raise ValueError("Arena judge must own the omitted inference head")
+    expected_rank = host.config.arena_grader_rank
+    if expected_rank is None:
+        expected_rank = 0 if host.config.arena_samples else None
+    if host.rank != expected_rank:
+        raise ValueError("Arena judge must own its dedicated host")
+    host.role = "grader"
     from .bootstrap import check_ports_available, stop_ray
-    stop_ray(judge_ray_tmp(host.root))
-    check_ports_available([8791])
+    if host.config.arena_grader_rank is None:
+        stop_ray(judge_ray_tmp(host.root))
+        check_ports_available([8791])
     folder = host.root / "envs/arena"
     python = str(folder / "bin/python")
     marker = folder / ".complete"
@@ -51,11 +56,14 @@ def prepare_host(host):
             "from pallas_arena.judge.worker import PersistentWorker; "
             "assert jax.__version__=='0.10.2'; assert ray.__version__=='2.58.0'"], env=env)
         marker.write_text(identity)
+    if host.config.arena_grader_rank is not None:
+        host.phase = "grader_environment_ready"
+        return host.heartbeat()
     config_file = host.run / "arena-config.json"
     config_file.write_text(json.dumps(host.config.to_dict()))
     (host.run / "arena-pool-ready.json").unlink(missing_ok=True)
     host.start("arena-queue", [python, "-m", "pallas_arena.judge.queue",
-        "--host", "0.0.0.0" if host.config.arena_service_only else "127.0.0.1", "--port", "8791", "--lease-timeout", "1800"], env=env)
+        "--host", "0.0.0.0" if (host.config.arena_service_only or host.config.arena_grader_rank is not None) else "127.0.0.1", "--port", "8791", "--lease-timeout", "1800"], env=env)
     host.start("arena-pool", [python, "-m", "tpu.swarm.ray_train.arena_sampling",
         "pool", str(config_file)], env=env)
     import httpx

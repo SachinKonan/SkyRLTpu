@@ -133,6 +133,19 @@ def merge_case_results(
                   "grad_scores", "tp_control", "tp_timer_ratios",
                   "tp_baseline_impls"):
             merged[k].update(r.get(k) or {})
+        # A candidate compile/correctness failure is decisive regardless of
+        # whether an unrelated baseline calibration was noisy. Check it before
+        # excluding timing factors (which could otherwise hide that failure).
+        if not r.get("passed"):
+            gate = r.get("gate", "?")
+            why = str((r.get("violations") or ["?"])[0])[:300]
+            if gate in JUDGE_FAULT_GATES or case in (r.get("skipped_tp") or {}):
+                merged["excluded_cases"][case] = f"{gate}: {why}"
+            else:
+                fatal = fatal or (gate, why)
+                violations.append(f"{case}: [{gate}] {why}")
+            continue
+
         floor = r.get("task_noise_floor") or default_floor
         merged["case_noise_floors"][case] = round(floor, 4)
         if floor > 0.5:
@@ -147,17 +160,6 @@ def merge_case_results(
             merged["case_boot_s"][case] = r["task_boot_s"]
         if r.get("timer"):
             merged["case_timer"][case] = r["timer"]
-
-        if not r.get("passed"):
-            gate = r.get("gate", "?")
-            why = str((r.get("violations") or ["?"])[0])[:300]
-            if gate in JUDGE_FAULT_GATES or case in (r.get("skipped_tp") or {}):
-                merged["excluded_cases"][case] = f"{gate}: {why}"
-            else:
-                # candidate fault -- fatal by the correct-everywhere rule
-                fatal = fatal or (gate if gate in CANDIDATE_FATAL_GATES else gate, why)
-                violations.append(f"{case}: [{gate}] {why}")
-            continue
 
         # skipped-tp inside a passing result (e.g. control failed) = excluded
         for sk_case, sk_why in (r.get("skipped_tp") or {}).items():

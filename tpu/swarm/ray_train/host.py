@@ -8,13 +8,13 @@ from pathlib import Path
 import shutil
 import subprocess
 import tarfile
-import sqlite3
 import threading
 import time
 
 from .cache import CacheStore, GCS, mount_cache
 from .commands import client_environment, trainer_command, trainer_environment
 from .config import Config
+from .database_snapshot import create_snapshot, restore_snapshot
 from .events import emit
 from .process import Process
 
@@ -368,6 +368,16 @@ class Host:
         self.phase = "trainer_started"
         return self.heartbeat()
 
+    def check_grader_client(self):
+        if self.rank != 0 or self.config.arena_grader_rank is None:
+            raise RuntimeError("grader client check requires a dedicated grader and the client host")
+        self.checked("grader-client-check", [str(self.root / "envs/client/bin/python"),
+            str(Path(__file__).with_name("grader_client_check.py")),
+            "--source", str(self.source), "--output", str(self.run / "grader-client-check")],
+            env=client_environment(self.config, self.root, self.ips[0],
+                                   trainer_head=self.ips[self.trainer_leader]), cwd=self.source)
+        return {"ok": True}
+
     def start_client(self):
         if self.rank != 0:
             raise RuntimeError("client belongs on the head")
@@ -376,6 +386,10 @@ class Host:
         if self.config.stacked_probe:
             command = [command[0], str(Path(__file__).with_name("stacked_probe.py")),
                        "--source", str(self.source), "--model", self.config.model]
+        if self.config.attention_replay:
+            command = [command[0], str(Path(__file__).with_name("attention_replay.py")),
+                       "--source", str(self.source), "--model", self.config.model,
+                       "--learning-rate", self.config.client_learning_rate]
         self.start("client", command,
                    client_environment(self.config, self.root, self.ips[0],
                                       trainer_head=self.ips[self.trainer_leader]), self.source)
@@ -420,7 +434,10 @@ class Host:
         if self.rank == self.trainer_leader and not db.exists():
             listing = self.gcs.metadata("ls", "--json", self.config.run_gcs + "/tinker-backup.db", allow_empty=True)
             if json.loads(listing):
-                self.gcs.transfer(["cp", self.config.run_gcs + "/tinker-backup.db", str(db)], "restore-database", self.run)
+                downloaded = self.run / "tinker-downloaded.db"
+                self.gcs.transfer(["cp", self.config.run_gcs + "/tinker-backup.db", str(downloaded)], "restore-database", self.run)
+                restore_snapshot(downloaded, db, self.run / "future-blobs")
+                downloaded.unlink()
 
     def sync_run(self):
         if self.rank not in (0, self.trainer_leader):
@@ -440,8 +457,7 @@ class Host:
         db = self.run / "tinker.db"
         if self.rank == self.trainer_leader and db.exists():
             backup = self.run / "tinker-backup.db"
-            with sqlite3.connect(db) as source, sqlite3.connect(backup) as destination:
-                source.backup(destination)
+            create_snapshot(db, backup)
             gcs.transfer(["cp", str(backup), self.config.run_gcs + "/tinker-backup.db"], "database-writeback", timeout=120)
         logs = [str(path) for pattern in ("*.jsonl", "*.log") for path in self.run.glob(pattern)]
         if logs:

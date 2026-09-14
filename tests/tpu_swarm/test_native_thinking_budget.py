@@ -664,7 +664,7 @@ def existing_completers():
     """Execute the actual client methods with only transport/types stubbed."""
     import ast
     path = ROOT/'third_party/discover/ttt_discover/tinker_utils/completers.py'
-    names = {'QwenTwoPhaseTokenCompleter', 'GemmaTwoPhaseTokenCompleter', 'MuseTwoPhaseTokenCompleter'}
+    names = {'NativeCompletionError', 'QwenTwoPhaseTokenCompleter', 'GemmaTwoPhaseTokenCompleter', 'MuseTwoPhaseTokenCompleter'}
     nodes = [n for n in ast.parse(path.read_text()).body if isinstance(n, ast.ClassDef) and n.name in names]
     for node in nodes:
         node.decorator_list = []

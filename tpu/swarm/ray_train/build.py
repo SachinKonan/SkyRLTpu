@@ -46,7 +46,7 @@ def build(profile, output):
         if config.frozen_benchmark:
             for path in sorted((repo / "tpu/swarm/bench").glob("*.py")):
                 bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
-        if config.arena_samples:
+        if config.arena_samples or config.arena_grader_rank is not None:
             for path in sorted((repo / "tpu/pallas_arena").rglob("*.py")):
                 if "__pycache__" not in path.parts:
                     bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)

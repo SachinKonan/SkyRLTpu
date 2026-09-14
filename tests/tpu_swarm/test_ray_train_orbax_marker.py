@@ -166,7 +166,7 @@ def test_pair_engine_command_and_environment(tmp_path):
     assert cmd[cmd.index("--skyrl-ray-placement-hosts") + 1] == "10.0.0.5,10.0.0.6"
     env = inference_environment(cfg, tmp_path, tmp_path / "run", head="10.0.0.1", group=group)
     assert env["TPU_MULTIHOST_BACKEND"] == "ray" and env["VLLM_USE_RAY_EXECUTOR"] == "1"
-    assert env["RAY_ADDRESS"] == "10.0.0.1:19679" and env["SKYRL_RAY_PLACEMENT_HOSTS"] == "10.0.0.5,10.0.0.6"
+    assert env["RAY_ADDRESS"] == "10.0.0.1:24679" and env["SKYRL_RAY_PLACEMENT_HOSTS"] == "10.0.0.5,10.0.0.6"
     # tpu-inference sets the per-host TPU process variables itself in Ray mode.
     assert not any(k in env for k in ("TPU_PROCESS_BOUNDS", "TPU_PROCESS_ADDRESSES", "TPU_VISIBLE_CHIPS", "CLOUD_TPU_TASK_ID"))
     assert env["MOE_REQUANTIZE_WEIGHT_DTYPE"] == "fp8"

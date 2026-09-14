@@ -1,0 +1,82 @@
+[
+  {
+    "run_id": "native-v5p-gemma-ac2-grpo-lr15e4-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-grpo-lr15e4-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-d5dcc0b48bfa6a9c14513636c51edb3c384ca64e7cf86ca66195751975c75927.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-grpo-lr15e4-s1-bwd256-003/native-v5p-gemma-ac2-grpo-lr15e4-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:05:56.934624+00:00",
+    "job_id": 809
+  },
+  {
+    "run_id": "native-v5p-gemma-ac2-grpo-lr4e5-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-grpo-lr4e5-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-d5dcc0b48bfa6a9c14513636c51edb3c384ca64e7cf86ca66195751975c75927.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-grpo-lr4e5-s1-bwd256-003/native-v5p-gemma-ac2-grpo-lr4e5-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:06:06.195462+00:00",
+    "job_id": 810
+  },
+  {
+    "run_id": "native-v5p-gemma-ac2-pwc-lr15e4-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-pwc-lr15e4-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-6ec9b4ea4f524dff0efdb41bffc04e57fb89ed6a01c432ed7aa57e9be1639729.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-pwc-lr15e4-s1-bwd256-003/native-v5p-gemma-ac2-pwc-lr15e4-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:06:14.940656+00:00",
+    "job_id": 811
+  },
+  {
+    "run_id": "native-v5p-gemma-ac2-pwc-lr4e5-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-pwc-lr4e5-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-04c0aafb659d98ccb8301a414863ac20f9586ab6c264795d06fc431c5f1cd554.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-ac2-pwc-lr4e5-s1-bwd256-003/native-v5p-gemma-ac2-pwc-lr4e5-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:06:22.930338+00:00",
+    "job_id": 812
+  },
+  {
+    "run_id": "native-v5p-gemma-packing32-grpo-lr15e4-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-grpo-lr15e4-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-e1b5d2aeb808997a3c62b1a553e3cd95fd8345c3d30e8a0c202332be731c2938.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-grpo-lr15e4-s1-bwd256-003/native-v5p-gemma-packing32-grpo-lr15e4-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:06:35.786218+00:00",
+    "job_id": 813
+  },
+  {
+    "run_id": "native-v5p-gemma-packing32-grpo-lr4e5-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-grpo-lr4e5-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-3384b76f0d582999bcd3390703d2a333a4973305d3c80a5cff2831665e0562d8.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-grpo-lr4e5-s1-bwd256-003/native-v5p-gemma-packing32-grpo-lr4e5-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:06:43.302641+00:00",
+    "job_id": 814
+  },
+  {
+    "run_id": "native-v5p-gemma-packing32-pwc-lr15e4-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-pwc-lr15e4-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-3384b76f0d582999bcd3390703d2a333a4973305d3c80a5cff2831665e0562d8.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-pwc-lr15e4-s1-bwd256-003/native-v5p-gemma-packing32-pwc-lr15e4-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:06:54.212678+00:00",
+    "job_id": 815
+  },
+  {
+    "run_id": "native-v5p-gemma-packing32-pwc-lr4e5-s1-bwd256-003",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-pwc-lr4e5-s1-bwd256-003/ray-training.tar.gz",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-ca52f94eaec3e614771286375fdc4fa5818ee75fd93aa53d1c58f6d59575dac7.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/benchmarks/gemma-bwd256/sweep/native-v5p-gemma-packing32-pwc-lr4e5-s1-bwd256-003/native-v5p-gemma-packing32-pwc-lr4e5-s1-bwd256-003.yaml",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "launch_exit": 0,
+    "submitted_at": "2026-09-14T01:07:06.209861+00:00",
+    "job_id": 816
+  }
+]

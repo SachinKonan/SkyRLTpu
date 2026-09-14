@@ -38,8 +38,13 @@ def test_only_api_leader_backs_up_database_and_logs_do_not_collide(tmp_path, mon
 @pytest.mark.parametrize('rank', [0, 7])
 def test_restore_routes_client_to_head_and_database_to_api_leader(tmp_path, rank):
     calls = []
+    def transfer(command, label, *args, **kwargs):
+        calls.append(label)
+        if label == 'restore-database':
+            with sqlite3.connect(command[-1]) as db:
+                db.execute('create table proof(value text)')
     gcs = SimpleNamespace(list=lambda *a, **kw: ['client'], metadata=lambda *a, **kw: json.dumps(['db']),
-                          transfer=lambda command, label, *a, **kw: calls.append(label))
+                          transfer=transfer)
     host = SimpleNamespace(rank=rank, trainer_leader=7, run=tmp_path, gcs=gcs,
                            config=SimpleNamespace(run_gcs='gs://test/run'))
     module.Host.restore_run(host)

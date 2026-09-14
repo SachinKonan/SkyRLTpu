@@ -1,0 +1,102 @@
+[
+  {
+    "event": "replay_started",
+    "time": 1789347745.721605,
+    "source_run": "native-v5p-gemma-ac2-grpo-lr15e4-s1-002",
+    "model_id": "model_513a682f"
+  },
+  {
+    "event": "backward_started",
+    "time": 1789347745.7242484,
+    "bucket": 18432,
+    "tokens": 15515,
+    "repeat": 0,
+    "source_request": 20,
+    "datum_index": 3
+  },
+  {
+    "event": "backward_completed",
+    "time": 1789347776.6380706,
+    "bucket": 18432,
+    "repeat": 0,
+    "seconds": 30.91382276400327,
+    "metrics": {}
+  },
+  {
+    "event": "backward_started",
+    "time": 1789347776.638245,
+    "bucket": 18432,
+    "tokens": 15515,
+    "repeat": 1,
+    "source_request": 20,
+    "datum_index": 3
+  },
+  {
+    "event": "backward_completed",
+    "time": 1789347804.3363283,
+    "bucket": 18432,
+    "repeat": 1,
+    "seconds": 27.698082786002487,
+    "metrics": {}
+  },
+  {
+    "event": "backward_started",
+    "time": 1789347804.339408,
+    "bucket": 22528,
+    "tokens": 18732,
+    "repeat": 0,
+    "source_request": 28,
+    "datum_index": 1
+  },
+  {
+    "event": "backward_completed",
+    "time": 1789347838.0552273,
+    "bucket": 22528,
+    "repeat": 0,
+    "seconds": 33.71582003599906,
+    "metrics": {}
+  },
+  {
+    "event": "backward_started",
+    "time": 1789347838.0554059,
+    "bucket": 22528,
+    "tokens": 18732,
+    "repeat": 1,
+    "source_request": 28,
+    "datum_index": 1
+  },
+  {
+    "event": "backward_completed",
+    "time": 1789347850.7579565,
+    "bucket": 22528,
+    "repeat": 1,
+    "seconds": 12.702550668000185,
+    "metrics": {}
+  },
+  {
+    "event": "optimizer_completed",
+    "time": 1789347866.3758242,
+    "seconds": 15.617689652997797,
+    "metrics": {
+      "skyrl.ai/grad_norm": 0.049072265625,
+      "skyrl.ai/learning_rate": 0.00015
+    }
+  },
+  {
+    "event": "adapter_exported",
+    "time": 1789347903.0069404,
+    "path": "tinker://model_513a682f/replay-updated"
+  },
+  {
+    "event": "replay_complete",
+    "time": 1789347907.166738,
+    "buckets": [
+      18432,
+      22528
+    ],
+    "backward_passes": 4,
+    "optimizer_updates": 1,
+    "post_update_tokens": 64,
+    "sampling_seconds": 4.15059466099774
+  }
+]

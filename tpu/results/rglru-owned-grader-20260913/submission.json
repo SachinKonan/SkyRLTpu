@@ -1,0 +1,9 @@
+{
+  "run_id": "native-v5p-muse-rglru-grpo-lr4e5-s1-003",
+  "pool": "tpuswarm-v5p32-east5a-erdos",
+  "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-0abc3335909b18da096adecac8ab7a2f1ce4e70815475ce706cd9351be46bb80.tar.gz",
+  "sha256": "0abc3335909b18da096adecac8ab7a2f1ce4e70815475ce706cd9351be46bb80",
+  "submitted_at": "2026-09-14T01:04:00.805489+00:00",
+  "launch_exit": 0,
+  "job_id": 808
+}

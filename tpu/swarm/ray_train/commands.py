@@ -51,6 +51,7 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         TPU_PROCESS_PORT=str(p.trainer_tpu), CLOUD_TPU_TASK_ID=str(process_id),
         TPU_VISIBLE_CHIPS="0,1,2,3", TINKER_API_KEY="tml-local-skyrl-no-auth",
         SKYRL_DATABASE_URL="sqlite:///" + str(run / "tinker.db"),
+        SKYRL_FUTURE_BLOB_DIR=str(run / "future-blobs"),
         TPUSWARM_BUNDLE_ID=config.base_bundle_sha256,
         # No SKYRL_EXTERNAL_WATCHDOG_* overrides: the legacy v5p-32 cell runs the
         # dispatch defaults (stale 300 s, inflight 3600 s, 2 redispatches,
@@ -219,7 +220,7 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         TTD_M0_BASE_URL=f"http://{trainer_head}:{config.ports.trainer}",
         HF_HOME=str(root / "ram/hf"), HF_HUB_OFFLINE=_flag(config.client_hf_offline), JAX_PLATFORMS="cpu",
         TTD_RUN_DIR=str(root / "runs" / config.run_id / "client"), EXPERIMENT_NAME=config.run_id,
-        TTD_ENV="erdos_min_overlap", TTD_PROBLEM_TYPE="", TTD_FCALGO_MAX_CASES="0",
+        TTD_ENV="erdos_min_overlap", TTD_PROBLEM_TYPE="", TTD_FCALGO_MAX_CASES="0", ARENA_RAY_ACTOR="",
         TTD_ENSEMBLE_MODELS=config.client_member_spec,
         TTD_ALLOW_SINGLE_MEMBER="1", TTD_QWEN_TWO_PHASE="1", TTD_DISABLE_WANDB_TABLES="1",
         TTD_CROSS_WEIGHT="0", TTD_ADV_ESTIMATOR="mean_baseline", TTD_ELITE_SLOTS="2",
@@ -236,6 +237,11 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults.update(TTD_PROBLEM_TYPE="rg_lru", EVAL_TIMEOUT="3600",
                         GROUPS_PER_BATCH="1", GROUP_SIZE="8", TTD_EVAL_BACKEND="local")
     defaults.update(config.client_env)
+    if config.arena_grader_rank is not None:
+        defaults["ARENA_QUEUE_URL"] = ""
+        defaults["ARENA_RAY_ACTOR"] = ""
+        defaults["ARENA_RAY_TASKS"] = "1"
+        defaults["ARENA_RAY_ROOT"] = str(root)
     defaults["TTD_NATIVE_THINKING_BUDGET"] = _flag(config.inference.native_thinking_budget)
     if config.adapter_count > 1:
         renderer = config.client_member_spec.split(":")[1]

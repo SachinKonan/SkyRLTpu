@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import fcntl
 import hashlib
 import json
@@ -17,6 +18,8 @@ from .config import Config
 
 
 def workload_resources(config, rank):
+    if config.arena_grader_rank == rank:
+        return {"TPU": 4, "arena_grader": 4, "arena_pregate": 2}
     if config.inference_only_ranks is not None and rank not in config.inference_only_ranks:
         # An omitted TPU key enables Ray's automatic hardware detection.
         return {"TPU": 0}
@@ -38,6 +41,43 @@ def check_ports_available(ports, timeout=60):
             if time.monotonic() >= deadline:
                 raise RuntimeError(f"TCP port {port} is unavailable after {timeout}s") from exc
             time.sleep(1)
+
+
+def workload_ports(config):
+    values = asdict(config.ports)
+    lo, hi = values.pop("worker_min"), values.pop("worker_max")
+    ports = set(values.values()) | set(range(lo, hi + 1))
+    for slot in range(config.engines_per_host):
+        ports.update((config.ports.engine + slot, config.ports.inference_tpu + slot))
+    return sorted(ports)
+
+
+def validate_port_ranges(ports, ephemeral, other_worker_ranges):
+    for label, (lo, hi) in [("Linux ephemeral", ephemeral), *other_worker_ranges]:
+        overlap = next((port for port in ports if lo <= port <= hi), None)
+        if overlap is not None:
+            raise RuntimeError(f"Workload port {overlap} overlaps {label} range {lo}-{hi}")
+
+
+def check_port_isolation(ports):
+    import psutil
+    ephemeral = tuple(map(int, Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split()))
+    ranges = []
+    for process in psutil.process_iter(["pid", "cmdline"]):
+        args = process.info["cmdline"] or []
+        if not args or Path(args[0]).name != "raylet":
+            continue
+        options = dict(arg[2:].split("=", 1) for arg in args[1:]
+                       if arg.startswith("--") and "=" in arg)
+        lo = int(options.get("min_worker_port", "0"))
+        hi = int(options.get("max_worker_port", "0"))
+        if lo and hi:
+            ranges.append((f"Ray PID {process.pid} workers", (lo, hi)))
+        # Some Ray deployments use a list instead of a contiguous range.
+        for port in options.get("worker_port_list", "").split(","):
+            if port:
+                ranges.append((f"Ray PID {process.pid} worker", (int(port), int(port))))
+    validate_port_ranges(ports, ephemeral, ranges)
 
 
 def stop_ray(ray_tmp):
@@ -79,10 +119,11 @@ def retire_before_port_check(config, ip, log):
     if config.retired_task_ids or config.retired_processes:
         pids = retire_workloads(config.retired_task_ids, config.retired_processes.get(ip))
         emit(log, "retired_workloads_stopped", ip=ip, pids=pids)
-    check_ports_available((config.ports.ray, config.ports.dashboard, config.ports.client,
-        config.ports.object_manager, config.ports.node_manager, config.ports.dashboard_agent,
-        config.ports.dashboard_agent_grpc, config.ports.runtime_env, config.ports.metrics,
-        config.ports.engine, config.ports.trainer, config.ports.inference))
+    ports = workload_ports(config)
+    check_port_isolation(ports)
+    check_ports_available(ports)
+    emit(log, "port_preflight_passed", ip=ip, checked=len(ports),
+         worker_min=config.ports.worker_min, worker_max=config.ports.worker_max)
 
 
 def ensure_controller_runtime(root, initial_behavior=False):

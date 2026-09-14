@@ -63,7 +63,7 @@ def test_profile_build_targets_correct_tpu_family(tmp_path, profile, zone, hosts
         assert cfg.inference_hosts == 3
         assert cfg.trainer.process_bounds == "1,1,1"
         env = trainer_environment(cfg, ROOT, ROOT / "run", IPS[:1], 0)
-        assert env["TPU_PROCESS_ADDRESSES"] == "10.0.0.1:19804"
+        assert env["TPU_PROCESS_ADDRESSES"] == "10.0.0.1:24804"
 
 
 def test_v5p_profile_preserves_training_and_checkpoint_identity():
@@ -126,7 +126,7 @@ def test_trainer_rank_and_bounds_use_selected_physical_row():
     cfg = config(trainer=dict(hosts=2, tp=4, fsdp=2, process_bounds="1,1,2"))
     env = trainer_environment(cfg, ROOT, ROOT / "run", IPS[:2], 1)
     assert env["CLOUD_TPU_TASK_ID"] == "1"
-    assert env["TPU_PROCESS_ADDRESSES"] == ",".join(ip+":19804" for ip in IPS[:2])
+    assert env["TPU_PROCESS_ADDRESSES"] == ",".join(ip+":24804" for ip in IPS[:2])
     assert env["TPU_PROCESS_BOUNDS"] == "1,1,2"
     cmd = trainer_command(cfg, ROOT, ROOT / "source", IPS[0], IPS[:2], 1)
     assert "skyrl.backends.rpc" in cmd
@@ -144,7 +144,7 @@ def test_inference_isolation_and_explicit_overrides(monkeypatch):
     assert "--enable-chunked-prefill" in cmd and "--enable-prefix-caching" not in cmd
     env = inference_environment(cfg, ROOT, ROOT / "run")
     assert env["TPU_PROCESS_BOUNDS"] == "1,1,1"
-    assert env["TPU_PROCESS_ADDRESSES"] == "localhost:19805"
+    assert env["TPU_PROCESS_ADDRESSES"] == "localhost:24805"
     assert "JAX_COORDINATOR_ADDRESS" not in env
     assert "TPU_MULTIPROCESS_DP" not in env
     assert env["VLLM_XLA_CACHE_PATH"].endswith("ram/compile")
@@ -153,7 +153,7 @@ def test_inference_isolation_and_explicit_overrides(monkeypatch):
 def test_client_uses_existing_renderer_and_workload_ray():
     env = client_environment(config(), ROOT, IPS[0])
     assert env["TTD_ENSEMBLE_MODELS"] == "Qwen/Qwen3.5-27B:qwen3:qwen"
-    assert env["RAY_ADDRESS"] == "10.0.0.1:19679"
+    assert env["RAY_ADDRESS"] == "10.0.0.1:24679"
     assert env["TTD_RAY_PAYLOAD"] == "1"
     assert env["GROUPS_PER_BATCH"] == "16"
     assert env["GROUP_SIZE"] == "32"
@@ -216,7 +216,7 @@ def test_v5p_profiles_inherit_the_legacy_cell_defaults(profile):
     assert (cfg.trainer.hosts, cfg.trainer.tp, cfg.trainer.fsdp, cfg.trainer.process_bounds) == (1, 1, 4, "1,1,1")
     assert "v5p32-cells" in cfg.base_bundle
     backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS[:cfg.trainer.hosts], ENGINE_IPS)
-    assert backend["vllm_base_url"] == ",".join(f"http://{ip}:19801" for ip in ENGINE_IPS)
+    assert backend["vllm_base_url"] == ",".join(f"http://{ip}:24801" for ip in ENGINE_IPS)
     assert backend["vllm_client_side_round_robin"]
 
 
@@ -266,7 +266,7 @@ def test_qwen_preset_reproduces_the_legacy_trainer_contract():
     backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS[:1], ENGINE_IPS)
     assert backend["maxtext_max_target_length"] == 22528
     assert backend["train_token_budget"] == 73728 and backend["flce_tile_size"] == 512
-    assert backend["vllm_base_url"] == ",".join(f"http://{ip}:19801" for ip in ENGINE_IPS)
+    assert backend["vllm_base_url"] == ",".join(f"http://{ip}:24801" for ip in ENGINE_IPS)
     assert backend["vllm_client_side_round_robin"] and not backend["vllm_route_by_prompt_prefix"]
     assert backend["vllm_max_concurrent_requests"] == 256
     assert backend["vllm_request_timeout_sec"] == 300
@@ -328,8 +328,8 @@ def test_gptoss_preset_two_trainer_hosts_and_engine_requantize_env():
     assert kwargs["sparse_matmul"] and kwargs["megablox"] and kwargs["allow_split_physical_axes"]
     assert "use_tokamax_splash" not in kwargs
     assert (kwargs["ici_tensor_parallelism"], kwargs["ici_fsdp_parallelism"]) == (4, 2)
-    assert backend["num_processes"] == 2 and backend["coordinator_address"] == "10.0.0.1:19803"
-    assert backend["vllm_base_url"] == "http://10.0.0.5:19801,http://10.0.0.7:19801"
+    assert backend["num_processes"] == 2 and backend["coordinator_address"] == "10.0.0.1:24803"
+    assert backend["vllm_base_url"] == "http://10.0.0.5:24801,http://10.0.0.7:24801"
     assert backend["train_token_budget"] == 2 * 18432
     assert cfg.trainer.maxtext_spec.endswith("@d388c5478b18b2322ab36c032deb87b9a4ff065f")
     assert cfg.trainer.ckpt_require_marker
@@ -359,7 +359,7 @@ def test_preset_values_stay_overridable_and_validated():
         v5p_config(inference=dict(routing="sideways"))
     with pytest.raises(ValueError, match="client_member_spec"):
         v5p_config(client_member_spec="Other/Model:qwen3:qwen")
-    assert inference_urls(v5p_config(inference=dict(routing="ingress")), IPS[0], ENGINE_IPS) == "http://10.0.0.1:19800"
+    assert inference_urls(v5p_config(inference=dict(routing="ingress")), IPS[0], ENGINE_IPS) == "http://10.0.0.1:24800"
     assert set(PRESETS) == {"qwen3.5-27b", "gemma4-31b", "muse-glimmer-30b", "gpt-oss-120b"}
 
 

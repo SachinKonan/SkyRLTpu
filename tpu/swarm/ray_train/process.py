@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import os
 from pathlib import Path
 import signal
@@ -36,16 +37,37 @@ class Process:
         self.output.close()
 
 
-def guard(parent, command, term_grace=15):
-    child = subprocess.Popen(command, start_new_session=True)
+def guard(parent, command, term_grace=15, resource_lock=None):
     stopping = False
 
     def stop(*_):
         nonlocal stopping
         stopping = True
 
+    # Install before spawning so cancellation cannot kill the guardian in the
+    # window between child creation and handler registration.
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    lock = None
+    if resource_lock:
+        # The guardian, not the Ray worker, owns the physical-device lease.
+        # A replacement task may be scheduled as soon as its predecessor is
+        # killed, before that predecessor's subprocesses have finished exiting.
+        lock = open(resource_lock, "a")
+        while True:
+            if stopping or os.getppid() != parent:
+                lock.close()
+                return 143
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                time.sleep(0.05)
+    if stopping or os.getppid() != parent:
+        if lock is not None:
+            lock.close()
+        return 143
+    child = subprocess.Popen(command, start_new_session=True)
     try:
         while child.poll() is None:
             if stopping or os.getppid() != parent:
@@ -69,9 +91,12 @@ def guard(parent, command, term_grace=15):
         except ProcessLookupError:
             pass
         child.wait(timeout=5)
+        if lock is not None:
+            lock.close()
 
 
 if __name__ == "__main__":
     if sys.argv[1] != "guard":
         raise SystemExit("internal guardian entrypoint")
-    raise SystemExit(guard(int(sys.argv[2]), json.loads(sys.argv[3]), float(sys.argv[4])))
+    raise SystemExit(guard(int(sys.argv[2]), json.loads(sys.argv[3]), float(sys.argv[4]),
+                          sys.argv[5] if len(sys.argv) > 5 else None))
