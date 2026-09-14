@@ -311,7 +311,20 @@ tokens, and gemma's context is 10240 with its programs needing 5-6k.
 |---|---|---|---|---|---|
 | stageI-q-insp-n | **772** | qwen | centered 1.5e-4 | qwen best | 709/710 (no context), 626 (context + arrays) |
 | stageI-g-insp-n | **773** | gemma | centered 4e-5 | gemma best | 717/718, 625 |
-| stageI-m-insp-n | **774** | muse | LOO 4e-5 | muse best | 719 |
+| stageI-m-insp-n | **774 → 880** | muse | LOO 4e-5 | muse best | 719 |
+
+**774 FAILED 2026-09-14 ~15:40Z — phantom checkpoint, not a code bug.** After its 4th preemption the
+cell tried to resume from `model_33c7aa0e/weights/000006`, which the registry listed but whose 3 GB
+tarball never reached GCS (the worker was reclaimed between registering the checkpoint and the
+sidecar's upload; the small snapshot `puct_sampler_step_000006.json` did make it). Tinker returned
+404, and `TTD_RESUME_STRICT=1` correctly refused to fall back to fresh weights — exit 1, which is
+not in `recover_on_exit_codes`, so the job stopped. Fix: backed up the registry
+(`checkpoints.jsonl.bak-phantom006`), dropped the 000006 entry (tarballs exist for 000001–000005),
+relaunched the same yaml as **880**; it resumes with weights 000005 against tree snapshot 6, i.e.
+one update behind the policy that produced batch-5 rollouts — a one-step off-policy update, same
+order of mismatch as any ordinary preemption resume. Its best at failure was 0.380907037 (6 steps).
+Generic lesson: a registry entry is written before its tarball is durable, so every strict resume
+after a preemption can hit this; `fix_phantom_ckpt.py` (job tmp) is the repair.
 
 625/626/719 cancelled at their flatline; their workers (435, 461, 449) were process-killed and
 disk-swept (8-25 GB → 60-77 GB free) before 772/773/774 landed on them.
