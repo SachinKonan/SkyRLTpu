@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import tarfile
 
 import yaml
@@ -74,7 +75,11 @@ def package(profile, output, *, probe=False):
     doc['run'] = prelude+run
     task = out/(run_id+'.yaml')
     task.write_text(yaml.safe_dump(doc, sort_keys=False))
+    main_commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+    discover_commit = subprocess.check_output(
+        ['git', '-C', str(root), 'rev-parse', 'HEAD:third_party/discover'], text=True).strip()
     (out/'manifest.json').write_text(json.dumps(dict(run_id=run_id,sha256=digest,
+        main_commit=main_commit,discover_commit=discover_commit,
         accelerator=config.accelerator,grading_ranks=config.placement_ranks,
         grading_chips=doc['envs']['PLACEMENT_TPU_CHIPS'],submitted=False,
         files={name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in files.items()}), indent=2)+'\n')

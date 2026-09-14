@@ -1,6 +1,6 @@
 """Managed placement probe using the native workload's private Ray setup.
 
-Runs under a pool lease on TPU hosts, but publishes zero Ray TPU resources.
+Runs under a pool lease, publishing TPU resources only on grading hosts.
 Only this run's Ray temporary directory is retired; the pool Ray is untouched.
 """
 import argparse
@@ -14,6 +14,13 @@ import socket
 import subprocess
 import sys
 import time
+
+
+def probe_ports(ports):
+    names = ('ray', 'dashboard', 'client', 'object_manager', 'node_manager',
+             'dashboard_agent', 'dashboard_agent_grpc', 'runtime_env', 'metrics')
+    return sorted({getattr(ports,name) for name in names} |
+                  set(range(ports.worker_min,ports.worker_max+1)))
 
 
 def main():
@@ -38,7 +45,8 @@ def main():
         os.execv(str(python),[str(python),'-m','tpu.science.placement_probe_bootstrap','--runtime-ready'])
     os.fstat(int(os.environ['SCIENCE_OWNER_FD']))
     import ray
-    from tpu.swarm.ray_train.bootstrap import stop_ray,check_ports_available
+    from tpu.swarm.ray_train.bootstrap import stop_ray,check_ports_available,check_port_isolation
+    from tpu.swarm.ray_train.config import Ports
     # Ray appends a session name and Unix socket name (Linux limit: 107 bytes).
     # Hash the run ID so the directory remains short and private to this run.
     ray_tmp=Path('/tmp')/('plc-'+str(os.getuid())+'-'+hashlib.sha256(run.encode()).hexdigest()[:12])
@@ -48,8 +56,8 @@ def main():
     ray_tmp.mkdir(mode=0o700,exist_ok=True)
     if ray_tmp.is_symlink() or ray_tmp.stat().st_uid!=os.getuid():
         raise RuntimeError('placement Ray directory is not owned by this user')
-    port=20679
-    ports=[port,20680,20681,20682,20683,20684,20685,20686,20687]
+    p=Ports();port=p.ray
+    ports=probe_ports(p)
     stopped=False
     def stop(*_):
         nonlocal stopped
@@ -57,18 +65,18 @@ def main():
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     driver=None;code=1
     try:
-        stop_ray(ray_tmp);check_ports_available(ports)
+        stop_ray(ray_tmp);check_port_isolation(ports);check_ports_available(ports)
         os.environ.update(RAY_ADDRESS=ips[0]+':'+str(port),RAY_NAMESPACE=run,
             RAY_TMPDIR=str(ray_tmp),RAY_USAGE_STATS_ENABLED='0',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
         os.environ['TPU_VISIBLE_CHIPS'] = ','.join(map(str,chips)) if rank in grading_ranks else ''
         command=[str(Path(sys.executable).with_name('ray')),'start','--node-ip-address='+ips[rank],
             '--num-cpus=32','--resources='+json.dumps(host_resources(chips) if rank in grading_ranks else {'TPU':0}),'--object-store-memory=1073741824',
-            '--object-manager-port=20682','--node-manager-port=20683',
-            '--dashboard-agent-listen-port=20684','--dashboard-agent-grpc-port=20685',
-            '--runtime-env-agent-port=20686','--metrics-export-port=20687',
-            '--min-worker-port=20700','--max-worker-port=20799','--disable-usage-stats']
-        if rank==0:command+=['--head','--port='+str(port),'--dashboard-port=20680',
-                             '--ray-client-server-port=20681','--temp-dir='+str(ray_tmp)]
+            f'--object-manager-port={p.object_manager}',f'--node-manager-port={p.node_manager}',
+            f'--dashboard-agent-listen-port={p.dashboard_agent}',f'--dashboard-agent-grpc-port={p.dashboard_agent_grpc}',
+            f'--runtime-env-agent-port={p.runtime_env}',f'--metrics-export-port={p.metrics}',
+            f'--min-worker-port={p.worker_min}',f'--max-worker-port={p.worker_max}','--disable-usage-stats']
+        if rank==0:command+=['--head','--port='+str(port),f'--dashboard-port={p.dashboard}',
+                             f'--ray-client-server-port={p.client}','--temp-dir='+str(ray_tmp)]
         else:
             deadline=time.monotonic()+180
             while True:

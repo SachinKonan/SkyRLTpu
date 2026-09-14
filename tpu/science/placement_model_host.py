@@ -28,7 +28,7 @@ def main():
             head=os.environ['SKYPILOT_NODE_IPS'].split()[0]
             while True:
                 try:
-                    with socket.create_connection((head,19679),timeout=2):break
+                    with socket.create_connection((head,config.ports.ray),timeout=2):break
                 except OSError:
                     if proc.poll() is not None or time.monotonic()>deadline:raise TimeoutError('Ray startup')
                     time.sleep(5)

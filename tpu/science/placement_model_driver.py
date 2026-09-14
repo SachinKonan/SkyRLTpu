@@ -16,15 +16,20 @@ from .rewards import invalid
 from tpu.swarm.ray_train.config import Config
 
 
+def placement_endpoints(config, head):
+    return f'{head}:{config.ports.ray}', f'http://{head}:{config.ports.inference}'
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--profile',required=True)
     a=p.parse_args();config=Config.load(a.profile)
     root=Path.cwd();native=Path(config.root).expanduser();ips=os.environ['SKYPILOT_NODE_IPS'].split()
     out=root/('results-'+config.run_id);out.mkdir(exist_ok=False)
     env=dict(os.environ,OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
+    ray_address,inference_url=placement_endpoints(config,ips[0])
     status=None;failure=None;pool=None
     try:
-        ray.init(address=ips[0]+':19679',namespace=config.run_id)
+        ray.init(address=ray_address,namespace=config.run_id)
         deadline=time.monotonic()+7200
         while time.monotonic()<deadline:
             try:status=ray.get_actor('runtime-status',namespace=config.run_id)
@@ -53,14 +58,14 @@ def main():
             try:
                 catalog=ray.get_actor('inference-catalog',namespace=config.run_id)
                 state=ray.get(catalog.snapshot.remote(),timeout=10)
-                ready=(len(state['replicas'])==config.inference_hosts*config.engines_per_host and httpx.get('http://'+ips[0]+':19800/health',timeout=5).status_code==200)
+                ready=(len(state['replicas'])==config.inference_hosts*config.engines_per_host and httpx.get(inference_url+'/health',timeout=5).status_code==200)
             except (ValueError, ray.exceptions.RayError, OSError, httpx.HTTPError):pass
             if snapshot and ready:break
             time.sleep(10)
         else:raise TimeoutError('native inference service did not become ready')
         cmd=[str(native/'envs/serving/bin/python'),'-m','tpu.science.sample','--profile',a.profile,
              '--tokenizer',snapshot,'--prompt',str(root/'tpu/science/prompts'/('placement-jax-v5p.txt' if config.accelerator=='tpu-v5p-32' else 'placement-jax.txt')),
-             '--base','http://'+ips[0]+':19800','--output',str(out/'samples'),'--samples','4']
+             '--base',inference_url,'--output',str(out/'samples'),'--samples','4']
         with (out/'sampling.log').open('wb') as log:
             subprocess.run(cmd,check=True,timeout=11000,env=env,stdout=log,stderr=subprocess.STDOUT)
         summary=json.loads((out/'samples/summary.json').read_text());pending={};verdicts={}

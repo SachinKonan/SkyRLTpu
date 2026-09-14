@@ -147,3 +147,22 @@ def test_ray_id_reaches_subprocess_device_and_environment(tmp_path, monkeypatch)
     env = {command[i+1]:command[i+2] for i,x in enumerate(command) if x == '--setenv'}
     assert env['TPU_VISIBLE_CHIPS'] == '3'
     assert env['TPU_PROCESS_PORT'] == '8479'
+
+
+def test_placement_clients_follow_configured_ports():
+    from tpu.science.placement_model_driver import placement_endpoints
+    from tpu.swarm.ray_train.config import Ports
+    config = Config.load(PROFILE)
+    assert placement_endpoints(config, '10.0.0.1') == ('10.0.0.1:24679', 'http://10.0.0.1:24800')
+    custom = replace(config, ports=replace(Ports(), ray=25679, inference=25800))
+    assert placement_endpoints(custom, '10.0.0.1') == ('10.0.0.1:25679', 'http://10.0.0.1:25800')
+
+
+def test_placement_probe_checks_worker_ports_and_native_port_isolation():
+    from tpu.science.placement_probe_bootstrap import probe_ports
+    from tpu.swarm.ray_train.bootstrap import validate_port_ranges
+    config = Config.load(PROFILE)
+    ports = probe_ports(config.ports)
+    assert config.ports.ray in ports
+    assert set(range(config.ports.worker_min, config.ports.worker_max+1)) <= set(ports)
+    validate_port_ranges(ports, (32768, 60999), [('SkyPilot', (11002, 19999))])

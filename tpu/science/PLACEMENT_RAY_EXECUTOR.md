@@ -50,3 +50,16 @@ a Slurm CPU allocation uses four logical TPU resources to verify four distinct
 assigned IDs, simultaneous execution, and queuing/reuse by a fifth task.
 That test does not execute a TPU kernel. The four-chip v5p JAX reference
 probe and Muse sampling pilot still require hardware execution.
+
+The placement branch is rebased onto native-training commit `32620e45`,
+which pins Discover to `1d662eb`. Placement clients read `config.ports`
+instead of the old hardcoded service ports. The standalone reference probe
+uses the native port defaults and checks its full worker range against
+Linux ephemeral ports and other Ray workers before startup. Grading
+resource registration preserves the native RG-LRU grader path; profiles
+cannot combine RG-LRU and placement grading roles.
+
+Fresh artifacts for this base are built under
+`.science/deployment-placement-v5p-rebased/`. Their manifests record the
+main-repository commit, Discover pin, archive hash, and source-file hashes.
+Earlier deployment bundles remain historical and should not be submitted.
