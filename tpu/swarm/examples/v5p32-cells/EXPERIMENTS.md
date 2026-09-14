@@ -248,6 +248,38 @@ sees all four solutions, its own included; summaries carry the method only, no
 objective/tree/step provenance), `TTD_EXEMPLARS_MODE=summary` (~800 tokens; `code`
 adds 2500-char excerpts, ~3400 tokens, for gpt-oss). Off when the path is unset.
 
+## THE SEED-NOISE RESULT (2026-09-14): transfer effects are inside the noise
+
+Three runs of the SAME config, same yaml apart from the run name (verified: 30/32 recorded config
+fields identical, the two that differ are `log_path` and `wandb_name`; the only yaml delta is bundle
+v21 → v23, whose change is two guarded lines in the **LOO** estimator that the centered path never
+executes). The seeds differ because nothing in the stack is seeded: `create_initial_state` draws 16
+constructions from an unseeded `default_rng()` and vLLM samples at temperature 1.0 with no `--seed`.
+
+| step | qwen original | qwen rep 1 (709) | qwen rep 2 (710) | spread |
+|---|---|---|---|---|
+| 3 | 0.380887496 | 0.380989484 | 0.380898495 | 1.02e-4 |
+| 7 | 0.380868316 | 0.380888357 | 0.380881962 | 2.00e-5 |
+| 11 | 0.380857611 | 0.380873748 | 0.380881136 | **2.35e-5** |
+
+The spread stops shrinking after step 8 — it is not convergence lag, it is the noise floor.
+Gemma agrees: original 0.380863470, rep1 0.380874732 (15/15), rep2 0.380900004 (11/15) → **3.65e-5**.
+
+**Consequences.** (1) The transfer arm's 1.7e-5 lead over the best replication is INSIDE the 2.35e-5
+noise band; my earlier claim that it was "about twice the noise" came from comparing only the two
+replications (7.4e-6) and excluding the original, which understated the floor threefold. (2) Both
+originals were the best of their three — the reference library and the Stage H seed were both built
+from lucky draws. (3) Two unaided runs passed the published record with no cross-model input at all
+(qwen rep1 0.380873748, gemma rep1 verified 0.380873167), so clearing it is reproducible, not special.
+(4) What survives is SPEED, not depth: 716 reached 0.380856777 at step 3 where unaided runs need
+8-11 steps and none got below it.
+
+**Muse replications (user, 2026-09-14): jobs 818 and 819.** Both transfer arms that produced results
+are muse (716 record, 774 inspiration), yet muse had only ONE same-config sample (0.380860445), so
+muse's own noise floor was unmeasured and the record's 3.7e-6 margin over it uninterpretable. These
+two close that gap. Note muse is the slowest model: measured 3.9 h/step vs gemma 1.6 and qwen 1.9
+(13.1k generated tokens/turn vs gemma's 6.0k), so ~2 days each.
+
 ## Stage I: the prompt redesign (2026-09-13 ~21:0xZ, bundle v29, discover 492b02c)
 
 **Why Stage F was replaced.** The three Stage F context cells (625 qwen, 626 gemma, 719 muse)
