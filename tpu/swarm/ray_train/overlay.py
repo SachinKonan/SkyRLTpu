@@ -84,8 +84,10 @@ def manifest(repo, config=None):
         names.update(SMOKE_FILES)
     if config is not None and config.science_task:
         names.update(SCIENCE_FILES | set(SMOKE_FILES))
-    if (config is not None and not config.inference_only and config.model_preset == 'qwen3.5-27b'
-            and config.trainer.logical_kv_heads > 4):
+    native_kv_heads = {'qwen3.5-27b': 4, 'muse-glimmer-30b': 2}
+    if (config is not None and not config.inference_only
+            and (config.attention_replay or config.model_preset in native_kv_heads
+                 and config.trainer.logical_kv_heads > native_kv_heads[config.model_preset])):
         names.update(REPEATED_KV_FILES)
     if config is not None and config.has_problem_prompt_overlay:
         names.add(PROBLEM_PROMPT_FILES[config.client_env["TTD_ENV"]])

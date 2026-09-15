@@ -452,8 +452,8 @@ class Config:
             raise ValueError("short stacked probe requires two adapters and replay verification")
         if self.attention_replay and (self.adapter_count != 1 or self.inference_only
                                       or self.stacked_probe or self.is_recurrent_gemma
-                                      or self.model_preset not in ("gemma4-31b", "qwen3.5-27b")):
-            raise ValueError("attention replay requires one Gemma or Qwen adapter and a training executor")
+                                      or self.model_preset not in ("gemma4-31b", "qwen3.5-27b", "muse-glimmer-30b")):
+            raise ValueError("attention replay requires one Gemma, Qwen or Muse adapter and a training executor")
         if self.attention_replay and (Path(self.attention_replay_fixture).name != self.attention_replay_fixture
                                       or not self.attention_replay_fixture.endswith('.json')):
             raise ValueError("attention replay fixture must be a local JSON filename")
@@ -480,10 +480,11 @@ class Config:
             if (self.inference_only or self.accelerator not in ("tpu-v6e-32", "tpu-v4-64") or self.trainer.hosts != 4
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
                 raise ValueError("Science training requires v6e-32 or v4-64, four trainer hosts and dynamically assigned grading")
-            # Muse's pinned checkpoint has two KV heads. MaxText shards that
-            # dimension over TP without vLLM's inference-side KV replication.
-            if self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2):
-                raise ValueError("Muse science training requires TP1 or TP2 for its two KV heads; use TP2/FSDP8 on four hosts")
+            # TP8 uses the checkpoint loader's repeat-interleaved KV heads,
+            # with tied gradients/Adam moments and native-shape adapter export.
+            if (self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2)
+                    and not (self.trainer.tp == 8 and self.trainer.logical_kv_heads == 8)):
+                raise ValueError("Muse has two KV heads: use TP1/TP2 or TP8 with eight tied logical KV heads")
             if (self.accelerator == "tpu-v4-64" and self.model_preset == "qwen3.5-27b"
                     and not self.inference.ragged_conv1d):
                 raise ValueError("v4 Qwen science requires ragged_conv1d: true; the pinned Pallas convolution uses unsupported v4 unpacking")

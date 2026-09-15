@@ -821,15 +821,23 @@ class TunixBackend(AbstractBackend):
 
         with _maxtext_config_cwd():
             maxtext_config = pyconfig.initialize(argv)
-            if mt_name.startswith("qwen3.5"):
+            if mt_name.startswith(("qwen3.5", "muse-glimmer")):
                 from skyrl.backends.lora_init import RepeatedKVHeads
+                from transformers import PretrainedConfig
 
-                hf = AutoConfig.from_pretrained(self.base_model)
-                hf = getattr(hf, "text_config", hf)
+                if mt_name.startswith("qwen3.5"):
+                    hf_config = AutoConfig.from_pretrained(self.base_model)
+                    hf_config = getattr(hf_config, "text_config", hf_config)
+                    hf = dict(num_key_value_heads=hf_config.num_key_value_heads, head_dim=hf_config.head_dim)
+                else:
+                    # Muse needs only checkpoint metadata, not an AutoConfig
+                    # registration or execution of custom checkpoint code.
+                    hf, _ = PretrainedConfig.get_config_dict(self.config.model_path or self.base_model)
+                    hf = hf.get("text_config", hf)
                 logical_heads = maxtext_config.num_kv_heads
-                if logical_heads != hf.num_key_value_heads:
+                if logical_heads != hf["num_key_value_heads"]:
                     self._repeated_kv_heads = RepeatedKVHeads(
-                        hf.num_key_value_heads, logical_heads, hf.head_dim)
+                        hf["num_key_value_heads"], logical_heads, hf["head_dim"])
                     logger.info("Tying repeated K/V LoRA heads: %s", self._repeated_kv_heads)
             model = model_creation_utils.from_pretrained(
                 maxtext_config, mesh=None, wrap_with_tunix_adapter=True
