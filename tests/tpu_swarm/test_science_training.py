@@ -13,6 +13,21 @@ from tpu.science.placement_slots import device_paths, tpu_environment
 
 
 class ScienceTopologyTest(unittest.TestCase):
+    def test_gemma_science_retains_validated_replay_backend(self):
+        from tpu.swarm.ray_train.overlay import manifest
+        root = Path(__file__).resolve().parents[2]
+        profiles = root / 'tpu/swarm/ray_train/profiles'
+        replay = Config.load(profiles / 'science-gemma-v4-tp4-fsdp4-replay-001.json')
+        validated = manifest(root, replay)
+        for task in ('routing', 'placement'):
+            with self.subTest(task=task):
+                config = Config.load(profiles / f'science-{task}-v4-gemma-16x32-e2e-001.json')
+                shipped = manifest(root, config)
+                self.assertFalse(config.attention_replay)
+                for name in ('skyrl/backends/tunix_backend.py', 'skyrl/backends/lora_init.py'):
+                    self.assertEqual(shipped[name], validated[name])
+                self.assertEqual(config.trainer_env['TUNIX_SHARD_INPUTS'], '1')
+
     def test_full_qwen_batch_reaches_client_without_request_splitting(self):
         from tpu.swarm.ray_train.commands import client_environment
         from tpu.swarm.ray_train.overlay import manifest, REPEATED_KV_FILES
