@@ -105,12 +105,12 @@ def device_paths(chip, accelerator, dev_root=Path('/dev')):
     return paths
 
 
-def tpu_environment(chip, accelerator):
+def tpu_environment(chip, accelerator, *, isolated=False):
     validate_chip(chip)
     if accelerator not in ('tpu-v4-64', 'tpu-v4-32', 'tpu-v5p-32', 'tpu-v6e-32'):
         raise ValueError('unsupported placement accelerator')
     port = str(8476 + chip)
-    return dict(JAX_PLATFORMS='tpu', TPU_VISIBLE_CHIPS=str(chip),
+    env = dict(JAX_PLATFORMS='tpu', TPU_VISIBLE_CHIPS=str(chip),
                 TPU_PROCESS_BOUNDS='1,1,1', TPU_CHIPS_PER_PROCESS_BOUNDS='1,1,1',
                 TPU_PROCESS_ADDRESSES='localhost:' + port, TPU_PROCESS_PORT=port,
                 CLOUD_TPU_TASK_ID='0', TPU_SKIP_MDS_QUERY='true',
@@ -118,3 +118,14 @@ def tpu_environment(chip, accelerator):
                 TPU_HOST_BOUNDS='1,1,1', TPU_CHIPS_PER_HOST_BOUNDS='2,2,1',
                 TPU_WORKER_HOSTNAMES='localhost', TPU_WORKER_ID='0',
                 TPU_TOPOLOGY_ALT='false', TPU_TOPOLOGY_WRAP='false,false,false')
+    if isolated and accelerator == 'tpu-v6e-32':
+        # Only Ray's assigned VFIO group is mounted. v6e libtpu enumerates
+        # that single accessible device as ordinal 0, even for /dev/vfio/3.
+        # The physical assignment still controls device_paths(), locks and
+        # CPU affinity; this translation must never be used on the bare host.
+        env.update(TPU_VISIBLE_CHIPS='0', TPU_CHIPS_PER_HOST_BOUNDS='1,1,1',
+                   # Single-chip execution needs no host tpunetd service.
+                   # Keep the network namespace isolated instead of exposing
+                   # host port 8353 (or the metadata/credential endpoints).
+                   LIBTPU_INIT_ARGS='--enable_tpunetd_client=false')
+    return env

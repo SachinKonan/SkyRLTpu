@@ -76,6 +76,21 @@ def test_only_one_vfio_group_is_exposed(tmp_path):
         device_paths(0, 'tpu-unknown', tmp_path)
 
 
+def test_v6e_isolation_translates_only_the_visible_ordinal(tmp_path):
+    (tmp_path / 'vfio').mkdir()
+    for name in ['0', '1', '2', '3', 'vfio']:
+        (tmp_path / 'vfio' / name).symlink_to('/dev/null')
+    for chip in range(4):
+        # Ray's physical ID selects the real device. Inside the namespace
+        # libtpu sees a one-element enumeration, whose only valid ordinal is 0.
+        assert device_paths(chip, 'tpu-v6e-32', tmp_path)[0] == tmp_path / f'vfio/{chip}'
+        env = tpu_environment(chip, 'tpu-v6e-32', isolated=True)
+        assert env['TPU_VISIBLE_CHIPS'] == '0'
+        assert env['TPU_CHIPS_PER_HOST_BOUNDS'] == '1,1,1'
+        assert env['LIBTPU_INIT_ARGS'] == '--enable_tpunetd_client=false'
+        assert tpu_environment(chip, 'tpu-v6e-32')['TPU_VISIBLE_CHIPS'] == str(chip)
+
+
 def test_locks_exclude_same_chip_across_processes_but_allow_other_chips(tmp_path):
     locks = tmp_path / 'locks'
     command = [sys.executable, '-c',

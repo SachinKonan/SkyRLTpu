@@ -240,7 +240,11 @@ class Controller:
         preparation_results = self.checked_get(preparation_refs + self.science_refs, self.config.setup_timeout)
         prepared = preparation_results[:len(prepared_ranks)]
         if self.config.science_task:
-            result = check_references(self.config.science_task, preparation_results[len(preparation_refs):])
+            references = preparation_results[len(preparation_refs):]
+            for index, verdict in enumerate(references):
+                self.report('science_reference_result', task=self.config.science_task,
+                            index=index, verdict=verdict)
+            result = check_references(self.config.science_task, references)
             self.report('science_reference_passed', **result)
             self.science_refs = []
         if self.config.arena_grader_rank is not None:

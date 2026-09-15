@@ -40,7 +40,7 @@ def evaluate(request):
         if busy.returncode != 1 or busy.stdout.strip() or busy.stderr.strip():
             raise RuntimeError('candidate chip is occupied or ownership check failed')
         mounts += [('/sys','/sys'),('/etc/hosts','/etc/hosts')]
-        env.update(tpu_environment(chip, request.get('accelerator', 'tpu-v4-64')))
+        env.update(tpu_environment(chip, request.get('accelerator', 'tpu-v4-64'), isolated=True))
     cmd = command([str(python),'/runner.py','170','tpu' if tpu else 'cpu'],
                   readonly=mounts,writable=[(work,'/output')],env=env)
     if tpu:
