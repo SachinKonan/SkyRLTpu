@@ -473,9 +473,9 @@ class Config:
                 raise ValueError("inference_only_ranks requires unique valid ranks in inference-only mode")
         placement_ranks = self.placement_ranks
         if self.science_task:
-            if (self.inference_only or self.accelerator != "tpu-v6e-32" or self.trainer.hosts != 4
+            if (self.inference_only or self.accelerator not in ("tpu-v6e-32", "tpu-v4-64") or self.trainer.hosts != 4
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
-                raise ValueError("Science training requires v6e-32, four trainer hosts and dynamically assigned grading")
+                raise ValueError("Science training requires v6e-32 or v4-64, four trainer hosts and dynamically assigned grading")
             # Muse's pinned checkpoint has two KV heads. MaxText shards that
             # dimension over TP without vLLM's inference-side KV replication.
             if self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2):

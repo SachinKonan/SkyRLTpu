@@ -28,6 +28,21 @@ def placement_group_name(run_id):
     return 'science-placement-' + run_id
 
 
+def placement_accelerator():
+    accelerator = os.environ['SCIENCE_ACCELERATOR']
+    if accelerator not in ('tpu-v4-64', 'tpu-v6e-32'):
+        raise ValueError('unsupported science placement accelerator')
+    return accelerator
+
+
+def task_prompt(task):
+    name = 'prompts/rendered/routing.txt' if task == 'routing' else 'prompts/placement-jax-v6e.txt'
+    prompt = (Path(__file__).parent / name).read_text()
+    if task == 'placement' and placement_accelerator() == 'tpu-v4-64':
+        prompt = prompt.replace('TPU v6e chip', 'TPU v4 chip')
+    return prompt
+
+
 async def evaluate(task, source, timeout):
     connect()
     root = os.environ['SCIENCE_WORKER_ROOT']
@@ -46,7 +61,7 @@ async def evaluate(task, source, timeout):
                 refs.append(grade_case.options(scheduling_strategy=PlacementGroupSchedulingStrategy(
                     placement_group=group, placement_group_bundle_index=-1,
                     placement_group_capture_child_tasks=False)).remote(
-                        source, case, root, accelerator='tpu-v6e-32'))
+                        source, case, root, accelerator=placement_accelerator()))
         else:
             raise ValueError('unsupported science task')
         results = await asyncio.wait_for(asyncio.gather(
@@ -86,8 +101,7 @@ class ScienceTrainingEnv(Environment):
         return False
 
     def get_question(self):
-        name = 'prompts/rendered/routing.txt' if self.problem_type == 'routing' else 'prompts/placement-jax-v6e.txt'
-        prompt = (Path(__file__).parent / name).read_text()
+        prompt = task_prompt(self.problem_type)
         state = self.initial_state
         if state.code:
             prompt += ('\nPrevious candidate:\n```python\n' + state.code + '\n```\n'

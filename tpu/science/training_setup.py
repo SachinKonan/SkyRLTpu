@@ -9,7 +9,7 @@ from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy, Place
 def split_roles(task, train_ranks, inference_ranks):
     train, inference = list(train_ranks), list(inference_ranks)
     if len(train) != 4 or len(inference) != 4 or set(train) & set(inference):
-        raise ValueError('science v6e topology requires disjoint four-host blocks')
+        raise ValueError('science topology requires disjoint four-host blocks')
     grading = inference.pop() if task == 'placement' else None
     return train, inference, grading
 

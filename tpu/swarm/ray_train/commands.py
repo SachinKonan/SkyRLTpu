@@ -237,6 +237,9 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults.update(TTD_PROBLEM_TYPE="rg_lru", EVAL_TIMEOUT="3600",
                         GROUPS_PER_BATCH="1", GROUP_SIZE="8", TTD_EVAL_BACKEND="local")
     defaults.update(config.client_env)
+    if config.science_task:
+        # Use the deployed profile even if the parent carries another TPU family.
+        defaults["SCIENCE_ACCELERATOR"] = config.accelerator
     if config.arena_grader_rank is not None:
         defaults["ARENA_QUEUE_URL"] = ""
         defaults["ARENA_RAY_ACTOR"] = ""

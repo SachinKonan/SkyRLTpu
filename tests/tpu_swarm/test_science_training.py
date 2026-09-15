@@ -64,6 +64,30 @@ class ScienceTopologyTest(unittest.TestCase):
 
 
 class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_placement_dispatch_and_prompt_follow_accelerator(self):
+        from tpu.science import training_env as env
+        from tpu.science import placement_ray, challenge_contract
+        from tpu.science.rewards import valid
+        result = valid(.5, {})
+        class Ref:
+            def future(self):
+                future = Future(); future.set_result(result); return future
+        for accelerator, chip in [('tpu-v4-64', 'TPU v4 chip'), ('tpu-v6e-32', 'TPU v6e chip')]:
+            with patch.object(env, 'connect'), patch.dict('os.environ',
+                    SCIENCE_ACCELERATOR=accelerator, SCIENCE_WORKER_ROOT='/payload', RAY_NAMESPACE='run'), \
+                    patch('ray.util.placement_group.get_placement_group', return_value=object()), \
+                    patch.object(placement_ray.grade_case, 'options') as opts, \
+                    patch.object(challenge_contract, 'aggregate', return_value=result), \
+                    patch.object(env.ray, 'cancel'):
+                opts.return_value.remote.side_effect = lambda *a, **k: Ref()
+                self.assertEqual(await env.evaluate('placement', 'code', 10), result)
+                self.assertEqual(opts.return_value.remote.call_count, 4)
+                for call in opts.return_value.remote.call_args_list:
+                    self.assertEqual(call.kwargs['accelerator'], accelerator)
+                prompt = env.task_prompt('placement')
+                self.assertIn(chip, prompt)
+                self.assertNotIn('TPU v6e chip' if 'v4' in accelerator else 'TPU v4 chip', prompt)
+
     async def test_reward_and_state_direction_from_real_environment(self):
         from tpu.science import training_env as env
         from tpu.science.rewards import valid
