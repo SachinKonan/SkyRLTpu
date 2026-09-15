@@ -476,6 +476,10 @@ class Config:
             if (self.inference_only or self.accelerator != "tpu-v6e-32" or self.trainer.hosts != 4
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
                 raise ValueError("Science training requires v6e-32, four trainer hosts and dynamically assigned grading")
+            # Muse's pinned checkpoint has two KV heads. MaxText shards that
+            # dimension over TP without vLLM's inference-side KV replication.
+            if self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2):
+                raise ValueError("Muse science training requires TP1 or TP2 for its two KV heads; use TP2/FSDP8 on four hosts")
             if self.client_env.get("TTD_EVAL_BACKEND") != "local" or self.client_env.get("NUM_CPUS_PER_TASK") != "4":
                 raise ValueError("Science environments dispatch their own Ray tasks; use local outer evaluation and four CPUs")
         if placement_ranks:

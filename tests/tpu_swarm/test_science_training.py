@@ -25,7 +25,7 @@ class ScienceTopologyTest(unittest.TestCase):
         for task, count in [('routing', 4), ('placement', 3)]:
             c = Config.load(f'tpu/swarm/ray_train/profiles/science-{task}-v6e-muse-grpo-001.json')
             self.assertFalse(c.inference_only)
-            self.assertEqual((c.trainer.hosts, c.trainer.tp, c.trainer.fsdp), (4, 4, 4))
+            self.assertEqual((c.trainer.hosts, c.trainer.tp, c.trainer.fsdp), (4, 2, 8))
             self.assertEqual(c.inference_hosts, count)
             self.assertTrue(c.inference.native_thinking_budget)
             self.assertEqual(c.client_env['TTD_LOSS_FN'], 'importance_sampling')
@@ -34,6 +34,18 @@ class ScienceTopologyTest(unittest.TestCase):
                 self.assertEqual(workload_resources(c, 0), {'TPU': 4, 'placement_tpu_host': 4})
                 with self.assertRaises(ValueError):
                     replace(c, client_env={**c.client_env, 'PLACEMENT_TPU_RANKS': '7'}).validate()
+
+    def test_muse_training_rejects_indivisible_kv_heads(self):
+        from tpu.swarm.ray_train.commands import maxtext_kwargs
+        for task in ('routing', 'placement'):
+            c = Config.load(f'tpu/swarm/ray_train/profiles/science-{task}-v6e-muse-grpo-001.json')
+            with self.assertRaisesRegex(ValueError, 'two KV heads'):
+                replace(c, trainer=replace(c.trainer, tp=4, fsdp=4)).validate()
+            kwargs = maxtext_kwargs(c, Path('/runtime'))
+            self.assertEqual(kwargs['ici_tensor_parallelism'], 2)
+            self.assertEqual(kwargs['ici_fsdp_parallelism'], 8)
+            self.assertNotIn('base_num_kv_heads', kwargs)
+            self.assertNotIn('override_model_config', kwargs)
 
     def test_v6e_exposes_only_assigned_chip(self):
         with tempfile.TemporaryDirectory() as temp:
