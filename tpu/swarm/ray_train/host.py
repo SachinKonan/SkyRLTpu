@@ -11,7 +11,8 @@ import tarfile
 import threading
 import time
 
-from .cache import CacheStore, GCS, mount_cache
+from .cache import CacheStore, GCS
+from .cache_admission import admit_cache
 from .commands import client_environment, trainer_command, trainer_environment
 from .config import Config
 from .database_snapshot import create_snapshot, restore_snapshot
@@ -303,12 +304,15 @@ class Host:
         self.checked("client-import", [python, "-c", "import ray,tinker,wandb,torch,ttt_discover; assert torch.version.cuda is None"])
         marker.write_text(identity)
 
+    def reclaim_grader_caches(self):
+        admit_cache(self.config, self.root, None, self.log)
+        return self.heartbeat()
+
     def prepare(self, role):
         if role not in ("trainer", "inference"):
             raise ValueError("invalid host role")
         self.role, self.phase = role, "cache_setup"
-        cap = self.config.cache.trainer_gib if role == "trainer" else self.config.cache.inference_gib
-        ram = mount_cache(self.root / "ram", cap, self.config.cache.reserve_gib)
+        ram = admit_cache(self.config, self.root, role, self.log)
         self.store = CacheStore(ram, self.gcs)
         self.store.reconcile_role(role)
         if role == "trainer":

@@ -235,6 +235,8 @@ class Controller:
             preparation_refs.append(arena_start)
         if self.config.science_task:
             from tpu.science.training_setup import prepare, check_references
+            if science_grading_rank is not None:
+                self.checked_get([self.hosts[science_grading_rank].reclaim_grader_caches.remote()], 300)
             self.science_group, self.science_refs = prepare(self.config, self.ips, nodes, science_grading_rank)
             self.report('science_reference_started', task=self.config.science_task, grader_rank=science_grading_rank)
         preparation_results = self.checked_get(preparation_refs + self.science_refs, self.config.setup_timeout)

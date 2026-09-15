@@ -55,6 +55,33 @@ again. LoRA/optimizer checkpoints, sampler state, and the client run directory
 use the separate run/checkpoint persistence paths; they are not compilation
 caches and must not depend on this mechanism.
 
+## Cache admission across run roots
+
+Before reserving tmpfs for a trainer or inference host, `cache_admission.py`
+examines sibling executor `ram` mounts. This covers run-specific roots, which
+previously bypassed the within-root model/role eviction logic. A compatible
+model/role mount can be moved to the new root without copying its bytes; normal
+restore still validates its revision and checksums, and re-scopes compilation
+entries. Other verified inactive cache mounts are unmounted before the memory
+reserve check. Science grading-only hosts reclaim retired model caches without
+allocating a new model cache.
+
+Admission is serialized by a host-local lock. It holds the previous root's
+bootstrap lock and all run leases, validates ownership records, rejects unknown
+cache entries/symlinks, checks for live or orphaned run processes, and checks
+mount users with `fuser`. A read-only privileged process check handles SSH/PAM
+environments hidden from the workload UID; it returns only a boolean. Unknown,
+busy, or uninspectable mounts are retained. No lazy/forced unmount is used.
+
+Only tmpfs cache mounts are affected. Run directories, checkpoints, databases,
+client/PUCT state, source trees, environments, and GCS objects are not removed.
+Compilation files in an evicted cache follow the existing best-effort writeback
+contract: entries never uploaded before a crash may need recompilation.
+
+Events: `ram_cache_reused`, `ram_cache_reclaimed` (bytes), and
+`ram_cache_preserved` (reason). This applies to newly packaged executor bundles;
+already running bundles remain immutable.
+
 ## Local Checkpoint Retention
 
 Downloaded base weights and compilation caches use tmpfs. Generated training
