@@ -480,6 +480,9 @@ class Config:
             # dimension over TP without vLLM's inference-side KV replication.
             if self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2):
                 raise ValueError("Muse science training requires TP1 or TP2 for its two KV heads; use TP2/FSDP8 on four hosts")
+            if (self.accelerator == "tpu-v4-64" and self.model_preset == "qwen3.5-27b"
+                    and not self.inference.ragged_conv1d):
+                raise ValueError("v4 Qwen science requires ragged_conv1d: true; the pinned Pallas convolution uses unsupported v4 unpacking")
             if self.client_env.get("TTD_EVAL_BACKEND") != "local" or self.client_env.get("NUM_CPUS_PER_TASK") != "4":
                 raise ValueError("Science environments dispatch their own Ray tasks; use local outer evaluation and four CPUs")
         if placement_ranks:

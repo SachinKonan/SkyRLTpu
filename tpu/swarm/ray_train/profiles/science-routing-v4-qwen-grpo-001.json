@@ -35,7 +35,8 @@
     "chunk_tokens": 1024,
     "max_model_length": 22528,
     "request_timeout": 7200,
-    "native_thinking_budget": true
+    "native_thinking_budget": true,
+    "ragged_conv1d": true
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",

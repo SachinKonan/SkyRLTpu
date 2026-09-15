@@ -363,7 +363,20 @@ def test_science_comparisons_keep_sampling_and_model_specific_training(task, mod
     assert "base_num_kv_heads" not in kwargs and "override_model_config" not in kwargs
     if model == "gemma":
         assert all(kwargs[name] == 256 for name in ("sa_block_q_dkv", "sa_block_kv_dkv", "sa_block_kv_dkv_compute"))
+    if model == "qwen":
+        assert inference_environment(cfg, ROOT, ROOT / "run")["USE_JAX_RAGGED_CONV1D"] == "1"
     assert cfg.inference_hosts == (3 if task == "placement" else 4)
+
+
+@pytest.mark.parametrize("task", ["routing", "placement"])
+def test_qwen_v4_science_retry_requires_compatible_convolution(task):
+    from dataclasses import replace
+    cfg = Config.load(f"tpu/swarm/ray_train/profiles/science-{task}-v4-qwen-grpo-002.json")
+    assert inference_environment(cfg, ROOT, ROOT / "run")["USE_JAX_RAGGED_CONV1D"] == "1"
+    assert cfg.client_context_window == 22528 and cfg.client_phase1_max_tokens == 16384
+    assert cfg.inference.chunk_tokens == 1024 and cfg.inference.max_sequences == 16
+    with pytest.raises(ValueError, match="ragged_conv1d"):
+        replace(cfg, inference=replace(cfg.inference, ragged_conv1d=False)).validate()
 
 
 def test_gptoss_preset_two_trainer_hosts_and_engine_requantize_env():
