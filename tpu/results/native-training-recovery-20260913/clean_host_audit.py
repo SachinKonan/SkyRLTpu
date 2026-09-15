@@ -24,8 +24,10 @@ if result.returncode != 1 or result.stdout.strip() or result.stderr.strip():
 
 modules = {'skyrl.tinker.api', 'skyrl.tinker.engine', 'skyrl.backends.rpc',
            'tpu.thinking_budget.server', 'tpu.swarm.ray_train.thinking_budget.server',
-           'tpu.swarm.ray_train.grader_child'}
-suffixes = ('/vllm_tpu_server.py', '/thinking_budget/server.py', '/grader_child.py')
+           'tpu.swarm.ray_train.grader_child', 'tpu.swarm.ray_train.bootstrap',
+           'tpu.science.placement_task', 'tpu.science.challenge_score_child',
+           'tpu.science.worker'}
+suffixes = ('/vllm_tpu_server.py', '/thinking_budget/server.py', '/grader_child.py', '/runner.py')
 strays = []
 for proc in Path('/proc').iterdir():
     if not proc.name.isdigit() or int(proc.name) == os.getpid():
@@ -41,6 +43,11 @@ for proc in Path('/proc').iterdir():
         strays.append(dict(pid=int(proc.name), matched=matches))
 if strays:
     raise RuntimeError('Existing workload processes; refusing to start: ' + json.dumps(strays))
+units = subprocess.run(['systemctl', 'list-units', '--no-legend', '--plain',
+                        '--state=active,activating,deactivating', 'placement-grade-*', 'science-grade-*'],
+                       capture_output=True, text=True, timeout=10)
+if units.returncode or units.stdout.strip():
+    raise RuntimeError('Existing grading units or unit audit failed: ' + units.stdout.strip() + units.stderr.strip())
 mem = {key: int(value.split()[0]) for key, value in
        (line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())}
 print(json.dumps(dict(event='native_sweep_clean_host_audit',

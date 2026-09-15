@@ -16,6 +16,9 @@ from .placement_slots import chip_lock, chip_cpus, task_resources, assigned_chip
 @ray.remote(num_cpus=4, memory=16*1024**3, resources=task_resources(), max_retries=0)
 def grade_case(source, case, root, backend='tpu', *, accelerator='tpu-v4-64'):
     chip = assigned_chip(ray.get_runtime_context().get_accelerator_ids())
+    visible = assigned_chip({'TPU': os.environ.get('TPU_VISIBLE_CHIPS', '').split(',')})
+    if visible != chip:
+        raise RuntimeError('Ray TPU visibility does not match its physical allocation')
     with chip_lock(chip):
         return _grade_case(source, case, root, backend, chip, accelerator)
 
@@ -96,7 +99,8 @@ def _grade_case(source, case, root, backend, chip, accelerator):
     result['metrics'].update(ray_node_id=ray.get_runtime_context().get_node_id(),
         host=__import__('socket').gethostname(),case=case,artifact_directory=str(folder),
         task_envelope_seconds=time.monotonic()-started,hard_memory_gib=16,hard_cpus=cpus,
-        physical_chip_id=chip,ray_tpu_ids=[str(chip)],accelerator=accelerator,physical_tpu_chips=1 if backend=='tpu' else 0,ray_executor=True)
+        physical_chip_id=chip,ray_tpu_ids=[str(chip)],ray_tpu_visible_chips=os.environ.get('TPU_VISIBLE_CHIPS'),
+        accelerator=accelerator,physical_tpu_chips=1 if backend=='tpu' else 0,ray_executor=True)
     (folder/'verdict.json').write_text(json.dumps(result,allow_nan=False,indent=2))
     return result
 

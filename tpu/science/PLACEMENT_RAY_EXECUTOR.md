@@ -10,9 +10,15 @@ pins every bundle to the chosen grading host. Remote tasks use bundle index
 
 The remote task reads `get_accelerator_ids()['TPU']` and requires exactly one
 valid physical chip ID. It passes that assignment in the trusted request
-to the subprocess. The subprocess has no default-to-zero behavior: it uses
-the same ID for `TPU_VISIBLE_CHIPS`, the exposed accelerator device, a
-per-chip coordination port, and a disjoint four-core CPU set. v5p exposes
+to the subprocess. The subprocess uses that physical ID for the exposed
+accelerator device, a per-chip coordination port, and a disjoint four-core
+CPU set. The Ray worker checks that its `TPU_VISIBLE_CHIPS` agrees with its
+runtime allocation before dispatch. In an isolated v4-64 or v6e subprocess,
+libtpu enumerates the sole mounted device as local ordinal 0, so only the
+subprocess visibility is translated to 0 and its host chip bounds are
+`1,1,1`. This never changes the physical mount or Ray allocation. Bare-host
+execution retains Ray-assigned visibility. v6e also disables the host
+tpunetd client inside the network namespace. v5p exposes
 only the assigned VFIO group and the shared VFIO control node. The JAX
 runner requires exactly one TPU device before importing candidate code.
 
@@ -50,6 +56,14 @@ a Slurm CPU allocation uses four logical TPU resources to verify four distinct
 assigned IDs, simultaneous execution, and queuing/reuse by a fifth task.
 That test does not execute a TPU kernel. The four-chip v5p JAX reference
 probe and Muse sampling pilot still require hardware execution.
+
+On 2026-09-15, the isolated v4-64 path passed eight actual Ray reference
+evaluations (NumPy and JAX seeds on ibm01/04/08/18), with four simultaneous
+candidates, all four physical chips, one visible device per subprocess,
+matching Ray worker visibility, and malformed-output rejection. Evidence is
+in `results/placement/v4-isolation-fix-20260915.json`. The v6e equivalent is
+in `results/placement/v6e-isolation-fix-20260915.json`. These are grader
+checks, not model-generated results or proof of completed RL training.
 
 The placement branch is rebased onto native-training commit `32620e45`,
 which pins Discover to `1d662eb`. Placement clients read `config.ports`

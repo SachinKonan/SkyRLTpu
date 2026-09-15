@@ -118,14 +118,16 @@ def tpu_environment(chip, accelerator, *, isolated=False):
                 TPU_HOST_BOUNDS='1,1,1', TPU_CHIPS_PER_HOST_BOUNDS='2,2,1',
                 TPU_WORKER_HOSTNAMES='localhost', TPU_WORKER_ID='0',
                 TPU_TOPOLOGY_ALT='false', TPU_TOPOLOGY_WRAP='false,false,false')
-    if isolated and accelerator == 'tpu-v6e-32':
-        # Only Ray's assigned VFIO group is mounted. v6e libtpu enumerates
-        # that single accessible device as ordinal 0, even for /dev/vfio/3.
+    if isolated and accelerator in ('tpu-v4-64', 'tpu-v6e-32'):
+        # Only Ray's assigned device is mounted. libtpu enumerates that
+        # single accessible device as ordinal 0, including /dev/accel3
+        # on v4 and /dev/vfio/3 on v6e (verified with concurrent kernels).
         # The physical assignment still controls device_paths(), locks and
         # CPU affinity; this translation must never be used on the bare host.
-        env.update(TPU_VISIBLE_CHIPS='0', TPU_CHIPS_PER_HOST_BOUNDS='1,1,1',
-                   # Single-chip execution needs no host tpunetd service.
-                   # Keep the network namespace isolated instead of exposing
-                   # host port 8353 (or the metadata/credential endpoints).
-                   LIBTPU_INIT_ARGS='--enable_tpunetd_client=false')
+        env.update(TPU_VISIBLE_CHIPS='0', TPU_CHIPS_PER_HOST_BOUNDS='1,1,1')
+        if accelerator == 'tpu-v6e-32':
+            # v6e single-chip execution needs no host tpunetd service.
+            # Keep the network namespace isolated instead of exposing
+            # host port 8353 (or the metadata/credential endpoints).
+            env['LIBTPU_INIT_ARGS'] = '--enable_tpunetd_client=false'
     return env

@@ -91,6 +91,18 @@ def test_v6e_isolation_translates_only_the_visible_ordinal(tmp_path):
         assert tpu_environment(chip, 'tpu-v6e-32')['TPU_VISIBLE_CHIPS'] == str(chip)
 
 
+def test_v4_isolation_keeps_physical_mount_and_translates_runtime_ordinal(tmp_path):
+    for chip in range(4):
+        (tmp_path / f'accel{chip}').symlink_to('/dev/null')
+        assert device_paths(chip, 'tpu-v4-64', tmp_path) == [tmp_path / f'accel{chip}']
+        env = tpu_environment(chip, 'tpu-v4-64', isolated=True)
+        assert env['TPU_VISIBLE_CHIPS'] == '0'
+        assert env['TPU_CHIPS_PER_HOST_BOUNDS'] == '1,1,1'
+        assert env['TPU_PROCESS_PORT'] == str(8476 + chip)
+        assert 'LIBTPU_INIT_ARGS' not in env
+        assert tpu_environment(chip, 'tpu-v4-64')['TPU_VISIBLE_CHIPS'] == str(chip)
+
+
 def test_locks_exclude_same_chip_across_processes_but_allow_other_chips(tmp_path):
     locks = tmp_path / 'locks'
     command = [sys.executable, '-c',
@@ -135,7 +147,12 @@ def test_ray_assignment_overrides_parent_environment(monkeypatch):
     assert tpu_environment(assigned_chip({'TPU': ['3']}), 'tpu-v5p-32')['TPU_VISIBLE_CHIPS'] == '3'
 
 
-def test_ray_id_reaches_subprocess_device_and_environment(tmp_path, monkeypatch):
+@pytest.mark.parametrize('accelerator, devices, visible', [
+    ('tpu-v5p-32', ['/dev/vfio/3', '/dev/vfio/vfio'], '3'),
+    ('tpu-v6e-32', ['/dev/vfio/3', '/dev/vfio/vfio'], '0'),
+    ('tpu-v4-64', ['/dev/accel3'], '0'),
+])
+def test_ray_id_reaches_subprocess_device_and_environment(tmp_path, monkeypatch, accelerator, devices, visible):
     from types import SimpleNamespace
     from tpu.science import placement_task
     source = tmp_path/'candidate.py'
@@ -144,7 +161,7 @@ def test_ray_id_reaches_subprocess_device_and_environment(tmp_path, monkeypatch)
     monkeypatch.setenv('TPU_VISIBLE_CHIPS', '0')  # Must not override Ray chip 3.
     monkeypatch.setattr(placement_task, 'python_mounts', lambda _: [])
     monkeypatch.setattr(placement_task, 'device_paths',
-                        lambda chip, accelerator: [Path(f'/dev/vfio/{chip}'), Path('/dev/vfio/vfio')])
+                        lambda chip, accelerator: [Path(p) for p in devices] if chip == 3 else [])
     monkeypatch.setattr(placement_task.subprocess, 'run',
                         lambda *a, **k: SimpleNamespace(returncode=1, stdout=b'', stderr=b''))
     class StopBeforeExecution:
@@ -153,14 +170,14 @@ def test_ray_id_reaches_subprocess_device_and_environment(tmp_path, monkeypatch)
         def poll(self): return 1
     monkeypatch.setattr(placement_task.subprocess, 'Popen', StopBeforeExecution)
     request = dict(root=str(tmp_path), work=str(tmp_path/'work'), source=str(source),
-                   case='ibm01', backend='tpu', accelerator='tpu-v5p-32', tpu_ids=['3'])
+                   case='ibm01', backend='tpu', accelerator=accelerator, tpu_ids=['3'])
     with pytest.raises(RuntimeError, match='candidate exited 1'):
         placement_task.evaluate(request)
     command = captured['command']
     binds = [(command[i+1], command[i+2]) for i,x in enumerate(command) if x == '--dev-bind']
-    assert binds == [('/dev/vfio/3','/dev/vfio/3'), ('/dev/vfio/vfio','/dev/vfio/vfio')]
+    assert binds == [(p, p) for p in devices]
     env = {command[i+1]:command[i+2] for i,x in enumerate(command) if x == '--setenv'}
-    assert env['TPU_VISIBLE_CHIPS'] == '3'
+    assert env['TPU_VISIBLE_CHIPS'] == visible
     assert env['TPU_PROCESS_PORT'] == '8479'
 
 

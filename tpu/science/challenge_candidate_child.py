@@ -1,6 +1,7 @@
 """Candidate-only runner. Invoke inside isolation; never from a controller."""
 import ast
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -16,14 +17,17 @@ if use_tpu:
 started = time.monotonic()
 device_info = {}
 if use_tpu:
-    print(json.dumps({'event':'tpu_initialization_started'}),flush=True)
+    device_info = {'sandbox_tpu_visible_chips': os.environ.get('TPU_VISIBLE_CHIPS'),
+                   'sandbox_device_paths': sorted(str(p) for p in Path('/dev').glob('accel*')) +
+                       sorted(str(p) for p in Path('/dev/vfio').glob('*') if p.name != 'vfio')}
+    print(json.dumps({'event':'tpu_initialization_started', **device_info}),flush=True)
     import jax
     devices = jax.devices()
     if len(devices) != 1 or devices[0].platform != 'tpu':
         raise RuntimeError(f'expected exactly one TPU device, found {devices}')
-    device_info = {'jax_version': jax.__version__, 'devices': [str(d) for d in devices],
+    device_info.update({'jax_version': jax.__version__, 'devices': [str(d) for d in devices],
                    'device_kind': devices[0].device_kind, 'device_count': len(devices),
-                   'initialization_seconds': time.monotonic()-started}
+                   'initialization_seconds': time.monotonic()-started})
     print(json.dumps({'event':'tpu_initialization_complete',**device_info}),flush=True)
 source = Path('/candidate.py').read_text()
 tree = ast.parse(source)
