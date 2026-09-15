@@ -319,6 +319,21 @@ def test_muse_preset_carries_its_legacy_engine_flags():
     assert cfg.inference.transformers_version == ""
 
 
+@pytest.mark.parametrize("task", ["routing", "placement"])
+@pytest.mark.parametrize("revision", ["002", "003"])
+def test_science_muse_tp2_splits_physical_axes_without_changing_checkpoint(task, revision):
+    cfg = Config.load(f"tpu/swarm/ray_train/profiles/science-{task}-v6e-muse-grpo-{revision}.json")
+    backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS)
+    kwargs = backend["maxtext_kwargs"]
+    assert (kwargs["ici_tensor_parallelism"], kwargs["ici_fsdp_parallelism"]) == (2, 8)
+    assert kwargs["allow_split_physical_axes"] is True
+    # Explicit kwargs replace the preset dictionary; retain Muse host offload.
+    assert kwargs["parameter_memory_host_offload"] is True
+    assert "base_num_kv_heads" not in kwargs
+    assert "override_model_config" not in kwargs
+    assert backend["num_processes"] == 4
+
+
 def test_gptoss_preset_two_trainer_hosts_and_engine_requantize_env():
     cfg = v5p_config(model_preset="gpt-oss-120b",
                      trainer=dict(hosts=2, tp=4, fsdp=2, process_bounds="1,1,2"))

@@ -20,7 +20,11 @@
     "logical_kv_heads": 2,
     "remat": "full",
     "request_timeout": 7200,
-    "chip_bounds": "2,2,1"
+    "chip_bounds": "2,2,1",
+    "maxtext_kwargs": {
+      "parameter_memory_host_offload": true,
+      "allow_split_physical_axes": true
+    }
   },
   "inference": {
     "tp": 4,
