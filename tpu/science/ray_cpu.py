@@ -29,13 +29,14 @@ def acquire_slot(root, slots=2, deadline_seconds=2400):
 
 
 @ray.remote(num_cpus=4,memory=8*1024**3,max_retries=0)
-def grade(task, source, root):
+def grade(task, source, root, *, admission_timeout_s=2400):
     from .worker import process_identity
     from .rewards import invalid
     if task not in ('portfolio','portfolio_v2','routing'):raise ValueError('unsupported science task')
     root=Path(root).resolve();jobs=root/'.science/ray-jobs';jobs.mkdir(exist_ok=True)
     if not (root/'.science/ready.json').is_file():raise RuntimeError('CPU worker dependencies not prepared')
-    slot,lock=acquire_slot(jobs)
+    # Admission belongs to the batch queue allowance, not candidate runtime.
+    slot,lock=acquire_slot(jobs, deadline_seconds=admission_timeout_s)
     job_id=uuid.uuid4().hex;unit='science-grade-'+job_id
     folder=jobs/job_id;folder.mkdir()
     (folder/'candidate.py').write_text(source)

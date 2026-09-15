@@ -1,0 +1,225 @@
+{
+  "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+  "job_id": 896,
+  "events": [
+    {
+      "event": "replay_started",
+      "time": 1789478144.5527866,
+      "source_run": "science-routing-v4-qwen-grpo-002",
+      "model_id": "model_9b0e512d"
+    },
+    {
+      "event": "backward_started",
+      "time": 1789478144.5758095,
+      "bucket": "18432,22528",
+      "tokens": 20498,
+      "repeat": 0,
+      "source_request": 4,
+      "datum_index": null,
+      "examples": 8
+    },
+    {
+      "event": "backward_completed",
+      "time": 1789478376.9173357,
+      "bucket": "18432,22528",
+      "repeat": 0,
+      "seconds": 232.3415280679983,
+      "metrics": {}
+    },
+    {
+      "event": "backward_started",
+      "time": 1789478376.9176872,
+      "bucket": "18432,22528",
+      "tokens": 20498,
+      "repeat": 1,
+      "source_request": 4,
+      "datum_index": null,
+      "examples": 8
+    },
+    {
+      "event": "backward_completed",
+      "time": 1789478612.2724726,
+      "bucket": "18432,22528",
+      "repeat": 1,
+      "seconds": 235.35478437499842,
+      "metrics": {}
+    },
+    {
+      "event": "optimizer_completed",
+      "time": 1789478627.9771185,
+      "seconds": 15.70417950200499,
+      "metrics": {
+        "skyrl.ai/grad_norm": 0.0018677396001294255,
+        "skyrl.ai/learning_rate": 4e-05
+      }
+    },
+    {
+      "event": "adapter_exported",
+      "time": 1789478658.6084113,
+      "path": "tinker://model_9b0e512d/replay-updated"
+    },
+    {
+      "event": "replay_complete",
+      "time": 1789478668.3148081,
+      "buckets": [
+        "18432,22528"
+      ],
+      "backward_passes": 2,
+      "optimizer_updates": 1,
+      "post_update_tokens": 64,
+      "sampling_seconds": 9.695117144001415
+    }
+  ],
+  "controller_events": [
+    {
+      "event": "topology_validated",
+      "grader_rank": null,
+      "host": "t1v-n-8254e2fb-w-0",
+      "inference_ranks": [
+        1,
+        4,
+        5,
+        7
+      ],
+      "pid": 290425,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789476405.3605218,
+      "train_ranks": [
+        0,
+        3,
+        6,
+        2
+      ],
+      "trainer_leader": 0
+    },
+    {
+      "event": "services_ready",
+      "host": "t1v-n-8254e2fb-w-0",
+      "inference_replicas": 4,
+      "pid": 290425,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478129.7513962,
+      "trainer": true
+    },
+    {
+      "event": "client_started",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478129.7567277
+    },
+    {
+      "event": "client_finished",
+      "exit_code": 0,
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478669.9900658
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 2,
+      "result": 0,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478696.8658142
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 3,
+      "result": 0,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478696.8819952
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 6,
+      "result": 0,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478696.8865
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 0,
+      "result": 0,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478696.9107256
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 7,
+      "result": 0,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478697.2754166
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 4,
+      "result": 0,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478697.2758
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 5,
+      "result": 0,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478697.2857108
+    },
+    {
+      "event": "final_compile_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 1,
+      "result": 3,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478702.9007246
+    },
+    {
+      "event": "final_run_writeback_complete",
+      "host": "t1v-n-8254e2fb-w-0",
+      "pid": 290425,
+      "rank": 0,
+      "result": null,
+      "run_id": "science-qwen-v4-tp8-fsdp2-replay-001",
+      "time": 1789478712.6505659
+    }
+  ],
+  "trainer_evidence": [
+    "2026-09-15 12:49:50,810 - INFO - skyrl: Tying repeated K/V LoRA heads:           RepeatedKVHeads(native_heads=4, logical_heads=8, head_dim=256)",
+    "2026-09-15 13:15:46,078 - INFO - skyrl: Sharding microbatch inputs over mesh     axes ('fsdp',) (rows=2)",
+    "2026-09-15 13:16:48,776 - INFO - skyrl: fb tile 1/1 adapters=1 shape=[2,18432]   63.34s (elapsed 63.3s, eta 0s) hbm=4.4G/peak=7.8G",
+    "2026-09-15 13:18:04,299 - INFO - skyrl: fb tile 1/4 adapters=1 shape=[2,22528]   74.53s (elapsed 74.5s, eta 224s) hbm=4.5G/peak=8.0G",
+    "2026-09-15 13:18:18,363 - INFO - skyrl: fb tile 2/4 adapters=1 shape=[2,22528]   14.04s (elapsed 88.6s, eta 89s) hbm=4.5G/peak=8.0G",
+    "2026-09-15 13:19:24,682 - INFO - skyrl: fb tile 3/4 adapters=1 shape=[2,18432]   66.30s (elapsed 154.9s, eta 52s) hbm=4.6G/peak=8.1G",
+    "2026-09-15 13:19:36,270 - INFO - skyrl: fb tile 4/4 adapters=1 shape=[2,18432]   11.57s (elapsed 166.5s, eta 0s) hbm=4.6G/peak=8.1G",
+    "2026-09-15 13:20:43,034 - INFO - skyrl: fb tile 1/1 adapters=1 shape=[2,18432]   64.72s (elapsed 64.7s, eta 0s) hbm=4.4G/peak=8.1G",
+    "2026-09-15 13:21:56,392 - INFO - skyrl: fb tile 1/4 adapters=1 shape=[2,22528]   72.35s (elapsed 72.3s, eta 217s) hbm=4.5G/peak=8.1G",
+    "2026-09-15 13:22:10,855 - INFO - skyrl: fb tile 2/4 adapters=1 shape=[2,22528]   14.44s (elapsed 86.8s, eta 87s) hbm=4.5G/peak=8.1G",
+    "2026-09-15 13:23:20,270 - INFO - skyrl: fb tile 3/4 adapters=1 shape=[2,18432]   69.39s (elapsed 156.2s, eta 52s) hbm=4.6G/peak=8.1G",
+    "2026-09-15 13:23:31,623 - INFO - skyrl: fb tile 4/4 adapters=1 shape=[2,18432]   11.33s (elapsed 167.6s, eta 0s) hbm=4.6G/peak=8.1G"
+  ],
+  "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-031497a58c8c2659d6167340ae2fa891b6b4bb5c0a24019da664f81faf9c15b1.tar.gz",
+  "bundle_sha256": "031497a58c8c2659d6167340ae2fa891b6b4bb5c0a24019da664f81faf9c15b1",
+  "implementation_commit": "ec98bfd21ec9ada1fc71ea4b44ee338dd9ab9b16",
+  "validation_scope": "Recorded routing batch replay; not a new discovery run",
+  "training_tp": 8,
+  "training_fsdp": 2,
+  "microbatch_rows": 2,
+  "native_kv_heads": 4,
+  "logical_kv_heads": 8,
+  "request_sha256": "ee4a7beb530575eb3ae383d0ecd840b73f888210670f92afe88e9cb0836a5113"
+}

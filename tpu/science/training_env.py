@@ -50,7 +50,8 @@ async def evaluate(task, source, timeout):
     try:
         if task == 'routing':
             from .ray_cpu import grade
-            refs.append(grade.options(scheduling_strategy='SPREAD').remote('routing', source, root))
+            refs.append(grade.options(scheduling_strategy='SPREAD').remote(
+                'routing', source, root, admission_timeout_s=timeout))
         elif task == 'placement':
             from ray.util.placement_group import get_placement_group
             from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy

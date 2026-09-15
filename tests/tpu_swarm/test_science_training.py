@@ -13,6 +13,28 @@ from tpu.science.placement_slots import device_paths, tpu_environment
 
 
 class ScienceTopologyTest(unittest.TestCase):
+    def test_full_qwen_batch_reaches_client_without_request_splitting(self):
+        from tpu.swarm.ray_train.commands import client_environment
+        from tpu.swarm.ray_train.overlay import manifest, REPEATED_KV_FILES
+        root = Path(__file__).resolve().parents[2]
+        for task, engines in [('routing', 4), ('placement', 3)]:
+            c = Config.load(root / f'tpu/swarm/ray_train/profiles/science-{task}-v4-qwen-16x32-e2e-001.json')
+            env = client_environment(c, Path('/runtime'), 'head')
+            self.assertEqual((env['GROUPS_PER_BATCH'], env['GROUP_SIZE']), ('16', '32'))
+            self.assertEqual(env['TTD_QWEN_SAMPLE_GROUP_CHUNK_SIZE'], '0')
+            self.assertEqual(env['TTD_MIN_VALID_PER_GROUP'], '0')
+            self.assertEqual(env['TTD_ONE_STEP_SMOKE'], '1')
+            self.assertEqual(env['NUM_EPOCHS'], '1')
+            self.assertEqual((c.trainer.tp, c.trainer.fsdp, c.trainer.logical_kv_heads), (8, 2, 8))
+            self.assertEqual(c.trainer.token_budget, 45056)
+            self.assertEqual(c.inference_hosts, engines)
+            self.assertTrue(c.inference.prefix_caching)
+            self.assertEqual(c.inference.max_sequences, 16)
+            self.assertTrue(REPEATED_KV_FILES <= manifest(root, c).keys())
+            # All 512 candidates can wait for their hard-limited worker slots.
+            worst = 512 * 300 if task == 'placement' else 512 / 16 * 1800
+            self.assertGreater(float(env['EVAL_TIMEOUT']), worst)
+
     def test_shuffled_physical_training_block_is_preserved(self):
         train, infer, grader = split_roles('placement', [6, 0, 7, 2], [1, 3, 4, 5])
         self.assertEqual(train, [6, 0, 7, 2])
@@ -117,6 +139,7 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
             opts.return_value.remote.return_value = ref
             with self.assertRaises(env.ScienceInfrastructureError) as error:
                 await env.evaluate('routing', 'code', 1)
+            self.assertEqual(opts.return_value.remote.call_args.kwargs['admission_timeout_s'], 1)
             self.assertTrue(error.exception.abort_training_step)
             cancel.assert_called_once_with(ref, force=True)
 
