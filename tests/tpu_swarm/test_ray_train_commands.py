@@ -339,6 +339,33 @@ def test_science_muse_tp2_splits_physical_axes_without_changing_checkpoint(task,
         assert cfg.inference_hosts == (3 if task == "placement" else 4)
 
 
+@pytest.mark.parametrize("task,model,preset", [
+    ("routing", "qwen", "qwen3.5-27b"),
+    ("placement", "qwen", "qwen3.5-27b"),
+    ("placement", "gemma", "gemma4-31b"),
+])
+def test_science_comparisons_keep_sampling_and_model_specific_training(task, model, preset):
+    cfg = Config.load(f"tpu/swarm/ray_train/profiles/science-{task}-v4-{model}-grpo-001.json")
+    backend = trainer_backend_config(cfg, ROOT, IPS[0], IPS)
+    kwargs = backend["maxtext_kwargs"]
+    env = client_environment(cfg, ROOT, IPS[0])
+    assert cfg.model_preset == preset
+    assert env["TTD_ENSEMBLE_MODELS"] == PRESETS[preset].member_spec
+    assert env["TTD_ANSWER_MODEL_FAMILY"] == model
+    assert env["SCIENCE_ACCELERATOR"] == "tpu-v4-64"
+    assert (env["GROUP_SIZE"], env["LEARNING_RATE"], env["TTD_LOSS_FN"]) == ("8", "4e-5", "importance_sampling")
+    assert (env["TTD_M0_CONTEXT_WINDOW"], env["TTD_M0_PHASE1_MAX_TOKENS"]) == ("22528", "16384")
+    assert cfg.inference.native_thinking_budget
+    assert (kwargs["ici_tensor_parallelism"], kwargs["ici_fsdp_parallelism"]) == (4, 4)
+    assert kwargs["dq_reduction_steps"] == 3
+    assert kwargs["allow_split_physical_axes"] is True
+    assert "parameter_memory_host_offload" not in kwargs
+    assert "base_num_kv_heads" not in kwargs and "override_model_config" not in kwargs
+    if model == "gemma":
+        assert all(kwargs[name] == 256 for name in ("sa_block_q_dkv", "sa_block_kv_dkv", "sa_block_kv_dkv_compute"))
+    assert cfg.inference_hosts == (3 if task == "placement" else 4)
+
+
 def test_gptoss_preset_two_trainer_hosts_and_engine_requantize_env():
     cfg = v5p_config(model_preset="gpt-oss-120b",
                      trainer=dict(hosts=2, tp=4, fsdp=2, process_bounds="1,1,2"))
