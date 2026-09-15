@@ -374,6 +374,51 @@ did MORE (6.4e-7 in 15 steps) than the context prompt (1.3e-9 in 2 steps); the p
 better because it was handed the stronger construction. Both are plausibly inside seed noise,
 which is what rows 2–5 exist to measure.
 
+## Stage J: 45-step continuation controls on v6e-32 (launched 2026-09-15 16:16Z)
+
+The user's gen-1 design: for qwen seed i, a child (muse or gemma, gen-0 weights of seed i) runs 15
+steps on the qwen seed-i tree and is scored as the delta over the parent's final best. The mixture
+path spends 15 (qwen) + 15 (child gen-0) + 15 (child gen-1) = 45 steps, so the compute-matched
+control is the parent continuing ALONE on its own tree, weights and optimizer to 45 total steps.
+These controls need no v5p: they are the gen-0 runs resumed in place (same GCS_RUN => weights +
+tree + metrics resume from the last durable snapshot) with `NUM_EPOCHS` 15 -> 45, moved to the
+v6e east5b pool so v5p stays for the children. Muse cannot go: its TP2 x 2-engines-per-host
+serving is sized for 95 GB v5p chips and has no v6e config.
+
+Template `v6e32-cell-template.yaml` = the gemma cell another session already resumed on v6e
+(stageB2-g-v32-ttd-n-v6e): 2+6 layout (VMs 0-1 trainer TP8/FSDP1, process grid picked from
+physical topology by the embedded wrapper; VMs 2-7 TP4 engines, 32 seqs, util 0.80), bundle v21
+or v23 = whichever produced the run's checkpoints. `gen_cont45_v6e.py` swaps only the run identity,
+estimator (centered piecewise), LR, step cap and caches. Qwen on this layout is UNTESTED: one
+22,528-token row per fb call (`TUNIX_TRAIN_TOKEN_BUDGET` 22528; v5p packed 73,728) on 8 x 32 GB
+chips; gemma's port OOMed at two 10,240 rows, and qwen's 152k vocab makes its one-row logits
+about 1.3x gemma's one-row. If the qwen trainer dies at LoRA template build, the fix is a 4+4
+layout (TP8/FSDP2, the asia qwen recipe), which the wrapper does not yet select.
+
+| Job | Yaml | Continues | Model | Resumes from | Target |
+|---|---|---|---|---|---|
+| 906 | cont45-g-rep2-v6e | stageG-g-rep2 | gemma | final @15 (model_e619a0df) | 45 |
+| 907 | cont45-g-rep1-v6e | stageG-g-rep1 | gemma | final @15 (model_1062a2d1) | 45 |
+| 908 | cont45-g-orig-v6e | stageB2-g-pwc-n | gemma | 000013 @13 (model_35ca8a17) | 45 |
+| 909 | cont45-q-rep2-v6e | stageG-q-rep2 | qwen | final @15 (model_4b7591a1) | 45 |
+| 910 | cont45-q-rep1-v6e | stageG-q-rep1 | qwen | 000014 @14 (model_661d0470; 709 cancelled by the user at 14/15, gains 4e-7/step) | 45 |
+| 911 | cont45-q-orig-v6e | stageC-pwc-n | qwen | 000012 @12 (model_d09cea07) | 45 |
+
+All six weight + sampler tarballs verified present before launch (no phantom registry rows).
+`TTD_FLATLINE_STOP` is off (default), so a converged parent keeps stepping to 45.
+
+Context at launch: the v6e east5b pool is in heavy spot churn (2,149 FAILED_CLEANUP replicas,
+workers under 20 min old; 677/678 banked two steps each in 3.7 days and nothing after 09-13
+13:34Z; gemma step there = 3.9 h vs 1.6 h on v5p). Per the user, 677/678 (another session's gemma
+resumes) were cancelled to clear the queue; their VMs were already PREEMPTED/DELETING so there
+was nothing to clean. On v5p the user cancelled 709 (14/15, plateaued) and the three native
+survivors 862/868/877 so the seven Mixture-of-Models runs get every worker.
+
+Also found 2026-09-15: the v5p pool never files more than ~35 of its 48 requests because GCP
+caps TPU queued resources at 50 per project per zone (`QueuedResourcePerProjectPerZone`; the 13
+request-less workers loop every 30 s on that QuotaFailure). Chip quotas are irrelevant (v5p spot
+1,536 chips, 0 in use). Fix = quota increase or other owners deleting their 3 dead requests.
+
 ## Earlier framing of the same plan
 
 Every cross-model number we have quoted is **n = 1 per (model, config)**, so none of the deltas
