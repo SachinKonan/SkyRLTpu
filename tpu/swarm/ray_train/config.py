@@ -303,6 +303,7 @@ class Config:
     client_learning_rate: str = "1.5e-4"
     stacked_probe: bool = False
     attention_replay: bool = False
+    attention_replay_fixture: str = "gemma_attention_replay.json"
     # Legacy launch_cell.sh runs the client with HF_HUB_OFFLINE=0 and fetches
     # the tokenizer; the executor's restored snapshot can serve it offline.
     client_hf_offline: bool = False
@@ -451,8 +452,11 @@ class Config:
             raise ValueError("short stacked probe requires two adapters and replay verification")
         if self.attention_replay and (self.adapter_count != 1 or self.inference_only
                                       or self.stacked_probe or self.is_recurrent_gemma
-                                      or self.model_preset != "gemma4-31b"):
-            raise ValueError("attention replay requires one Gemma adapter and a training executor")
+                                      or self.model_preset not in ("gemma4-31b", "qwen3.5-27b")):
+            raise ValueError("attention replay requires one Gemma or Qwen adapter and a training executor")
+        if self.attention_replay and (Path(self.attention_replay_fixture).name != self.attention_replay_fixture
+                                      or not self.attention_replay_fixture.endswith('.json')):
+            raise ValueError("attention replay fixture must be a local JSON filename")
         if self.adapter_count > 1:
             if self.model not in ("Qwen/Qwen3.5-27B", "openai/gpt-oss-120b", "openai/gpt-oss-20b"):
                 raise ValueError("pooled multi-LoRA supports Qwen3.5 and GPT-OSS")

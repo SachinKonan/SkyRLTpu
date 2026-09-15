@@ -62,6 +62,7 @@ NATIVE_FILES = {"skyrl/tinker/dispatch.py", "skyrl/tinker/extra/external_inferen
 ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
+REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py"}
 
 SCIENCE_FILES = {'tpu/run_ttd_ensemble.py'} | {
     'tpu/science/' + name for name in (
@@ -83,6 +84,9 @@ def manifest(repo, config=None):
         names.update(SMOKE_FILES)
     if config is not None and config.science_task:
         names.update(SCIENCE_FILES | set(SMOKE_FILES))
+    if (config is not None and not config.inference_only and config.model_preset == 'qwen3.5-27b'
+            and config.trainer.logical_kv_heads > 4):
+        names.update(REPEATED_KV_FILES)
     if config is not None and config.has_problem_prompt_overlay:
         names.add(PROBLEM_PROMPT_FILES[config.client_env["TTD_ENV"]])
     if config is not None and config.has_adaptive_pwc_overlay:
@@ -118,6 +122,7 @@ def install(directory, destination):
     allowed.extend([base | NATIVE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
     allowed.extend([base | DATABASE_FILES for base in [set(), *allowed]])
     allowed.extend([base | SCIENCE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
+    allowed.extend([base | REPEATED_KV_FILES for base in [set(), *allowed]])
     if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")
     for name, expected in records.items():

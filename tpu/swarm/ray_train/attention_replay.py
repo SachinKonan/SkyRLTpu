@@ -36,7 +36,9 @@ def finite_metrics(metrics):
 def run(args):
     sys.path[:0] = [str(Path(args.source) / 'third_party/discover'), args.source]
     import tinker
-    fixture = json.loads(Path(__file__).with_name('gemma_attention_replay.json').read_text())
+    fixture = json.loads(Path(__file__).with_name(getattr(args, 'fixture', 'gemma_attention_replay.json')).read_text())
+    if fixture.get('model', args.model) != args.model:
+        raise ValueError('replay fixture belongs to a different model')
     output = Path(os.environ['TTD_RUN_DIR'])
     output.mkdir(parents=True, exist_ok=True)
     def record(event, **fields):
@@ -49,13 +51,15 @@ def run(args):
     record('replay_started', source_run=fixture['source_run'], model_id=client.model_id)
     failures = []
     for case in fixture['cases']:
-        datum = restore_datum(case['datum'], tinker)
+        raw_datums = case['datums'] if 'datums' in case else [case['datum']]
+        datums = [restore_datum(raw, tinker) for raw in raw_datums]
         for repeat in range(2):
             started = time.monotonic()
             record('backward_started', bucket=case['bucket'], tokens=case['length'], repeat=repeat,
-                   source_request=case['request_id'], datum_index=case['datum_index'])
+                   source_request=case['request_id'], datum_index=case.get('datum_index'),
+                   examples=len(datums))
             try:
-                result = client.forward_backward([datum], loss_fn=case['loss_fn'],
+                result = client.forward_backward(datums, loss_fn=case['loss_fn'],
                                                  loss_fn_config=case['loss_fn_config']).result()
                 finite_metrics(result.metrics)
                 record('backward_completed', bucket=case['bucket'], repeat=repeat,
@@ -76,7 +80,8 @@ def run(args):
     record('adapter_exported', path=path)
     sampler = service.create_sampling_client(model_path=path)
     # Reuse the genuine task prompt, stopping before its first trained token.
-    raw = fixture['cases'][0]['datum']
+    first = fixture['cases'][0]
+    raw = first['datums'][0] if 'datums' in first else first['datum']
     advantages = raw['loss_fn_inputs']['advantages']['data']
     prefix = next(i for i, value in enumerate(advantages) if value != 0) + 1
     tokens = [t for c in raw['model_input']['chunks'] for t in c['tokens']][:prefix]
@@ -88,7 +93,7 @@ def run(args):
     sample = result.sequences[0]
     if sample.logprobs is None or len(sample.logprobs) != len(sample.tokens) or any(not math.isfinite(p) for p in sample.logprobs):
         raise RuntimeError('post-update inference returned invalid logprobs')
-    record('replay_complete', buckets=[c['bucket'] for c in fixture['cases']], backward_passes=4,
+    record('replay_complete', buckets=[c['bucket'] for c in fixture['cases']], backward_passes=2*len(fixture['cases']),
            optimizer_updates=1, post_update_tokens=len(sample.tokens), sampling_seconds=time.monotonic()-started)
 
 
@@ -97,4 +102,5 @@ if __name__ == '__main__':
     parser.add_argument('--source', required=True)
     parser.add_argument('--model', required=True)
     parser.add_argument('--learning-rate', required=True, type=float)
+    parser.add_argument('--fixture', default='gemma_attention_replay.json')
     run(parser.parse_args())

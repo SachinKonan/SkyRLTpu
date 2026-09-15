@@ -389,7 +389,8 @@ class Host:
         if self.config.attention_replay:
             command = [command[0], str(Path(__file__).with_name("attention_replay.py")),
                        "--source", str(self.source), "--model", self.config.model,
-                       "--learning-rate", self.config.client_learning_rate]
+                       "--learning-rate", self.config.client_learning_rate,
+                       "--fixture", self.config.attention_replay_fixture]
         self.start("client", command,
                    client_environment(self.config, self.root, self.ips[0],
                                       trainer_head=self.ips[self.trainer_leader]), self.source)
