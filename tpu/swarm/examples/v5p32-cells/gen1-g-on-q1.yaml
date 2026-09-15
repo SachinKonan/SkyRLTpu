@@ -52,7 +52,9 @@ envs:
   # Seeded generation: the staged step-0 seed is the ONLY legitimate snapshot while nothing is
   # banked (launch_cell.sh META_SEED_ONLY guard). Weights only: fresh optimizer.
   META_SEED_ONLY: "1"
-  META_INIT_STATE_PATH: tinker://model_1062a2d1/weights/final
+  # Step 15 by NUMBER: launch_cell.sh restores carried tarballs via tinker://model_x/weights/(\d+), so the
+  # registry alias "weights/final" (the same batch-15 weights) is never restored and the cell crashes (job 912).
+  META_INIT_STATE_PATH: tinker://model_1062a2d1/weights/000015
 
   TTD_ENV: erdos_min_overlap
   TTD_ADV_ESTIMATOR: piecewise_valid_entropic_centered
