@@ -407,6 +407,19 @@ layout (TP8/FSDP2, the asia qwen recipe), which the wrapper does not yet select.
 All six weight + sampler tarballs verified present before launch (no phantom registry rows).
 `TTD_FLATLINE_STOP` is off (default), so a converged parent keeps stepping to 45.
 
+**2026-09-16 update: all continuations moved to v5p** (v6e banked nothing in two days; 906-911 cancelled).
+Per the user the controls are 15 MORE steps, not 45 total: `cont27-q-orig`, `cont28-g-orig`, `cont26-m-orig`
+(origins stopped at 12/13/11), `cont30-q-q1/q2`, `cont30-g-rep1/rep2`. Two gotchas cost a few placements:
+(1) `META_INIT_STATE_PATH` must name a NUMBERED step: launch_cell.sh restores carried tarballs via
+`tinker://model_x/weights/(\d+)`, so the registry alias `weights/final` is never restored and the child
+crashes at trainer start (gen1 children 912/913 -> relaunched as 924/925 with `weights/000015`).
+(2) `cell_probe.sh` declares a run complete if ANY registry row is named `final` (or a CONVERGED marker
+exists, or latest batch >= NUM_EPOCHS), so a finished 15-step run resumed with NUM_EPOCHS 30 "completes"
+instantly (927 SUCCEEDED with 0 new steps). Fix: drop the `final` rows (backup `.bak-final`; the numbered
+`000015` row carries identical weights) -- done for stageG-q-rep2, stageG-g-rep1, stageG-g-rep2 before
+relaunching. Gen-1 children now: 941 gemma-on-qwen-origin, 924/925 gemma-on-qwen-seed1/2, 716 muse-on-origin
+(record); muse-on-seed1/2 wait for 818/819 to finish.
+
 Context at launch: the v6e east5b pool is in heavy spot churn (2,149 FAILED_CLEANUP replicas,
 workers under 20 min old; 677/678 banked two steps each in 3.7 days and nothing after 09-13
 13:34Z; gemma step there = 3.9 h vs 1.6 h on v5p). Per the user, 677/678 (another session's gemma
