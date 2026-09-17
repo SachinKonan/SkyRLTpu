@@ -215,46 +215,42 @@ def test_native_source_path_fits_filesystem_name_limit_and_tracks_all_inputs():
 @pytest.mark.parametrize('model', ['qwen3.5-27b', 'gemma4-31b', 'muse-glimmer-30b'])
 @pytest.mark.parametrize('n', [1, 32])
 @pytest.mark.parametrize('already_answering', [False, True])
-def test_stop_exactly_at_cap_continues_same_prefix_like_legacy(existing_completers, monkeypatch, model, n, already_answering):
+def test_stop_exactly_at_cap_returns_server_output_without_continuation(existing_completers, monkeypatch, model, n, already_answering):
     f = json.loads((ROOT/'tests/tpu_swarm/fixtures/thinking_markers.json').read_text())[model]
     cls = existing_completers[model]
-    first = [7] + (f['end'] if already_answering else [8, 99])
-    tail = f['answer_tail']; cap = len(first)
+    eos = 99
+    # A: EOS during reasoning. B: close reasoning, finish the answer, then EOS.
+    first = [7] + (f['end'] + f['answer_tail'] if already_answering else [8]) + [eos]
+    cap = len(first)
+    logprobs = [-0.1 * (i + 1) for i in range(cap)]
     p = cls(); p.phase1_max_tokens = 100 + cap; p.context_window = 512
     p.context_buffer = 50; p.min_think_tokens = 0; p.temperature = 1
-    decoded = cls.THINK_CLOSE_MARKER if already_answering else 'reasoning EOS'
+    decoded = cls.THINK_CLOSE_MARKER + 'complete answer EOS' if already_answering else 'reasoning EOS'
     p.tokenizer = SimpleNamespace(encode=lambda *a, **k: f['transition'], decode=lambda ids: decoded)
     prompt = SimpleNamespace(length=100, chunks=[])
-    old_calls = []
-    async def legacy_sample(chunks, stop, max_tokens):
-        old_calls.append((chunks, stop, max_tokens))
-        tokens = first if len(old_calls) == 1 else tail
-        return tokens, [-0.5] * len(tokens)
-    p._sample = legacy_sample
-    expected = asyncio.run(p._two_phase(prompt, ['STOP']))
     native_calls = []
     async def native_sample(**kwargs):
         native_calls.append(kwargs)
         assert kwargs['num_samples'] == n
-        c = dict(token_ids=first, logprobs={'token_logprobs': [-0.5] * cap})
+        assert kwargs['sampling_params'].max_tokens > cap
+        c = dict(token_ids=first, logprobs={'token_logprobs': list(logprobs)})
         api.annotate_response({'choices':[c]}, compat_settings(f, cap), [])
-        return SimpleNamespace(sequences=[SimpleNamespace(tokens=first, logprobs=c['logprobs']['token_logprobs'],
-            loss_mask=c['loss_mask'], thinking_budget=c['thinking_budget']) for _ in range(n)])
-    continuation_calls = []
-    async def continuation(chunks, stop, max_tokens):
-        continuation_calls.append((chunks, stop, max_tokens))
-        assert chunks[-1].tokens == old_calls[1][0][-1].tokens
-        assert (stop, max_tokens) == old_calls[1][1:]
-        return tail, [-0.5] * len(tail)
-    p._sample = continuation; p.sampling_client = SimpleNamespace(sample_async=native_sample)
+        assert c['loss_mask'] == [1.0] * cap
+        return SimpleNamespace(sequences=[SimpleNamespace(tokens=list(first), logprobs=list(c['logprobs']['token_logprobs']),
+            loss_mask=list(c['loss_mask']), thinking_budget=c['thinking_budget'], stop_reason='stop') for _ in range(n)])
+    async def forbidden_continuation(*args, **kwargs):
+        pytest.fail('native resumed sampling after the server stopped at the cap')
+    p._sample = forbidden_continuation
+    p.sampling_client = SimpleNamespace(sample_async=native_sample)
     monkeypatch.setenv('TTD_NATIVE_THINKING_BUDGET', '1')
     monkeypatch.setenv('TTD_QWEN_SAMPLE_GROUP_CHUNK_SIZE', '0')
-    out = asyncio.run(p.sample_group(prompt, ['STOP'], n))
-    assert len(native_calls) == 1 and len(continuation_calls) == n
+    out = ([asyncio.run(p(prompt, ['STOP']))] if n == 1
+           else asyncio.run(p.sample_group(prompt, ['STOP'], n)))
+    assert len(native_calls) == 1 and len(out) == n
     for actual in out:
-        assert actual.tokens == expected.tokens
-        assert actual.maybe_mask == expected.maybe_mask
-        assert actual.maybe_logprobs == expected.maybe_logprobs
+        assert actual.tokens == first and actual.tokens[-1] == eos
+        assert actual.maybe_mask == [1.0] * cap
+        assert actual.maybe_logprobs == logprobs
 
 
 @pytest.mark.parametrize('model', ['qwen3.5-27b', 'gemma4-31b', 'muse-glimmer-30b'])

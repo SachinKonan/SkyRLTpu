@@ -16,7 +16,8 @@ CLASSES = {"qwen3.5-27b": "QwenTwoPhaseTokenCompleter",
 MARKERS = {"qwen3.5-27b": ("<think>", "</think>"),
            "gemma4-31b": ("<|channel>thought\n", "<channel|>"),
            "muse-glimmer-30b": (" to=self<|message|>", " to=user<|message|>")}
-# Discover 2444247: 1d662eb4 plus the reviewed native boundary fallback.
+# Discover afc649a: native stops at cap-boundary EOS; the legacy
+# algorithm and insufficient-headroom fallback remain unchanged.
 # Includes client-side validation of loss masks and behavior logprobs.
 # Whitespace/line-number changes do not change these hashes. Update the Discover
 # commit, these fingerprints, and the parent gitlink together after reviewing
@@ -27,7 +28,7 @@ METHODS = {
     '__call__': '8b5173e56b4fd5e31a5fc291136141d16ff0f4a18e12e0ef5e844bc94e28593c',
     '_two_phase': '5fa022a0fa936abde872d87320136c0b024336465979bbb987ebb43ddc275f9c',
     'sample_group': 'f3975e8e7cad291b77615b6091ac52e454342f0f476b43c3f2a5553626188d34',
-    '_native_group': 'd4a1024f95059a1d9f3bbbf3db53bc8cf48e9b0ee1d956304640f368d24319f6',
+    '_native_group': '2bae44c6fdf728d536a7b728ebdbd57f34f151902e82be48aaa1a3fd290e293c',
 }
 CONSTANTS = {"THINK_CLOSE", "THINK_CLOSE_MARKER", "ANSWER_CUE"}
 

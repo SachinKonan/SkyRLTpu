@@ -469,3 +469,169 @@ but the consequences need stating.
    same commit as `contract.py`. Get an explicit decision on copying the
    sample-past-EOS quirk.
 3. Make the contract hashes independent of the Python minor version.
+
+---
+
+# Third review (2026-09-17, commit `d3415f82`, Discover `2444247`)
+
+Reviewed the committed state. Re-ran the whole `tests/tpu_swarm/` directory,
+re-ran the contract check under Python 3.9 to 3.13, and compared the serving
+command line and environment of all 222 profiles against the base commit
+`86f476a7`.
+
+## Verdict
+
+All three items I required after the second review are fixed and verified.
+I found no new defects in this pass. What remains is validation work that
+cannot be done on CPU, and it is now written down accurately in
+`LEGACY_PARITY_TPU_VALIDATION.md`.
+
+## Required items: all verified
+
+1. **Chunked-prefill / prefix-caching flags: fixed.**
+   - `commands.py:204-214` is back to omit-when-false.
+   - Measured: the serving argv of **all 222 profiles is identical to the base
+     commit**. The only serving-env changes are the two additions
+     `CUSTOM_NUM_TOKENS_BUCKETS=""` and `SERIALIZE_MODEL_AND_SAMPLING="0"`,
+     which equal what legacy exports.
+   - The test that locked the regression in now asserts the opposite, and a new
+     test (`test_all_profiles_preserve_legacy_chunked_prefill_emission`) checks
+     every profile.
+2. **Discover change committed and gitlink advanced: fixed.**
+   - Submodule commit `2444247`; the parent commit points at it; working trees
+     are clean. `contract.py` hashes match.
+   - Caveat, already stated in the new doc: the submodule's `origin` is a local
+     path (`SkyRLTpu-science-placement/third_party/discover`) and `2444247`
+     exists only on the local branch. A clone elsewhere cannot fetch it until it
+     is pushed.
+3. **Contract hashes independent of Python version: fixed.** Measured: the
+   check passes for all three models on 3.9.25, 3.10.18, 3.11.13, 3.12.0 and
+   3.13.7.
+
+## Other changes in this pass
+
+- **Exact-cap EOS continuation is kept.** `LEGACY_PARITY_TPU_VALIDATION.md`
+  records it as a deliberate, user-requested choice that copies legacy's
+  sample-after-EOS quirk. That closes the "should be a decision" criticism,
+  provided that attribution is right. Note the continuation is a second request
+  and may land on a different engine than the first.
+- **The review doc now lists the legacy differences it keeps** (lines
+  270-290): serving `max-num-seqs`/batched tokens/memory utilization, ingress
+  routing and timeouts, thread caps and the grader-sandbox effect, offline HF
+  loading, `TTD_KL_MEASURE_EVERY`, `TPU_VISIBLE_CHIPS`, cache thresholds,
+  single-host mesh kwargs, client Python/locks, MaxText pinning, Qwen ragged
+  conv, server adapter reload semantics. That closes the "unlisted
+  differences" criticism. They are acknowledged, not resolved.
+- **`LEGACY_PARITY_TPU_VALIDATION.md` is sound.** It asks for per-model,
+  per-role inventory capture, a four-host warmup test (correctly noting a
+  single-host smoke cannot exercise the nested-RPC defect), recorded-batch
+  numerical replay with tolerances set from legacy repeatability, real-tokenizer
+  native tests, and a separate cluster test of the gpt-oss pair-host hook. It
+  says plainly that it is a plan and not evidence.
+
+## Test results
+
+- **770 passed, 11 failed, 1 collection error, 3 skipped.**
+- The same 11 failures and the collection error as before. None touch this
+  patch: `training_failed` fixtures (3), missing TPUSwarm checkout files (6),
+  bash orbax test (1), missing `sky` (1), missing `tpuswarm` (collection).
+
+## Still open (none of it is a code defect in this patch)
+
+- **Contract item 1 is still unmet.** No legacy inventory has been captured;
+  `runtime_baselines/` holds only its README. Until that exists, "matches
+  legacy" is unproven for trainer, serving and client.
+- **Muse serving recipe** (tokenizers 0.22.2 pin vs legacy `transformers@main`
+  plus tokenizers 0.23.x) is unresolved.
+- **Client transformers 5.8.0 vs legacy 5.13.0** is acknowledged, not
+  validated.
+- **No TPU run of any kind.** Warmup stays off. The pair-host worker hook is
+  untested on a real cluster.
+- **Discover commit is not pushed.**
+- Gates 5-8 of the review doc (completion certificate, bounded recovery,
+  storage reclamation, failure idempotence) are unimplemented, as it says.
+- The `sqlite:////` URL mangling in launch records was not re-checked.
+- The 11 unrelated test failures are pre-existing repo debt.
+
+## Bottom line
+
+As a code patch, this is ready: it is behaviour-neutral for every existing
+profile's serving launch, its new checks fail closed, and its docs no longer
+overclaim. As a claim that the Ray v2 executor equals the legacy v5p-32
+runtime, it is still unproven, and the next step is the TPU validation plan,
+starting with legacy inventory capture and the four-host warmup test.
+
+---
+
+# Required change (user decision, 2026-09-17): native must stop when the model stops
+
+**Decision by the user:** when a native rollout ends with a stop/EOS on exactly
+the last token of the thinking cap, the rollout is finished. Do **not** copy
+legacy's behaviour of continuing to sample after that EOS. This supersedes the
+"exact-cap EOS continuation is kept" note in the third review, and the wording
+in `LEGACY_PARITY_TPU_VALIDATION.md:107-108` that calls the continuation
+"user-requested" is wrong.
+
+## Why
+
+- The only trigger is `len(tokens) == cap`, where `cap` is the thinking budget
+  (16,384 minus the prompt length). A native request has
+  `max_tokens = total > cap`, so ending at exactly `cap` means the model itself
+  emitted a stop/EOS there.
+- That happens in two ways:
+  - **A.** EOS in the middle of thinking, with no close marker written.
+  - **B.** The model closed its thinking early, wrote a complete answer, and
+    the final EOS landed on token `cap`. This is a complete, valid rollout.
+- Legacy only checks length, not whether the last token was a stop. It treats
+  both cases as "thinking budget exhausted", sends a second request and keeps
+  generating after the EOS. Those post-EOS tokens are trained with loss
+  weight 1. In case B a good rollout gets junk appended.
+- This is a legacy bug, not semantics worth preserving. Copying it buys no
+  meaningful parity (it is a roughly one-in-thousands event per rollout) and has
+  a real cost: polluted training sequences, a second request that can land on a
+  different engine, and extra code in the pinned client.
+- The original native behaviour was already right: the server stops at the
+  EOS, the mask is all ones, no tokens are injected.
+
+## What to change
+
+1. **Discover submodule,
+   `ttt_discover/tinker_utils/completers.py`, `_native_group`:** delete the
+   `if len(tokens) == cap:` continuation block (currently lines 465-479: the
+   `prefill`/`answer_max`/`_sample`/"invalid boundary continuation" code). After
+   the existing validation checks, the tokens, logprobs and mask from the server
+   are returned as-is. Restore the log line to count forced tokens from the
+   returned mask.
+   - Keep everything else from commit `2444247`: the `_two_phase` extraction,
+     the `NativeCompletionError` changes and the insufficient-headroom
+     fallback (unreachable on current profiles, harmless).
+   - Leave the legacy `_two_phase` path itself untouched. This decision is
+     about native only; legacy stays the byte-identical reference.
+2. **`tpu/swarm/ray_train/thinking_budget/contract.py`:** regenerate the
+   `_native_group` fingerprint in `METHODS` in the same change, and update the
+   comment above `METHODS` that mentions the "native boundary fallback". The
+   other four hashes must not change.
+3. **Tests, `tests/tpu_swarm/test_native_training.py`:** replace
+   `test_stop_exactly_at_cap_continues_same_prefix_like_legacy` with a test
+   that asserts the opposite, for Qwen/Gemma/Muse and n=1/n=32, in both case A
+   and case B:
+   - exactly one sampling request is made (no second request);
+   - returned tokens equal the server's tokens and end at the stop token;
+   - the mask is all ones, nothing is injected, logprobs are the server's.
+4. **Docs:**
+   - `LEGACY_PARITY_TPU_VALIDATION.md:107-108`: remove the "user-requested ...
+     sampling-after-EOS quirk" paragraph. In the validation table, the native
+     completion row should expect cap-boundary EOS to **stop**, and list it as
+     a reviewed, intentional difference from legacy.
+   - `RAY_RUNTIME_PARITY_REVIEW.md:251`: change the "Native stop exactly on
+     cap" row to say native stops at the EOS, and add this to the "retained
+     differences" list as a deliberate deviation from a legacy bug.
+5. **Commit order:** commit the Discover change first, then the parent gitlink,
+   `contract.py`, tests and docs together, as before.
+
+## Acceptance
+
+- Contract check passes for all three models on Python 3.9 to 3.13.
+- The whole `tests/tpu_swarm/` run shows no new failures beyond the 11 known
+  unrelated ones.
+- Serving argv for all 222 profiles is still identical to `86f476a7`.

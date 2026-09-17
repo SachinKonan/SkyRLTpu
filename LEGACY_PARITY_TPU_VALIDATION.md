@@ -98,17 +98,19 @@ parity. Record both cold compilation and warm-cache timings separately.
 | --- | --- | --- |
 | Environment/startup | All intended role environments and inference engines | Inventories match approved baselines; effective vLLM config confirms chunked-prefill behavior and token limits; every engine becomes healthy |
 | Four-host warmup | Adapter creation with warmup enabled and both 18,432/22,528 buckets, where configured | All ranks complete the same local backward sequence; no nested RPC, collective timeout or TPU error; weights/optimizer and accumulation counters are preserved |
-| Native completion | Qwen/Gemma/Muse with real pinned tokenizers, n=1 and n=32 | Natural closure, forced transitions, early finishes, cap-boundary closure/EOS, truncation and low-headroom fallback agree with two-phase token/mask/logprob semantics on controlled fixtures |
+| Native completion | Qwen/Gemma/Muse with real pinned tokenizers, n=1 and n=32 | Natural closure, forced transitions, early finishes, truncation and low-headroom fallback agree with two-phase token/mask/logprob semantics on controlled fixtures; cap-boundary EOS must STOP without another request, an intentional difference from legacy |
 | One real update | Production 16x32 workload, packing and accumulation settings | Grading completes; expected groups are consumed; all backward passes and exactly one optimizer step complete; adapter exports and reloads into every engine |
 | Numerical replay | Same recorded training batch through legacy and Ray | Exact preprocessing/masks/advantages and counters; compare losses, gradient norms and gradient/optimizer/adapter arrays with numerical tolerances established from reference repeatability before evaluating Ray |
 | Durable restart | Save a completed step, stop the test cleanly, restart from it | Weights, optimizer state, client/search state and completed-step identity agree; resumed update succeeds without replaying partial gradients |
 | Lifecycle | Controlled cancellation/relaunch of only the test workload | Owned processes/devices/ports released, artifacts preserved, repeat launch succeeds; no cross-workload cleanup |
 
-The native cap-EOS continuation intentionally preserves the user-requested legacy
-semantics, including its sampling-after-EOS quirk. It may issue a second request;
-legacy routing rules apply, so same-engine affinity is not assumed. The ordinary
-native case remains one request. Real tokenizer coverage must not be replaced by
-fixture-only success.
+Native stops when the server stops, including a stop/EOS exactly on the thinking
+cap. No second request is sent and no post-EOS tokens are injected or trained.
+This is a reviewed, intentional correction of legacy's length-only continuation
+bug. Test both EOS during reasoning and EOS after a complete answer, for n=1 and
+n=32. The legacy `_two_phase` algorithm itself remains unchanged; the native
+insufficient-headroom fallback is also retained. Real tokenizer coverage must
+not be replaced by fixture-only success.
 
 Validate gpt-oss paired-engine worker hooks separately if deploying that topology:
 prove the function imports on the second host, Ray's assigned TPU visibility is

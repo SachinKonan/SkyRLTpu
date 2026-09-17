@@ -13,7 +13,9 @@ The requested contract is:
 1. Match the working legacy **trainer** environment with the Ray trainer, and
    the working legacy **serving** environment with Ray serving. Trainer and
    serving need not use the same JAX version as each other.
-2. Native thinking preserves the supported two-phase completion semantics.
+2. Native thinking preserves the supported two-phase completion semantics,
+   except that cap-boundary stop/EOS ends the native rollout (the explicit
+   user decision in the final required change in `CRITICISM_MD.md`).
 3. The same effective model/training settings reach every appropriate process.
 4. Ray replaces SSH/tmux coordination with owned, repeatable startup/shutdown.
 
@@ -106,7 +108,7 @@ Implementation entrypoints are `environment.py`, `config.py`, `commands.py`,
 `thinking_budget/contract.py`, `controller.py`, and
 `skyrl/backends/backward_warmup.py`. This branch now changes `third_party/discover/ttt_discover/tinker_utils/completers.py`
 in its isolated submodule checkout. That file is included in the native training
-source overlay. Discover is now committed at `2444247284d2ef766a13b8a892b28d90f1bc4c33`;
+source overlay. Discover is now committed at `afc649a3b64ec0b3023c28bb960c1ec75797a832`;
 the parent snapshot records that gitlink alongside the matching contract hashes. TPU-inference submodule contents are unchanged.
 
 ### Warmup specifics
@@ -144,9 +146,9 @@ the patch and this list before any deployment.
    concrete, but the legacy shell and Ray builders still independently encode
    launch settings. Refactor both to consume one resolved specification, with
    allowed differences limited to addresses, paths, topology and supervision.
-3. **Native hardware/tokenizer validation:** exact-cap EOS/stop continuation and
-   insufficient-headroom behavior now use legacy continuation/fallback on CPU
-   fixtures. Validate these on real pinned tokenizers and TPU, including
+3. **Native hardware/tokenizer validation:** exact-cap EOS/stop now ends native
+   sampling; insufficient headroom retains the legacy fallback. CPU fixtures
+   cover these behaviors. Validate these on real pinned tokenizers and TPU, including
    stop/forced-transition conflicts, natural/forced/partial markers, early answers,
    n=1/n=32, truncated output and all training masks. Do not claim identical random draws from differently
    scheduled requests. Preserve sampled behavior logprobs.
@@ -179,7 +181,7 @@ Review changes against `86f476a7`, not against the moving science branch:
 ```bash
 git diff 86f476a7 --stat
 git diff 86f476a7 -- tpu/swarm/ray_train skyrl/backends tests/tpu_swarm
-git -C third_party/discover diff 1d662eb..2444247 -- ttt_discover/tinker_utils/completers.py
+git -C third_party/discover diff 1d662eb..afc649a -- ttt_discover/tinker_utils/completers.py
 ```
 
 New files are included in the parent commit; inspect its complete diff against
@@ -248,19 +250,21 @@ initial 11-file suite as a full-directory pass.
 | Second engine host differs | Carry bucket/serialization flags and sanitize inherited model/compiler settings through Ray's worker setup hook | Pure production-hook regression and explicit paired-engine source-overlay test. Real Ray/vLLM pair smoke remains pending. |
 | Gemma TP8 override uses wrong key | Use `global_num_kv_heads` for Gemma, `base_num_kv_heads` otherwise | Pure configuration regression |
 | Stale client installation tests | Supply real required fixture attributes and assert inventory sequencing | Client dependency tests now participate in validation |
-| Native stop exactly on cap | Continue the same sampled prefix with legacy phase-2 cue, budget, mask and logprobs | Qwen/Gemma/Muse, n=1/n=32, with/without an already-open answer channel |
+| Native stop exactly on cap | Stop at the server EOS and return its tokens, mask and logprobs unchanged; no continuation | Intentional difference from legacy. Qwen/Gemma/Muse, n=1/n=32, EOS during reasoning and after a complete answer |
 | Native insufficient answer headroom | Invoke the original two-phase algorithm for this unsupported native shape; invalid thinking caps raise fatal NativeCompletionError | Wall-ending behavior equality test; AST comparison proves extracted legacy algorithm body unchanged |
 
 ### Native completion scope after this fix
 
-Ordinary native requests still use one serving request. Two rare cases now use
-legacy continuation: a completed response exactly at the cap, and a request with
-insufficient headroom for the native forced transition plus one answer token.
-Continuation uses the same sampling client and original sampled prefix; routing
-of a second request remains the legacy client's routing behavior. This does not
-promise engine affinity or identical random draws across different schedulers.
-No global native flag is toggled during fallback, so concurrent requests are not
-silently switched into another mode.
+Native requests stop at the server's stop/EOS, even if output length equals
+the thinking cap. They do not restart sampling or append tokens after EOS. The
+previous claim that preserving the sample-after-EOS quirk was user-requested
+is withdrawn; the explicit decision is to keep native stop behavior instead.
+
+Requests with insufficient headroom for the native forced transition plus one
+answer token still use the unchanged `_two_phase` fallback. No global native
+flag is toggled during fallback, so concurrent requests are not silently switched
+into another mode. Differently scheduled requests need not produce identical
+random draws, and fallback routing does not promise same-engine affinity.
 
 The original two-phase algorithm was extracted into `_two_phase`, with a test
 comparing its AST body to Discover commit `1d662eb4`. Updated contract hashes
@@ -268,6 +272,10 @@ include this local change. Do not interpret those hashes as proof of mathematica
 parity: they prevent later unreviewed drift; comparison tests supply the evidence.
 
 ### Retained differences and decisions still needed
+
+- Native intentionally stops at cap-boundary EOS rather than reproducing legacy
+  sampling past EOS. No tokens are appended to either an unfinished reasoning
+  rollout or a complete answer. The legacy algorithm itself stays unchanged.
 
 - Preserve existing workload profiles: max-num-seqs 16, profile-specific batched
   tokens (often 1024/4096), memory utilization (often 0.65–0.8), meshes, context,
@@ -324,7 +332,7 @@ Final local validation:
 - `git diff --check` passes in the main checkout and the Discover submodule.
 
 The changes are recorded as local commits in Discover and its parent. Review
-the new files and Discover commit `2444247` as well as the parent diff. No
+the new files and Discover commit `afc649a` as well as the parent diff. No
 changes were made to `CRITICISM_MD.md`, the parent science-placement worktree,
 or running jobs.
 
@@ -351,3 +359,29 @@ or running jobs.
 - The remaining environment and hardware validation procedure is documented in
   `LEGACY_PARITY_TPU_VALIDATION.md`. No TPU launch or legacy-host capture was
   performed in this turn; environment equality is not yet certified.
+
+
+## Final required change: native stops at cap-boundary EOS
+
+This supersedes the earlier cap-EOS continuation decision and its attribution.
+Discover commit `afc649a3b64ec0b3023c28bb960c1ec75797a832` removes only the
+native length-equals-cap continuation block. It returns the server's validated
+tokens, logprobs and mask without another request. `_two_phase`, the other client
+methods, and insufficient-headroom fallback remain byte-identical to `2444247`.
+Only the `_native_group` method fingerprint changed.
+
+Acceptance evidence:
+
+- Replaced continuation tests with stop tests for all three models, n=1/n=32,
+  covering EOS during thinking and EOS after a complete answer. They require one
+  sampling request, unchanged server tokens/logprobs, and an all-ones loss mask.
+- Contract checks pass for all three models on Python **3.9.25, 3.10.18,
+  3.11.13, 3.12.0 and 3.13.7**, with site packages disabled.
+- Independently loaded Config and command builders from `86f476a7`: serving argv
+  matches that base for **all 222 profiles**.
+- Full `tests/tpu_swarm/`: **770 passed, 11 failed, 3 skipped, 1 collection
+  error**, 109.14 seconds. Failure identities are exactly the previously recorded
+  unrelated fixtures/dependencies; there are no new failures.
+- Discover is committed first; the parent records its gitlink with the matching
+  fingerprint, tests and corrected documentation. These remain local commits;
+  no upstream push or TPU launch was performed.
