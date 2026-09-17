@@ -39,6 +39,12 @@ for proc in Path('/proc').iterdir():
     except PermissionError:
         continue  # TPU ownership is independently inspected as root above.
     matches = [arg for arg in args if arg in modules or arg.endswith(suffixes) or arg.startswith('VLLM::')]
+    # Cancelled workloads can leave an idle Ray head behind with no TPU
+    # owners. Detect private executor clusters before any new workers connect;
+    # do not flag SkyPilot's separate /tmp/ray_skypilot control cluster.
+    if (args and Path(args[0]).name in ('raylet', 'gcs_server')
+            and any('/.rtr-' in arg for arg in args)):
+        matches.append('existing private executor Ray cluster')
     if matches:
         strays.append(dict(pid=int(proc.name), matched=matches))
 if strays:
