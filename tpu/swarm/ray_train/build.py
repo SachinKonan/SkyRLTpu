@@ -49,7 +49,7 @@ def build(profile, output):
             info = tarfile.TarInfo(prefix + "manifest.json")
             info.size = len(data)
             bundle.addfile(info, io.BytesIO(data))
-        if config.frozen_benchmark:
+        if config.frozen_benchmark or config.bootstrap_layers:
             for path in sorted((repo / "tpu/swarm/bench").glob("*.py")):
                 bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
         if config.arena_samples or config.arena_grader_rank is not None:

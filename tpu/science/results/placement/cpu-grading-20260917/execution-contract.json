@@ -1,0 +1,146 @@
+{
+  "archive_sha256": "4f8f199f11e501cfdc0ada3188a88a118551b4267e7a648bfcb2d81fe844b348",
+  "source_hashes": {
+    "tpu/science/placement_ray.py": "ee7faf293b8c039050cdf3e497e4eea2589656fd1de2d7b32358c1713e185f2f",
+    "tpu/science/placement_task.py": "75205720ce936ee0adeb7fd007582adb0f78dd6292dd7bfb1f998d083e5878c8",
+    "tpu/science/challenge_candidate_child.py": "9afa79d36a0636f79b099fc9cdb5fb13324edfb2bd6014d94693cc60b23f19ae",
+    "tpu/science/challenge_score_child.py": "93a54dbcdc2468b52615e7f419af716677ad36f6f3f5bdf8641a46f44b9376db",
+    "tpu/science/challenge_contract.py": "29f6fb60ec99cb7d26736e5557d26254a59dd7be0e6d9dd5bfb3ee101728e3db"
+  },
+  "input_manifest": {
+    "schema": "xplace-start-v1",
+    "method": "Archgen route-aware Xplace + deterministic CPU legalization",
+    "candidate_budget_excludes_precomputation": true,
+    "cases": {
+      "ibm01": {
+        "valid": true,
+        "positions_sha256": "8b8e8a1b09946cad8cc63fb22b649a448aed60582b279a2d6013bf1b85b78fe0",
+        "source_problem_sha256": "b66fd5d269690559815245a7845e85876e35bfe2afcde526ddb8df6f3381faaf",
+        "raw_positions_sha256": "638b4c1e7b04dcea5eed7ece896109b62811b6b13d4f4a806d2f454385464b3c",
+        "report_sha256": "7e7a1f645fdb48ca2bd4a5e65ce7ceb660e756c35804c5c5a02967db491368e8",
+        "native_sha256": {
+          "netlist.pb.txt": "ca97cee4652966bc0afc16562ccc9aec224de31de1cfb317b61972a4ba1a4c96",
+          "initial.plc": "f5202ce7295ba2ae38781a6a658b5affaa0ee933110ec071f41dd14961b133ad"
+        },
+        "metrics": {
+          "proxy_cost": 0.923904299736023,
+          "wirelength_cost": 0.06846079230308533,
+          "density_cost": 0.5259437561035156,
+          "congestion_cost": 1.1849433109395504,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 4.331735556945205
+        },
+        "precomputation_seconds": 22.19229555502534,
+        "gpu": "NVIDIA A40",
+        "xplace_commit": "49cf66bc75ba9908f145bb6686f03cde692367cf",
+        "adapter_commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+        "problem_sha256": "09ea9fc8c565e2226b59abe6b087c44119d24808455f02ac3c06a1ccb08502ce"
+      },
+      "ibm04": {
+        "valid": true,
+        "positions_sha256": "16876f3b595d5eb7343b5de2e8b76b026c09642924accfc4f42de48481080397",
+        "source_problem_sha256": "64b68584f81947567e69134d17964acaaf14c4aa38c37aabc73a62c39376ebfc",
+        "raw_positions_sha256": "517a167d15dfcf8de56951508c5782956c5e6faeb4cfcb50de1f785593173951",
+        "report_sha256": "66ade71d5cf19cc5a568a67ad97ba6a345f1f2d5ed5551f960ade5a0e16a3162",
+        "native_sha256": {
+          "netlist.pb.txt": "347924f72a646c0295f32858b4e58c41b1f18739286e8e5c8250226222ca188a",
+          "initial.plc": "94aa5b8956d87b8851cf5bc156d4b0a14a8bdcfcdb6282bc41ed281ce7671f0b"
+        },
+        "metrics": {
+          "proxy_cost": 1.1750555038452148,
+          "wirelength_cost": 0.07757479697465897,
+          "density_cost": 0.5871685147285461,
+          "congestion_cost": 1.607792869413217,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 6.623204842908308
+        },
+        "precomputation_seconds": 20.997947281925008,
+        "gpu": "NVIDIA A40",
+        "xplace_commit": "49cf66bc75ba9908f145bb6686f03cde692367cf",
+        "adapter_commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+        "problem_sha256": "8cccea125ac7d15d5d067d7ec32bba5196e966b67c21145be09964b004133a5e"
+      },
+      "ibm08": {
+        "valid": true,
+        "positions_sha256": "9cee83dcf3f5b4d6d969a18eef98204f038f5e5960c03ddd78d38a8ccec44ece",
+        "source_problem_sha256": "f22cd2b4b26c03432388108b25b5f377df455e03db6b7a6e5134c4c8be1e4253",
+        "raw_positions_sha256": "d028f4946f3f88548136b5294f4568583f92907f567fe5b9bd20d64cabe19741",
+        "report_sha256": "97f48ea5bc1d3dd6ae26b627888fe3e624e5e8252b09810ef3635284b8544645",
+        "native_sha256": {
+          "netlist.pb.txt": "68d592796012b4885a5d65d2df646597061f77c245ce92a2bb85334ffc0138de",
+          "initial.plc": "243811e78c80c71e268b8143d94a6f3ac25230f105e38f60c2be190d50c2f5eb"
+        },
+        "metrics": {
+          "proxy_cost": 1.41314697265625,
+          "wirelength_cost": 0.07833116501569748,
+          "density_cost": 0.5814116597175598,
+          "congestion_cost": 2.088219927545536,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 12.05018659401685
+        },
+        "precomputation_seconds": 18.16964482900221,
+        "gpu": "NVIDIA A40",
+        "xplace_commit": "49cf66bc75ba9908f145bb6686f03cde692367cf",
+        "adapter_commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+        "problem_sha256": "a124ba699816b23110d2beac983037e7f99d9462a0be3d49cb32069fd79744ca"
+      },
+      "ibm18": {
+        "valid": true,
+        "positions_sha256": "45ea2241d51fcde0dcbd2fa52639fe662cfa160d87308a08feb3f504112dadf6",
+        "source_problem_sha256": "1f5d85c7ae07cc69738be77c1f36b3ac7b5d556a597435cbf70f8c5d1b9e509b",
+        "raw_positions_sha256": "aae64a1211abd6983cffde5bbf7a0537a9aa653a639447971b1ee9599835a81b",
+        "report_sha256": "d39646e0697c1d47672cecd0119353ac8528a50cee13155cd29a7b4e3e50e2e2",
+        "native_sha256": {
+          "netlist.pb.txt": "7e2bc08b5c1ff6ad659df9e1c639a1b6f8e9f867e4446a367fd1d9d8fccab773",
+          "initial.plc": "75a04aae366df17b34f2089ddc0f19e475fb4c6bcae4229842b60310eadeff96"
+        },
+        "metrics": {
+          "proxy_cost": 1.6020044088363647,
+          "wirelength_cost": 0.06962597370147705,
+          "density_cost": 0.4991860091686249,
+          "congestion_cost": 2.5655708549058267,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 45.24916662508622
+        },
+        "precomputation_seconds": 23.21906308096368,
+        "gpu": "NVIDIA A40",
+        "xplace_commit": "49cf66bc75ba9908f145bb6686f03cde692367cf",
+        "adapter_commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+        "problem_sha256": "3a1622d6b29834b87c97c8aafd859a6a8b379732285bc1f8069e420f18aa6297"
+      }
+    },
+    "mean_proxy_cost": 1.2785277962684631,
+    "reward": 0.4388798774531943
+  },
+  "budget": {
+    "cpus": 4,
+    "memory_gib": 8,
+    "slots_per_host": 16,
+    "candidate_seconds": 180,
+    "candidate_supplied_budget": 170,
+    "grader_seconds": 90,
+    "case_seconds": 300
+  },
+  "libraries": {
+    "jax": "0.10.1",
+    "jaxlib": "0.10.1",
+    "numpy": "2.4.6",
+    "optax": "0.2.8"
+  }
+}

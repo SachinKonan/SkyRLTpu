@@ -37,12 +37,30 @@ shared across all libraries and descendants, not granted separately per library.
 
 `ray_cpu.grade` runs on the existing private workload Ray cluster. Every one of
 the eight prepared hosts is eligible, including inference hosts. The initial
-pilot allows two four-core CPU slots per host. Each Ray task reserves four
+pilot defaults to two four-core CPU slots per host. Routing profiles can opt into
+`science_routing_slots_per_host=16`: sixteen concurrent tasks, 64 logical CPUs
+and at most 128 GiB of combined task memory per host. Host-wide slot locks prevent
+new payload directories from duplicating those slots. Each Ray task reserves four
 logical CPUs and 8 GiB, then launches an individually named systemd service with
 `CPUQuota=400%`, a four-CPU cpuset, `MemoryMax=8G`, no swap, `TasksMax=128`, and a
 hard overall deadline. The namespace sandbox runs candidate code without host
 credentials, networking or accelerator devices. Import restrictions provide
 reproducibility; the sandbox and cgroup enforce isolation and resource bounds.
+
+The expanded routing profile advertises 72 Ray CPUs per host (64 for grading and
+eight for actors), and bootstrap admission scales to the host count. Candidate
+budgets, rewards, and placement/portfolio concurrency are unchanged. Candidate
+`/tmp` is tmpfs charged inside its 8 GiB limit; the separate model/compilation
+RAM cache is capped at 128 GiB for expanded profiles. A tmpfs capacity is not a
+physical memory reservation. Retired cache mounts and model/runtime allocations
+still count against host RAM. Existing running jobs keep their packaged settings;
+apply this change through a new package and controlled checkpoint resume, not a
+live edit of imported Ray functions. Old and new executors must not overlap on a
+host because the old pilot used payload-local slot locks.
+Completed routing evaluations discard their private `evaluation/target` and
+`evaluation/rust` build trees after the worker stops. Candidate source, build/run
+logs, routed outputs and verdicts remain available. Keeping a roughly 380 MiB
+private Cargo target per candidate indefinitely can fill the host disk.
 
 Cooperative cancellation stops the service. If Ray kills the worker process,
 an owner-PID/start-time watchdog exits the service, and systemd kills all its

@@ -329,7 +329,7 @@ class Host:
         self.store.restore_compile(self.compile_prefix())
         self.phase = "environment_setup"
         self.install_role(role)
-        if self.rank == 0 and not self.config.inference_only:
+        if self.rank == 0 and (not self.config.inference_only or self.config.bootstrap_only):
             self.install_client()
         self.phase = "prepared"
         emit(self.log, "host_prepared", rank=self.rank, role=role, snapshot=str(self.snapshot))
@@ -401,6 +401,67 @@ class Host:
         self.phase = "client_running"
         return self.heartbeat()
 
+    def bootstrap_status(self):
+        path = self.run / 'client/bootstrap/complete.json'
+        if not path.exists():
+            # Never apply a newly enabled bootstrap to an old training history.
+            log = self.run / 'client/tinker_log' / self.config.run_id
+            if list(log.glob('member_*/checkpoints.jsonl')):
+                raise RuntimeError('bootstrap requested for existing training history')
+            return None
+        contract = json.loads((path.parent/'contract.json').read_text())['contract']
+        if Config.from_dict(contract['config']).to_dict() != self.config.to_dict():
+            raise RuntimeError('bootstrap config changed; use a new run ID')
+        implementation = Path(__file__).resolve().parents[2] / 'science/bootstrap.py'
+        if hashlib.sha256(implementation.read_bytes()).hexdigest() != contract['implementation_sha256']:
+            raise RuntimeError('bootstrap implementation changed; use a new run ID')
+        summary = json.loads(path.read_text())
+        if summary.get('retained', 0) < 1:
+            raise RuntimeError('completed bootstrap has no valid seeds')
+        pool = self.run / 'client/tinker_log' / self.config.run_id / 'puct_sampler_step_000000.json'
+        if not pool.exists():
+            raise RuntimeError('completed bootstrap is missing its promoted PUCT snapshot')
+        # Step zero is immutable after promotion; later optimizer states use
+        # separate snapshots. Refuse a partially restored or mixed seed pool.
+        digest = hashlib.sha256(json.dumps(json.loads(pool.read_text()), sort_keys=True).encode()).hexdigest()
+        if digest != summary['pool_sha256']:
+            raise RuntimeError('completed bootstrap PUCT snapshot checksum mismatch')
+        return summary
+
+    def bootstrap_launch(self):
+        if self.rank != 0 or not self.config.bootstrap_layers:
+            raise RuntimeError('bootstrap must run on the configured client host')
+        env = client_environment(self.config, self.root, self.ips[0],
+                                 trainer_head=self.ips[self.trainer_leader])
+        package = Path(__file__).resolve().parents[3]
+        env['PYTHONPATH'] = f'{package}:{self.source}:{self.source / "third_party/discover"}'
+        command = [str(self.root/'envs/client/bin/python'), '-m',
+            'tpu.science.bootstrap', '--config-json', json.dumps(self.config.to_dict()),
+            '--snapshot', str(self.snapshot), '--head', self.ips[0]]
+        # Python -m puts cwd before PYTHONPATH. The frozen source contains an
+        # older regular ray_train package, so launching there silently mixes
+        # the new bootstrap with its obsolete Config and helper modules.
+        return command, env, package
+
+    def check_bootstrap(self):
+        command, env, cwd = self.bootstrap_launch()
+        return self.checked('bootstrap-import', command + ['--check-only'], env, cwd, timeout=120)
+
+    def start_bootstrap(self):
+        command, env, cwd = self.bootstrap_launch()
+        self.start('bootstrap', command, env, cwd)
+        return self.heartbeat()
+
+    def verify_tpu_released(self):
+        devices = sorted(Path('/dev').glob('accel*')) + sorted(Path('/dev/vfio').glob('[0-9]*'))
+        if not devices:
+            raise RuntimeError('cannot verify TPU release: no device nodes')
+        result = subprocess.run(['sudo', '-n', 'fuser', *map(str, devices)],
+                                capture_output=True, text=True, timeout=15)
+        if result.returncode != 1 or result.stdout.strip() or result.stderr.strip():
+            raise RuntimeError('TPU device still owned or device ownership check failed')
+        return dict(rank=self.rank, devices=list(map(str, devices)), released=True)
+
     def prepare_frozen(self):
         from .frozen_benchmark import prepare_host
         return prepare_host(self)
@@ -435,6 +496,10 @@ class Host:
         local = self.run / "client"
         if self.rank == 0 and not local.exists() and self.gcs.list(self.config.run_gcs + "/client", allow_empty=True):
             self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(self.run)], "restore-run", self.run)
+        if self.rank == 0 and self.config.seed_pool_sha256:
+            from tpu.science.seed_pool import verify_pool
+            verify_pool(local / 'tinker_log' / self.config.run_id / 'puct_sampler_step_000000.json',
+                        self.config.seed_pool_sha256)
         db = self.run / "tinker.db"
         if self.rank == self.trainer_leader and not db.exists():
             listing = self.gcs.metadata("ls", "--json", self.config.run_gcs + "/tinker-backup.db", allow_empty=True)
@@ -445,8 +510,6 @@ class Host:
                 downloaded.unlink()
 
     def sync_run(self):
-        if self.rank not in (0, self.trainer_leader):
-            return
         if not self.run_sync_lock.acquire(timeout=330):
             raise TimeoutError("previous run-state writeback is still running")
         try:
@@ -487,6 +550,7 @@ class Host:
 
     def stop_client(self):
         with self.lock:
-            process = self.processes.get("client")
-        if process:
-            process.stop()
+            processes = [self.processes.get(name) for name in ('client', 'bootstrap')]
+        for process in processes:
+            if process:
+                process.stop()

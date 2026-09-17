@@ -1,0 +1,39 @@
+{
+  "time": "2026-09-16T22:49:57.319603+00:00",
+  "slots_per_host": 16,
+  "candidate_cpus": 4,
+  "candidate_memory_gib": 8,
+  "grading_memory_cap_gib": 128,
+  "ray_cpus_per_host": 72,
+  "ram_cache_cap_gib_per_mount": 128,
+  "tests_passed": 78,
+  "candidate_limits_and_scientific_rewards_changed": false,
+  "packages": {
+    "muse-training-template": {
+      "run_id": "science-routing-v4-muse-seeded-train-002",
+      "sha256": "bfe3cb696ba8dc0962dce7688a7979d02149e9a625bd8b9d2ce80ad9f382a245",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-bfe3cb696ba8dc0962dce7688a7979d02149e9a625bd8b9d2ce80ad9f382a245.tar.gz",
+      "path": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/grading16-20260916/muse-training-template"
+    },
+    "qwen-resume-package": {
+      "run_id": "science-routing-v4-qwen-bootstrap-l2-001",
+      "sha256": "31f2c500ea7ae26ddc9745396a717b1912cf26d8c5950680edafd7623184f9e7",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-31f2c500ea7ae26ddc9745396a717b1912cf26d8c5950680edafd7623184f9e7.tar.gz",
+      "path": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/grading16-20260916/qwen-resume-package"
+    },
+    "gemma-resume-package": {
+      "run_id": "science-routing-v4-gemma-bootstrap-l2-001",
+      "sha256": "1590b74484c4202074be98aa9a16b9659dd771a2b81f87e7760c9641aa285e6e",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-1590b74484c4202074be98aa9a16b9659dd771a2b81f87e7760c9641aa285e6e.tar.gz",
+      "path": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/grading16-20260916/gemma-resume-package"
+    }
+  },
+  "active_jobs_interrupted": false,
+  "muse_handoff_plan": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/muse-routing-seed-handoff-002/plan.json",
+  "qwen_gemma_deployment": "resume packages prepared, not submitted; current job settings unchanged",
+  "gemma_recovery_issue": "disk exhausted after two logged steps; completed build scratch cleaned, checkpoint recovery not performed",
+  "gemma_cleanup_evidence": [
+    "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/grading16-20260916/gemma-completed-build-cleanup.json",
+    "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/grading16-20260916/gemma-head-cleanup.json"
+  ]
+}

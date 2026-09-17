@@ -37,12 +37,12 @@ def test_slow_host_and_run_upload_do_not_block_peer_sync(tmp_path, monkeypatch):
         [r for r in refs if r[0] != 0], [r for r in refs if r[0] == 0]))
     monkeypatch.setattr(module.ray, "get", lambda ref: 2)
     control.writeback_tick()
-    assert len(control.calls) == 9
+    assert len(control.calls) == 16
     now[0] += control.config.cache.sync_seconds
     control.writeback_tick()
-    assert len(control.calls) == 16
+    assert len(control.calls) == 30
     assert len([r for r in control.calls if r[0] == 0]) == 2
-    assert all(len([r for r in control.calls if r[0] == rank]) == 2 for rank in range(1, 8))
+    assert all(len([r for r in control.calls if r[0] == rank]) == 4 for rank in range(1, 8))
 
 
 def test_failed_sync_retries_on_next_interval(tmp_path, monkeypatch):
@@ -59,15 +59,15 @@ def test_failed_sync_retries_on_next_interval(tmp_path, monkeypatch):
     monkeypatch.setattr(module.ray, "get", get)
     control.writeback_tick()
     control.writeback_tick()
-    assert len(control.calls) == 9
+    assert len(control.calls) == 16
     assert any(event == "writeback_retry_pending" and fields["rank"] == 3
                for event, fields in control.events)
     now[0] += control.config.cache.sync_seconds
     control.writeback_tick()
-    assert len(control.calls) == 18
+    assert len(control.calls) == 32
     control.stopping.set()
     control.writeback_tick()
-    assert len(control.calls) == 18
+    assert len(control.calls) == 32
 
 
 def test_final_flush_reaches_healthy_hosts_after_peer_failure(tmp_path, monkeypatch):
@@ -83,10 +83,12 @@ def test_final_flush_reaches_healthy_hosts_after_peer_failure(tmp_path, monkeypa
     monkeypatch.setattr(module.ray, "get", get)
     control.close()
     assert len([r for r in control.calls if r[1] == "compile"]) == 8
-    assert len([r for r in control.calls if r[1] == "run"]) == 1
+    assert len([r for r in control.calls if r[1] == "run"]) == 8
     completed = [fields["rank"] for event, fields in control.events
                  if event == "final_compile_writeback_complete"]
     assert completed == [0, 1, 3, 4, 5, 6, 7]
+    assert [fields["rank"] for event, fields in control.events
+            if event == "final_run_writeback_complete"] == completed
     assert any(event == "final_compile_writeback_error" and fields["rank"] == 2
                for event, fields in control.events)
 
@@ -95,10 +97,10 @@ def test_api_leader_database_and_head_client_both_get_writeback(tmp_path, monkey
     control = controller(tmp_path)
     control.trainer_leader = 7
     control.writeback_tick()
-    assert {r for r, kind, _ in control.calls if kind == 'run'} == {0, 7}
+    assert {r for r, kind, _ in control.calls if kind == 'run'} == set(range(8))
     monkeypatch.setattr(module.serve, 'shutdown', lambda: None)
     monkeypatch.setattr(module.ray, 'wait', lambda refs, **kw: (refs[:1], refs[1:]))
     monkeypatch.setattr(module.ray, 'get', lambda ref: 1)
     control.calls.clear()
     control.close()
-    assert {r for r, kind, _ in control.calls if kind == 'run'} == {0, 7}
+    assert {r for r, kind, _ in control.calls if kind == 'run'} == set(range(8))

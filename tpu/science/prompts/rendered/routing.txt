@@ -9,6 +9,21 @@ Every case must route correctly. The trusted grader independently checks topolog
 
 Resources: four CPU cores, 8 GiB RAM, 1800 seconds total: up to 900 seconds for changed-policy compilation and routing all cases with 20 layout/20 routing trials, then up to 900 seconds for independent verification. No accelerator. Installed dependencies are prewarmed outside timing.
 
+Implementation checklist:
+- Preserve the seed policy's exact hook signatures, return types, and required
+  definitions. Use only methods and fields shown in the read-only API below;
+  do not invent graph, layout, or RNG methods. Respect Rust borrow/lifetime rules.
+- A swap must be a physical coupling edge. Initial layouts must map all logical
+  qubits injectively into the available physical qubits. Preserve progress and
+  disconnected-component handling from the seed unless replacing them correctly.
+- Return the ENTIRE replacement policy, including its helpers, inside RUST_CODE.
+  The outer fenced language must be python. RUST_CODE must be one literal string:
+  no imports, function calls, string concatenation, extra assignments, or Rust
+  code outside that literal. Do not copy the fixed scaffold into the string.
+- Invalid bootstrap programs may be returned with compiler/verifier feedback.
+  Repair the reported cause first, preserving the complete interface. Valid
+  feedback reports weighted added-CNOT cost, SWAP totals, and improvement.
+
 Fixed Rust scaffold (read-only):
 ```rust
 use std::collections::{HashMap, HashSet, VecDeque};

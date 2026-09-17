@@ -70,6 +70,7 @@ class Controller:
         self.trainer_leader = 0
         self.science_group = None
         self.science_refs = []
+        self.transitioning = False
 
     def report(self, event, **fields):
         return emit(self.log, event, run_id=self.config.run_id, **fields)
@@ -89,6 +90,20 @@ class Controller:
                 waiting.remove(ref)
         return [results[ref] for ref in refs]
 
+    def checked_serve(self, response, timeout):
+        """Serve handles return DeploymentResponse, not a Ray ObjectRef."""
+        deadline = time.monotonic() + timeout
+        while True:
+            if self.failure or self.stopping.is_set():
+                raise RuntimeError(self.failure or "controller interrupted")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Serve phase exceeded deadline")
+            try:
+                return response.result(timeout_s=min(1, remaining))
+            except (TimeoutError, ray.exceptions.GetTimeoutError):
+                continue
+
     def writeback_tick(self):
         """One in-flight call per host/kind; a stalled host cannot block peers."""
         if self.sync_refs:
@@ -100,12 +115,12 @@ class Controller:
                     self.report("writeback_complete", rank=rank, kind=kind, result=result)
                 except Exception as exc:
                     self.report("writeback_retry_pending", rank=rank, kind=kind, detail=str(exc))
-        if self.stopping.is_set() or not self.prepared:
+        if self.stopping.is_set() or not self.prepared or self.transitioning:
             return
         active = set(self.sync_refs.values())
         now = time.monotonic()
         for rank, host in enumerate(self.hosts):
-            for kind in (("compile", "run") if rank in (0, self.trainer_leader) else ("compile",)):
+            for kind in ("compile", "run"):
                 key = (rank, kind)
                 if key in active or now - self.last_sync.get(key, float("-inf")) < self.config.cache.sync_seconds:
                     continue
@@ -211,12 +226,20 @@ class Controller:
             inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
                                if r != self.config.arena_grader_rank and r not in self.config.placement_ranks]
         science_grading_rank = None
-        if self.config.science_task:
+        if self.config.science_task and not self.config.bootstrap_only:
             from tpu.science.training_setup import split_roles
             train_ranks, inference_ranks, science_grading_rank = split_roles(
-                self.config.science_task, train_ranks, inference_ranks)
+                self.config.science_task, train_ranks, inference_ranks,
+                placement_backend=self.config.science_placement_backend)
         self.trainer_leader = train_ranks[0] if train_ranks else 0
         self.checked_get([host.set_trainer_leader.remote(self.trainer_leader) for host in self.hosts], 30)
+        bootstrap_pending = False
+        if self.config.bootstrap_layers:
+            self.checked_get([self.hosts[r].restore_run.remote() for r in sorted({0, self.trainer_leader})], 600)
+            bootstrap_pending = ray.get(self.hosts[0].bootstrap_status.remote(), timeout=30) is None
+            if self.config.bootstrap_only and not bootstrap_pending:
+                return self
+        bootstrap_expanded = bootstrap_pending and self.config.bootstrap_all_hosts
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
                     trainer_leader=self.trainer_leader,
                     grader_rank=science_grading_rank if self.config.science_task else self.config.arena_grader_rank)
@@ -227,7 +250,7 @@ class Controller:
                        None if shared_frozen_head else
                        self.hosts[0].prepare_frozen.remote() if self.config.frozen_benchmark else
                        self.hosts[0].prepare_arena.remote() if self.config.arena_samples else None)
-        preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
+        preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks and not bootstrap_expanded else "inference")
                             for rank in prepared_ranks]
         # Observe judge failure while cache/model preparation is still running,
         # and require its readiness before starting any serving deployment.
@@ -246,7 +269,8 @@ class Controller:
             for index, verdict in enumerate(references):
                 self.report('science_reference_result', task=self.config.science_task,
                             index=index, verdict=verdict)
-            result = check_references(self.config.science_task, references)
+            result = check_references(self.config.science_task, references, expected_hosts=self.config.hosts,
+                                      placement_backend=self.config.science_placement_backend)
             self.report('science_reference_passed', **result)
             self.science_refs = []
         if self.config.arena_grader_rank is not None:
@@ -271,7 +295,8 @@ class Controller:
             # preparation first; concurrent preparation would share GCS state.
             self.checked_get([self.hosts[0].prepare_frozen.remote()], self.config.setup_timeout)
         self.prepared = {self.ips[rank]: info for rank, info in zip(prepared_ranks, prepared)}
-        groups = self.config.engine_groups([self.ips[r] for r in inference_ranks])
+        serving_ranks = prepared_ranks if bootstrap_expanded else inference_ranks
+        groups = self.config.engine_groups([self.ips[r] for r in serving_ranks])
         for group in groups:
             for ip in group:
                 self.prepared[ip] = dict(self.prepared[ip], group=list(group))
@@ -279,16 +304,72 @@ class Controller:
         self.report("cache_barrier_complete", hosts=len(prepared), engines=groups)
         if not self.config.inference_only:
             self.checked_get([self.hosts[r].restore_run.remote() for r in sorted({0, self.trainer_leader})], 600)
+        if bootstrap_pending:
+            # No TrainerRank, trainer process, weights, or optimizer exists yet.
+            self.checked_get([self.hosts[0].check_bootstrap.remote()], 150)
+            self.report('bootstrap_import_check_passed')
+            self.catalog = Catalog.options(name="inference-catalog").remote(
+                [s['key'] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
+            ingress = deploy(self.config, self.prepared, self.catalog, self.ips[0])
+            self.wait_inference(engine_ips)
+            self.checked_get([self.hosts[0].start_bootstrap.remote()], 30)
+            self.report('bootstrap_started', layers=self.config.bootstrap_layers,
+                        inference_hosts=engine_ips, optimizer_steps=0)
+            while not self.stopping.wait(5):
+                if self.failure:
+                    raise RuntimeError(self.failure)
+                state = ray.get(self.hosts[0].heartbeat.remote(), timeout=15)
+                code = state['processes'].get('bootstrap')
+                if code is None:
+                    continue
+                if code != 0:
+                    raise RuntimeError(f'bootstrap exited {code}; see bootstrap.log')
+                summary = ray.get(self.hosts[0].bootstrap_status.remote(), timeout=30)
+                if not summary or summary['retained'] < 1:
+                    raise RuntimeError('bootstrap produced no valid retained seeds')
+                self.report('bootstrap_completed', **summary)
+                break
+            if self.stopping.is_set():
+                raise RuntimeError('bootstrap interrupted')
+            # Persist seeds before releasing engines. This is independent of
+            # optimizer checkpoints and never increments the training counter.
+            self.checked_get([self.hosts[0].sync_run.remote()], 360)
+            if self.config.bootstrap_only:
+                return self
+            if bootstrap_expanded:
+                self.transitioning = True
+                remaining = sorted(self.ips[r] for r in inference_ranks)
+                retired = self.checked_serve(ingress.restrict_engines.remote(remaining), 300)
+                self.report('bootstrap_engines_retired', retired=retired, remaining=remaining)
+                # A reduced Serve graph releases actor TPU reservations; stable
+                # per-host names keep surviving engines and their KV caches.
+                reduced = {ip: info for ip, info in self.prepared.items() if ip in remaining}
+                deploy(self.config, reduced, self.catalog, self.ips[0])
+                self.wait_inference(remaining)
+                self.checked_get([self.hosts[r].verify_tpu_released.remote() for r in train_ranks], 120)
+                if self.sync_refs:
+                    self.checked_get(list(self.sync_refs), 360)
+                    self.sync_refs.clear()
+                self.checked_get([self.hosts[r].sync_compile.remote() for r in train_ranks], 360)
+                new_prepared = self.checked_get([self.hosts[r].prepare.remote('trainer') for r in train_ranks],
+                                                self.config.setup_timeout)
+                for rank, info in zip(train_ranks, new_prepared):
+                    self.prepared[self.ips[rank]] = info
+                engine_ips = remaining
+                self.transitioning = False
+                self.report('bootstrap_roles_transitioned', train_ranks=train_ranks, inference_hosts=remaining)
         for rank in train_ranks:
             self.trainers.append(TrainerRank.options(
                 scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[self.ips[rank]]["NodeID"], soft=False))
                 .remote(self.hosts[rank], rank))
         self.checked_get([trainer.reserved.remote() for trainer in self.trainers], 120)
-        self.catalog = Catalog.options(name="inference-catalog").remote([s["key"] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
+        if self.catalog is None:
+            self.catalog = Catalog.options(name="inference-catalog").remote([s["key"] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
         inference_ips = engine_ips
         trainer_starts = [trainer.start.remote(train_ranks, inference_ips) for trainer in self.trainers]
         # Both services start concurrently; our readiness loop owns the deadline.
-        deploy(self.config, self.prepared, self.catalog, self.ips[0])
+        if not bootstrap_pending:
+            deploy(self.config, self.prepared, self.catalog, self.ips[0])
         self.checked_get(trainer_starts, self.config.ready_timeout)
         deadline = time.monotonic() + self.config.ready_timeout
         with httpx.Client(timeout=5) as client:
@@ -306,13 +387,43 @@ class Controller:
                 except httpx.HTTPError:
                     api_ready = inference_ready = False
                 if trainer_ready and api_ready and inference_ready and len(state["replicas"]) == len(self.config.engine_slots(engine_ips)):
+                    expected = {s['key'] for s in self.config.engine_slots(engine_ips)}
+                    if set(state['expected']) != expected or {r['ip'] for r in state['replicas']} != expected:
+                        raise RuntimeError('endpoint still contains a retired or unexpected engine')
                     self.report("services_ready", trainer=not self.config.inference_only, inference_replicas=len(state["replicas"]))
                     return self
                 time.sleep(5)
         raise TimeoutError("trainer/inference readiness deadline exceeded")
 
+    def wait_inference(self, ips):
+        expected = {s['key'] for s in self.config.engine_slots(ips)}
+        deadline = time.monotonic() + self.config.ready_timeout
+        with httpx.Client(timeout=10) as client:
+            while time.monotonic() < deadline:
+                if self.failure or self.stopping.is_set():
+                    raise RuntimeError(self.failure or 'controller interrupted')
+                state = ray.get(self.catalog.snapshot.remote(), timeout=15)
+                try:
+                    healthy = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/health').status_code == 200
+                    endpoint = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/status').json()
+                except (httpx.HTTPError, ValueError):
+                    healthy = False
+                if (healthy and set(state['expected']) == expected
+                        and {r['ip'] for r in state['replicas']} == expected
+                        and set(endpoint['expected']) == expected and not endpoint['active']):
+                    self.report('inference_membership_verified', hosts=sorted(expected))
+                    return
+                time.sleep(5)
+        raise TimeoutError('inference membership/health deadline exceeded')
+
     def run(self):
         self.setup()
+        if self.config.bootstrap_only:
+            summary = ray.get(self.hosts[0].bootstrap_status.remote(), timeout=30)
+            if not summary or summary['retained'] < 1:
+                raise RuntimeError('seed-only job has no verified seed pool')
+            self.report('bootstrap_only_finished', **summary)
+            return 0
         if self.config.frozen_benchmark:
             self.checked_get([self.hosts[0].start_frozen.remote()], 30)
         elif self.config.arena_samples:
@@ -365,7 +476,7 @@ class Controller:
             # hosts. Host-local locks serialize final and periodic writeback.
             self.drain_phase({host.sync_compile.remote(): rank for rank, host in enumerate(self.hosts)},
                              "final_compile_writeback", timeout=360)
-            self.drain_phase({self.hosts[r].sync_run.remote(): r for r in sorted({0, self.trainer_leader})},
+            self.drain_phase({host.sync_run.remote(): rank for rank, host in enumerate(self.hosts)},
                              "final_run_writeback", timeout=360)
 
     def drain_phase(self, refs, phase, timeout):

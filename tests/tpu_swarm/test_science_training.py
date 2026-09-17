@@ -1,4 +1,5 @@
 import asyncio
+import json
 from concurrent.futures import Future
 from dataclasses import replace
 from pathlib import Path
@@ -101,6 +102,117 @@ class ScienceTopologyTest(unittest.TestCase):
 
 
 class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_placement_feedback_preserves_actual_errors_for_every_case(self):
+        from tpu.science import training_env as env
+        from tpu.science.challenge_contract import CASES, aggregate
+        from tpu.science.rewards import invalid
+        rows = []
+        for case in CASES:
+            row = invalid('CalledProcessError: Command ' + '/long/path/' * 500)
+            row['metrics'] = {'case': case, 'grader.log': (
+                'NOISY_INIT\n' * 300 + "ValueError: illegal placement: ['Macros 0 and 166 overlap']\n")}
+            rows.append(row)
+        result = aggregate(rows)
+        e = object.__new__(env.PlacementTrainingEnv)
+        e.problem_type = 'placement'; e.log_path = '/tmp'; e.eval_timeout = 1200
+        e.num_cpus_per_task = 4; e.eval_backend = 'local'
+        async def evaluate(*args):
+            return result
+        with patch.object(env, 'evaluate', evaluate):
+            verdict = await e._safe_grade('candidate', 0)
+        self.assertEqual(verdict.reward, 0)
+        self.assertEqual(verdict.metrics, result['metrics'])
+        decoded = json.loads(verdict.stdout)
+        self.assertEqual([row['case'] for row in decoded['metrics']['cases']], list(CASES))
+        for row in decoded['metrics']['cases']:
+            self.assertFalse(row['valid'])
+            self.assertIn('Macros 0 and 166 overlap', row['message'])
+        self.assertNotIn('NOISY_INIT', verdict.stdout)
+        self.assertNotIn('/long/path/', verdict.stdout)
+        self.assertLessEqual(len(verdict.stdout), 3000)
+        with patch.dict('os.environ', SCIENCE_ACCELERATOR='tpu-v4-64'):
+            prompt = env.candidate_prompt('placement', 'candidate', verdict.stdout, repair=True)
+        self.assertIn('Macros 0 and 166 overlap', prompt)
+
+    async def test_candidate_exception_and_long_errors_leave_complete_feedback(self):
+        from tpu.science.feedback import observation
+        from tpu.science.challenge_contract import CASES, aggregate
+        from tpu.science.rewards import invalid
+        rows = []
+        for case in CASES:
+            row = invalid('candidate exited 1')
+            row['metrics'] = {'case': case, 'candidate.log': (
+                'Traceback (most recent call last):\n  File "/runner.py"\n'
+                'jax.errors.ConcretizationTypeError: invalid dynamic shape ' + 'x' * 8000)}
+            rows.append(row)
+        output = observation('placement', aggregate(rows))
+        self.assertLessEqual(len(output), 3000)
+        self.assertEqual(len(json.loads(output)['metrics']['cases']), 4)
+        self.assertIn('ConcretizationTypeError', output)
+
+    async def test_placement_components_reach_next_prompt_without_worker_logs(self):
+        from tpu.science import training_env as env
+        from tpu.science.challenge_contract import CASES, aggregate
+        from tpu.science.rewards import valid
+        from ttt_discover import State
+        rows = [valid(.5, dict(case=case, proxy_cost=1.2 + i,
+                               wirelength_cost=.2 + i, density_cost=.8, congestion_cost=1.2,
+                               candidate_wall_seconds=170.123456789, grading_seconds=6.123456789,
+                               **{'candidate.log': 'DO_NOT_FORWARD' * 4000}))
+                for i, case in enumerate(CASES)]
+        result = aggregate(rows)
+        e = object.__new__(env.PlacementTrainingEnv)
+        e.problem_type = 'placement'; e.log_path = '/tmp'; e.eval_timeout = 1200
+        e.num_cpus_per_task = 4; e.eval_backend = 'local'
+        e.state = State(timestep=-1, construction=None, code='', value=0.)
+        async def evaluate(*args):
+            return result
+        with patch.object(env, 'evaluate', evaluate):
+            verdict = await e._safe_grade('def place(): pass', 0)
+        self.assertEqual(verdict.reward, result['reward'])
+        self.assertEqual(verdict.raw_score, result['raw_score'])
+        self.assertEqual(verdict.metrics, result['metrics'])
+        state = e._create_next_state(0, 'def place(): pass', verdict)
+        feedback = json.loads(state.observation)
+        self.assertEqual([r['case'] for r in feedback['metrics']['cases']], list(CASES))
+        for i, row in enumerate(feedback['metrics']['cases']):
+            self.assertAlmostEqual(row['proxy_cost'], 1.2 + i)
+            self.assertAlmostEqual(row['wirelength_cost'], .2 + i)
+            self.assertEqual(row['density_cost'], .8)
+            self.assertEqual(row['congestion_cost'], 1.2)
+            self.assertAlmostEqual(row['candidate_wall_seconds'], 170.123, places=3)
+            self.assertAlmostEqual(row['grading_seconds'], 6.12346, places=5)
+        self.assertLess(len(state.observation), 3000)
+        self.assertNotIn('DO_NOT_FORWARD', state.observation)
+        e.initial_state = state
+        with patch.dict('os.environ', SCIENCE_ACCELERATOR='tpu-v4-64'):
+            prompt = e.get_question()
+        self.assertIn(state.observation, prompt)
+        self.assertEqual(prompt.count(state.code), 1)
+        self.assertNotIn('Starting implementation (replace with your improved algorithm):', prompt)
+
+    async def test_starter_only_on_initial_round_for_both_tasks(self):
+        from tpu.science import training_env as env
+        from ttt_discover import State
+        for task, marker in [('routing', 'Valid initial policy block:'),
+                             ('placement', 'Starting implementation (replace with your improved algorithm):')]:
+            e = object.__new__(env.ScienceTrainingEnv)
+            e.problem_type = task
+            e.initial_state = State(timestep=-1, construction=None, code='', value=0.)
+            with patch.dict('os.environ', SCIENCE_ACCELERATOR='tpu-v4-64'):
+                initial = e.get_question()
+                self.assertEqual(initial, env.task_prompt(task))
+                self.assertIn(marker, initial)
+                e.initial_state = State(timestep=0, construction=None, code='SELECTED_PROGRAM',
+                                        value=.5, observation='SAVED_FEEDBACK')
+                improved = e.get_question()
+            self.assertTrue(improved.startswith(initial.partition(marker)[0].rstrip()))
+            self.assertNotIn(marker, improved)
+            self.assertEqual(improved.count('SELECTED_PROGRAM'), 1)
+            self.assertIn('SAVED_FEEDBACK', improved)
+            if task == 'routing':
+                self.assertIn('Fixed Rust scaffold (read-only):', improved)
+
     async def test_placement_dispatch_and_prompt_follow_accelerator(self):
         from tpu.science import training_env as env
         from tpu.science import placement_ray, challenge_contract

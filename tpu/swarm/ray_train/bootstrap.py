@@ -19,6 +19,8 @@ from .config import Config
 
 def workload_resources(config, rank):
     if config.science_task == "placement":
+        if config.science_placement_backend == 'cpu':
+            return {"TPU": 4, "placement_cpu_host": config.science_placement_slots_per_host}
         # Topology chooses the grading host later. Only its pinned placement
         # group consumes these tokens; trainer and inference reserve their TPUs.
         return {"TPU": 4, "placement_tpu_host": 4}
@@ -236,7 +238,7 @@ def main():
             from tpu.science.placement_slots import chips_from_env
             os.environ['TPU_VISIBLE_CHIPS'] = ','.join(map(str, chips_from_env(config.client_env)))
         command = [str(runtime / "bin/ray"), "start", f"--node-ip-address={ips[rank]}",
-            "--num-cpus=32", "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
+            f"--num-cpus={config.ray_cpus_per_host}", "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
             f"--object-manager-port={p.object_manager}", f"--node-manager-port={p.node_manager}",
             f"--dashboard-agent-listen-port={p.dashboard_agent}", f"--dashboard-agent-grpc-port={p.dashboard_agent_grpc}",
             f"--runtime-env-agent-port={p.runtime_env}", f"--metrics-export-port={p.metrics}",

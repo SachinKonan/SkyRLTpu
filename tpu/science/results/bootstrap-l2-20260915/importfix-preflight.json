@@ -1,0 +1,282 @@
+[
+  {
+    "worker": 344,
+    "index": 1,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 69.92, \"free_inodes\": 12278485}, \"tmp\": {\"free_gib\": 69.92, \"free_inodes\": 12278485}}, \"mem_available_gib\": 341.77, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 3,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 65.39, \"free_inodes\": 12153811}, \"tmp\": {\"free_gib\": 65.39, \"free_inodes\": 12153811}}, \"mem_available_gib\": 338.34, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 344,
+    "index": 5,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.05, \"free_inodes\": 12278502}, \"tmp\": {\"free_gib\": 70.05, \"free_inodes\": 12278502}}, \"mem_available_gib\": 341.85, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 344,
+    "index": 4,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.09, \"free_inodes\": 12278452}, \"tmp\": {\"free_gib\": 70.09, \"free_inodes\": 12278452}}, \"mem_available_gib\": 341.85, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 344,
+    "index": 2,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.11, \"free_inodes\": 12278505}, \"tmp\": {\"free_gib\": 70.11, \"free_inodes\": 12278505}}, \"mem_available_gib\": 341.87, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 344,
+    "index": 3,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.11, \"free_inodes\": 12278511}, \"tmp\": {\"free_gib\": 70.11, \"free_inodes\": 12278511}}, \"mem_available_gib\": 341.7, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 1,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 66.39, \"free_inodes\": 12155190}, \"tmp\": {\"free_gib\": 66.39, \"free_inodes\": 12155190}}, \"mem_available_gib\": 338.32, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 344,
+    "index": 7,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 69.99, \"free_inodes\": 12278507}, \"tmp\": {\"free_gib\": 69.99, \"free_inodes\": 12278507}}, \"mem_available_gib\": 341.79, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 2,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 65.44, \"free_inodes\": 12153794}, \"tmp\": {\"free_gib\": 65.44, \"free_inodes\": 12153794}}, \"mem_available_gib\": 338.36, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 344,
+    "index": 6,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.06, \"free_inodes\": 12278522}, \"tmp\": {\"free_gib\": 70.06, \"free_inodes\": 12278522}}, \"mem_available_gib\": 341.89, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 344,
+    "index": 0,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 68.97, \"free_inodes\": 12254047}, \"tmp\": {\"free_gib\": 68.97, \"free_inodes\": 12254047}}, \"mem_available_gib\": 325.43, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 0,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 50.46, \"free_inodes\": 12121285}, \"tmp\": {\"free_gib\": 50.46, \"free_inodes\": 12121285}}, \"mem_available_gib\": 320.49, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 4,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 65.45, \"free_inodes\": 12153809}, \"tmp\": {\"free_gib\": 65.45, \"free_inodes\": 12153809}}, \"mem_available_gib\": 338.35, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 6,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 66.38, \"free_inodes\": 12155178}, \"tmp\": {\"free_gib\": 66.38, \"free_inodes\": 12155178}}, \"mem_available_gib\": 338.25, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 5,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.18, \"free_inodes\": 12155815}, \"tmp\": {\"free_gib\": 67.18, \"free_inodes\": 12155815}}, \"mem_available_gib\": 336.12, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 4,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 44.17, \"free_inodes\": 12064077}, \"tmp\": {\"free_gib\": 44.17, \"free_inodes\": 12064077}}, \"mem_available_gib\": 341.13, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 1,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 50.17, \"free_inodes\": 12085659}, \"tmp\": {\"free_gib\": 50.17, \"free_inodes\": 12085659}}, \"mem_available_gib\": 341.34, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 354,
+    "index": 7,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 66.44, \"free_inodes\": 12155182}, \"tmp\": {\"free_gib\": 66.44, \"free_inodes\": 12155182}}, \"mem_available_gib\": 338.33, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 3,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 47.49, \"free_inodes\": 12099422}, \"tmp\": {\"free_gib\": 47.49, \"free_inodes\": 12099422}}, \"mem_available_gib\": 341.36, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 5,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 48.3, \"free_inodes\": 12079391}, \"tmp\": {\"free_gib\": 48.3, \"free_inodes\": 12079391}}, \"mem_available_gib\": 341.28, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 2,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 43.72, \"free_inodes\": 12059364}, \"tmp\": {\"free_gib\": 43.72, \"free_inodes\": 12059364}}, \"mem_available_gib\": 341.31, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 6,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 49.36, \"free_inodes\": 12082613}, \"tmp\": {\"free_gib\": 49.36, \"free_inodes\": 12082613}}, \"mem_available_gib\": 341.39, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 0,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 45.57, \"free_inodes\": 12052599}, \"tmp\": {\"free_gib\": 45.57, \"free_inodes\": 12052599}}, \"mem_available_gib\": 323.95, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 363,
+    "index": 7,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 48.8, \"free_inodes\": 12098073}, \"tmp\": {\"free_gib\": 48.8, \"free_inodes\": 12098073}}, \"mem_available_gib\": 394.55, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 6,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.52, \"free_inodes\": 12163792}, \"tmp\": {\"free_gib\": 67.52, \"free_inodes\": 12163792}}, \"mem_available_gib\": 335.35, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 5,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.34, \"free_inodes\": 12163768}, \"tmp\": {\"free_gib\": 67.34, \"free_inodes\": 12163768}}, \"mem_available_gib\": 335.29, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 7,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.64, \"free_inodes\": 12186351}, \"tmp\": {\"free_gib\": 67.64, \"free_inodes\": 12186351}}, \"mem_available_gib\": 335.27, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 4,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.34, \"free_inodes\": 12162946}, \"tmp\": {\"free_gib\": 67.34, \"free_inodes\": 12162946}}, \"mem_available_gib\": 335.25, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 3,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.53, \"free_inodes\": 12163101}, \"tmp\": {\"free_gib\": 67.53, \"free_inodes\": 12163101}}, \"mem_available_gib\": 335.33, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 1,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.32, \"free_inodes\": 12164620}, \"tmp\": {\"free_gib\": 67.32, \"free_inodes\": 12164620}}, \"mem_available_gib\": 335.28, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 2,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.48, \"free_inodes\": 12167033}, \"tmp\": {\"free_gib\": 67.48, \"free_inodes\": 12167033}}, \"mem_available_gib\": 335.14, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 367,
+    "index": 0,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 66.49, \"free_inodes\": 12139539}, \"tmp\": {\"free_gib\": 66.49, \"free_inodes\": 12139539}}, \"mem_available_gib\": 262.25, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 1,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.99, \"free_inodes\": 12279192}, \"tmp\": {\"free_gib\": 70.99, \"free_inodes\": 12279192}}, \"mem_available_gib\": 335.46, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 2,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.17, \"free_inodes\": 12279230}, \"tmp\": {\"free_gib\": 71.17, \"free_inodes\": 12279230}}, \"mem_available_gib\": 335.57, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 3,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.99, \"free_inodes\": 12279209}, \"tmp\": {\"free_gib\": 70.99, \"free_inodes\": 12279209}}, \"mem_available_gib\": 335.43, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 0,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 69.92, \"free_inodes\": 12254739}, \"tmp\": {\"free_gib\": 69.92, \"free_inodes\": 12254739}}, \"mem_available_gib\": 318.97, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 6,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.12, \"free_inodes\": 12279183}, \"tmp\": {\"free_gib\": 71.12, \"free_inodes\": 12279183}}, \"mem_available_gib\": 335.58, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 5,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.12, \"free_inodes\": 12279225}, \"tmp\": {\"free_gib\": 71.12, \"free_inodes\": 12279225}}, \"mem_available_gib\": 335.52, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 7,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 79.15, \"free_inodes\": 12339510}, \"tmp\": {\"free_gib\": 79.15, \"free_inodes\": 12339510}}, \"mem_available_gib\": 395.0, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  },
+  {
+    "worker": 368,
+    "index": 4,
+    "code": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.77, \"free_inodes\": 12279207}, \"tmp\": {\"free_gib\": 70.77, \"free_inodes\": 12279207}}, \"mem_available_gib\": 335.44, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "error": ""
+  }
+]

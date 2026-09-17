@@ -66,8 +66,8 @@ REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_ini
 
 SCIENCE_FILES = {'tpu/run_ttd_ensemble.py'} | {
     'tpu/science/' + name for name in (
-        '__init__.py', 'training_env.py', 'training_setup.py', 'ray_cpu.py', 'worker.py',
-        'routing.py', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py',
+        '__init__.py', 'bootstrap.py', 'seed_pool.py', 'training_env.py', 'feedback.py', 'training_setup.py', 'ray_cpu.py', 'worker.py',
+        'routing.py', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',
         'placement_ray.py', 'placement_slots.py', 'placement_task.py', 'challenge_contract.py',
         'seed_routing.py', 'challenge_seed.py', 'challenge_seed_jax.py', 'requirements-cpu.lock',
         'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt')}

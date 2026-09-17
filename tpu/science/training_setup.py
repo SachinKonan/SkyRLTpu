@@ -6,11 +6,11 @@ from ray.util.placement_group import placement_group
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy, PlacementGroupSchedulingStrategy
 
 
-def split_roles(task, train_ranks, inference_ranks):
+def split_roles(task, train_ranks, inference_ranks, *, placement_backend='tpu'):
     train, inference = list(train_ranks), list(inference_ranks)
     if len(train) != 4 or len(inference) != 4 or set(train) & set(inference):
         raise ValueError('science topology requires disjoint four-host blocks')
-    grading = inference.pop() if task == 'placement' else None
+    grading = inference.pop() if task == 'placement' and placement_backend == 'tpu' else None
     return train, inference, grading
 
 
@@ -18,7 +18,17 @@ def prepare(config, ips, nodes, grading_rank):
     root = os.environ['SCIENCE_WORKER_ROOT']
     refs = []
     group = None
-    if config.science_task == 'placement':
+    if config.science_task == 'placement' and config.science_placement_backend == 'cpu':
+        from .placement_ray import grade_cpu_case
+        from .placement_task import CASES
+        for ip in ips:
+            for name in ('challenge_seed.py', 'challenge_seed_jax.py'):
+                source = (Path(root) / 'tpu/science' / name).read_text()
+                for case in CASES:
+                    refs.append(grade_cpu_case.options(scheduling_strategy=NodeAffinitySchedulingStrategy(
+                        nodes[ip]['NodeID'], soft=False)).remote(source, case, root,
+                            slots_per_host=config.science_placement_slots_per_host))
+    elif config.science_task == 'placement':
         from .placement_slots import grading_bundles
         from .placement_ray import grade_case
         from .placement_task import CASES
@@ -37,14 +47,30 @@ def prepare(config, ips, nodes, grading_rank):
         source = (Path(root) / 'tpu/science/seed_routing.py').read_text()
         for ip in ips:
             refs.append(grade.options(scheduling_strategy=NodeAffinitySchedulingStrategy(
-                nodes[ip]['NodeID'], soft=False)).remote('routing', source, root))
+                nodes[ip]['NodeID'], soft=False)).remote('routing', source, root,
+                    slots_per_host=config.science_routing_slots_per_host))
     return group, refs
 
 
-def check_references(task, results):
-    if len(results) != 8 or any(r['correctness'] != 1 for r in results):
+def check_references(task, results, *, expected_hosts=8, placement_backend='tpu'):
+    cpu_placement = task == 'placement' and placement_backend == 'cpu'
+    expected = 8 * expected_hosts if cpu_placement else 8 if task == 'placement' else expected_hosts
+    if len(results) != expected or any(r['correctness'] != 1 for r in results):
         raise RuntimeError('science reference failed; refusing to train on a broken grader')
-    if task == 'placement':
+    if cpu_placement:
+        from collections import Counter
+        from .challenge_contract import CASES
+        by_host = {}
+        for row in results:
+            m = row['metrics']
+            if (m.get('physical_tpu_chips') != 0 or m.get('hard_memory_gib') != 8
+                    or len(m.get('hard_cpus', [])) != 4
+                    or m.get('candidate_device', {}).get('device_kind') != 'cpu'):
+                raise RuntimeError('CPU placement reference escaped its resource contract')
+            by_host.setdefault(m['ray_node_id'], []).append(m['case'])
+        if len(by_host) != expected_hosts or any(Counter(v) != Counter({c: 2 for c in CASES}) for v in by_host.values()):
+            raise RuntimeError('CPU placement references did not cover every host and case')
+    elif task == 'placement':
         if {r['metrics']['physical_chip_id'] for r in results} != {0, 1, 2, 3}:
             raise RuntimeError('placement references did not exercise all four chips')
         if len({r['metrics']['ray_node_id'] for r in results}) != 1:

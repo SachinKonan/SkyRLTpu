@@ -1,0 +1,64 @@
+{
+  "time": "2026-09-16T17:41:31.449114+00:00",
+  "runs": [
+    {
+      "run_id": "science-placement-v4-qwen-xplace-bootstrap-l2-001",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-2b990b7d82080babd3d12c755464195c0b0bce320b4977a15b244439a1a158a6.tar.gz",
+      "submitted_at": "2026-09-16T17:40:47.427623+00:00",
+      "state": "submitted",
+      "exit_code": 0,
+      "job_id": 970,
+      "worker": 372,
+      "model": "qwen",
+      "bootstrap_layers": 2,
+      "invalid_only_repair": true,
+      "groups": 16,
+      "group_size": 32,
+      "phase1_tokens": 16384,
+      "answer_tokens": 6144,
+      "xplace_cases": [
+        "ibm01",
+        "ibm04",
+        "ibm08",
+        "ibm18"
+      ]
+    },
+    {
+      "run_id": "science-placement-v4-gemma-xplace-bootstrap-l2-001",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-3c098acae7ef9f8e5ca9bc5833c687d042cb5032ac6a6b304dcb8b49ef64fc1d.tar.gz",
+      "submitted_at": "2026-09-16T17:34:47.763483+00:00",
+      "state": "submitted",
+      "exit_code": 0,
+      "job_id": 969,
+      "worker": 383,
+      "model": "gemma",
+      "bootstrap_layers": 2,
+      "invalid_only_repair": true,
+      "groups": 16,
+      "group_size": 32,
+      "phase1_tokens": 16384,
+      "answer_tokens": 6144,
+      "xplace_cases": [
+        "ibm01",
+        "ibm04",
+        "ibm08",
+        "ibm18"
+      ]
+    }
+  ],
+  "tests": {
+    "bootstrap": 8,
+    "placement_contracts": 19
+  },
+  "qwen_runtime_repair": {
+    "cancelled_job": 968,
+    "worker": 372,
+    "python": "3.10.12",
+    "ray": "2.9.3",
+    "alive_nodes_verified": 8,
+    "reason": "Head Python upgraded while Ray metadata and workers remained 3.10.6",
+    "experiment_unchanged": true
+  }
+}

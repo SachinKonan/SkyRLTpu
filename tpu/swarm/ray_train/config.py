@@ -279,6 +279,11 @@ class Config:
     arena_samples: int = 0
     frozen_benchmark: dict = field(default_factory=dict)
     training_smoke: bool = False
+    # Opt-in, pre-optimizer science seed discovery. Existing profiles stay unchanged.
+    bootstrap_layers: int = 0
+    bootstrap_all_hosts: bool = False
+    bootstrap_only: bool = False
+    seed_pool_sha256: str = ""
     arena_service_only: bool = False
     arena_grader_rank: int | None = None
     # One independent base model on each inference rank, for arena comparisons.
@@ -308,6 +313,11 @@ class Config:
     # the tokenizer; the executor's restored snapshot can serve it offline.
     client_hf_offline: bool = False
     client_env: dict[str, str] = field(default_factory=dict)
+    # Opt-in throughput setting; candidate CPU/RAM/time budgets are unchanged.
+    science_routing_slots_per_host: int = 2
+    # Opt-in CPU placement keeps historical TPU profiles reproducible.
+    science_placement_backend: str = "tpu"
+    science_placement_slots_per_host: int = 2
     # Extra environment for the trainer (Tinker API server) process only,
     # e.g. TUNIX_LORA_MIX_GAMMA. Applied after the launcher's own settings.
     trainer_env: dict[str, str] = field(default_factory=dict)
@@ -317,6 +327,13 @@ class Config:
     @property
     def science_task(self):
         return {"science_routing": "routing", "science_placement": "placement"}.get(self.client_env.get("TTD_ENV"))
+
+    @property
+    def ray_cpus_per_host(self):
+        # Leave scheduler capacity for controller/Serve actors as well as graders.
+        if self.science_task == 'placement' and self.science_placement_backend == 'cpu':
+            return max(32, 4 * self.science_placement_slots_per_host + 8)
+        return max(32, 4 * self.science_routing_slots_per_host + 8) if self.science_task == 'routing' else 32
 
     @property
     def is_recurrent_gemma(self):
@@ -377,6 +394,46 @@ class Config:
         return asdict(self)
 
     def validate(self):
+        if self.science_placement_backend not in ('cpu', 'tpu'):
+            raise ValueError('placement backend must be cpu or tpu')
+        placement_slots = self.science_placement_slots_per_host
+        if type(placement_slots) is not int or not 1 <= placement_slots <= 16:
+            raise ValueError('placement CPU slots must be an integer in [1,16]')
+        if self.science_placement_backend == 'cpu':
+            if self.science_task != 'placement':
+                raise ValueError('CPU placement backend requires science placement')
+            if max(self.cache.trainer_gib, self.cache.inference_gib) > 128:
+                raise ValueError('CPU placement requires RAM caches capped at 128 GiB')
+        elif placement_slots != 2:
+            raise ValueError('placement CPU slots require the CPU backend')
+        slots = self.science_routing_slots_per_host
+        if type(slots) is not int or not 1 <= slots <= 16:
+            raise ValueError('routing grading slots must be an integer in [1,16] (128 GiB maximum)')
+        if slots != 2 and self.science_task != 'routing':
+            raise ValueError('routing grading slots only apply to science routing')
+        if slots > 2 and max(self.cache.trainer_gib, self.cache.inference_gib) > 128:
+            raise ValueError('expanded routing grading requires RAM caches capped at 128 GiB')
+        if type(self.bootstrap_only) is not bool:
+            raise ValueError('bootstrap_only must be a boolean')
+        if self.seed_pool_sha256 and (not re.fullmatch(r'[0-9a-f]{64}', self.seed_pool_sha256)
+                or not self.science_task or self.inference_only or self.bootstrap_layers):
+            raise ValueError('imported seed checksum requires science training without local bootstrap')
+        if type(self.bootstrap_layers) is not int or self.bootstrap_layers not in (0, 1, 2):
+            raise ValueError('bootstrap_layers must be 0, 1, or 2')
+        if self.bootstrap_all_hosts and not self.bootstrap_layers:
+            raise ValueError('bootstrap_all_hosts requires bootstrap_layers')
+        if self.bootstrap_only and (not self.bootstrap_layers or not self.inference_only
+                or self.science_task != 'routing' or self.accelerator != 'tpu-v4-32'
+                or self.trainer.hosts != 0 or self.inference_only_ranks is not None
+                or self.frozen_benchmark or self.arena_samples or self.arena_service_only):
+            raise ValueError('bootstrap-only requires routing on all four v4-32 inference hosts and no trainer')
+        if self.bootstrap_layers and (not self.science_task
+                or (self.inference_only and not self.bootstrap_only)
+                or self.adapter_count != 1 or (self.accelerator not in ('tpu-v4-64', 'tpu-v6e-32') and not self.bootstrap_only)
+                or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
+                or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
+                or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
+            raise ValueError('bootstrap requires single-model v4-64/v6e-32 science training or v4-32 routing seeds with native TP4 ingress')
         if self.has_answer_only_overlay:
             if not (self.has_problem_prompt_overlay or self.is_recurrent_gemma or self.science_task):
                 raise ValueError("answer-only extraction requires a supported math, RG-LRU or science environment")
@@ -477,7 +534,8 @@ class Config:
                 raise ValueError("inference_only_ranks requires unique valid ranks in inference-only mode")
         placement_ranks = self.placement_ranks
         if self.science_task:
-            if (self.inference_only or self.accelerator not in ("tpu-v6e-32", "tpu-v4-64") or self.trainer.hosts != 4
+            if ((not self.bootstrap_only and (self.inference_only
+                    or self.accelerator not in ("tpu-v6e-32", "tpu-v4-64") or self.trainer.hosts != 4))
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
                 raise ValueError("Science training requires v6e-32 or v4-64, four trainer hosts and dynamically assigned grading")
             # TP8 uses the checkpoint loader's repeat-interleaved KV heads,
@@ -701,7 +759,8 @@ class Config:
         if self.inference_only_ranks is not None:
             return len(self.inference_only_ranks)
         return (self.hosts - self.trainer.hosts - int(self.arena_grader_rank is not None)
-                - len(self.placement_ranks) - int(self.science_task == "placement"))
+                - len(self.placement_ranks) - int(self.science_task == "placement"
+                                                and self.science_placement_backend == 'tpu'))
 
     def client_sampling_environment(self):
         defaults = {

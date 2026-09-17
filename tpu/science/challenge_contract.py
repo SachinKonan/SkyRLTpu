@@ -6,6 +6,7 @@ instead of the challenge loader's unit-weight, macro-deduplicated graph.
 import numpy as np
 
 CASES = ('ibm01', 'ibm04', 'ibm08', 'ibm18')
+CANDIDATE_LIMIT_SECONDS = 180
 
 
 def problem_from_native(benchmark, plc):

@@ -46,10 +46,20 @@ class Catalog:
             raise RuntimeError(f"inference restart budget exhausted on {ip}")
 
     def register(self, ip, instance, versions=None):
+        if ip not in self.expected:
+            raise RuntimeError('retired inference engine cannot register')
         if versions is not None and set(versions) != self.versions:
             return False
         self.replicas[ip] = dict(ip=ip, instance=instance, registered=time.time())
         return True
+
+    def restrict(self, keys):
+        keys = set(keys)
+        if not keys or not keys <= self.expected:
+            raise ValueError('engine transition must retain a nonempty subset')
+        self.expected = keys
+        self.replicas = {k: v for k, v in self.replicas.items() if k in keys}
+        self.starts = {k: v for k, v in self.starts.items() if k in keys}
 
     def commit(self, version, previous=None):
         self.version = version
@@ -58,7 +68,7 @@ class Catalog:
         self.versions.add(version)
 
     def snapshot(self):
-        return dict(version=self.version, versions=sorted(self.versions), replicas=list(self.replicas.values()), starts=self.starts,
+        return dict(version=self.version, versions=sorted(self.versions), expected=sorted(self.expected), replicas=list(self.replicas.values()), starts=self.starts,
                     exhausted=[ip for ip, count in self.starts.items() if count > self.restart_limit+1])
 
 
@@ -89,6 +99,7 @@ class Engine:
         self.instance = uuid.uuid4().hex
         self.version = None
         self.lock = asyncio.Lock()
+        self.retiring = False
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.head = f"http://{head}:{self.config.ports.inference}"
         self.url = f"http://127.0.0.1:{self.config.ports.engine + slot}"
@@ -143,9 +154,33 @@ class Engine:
             self.version = version
 
     async def generate(self, payload):
+        if self.retiring:
+            raise RuntimeError('engine is retired')
         await self.ensure_adapter(payload["model"])
-        response = await self.http.post(self.url + "/v1/completions", json=payload)
-        response.raise_for_status()
+        try:
+            response = await self.http.post(self.url + "/v1/completions", json=payload)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            # Preserve the local engine error before Ray wraps the exception or
+            # the VM disappears. Never include request headers or prompt text.
+            detail = dict(ip=self.ip, instance=self.instance, error=str(exc),
+                          engine_returncode=self.process.poll())
+            if isinstance(exc, httpx.HTTPStatusError):
+                detail.update(status_code=exc.response.status_code,
+                              response_body=exc.response.text[:4096])
+            try:
+                with self.process.log.open('rb') as stream:
+                    stream.seek(0, 2)
+                    stream.seek(max(0, stream.tell() - 8192))
+                    detail['engine_log_tail'] = stream.read(8192).decode(errors='replace')
+            except OSError as log_error:
+                detail['engine_log_error'] = str(log_error)
+            message = 'Inference generation failed: ' + json.dumps(detail, sort_keys=True)
+            try:
+                emit(self.run / 'inference-events.jsonl', 'generation_failed', **detail)
+            except OSError:
+                print(message, flush=True)
+            raise RuntimeError(message) from exc
         return response.json()
 
     async def tokenize(self, payload):
@@ -156,10 +191,19 @@ class Engine:
         return response.json()
 
     async def check_health(self):
+        if self.retiring:
+            return  # Intentional shutdown must not trigger Serve auto-recovery.
         if self.process.poll() is not None:
             raise RuntimeError("vLLM subprocess died")
         response = await self.http.get(self.url + "/health", timeout=5)
         response.raise_for_status()
+
+    async def retire(self):
+        self.retiring = True
+        await asyncio.to_thread(self.process.stop)
+        if self.process.poll() is None:
+            raise RuntimeError('retired inference subprocess remains alive')
+        return dict(key=self.key, stopped=True)
 
     def __del__(self):
         if hasattr(self, "process"):
@@ -329,12 +373,47 @@ class Ingress:
         self.next_engine += 1
         return handle
 
+    async def restrict_engines(self, remaining_ips):
+        """Close admission, drain ALL requests, remove retired targets, then stop them.
+
+        Admission stays closed until the controller redeploys the reduced graph.
+        Neither adapter fanout nor tokenization can address a retired host.
+        """
+        async with self.upload_lock:
+            async with self.condition:
+                self.updating = True
+                await self.condition.wait_for(lambda: self.active == 0)
+            slots = self.config.engine_slots(self.ips)
+            keep = [i for i, s in enumerate(slots) if s['ip'] in remaining_ips]
+            if not keep or len(keep) != len(self.config.engine_slots(remaining_ips)):
+                raise ValueError('invalid remaining engine hosts')
+            retired = [e for i, e in enumerate(self.engines) if i not in keep]
+            await self.catalog.restrict.remote([slots[i]['key'] for i in keep])
+            self.engines = [self.engines[i] for i in keep]
+            self.engine_urls = [self.engine_urls[i] for i in keep]
+            self.ips = list(remaining_ips)
+            self.next_engine = 0
+            return await asyncio.gather(*(e.retire.remote() for e in retired))
+
     @app.post("/tokenize")
     async def tokenize(self, request: Request):
         payload = await request.json()
         if payload.get("model") not in self.config.served_models:
             raise HTTPException(400, "unknown base model")
-        return await self.select_engine(payload["model"]).tokenize.remote(payload)
+        if not self.config.bootstrap_all_hosts:
+            # Preserve legacy tokenization admission when role transitions are
+            # disabled. Only expanded bootstrap needs tokenization draining.
+            return await self.select_engine(payload["model"]).tokenize.remote(payload)
+        async with self.condition:
+            if self.updating:
+                raise HTTPException(409, 'engine transition or adapter update in progress')
+            self.active += 1
+        try:
+            return await self.select_engine(payload["model"]).tokenize.remote(payload)
+        finally:
+            async with self.condition:
+                self.active -= 1
+                self.condition.notify_all()
 
     @app.post("/v1/completions")
     async def generate(self, request: Request):
@@ -369,7 +448,8 @@ def deploy(config, prepared, catalog, head):
                    .bind(serving[ip]["config"], {ip: serving[ip]}, catalog, head)
                    for i, ip in enumerate(heads)]
     elif config.inference.hosts_per_engine == 1:
-        engines = [Engine.options(name=f"engine-{i}", num_replicas=1,
+        engines = [Engine.options(name=(f"engine-{s['ip'].replace('.', '-')}-{s['slot']}"
+                                       if config.bootstrap_all_hosts else f"engine-{i}"), num_replicas=1,
                    ray_actor_options={"num_cpus": 8, "resources": {"TPU": config.inference.tp, f"node:{s['ip']}": 0.01}})
                    .bind(config.to_dict(), {s["ip"]: serving[s["ip"]]}, catalog, head, slot=s["slot"])
                    for i, s in enumerate(config.engine_slots(heads))]

@@ -1,0 +1,7 @@
+{
+  "seconds": 2303.5466834900435,
+  "torch": "2.5.1+cu124",
+  "cuda": "12.4",
+  "gpu": "NVIDIA A40",
+  "peak_gpu_allocated_bytes": 96563712
+}

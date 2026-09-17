@@ -1,0 +1,18 @@
+[
+  {
+    "job_id": 949,
+    "run_id": "science-placement-v4-gemma-bootstrap-l2-001",
+    "sha256": "a6e42f97a5f5abd7660507835afa7f936c97fd1314bf447356abdfeaf71f75f2",
+    "reason": "Resume saved bootstrap with compact per-case errors",
+    "generations_preserved": 16,
+    "grades_preserved": 39
+  },
+  {
+    "job_id": 950,
+    "run_id": "science-placement-v4-qwen-bootstrap-l2-001",
+    "sha256": "2a22c662ff3365f17c11f7ccf126a5bfb9cce2d77dae6fbbc360ba26fbcaa320",
+    "reason": "Resume saved bootstrap with compact per-case errors",
+    "generations_preserved": 14,
+    "grades_preserved": 155
+  }
+]

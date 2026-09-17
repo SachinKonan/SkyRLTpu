@@ -1,0 +1,83 @@
+{
+  "recorded": 1789516791.7058063,
+  "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+  "layers": 2,
+  "repair_only_invalid": true,
+  "groups": 16,
+  "group_size": 32,
+  "optimizer_steps_requested": 15,
+  "runs": [
+    {
+      "run_id": "science-placement-v4-gemma-bootstrap-l2-001",
+      "task": "placement",
+      "job_id": 933,
+      "sha256": "c9c0e5609207b12eb7eb64e11b8987bd65acce839cdbacbf295a7d2cabd12f8b",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-c9c0e5609207b12eb7eb64e11b8987bd65acce839cdbacbf295a7d2cabd12f8b.tar.gz",
+      "submission_time": 1789516734.445717,
+      "worker_at_launch": 368,
+      "status_at_launch": "STARTING",
+      "optimizer_steps_verified": 0,
+      "bootstrap_verified": false
+    },
+    {
+      "run_id": "science-placement-v4-muse-bootstrap-l2-001",
+      "task": "placement",
+      "job_id": 932,
+      "sha256": "7f0bf18ef850b170c73e9c56789d89d4a25c937ba9fdd0dde0d386f4301e5faf",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-7f0bf18ef850b170c73e9c56789d89d4a25c937ba9fdd0dde0d386f4301e5faf.tar.gz",
+      "submission_time": 1789516726.4479272,
+      "worker_at_launch": 367,
+      "status_at_launch": "STARTING",
+      "optimizer_steps_verified": 0,
+      "bootstrap_verified": false
+    },
+    {
+      "run_id": "science-placement-v4-qwen-bootstrap-l2-001",
+      "task": "placement",
+      "job_id": 931,
+      "sha256": "9be0d95e90f89bb1efdfe8994acf2f419a87de8cc9b86caaee025a43ea493f02",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-9be0d95e90f89bb1efdfe8994acf2f419a87de8cc9b86caaee025a43ea493f02.tar.gz",
+      "submission_time": 1789516716.9948676,
+      "worker_at_launch": 363,
+      "status_at_launch": "STARTING",
+      "optimizer_steps_verified": 0,
+      "bootstrap_verified": false
+    },
+    {
+      "run_id": "science-routing-v4-gemma-bootstrap-l2-001",
+      "task": "routing",
+      "job_id": 930,
+      "sha256": "7f37162447eccd5a425da570fd33f203b954eec19b18451ca085849b251815c4",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-7f37162447eccd5a425da570fd33f203b954eec19b18451ca085849b251815c4.tar.gz",
+      "submission_time": 1789516705.694071,
+      "worker_at_launch": 358,
+      "status_at_launch": "STARTING",
+      "optimizer_steps_verified": 0,
+      "bootstrap_verified": false
+    },
+    {
+      "run_id": "science-routing-v4-muse-bootstrap-l2-001",
+      "task": "routing",
+      "job_id": 929,
+      "sha256": "d4a6b0d4bfe11da678c9ee79ba673c037179e78e167a2857ee8d414d8ad90cf5",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-d4a6b0d4bfe11da678c9ee79ba673c037179e78e167a2857ee8d414d8ad90cf5.tar.gz",
+      "submission_time": 1789516699.349142,
+      "worker_at_launch": 354,
+      "status_at_launch": "STARTING",
+      "optimizer_steps_verified": 0,
+      "bootstrap_verified": false
+    },
+    {
+      "run_id": "science-routing-v4-qwen-bootstrap-l2-001",
+      "task": "routing",
+      "job_id": 928,
+      "sha256": "2182e4c3d9064691085d5610bad4d4716e38bda3256dc9f9ed467444c99230d0",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-2182e4c3d9064691085d5610bad4d4716e38bda3256dc9f9ed467444c99230d0.tar.gz",
+      "submission_time": 1789516690.8844674,
+      "worker_at_launch": 344,
+      "status_at_launch": "STARTING",
+      "optimizer_steps_verified": 0,
+      "bootstrap_verified": false
+    }
+  ]
+}

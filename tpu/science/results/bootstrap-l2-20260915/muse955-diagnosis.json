@@ -1,0 +1,29 @@
+{
+  "job_id": 955,
+  "run_id": "science-routing-v4-muse-bootstrap-l2-003",
+  "memory_utilization": 0.75,
+  "bootstrap_started": 1789547720.8366024,
+  "controller_failed": 1789547830.8775425,
+  "observed_failure": "HTTP 500 from inference engines 10.130.0.65 and 10.130.0.77; later health HTTP 503",
+  "last_host_heartbeat": 1789547825.7308338,
+  "all_eight_host_actors_responded": true,
+  "hosts_reported_stopped": false,
+  "ray_node_loss_reported": false,
+  "archived_engine_log_hosts": [
+    "head 10.130.0.76"
+  ],
+  "failing_hosts_logs_archived": false,
+  "failed_slice_still_allocated": false,
+  "underlying_engine_exception": "Unknown: failed-host logs were not persisted; HTTP error response bodies were discarded. OOM or hardware fault is not established for job 955.",
+  "code_findings": [
+    "Host.sync_run skipped non-head/non-trainer-leader ranks",
+    "Controller scheduled periodic/final run log writeback only on head/trainer leader",
+    "Engine.generate called raise_for_status without preserving response body or engine log tail"
+  ],
+  "local_fixes": [
+    "Archive each host run logs periodically and at shutdown; client/DB uploads retain original ownership",
+    "Include bounded HTTP response body and engine log tail with engine identity in generation failures",
+    "Existing public DeploymentResponse.result controller handoff fix retained"
+  ],
+  "deployment": "Diagnostic fixes local only; existing running jobs unchanged"
+}

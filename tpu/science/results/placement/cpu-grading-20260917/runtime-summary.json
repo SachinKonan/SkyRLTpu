@@ -1,0 +1,17 @@
+{
+  "evaluations": 1024,
+  "valid": 1023,
+  "peak_memory_gib": 1.5696029663085938,
+  "max_candidate_seconds": 178.75563467299799,
+  "max_grader_seconds": 40.76435844300431,
+  "peak_candidate_concurrency_by_host": {
+    "t1v-n-06e7a671-w-5": 16,
+    "t1v-n-06e7a671-w-3": 16,
+    "t1v-n-06e7a671-w-2": 16,
+    "t1v-n-06e7a671-w-6": 16,
+    "t1v-n-06e7a671-w-4": 16,
+    "t1v-n-06e7a671-w-0": 16,
+    "t1v-n-06e7a671-w-1": 16,
+    "t1v-n-06e7a671-w-7": 16
+  }
+}

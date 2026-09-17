@@ -1,0 +1,59 @@
+[
+  {
+    "job": 935,
+    "contract_sha256": "10bb508c3bb48a12a8b58b4f0052839efd6157b6b8fc3a9439ce4062b9fbb8ad",
+    "event": "bootstrap_completed",
+    "host": "t1v-n-ff03dfe1-w-0",
+    "layers": 2,
+    "optimizer_steps": 0,
+    "pid": 58571,
+    "pool_sha256": "805d8c01ec0b29e09d6d834eb59c15d22a9223156351b3a45017ceca62a7c275",
+    "retained": 5,
+    "run_id": "science-routing-v4-qwen-bootstrap-l2-001",
+    "time": 1789539552.580613,
+    "total": 1024,
+    "valid": 99
+  },
+  {
+    "job": 935,
+    "detail": "wait() expected a list of ray.ObjectRef or ray.ObjectRefGenerator, got list containing <class 'ray.serve.handle.DeploymentResponse'>",
+    "event": "controller_failed",
+    "host": "t1v-n-ff03dfe1-w-0",
+    "pid": 58571,
+    "run_id": "science-routing-v4-qwen-bootstrap-l2-001",
+    "time": 1789539572.0980382
+  },
+  {
+    "job": 938,
+    "detail": "controller interrupted",
+    "event": "controller_failed",
+    "host": "t1v-n-2440ec55-w-0",
+    "pid": 85847,
+    "run_id": "science-routing-v4-gemma-bootstrap-l2-001",
+    "time": 1789520099.294094
+  },
+  {
+    "job": 938,
+    "contract_sha256": "7535456f5b2ef1e68604c15f4ba88ee4783f064b93aa26e16058b6a768f6b309",
+    "event": "bootstrap_completed",
+    "host": "t1v-n-2440ec55-w-0",
+    "layers": 2,
+    "optimizer_steps": 0,
+    "pid": 104372,
+    "pool_sha256": "17198a8b1d1a290d66d7243c3c7b55516b9ff46a87a85301aed4c64c1f36ab34",
+    "retained": 9,
+    "run_id": "science-routing-v4-gemma-bootstrap-l2-001",
+    "time": 1789554679.2982101,
+    "total": 1024,
+    "valid": 194
+  },
+  {
+    "job": 938,
+    "detail": "wait() expected a list of ray.ObjectRef or ray.ObjectRefGenerator, got list containing <class 'ray.serve.handle.DeploymentResponse'>",
+    "event": "controller_failed",
+    "host": "t1v-n-2440ec55-w-0",
+    "pid": 104372,
+    "run_id": "science-routing-v4-gemma-bootstrap-l2-001",
+    "time": 1789554687.814985
+  }
+]

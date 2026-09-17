@@ -12,23 +12,29 @@ ALLOWED = {'numpy', 'scipy', 'networkx', 'math', 'random', 'time', 'itertools',
            'functools', 'collections', 'heapq', 'bisect', 'array', 'statistics',
            'dataclasses', 'typing', 'enum', 'copy', 'operator', '__future__'}
 use_tpu = len(sys.argv) > 2 and sys.argv[2] == 'tpu'
-if use_tpu:
+use_cpu_jax = len(sys.argv) > 2 and sys.argv[2] == 'cpu-jax'
+if use_tpu or use_cpu_jax:
     ALLOWED.update({'jax', 'optax'})
 started = time.monotonic()
 device_info = {}
-if use_tpu:
+if use_tpu or use_cpu_jax:
+    if use_cpu_jax:
+        os.environ['JAX_PLATFORMS'] = 'cpu'
     device_info = {'sandbox_tpu_visible_chips': os.environ.get('TPU_VISIBLE_CHIPS'),
                    'sandbox_device_paths': sorted(str(p) for p in Path('/dev').glob('accel*')) +
                        sorted(str(p) for p in Path('/dev/vfio').glob('*') if p.name != 'vfio')}
-    print(json.dumps({'event':'tpu_initialization_started', **device_info}),flush=True)
+    platform = 'tpu' if use_tpu else 'cpu'
+    print(json.dumps({'event':platform + '_initialization_started', **device_info}),flush=True)
     import jax
     devices = jax.devices()
-    if len(devices) != 1 or devices[0].platform != 'tpu':
-        raise RuntimeError(f'expected exactly one TPU device, found {devices}')
+    if len(devices) != 1 or devices[0].platform != platform:
+        raise RuntimeError(f'expected exactly one {platform} device, found {devices}')
+    if use_cpu_jax and device_info['sandbox_device_paths']:
+        raise RuntimeError('CPU placement sandbox exposes accelerator devices')
     device_info.update({'jax_version': jax.__version__, 'devices': [str(d) for d in devices],
                    'device_kind': devices[0].device_kind, 'device_count': len(devices),
                    'initialization_seconds': time.monotonic()-started})
-    print(json.dumps({'event':'tpu_initialization_complete',**device_info}),flush=True)
+    print(json.dumps({'event':platform + '_initialization_complete',**device_info}),flush=True)
 source = Path('/candidate.py').read_text()
 tree = ast.parse(source)
 for node in ast.walk(tree):

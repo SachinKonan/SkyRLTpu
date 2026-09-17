@@ -164,10 +164,18 @@ class GCS:
         self.env = dict(os.environ, CLOUDSDK_STORAGE_PROCESS_COUNT=str(config.process_count),
                         CLOUDSDK_STORAGE_THREAD_COUNT=str(config.thread_count),
                         CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=config.slice_threshold)
+        # Ray workers can inherit a PATH without /snap/bin even though the
+        # launching shell found the SDK there. Resolve on each actual host;
+        # keep the gcloud basename (snap dispatch depends on it).
+        self.gcloud = shutil.which("gcloud", path=self.env.get("PATH", ""))
+        if self.gcloud is None:
+            self.gcloud = shutil.which("gcloud", path="/snap/bin:/usr/bin:/usr/local/bin")
+        if self.gcloud is None:
+            raise FileNotFoundError("gcloud is unavailable on this Ray worker")
         self.running = None
 
     def metadata(self, *args, allow_empty=False):
-        result = subprocess.run(["gcloud", "storage", *args], env=self.env,
+        result = subprocess.run([self.gcloud, "storage", *args], env=self.env,
                                 capture_output=True, text=True, timeout=300)
         if result.returncode:
             if allow_empty and "matched no objects" in result.stderr.lower():
@@ -181,7 +189,7 @@ class GCS:
 
     def transfer(self, args, label, destination=None, timeout=3600):
         log = self.logs / f"{label}.log"
-        self.running = Process(["gcloud", "storage", *args], log, env=self.env)
+        self.running = Process([self.gcloud, "storage", *args], log, env=self.env)
         start = time.monotonic()
         next_report = 0
         try:

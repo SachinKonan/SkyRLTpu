@@ -15,7 +15,7 @@ from .isolation import command, python_mounts
 from .rewards import invalid, valid
 from .worker import watch_owner
 
-from .challenge_contract import CASES
+from .challenge_contract import CASES, CANDIDATE_LIMIT_SECONDS
 from .placement_slots import device_paths, tpu_environment, assigned_chip
 
 
@@ -28,8 +28,13 @@ def evaluate(request):
     if source.stat().st_size > 1024**2: raise ValueError('oversized source')
     problem = root/'.science/placement-inputs'/f'{case}-problem.npz'
     tpu = request.get('backend') == 'tpu'
+    cpu_jax = request.get('backend') == 'cpu-jax'
     env = {'OPENBLAS_NUM_THREADS':'4','OMP_NUM_THREADS':'4','MKL_NUM_THREADS':'4',
            'NUMEXPR_NUM_THREADS':'4','XDG_CACHE_HOME':'/tmp/cache'}
+    if cpu_jax:
+        env.update(JAX_PLATFORMS='cpu', JAX_NUM_THREADS='4', TF_NUM_INTRAOP_THREADS='4',
+                   TF_NUM_INTEROP_THREADS='1',
+                   XLA_FLAGS='--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=4')
     mounts = python_mounts(python)+[(source,'/candidate.py'),(problem,'/problem.npz'),
         (root/'tpu/science/challenge_candidate_child.py','/runner.py')]
     if tpu:
@@ -41,7 +46,7 @@ def evaluate(request):
             raise RuntimeError('candidate chip is occupied or ownership check failed')
         mounts += [('/sys','/sys'),('/etc/hosts','/etc/hosts')]
         env.update(tpu_environment(chip, request.get('accelerator', 'tpu-v4-64'), isolated=True))
-    cmd = command([str(python),'/runner.py','170','tpu' if tpu else 'cpu'],
+    cmd = command([str(python),'/runner.py','170','tpu' if tpu else 'cpu-jax' if cpu_jax else 'cpu'],
                   readonly=mounts,writable=[(work,'/output')],env=env)
     if tpu:
         at = cmd.index('--dev')+2
@@ -49,7 +54,7 @@ def evaluate(request):
     def constrain():
         # libtpu maps device memory virtually. Actual process-tree RAM is bounded
         # by the verified cgroup rather than RLIMIT_AS in the TPU profile.
-        if not tpu: resource.setrlimit(resource.RLIMIT_AS,(16*1024**3,)*2)
+        if not tpu and not cpu_jax: resource.setrlimit(resource.RLIMIT_AS,(16*1024**3,)*2)
         resource.setrlimit(resource.RLIMIT_FSIZE,(2*1024**2,)*2)
         resource.setrlimit(resource.RLIMIT_CORE,(0,0))
         resource.setrlimit(resource.RLIMIT_NOFILE,(1024,1024))
@@ -60,7 +65,7 @@ def evaluate(request):
         proc = subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,
                                 start_new_session=True,preexec_fn=constrain,env={'PATH':'/usr/bin:/bin'})
         try:
-            code = proc.wait(timeout=180)
+            code = proc.wait(timeout=CANDIDATE_LIMIT_SECONDS)
         finally:
             # Kill any detached work inside the child's PID namespace on exit.
             if proc.poll() is None: os.killpg(proc.pid,signal.SIGKILL); proc.wait()
@@ -85,12 +90,14 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--request',required=True);p.add_argument('--result',required=True)
     p.add_argument('--owner-pid',type=int,required=True);p.add_argument('--owner-start',required=True)
     args=p.parse_args();watch_owner(args.owner_pid,args.owner_start)
-    group,_=envelope(16)
     request=json.loads(Path(args.request).read_text());started=time.monotonic()
+    memory_gib = 8 if request.get('backend') == 'cpu-jax' else 16
+    group,_=envelope(memory_gib)
     try: result=evaluate(request)
     except Exception as exc: result=invalid(f'{type(exc).__name__}: {exc}')
     result['metrics'].update(allocation_memory=metrics(group),worker_seconds=time.monotonic()-started,
-                             cpu_affinity=sorted(os.sched_getaffinity(0)),case=request['case'])
+                             cpu_affinity=sorted(os.sched_getaffinity(0)),case=request['case'],
+                             candidate_limit_seconds=CANDIDATE_LIMIT_SECONDS)
     for name in ['candidate.log','grader.log','child.json']:
         f=Path(request['work'])/name
         if f.exists():result['metrics'][name]=f.read_text(errors='replace')[-4000:]

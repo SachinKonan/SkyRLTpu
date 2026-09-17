@@ -1,0 +1,1 @@
+{"candidate_seconds": 9.739034462021664, "sandbox_tpu_visible_chips": null, "sandbox_device_paths": [], "jax_version": "0.10.1", "devices": ["cpu:0"], "device_kind": "cpu", "device_count": 1, "initialization_seconds": 1.9658085600240156}

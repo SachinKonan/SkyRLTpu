@@ -11,6 +11,16 @@ import ray
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import placement_group, remove_placement_group
 from .placement_slots import chip_lock, chip_cpus, task_resources, assigned_chip, grading_nodes, grading_bundles
+from .cpu_slots import acquire_slot, slot_cpus
+
+
+@ray.remote(num_cpus=4, memory=8*1024**3, resources={'placement_cpu_host': 1}, max_retries=0)
+def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s=2400):
+    """One case on host CPUs; no Ray TPU request and no device mounts."""
+    slot, lock = acquire_slot(slots=slots_per_host, deadline_seconds=admission_timeout_s)
+    with lock:
+        return _grade_case(source, case, root, 'cpu-jax', None, None,
+                           cpu_slot=slot, slots_per_host=slots_per_host)
 
 
 @ray.remote(num_cpus=4, memory=16*1024**3, resources=task_resources(), max_retries=0)
@@ -59,22 +69,25 @@ class PlacementPool:
             self.pending.clear()
 
 
-def _grade_case(source, case, root, backend, chip, accelerator):
+def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None, slots_per_host=None):
     from .worker import process_identity
     from .rewards import invalid
     root=Path(root).resolve(); jobs=root/'.science/placement-jobs';jobs.mkdir(exist_ok=True)
     folder=jobs/uuid.uuid4().hex;folder.mkdir();unit='placement-grade-'+folder.name
     (folder/'candidate.py').write_text(source)
+    cpu = backend == 'cpu-jax'
+    memory_gib = 8 if cpu else 16
     request=dict(source=str(folder/'candidate.py'),case=case,root=str(root),
-                 work=str(folder/'evaluation'),backend=backend,tpu_ids=[str(chip)],accelerator=accelerator)
+                 work=str(folder/'evaluation'),backend=backend,tpu_ids=[] if cpu else [str(chip)],
+                 accelerator=accelerator,memory_gib=memory_gib)
     (folder/'request.json').write_text(json.dumps(request))
-    cpus=chip_cpus(chip)
+    cpus=slot_cpus(cpu_slot) if cpu else chip_cpus(chip)
     if not set(cpus)<=os.sched_getaffinity(0):raise RuntimeError('placement CPU set unavailable')
     user=pwd.getpwuid(os.getuid()).pw_name
     # TPU driver mappings need a permissive memlock limit. MemoryMax still
     # bounds the candidate's actual host RAM across its entire process tree.
     cmd=['sudo','-n','systemd-run','--unit='+unit,'--uid='+user,'--gid='+str(os.getgid()),
-         '--wait','--collect','--pipe','--quiet','--property=MemoryMax=16G','--property=MemorySwapMax=0',
+         '--wait','--collect','--pipe','--quiet',f'--property=MemoryMax={memory_gib}G','--property=MemorySwapMax=0',
          '--property=LimitMEMLOCK=infinity',
          '--property=CPUQuota=400%','--property=AllowedCPUs='+','.join(map(str,cpus)),
          '--property=TasksMax=1024','--property=RuntimeMaxSec=300','--property=KillMode=control-group',
@@ -98,9 +111,12 @@ def _grade_case(source, case, root, backend, chip, accelerator):
                        stderr=subprocess.DEVNULL,timeout=10)
     result['metrics'].update(ray_node_id=ray.get_runtime_context().get_node_id(),
         host=__import__('socket').gethostname(),case=case,artifact_directory=str(folder),
-        task_envelope_seconds=time.monotonic()-started,hard_memory_gib=16,hard_cpus=cpus,
-        physical_chip_id=chip,ray_tpu_ids=[str(chip)],ray_tpu_visible_chips=os.environ.get('TPU_VISIBLE_CHIPS'),
+        task_envelope_seconds=time.monotonic()-started,hard_memory_gib=memory_gib,hard_cpus=cpus,
+        physical_chip_id=chip,ray_tpu_ids=[] if cpu else [str(chip)],ray_tpu_visible_chips=os.environ.get('TPU_VISIBLE_CHIPS'),
         accelerator=accelerator,physical_tpu_chips=1 if backend=='tpu' else 0,ray_executor=True)
+    if cpu:
+        result['metrics'].update(grading_slots_per_host=slots_per_host,
+                                 grading_memory_cap_gib=8*slots_per_host, cpu_slot=cpu_slot)
     (folder/'verdict.json').write_text(json.dumps(result,allow_nan=False,indent=2))
     return result
 

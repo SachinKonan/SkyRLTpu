@@ -1,6 +1,5 @@
 """Science rewards in the unchanged native Discover training loop."""
 import asyncio
-import json
 import os
 from pathlib import Path
 import threading
@@ -35,11 +34,31 @@ def placement_accelerator():
     return accelerator
 
 
-def task_prompt(task):
+def task_prompt(task, *, include_starter=True):
     name = 'prompts/rendered/routing.txt' if task == 'routing' else 'prompts/placement-jax-v6e.txt'
+    cpu = task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu'
+    if cpu:
+        name = 'prompts/placement-jax-cpu.txt'
     prompt = (Path(__file__).parent / name).read_text()
-    if task == 'placement' and placement_accelerator() == 'tpu-v4-64':
+    if task == 'placement' and not cpu and placement_accelerator() == 'tpu-v4-64':
         prompt = prompt.replace('TPU v6e chip', 'TPU v4 chip')
+    if not include_starter:
+        marker = ('Valid initial policy block:' if task == 'routing' else
+                  'Starting implementation (replace with your improved algorithm):')
+        instructions, separator, _ = prompt.partition(marker)
+        if not separator:
+            raise ValueError(f'{task} prompt is missing its starter boundary')
+        prompt = instructions.rstrip()
+    return prompt
+
+
+def candidate_prompt(task, code='', feedback='', *, repair=False):
+    prompt = task_prompt(task, include_starter=not bool(code))
+    if code:
+        instruction = ('Repair this invalid program using the grading error. First make it valid; '
+                       'return a complete replacement program.' if repair else 'Improve this candidate.')
+        prompt += ('\nPrevious candidate:\n```python\n' + code + '\n```\n'
+                   + 'Grader feedback:\n' + feedback[-3000:] + '\n' + instruction + '\n')
     return prompt
 
 
@@ -51,7 +70,15 @@ async def evaluate(task, source, timeout):
         if task == 'routing':
             from .ray_cpu import grade
             refs.append(grade.options(scheduling_strategy='SPREAD').remote(
-                'routing', source, root, admission_timeout_s=timeout))
+                'routing', source, root, admission_timeout_s=timeout,
+                slots_per_host=int(os.environ.get('SCIENCE_ROUTING_SLOTS_PER_HOST', '2'))))
+        elif task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu':
+            from .placement_ray import grade_cpu_case
+            from .placement_task import CASES
+            for case in CASES:
+                refs.append(grade_cpu_case.options(scheduling_strategy='SPREAD').remote(
+                    source, case, root, admission_timeout_s=timeout,
+                    slots_per_host=int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16'))))
         elif task == 'placement':
             from ray.util.placement_group import get_placement_group
             from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -102,24 +129,16 @@ class ScienceTrainingEnv(Environment):
         return False
 
     def get_question(self):
-        prompt = task_prompt(self.problem_type)
         state = self.initial_state
-        if state.code:
-            prompt += ('\nPrevious candidate:\n```python\n' + state.code + '\n```\n'
-                       + 'Grader feedback:\n' + state.observation[-3000:] + '\nImprove this candidate.\n')
-        return prompt
+        return candidate_prompt(self.problem_type, state.code, state.observation)
 
     async def _safe_grade(self, given_answer, step):
         ScienceTrainingReward(self.problem_type, self.log_path, self.eval_timeout,
                               self.num_cpus_per_task, self.eval_backend)
         result = await evaluate(self.problem_type, given_answer, self.eval_timeout)
-        # Return scientific diagnostics alongside the bounded learning reward.
-        metrics = result['metrics']
-        feedback = {k: v for k, v in metrics.items() if k in (
-            'mean_proxy_cost', 'weighted_candidate_cnots', 'weighted_baseline_cnots',
-            'swaps', 'added_cnots', 'improvement', 'case_count', 'total_seconds')}
-        result = dict(result, stdout=json.dumps(dict(reward=result['reward'], message=result['msg'],
-                                                    metrics=feedback))[:3000])
+        from .feedback import diagnostic_message, observation
+        result = dict(result, stdout=observation(self.problem_type, result),
+                      msg=diagnostic_message(self.problem_type, result))
         return VerifyResult(**{k: result[k] for k in (
             'reward', 'correctness', 'raw_score', 'msg', 'result_construction', 'stdout', 'metrics')})
 

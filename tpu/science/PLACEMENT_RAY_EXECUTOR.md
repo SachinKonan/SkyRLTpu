@@ -1,3 +1,26 @@
+## CPU placement training profile (2026-09-17)
+
+New `science_placement_backend="cpu"` profiles retain four trainer hosts and
+four TP4 inference hosts on each v6e-32. All eight hosts advertise
+`placement_cpu_host: 16`. Each Ray case requests 4 CPUs, 8 GiB logical memory,
+and one CPU grading token, with no TPU resource request. Host-wide file locks
+also limit admission to 16 slots across runtime directories. Slots use disjoint
+four-CPU sets 16-79. A systemd cgroup enforces 8 GiB total RAM, no swap, four
+CPUs and a 300-second lifetime; candidate execution remains 180 seconds and
+trusted grading 90 seconds. JAX is forced to CPU inside a namespace with no
+accelerator device mounts. The candidate receives 170 seconds including import
+and compilation overhead; the prompt lists libraries and shared resource limits.
+
+The topology/reference gate checks both NumPy and JAX reference programs on all
+four netlists on all eight hosts before training. Sixteen cases per host means
+128 concurrent cases across a slice, not 128 complete four-case submissions.
+RAM-backed model caches remain capped at 128 GiB per host. These limits reserve
+at most 64 CPUs and 128 GiB per host for candidate execution and grading.
+
+Old profiles default to the TPU backend described below. CPU runs use new IDs,
+prompt files and CPU-regraded seed pools; TPU rewards must not be imported into
+the new pools. CPU regrading can change legality as well as score.
+
 Placement grading uses the existing workload Ray cluster. On the proposed
 v5p-32 layout, host 3 advertises `TPU: 4` and `placement_tpu_host: 4`.
 The latter marks grading capacity; there are no custom per-chip resources.

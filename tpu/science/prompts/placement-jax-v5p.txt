@@ -15,8 +15,14 @@ The evaluator computes these normalized components with its pinned TILOS
 implementation. Lower cost is better. Across the supplied evaluation cases,
 reward = max(1e-6, 1 / (1 + mean(cost))). Any invalid case makes the whole
 submission's reward zero. A cost of 1 gives reward 0.5; cost 2 gives 1/3.
-No baseline division is applied. Feedback includes each component, legality
-errors, case runtimes, and the suite's mean proxy cost.
+No baseline division is applied. For selected valid programs, feedback includes
+per-case proxy_cost, wirelength_cost, density_cost, congestion_cost,
+candidate_wall_seconds, candidate_limit_seconds, grading_seconds, and the
+suite's mean_proxy_cost. Candidate runtime includes imports, initialization,
+JIT compilation, and completed device work; grading time is separate.
+Components are normalized costs before applying the weights above. Use this
+breakdown to identify which cases and components need improvement, while
+optimizing the suite mean and preserving legality on every case.
 
 All coordinates and sizes are in microns. Positions are continuous rectangle
 CENTERS, not grid-cell IDs. The metric grid does not restrict legal centers.
@@ -32,12 +38,16 @@ Hard constraints:
   fixed hard macros. Soft-cluster overlap is permitted and affects the proxy.
 - Dimensions and the supplied pin offsets are fixed. This interface optimizes
   positions only; do not return flips, rotations, or resized soft clusters.
-- Initial positions are a starting point and are not guaranteed legal.
-  Leave a small positive margin to avoid float32 rounding violations.
+- Initial positions are a precomputed Xplace placement with deterministic
+  legalization, verified legal by the trusted grader. They are provided on
+  every case. You may refine them or construct other starting layouts. Keep
+  a verified legal fallback and a positive margin against float32 violations.
+  Xplace precomputation is fixed and outside your candidate runtime budget.
 
 Input schema (all arrays are NumPy arrays; all indices are zero based):
 - canvas: float[2], width and height.
-- initial_positions: float[M,2]; sizes: float[M,2], width and height.
+- initial_positions: float[M,2], the verified Xplace starting layout.
+- sizes: float[M,2], width and height.
 - fixed: bool[M]; num_hard: integer H.
 - port_positions: float[P,2].
 - net_offsets: int[K+1], compressed offsets into the endpoint arrays below.
@@ -87,6 +97,13 @@ four-core allocation. Memory is a shared process-tree allowance, not 16 GiB
 per library. Respect time_budget_s; reserve time to return your best legal
 placement. Final independent grading has a separate allowance.
 
+Runtime below the limit does not directly increase your reward. If useful,
+spend available time exploring additional placements or refining promising
+candidates. Return your best legal placement before the supplied time_budget_s
+expires. Additional computation is optional; preserve improvements rather than
+running longer for its own sake. Use time_budget_s to plan your work, not the
+larger hard deadline shown in feedback.
+
 This initial scaffold provides no in-process proxy helper. You can implement
 cheap wirelength, density, or congestion estimates from the supplied data;
 the independent evaluator determines the actual reward. Optimize generally
@@ -104,6 +121,25 @@ spatial gradients to guide placement. Use the allowed numerical libraries for
 these operations. All preprocessing and optimization count against the same
 runtime and memory limits. Final placements must satisfy every legality
 constraint and are scored by the trusted evaluator.
+
+Implementation checklist (apply before returning your complete module):
+- The supplied Xplace initial_positions are a legal fallback. You may replace
+  the starter entirely. Reserve time to return your best legal placement.
+- Keep hard-macro legalization on the CPU unless your replacement enforces
+  every rectangle constraint. A penalty objective alone does not ensure legality.
+- The installed segment reductions are jax.ops.segment_sum, segment_min, and
+  segment_max, not jax.lax.segment_*. Set num_segments to the Python integer
+  len(problem["net_weights"]) outside JIT. Precompute net IDs with NumPy.
+- Inside JIT use fixed array shapes. Avoid int/float/bool conversions of tracers,
+  data-dependent Python branches, and boolean indexing with dynamic lengths.
+  Use jnp.where masks and precomputed integer indices where appropriate.
+- Check broadcasting explicitly: positions and sizes [M,2], fixed [M],
+  fixed[:,None] [M,1], pin_owner [L], pin_offset [L,2], net_weights [K].
+  A pin owner can refer to a port; concatenate macro centers and port centers.
+- Copy input arrays before modifying them; restore fixed rows exactly. Check
+  finiteness, full rectangle bounds, and hard-hard overlaps before returning.
+- Include every helper/import you use. Return one complete Python code fence,
+  with the exact place(problem, seed, *, time_budget_s) signature; no patch.
 
 Starting implementation (replace with your improved algorithm):
 ```python

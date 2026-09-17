@@ -1,0 +1,37 @@
+{
+  "submitted_at": 1789530145.5542407,
+  "runs": [
+    {
+      "run_id": "science-routing-v4-muse-bootstrap-l2-003",
+      "job_id": 955,
+      "supersedes_job_id": 947,
+      "sha256": "35769521a26d57ae0fd24839c252baa5da22cf754652abb87cf61a94cff280c5",
+      "parent_bundle_sha256": "3ebfc64a703e896270a1a65bb8c2a9e14d797d86ae7bcb6791c5e03adc76c0ed",
+      "memory_utilization": 0.75,
+      "original_bundle_members_byte_identical": true,
+      "profile_only_changes": [
+        "run_id",
+        "root",
+        "client_env.TTD_SICK_MARKER",
+        "inference.memory_utilization"
+      ]
+    },
+    {
+      "run_id": "science-placement-v4-muse-bootstrap-l2-003",
+      "job_id": 956,
+      "supersedes_job_id": 951,
+      "sha256": "5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f",
+      "parent_bundle_sha256": "1786e5900822738d13a0be86cfb21e4425ff75082fe83784a672a83db735a208",
+      "memory_utilization": 0.75,
+      "original_bundle_members_byte_identical": true,
+      "profile_only_changes": [
+        "run_id",
+        "root",
+        "client_env.TTD_SICK_MARKER",
+        "inference.memory_utilization"
+      ]
+    }
+  ],
+  "old_placement_status": "CANCELLED",
+  "old_routing_status": "FAILED"
+}

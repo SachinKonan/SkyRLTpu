@@ -19,6 +19,32 @@ def config_dict():
                            trainer_compile="gs://test/train", inference_compile="gs://test/infer"))
 
 
+def test_gcs_resolves_snap_sdk_when_ray_worker_path_omits_it(tmp_path, monkeypatch):
+    from tpu.swarm.ray_train import cache
+    from types import SimpleNamespace
+    searched, commands = [], []
+    def which(name, *, path):
+        searched.append(path)
+        return '/snap/bin/gcloud' if '/snap/bin' in path.split(':') else None
+    monkeypatch.setenv('PATH', '/usr/bin:/bin')
+    monkeypatch.setattr(cache.shutil, 'which', which)
+    def run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout='revision', stderr='')
+    monkeypatch.setattr(cache.subprocess, 'run', run)
+    gcs = cache.GCS(tmp_path, Config.from_dict(config_dict()).cache)
+    assert gcs.metadata('cat', 'gs://test/refs/main') == 'revision'
+    assert commands == [['/snap/bin/gcloud', 'storage', 'cat', 'gs://test/refs/main']]
+    assert searched[0] == '/usr/bin:/bin'
+
+
+def test_gcs_fails_early_without_sdk(tmp_path, monkeypatch):
+    from tpu.swarm.ray_train import cache
+    monkeypatch.setattr(cache.shutil, 'which', lambda *args, **kwargs: None)
+    with pytest.raises(FileNotFoundError, match='this Ray worker'):
+        cache.GCS(tmp_path, Config.from_dict(config_dict()).cache)
+
+
 def test_default_profile_is_the_legacy_v5p_cell_split():
     config = Config.from_dict(config_dict())
     assert (config.trainer.hosts, config.inference_hosts) == (1, 3)
@@ -36,8 +62,8 @@ def test_v5p_profile_reuses_controller_contract():
     assert config.inference_hosts == 3
 
 
-@pytest.mark.parametrize("field,value", [("ray", 6380), ("ray", 16379), ("engine", 42001),
-                                         ("engine", 19800), ("worker_max", 41999)])
+@pytest.mark.parametrize("field,value", [("ray", 6380), ("ray", 16379), ("engine", 22001),
+                                         ("engine", 24800), ("worker_max", 41999)])
 def test_reject_conflicting_ports(field, value):
     raw = config_dict()
     raw["ports"] = {field: value}

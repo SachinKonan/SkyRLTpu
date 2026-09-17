@@ -1,0 +1,5 @@
+{
+  "pid": 1559930,
+  "script": "tpu/science/results/placement/gpu-suite-20260916/run-xplace-a40.sh",
+  "gpu": "A40 device 0"
+}

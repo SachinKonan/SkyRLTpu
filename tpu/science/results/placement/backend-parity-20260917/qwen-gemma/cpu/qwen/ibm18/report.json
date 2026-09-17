@@ -1,0 +1,39 @@
+{
+  "model": "qwen",
+  "case": "ibm18",
+  "backend": "cpu",
+  "source_sha256": "859a286fef288cc3437ccbedfc2c3eb0c148574e315cacc7578e6c34aed4e235",
+  "input_sha256": "3a1622d6b29834b87c97c8aafd859a6a8b379732285bc1f8069e420f18aa6297",
+  "cpu_affinity": [
+    12,
+    13,
+    14,
+    15
+  ],
+  "candidate_wall_seconds": 12.566641498939134,
+  "child": {
+    "candidate_seconds": 11.706279134959914,
+    "sandbox_tpu_visible_chips": null,
+    "sandbox_device_paths": [],
+    "jax_version": "0.10.1",
+    "devices": [
+      "cpu:0"
+    ],
+    "device_kind": "cpu",
+    "device_count": 1,
+    "initialization_seconds": 1.9658084299881011
+  },
+  "score": {
+    "proxy_cost": 1.6024248600006104,
+    "wirelength_cost": 0.06771653890609741,
+    "density_cost": 0.5403456091880798,
+    "congestion_cost": 2.5290710737415933,
+    "overlap_count": 0.0,
+    "total_overlap_area": 0.0,
+    "max_overlap_area": 0.0,
+    "num_macros_with_overlaps": 0.0,
+    "overlap_ratio": 0.0,
+    "grading_seconds": 30.870541292009875
+  },
+  "valid": true
+}

@@ -1,0 +1,325 @@
+[
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744",
+    "result": {
+      "host": "t1v-n-06e7a671-w-0",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.2010612487793,
+        "MemAvailable": 629.9894027709961,
+        "Shmem": 56.30270767211914,
+        "Cached": 78.50641250610352
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.100528717041,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.0024871826171875
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.0024871826171875
+        },
+        {
+          "path": "/run/user/2008",
+          "size_gib": 70.82010269165039,
+          "used_gib": 3.814697265625e-06
+        },
+        {
+          "path": "/home/gcpuser/.cache/science-placement-v6e-muse-xplace-bootstrap-l2-001/ram",
+          "size_gib": 128.0,
+          "used_gib": 56.30021286010742
+        }
+      ]
+    }
+  },
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744-worker1",
+    "result": {
+      "host": "t1v-n-06e7a671-w-4",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.201057434082,
+        "MemAvailable": 643.0754585266113,
+        "Shmem": 56.463951110839844,
+        "Cached": 75.99126434326172
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.100528717041,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/user/2010",
+          "size_gib": 70.82010269165039,
+          "used_gib": 3.814697265625e-06
+        },
+        {
+          "path": "/home/gcpuser/.cache/science-placement-v6e-muse-xplace-bootstrap-l2-001/ram",
+          "size_gib": 128.0,
+          "used_gib": 56.461463928222656
+        }
+      ]
+    }
+  },
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744-worker2",
+    "result": {
+      "host": "t1v-n-06e7a671-w-6",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.2010612487793,
+        "MemAvailable": 643.0550765991211,
+        "Shmem": 56.467628479003906,
+        "Cached": 76.65567016601562
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.100528717041,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/user/2006",
+          "size_gib": 70.82010269165039,
+          "used_gib": 3.814697265625e-06
+        },
+        {
+          "path": "/home/gcpuser/.cache/science-placement-v6e-muse-xplace-bootstrap-l2-001/ram",
+          "size_gib": 128.0,
+          "used_gib": 56.46514129638672
+        }
+      ]
+    }
+  },
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744-worker3",
+    "result": {
+      "host": "t1v-n-06e7a671-w-7",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.2010269165039,
+        "MemAvailable": 643.0954475402832,
+        "Shmem": 56.47011947631836,
+        "Cached": 75.79126739501953
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.10051345825195,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.64020538330078,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.64020538330078,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/user/2006",
+          "size_gib": 70.82010269165039,
+          "used_gib": 3.814697265625e-06
+        },
+        {
+          "path": "/home/gcpuser/.cache/science-placement-v6e-muse-xplace-bootstrap-l2-001/ram",
+          "size_gib": 128.0,
+          "used_gib": 56.46763229370117
+        }
+      ]
+    }
+  },
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744-worker4",
+    "result": {
+      "host": "t1v-n-06e7a671-w-1",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.2010612487793,
+        "MemAvailable": 643.1947708129883,
+        "Shmem": 56.30678939819336,
+        "Cached": 75.62807083129883
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.100528717041,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.6402130126953,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/user/2007",
+          "size_gib": 70.82010269165039,
+          "used_gib": 3.814697265625e-06
+        },
+        {
+          "path": "/home/gcpuser/.cache/science-placement-v6e-muse-xplace-bootstrap-l2-001/ram",
+          "size_gib": 128.0,
+          "used_gib": 56.30430221557617
+        }
+      ]
+    }
+  },
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744-worker5",
+    "result": {
+      "host": "t1v-n-06e7a671-w-2",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.201099395752,
+        "MemAvailable": 699.4826240539551,
+        "Shmem": 0.0024871826171875,
+        "Cached": 11.221672058105469
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.10054779052734,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.64022064208984,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.64022064208984,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/user/2005",
+          "size_gib": 70.82010650634766,
+          "used_gib": 3.814697265625e-06
+        }
+      ]
+    }
+  },
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744-worker6",
+    "result": {
+      "host": "t1v-n-06e7a671-w-3",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.2010879516602,
+        "MemAvailable": 643.2259674072266,
+        "Shmem": 56.3088264465332,
+        "Cached": 75.63056182861328
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.1005439758301,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.64022064208984,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.64022064208984,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/user/2008",
+          "size_gib": 70.82010650634766,
+          "used_gib": 3.814697265625e-06
+        },
+        {
+          "path": "/home/gcpuser/.cache/science-placement-v6e-muse-xplace-bootstrap-l2-001/ram",
+          "size_gib": 128.0,
+          "used_gib": 56.306339263916016
+        }
+      ]
+    }
+  },
+  {
+    "alias": "tpuswarm-v6e32-east5b-qwen35-3744-worker7",
+    "result": {
+      "host": "t1v-n-06e7a671-w-5",
+      "logical_cpus": 180,
+      "available_cpu_affinity": 180,
+      "mem_gib": {
+        "MemTotal": 708.2010688781738,
+        "MemAvailable": 643.0273094177246,
+        "Shmem": 56.47010040283203,
+        "Cached": 75.98934555053711
+      },
+      "tmpfs": [
+        {
+          "path": "/dev/shm",
+          "size_gib": 354.1005325317383,
+          "used_gib": 1.1444091796875e-05
+        },
+        {
+          "path": "/run",
+          "size_gib": 141.64021682739258,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/snapd/ns",
+          "size_gib": 141.64021682739258,
+          "used_gib": 0.00247955322265625
+        },
+        {
+          "path": "/run/user/2012",
+          "size_gib": 70.82010650634766,
+          "used_gib": 3.814697265625e-06
+        },
+        {
+          "path": "/home/gcpuser/.cache/science-placement-v6e-muse-xplace-bootstrap-l2-001/ram",
+          "size_gib": 128.0,
+          "used_gib": 56.467613220214844
+        }
+      ]
+    }
+  }
+]

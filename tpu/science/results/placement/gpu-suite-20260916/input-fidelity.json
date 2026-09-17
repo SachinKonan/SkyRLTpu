@@ -1,0 +1,86 @@
+{
+  "ibm01": {
+    "unchanged_fields": [
+      "schema_version",
+      "canvas",
+      "sizes",
+      "fixed",
+      "num_hard",
+      "port_positions",
+      "net_offsets",
+      "pin_owner",
+      "pin_offset",
+      "net_weights",
+      "wirelength_normalizer",
+      "grid_shape",
+      "routes_per_micron",
+      "macro_routing_allocation",
+      "congestion_smoothing_range"
+    ],
+    "fixed_positions_unchanged": true,
+    "changed_positions": 1140
+  },
+  "ibm04": {
+    "unchanged_fields": [
+      "schema_version",
+      "canvas",
+      "sizes",
+      "fixed",
+      "num_hard",
+      "port_positions",
+      "net_offsets",
+      "pin_owner",
+      "pin_offset",
+      "net_weights",
+      "wirelength_normalizer",
+      "grid_shape",
+      "routes_per_micron",
+      "macro_routing_allocation",
+      "congestion_smoothing_range"
+    ],
+    "fixed_positions_unchanged": true,
+    "changed_positions": 1380
+  },
+  "ibm08": {
+    "unchanged_fields": [
+      "schema_version",
+      "canvas",
+      "sizes",
+      "fixed",
+      "num_hard",
+      "port_positions",
+      "net_offsets",
+      "pin_owner",
+      "pin_offset",
+      "net_weights",
+      "wirelength_normalizer",
+      "grid_shape",
+      "routes_per_micron",
+      "macro_routing_allocation",
+      "congestion_smoothing_range"
+    ],
+    "fixed_positions_unchanged": true,
+    "changed_positions": 1331
+  },
+  "ibm18": {
+    "unchanged_fields": [
+      "schema_version",
+      "canvas",
+      "sizes",
+      "fixed",
+      "num_hard",
+      "port_positions",
+      "net_offsets",
+      "pin_owner",
+      "pin_offset",
+      "net_weights",
+      "wirelength_normalizer",
+      "grid_shape",
+      "routes_per_micron",
+      "macro_routing_allocation",
+      "congestion_smoothing_range"
+    ],
+    "fixed_positions_unchanged": true,
+    "changed_positions": 1314
+  }
+}

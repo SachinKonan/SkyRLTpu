@@ -12,10 +12,10 @@ export CUDA_HOME=/usr/local/cuda-12.6
 export PATH="$CUDA_HOME/bin:$PATH"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 uv --no-config venv --python .science/venv/bin/python "$PLACEMENT_ENV"
-uv --no-config pip install --python "$PLACEMENT_ENV/bin/python" torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+uv --no-config pip install --python "$PLACEMENT_ENV/bin/python" torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
 uv --no-config pip install --python "$PLACEMENT_ENV/bin/python" 'numpy<2.3' scipy tqdm absl-py matplotlib 'cmake>=3.24,<4' ninja pandas numba cairocffi opencv-python-headless seaborn pulp igraph
 export PATH="$PLACEMENT_ENV/bin:$PATH"
-python -c 'import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.cuda.get_device_name(0))'
+python -c 'import torch, torchvision.transforms; assert torch.cuda.is_available(); print(torch.__version__, torchvision.__version__, torch.cuda.get_device_name(0))'
 python - <<'PY'
 from pathlib import Path
 import shutil
