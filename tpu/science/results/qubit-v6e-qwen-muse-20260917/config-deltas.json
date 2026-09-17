@@ -1,0 +1,94 @@
+[
+  {
+    "model": "qwen",
+    "changes": {
+      "root": [
+        "~/.cache/science-routing-v4-qwen-bootstrap-l2-001-runtime-20260917",
+        "~/.cache/science-qubit-v6e-qwen-runtime-001"
+      ],
+      "trainer.process_bounds": [
+        "1,1,4",
+        "2,2,1"
+      ],
+      "run_id": [
+        "science-routing-v4-qwen-bootstrap-l2-001",
+        "science-qubit-v6e-qwen-runtime-001"
+      ],
+      "client_env.TTD_SICK_MARKER": [
+        "/home/gcpuser/.cache/science-routing-v4-qwen-bootstrap-l2-001-runtime-20260917/runs/science-routing-v4-qwen-bootstrap-l2-001/ENGINE-SICK",
+        "/home/gcpuser/.cache/science-qubit-v6e-qwen-runtime-001/runs/science-qubit-v6e-qwen-runtime-001/ENGINE-SICK"
+      ],
+      "cache.inference_compile": [
+        "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-science-v4-qwen-tp4-seq16-chunk1024-s22528-jaxconv-v2",
+        "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-qwen-runtime-001-inference_compile-v1"
+      ],
+      "cache.trainer_compile": [
+        "gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-science-qwen-v4-tp8-fsdp2-r32-s22528-tiedkv-v1",
+        "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-qwen-runtime-001-trainer_compile-v1"
+      ],
+      "zone": [
+        "us-central2-b",
+        "us-east5-b"
+      ],
+      "bucket": [
+        "gs://sk7524-tinker-tpu-us-central2",
+        "gs://sk7524-tinker-tpu-us-east5"
+      ],
+      "accelerator": [
+        "tpu-v4-64",
+        "tpu-v6e-32"
+      ]
+    },
+    "write_destinations": {
+      "run": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001",
+      "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-qwen-runtime-001-trainer_compile-v1",
+      "inference_compile": "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-qwen-runtime-001-inference_compile-v1"
+    }
+  },
+  {
+    "model": "muse",
+    "changes": {
+      "root": [
+        "~/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917",
+        "~/.cache/science-qubit-v6e-muse-runtime-001"
+      ],
+      "trainer.process_bounds": [
+        "1,1,4",
+        "2,2,1"
+      ],
+      "run_id": [
+        "science-routing-v4-muse-seeded-train-002",
+        "science-qubit-v6e-muse-runtime-001"
+      ],
+      "client_env.TTD_SICK_MARKER": [
+        "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/runs/science-routing-v4-muse-seeded-train-002/ENGINE-SICK",
+        "/home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/ENGINE-SICK"
+      ],
+      "cache.inference_compile": [
+        "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-science-v4-muse-tp4-seq16-chunk1024-s22528-rpa3-v1",
+        "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-muse-runtime-001-inference_compile-v1"
+      ],
+      "cache.trainer_compile": [
+        "gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-science-muse-v4-tp8-fsdp2-r32-s22528-replay-v1",
+        "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-muse-runtime-001-trainer_compile-v1"
+      ],
+      "zone": [
+        "us-central2-b",
+        "us-east5-b"
+      ],
+      "bucket": [
+        "gs://sk7524-tinker-tpu-us-central2",
+        "gs://sk7524-tinker-tpu-us-east5"
+      ],
+      "accelerator": [
+        "tpu-v4-64",
+        "tpu-v6e-32"
+      ]
+    },
+    "write_destinations": {
+      "run": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-muse-runtime-001",
+      "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-muse-runtime-001-trainer_compile-v1",
+      "inference_compile": "gs://sk7524-tinker-tpu-us-east5/science-qubit-v6e-muse-runtime-001-inference_compile-v1"
+    }
+  }
+]
