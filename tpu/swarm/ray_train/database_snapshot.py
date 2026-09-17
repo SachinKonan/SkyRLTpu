@@ -17,6 +17,39 @@ import sqlite3
 TABLE = "skyrl_snapshot_payloads"
 
 
+def require_checkpoint_client(client: Path, run_id: str, member: str, minimum: int):
+    """Refuse a fresh client when this launch explicitly requires saved work."""
+    logs = client / 'tinker_log' / run_id
+    rows = [json.loads(line) for line in
+            (logs / f'member_{member}' / 'checkpoints.jsonl').read_text().splitlines() if line.strip()]
+    latest = rows[-1] if rows else {}
+    step = latest.get('batch', -1)
+    if step < minimum or not latest.get('state_path'):
+        raise RuntimeError(f'required checkpoint >= {minimum}, found {step}')
+    pool = logs / f'puct_sampler_step_{step:06d}.json'
+    if not pool.is_file():
+        raise RuntimeError(f'checkpoint {step} has no matching search snapshot')
+    return step
+
+
+def abandon_pending_for_checkpoint_resume(path: Path) -> int:
+    """Retire dead-client requests before a checkpoint-based client restart.
+
+    Completed requests and model/checkpoint registrations remain intact.
+    Call only before starting the API; never against a running trainer.
+    """
+    with closing(sqlite3.connect(path)) as db:
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='futures'").fetchone():
+            return 0
+        result = json.dumps({'error': 'Interrupted request superseded by checkpoint resume'})
+        cursor = db.execute(
+            "UPDATE futures SET status='FAILED', result_data=?, completed_at=CURRENT_TIMESTAMP "
+            "WHERE status='PENDING'", (result,))
+        count = cursor.rowcount
+        db.commit()
+        return count
+
+
 class IncompleteDatabaseSnapshot(RuntimeError):
     pass
 

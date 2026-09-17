@@ -72,3 +72,50 @@ def test_routing_recovery_package_has_retries_and_sixteen_slots(tmp_path):
     assert cfg.client_env['TTD_RESUME_STRICT'] == '1'
     assert cfg.client_env['TTD_RESUME_SEARCH_AHEAD'] == '1'
     assert 'third_party/discover/ttt_discover/rl/resume.py' in manifest(Path.cwd(),cfg)
+
+
+def test_checkpoint_restart_retires_only_pending_requests(tmp_path):
+    import sqlite3
+    from tpu.swarm.ray_train.database_snapshot import abandon_pending_for_checkpoint_resume
+    path=tmp_path/'db'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE futures (status TEXT, result_data TEXT, completed_at TEXT)')
+        db.executemany('INSERT INTO futures VALUES (?, ?, NULL)', [('PENDING',None),('COMPLETED','saved'),('FAILED','previous')])
+    assert abandon_pending_for_checkpoint_resume(path) == 1
+    assert abandon_pending_for_checkpoint_resume(path) == 0
+    with sqlite3.connect(path) as db:
+        rows=db.execute('SELECT status,result_data FROM futures').fetchall()
+    assert rows[1:] == [('COMPLETED','saved'),('FAILED','previous')]
+    assert rows[0][0] == 'FAILED'
+
+
+def test_required_resume_never_silently_starts_fresh(tmp_path):
+    import json
+    from tpu.swarm.ray_train.database_snapshot import require_checkpoint_client
+    logs=tmp_path/'tinker_log/run';member=logs/'member_qwen';member.mkdir(parents=True)
+    (member/'checkpoints.jsonl').write_text(json.dumps(dict(batch=3,state_path='tinker://model/weights/000003'))+'\n')
+    with pytest.raises(RuntimeError,match='matching search snapshot'):
+        require_checkpoint_client(tmp_path,'run','qwen',3)
+    (logs/'puct_sampler_step_000003.json').write_text('{}')
+    assert require_checkpoint_client(tmp_path,'run','qwen',3) == 3
+    with pytest.raises(RuntimeError,match='required checkpoint'):
+        require_checkpoint_client(tmp_path,'run','qwen',4)
+
+
+def test_interrupted_client_restore_is_not_published(tmp_path):
+    from tpu.swarm.ray_train.host import Host
+    cfg=SimpleNamespace(run_gcs='gs://test/run', checkpoint_resume=True, seed_pool_sha256='',resume_min_checkpoint_step=0)
+    def transfer(command,*args,**kwargs):
+        stage=Path(command[-1])/'client';stage.mkdir(exist_ok=True)
+        (stage/'partial').write_text('partial')
+        raise RuntimeError('transfer interrupted')
+    host=SimpleNamespace(rank=0,trainer_leader=7,run=tmp_path,config=cfg,gcs=SimpleNamespace(list=lambda *a,**kw:['client'],transfer=transfer))
+    with pytest.raises(RuntimeError,match='transfer interrupted'):
+        Host.restore_run(host)
+    assert not (tmp_path/'client').exists()
+    def complete(command,*args,**kwargs):
+        (Path(command[-1])/'client'/'complete').write_text('complete')
+    host.gcs.transfer=complete
+    Host.restore_run(host)
+    assert (tmp_path/'client'/'complete').read_text() == 'complete'
+    assert not (tmp_path/'client-restore').exists()

@@ -495,11 +495,23 @@ class Host:
             return
         local = self.run / "client"
         if self.rank == 0 and not local.exists() and self.gcs.list(self.config.run_gcs + "/client", allow_empty=True):
-            self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(self.run)], "restore-run", self.run)
+            if getattr(self.config, 'checkpoint_resume', False):
+                staging = self.run / 'client-restore'
+                staging.mkdir(exist_ok=True)
+                self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(staging)], "restore-run", self.run)
+                (staging / 'client').rename(local)
+                staging.rmdir()
+            else:
+                self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(self.run)], "restore-run", self.run)
         if self.rank == 0 and self.config.seed_pool_sha256:
             from tpu.science.seed_pool import verify_pool
             verify_pool(local / 'tinker_log' / self.config.run_id / 'puct_sampler_step_000000.json',
                         self.config.seed_pool_sha256)
+        if self.rank == 0 and getattr(self.config, 'resume_min_checkpoint_step', 0):
+            from .database_snapshot import require_checkpoint_client
+            require_checkpoint_client(local, self.config.run_id,
+                                      self.config.client_member_spec.rsplit(':', 1)[-1],
+                                      self.config.resume_min_checkpoint_step)
         db = self.run / "tinker.db"
         if self.rank == self.trainer_leader and not db.exists():
             listing = self.gcs.metadata("ls", "--json", self.config.run_gcs + "/tinker-backup.db", allow_empty=True)
@@ -508,6 +520,10 @@ class Host:
                 self.gcs.transfer(["cp", self.config.run_gcs + "/tinker-backup.db", str(downloaded)], "restore-database", self.run)
                 restore_snapshot(downloaded, db, self.run / "future-blobs")
                 downloaded.unlink()
+        if self.rank == self.trainer_leader and db.exists() and getattr(self.config, 'checkpoint_resume', False):
+            from .database_snapshot import abandon_pending_for_checkpoint_resume
+            count = abandon_pending_for_checkpoint_resume(db)
+            emit(self.log, 'checkpoint_resume_pending_retired', count=count, rank=self.rank)
 
     def sync_run(self):
         if not self.run_sync_lock.acquire(timeout=330):

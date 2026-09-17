@@ -295,6 +295,8 @@ class Config:
     arena_thinking_tokens: int | None = None
     ports: Ports = field(default_factory=Ports)
     max_restarts_on_errors: int = 0
+    checkpoint_resume: bool = False
+    resume_min_checkpoint_step: int = 0
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
     inference: Inference = field(default_factory=Inference)
@@ -639,6 +641,11 @@ class Config:
             raise ValueError("trainer.maxtext_kwargs must be a mapping")
         if type(self.max_restarts_on_errors) is not int or not 0 <= self.max_restarts_on_errors <= 3:
             raise ValueError("max_restarts_on_errors must be an integer from 0 to 3")
+        if type(self.checkpoint_resume) is not bool:
+            raise ValueError("checkpoint_resume must be a boolean")
+        if (type(self.resume_min_checkpoint_step) is not int or self.resume_min_checkpoint_step < 0
+                or self.resume_min_checkpoint_step and not self.checkpoint_resume):
+            raise ValueError("resume_min_checkpoint_step requires checkpoint_resume and a nonnegative integer")
         # commands.maxtext_kwargs merges these extras after the validated mesh.
         # Matching legacy declarations are harmless; conflicting ones would
         # silently launch a different mesh from the profile and row sharding.
