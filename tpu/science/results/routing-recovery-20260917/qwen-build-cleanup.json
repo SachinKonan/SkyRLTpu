@@ -1,0 +1,50 @@
+[
+  {
+    "rank": 0,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 384, \"free_before\": 0, \"free_after\": 76916822016}\n",
+    "error": "Warning: Permanently added '35.186.83.193' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "rank": 1,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 234, \"free_before\": 29686321152, \"free_after\": 76338962432}\n",
+    "error": "Warning: Permanently added '35.186.10.116' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "rank": 2,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 284, \"free_before\": 19455197184, \"free_after\": 76225036288}\n",
+    "error": "Warning: Permanently added '35.186.106.79' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "rank": 3,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 316, \"free_before\": 14128619520, \"free_after\": 77308780544}\n",
+    "error": "Warning: Permanently added '35.186.32.29' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "rank": 4,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 290, \"free_before\": 18262593536, \"free_after\": 76240060416}\n",
+    "error": "Warning: Permanently added '35.186.33.175' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "rank": 5,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 256, \"free_before\": 34416795648, \"free_after\": 85655646208}\n",
+    "error": "Warning: Permanently added '35.186.75.149' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "rank": 6,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 334, \"free_before\": 9423396864, \"free_after\": 76271017984}\n",
+    "error": "Warning: Permanently added '35.186.85.214' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "rank": 7,
+    "code": 0,
+    "result": "{\"removed_build_dirs\": 272, \"free_before\": 31275982848, \"free_after\": 85581385728}\n",
+    "error": "Warning: Permanently added '35.186.86.34' (ED25519) to the list of known hosts.\n"
+  }
+]

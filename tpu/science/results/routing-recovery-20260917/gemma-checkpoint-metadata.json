@@ -1,0 +1,16 @@
+{
+  "bucket": "sk7524-tinker-tpu-us-central2",
+  "component_count": 32,
+  "content_type": "application/x-tar",
+  "crc32c_hash": "hmCtmA==",
+  "creation_time": "2026-09-16T17:18:12+0000",
+  "etag": "CMDIzdDN85YDEAE=",
+  "generation": "1789579091993664",
+  "metageneration": 1,
+  "name": "ray-training/science-routing-v4-gemma-bootstrap-l2-001/checkpoints/model_0bfeb293/000001.tar.gz",
+  "size": 2938939279,
+  "storage_class": "STANDARD",
+  "storage_class_update_time": "2026-09-16T17:18:12+0000",
+  "storage_url": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/checkpoints/model_0bfeb293/000001.tar.gz#1789579091993664",
+  "update_time": "2026-09-16T17:18:12+0000"
+}

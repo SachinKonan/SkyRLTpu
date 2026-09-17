@@ -1,0 +1,407 @@
+{
+  "exit": {
+    "exit_code": 0
+  },
+  "result": {
+    "reward": 0.5386220506405557,
+    "correctness": 1.0,
+    "raw_score": 0.5386220506405557,
+    "msg": "Valid",
+    "result_construction": null,
+    "stdout": "",
+    "metrics": {
+      "weighted_baseline_cnots": 119874.00000000001,
+      "weighted_candidate_cnots": 102682.79999999999,
+      "added_cnots": 279516.0,
+      "swaps": 93172.0,
+      "improvement": 0.1434105811101659,
+      "cases": [
+        {
+          "case": "4gt13_92_q20",
+          "swaps": 2,
+          "added_cnots": 6
+        },
+        {
+          "case": "4gt13_92_willow",
+          "swaps": 12,
+          "added_cnots": 36
+        },
+        {
+          "case": "4gt13_92_heron_fez",
+          "swaps": 18,
+          "added_cnots": 54
+        },
+        {
+          "case": "4mod5-v1_22_q20",
+          "swaps": 1,
+          "added_cnots": 3
+        },
+        {
+          "case": "4mod5-v1_22_willow",
+          "swaps": 4,
+          "added_cnots": 12
+        },
+        {
+          "case": "4mod5-v1_22_heron_fez",
+          "swaps": 5,
+          "added_cnots": 15
+        },
+        {
+          "case": "9symml_195_q20",
+          "swaps": 3782,
+          "added_cnots": 11346
+        },
+        {
+          "case": "9symml_195_willow",
+          "swaps": 7500,
+          "added_cnots": 22500
+        },
+        {
+          "case": "9symml_195_heron_fez",
+          "swaps": 10853,
+          "added_cnots": 32559
+        },
+        {
+          "case": "adr4_197_q20",
+          "swaps": 334,
+          "added_cnots": 1002
+        },
+        {
+          "case": "adr4_197_willow",
+          "swaps": 729,
+          "added_cnots": 2187
+        },
+        {
+          "case": "adr4_197_heron_fez",
+          "swaps": 1030,
+          "added_cnots": 3090
+        },
+        {
+          "case": "alu-v0_27_q20",
+          "swaps": 2,
+          "added_cnots": 6
+        },
+        {
+          "case": "alu-v0_27_willow",
+          "swaps": 8,
+          "added_cnots": 24
+        },
+        {
+          "case": "alu-v0_27_heron_fez",
+          "swaps": 10,
+          "added_cnots": 30
+        },
+        {
+          "case": "co14_215_q20",
+          "swaps": 2079,
+          "added_cnots": 6237
+        },
+        {
+          "case": "co14_215_willow",
+          "swaps": 4083,
+          "added_cnots": 12249
+        },
+        {
+          "case": "co14_215_heron_fez",
+          "swaps": 5515,
+          "added_cnots": 16545
+        },
+        {
+          "case": "cycle10_2_110_q20",
+          "swaps": 554,
+          "added_cnots": 1662
+        },
+        {
+          "case": "cycle10_2_110_willow",
+          "swaps": 1276,
+          "added_cnots": 3828
+        },
+        {
+          "case": "cycle10_2_110_heron_fez",
+          "swaps": 1777,
+          "added_cnots": 5331
+        },
+        {
+          "case": "decod24-v2_43_q20",
+          "swaps": 0,
+          "added_cnots": 0
+        },
+        {
+          "case": "decod24-v2_43_willow",
+          "swaps": 9,
+          "added_cnots": 27
+        },
+        {
+          "case": "decod24-v2_43_heron_fez",
+          "swaps": 10,
+          "added_cnots": 30
+        },
+        {
+          "case": "ising_model_10_q20",
+          "swaps": 6,
+          "added_cnots": 18
+        },
+        {
+          "case": "ising_model_10_willow",
+          "swaps": 12,
+          "added_cnots": 36
+        },
+        {
+          "case": "ising_model_10_heron_fez",
+          "swaps": 13,
+          "added_cnots": 39
+        },
+        {
+          "case": "ising_model_13_q20",
+          "swaps": 6,
+          "added_cnots": 18
+        },
+        {
+          "case": "ising_model_13_willow",
+          "swaps": 14,
+          "added_cnots": 42
+        },
+        {
+          "case": "ising_model_13_heron_fez",
+          "swaps": 45,
+          "added_cnots": 135
+        },
+        {
+          "case": "ising_model_16_q20",
+          "swaps": 11,
+          "added_cnots": 33
+        },
+        {
+          "case": "ising_model_16_willow",
+          "swaps": 31,
+          "added_cnots": 93
+        },
+        {
+          "case": "ising_model_16_heron_fez",
+          "swaps": 65,
+          "added_cnots": 195
+        },
+        {
+          "case": "misex1_241_q20",
+          "swaps": 352,
+          "added_cnots": 1056
+        },
+        {
+          "case": "misex1_241_willow",
+          "swaps": 988,
+          "added_cnots": 2964
+        },
+        {
+          "case": "misex1_241_heron_fez",
+          "swaps": 1407,
+          "added_cnots": 4221
+        },
+        {
+          "case": "mod5mils_65_q20",
+          "swaps": 1,
+          "added_cnots": 3
+        },
+        {
+          "case": "mod5mils_65_willow",
+          "swaps": 6,
+          "added_cnots": 18
+        },
+        {
+          "case": "mod5mils_65_heron_fez",
+          "swaps": 11,
+          "added_cnots": 33
+        },
+        {
+          "case": "qft_10_q20",
+          "swaps": 14,
+          "added_cnots": 42
+        },
+        {
+          "case": "qft_10_willow",
+          "swaps": 23,
+          "added_cnots": 69
+        },
+        {
+          "case": "qft_10_heron_fez",
+          "swaps": 51,
+          "added_cnots": 153
+        },
+        {
+          "case": "qft_16_q20",
+          "swaps": 54,
+          "added_cnots": 162
+        },
+        {
+          "case": "qft_16_willow",
+          "swaps": 79,
+          "added_cnots": 237
+        },
+        {
+          "case": "qft_16_heron_fez",
+          "swaps": 148,
+          "added_cnots": 444
+        },
+        {
+          "case": "radd_250_q20",
+          "swaps": 319,
+          "added_cnots": 957
+        },
+        {
+          "case": "radd_250_willow",
+          "swaps": 668,
+          "added_cnots": 2004
+        },
+        {
+          "case": "radd_250_heron_fez",
+          "swaps": 938,
+          "added_cnots": 2814
+        },
+        {
+          "case": "rd73_252_q20",
+          "swaps": 479,
+          "added_cnots": 1437
+        },
+        {
+          "case": "rd73_252_willow",
+          "swaps": 1087,
+          "added_cnots": 3261
+        },
+        {
+          "case": "rd73_252_heron_fez",
+          "swaps": 1541,
+          "added_cnots": 4623
+        },
+        {
+          "case": "rd84_142_q20",
+          "swaps": 34,
+          "added_cnots": 102
+        },
+        {
+          "case": "rd84_142_willow",
+          "swaps": 77,
+          "added_cnots": 231
+        },
+        {
+          "case": "rd84_142_heron_fez",
+          "swaps": 124,
+          "added_cnots": 372
+        },
+        {
+          "case": "rd84_253_q20",
+          "swaps": 1433,
+          "added_cnots": 4299
+        },
+        {
+          "case": "rd84_253_willow",
+          "swaps": 2951,
+          "added_cnots": 8853
+        },
+        {
+          "case": "rd84_253_heron_fez",
+          "swaps": 4314,
+          "added_cnots": 12942
+        },
+        {
+          "case": "sqn_258_q20",
+          "swaps": 906,
+          "added_cnots": 2718
+        },
+        {
+          "case": "sqn_258_willow",
+          "swaps": 2134,
+          "added_cnots": 6402
+        },
+        {
+          "case": "sqn_258_heron_fez",
+          "swaps": 2954,
+          "added_cnots": 8862
+        },
+        {
+          "case": "square_root_7_q20",
+          "swaps": 519,
+          "added_cnots": 1557
+        },
+        {
+          "case": "square_root_7_willow",
+          "swaps": 1584,
+          "added_cnots": 4752
+        },
+        {
+          "case": "square_root_7_heron_fez",
+          "swaps": 2252,
+          "added_cnots": 6756
+        },
+        {
+          "case": "sym6_145_q20",
+          "swaps": 249,
+          "added_cnots": 747
+        },
+        {
+          "case": "sym6_145_willow",
+          "swaps": 732,
+          "added_cnots": 2196
+        },
+        {
+          "case": "sym6_145_heron_fez",
+          "swaps": 1001,
+          "added_cnots": 3003
+        },
+        {
+          "case": "sym9_193_q20",
+          "swaps": 3782,
+          "added_cnots": 11346
+        },
+        {
+          "case": "sym9_193_willow",
+          "swaps": 7500,
+          "added_cnots": 22500
+        },
+        {
+          "case": "sym9_193_heron_fez",
+          "swaps": 10853,
+          "added_cnots": 32559
+        },
+        {
+          "case": "z4_268_q20",
+          "swaps": 287,
+          "added_cnots": 861
+        },
+        {
+          "case": "z4_268_willow",
+          "swaps": 641,
+          "added_cnots": 1923
+        },
+        {
+          "case": "z4_268_heron_fez",
+          "swaps": 883,
+          "added_cnots": 2649
+        }
+      ],
+      "case_count": 72,
+      "build_seconds": 5.0776742289890535,
+      "solve_seconds": 541.9844472199911,
+      "verify_seconds": 741.1111013479967,
+      "total_seconds": 1288.2345612110075,
+      "seed": 42,
+      "layout_trials": 20,
+      "routing_trials": 20,
+      "hardware": "cpu",
+      "cpus": 4,
+      "memory_gib": 8,
+      "source_sha256": "55ebfe8b52519b5c6cba0668bb0749e1bc68c3b2412bcc294119f64ab80c23da",
+      "allocation_memory": {
+        "memory_current_mib": 656.94921875,
+        "memory_peak_mib": 830.671875
+      },
+      "worker_seconds": 1288.8315411689982,
+      "cpu_affinity": [
+        16,
+        17,
+        18,
+        19
+      ],
+      "grader_sha256": "b3daf4cb0af2894a263433212e67849765f61bc6162c2afd49fc52c0a6691a3b",
+      "library_lock_sha256": "89d1d6f60d77d636a83133ad281551976eef3c21fc5b4861399b453394789c82"
+    }
+  }
+}
