@@ -636,6 +636,17 @@ class Config:
             raise ValueError("trainer request/retry settings must be positive")
         if not isinstance(self.trainer.maxtext_kwargs, dict):
             raise ValueError("trainer.maxtext_kwargs must be a mapping")
+        # commands.maxtext_kwargs merges these extras after the validated mesh.
+        # Matching legacy declarations are harmless; conflicting ones would
+        # silently launch a different mesh from the profile and row sharding.
+        for key, expected in (("ici_tensor_parallelism", self.trainer.tp),
+                              ("ici_fsdp_parallelism", self.trainer.fsdp),
+                              ("ici_context_parallelism", 1)):
+            if key in self.trainer.maxtext_kwargs:
+                value = self.trainer.maxtext_kwargs[key]
+                if type(value) is not int or value != expected:
+                    raise ValueError(f"trainer.maxtext_kwargs.{key}={value!r} "
+                                     f"conflicts with the trainer mesh (expected {expected})")
         if not isinstance(self.trainer.extra_pins, list) or not all(
                 isinstance(p, str) and "==" in p for p in self.trainer.extra_pins):
             raise ValueError("trainer.extra_pins must be a list of exact 'name==version' pins")
