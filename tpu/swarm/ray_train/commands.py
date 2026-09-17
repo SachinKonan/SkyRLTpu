@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 from .config import Config
+from .environment import workload_environment
 
 
 def _flag(value):
@@ -33,7 +34,7 @@ def inference_urls(config: Config, head, inference_ips=None):
 
 def trainer_environment(config: Config, root: Path, run: Path, train_ips, process_id):
     t, p = config.trainer, config.ports
-    env = dict(os.environ)
+    env = workload_environment()
     for key in ("JAX_COORDINATOR_ADDRESS", "TPU_MULTIHOST_BACKEND", "TPU_MULTIPROCESS_DP"):
         env.pop(key, None)
     env.update(
@@ -58,6 +59,9 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         # abandon 7200 s); the 0/28800/30/4 set belonged to the v4-64 launcher.
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     env.update(config.trainer_env)
+    env.update(TUNIX_BACKWARD_WARMUP=_flag(t.backward_warmup),
+               TUNIX_WARMUP_MAX_LENGTH=str(t.sequence_length),
+               TUNIX_WARMUP_LOSS_FN=config.client_env.get("TTD_LOSS_FN", "importance_sampling"))
     return env
 
 
@@ -71,7 +75,8 @@ def maxtext_kwargs(config: Config, root: Path):
         kwargs["use_tokamax_splash"] = True
     if t.tp == 8:
         kwargs.update(allow_split_physical_axes=True, override_model_config=True,
-                      base_num_kv_heads=t.logical_kv_heads)
+                      **{("global_num_kv_heads" if config.model_preset == "gemma4-31b"
+                          else "base_num_kv_heads"): t.logical_kv_heads})
     kwargs.update(t.maxtext_kwargs)
     kwargs["jax_cache_dir"] = str(root / "ram/compile")
     return kwargs
@@ -133,7 +138,7 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
     cluster at head:ports.ray; the worker for the second host runs under the
     serving venv via the job runtime_env set in tpu/vllm_tpu_server.py)."""
     v = config.inference
-    env = dict(os.environ)
+    env = workload_environment()
     for key in ("JAX_COORDINATOR_ADDRESS", "TPU_MULTIHOST_BACKEND", "TPU_MULTIPROCESS_DP"):
         env.pop(key, None)
     pair = bool(group) and len(group) > 1
@@ -151,7 +156,9 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
         VLLM_USE_RAY_EXECUTOR="0",
         SKIP_JAX_PRECOMPILE=_flag(v.skip_precompile), USE_BATCHED_RPA_KERNEL=_flag(v.batched_rpa_kernel),
         USE_JAX_RAGGED_CONV1D=_flag(v.ragged_conv1d),
-        VLLM_PLUGINS="lora_filesystem_resolver", VLLM_LORA_RESOLVER_CACHE_DIR=str(run / "loras"),
+        CUSTOM_NUM_TOKENS_BUCKETS=v.custom_token_buckets,
+        SERIALIZE_MODEL_AND_SAMPLING=_flag(v.serialize_model_and_sampling),
+        VLLM_PLUGINS=v.plugins, VLLM_LORA_RESOLVER_CACHE_DIR=str(run / "loras"),
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     env.update(v.engine_env)
     if v.unset_plugins:
@@ -192,6 +199,8 @@ def inference_command(config, root, source, snapshot, run, group=None, slot=0):
                "--host", "0.0.0.0", "--port", str(config.ports.engine + slot),
                "--tensor-parallel-size", str(v.tp), "--max-model-len", str(v.max_model_length),
                "--max-num-seqs", str(v.max_sequences)]
+    # These booleans preserve the legacy shell contract: false omits the
+    # option and leaves vLLM's default alone; it does not force the feature off.
     if v.prefix_caching:
         command.append("--enable-prefix-caching")
     command += ["--enable-lora", "--max-loras", str(v.max_loras), "--max-lora-rank", str(v.max_lora_rank),
@@ -212,7 +221,7 @@ def inference_command(config, root, source, snapshot, run, group=None, slot=0):
 
 def client_environment(config, root, head, inference_ips=None, trainer_head=None):
     config.validate()
-    env = dict(os.environ)
+    env = workload_environment()
     t = config.trainer
     trainer_head = trainer_head or head
     defaults = dict(
@@ -237,6 +246,8 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults.update(TTD_PROBLEM_TYPE="rg_lru", EVAL_TIMEOUT="3600",
                         GROUPS_PER_BATCH="1", GROUP_SIZE="8", TTD_EVAL_BACKEND="local")
     defaults.update(config.client_env)
+    if t.backward_warmup:
+        defaults["TTD_WARMUP_FB"] = "0"
     if config.science_task:
         # Use the deployed profile even if the parent carries another TPU family.
         defaults["SCIENCE_ACCELERATOR"] = config.accelerator

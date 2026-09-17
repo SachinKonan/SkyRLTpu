@@ -1452,6 +1452,9 @@ class TunixBackend(AbstractBackend):
                 "copy); additional LoRA configs are unavailable for this process."
             )
         self._log_hbm("create_model/done")
+        if os.environ.get("TUNIX_BACKWARD_WARMUP") == "1":
+            from skyrl.backends.backward_warmup import run as warm_backward
+            warm_backward(self, model_id)
         logger.info(f"Created model {model_id} with lora rank={lora_config.rank}, alpha={lora_config.alpha}")
 
     def delete_model(self, model_id: str) -> None:

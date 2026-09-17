@@ -91,6 +91,8 @@ def test_final_flush_reaches_healthy_hosts_after_peer_failure(tmp_path, monkeypa
             if event == "final_run_writeback_complete"] == completed
     assert any(event == "final_compile_writeback_error" and fields["rank"] == 2
                for event, fields in control.events)
+    assert any(e['phase'] == 'final_run_writeback' and e['rank'] == 2 for e in control.shutdown_errors)
+    assert not any(e['phase'] == 'final_compile_writeback' for e in control.shutdown_errors)
 
 
 def test_api_leader_database_and_head_client_both_get_writeback(tmp_path, monkeypatch):

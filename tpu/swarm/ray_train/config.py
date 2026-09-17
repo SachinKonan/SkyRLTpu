@@ -89,6 +89,9 @@ class Trainer:
     seq_buckets: str = "4096,8192,12288,16384,20480"
     minimal_fb_output: bool = True
     free_base_state: bool = True
+    # Opt in only after TPU validation for the model/mesh. Runs before rollout
+    # generation and leaves weights, optimizer and gradient accumulators intact.
+    backward_warmup: bool = False
     # Extra MaxText kwargs merged over the launcher-derived set (gpt-oss:
     # sparse_matmul/megablox; gemma: allow_split_physical_axes; muse: host
     # offload).
@@ -146,6 +149,7 @@ class Inference:
     max_adapter_upload_bytes: int = 2 * 1024**3
     # Legacy start_vllm_tpu.sh always passes --enable-prefix-caching and never
     # --enable-chunked-prefill; the 2026-09-07 profiles had the opposite.
+    # False means omit the flag, retaining the installed vLLM default.
     prefix_caching: bool = True
     chunked_prefill: bool = False
     # Engine environment (legacy per-model values: qwen/gemma 0/0/0, muse 1/1/1).
@@ -158,9 +162,12 @@ class Inference:
     extra_args: list[str] = field(default_factory=list)
     # Extra engine environment (e.g. MOE_REQUANTIZE_WEIGHT_DTYPE for gpt-oss).
     engine_env: dict[str, str] = field(default_factory=dict)
+    custom_token_buckets: str = ""
+    serialize_model_and_sampling: bool = False
     # Muse needs the native model registration plugin as well as LoRA plugins.
     # Remove the allow-list after applying inherited/profile environment values.
     unset_plugins: bool = False
+    plugins: str = "lora_filesystem_resolver"
     native_thinking_budget: bool = False
     transformers_version: str = "5.8.0"
     # "direct": the trainer round-robins straight to the engines and pushes
@@ -274,6 +281,9 @@ class Config:
     adapter_count: int = 1
     pooled_group_size: int = 32
     importance_cap: float = 2.0
+    # Reviewed inventory files relative to ray_train/runtime_baselines. Empty
+    # means record/reuse verification only, never a claim of legacy parity.
+    runtime_baselines: dict[str, str] = field(default_factory=dict)
     inference_only: bool = False
     inference_only_ranks: list[int] | None = None
     arena_samples: int = 0
@@ -347,7 +357,9 @@ class Config:
     def requires_source_overlay(self):
         return (not self.inference_only or self.adapter_count > 1 or self.is_recurrent_gemma or self.training_smoke
                 or self.has_problem_prompt_overlay or self.has_adaptive_pwc_overlay
-                or self.has_answer_only_overlay or (self.inference.native_thinking_budget and not self.inference_only))
+                or self.has_answer_only_overlay or self.trainer.backward_warmup
+                or self.inference.hosts_per_engine > 1
+                or (self.inference.native_thinking_budget and not self.inference_only))
 
     @property
     def has_answer_only_overlay(self):
@@ -619,8 +631,30 @@ class Config:
             raise ValueError("inference.engine_env must contain strings")
         if type(self.inference.unset_plugins) is not bool:
             raise ValueError("inference.unset_plugins must be a boolean")
+        if not isinstance(self.inference.plugins, str):
+            raise ValueError("inference.plugins must be a string")
         if not all(isinstance(a, str) for a in self.inference.extra_args):
             raise ValueError("inference.extra_args must contain strings")
+        managed_flags = {"--tensor-parallel-size", "--pipeline-parallel-size", "--max-model-len",
+                         "--max-num-seqs", "--max-num-batched-tokens", "--gpu-memory-utilization",
+                         "--max-loras", "--max-lora-rank", "--port", "--host", "--served-model-name",
+                         "--enable-prefix-caching", "--no-enable-prefix-caching",
+                         "--enable-chunked-prefill", "--no-enable-chunked-prefill",
+                         "--enable-lora", "--no-enable-lora", "--download-dir",
+                         "--limit-mm-per-prompt", "--distributed-executor-backend",
+                         "--data-parallel-size", "--skyrl-lora-dir", "--skyrl-ray-placement-hosts",
+                         "--model"}
+        aliases = {"-tp": "--tensor-parallel-size", "-pp": "--pipeline-parallel-size",
+                   "-dp": "--data-parallel-size"}
+        def normalized_flag(arg):
+            flag = arg.split("=", 1)[0].replace("_", "-")
+            return aliases.get(flag, flag)
+        if any(normalized_flag(arg) in managed_flags for arg in self.inference.extra_args):
+            raise ValueError("inference.extra_args conflicts with managed inference settings")
+        if type(self.inference.serialize_model_and_sampling) is not bool:
+            raise ValueError("serialize_model_and_sampling must be boolean")
+        if not isinstance(self.inference.custom_token_buckets, str):
+            raise ValueError("custom_token_buckets must be a string")
         if self.trainer.max_lora_rank < 0 or 0 < self.trainer.max_lora_rank < self.trainer.lora_rank:
             raise ValueError("trainer max_lora_rank must be 0 (= lora_rank) or >= lora_rank")
         if self.trainer.effective_max_lora_rank > self.inference.max_lora_rank:
@@ -646,6 +680,11 @@ class Config:
         if (type(self.resume_min_checkpoint_step) is not int or self.resume_min_checkpoint_step < 0
                 or self.resume_min_checkpoint_step and not self.checkpoint_resume):
             raise ValueError("resume_min_checkpoint_step requires checkpoint_resume and a nonnegative integer")
+        if not isinstance(self.runtime_baselines, dict) or set(self.runtime_baselines) - {"trainer", "serving", "client"}:
+            raise ValueError("runtime_baselines supports trainer, serving and client inventories")
+        if any(not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]+\.json", name)
+               for name in self.runtime_baselines.values()):
+            raise ValueError("runtime baseline filenames must be plain JSON filenames")
         # commands.maxtext_kwargs merges these extras after the validated mesh.
         # Matching legacy declarations are harmless; conflicting ones would
         # silently launch a different mesh from the profile and row sharding.
@@ -698,6 +737,46 @@ class Config:
                 raise ValueError("Arena requires 0 < ARENA_WAIT_TIMEOUT <= EVAL_TIMEOUT < infinity")
         if any(str(k) != k or str(v) != v for k, v in self.trainer_env.items()):
             raise ValueError("trainer environment must contain strings")
+        if type(self.trainer.backward_warmup) is not bool:
+            raise ValueError("backward_warmup must be boolean")
+        if self.trainer.backward_warmup:
+            from .warmup_contract import shapes
+            if self.adapter_count != 1 or self.trainer_env.get("TUNIX_LORA_MIX_GAMMA"):
+                raise ValueError("backward warmup requires a single unmixed adapter")
+            if self.client_env.get("TTD_WARMUP_FB", "0") != "0":
+                raise ValueError("disable legacy dummy FB when using state-preserving warmup")
+            if self.client_env.get("TTD_LOSS_FN", "importance_sampling") != "importance_sampling":
+                raise ValueError("backward warmup currently requires importance_sampling")
+            shapes(self.trainer.sequence_length, self.trainer.token_budget, self.trainer.fsdp,
+                   uniform=int(self.trainer_env.get("TUNIX_UNIFORM_SEQ_LEN", self.trainer.sequence_length)),
+                   buckets=[int(n) for n in self.trainer_env.get("TUNIX_SEQ_BUCKETS", self.trainer.seq_buckets).split(",") if n.strip()])
+        if "TUNIX_ROW_SHARD" in self.trainer_env:
+            if self.trainer_env["TUNIX_ROW_SHARD"] != str(self.trainer.fsdp):
+                raise ValueError("TUNIX_ROW_SHARD conflicts with trainer.fsdp")
+        # Topology and request/database identities are executor-owned. Allow
+        # compiler and diagnostic knobs, but never a second source of topology.
+        owned = {"TPU_PROCESS_BOUNDS", "TPU_CHIPS_PER_PROCESS_BOUNDS", "TPU_PROCESS_ADDRESSES",
+                 "TPU_PROCESS_PORT", "TPU_VISIBLE_CHIPS", "CLOUD_TPU_TASK_ID",
+                 "SKYRL_TRAIN_PROCESS_ID", "SKYRL_DATABASE_URL", "SKYRL_FUTURE_BLOB_DIR"}
+        if owned.intersection(self.trainer_env):
+            raise ValueError("trainer_env cannot override executor topology or request storage")
+        if owned.intersection(self.inference.engine_env):
+            raise ValueError("engine_env cannot override executor topology")
+        if {"VLLM_XLA_CACHE_PATH", "JAX_COMPILATION_CACHE_DIR", "VLLM_LORA_RESOLVER_CACHE_DIR",
+            "VLLM_PLUGINS", "HF_HOME", "HF_HUB_OFFLINE", "RAY_ADDRESS", "RAY_NAMESPACE",
+            "TPU_MULTIHOST_BACKEND", "VLLM_USE_RAY_EXECUTOR",
+            "SKYRL_RAY_PLACEMENT_HOSTS"}.intersection(self.inference.engine_env):
+            raise ValueError("engine_env cannot override executor cache, plugin or routing settings")
+        flags = {"SKIP_JAX_PRECOMPILE": str(int(self.inference.skip_precompile)),
+                 "USE_BATCHED_RPA_KERNEL": str(int(self.inference.batched_rpa_kernel)),
+                 "USE_JAX_RAGGED_CONV1D": str(int(self.inference.ragged_conv1d)),
+                 "CUSTOM_NUM_TOKENS_BUCKETS": self.inference.custom_token_buckets,
+                 "SERIALIZE_MODEL_AND_SAMPLING": str(int(self.inference.serialize_model_and_sampling)),
+                 "TPU_BACKEND_TYPE": self.inference.tpu_backend,
+                 "MODEL_IMPL_TYPE": self.inference.model_impl}
+        for key, expected in flags.items():
+            if key in self.inference.engine_env and self.inference.engine_env[key] != expected:
+                raise ValueError(f"engine_env {key} conflicts with inference configuration")
         if len(self.client_member_spec.split(":")) != 3 or not self.client_member_spec.startswith(self.model + ":"):
             raise ValueError("client_member_spec must be '<model>:<renderer>:<tag>' for the configured model")
         try:

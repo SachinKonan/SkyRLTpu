@@ -478,7 +478,7 @@ def test_muse_removes_parent_and_profile_plugin_restrictions(monkeypatch, accele
     monkeypatch.setenv("VLLM_PLUGINS", "stale_plugin")
     cfg = v5p_config(model_preset="muse-glimmer-30b", accelerator=accelerator,
                      hosts=hosts, trainer=trainer,
-                     inference=dict(engine_env={"VLLM_PLUGINS": "lora_filesystem_resolver"}))
+                     inference=dict(plugins="lora_filesystem_resolver"))
     cfg = Config.from_dict(cfg.to_dict())
     env = inference_environment(cfg, ROOT, ROOT / "run")
     assert "VLLM_PLUGINS" not in env
@@ -501,5 +501,5 @@ def test_plugin_unset_requires_boolean_and_can_be_explicitly_overridden():
     with pytest.raises(ValueError, match="unset_plugins must be a boolean"):
         v5p_config(inference=dict(unset_plugins="false"))
     cfg = v5p_config(model_preset="muse-glimmer-30b",
-                     inference=dict(unset_plugins=False, engine_env={"VLLM_PLUGINS": "explicit_plugin"}))
+                     inference=dict(unset_plugins=False, plugins="explicit_plugin"))
     assert inference_environment(cfg, ROOT, ROOT / "run")["VLLM_PLUGINS"] == "explicit_plugin"

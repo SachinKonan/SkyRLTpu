@@ -539,6 +539,12 @@ def patched_core(tmp_path):
     with tarfile.open(ROOT / "tests/tpu_swarm/fixtures/thinking_budget_core.tar.gz") as archive:
         archive.extractall(tmp_path, filter="data")
     (tmp_path / "tpu").mkdir()
+    # The installer now verifies the packaged client contract before touching
+    # the serving source. Include that actual client alongside the core fixture.
+    import shutil
+    client = Path("third_party/discover/ttt_discover/tinker_utils/completers.py")
+    (tmp_path / client).parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / client, tmp_path / client)
     install(tmp_path)
     return tmp_path / "third_party/tpu-inference"
 
@@ -796,3 +802,17 @@ def test_completer_detection_device_batch_and_rollback(model):
     for token in streams[0]:assert run_token(token)==token
     request.output_token_ids=request.output_token_ids[:s.budget]
     assert [run_token(7) for _ in f['transition']]==f['transition']
+
+
+@pytest.mark.parametrize('model', ['qwen3.5-27b','gemma4-31b','muse-glimmer-30b'])
+def test_detector_close_completing_exactly_on_cap_does_not_force(model):
+    f = json.loads((ROOT/'tests/tpu_swarm/fixtures/thinking_markers.json').read_text())[model]
+    first = [7] + f['end']
+    settings = compat_settings(f, len(first))
+    state = budget.initial_state(settings, [])
+    for token in first:
+        out, state, forced = budget.reference_step(settings, state, token)
+        assert out == token and not forced
+    assert state[0] == budget.ANSWERING
+    out, state, forced = budget.reference_step(settings, state, 7)
+    assert out == 7 and not forced

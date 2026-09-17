@@ -23,6 +23,7 @@ from tpu.swarm.ray_train.process import Process
 from tpu.swarm.ray_train.bootstrap import check_ports_available
 
 
+
 # Representative upstream wrapper endings. Keep these fixtures independent of
 # the patcher's matching constants so changes to its matcher remain testable.
 OLD = '''    if self.config.attention == "vllm_rpa":

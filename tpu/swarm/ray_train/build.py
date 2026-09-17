@@ -19,6 +19,13 @@ def build(profile, output):
     config = Config.load(profile)
     package = Path(__file__).resolve().parent
     repo = package.parents[2]
+    # Native client parity is checked by source_ready after extracting the
+    # checksum-verified base and applying overlays. The checkout's Discover
+    # file is not necessarily the client deployed from that base bundle.
+    for name in config.runtime_baselines.values():
+        baseline = json.loads((package / "runtime_baselines" / name).read_text())
+        if baseline.get("schema") != 1 or not baseline.get("packages"):
+            raise ValueError("runtime baseline must contain a captured schema-1 package inventory")
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     archive = output / "ray-training.tar.gz"
@@ -82,7 +89,7 @@ if [ ! -f "$code/.complete" ]; then
   tar -xzf "$code/code.tar.gz" -C "$code"
   touch "$code/.complete"
 fi
-export PYTHONPATH="$code${{PYTHONPATH:+:$PYTHONPATH}}"
+export PYTHONPATH="$code:$code/tpu${{PYTHONPATH:+:$PYTHONPATH}}"
 exec python3 -m tpu.swarm.ray_train.bootstrap "$code/{source}"
 ''')
     path = output / (config.run_id + ".yaml")

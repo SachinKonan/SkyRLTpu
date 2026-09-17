@@ -24,11 +24,12 @@ def test_serve_shutdown_has_bounded_wait(tmp_path):
     from tpu.swarm.ray_train import controller
     released = threading.Event()
     events = []
-    instance = SimpleNamespace(report=lambda event, **kw: events.append(event))
+    instance = SimpleNamespace(report=lambda event, **kw: events.append(event), shutdown_errors=[])
     with patch.object(controller.serve, 'shutdown', lambda: released.wait(2)):
         try:
             controller.Controller.close_serve(instance, timeout=.01)
             assert events == ['serve_cleanup_timeout']
+            assert instance.shutdown_errors == [{'phase': 'serve_cleanup', 'error': 'timeout'}]
         finally:
             released.set()
 
@@ -46,7 +47,9 @@ def test_failed_worker_cleans_builds_before_propagating(tmp_path):
     from tpu.science.worker import process_identity
     jobs=tmp_path/'jobs';jobs.mkdir()
     with patch.object(ray_cpu.subprocess, 'Popen', side_effect=OSError('launch failed')), \
-         patch.object(ray_cpu.subprocess, 'run'), patch.object(ray_cpu,'cleanup_builds') as cleanup:
+         patch.object(ray_cpu.subprocess, 'run'), \
+         patch.object(ray_cpu.os, 'sched_getaffinity', return_value=set(range(128))), \
+         patch.object(ray_cpu,'cleanup_builds') as cleanup:
         with pytest.raises(OSError, match='launch failed'):
             ray_cpu._grade_admitted('routing', 'code', tmp_path, jobs, 0, 16)
         cleanup.assert_called_once()

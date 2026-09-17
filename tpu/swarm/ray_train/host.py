@@ -41,6 +41,9 @@ class Host:
         self.run = self.root / "runs" / self.config.run_id
         self.run.mkdir(parents=True, exist_ok=True)
         self.source_identity = self.config.base_bundle_sha256
+        self.runtime_baseline_identity = "".join(
+            hashlib.sha256((Path(__file__).parent / "runtime_baselines" / name).read_bytes()).hexdigest()
+            for _, name in sorted(self.config.runtime_baselines.items()))
         if self.config.requires_source_overlay:
             from .overlay import identity
             self.source_identity += "-" + identity(Path(__file__).with_name("source_overlay"))
@@ -155,6 +158,10 @@ class Host:
     def source_ready(self):
         marker = self.source / ".source-complete"
         if marker.exists() and marker.read_text() == self.source_identity:
+            if self.config.inference.native_thinking_budget:
+                from .thinking_budget.contract import check
+                check(self.source, model=self.config.model_preset,
+                      require_client=not self.config.inference_only)
             return str(self.source)
         archive = self.root / "base-download.tar.gz"
         self.gcs.transfer(["cp", self.config.base_bundle, str(archive)], "base-code", self.root)
@@ -173,7 +180,8 @@ class Host:
             install(Path(__file__).with_name("source_overlay"), staging)
         if self.config.inference.native_thinking_budget:
             from .thinking_budget.install import install as install_thinking
-            install_thinking(staging)
+            install_thinking(staging, model=self.config.model_preset,
+                             require_client=not self.config.inference_only)
         for path in ("tpu/probe_topology.py", "skyrl/backends/tunix_backend.py",
                      "skyrl/utils/checkpoint_mirror.py", "tpu/vllm_tpu_server.py"):
             if not (staging / path).is_file():
@@ -236,11 +244,12 @@ class Host:
         identity = self.source_identity + (
             self.config.trainer.maxtext_spec + "|" + " ".join(self.TRAINER_PINS + self.config.trainer.extra_pins)
             if role == "trainer"
-            else " ".join(self.serving_pins()))
+            else " ".join(self.serving_pins())) + "|runtime-inventory-v1|" + self.runtime_baseline_identity
         marker = folder / ".complete"
         if marker.exists() and marker.read_text() == identity:
             if role == "trainer":
                 self.checked("trainer-flce-contract", [str(folder / "bin/python"), str(Path(__file__).with_name("patch_maxtext.py"))])
+            self.verify_runtime(role, folder)
             return
         if folder.exists():
             shutil.rmtree(folder)
@@ -271,7 +280,31 @@ class Host:
                 "assert jax.__version__ == '0.10.1'; "
                 "missing = [n for n in ('add_lora','remove_lora','list_loras','pin_lora') if not hasattr(TPUWorker, n)]; "
                 "assert not missing, missing"], env=dict(os.environ, JAX_PLATFORMS="cpu"))
+        self.verify_runtime(role, folder, fresh=True)
         marker.write_text(identity)
+
+    def verify_runtime(self, role, folder, fresh=False):
+        """Detect drift on reuse; preserve a per-host inventory with the run."""
+        # Host placement calls this role 'inference', while the installed venv
+        # and reviewed baseline are named 'serving'. Never bypass that baseline.
+        role = "serving" if role == "inference" else role
+        inventory = folder / ".runtime-inventory.json"
+        output = self.run / f"runtime-{role}-{self.rank}.json"
+        command = [str(folder / "bin/python"), str(Path(__file__).with_name("runtime_inventory.py")),
+                   "--source", str(self.source), "--output", str(output)]
+        if not fresh:
+            if not inventory.is_file():
+                raise RuntimeError(f"{role} runtime predates inventory verification; rebuild its owned environment")
+            command += ["--expect", str(inventory)]
+        self.checked(role + "-runtime-inventory", command)
+        if role in self.config.runtime_baselines:
+            from .runtime_inventory import differences
+            expected = Path(__file__).parent / "runtime_baselines" / self.config.runtime_baselines[role]
+            delta = differences(json.loads(expected.read_text()), json.loads(output.read_text()))
+            if delta:
+                raise RuntimeError(f"{role} differs from reviewed runtime baseline: {json.dumps(delta, sort_keys=True)}")
+        if fresh:
+            shutil.copyfile(output, inventory)
 
     def install_client(self):
         folder = self.root / "envs/client"
@@ -279,7 +312,8 @@ class Host:
         identity = hashlib.sha256(self.source_identity.encode()
             + (CLIENT_ENV / "pyproject.toml").read_bytes()
             + (CLIENT_ENV / "uv.lock").read_bytes()
-            + b"client-frozen-v1").hexdigest()
+            + b"client-frozen-v2-inventory"
+            + self.runtime_baseline_identity.encode()).hexdigest()
         python = str(folder / "bin/python")
         verify = [python, str(Path(__file__).with_name("client_dependencies.py")),
                   str(CLIENT_ENV / "uv.lock")]
@@ -287,6 +321,7 @@ class Host:
             self.checked("client-lock-check", verify)
             if self.config.inference.native_thinking_budget:
                 self.checked("client-native-sdk", [python, str(Path(__file__).with_name("native_sdk.py"))])
+            self.verify_runtime("client", folder)
             return
         if folder.exists():
             shutil.rmtree(folder)
@@ -302,6 +337,7 @@ class Host:
         if self.config.inference.native_thinking_budget:
             self.checked("client-native-sdk", [python, str(Path(__file__).with_name("native_sdk.py"))])
         self.checked("client-import", [python, "-c", "import ray,tinker,wandb,torch,ttt_discover; assert torch.version.cuda is None"])
+        self.verify_runtime("client", folder, fresh=True)
         marker.write_text(identity)
 
     def reclaim_grader_caches(self):
@@ -381,9 +417,12 @@ class Host:
             raise RuntimeError("trainer host was not prepared for this role")
         ips = [self.ips[r] for r in train_ranks]
         process_id = train_ranks.index(self.rank)
-        self.start("trainer", trainer_command(self.config, self.root, self.source, self.ips[0], ips, process_id,
-                                              inference_ips),
-                   trainer_environment(self.config, self.root, self.run, ips, process_id), self.source)
+        command = trainer_command(self.config, self.root, self.source, self.ips[0], ips, process_id, inference_ips)
+        environment = trainer_environment(self.config, self.root, self.run, ips, process_id)
+        from .launch_contract import write_launch_contract
+        write_launch_contract(self.run / f"launch-trainer-{self.rank}.json", command, environment,
+                              extra_keys=self.config.trainer_env)
+        self.start("trainer", command, environment, self.source)
         self.phase = "trainer_started"
         return self.heartbeat()
 
@@ -410,9 +449,12 @@ class Host:
                        "--source", str(self.source), "--model", self.config.model,
                        "--learning-rate", self.config.client_learning_rate,
                        "--fixture", self.config.attention_replay_fixture]
-        self.start("client", command,
-                   client_environment(self.config, self.root, self.ips[0],
-                                      trainer_head=self.ips[self.trainer_leader]), self.source)
+        environment = client_environment(self.config, self.root, self.ips[0],
+                                         trainer_head=self.ips[self.trainer_leader])
+        from .launch_contract import write_launch_contract
+        write_launch_contract(self.run / f"launch-client-{self.rank}.json", command, environment,
+                              extra_keys=self.config.client_env)
+        self.start("client", command, environment, self.source)
         self.phase = "client_running"
         return self.heartbeat()
 
@@ -558,7 +600,7 @@ class Host:
             backup = self.run / "tinker-backup.db"
             create_snapshot(db, backup)
             gcs.transfer(["cp", str(backup), self.config.run_gcs + "/tinker-backup.db"], "database-writeback", timeout=120)
-        logs = [str(path) for pattern in ("*.jsonl", "*.log") for path in self.run.glob(pattern)]
+        logs = [str(path) for pattern in ("*.jsonl", "*.log", "runtime-*.json", "launch-*.json") for path in self.run.glob(pattern)]
         if logs:
             destination = self.config.run_gcs + "/logs/"
             if self.rank != 0:

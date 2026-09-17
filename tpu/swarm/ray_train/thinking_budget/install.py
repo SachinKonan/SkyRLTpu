@@ -5,7 +5,7 @@ import shutil
 import subprocess
 
 ASSETS = ("runner.patch", "thinking_budget.py", "thinking_budget_api.py",
-          "thinking_budget_device.py", "server.py", "install.py")
+          "thinking_budget_device.py", "server.py", "install.py", "contract.py")
 
 
 def identity():
@@ -16,8 +16,10 @@ def identity():
     return digest.hexdigest()
 
 
-def install(source):
+def install(source, model=None, require_client=True):
     source, assets = Path(source), Path(__file__).parent
+    from .contract import check
+    check(source, model=model, require_client=require_client)
     core = source / "third_party/tpu-inference"
     # No fuzzy application, replacement of the full core, or shared checkout edits.
     command = ["patch", "--batch", "--forward", "--fuzz=0", "-p1", "-i", str(assets / "runner.patch")]

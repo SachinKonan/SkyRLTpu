@@ -63,6 +63,7 @@ ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py"}
+WARMUP_FILES = REPEATED_KV_FILES | {"skyrl/backends/backward_warmup.py", "tpu/swarm/ray_train/warmup_contract.py"}
 
 SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/rl/resume.py'} | {
     'tpu/science/' + name for name in (
@@ -76,6 +77,12 @@ SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/r
 
 def manifest(repo, config=None):
     names = set(FILES) if config is None or config.adapter_count > 1 else set()
+    if config is not None and config.inference.hosts_per_engine > 1:
+        names.add("tpu/vllm_tpu_server.py")
+    # The updated backend imports the helper only for an explicitly enabled
+    # warmup. Always ship the helper whenever that backend is selected.
+    if config is not None and config.trainer.backward_warmup:
+        names.update(WARMUP_FILES)
     if config is None or not config.inference_only:
         names.update(DATABASE_FILES)
     if config is not None and config.is_recurrent_gemma:
@@ -130,6 +137,8 @@ def install(directory, destination):
     allowed.extend([base | DATABASE_FILES for base in [set(), *allowed]])
     allowed.extend([base | SCIENCE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
     allowed.extend([base | REPEATED_KV_FILES for base in [set(), *allowed]])
+    allowed.extend([base | WARMUP_FILES for base in [set(), *allowed]])
+    allowed.extend([base | {"tpu/vllm_tpu_server.py"} for base in [set(), *allowed]])
     if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")
     for name, expected in records.items():
