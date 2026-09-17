@@ -43,3 +43,9 @@ The wrapper copies the launcher's process resource limits (including NOFILE
 and MEMLOCK) and removes systemd's default task-count ceiling. It does not
 change candidate CPU/memory limits. The live probe and reproduction procedure
 are in `tests/tpu_swarm/live_runtime_service/`.
+
+The current six v4-64 science training profiles (three circuit, three qubit)
+and the Gemma qubit v6e-32 duplicate explicitly enable this mode. Legacy
+profiles retain the disabled default. Already submitted immutable packages
+are unaffected, including queued jobs; only newly built packages contain this
+lifecycle and the linked grader services.

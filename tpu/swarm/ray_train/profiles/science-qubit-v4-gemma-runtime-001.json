@@ -99,5 +99,6 @@
   "science_routing_slots_per_host": 16,
   "max_restarts_on_errors": 3,
   "checkpoint_resume": true,
-  "resume_min_checkpoint_step": 1
+  "resume_min_checkpoint_step": 1,
+  "systemd_runtime": true
 }

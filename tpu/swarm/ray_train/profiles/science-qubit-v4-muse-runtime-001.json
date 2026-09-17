@@ -95,5 +95,6 @@
   "seed_pool_sha256": "83192df8f0ffc637b9431f3697d5f7c4cf4aa2665cd11bf1d728ef9a4ce1baba",
   "science_routing_slots_per_host": 16,
   "max_restarts_on_errors": 3,
-  "checkpoint_resume": true
+  "checkpoint_resume": true,
+  "systemd_runtime": true
 }

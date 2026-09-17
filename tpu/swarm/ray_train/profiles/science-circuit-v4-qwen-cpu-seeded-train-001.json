@@ -95,5 +95,6 @@
   "science_placement_slots_per_host": 16,
   "seed_pool_sha256": "7484c65e9dc0082b3d2c45bebcf539d19387d373ddd9537d75c7d74dad764cb5",
   "checkpoint_resume": true,
-  "max_restarts_on_errors": 3
+  "max_restarts_on_errors": 3,
+  "systemd_runtime": true
 }
