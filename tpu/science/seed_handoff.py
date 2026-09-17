@@ -17,6 +17,25 @@ from .seed_pool import merge
 from tpu.swarm.ray_train.config import Config
 
 
+def storage_command(gcloud, args, env, *, allow_missing=False, attempts=3):
+    """Retry idempotent storage operations without repeating job submission."""
+    error = ''
+    for attempt in range(attempts):
+        try:
+            result = subprocess.run([gcloud, *args], env=env, capture_output=True, timeout=300)
+            if result.returncode == 0:
+                return result.stdout
+            error = result.stderr.decode(errors='replace')
+            if allow_missing and any(s in error.lower() for s in (
+                    'no urls matched', 'matched no objects or files', 'not found', 'does not exist')):
+                return None
+        except subprocess.TimeoutExpired:
+            error = 'storage operation timed out'
+        if attempt + 1 < attempts:
+            time.sleep(5)
+    raise RuntimeError('gcloud operation failed after retries: ' + error[-2000:])
+
+
 def seed_job_status(sky, shards, env):
     """An unavailable control plane is unknown, never success or job failure."""
     try:
@@ -85,14 +104,7 @@ def run(plan_path):
     gcloud = plan['gcloud']
 
     def command(args, *, allow_missing=False):
-        result = subprocess.run([gcloud, *args], env=env, capture_output=True, timeout=300)
-        if result.returncode:
-            error = result.stderr.decode(errors='replace')
-            if allow_missing and any(s in error.lower() for s in (
-                    'no urls matched', 'matched no objects or files', 'not found', 'does not exist')):
-                return None
-            raise RuntimeError('gcloud operation failed: ' + error[-2000:])
-        return result.stdout
+        return storage_command(gcloud, args, env, allow_missing=allow_missing)
 
     def unchanged():
         for path, digest in plan['source_hashes'].items():

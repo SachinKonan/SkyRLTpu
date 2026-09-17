@@ -5,7 +5,7 @@
   "bucket": "gs://sk7524-tinker-tpu-us-central2",
   "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
   "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
-  "root": "~/.cache/science-routing-v4-gemma-bootstrap-l2-001",
+  "root": "~/.cache/science-routing-v4-gemma-bootstrap-l2-001-recovery-20260917",
   "model_preset": "gemma4-31b",
   "training_smoke": false,
   "trainer": {
@@ -71,7 +71,7 @@
     "NUM_CPUS_PER_TASK": "4",
     "SAVE_EVERY": "1",
     "TTD_REJECT_TRUNCATED": "1",
-    "TTD_SICK_MARKER": "/home/gcpuser/.cache/science-routing-v4-gemma-bootstrap-l2-001/runs/science-routing-v4-gemma-bootstrap-l2-001/ENGINE-SICK",
+    "TTD_SICK_MARKER": "/home/gcpuser/.cache/science-routing-v4-gemma-bootstrap-l2-001-recovery-20260917/runs/science-routing-v4-gemma-bootstrap-l2-001/ENGINE-SICK",
     "TTD_FLATLINE_STOP": "0",
     "TTD_MIN_THINK_TOKENS": "0",
     "TTD_M0_LORA_SEED": "1",
@@ -82,7 +82,9 @@
     "TTD_ONE_STEP_SMOKE": "0",
     "TTD_QWEN_SAMPLE_GROUP_CHUNK_SIZE": "0",
     "TTD_MIN_VALID_PER_GROUP": "0",
-    "TTD_SAMPLING_PROGRESS_TIMEOUT": "28800"
+    "TTD_SAMPLING_PROGRESS_TIMEOUT": "28800",
+    "TTD_RESUME_STRICT": "1",
+    "TTD_RESUME_SEARCH_AHEAD": "1"
   },
   "client_learning_rate": "4e-5",
   "trainer_env": {
@@ -94,5 +96,6 @@
   "zone": "us-central2-b",
   "bootstrap_layers": 0,
   "bootstrap_all_hosts": false,
-  "science_routing_slots_per_host": 16
+  "science_routing_slots_per_host": 16,
+  "max_restarts_on_errors": 3
 }

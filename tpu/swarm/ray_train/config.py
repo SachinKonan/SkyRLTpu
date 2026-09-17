@@ -294,6 +294,7 @@ class Config:
     arena_max_tokens: int = 8192
     arena_thinking_tokens: int | None = None
     ports: Ports = field(default_factory=Ports)
+    max_restarts_on_errors: int = 0
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
     inference: Inference = field(default_factory=Inference)
@@ -636,6 +637,8 @@ class Config:
             raise ValueError("trainer request/retry settings must be positive")
         if not isinstance(self.trainer.maxtext_kwargs, dict):
             raise ValueError("trainer.maxtext_kwargs must be a mapping")
+        if type(self.max_restarts_on_errors) is not int or not 0 <= self.max_restarts_on_errors <= 3:
+            raise ValueError("max_restarts_on_errors must be an integer from 0 to 3")
         # commands.maxtext_kwargs merges these extras after the validated mesh.
         # Matching legacy declarations are harmless; conflicting ones would
         # silently launch a different mesh from the profile and row sharding.

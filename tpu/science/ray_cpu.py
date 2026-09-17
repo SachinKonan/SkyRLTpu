@@ -70,6 +70,7 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host):
         '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
         '--owner-pid',str(os.getpid()),'--owner-start',process_identity(os.getpid())]
     started=time.monotonic()
+    result = None
     try:
         with (folder/'worker.log').open('wb') as log:
             proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
@@ -83,12 +84,17 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host):
     finally:
         # This also executes on cooperative Ray cancellation. A dead Ray worker
         # is detected by the unit's watchdog; RuntimeMaxSec is the final backstop.
-        subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
-    if task == 'routing':
         try:
-            result['metrics']['removed_build_dirs'] = cleanup_builds(folder)
-        except OSError as exc:
-            result['metrics']['build_cleanup_error'] = str(exc)
+            subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
+        finally:
+            if task == 'routing':
+                try:
+                    removed = cleanup_builds(folder)
+                    if result is not None:
+                        result['metrics']['removed_build_dirs'] = removed
+                except OSError as exc:
+                    if result is not None:
+                        result['metrics']['build_cleanup_error'] = str(exc)
     result['metrics'].update(ray_node_id=ray.get_runtime_context().get_node_id(),
         host=__import__('socket').gethostname(),job_id=job_id,task=task,ray_executor=True,
         task_envelope_seconds=time.monotonic()-started,hard_memory_gib=8,hard_cpus=cpus,

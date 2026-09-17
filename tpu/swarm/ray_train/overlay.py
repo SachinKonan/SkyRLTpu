@@ -64,7 +64,7 @@ ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_build
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py"}
 
-SCIENCE_FILES = {'tpu/run_ttd_ensemble.py'} | {
+SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/rl/resume.py'} | {
     'tpu/science/' + name for name in (
         '__init__.py', 'bootstrap.py', 'seed_pool.py', 'training_env.py', 'feedback.py', 'training_setup.py', 'ray_cpu.py', 'worker.py',
         'routing.py', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',

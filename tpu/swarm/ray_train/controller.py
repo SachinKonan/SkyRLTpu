@@ -465,10 +465,7 @@ class Controller:
         if self.science_group is not None:
             from ray.util.placement_group import remove_placement_group
             remove_placement_group(self.science_group)
-        try:
-            serve.shutdown()
-        except Exception as exc:
-            self.report("serve_cleanup_error", detail=str(exc))
+        self.close_serve()
         if self.hosts:
             self.drain_phase({host.stop.remote(): rank for rank, host in enumerate(self.hosts)},
                              "host_stop", timeout=90)
@@ -478,6 +475,20 @@ class Controller:
                              "final_compile_writeback", timeout=360)
             self.drain_phase({host.sync_run.remote(): rank for rank, host in enumerate(self.hosts)},
                              "final_run_writeback", timeout=360)
+
+    def close_serve(self, timeout=60):
+        # A failed replica must not leave the job RUNNING forever while Serve
+        # drains requests. Host/process shutdown and durable writeback follow.
+        def shutdown():
+            try:
+                serve.shutdown()
+            except Exception as exc:
+                self.report("serve_cleanup_error", detail=str(exc))
+        thread = threading.Thread(target=shutdown, daemon=True)
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
+            self.report("serve_cleanup_timeout", timeout=timeout)
 
     def drain_phase(self, refs, phase, timeout):
         deadline = time.monotonic() + timeout

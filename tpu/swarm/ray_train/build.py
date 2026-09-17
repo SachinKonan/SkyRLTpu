@@ -70,7 +70,7 @@ def build(profile, output):
     task = dict(name=config.run_id, resources=dict(cloud="gcp", zone=zone,
         accelerators=config.accelerator, accelerator_args=dict(gcp_queued_resource=True, runtime_version=runtime),
         use_spot=True, disk_size=300 if is_v4 else 150,
-        job_recovery=dict(strategy="FAILOVER", max_restarts_on_errors=0)),
+        job_recovery=dict(strategy="FAILOVER", max_restarts_on_errors=config.max_restarts_on_errors)),
         envs=dict(RAY_TRAIN_CODE=uri, RAY_TRAIN_CODE_SHA256=digest),
         run=f'''set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
