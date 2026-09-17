@@ -71,6 +71,7 @@ class Controller:
         self.science_group = None
         self.science_refs = []
         self.transitioning = False
+        self.shutdown_errors = []
 
     def report(self, event, **fields):
         return emit(self.log, event, run_id=self.config.run_id, **fields)
@@ -469,6 +470,7 @@ class Controller:
             serve.shutdown()
         except Exception as exc:
             self.report("serve_cleanup_error", detail=str(exc))
+            self.shutdown_errors.append({"phase": "serve_cleanup", "error": str(exc)})
         if self.hosts:
             self.drain_phase({host.stop.remote(): rank for rank, host in enumerate(self.hosts)},
                              "host_stop", timeout=90)
@@ -492,8 +494,12 @@ class Controller:
                     self.report(phase + "_complete", rank=rank, result=result)
                 except Exception as exc:
                     self.report(phase + "_error", rank=rank, detail=str(exc))
+                    if phase != "final_compile_writeback":
+                        self.shutdown_errors.append({"phase": phase, "rank": rank, "error": str(exc)})
         for rank in pending.values():
             self.report(phase + "_timeout", rank=rank)
+            if phase != "final_compile_writeback":
+                self.shutdown_errors.append({"phase": phase, "rank": rank, "error": "timeout"})
 
 
 def main():
@@ -521,6 +527,9 @@ def main():
         raise
     finally:
         controller.close()
+        if code == 0 and controller.shutdown_errors:
+            code = 1
+            controller.report("completion_not_durable", failures=controller.shutdown_errors)
         ray.get(status.finish.remote(code), timeout=10)
         ray.shutdown()
     raise SystemExit(code)

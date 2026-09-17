@@ -210,3 +210,93 @@ def test_native_source_path_fits_filesystem_name_limit_and_tracks_all_inputs():
         exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])),'host-path','exec'),ns)
         names.append(ns['source_name']);assert len(names[-1])<=255
     assert names[0]!=names[1]
+
+
+@pytest.mark.parametrize('model', ['qwen3.5-27b', 'gemma4-31b', 'muse-glimmer-30b'])
+@pytest.mark.parametrize('n', [1, 32])
+@pytest.mark.parametrize('already_answering', [False, True])
+def test_stop_exactly_at_cap_continues_same_prefix_like_legacy(existing_completers, monkeypatch, model, n, already_answering):
+    f = json.loads((ROOT/'tests/tpu_swarm/fixtures/thinking_markers.json').read_text())[model]
+    cls = existing_completers[model]
+    first = [7] + (f['end'] if already_answering else [8, 99])
+    tail = f['answer_tail']; cap = len(first)
+    p = cls(); p.phase1_max_tokens = 100 + cap; p.context_window = 512
+    p.context_buffer = 50; p.min_think_tokens = 0; p.temperature = 1
+    decoded = cls.THINK_CLOSE_MARKER if already_answering else 'reasoning EOS'
+    p.tokenizer = SimpleNamespace(encode=lambda *a, **k: f['transition'], decode=lambda ids: decoded)
+    prompt = SimpleNamespace(length=100, chunks=[])
+    old_calls = []
+    async def legacy_sample(chunks, stop, max_tokens):
+        old_calls.append((chunks, stop, max_tokens))
+        tokens = first if len(old_calls) == 1 else tail
+        return tokens, [-0.5] * len(tokens)
+    p._sample = legacy_sample
+    expected = asyncio.run(p._two_phase(prompt, ['STOP']))
+    native_calls = []
+    async def native_sample(**kwargs):
+        native_calls.append(kwargs)
+        assert kwargs['num_samples'] == n
+        c = dict(token_ids=first, logprobs={'token_logprobs': [-0.5] * cap})
+        api.annotate_response({'choices':[c]}, compat_settings(f, cap), [])
+        return SimpleNamespace(sequences=[SimpleNamespace(tokens=first, logprobs=c['logprobs']['token_logprobs'],
+            loss_mask=c['loss_mask'], thinking_budget=c['thinking_budget']) for _ in range(n)])
+    continuation_calls = []
+    async def continuation(chunks, stop, max_tokens):
+        continuation_calls.append((chunks, stop, max_tokens))
+        assert chunks[-1].tokens == old_calls[1][0][-1].tokens
+        assert (stop, max_tokens) == old_calls[1][1:]
+        return tail, [-0.5] * len(tail)
+    p._sample = continuation; p.sampling_client = SimpleNamespace(sample_async=native_sample)
+    monkeypatch.setenv('TTD_NATIVE_THINKING_BUDGET', '1')
+    monkeypatch.setenv('TTD_QWEN_SAMPLE_GROUP_CHUNK_SIZE', '0')
+    out = asyncio.run(p.sample_group(prompt, ['STOP'], n))
+    assert len(native_calls) == 1 and len(continuation_calls) == n
+    for actual in out:
+        assert actual.tokens == expected.tokens
+        assert actual.maybe_mask == expected.maybe_mask
+        assert actual.maybe_logprobs == expected.maybe_logprobs
+
+
+@pytest.mark.parametrize('model', ['qwen3.5-27b', 'gemma4-31b', 'muse-glimmer-30b'])
+def test_native_insufficient_headroom_uses_original_wall_behavior(existing_completers, model):
+    f = json.loads((ROOT/'tests/tpu_swarm/fixtures/thinking_markers.json').read_text())[model]
+    cls = existing_completers[model]; p = cls()
+    p.phase1_max_tokens = 104; p.context_window = 154 + len(f['transition'])
+    p.context_buffer = 50; p.min_think_tokens = 0; p.temperature = 1
+    p.tokenizer = SimpleNamespace(encode=lambda *a, **kw: f['transition'], decode=lambda ids: 'reasoning')
+    calls = []
+    async def sample(chunks, stop, max_tokens):
+        calls.append(max_tokens)
+        assert max_tokens == 4
+        return [7]*4, [-0.5]*4
+    p._sample = sample
+    prompt = SimpleNamespace(length=100, chunks=[])
+    expected = asyncio.run(p._two_phase(prompt, ['STOP']))
+    out = asyncio.run(p._native_group(prompt, ['STOP'], 2))
+    assert len(calls) == 3
+    for actual in out:
+        assert vars(actual) == vars(expected)
+
+
+def test_native_invalid_cap_is_a_fatal_contract_error(existing_completers):
+    cls = existing_completers['qwen3.5-27b']; p = cls()
+    p.phase1_max_tokens = 100; p.context_window = 512
+    p.context_buffer = 50; p.min_think_tokens = 0
+    p.tokenizer = SimpleNamespace(encode=lambda *a, **kw: [1])
+    with pytest.raises(Exception, match='positive thinking headroom') as error:
+        asyncio.run(p._native_group(SimpleNamespace(length=100), [], 1))
+    assert type(error.value).__name__ == 'NativeCompletionError'
+
+
+def test_extracted_two_phase_algorithm_is_unchanged_from_discover_base():
+    import subprocess
+    path = 'ttt_discover/tinker_utils/completers.py'
+    old = subprocess.check_output(['git', 'show', '1d662eb47971d868d12b03ecc5c050fadf7a6b44:' + path],
+        cwd=ROOT/'third_party/discover', text=True)
+    def body(source, method, skip):
+        cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef)
+                   and n.name == 'QwenTwoPhaseTokenCompleter')
+        fn = next(n for n in cls.body if isinstance(n, ast.AsyncFunctionDef) and n.name == method)
+        return [ast.dump(n, include_attributes=False) for n in fn.body[skip:]]
+    current = (ROOT/'third_party/discover'/path).read_text()
+    assert body(old, '__call__', 2) == body(current, '_two_phase', 1)

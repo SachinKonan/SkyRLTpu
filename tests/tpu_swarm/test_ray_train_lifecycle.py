@@ -17,10 +17,13 @@ from fastapi import HTTPException
 
 from tpu.swarm.ray_train import serving
 from tpu.swarm.ray_train.config import Config
-from tpu.swarm.ray_train.patch_maxtext import OLD, NEW, CONDITION, patch
+from tpu.swarm.ray_train.patch_maxtext import TAIL, RETURN, CONDITION, patch
 from tpu.swarm.ray_train.host import Host
 from tpu.swarm.ray_train.process import Process
 from tpu.swarm.ray_train.bootstrap import check_ports_available
+
+OLD = TAIL + RETURN
+NEW = TAIL + CONDITION + RETURN
 
 
 def test_maxtext_patch_is_idempotent_and_rejects_unknown_source(tmp_path):
@@ -48,7 +51,7 @@ def test_trainer_ready_handles_wrapped_logs_but_not_previous_process(tmp_path):
     message = b"INFO skyrl: Initialized TinkerEngine with           \nbackend=DistributedTunixBackend\n"
     log.write_bytes(message)
     process = SimpleNamespace(poll=lambda: None, log_offset=0)
-    host = SimpleNamespace(rank=0, run=tmp_path, processes={"trainer": process})
+    host = SimpleNamespace(rank=0, trainer_leader=0, run=tmp_path, processes={"trainer": process})
     assert Host.trainer_ready(host)
     process.log_offset = len(message)
     assert not Host.trainer_ready(host)
@@ -266,6 +269,8 @@ def test_replacement_engine_restores_direct_adapter_before_generation(tmp_path):
         engine = cls.__new__(cls)
         engine.config = Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json")
         engine.version, engine.lock, engine.run = None, asyncio.Lock(), tmp_path
+        engine.retiring = False
+        engine.engine_run = tmp_path
         engine.url, engine.head = "http://engine:19801", "http://head:19800"
         engine.http = httpx.AsyncClient(transport=httpx.MockTransport(transport))
         try:

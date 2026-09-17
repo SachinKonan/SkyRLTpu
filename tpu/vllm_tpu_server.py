@@ -271,7 +271,23 @@ _WORKER_ENV_KEYS = (
     "MODEL_IMPL_TYPE", "TPU_MULTIHOST_BACKEND", "SKIP_JAX_PRECOMPILE", "USE_BATCHED_RPA_KERNEL",
     "USE_JAX_RAGGED_CONV1D", "USE_MOE_EP_KERNEL", "MOE_REQUANTIZE_WEIGHT_DTYPE",
     "MOE_REQUANTIZE_BLOCK_SIZE", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+    "CUSTOM_NUM_TOKENS_BUCKETS", "SERIALIZE_MODEL_AND_SAMPLING",
 )
+
+
+def _sanitize_ray_worker_environment(expected):
+    """Run before the remote engine imports JAX/vLLM, including on host two."""
+    import os
+    prefixes = ("TUNIX_", "SKYRL_", "TTD_", "JAX_", "XLA_", "TPU_",
+                "CLOUD_TPU_", "VLLM_", "LIBTPU_", "PJRT_")
+    keys = {"CUSTOM_NUM_TOKENS_BUCKETS", "SERIALIZE_MODEL_AND_SAMPLING",
+            "SKIP_JAX_PRECOMPILE", "USE_BATCHED_RPA_KERNEL", "USE_JAX_RAGGED_CONV1D",
+            "MODEL_IMPL_TYPE", "USE_MOE_EP_KERNEL", "MOE_REQUANTIZE_WEIGHT_DTYPE",
+            "MOE_REQUANTIZE_BLOCK_SIZE"}
+    for key in list(os.environ):
+        if (key.startswith(prefixes) or key in keys) and key not in expected:
+            del os.environ[key]
+    os.environ.update(expected)
 
 
 def _engine_on_existing_ray(engine_args, hosts: list[str]):
@@ -286,11 +302,16 @@ def _engine_on_existing_ray(engine_args, hosts: list[str]):
     host's own chips (tpu-inference's Ray multihost mode).
     """
     import ray
+    from functools import partial
     from ray.util.placement_group import placement_group
 
     env_vars = {k: os.environ[k] for k in _WORKER_ENV_KEYS if k in os.environ}
+    # vLLM needs its explicit driver settings too; only the driver environment
+    # has been resolved/isolated by the executor at this point.
+    env_vars.update({k: v for k, v in os.environ.items() if k.startswith("VLLM_")})
     ray.init(address=os.environ.get("RAY_ADDRESS", "auto"), ignore_reinit_error=True,
-             runtime_env={"py_executable": sys.executable, "env_vars": env_vars})
+             runtime_env={"py_executable": sys.executable, "env_vars": env_vars,
+                          "worker_process_setup_hook": partial(_sanitize_ray_worker_environment, env_vars)})
     chips = int(engine_args.tensor_parallel_size)
     bundles = [{"TPU": chips, f"node:{host}": 0.001} for host in hosts]
     group = placement_group(bundles, strategy="STRICT_SPREAD")

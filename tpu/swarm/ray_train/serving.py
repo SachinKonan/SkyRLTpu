@@ -103,8 +103,12 @@ class Engine:
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.head = f"http://{head}:{self.config.ports.inference}"
         self.url = f"http://127.0.0.1:{self.config.ports.engine + slot}"
-        self.process = Process(inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.engine_run, group=self.group, slot=slot),
-            self.run / f"engine-{self.instance}.log", inference_environment(self.config, self.root, self.engine_run, head=head, group=self.group, slot=slot), self.source)
+        command = inference_command(self.config, self.root, self.source, Path(info["snapshot"]), self.engine_run, group=self.group, slot=slot)
+        environment = inference_environment(self.config, self.root, self.engine_run, head=head, group=self.group, slot=slot)
+        from .launch_contract import write_launch_contract
+        write_launch_contract(self.run / f"launch-inference-{slot}.json", command, environment,
+                              extra_keys=self.config.inference.engine_env)
+        self.process = Process(command, self.run / f"engine-{self.instance}.log", environment, self.source)
         deadline = time.monotonic() + self.config.ready_timeout
         while time.monotonic() < deadline:
             if self.process.poll() is not None:

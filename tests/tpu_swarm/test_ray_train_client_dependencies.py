@@ -26,7 +26,12 @@ def fake_host(tmp_path, monkeypatch):
         marker.parent.mkdir(parents=True, exist_ok=True)
 
     obj = SimpleNamespace(root=root, source=tmp_path / "source", source_identity="frozen-source",
-                          config=SimpleNamespace(base_bundle_sha256="frozen-source"), checked=checked)
+                          runtime_baseline_identity="",
+                          config=SimpleNamespace(base_bundle_sha256="frozen-source",
+                                                 inference=SimpleNamespace(native_thinking_budget=False)),
+                          checked=checked,
+                          verify_runtime=lambda role, folder, **kwargs: calls.append(
+                              ("inventory-" + role, [str(folder)], kwargs)))
     return obj, calls, marker, project
 
 
@@ -42,12 +47,13 @@ def test_client_uses_frozen_lock_and_no_dependency_resolution(tmp_path, monkeypa
     install = commands["client-install"][0]
     assert "--no-deps" in install and "--no-build-isolation" in install
     assert not any("[math]" in arg for arg in install)
-    assert calls[-1][0] == "client-import"
+    assert calls[-2][0] == "client-import"
+    assert calls[-1][0] == "inventory-client" and calls[-1][2] == {"fresh": True}
     assert marker.read_text() != obj.config.base_bundle_sha256
     identity = marker.read_text()
     calls.clear()
     host.Host.install_client(obj)
-    assert [c[0] for c in calls] == ["client-lock-check"]
+    assert [c[0] for c in calls] == ["client-lock-check", "inventory-client"]
     (project / "uv.lock").write_text((project / "uv.lock").read_text() + "\n# revised lock\n")
     calls.clear()
     host.Host.install_client(obj)
@@ -127,8 +133,11 @@ def test_real_frozen_client_install(tmp_path, monkeypatch):
     def checked(name, command, **kwargs):
         subprocess.run(command, env=kwargs.get("env"), cwd=tmp_path, check=True)
 
-    obj = SimpleNamespace(root=tmp_path / "runtime", source=source,
-                          config=SimpleNamespace(base_bundle_sha256="smoke-source"), checked=checked)
+    obj = SimpleNamespace(root=tmp_path / "runtime", source=source, source_identity="smoke-source",
+                          runtime_baseline_identity="", run=tmp_path, rank=0,
+                          config=SimpleNamespace(base_bundle_sha256="smoke-source", runtime_baselines={},
+                                                 inference=SimpleNamespace(native_thinking_budget=False)), checked=checked)
+    obj.verify_runtime = lambda *args, **kwargs: host.Host.verify_runtime(obj, *args, **kwargs)
     host.Host.install_client(obj)
     host.Host.install_client(obj)
     assert (obj.root / "envs/client/.complete").exists()
@@ -140,9 +149,30 @@ def test_changed_source_overlay_reinstalls_client(tmp_path, monkeypatch):
     first = marker.read_text()
     calls.clear()
     host.Host.install_client(obj)
-    assert [name for name, _, _ in calls] == ['client-lock-check']
+    assert [name for name, _, _ in calls] == ['client-lock-check', 'inventory-client']
     obj.source_identity += '-changed-overlay'
     calls.clear()
     host.Host.install_client(obj)
     assert marker.read_text() != first
     assert any(name == 'client-install' for name, _, _ in calls)
+
+
+def test_failed_client_inventory_never_marks_complete(tmp_path, monkeypatch):
+    obj, _, marker, _ = fake_host(tmp_path, monkeypatch)
+    def fail(*args, **kwargs):
+        raise RuntimeError('reviewed runtime baseline mismatch')
+    obj.verify_runtime = fail
+    with pytest.raises(RuntimeError, match='baseline mismatch'):
+        host.Host.install_client(obj)
+    assert not marker.exists()
+
+
+def test_changed_client_baseline_invalidates_install_marker(tmp_path, monkeypatch):
+    obj, calls, marker, _ = fake_host(tmp_path, monkeypatch)
+    host.Host.install_client(obj)
+    first = marker.read_text()
+    obj.runtime_baseline_identity = 'changed-approved-inventory'
+    calls.clear()
+    host.Host.install_client(obj)
+    assert marker.read_text() != first
+    assert any(name == 'client-sync' for name, _, _ in calls)
