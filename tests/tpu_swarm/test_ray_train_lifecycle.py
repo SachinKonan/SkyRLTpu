@@ -17,10 +17,31 @@ from fastapi import HTTPException
 
 from tpu.swarm.ray_train import serving
 from tpu.swarm.ray_train.config import Config
-from tpu.swarm.ray_train.patch_maxtext import OLD, NEW, CONDITION, patch
+from tpu.swarm.ray_train.patch_maxtext import CONDITION, patch
 from tpu.swarm.ray_train.host import Host
 from tpu.swarm.ray_train.process import Process
 from tpu.swarm.ray_train.bootstrap import check_ports_available
+
+
+# Representative upstream wrapper endings. Keep these fixtures independent of
+# the patcher's matching constants so changes to its matcher remain testable.
+OLD = '''    if self.config.attention == "vllm_rpa":
+      return hidden_state, kv_caches
+
+    return logits'''
+NEW = '''    if self.config.attention == "vllm_rpa":
+      return hidden_state, kv_caches
+
+    if self.config.num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN:
+      return hidden_state
+
+    return logits'''
+GPT_OSS = '''    if self.config.attention in ("vllm_rpa", "vllm_batched_rpa"):
+      if expert_indices is not None:
+        return hidden_state, kv_caches, expert_indices
+      return hidden_state, kv_caches
+
+    return logits'''
 
 
 def test_maxtext_patch_is_idempotent_and_rejects_unknown_source(tmp_path):
@@ -34,7 +55,8 @@ def test_maxtext_patch_is_idempotent_and_rejects_unknown_source(tmp_path):
         patch(path)
 
 
-@pytest.mark.parametrize("initial", [OLD + "\n" + OLD, NEW + "\n" + OLD])
+@pytest.mark.parametrize("initial", [OLD + "\n" + OLD, NEW + "\n" + OLD,
+                                    OLD + "\n" + GPT_OSS])
 def test_maxtext_patch_handles_both_linen_and_nnx_wrappers(tmp_path, initial):
     path = tmp_path / "models.py"
     path.write_text(initial)
@@ -48,7 +70,7 @@ def test_trainer_ready_handles_wrapped_logs_but_not_previous_process(tmp_path):
     message = b"INFO skyrl: Initialized TinkerEngine with           \nbackend=DistributedTunixBackend\n"
     log.write_bytes(message)
     process = SimpleNamespace(poll=lambda: None, log_offset=0)
-    host = SimpleNamespace(rank=0, run=tmp_path, processes={"trainer": process})
+    host = SimpleNamespace(rank=0, trainer_leader=0, run=tmp_path, processes={"trainer": process})
     assert Host.trainer_ready(host)
     process.log_offset = len(message)
     assert not Host.trainer_ready(host)
@@ -266,13 +288,16 @@ def test_replacement_engine_restores_direct_adapter_before_generation(tmp_path):
         engine = cls.__new__(cls)
         engine.config = Config.load("tpu/swarm/ray_train/profiles/qwen_v5p_32.json")
         engine.version, engine.lock, engine.run = None, asyncio.Lock(), tmp_path
+        engine.retiring = False
+        engine.engine_run = tmp_path / "engine-slot-0"
+        engine.engine_run.mkdir()
         engine.url, engine.head = "http://engine:19801", "http://head:19800"
         engine.http = httpx.AsyncClient(transport=httpx.MockTransport(transport))
         try:
             assert await engine.generate({"model": "adapter-1"}) == {"choices": ["generated"]}
             assert loaded == [b"trainer-to-client-adapter"]
             assert engine.version == "adapter-1"
-            assert not list(tmp_path.glob("*.reload.tar"))
+            assert not list(tmp_path.rglob("*.reload.tar"))
         finally:
             await engine.http.aclose()
     asyncio.run(run())

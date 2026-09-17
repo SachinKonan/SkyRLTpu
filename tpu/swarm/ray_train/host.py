@@ -331,6 +331,21 @@ class Host:
         self.install_role(role)
         if self.rank == 0 and (not self.config.inference_only or self.config.bootstrap_only):
             self.install_client()
+            if self.config.science_task:
+                # Validate the installed package, including prompt data, before
+                # the controller starts trainer/inference services. Imports and
+                # grader reference checks alone do not exercise this path.
+                self.checked("science-prompt-check", [
+                    str(self.root / "envs/client/bin/python"), "-c",
+                    "import sys; from tpu.science.training_env import candidate_prompt; "
+                    "task = sys.argv[1]; "
+                    "assert candidate_prompt(task).strip(); "
+                    "assert candidate_prompt(task, 'pass', 'Valid').strip(); "
+                    "assert candidate_prompt(task, 'pass', 'Invalid', repair=True).strip()",
+                    self.config.science_task],
+                    env=client_environment(self.config, self.root, self.ips[0],
+                                           trainer_head=self.ips[self.trainer_leader]),
+                    cwd=self.source)
         self.phase = "prepared"
         emit(self.log, "host_prepared", rank=self.rank, role=role, snapshot=str(self.snapshot))
         return dict(rank=self.rank, role=role, source=str(self.source), root=str(self.root),

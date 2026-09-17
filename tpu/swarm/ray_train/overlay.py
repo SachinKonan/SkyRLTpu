@@ -70,7 +70,8 @@ SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/r
         'routing.py', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',
         'placement_ray.py', 'placement_slots.py', 'placement_task.py', 'challenge_contract.py',
         'seed_routing.py', 'challenge_seed.py', 'challenge_seed_jax.py', 'requirements-cpu.lock',
-        'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt')}
+        'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt',
+        'prompts/placement-jax-cpu.txt')}
 
 
 def manifest(repo, config=None):

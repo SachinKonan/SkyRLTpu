@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+import shutil
 from concurrent.futures import Future
 from dataclasses import replace
 from pathlib import Path
@@ -14,6 +16,32 @@ from tpu.science.placement_slots import device_paths, tpu_environment
 
 
 class ScienceTopologyTest(unittest.TestCase):
+    def test_packaged_cpu_placement_prompts_for_all_models(self):
+        from tpu.science import training_env
+        from tpu.swarm.ray_train.overlay import manifest, install
+        root = Path(__file__).resolve().parents[2]
+        for model in ('qwen', 'muse', 'gemma'):
+            with self.subTest(model=model), tempfile.TemporaryDirectory() as temp:
+                config = Config.load(root / (
+                    f'tpu/swarm/ray_train/profiles/science-placement-v6e-{model}-cpu-seeded-train-001.json'))
+                records = manifest(root, config)
+                overlay, installed = Path(temp) / 'overlay', Path(temp) / 'installed'
+                overlay.mkdir()
+                for name in records:
+                    target = overlay / name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(root / name, target)
+                (overlay / 'manifest.json').write_text(json.dumps(records))
+                install(overlay, installed)
+                with patch.object(training_env, '__file__', str(installed / 'tpu/science/training_env.py')), \
+                        patch.dict(os.environ, {'SCIENCE_PLACEMENT_BACKEND': 'cpu'}):
+                    for code, repair in [('', False), ('pass', False), ('pass', True)]:
+                        self.assertTrue(training_env.candidate_prompt(
+                            'placement', code, 'Feedback', repair=repair).strip())
+                    (installed / 'tpu/science/prompts/placement-jax-cpu.txt').unlink()
+                    with self.assertRaises(FileNotFoundError):
+                        training_env.candidate_prompt('placement', 'pass', 'Feedback')
+
     def test_gemma_science_retains_validated_replay_backend(self):
         from tpu.swarm.ray_train.overlay import manifest
         root = Path(__file__).resolve().parents[2]
