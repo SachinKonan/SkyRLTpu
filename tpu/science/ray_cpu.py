@@ -49,6 +49,7 @@ def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2):
 
 
 def _grade_admitted(task, source, root, jobs, slot, slots_per_host):
+    from .cgroup_limits import runtime_owner_properties
     from .worker import process_identity
     from .rewards import invalid
     job_id=uuid.uuid4().hex;unit='science-grade-'+job_id
@@ -62,7 +63,8 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host):
     if not set(cpus)<=os.sched_getaffinity(0):raise RuntimeError('configured grading CPU set unavailable')
     user=pwd.getpwuid(os.getuid()).pw_name
     command=['sudo','-n','systemd-run','--unit='+unit,'--uid='+user,'--gid='+str(os.getgid()),
-        '--wait','--collect','--pipe','--quiet','--property=MemoryMax=8G','--property=MemorySwapMax=0',
+        '--wait','--collect','--pipe','--quiet',*runtime_owner_properties(),
+        '--property=MemoryMax=8G','--property=MemorySwapMax=0',
         '--property=CPUQuota=400%','--property=AllowedCPUs='+','.join(map(str,cpus)),
         '--property=TasksMax=128','--property=RuntimeMaxSec='+str(seconds),
         '--property=KillMode=control-group','--property=TimeoutStopSec=2','--property=OOMPolicy=stop',

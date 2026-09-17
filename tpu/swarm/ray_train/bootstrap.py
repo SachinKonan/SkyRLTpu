@@ -129,7 +129,10 @@ def retire_before_port_check(config, ip, log):
         pids = retire_workloads(config.retired_task_ids, config.retired_processes.get(ip))
         emit(log, "retired_workloads_stopped", ip=ip, pids=pids)
     ports = workload_ports(config)
-    check_port_isolation(ports)
+    # The supervisor already owns its listener; check its range isolation,
+    # but do not try to bind that listener again from the child bootstrap.
+    coordinator = [config.systemd_port] if getattr(config, "systemd_runtime", False) else []
+    check_port_isolation(ports + coordinator)
     check_ports_available(ports)
     emit(log, "port_preflight_passed", ip=ip, checked=len(ports),
          worker_min=config.ports.worker_min, worker_max=config.ports.worker_max)
@@ -180,6 +183,15 @@ def main():
         raise SystemExit("invalid SkyPilot host inventory")
     root = Path(config.root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
+    if config.systemd_runtime and os.environ.get("SKYRL_SYSTEMD_OWNED") != "1":
+        from .runtime_service import launch
+        token = os.environ.get("SKYPILOT_TASK_ID", "")
+        # Task identity is shared by all hosts and distinct from unrelated jobs.
+        return launch([sys.executable, "-m", __package__ + ".bootstrap", args.config],
+                      root / "runs" / config.run_id, ips, rank, token,
+                      port=config.systemd_port, peer_timeout=config.systemd_peer_timeout,
+                      shutdown_grace=config.systemd_shutdown_grace, setup_timeout=config.setup_timeout)
+
     if args.runtime_ready:
         lock_fd = int(os.environ["SKYRL_RAY_LOCK_FD"])
         os.fstat(lock_fd)
@@ -231,6 +243,8 @@ def main():
     try:
         stop_ray(ray_tmp)
         retire_before_port_check(config, ips[rank], log)
+        from .runtime_service import wait_preflight
+        wait_preflight(config, lambda: stopped)
         os.environ.update(RAY_ADDRESS=f"{ips[0]}:{p.ray}", RAY_NAMESPACE=config.run_id,
             RAY_TMPDIR=str(ray_tmp), JAX_PLATFORMS="cpu", TPU_VISIBLE_CHIPS="0,1,2,3",
             OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", RAY_USAGE_STATS_ENABLED="0")
@@ -290,14 +304,20 @@ def main():
         if stopped:
             code = 143
     finally:
-        if driver:
-            driver.stop()
-        if ray.is_initialized():
-            ray.shutdown()
-        stop_ray(ray_tmp)
-        emit(log, "bootstrap_stopped", rank=rank, exit_code=code)
-        os.close(run_lease)
-        os.close(lock_fd)
+        try:
+            if driver:
+                driver.stop()
+        finally:
+            try:
+                if ray.is_initialized():
+                    ray.shutdown()
+            finally:
+                try:
+                    stop_ray(ray_tmp)
+                    emit(log, "bootstrap_stopped", rank=rank, exit_code=code)
+                finally:
+                    os.close(run_lease)
+                    os.close(lock_fd)
     return code
 
 

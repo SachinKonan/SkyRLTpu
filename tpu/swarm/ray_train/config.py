@@ -304,6 +304,10 @@ class Config:
     arena_max_tokens: int = 8192
     arena_thinking_tokens: int | None = None
     ports: Ports = field(default_factory=Ports)
+    systemd_runtime: bool = False
+    systemd_port: int = 24900
+    systemd_peer_timeout: int = 30
+    systemd_shutdown_grace: int = 90
     max_restarts_on_errors: int = 0
     checkpoint_resume: bool = False
     resume_min_checkpoint_step: int = 0
@@ -673,6 +677,17 @@ class Config:
             raise ValueError("trainer request/retry settings must be positive")
         if not isinstance(self.trainer.maxtext_kwargs, dict):
             raise ValueError("trainer.maxtext_kwargs must be a mapping")
+        if type(self.systemd_runtime) is not bool:
+            raise ValueError("systemd_runtime must be boolean")
+        if type(self.systemd_port) is not int or not 1024 <= self.systemd_port <= 65535:
+            raise ValueError("invalid systemd coordinator port")
+        if (type(self.systemd_peer_timeout) is not int or self.systemd_peer_timeout <= 0
+                or type(self.systemd_shutdown_grace) is not int or self.systemd_shutdown_grace < 0):
+            raise ValueError("invalid systemd lifecycle timeouts")
+        if self.systemd_runtime:
+            if (self.systemd_port in asdict(self.ports).values()
+                    or self.ports.worker_min <= self.systemd_port <= self.ports.worker_max):
+                raise ValueError("systemd coordinator port overlaps workload ports")
         if type(self.max_restarts_on_errors) is not int or not 0 <= self.max_restarts_on_errors <= 3:
             raise ValueError("max_restarts_on_errors must be an integer from 0 to 3")
         if type(self.checkpoint_resume) is not bool:

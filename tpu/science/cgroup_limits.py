@@ -1,5 +1,19 @@
 """Verify the enclosing Slurm/systemd CPU task has a hard aggregate memory cap."""
 from pathlib import Path
+import re
+
+
+def runtime_owner_properties():
+    """Bind separately limited graders to their local Ray runtime, if owned."""
+    for line in Path('/proc/self/cgroup').read_text().splitlines():
+        if not line.startswith('0::'):
+            continue
+        for part in line.split(':', 2)[2].split('/'):
+            if re.fullmatch(r'skyrl-runtime-[0-9a-f]{20}\.service', part):
+                # After reverses ordering on stop: graders stop before owner.
+                # BindsTo also handles abrupt owner death; PartOf handles restart.
+                return [f'--property={kind}={part}' for kind in ('BindsTo', 'After', 'PartOf')]
+    return []
 
 
 def envelope(memory_gib):

@@ -86,8 +86,10 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
     user=pwd.getpwuid(os.getuid()).pw_name
     # TPU driver mappings need a permissive memlock limit. MemoryMax still
     # bounds the candidate's actual host RAM across its entire process tree.
+    from .cgroup_limits import runtime_owner_properties
     cmd=['sudo','-n','systemd-run','--unit='+unit,'--uid='+user,'--gid='+str(os.getgid()),
-         '--wait','--collect','--pipe','--quiet',f'--property=MemoryMax={memory_gib}G','--property=MemorySwapMax=0',
+         '--wait','--collect','--pipe','--quiet',*runtime_owner_properties(),
+         f'--property=MemoryMax={memory_gib}G','--property=MemorySwapMax=0',
          '--property=LimitMEMLOCK=infinity',
          '--property=CPUQuota=400%','--property=AllowedCPUs='+','.join(map(str,cpus)),
          '--property=TasksMax=1024','--property=RuntimeMaxSec=300','--property=KillMode=control-group',

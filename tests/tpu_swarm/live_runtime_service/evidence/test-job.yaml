@@ -1,0 +1,20 @@
+name: systemd-runtime-lifecycle-v432
+resources:
+  cloud: gcp
+  region: us-central2
+  zone: us-central2-b
+  accelerators: tpu-v4-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 0
+workdir: /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-systemd-runtime/.runtime-probe
+run: |
+  set -eu
+  py=/home/gcpuser/.cache/science-routing-v432-muse-seeds-l2-s0-002/envs/controller/bin/python
+  "$py" -c 'import ray, psutil; print("Ray", ray.__version__)'
+  exec "$py" -u probe.py matrix

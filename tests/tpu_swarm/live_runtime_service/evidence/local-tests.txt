@@ -1,0 +1,5 @@
+No entry for terminal type "dumb";
+using dumb terminal settings.
+........................................................................ [ 85%]
+............                                                         [100%]
+84 passed, 4 subtests passed in 10.35s
