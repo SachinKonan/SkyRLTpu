@@ -57,3 +57,28 @@ def test_additional_circuit_pwc_starts_fresh_and_preserves_grpo_control(model):
     for name in (grpo,pwc):
         c=Config.load(p/(name+'.json'))
         assert not c.seed_pool_sha256 and not c.resume_min_checkpoint_step and not c.bootstrap_layers
+
+@pytest.mark.parametrize('model', ['qwen','gemma','muse'])
+def test_q20_v6e_estimator_pair_reuses_only_original_bootstrap(model):
+    import json
+    p=Path('tpu/swarm/ray_train/profiles')
+    grpo=f'science-q20-v6e-{model}-grpo-seedonly-20260918'
+    pwc=f'science-q20-v6e-{model}-pwc-seedonly-20260918'
+    original=Config.load(p/f'science-qubit-q20-v6e-{model}-seeded-001.json')
+    a=json.loads((p/(grpo+'.json')).read_text())
+    b=json.loads((p/(pwc+'.json')).read_text().replace(pwc,grpo))
+    assert b['client_env']['TTD_ADV_ESTIMATOR']=='piecewise_valid_entropic_centered_adaptive'
+    assert b['client_env'].pop('TTD_ADV_PIECEWISE_RHO')=='0.5'
+    assert b['client_env'].pop('TTD_ADV_PIECEWISE_INVALID_REWARD')=='0'
+    b['client_env']['TTD_ADV_ESTIMATOR']='mean_baseline'
+    assert a==b
+    for name in (grpo,pwc):
+        c=Config.load(p/(name+'.json'))
+        assert c.seed_pool_sha256==original.seed_pool_sha256
+        assert c.seed_pool_sha256 and c.resume_min_checkpoint_step==0
+        assert not c.bootstrap_layers and not c.bootstrap_only
+        assert c.accelerator=='tpu-v6e-32' and c.systemd_runtime
+        assert c.client_env['NUM_EPOCHS']=='15'
+        assert c.client_env['SCIENCE_ROUTING_SUITE']=='q20'
+        assert c.science_routing_slots_per_host==16
+        assert c.run_gcs!=original.run_gcs
