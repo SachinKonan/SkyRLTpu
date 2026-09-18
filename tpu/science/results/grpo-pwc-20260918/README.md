@@ -1,4 +1,9 @@
-# Q20 and helper-enabled circuit: matched GRPO/PWC comparison
+# Superseded: matched GRPO/PWC comparison
+
+All jobs in this plan were cancelled. The current approved plan is
+[GRPO only](../grpo-only-20260918/README.md). The initial cleanup check below
+missed legacy private Ray processes; the later GRPO-only health audit corrected
+that omission. This document records the original launch, not current status.
 
 Approved allocation: 12 v4-64 training jobs (three models, two tasks, two
 estimators), with one of 13 machines reserved for recovery. Superseded science

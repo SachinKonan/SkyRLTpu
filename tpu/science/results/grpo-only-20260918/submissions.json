@@ -1,0 +1,92 @@
+[
+  {
+    "run_id": "science-q20-v4-gemma-grpo-clean-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-ad6b528560edc403e831e547a0c58f57e22b3fad7d496675b44e4386e9967f3d.tar.gz",
+    "submitted_at": "2026-09-18T15:41:53.537174+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1059,
+    "bundle_sha256": "ad6b528560edc403e831e547a0c58f57e22b3fad7d496675b44e4386e9967f3d"
+  },
+  {
+    "run_id": "science-circuit-v6e-gemma-helper-grpo-direct-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-fda13e741ae5ad5cd8e5f76344d600a888e3d7b696327473b2cd419cbb4192ab.tar.gz",
+    "submitted_at": "2026-09-18T15:42:06.772327+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1060,
+    "bundle_sha256": "fda13e741ae5ad5cd8e5f76344d600a888e3d7b696327473b2cd419cbb4192ab"
+  },
+  {
+    "run_id": "science-q20-v4-muse-grpo-clean-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-0814d1536af1187bb78f9dab0c77e15e6e772e3c88ce6a931b69dcc057f1af16.tar.gz",
+    "submitted_at": "2026-09-18T15:42:26.876687+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1061,
+    "bundle_sha256": "0814d1536af1187bb78f9dab0c77e15e6e772e3c88ce6a931b69dcc057f1af16"
+  },
+  {
+    "run_id": "science-circuit-v6e-muse-helper-grpo-direct-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-f17248ef924765f3640a08b2ebd1e22d3bc04367757df7325df89916ca16819a.tar.gz",
+    "submitted_at": "2026-09-18T15:42:40.524947+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1062,
+    "bundle_sha256": "f17248ef924765f3640a08b2ebd1e22d3bc04367757df7325df89916ca16819a"
+  },
+  {
+    "run_id": "science-q20-v4-qwen-grpo-clean-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-76dcccfa55d0c2715b73d663e1ca3b28a5fd22fab067cac814222f148bfcbe7a.tar.gz",
+    "submitted_at": "2026-09-18T15:42:53.418524+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1063,
+    "bundle_sha256": "76dcccfa55d0c2715b73d663e1ca3b28a5fd22fab067cac814222f148bfcbe7a"
+  },
+  {
+    "run_id": "science-circuit-v6e-qwen-helper-grpo-direct-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-cdb2d00ee22d60eb8ffa30288e700726b31534c5154561ec941a9c8723f7c8c9.tar.gz",
+    "submitted_at": "2026-09-18T15:43:04.202188+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1064,
+    "bundle_sha256": "cdb2d00ee22d60eb8ffa30288e700726b31534c5154561ec941a9c8723f7c8c9"
+  },
+  {
+    "run_id": "science-circuit-v6e-gemma-helper-pwc-direct-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-88d6cd2df64a3e38cedbe14a7002aae2c5583651f734c1e582f1de4ad3aaedfd.tar.gz",
+    "submitted_at": "2026-09-18T15:44:23.745947+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1065,
+    "bundle_sha256": "88d6cd2df64a3e38cedbe14a7002aae2c5583651f734c1e582f1de4ad3aaedfd"
+  },
+  {
+    "run_id": "science-circuit-v6e-muse-helper-pwc-direct-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-10beafbbe71d37990f0382df86faa8238f8c956bc717737c893a83fb51534e81.tar.gz",
+    "submitted_at": "2026-09-18T15:44:43.887431+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1066,
+    "bundle_sha256": "10beafbbe71d37990f0382df86faa8238f8c956bc717737c893a83fb51534e81"
+  },
+  {
+    "run_id": "science-circuit-v6e-qwen-helper-pwc-direct-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-4b75163d6016162982efdbc054eb5c22c482df65ec00cba030bc73cae74a36f9.tar.gz",
+    "submitted_at": "2026-09-18T15:44:57.005672+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1067,
+    "bundle_sha256": "4b75163d6016162982efdbc054eb5c22c482df65ec00cba030bc73cae74a36f9"
+  }
+]

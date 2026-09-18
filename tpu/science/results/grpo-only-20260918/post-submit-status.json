@@ -1,0 +1,128 @@
+[
+  {
+    "spot_job_id": 1047,
+    "name": "science-q20-v4-qwen-grpo-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-491"
+  },
+  {
+    "spot_job_id": 1048,
+    "name": "science-q20-v4-qwen-pwc-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-450"
+  },
+  {
+    "spot_job_id": 1049,
+    "name": "science-circuit-v4-qwen-helper-seed-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-457"
+  },
+  {
+    "spot_job_id": 1050,
+    "name": "science-q20-v4-gemma-grpo-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-488"
+  },
+  {
+    "spot_job_id": 1051,
+    "name": "science-q20-v4-gemma-pwc-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-468"
+  },
+  {
+    "spot_job_id": 1052,
+    "name": "science-circuit-v4-gemma-helper-seed-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-493"
+  },
+  {
+    "spot_job_id": 1053,
+    "name": "science-q20-v4-muse-grpo-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-498"
+  },
+  {
+    "spot_job_id": 1054,
+    "name": "science-q20-v4-muse-pwc-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-475"
+  },
+  {
+    "spot_job_id": 1055,
+    "name": "science-circuit-v4-muse-helper-seed-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-489"
+  },
+  {
+    "spot_job_id": 1056,
+    "name": "science-q20-v4-gemma-pwc-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-450"
+  },
+  {
+    "spot_job_id": 1057,
+    "name": "science-q20-v4-muse-pwc-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-475"
+  },
+  {
+    "spot_job_id": 1058,
+    "name": "science-q20-v4-qwen-pwc-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-491"
+  },
+  {
+    "spot_job_id": 1059,
+    "name": "science-q20-v4-gemma-grpo-clean-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-450"
+  },
+  {
+    "spot_job_id": 1060,
+    "name": "science-circuit-v6e-gemma-helper-grpo-direct-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4448"
+  },
+  {
+    "spot_job_id": 1061,
+    "name": "science-q20-v4-muse-grpo-clean-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-475"
+  },
+  {
+    "spot_job_id": 1062,
+    "name": "science-circuit-v6e-muse-helper-grpo-direct-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4463"
+  },
+  {
+    "spot_job_id": 1063,
+    "name": "science-q20-v4-qwen-grpo-clean-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-491"
+  },
+  {
+    "spot_job_id": 1064,
+    "name": "science-circuit-v6e-qwen-helper-grpo-direct-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4475"
+  },
+  {
+    "spot_job_id": 1065,
+    "name": "science-circuit-v6e-gemma-helper-pwc-direct-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4479"
+  },
+  {
+    "spot_job_id": 1066,
+    "name": "science-circuit-v6e-muse-helper-pwc-direct-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4484"
+  },
+  {
+    "spot_job_id": 1067,
+    "name": "science-circuit-v6e-qwen-helper-pwc-direct-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4493"
+  }
+]
