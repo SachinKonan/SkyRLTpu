@@ -1,4 +1,9 @@
-# Q20 on v6e: GRPO and adaptive PWC from identical bootstrap pools
+# Q20 on v6e: original bootstrap comparison launch
+
+**Update:** GRPO jobs 1068, 1070 and 1072 were cancelled at the user's request.
+They are replaced by continuations of the v4 GRPO state; see
+[parallel continuation records](../q20-v6e-hedge-20260918/README.md).
+The three PWC jobs remain unchanged. The text below records the original launch.
 
 Six additional runs, authorized after the three fresh circuit PWC runs. These
 augment the six v6e circuit runs and leave the three v4 Q20 GRPO continuations

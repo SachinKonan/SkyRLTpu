@@ -82,3 +82,27 @@ def test_q20_v6e_estimator_pair_reuses_only_original_bootstrap(model):
         assert c.client_env['SCIENCE_ROUTING_SUITE']=='q20'
         assert c.science_routing_slots_per_host==16
         assert c.run_gcs!=original.run_gcs
+
+@pytest.mark.parametrize('model', ['qwen','gemma','muse'])
+def test_q20_v6e_hedge_preserves_v4_training_state_and_parameters(model):
+    import json
+    p=Path('tpu/swarm/ray_train/profiles')
+    source=f'science-q20-v4-{model}-grpo-clean-20260918'
+    target=f'science-q20-v6e-{model}-grpo-hedge-20260918'
+    a=json.loads((p/(source+'.json')).read_text())
+    b=json.loads((p/(target+'.json')).read_text().replace(target,source))
+    assert b['accelerator']=='tpu-v6e-32' and b['trainer']['process_bounds']=='2,2,1'
+    assert b['zone']=='us-east5-b'
+    b.update(accelerator=a['accelerator'],zone=a['zone'],bucket=a['bucket'])
+    b['trainer']['process_bounds']=a['trainer']['process_bounds']
+    for k in ('trainer_compile','inference_compile'):
+        assert 'us-east5' in b['cache'][k]
+        b['cache'][k]=b['cache'][k].replace('us-east5','us-central2')
+    assert a==b
+    x=Config.load(p/(source+'.json'));y=Config.load(p/(target+'.json'))
+    assert x.run_gcs!=y.run_gcs
+    assert x.cache.trainer_compile!=y.cache.trainer_compile
+    assert x.cache.inference_compile!=y.cache.inference_compile
+    assert y.resume_min_checkpoint_step==(0 if model=='muse' else 2)
+    assert y.client_env['TTD_ADV_ESTIMATOR']=='mean_baseline'
+    assert y.checkpoint_resume and y.systemd_runtime

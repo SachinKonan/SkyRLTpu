@@ -1,0 +1,29 @@
+[
+  {
+    "run_id": "science-q20-v6e-gemma-grpo-hedge-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-23019707aa15a514ccdc8ed886cd418ed1249965ab90ae6e3ad10b0145c58346.tar.gz",
+    "submitted_at": "2026-09-18T16:05:03.777772+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1075
+  },
+  {
+    "run_id": "science-q20-v6e-muse-grpo-hedge-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-7e8e34e72aefbb846df6efc6583ba7a1d942d121c18ecd41f846210434b7eded.tar.gz",
+    "submitted_at": "2026-09-18T16:05:13.755578+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1076
+  },
+  {
+    "run_id": "science-q20-v6e-qwen-grpo-hedge-20260918",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-6c12d4fb1cb6b369e726be2bc79ae51e53d5ef12094f19c4b0a54f8b7afd56b8.tar.gz",
+    "submitted_at": "2026-09-18T16:05:59.320097+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1077
+  }
+]
