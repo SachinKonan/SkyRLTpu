@@ -22,12 +22,13 @@ def prepare(config, ips, nodes, grading_rank):
         from .placement_ray import grade_cpu_case
         from .placement_task import CASES
         for ip in ips:
-            for name in ('challenge_seed.py', 'challenge_seed_jax.py'):
+            helper = config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none')
+            for name in ('challenge_seed.py', 'challenge_seed_fast_proxy.py' if helper == 'fast_proxy_v1' else 'challenge_seed_jax.py'):
                 source = (Path(root) / 'tpu/science' / name).read_text()
                 for case in CASES:
                     refs.append(grade_cpu_case.options(scheduling_strategy=NodeAffinitySchedulingStrategy(
                         nodes[ip]['NodeID'], soft=False)).remote(source, case, root,
-                            slots_per_host=config.science_placement_slots_per_host))
+                            slots_per_host=config.science_placement_slots_per_host, helper=helper))
     elif config.science_task == 'placement':
         from .placement_slots import grading_bundles
         from .placement_ray import grade_case
@@ -53,7 +54,7 @@ def prepare(config, ips, nodes, grading_rank):
     return group, refs
 
 
-def check_references(task, results, *, expected_hosts=8, placement_backend='tpu', routing_suite='full'):
+def check_references(task, results, *, expected_hosts=8, placement_backend='tpu', routing_suite='full', placement_helper='none'):
     from .routing_suite import validate_suite
     validate_suite(routing_suite)
     cpu_placement = task == 'placement' and placement_backend == 'cpu'
@@ -70,6 +71,10 @@ def check_references(task, results, *, expected_hosts=8, placement_backend='tpu'
                     or len(m.get('hard_cpus', [])) != 4
                     or m.get('candidate_device', {}).get('device_kind') != 'cpu'):
                 raise RuntimeError('CPU placement reference escaped its resource contract')
+            if placement_helper == 'fast_proxy_v1' and (m.get('helper') != placement_helper
+                    or m.get('candidate_device', {}).get('helper') != placement_helper
+                    or set(m.get('helper_hashes', {})) != {'__init__.py', 'congestion.c', 'libproxy.so'}):
+                raise RuntimeError('CPU placement reference did not use the configured helper')
             by_host.setdefault(m['ray_node_id'], []).append(m['case'])
         if len(by_host) != expected_hosts or any(Counter(v) != Counter({c: 2 for c in CASES}) for v in by_host.values()):
             raise RuntimeError('CPU placement references did not cover every host and case')

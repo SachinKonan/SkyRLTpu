@@ -15,12 +15,12 @@ from .cpu_slots import acquire_slot, slot_cpus
 
 
 @ray.remote(num_cpus=4, memory=8*1024**3, resources={'placement_cpu_host': 1}, max_retries=0)
-def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s=2400):
+def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s=2400, helper='none'):
     """One case on host CPUs; no Ray TPU request and no device mounts."""
     slot, lock = acquire_slot(slots=slots_per_host, deadline_seconds=admission_timeout_s)
     with lock:
         return _grade_case(source, case, root, 'cpu-jax', None, None,
-                           cpu_slot=slot, slots_per_host=slots_per_host)
+                           cpu_slot=slot, slots_per_host=slots_per_host, helper=helper)
 
 
 @ray.remote(num_cpus=4, memory=16*1024**3, resources=task_resources(), max_retries=0)
@@ -69,7 +69,9 @@ class PlacementPool:
             self.pending.clear()
 
 
-def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None, slots_per_host=None):
+def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None, slots_per_host=None, helper='none'):
+    if helper not in ('none', 'fast_proxy_v1') or (helper != 'none' and backend != 'cpu-jax'):
+        raise ValueError('fast proxy requires CPU placement')
     from .worker import process_identity
     from .rewards import invalid
     root=Path(root).resolve(); jobs=root/'.science/placement-jobs';jobs.mkdir(exist_ok=True)
@@ -79,7 +81,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
     memory_gib = 8 if cpu else 16
     request=dict(source=str(folder/'candidate.py'),case=case,root=str(root),
                  work=str(folder/'evaluation'),backend=backend,tpu_ids=[] if cpu else [str(chip)],
-                 accelerator=accelerator,memory_gib=memory_gib)
+                 accelerator=accelerator,memory_gib=memory_gib,helper=helper)
     (folder/'request.json').write_text(json.dumps(request))
     cpus=slot_cpus(cpu_slot) if cpu else chip_cpus(chip)
     if not set(cpus)<=os.sched_getaffinity(0):raise RuntimeError('placement CPU set unavailable')

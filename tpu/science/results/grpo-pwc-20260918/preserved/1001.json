@@ -1,0 +1,14 @@
+{
+  "job": 1001,
+  "name": "science-qubit-q20-v6e-muse-seeded-001",
+  "root": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-muse-seeded-001",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-muse-seeded-001/client/tinker_log/science-qubit-q20-v6e-muse-seeded-001/puct_sampler_step_000000.json",
+      "source_generation": "1789703078309780",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-muse-seeded-001/client/tinker_log/science-qubit-q20-v6e-muse-seeded-001/puct_sampler_step_000000.json",
+      "size": 130420,
+      "crc32c": "XurVfA=="
+    }
+  ]
+}

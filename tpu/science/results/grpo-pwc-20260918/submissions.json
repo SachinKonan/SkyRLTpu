@@ -1,0 +1,101 @@
+[
+  {
+    "run_id": "science-circuit-v4-gemma-helper-seed-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-430a8a859d0587647cdec7577d6a1ac5a8573dfd4b85de8e623e67f9864c51f9.tar.gz",
+    "submitted_at": "2026-09-18T15:14:18.802750+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1052,
+    "bundle_sha256": "430a8a859d0587647cdec7577d6a1ac5a8573dfd4b85de8e623e67f9864c51f9",
+    "task_sha256": "ed453509e97bc5b495a6e81523074eddf3ac409b905fc8ec967c07e3cf2d1356"
+  },
+  {
+    "run_id": "science-circuit-v4-muse-helper-seed-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-6e5a276c703119ebe4e622af5054914a9fec70093afc71f0b260b759d292fcdc.tar.gz",
+    "submitted_at": "2026-09-18T15:15:11.210887+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1055,
+    "bundle_sha256": "6e5a276c703119ebe4e622af5054914a9fec70093afc71f0b260b759d292fcdc",
+    "task_sha256": "0db67989abc3444a492c4c0b0508580d12cd1cc52d6ea650f771508b83f3b880"
+  },
+  {
+    "run_id": "science-circuit-v4-qwen-helper-seed-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-a82a34dea34e4e9530a89cbb64147cef85f71024602bf82576461d5854b3b91a.tar.gz",
+    "submitted_at": "2026-09-18T15:13:23.367571+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1049,
+    "bundle_sha256": "a82a34dea34e4e9530a89cbb64147cef85f71024602bf82576461d5854b3b91a",
+    "task_sha256": "79b22c5dd1229c5c5177f4efdf9f84890c6698064e073b8da1af4f2b859cd983"
+  },
+  {
+    "run_id": "science-q20-v4-gemma-grpo-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-80ea35544ccd52d9ca6f12c7dc872f49657dd8987ea67b157ee1e1fb4ca576f0.tar.gz",
+    "submitted_at": "2026-09-18T15:13:41.855721+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1050,
+    "bundle_sha256": "80ea35544ccd52d9ca6f12c7dc872f49657dd8987ea67b157ee1e1fb4ca576f0",
+    "task_sha256": "d530f47cf5b8e0b075dcdb381883a72a67c0ab4abaf3079b2d48cf9014ca6705"
+  },
+  {
+    "run_id": "science-q20-v4-gemma-pwc-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-5383425cd17f81644bac94ca4c7f441b0c5f734d6e2f6eed3f952e9842024cb8.tar.gz",
+    "submitted_at": "2026-09-18T15:14:03.986786+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1051,
+    "bundle_sha256": "5383425cd17f81644bac94ca4c7f441b0c5f734d6e2f6eed3f952e9842024cb8",
+    "task_sha256": "2dfa3d5c1d75f711ec057d0e8502aee73b89586ed41671f3ae065896485ce463"
+  },
+  {
+    "run_id": "science-q20-v4-muse-grpo-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-62d4fb827248972b51d82b51e5f0935f377738108c2ed31d6b44476e96d14671.tar.gz",
+    "submitted_at": "2026-09-18T15:14:36.011373+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1053,
+    "bundle_sha256": "62d4fb827248972b51d82b51e5f0935f377738108c2ed31d6b44476e96d14671",
+    "task_sha256": "60342b11f5df3eeb80d14d6950a2086c86616b7bdb13ca2a409f0dbc11454d7f"
+  },
+  {
+    "run_id": "science-q20-v4-muse-pwc-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-6e3a4d6c6b78198a625ccca3fcec8dde903040ccf68954327ba4884a8ac1d1c2.tar.gz",
+    "submitted_at": "2026-09-18T15:14:57.100338+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1054,
+    "bundle_sha256": "6e3a4d6c6b78198a625ccca3fcec8dde903040ccf68954327ba4884a8ac1d1c2",
+    "task_sha256": "798db02d6f464d854da2dbb0fd22412b34ef372d29fcc259a7571d485120d04c"
+  },
+  {
+    "run_id": "science-q20-v4-qwen-grpo-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-2b8e5f04f226894893d498d3501ed15845f3a04566141039eee6074b746a59b2.tar.gz",
+    "submitted_at": "2026-09-18T15:12:53.681576+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1047,
+    "bundle_sha256": "2b8e5f04f226894893d498d3501ed15845f3a04566141039eee6074b746a59b2",
+    "task_sha256": "830650bfc98d6b701738cf808d88c7d01fd2b65f34a491145c56722f7baa07e2"
+  },
+  {
+    "run_id": "science-q20-v4-qwen-pwc-20260918",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-8c100fced3b081ed87314a0fccd04d857216a674685e49f20081f8bbc1ca0ab1.tar.gz",
+    "submitted_at": "2026-09-18T15:13:06.027998+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1048,
+    "bundle_sha256": "8c100fced3b081ed87314a0fccd04d857216a674685e49f20081f8bbc1ca0ab1",
+    "task_sha256": "a21b5c8b71d13885d30b7db5523ff6a114e12f2bead708b67ecb09bc7a94c31b"
+  }
+]

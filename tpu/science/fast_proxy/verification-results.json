@@ -1,0 +1,119 @@
+{
+  "status": "passed",
+  "native_source_sha256": "33a62973be565991868e8d411cfaad449ed43177f3ae4cdc256159a36a6e53b8",
+  "reference": "pinned .science/challenge-probe scorer; float32 candidate positions, NumPy 2",
+  "cases": [
+    {
+      "case": "ibm01",
+      "setup_seconds": 0.006896613049320877,
+      "full_evaluate_restore_seconds": 0.0012895697960630058,
+      "apply_revert_seconds": 6.277053034864366e-05,
+      "max_incremental_error": 8.881784197001252e-16,
+      "parity_errors": [
+        {
+          "proxy_cost": 4.5474603194151086e-08,
+          "wirelength_cost": 5.195659055767798e-09,
+          "density_cost": 4.624046934242898e-08,
+          "congestion_cost": 2.9228643949608113e-09
+        },
+        {
+          "proxy_cost": 2.7585410400376986e-08,
+          "wirelength_cost": 1.1200447111447964e-08,
+          "density_cost": 4.624046934242898e-08,
+          "congestion_cost": 2.9228639508716014e-09
+        },
+        {
+          "proxy_cost": 1.3310429203272633e-08,
+          "wirelength_cost": 9.890320354366544e-09,
+          "density_cost": 5.342271058861314e-08,
+          "congestion_cost": 2.9228646170054162e-09
+        }
+      ]
+    },
+    {
+      "case": "ibm04",
+      "setup_seconds": 0.009356405935250223,
+      "full_evaluate_restore_seconds": 0.0017641971935518086,
+      "apply_revert_seconds": 4.3136900058016184e-05,
+      "max_incremental_error": 0.0,
+      "parity_errors": [
+        {
+          "proxy_cost": 1.1570028624063866e-07,
+          "wirelength_cost": 4.91525334184173e-08,
+          "density_cost": 7.683042635431292e-08,
+          "congestion_cost": 8.58644275680831e-08
+        },
+        {
+          "proxy_cost": 1.0321200671903341e-07,
+          "wirelength_cost": 8.95851137716619e-08,
+          "density_cost": 1.377259406520892e-08,
+          "congestion_cost": 8.58644275680831e-08
+        },
+        {
+          "proxy_cost": 3.3401735155536016e-08,
+          "wirelength_cost": 3.5476381582411065e-08,
+          "density_cost": 1.3270715748525674e-08,
+          "congestion_cost": 8.586442690194929e-08
+        }
+      ]
+    },
+    {
+      "case": "ibm08",
+      "setup_seconds": 0.014567794045433402,
+      "full_evaluate_restore_seconds": 0.0030474120052531362,
+      "apply_revert_seconds": 4.984670493286103e-05,
+      "max_incremental_error": 0.0,
+      "parity_errors": [
+        {
+          "proxy_cost": 2.3851120434237316e-07,
+          "wirelength_cost": 2.5834216128839405e-07,
+          "density_cost": 5.7963058908150344e-08,
+          "congestion_cost": 9.716864202147235e-09
+        },
+        {
+          "proxy_cost": 1.7039271504870612e-07,
+          "wirelength_cost": 2.72180058435989e-07,
+          "density_cost": 5.796305879712804e-08,
+          "congestion_cost": 9.716864202147235e-09
+        },
+        {
+          "proxy_cost": 2.7802328794734876e-07,
+          "wirelength_cost": 2.623864832906886e-07,
+          "density_cost": 5.796305879712804e-08,
+          "congestion_cost": 9.716864202147235e-09
+        }
+      ]
+    },
+    {
+      "case": "ibm18",
+      "setup_seconds": 0.026676864945329726,
+      "full_evaluate_restore_seconds": 0.0056658893008716404,
+      "apply_revert_seconds": 8.211960492189974e-05,
+      "max_incremental_error": 0.0,
+      "parity_errors": [
+        {
+          "proxy_cost": 3.313329162146772e-07,
+          "wirelength_cost": 8.924046553115961e-08,
+          "density_cost": 4.924726447197436e-07,
+          "congestion_cost": 2.0924195709426385e-09
+        },
+        {
+          "proxy_cost": 3.5246976293201726e-07,
+          "wirelength_cost": 1.2708986731058136e-07,
+          "density_cost": 4.888498564836752e-07,
+          "congestion_cost": 2.0924191268534287e-09
+        },
+        {
+          "proxy_cost": 4.08005662144717e-07,
+          "wirelength_cost": 1.1674404118422466e-07,
+          "density_cost": 5.01404017860807e-07,
+          "congestion_cost": 2.0924191268534287e-09
+        }
+      ]
+    }
+  ],
+  "api_tests": 7,
+  "jax_cpu_concrete_array_check": "passed",
+  "timing_scope": "local warm helper; excludes imports and input loading; not isolated production throughput",
+  "max_component_absolute_error": 5.01404017860807e-07
+}

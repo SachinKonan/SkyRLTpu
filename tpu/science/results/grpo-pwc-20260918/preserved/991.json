@@ -1,0 +1,133 @@
+{
+  "job": 991,
+  "name": "science-qubit-v6e-qwen-runtime-001",
+  "root": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/global_step.json",
+      "source_generation": "1789734235762446",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/global_step.json",
+      "size": 19,
+      "crc32c": "ILUd9Q=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/life_state.json",
+      "source_generation": "1789734235888853",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/life_state.json",
+      "size": 202,
+      "crc32c": "PFmgOw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/member_qwen/checkpoints.jsonl",
+      "source_generation": "1789734235632122",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/member_qwen/checkpoints.jsonl",
+      "size": 1647,
+      "crc32c": "m55zTw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/metrics.jsonl",
+      "source_generation": "1789734235521765",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/metrics.jsonl",
+      "size": 90743,
+      "crc32c": "gRIUow=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000000.json",
+      "source_generation": "1789734235495571",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000000.json",
+      "size": 90056,
+      "crc32c": "ZIxMvw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000001.json",
+      "source_generation": "1789734235613297",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000001.json",
+      "size": 382439,
+      "crc32c": "QPrlYw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000002.json",
+      "source_generation": "1789734236123885",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000002.json",
+      "size": 728156,
+      "crc32c": "eZLVIw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000003.json",
+      "source_generation": "1789734235556569",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000003.json",
+      "size": 1164682,
+      "crc32c": "Hj5nBQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000004.json",
+      "source_generation": "1789734235749385",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000004.json",
+      "size": 1549533,
+      "crc32c": "YCX4Rw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000005.json",
+      "source_generation": "1789734235778943",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000005.json",
+      "size": 1968185,
+      "crc32c": "du48ew=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000006.json",
+      "source_generation": "1789734235925850",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000006.json",
+      "size": 2470467,
+      "crc32c": "PzR7ZQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000007.json",
+      "source_generation": "1789734235979084",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000007.json",
+      "size": 2951831,
+      "crc32c": "mBtkuA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000008.json",
+      "source_generation": "1789734235834138",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000008.json",
+      "size": 3434403,
+      "crc32c": "ANs68A=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000009.json",
+      "source_generation": "1789734235695315",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000009.json",
+      "size": 3857936,
+      "crc32c": "9o/wNA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000010.json",
+      "source_generation": "1789734236108663",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000010.json",
+      "size": 4355953,
+      "crc32c": "FjzqVA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000011.json",
+      "source_generation": "1789734235684118",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000011.json",
+      "size": 4885369,
+      "crc32c": "/xyoQw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000012.json",
+      "source_generation": "1789734235615899",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/client/tinker_log/science-qubit-v6e-qwen-runtime-001/puct_sampler_step_000012.json",
+      "size": 5422310,
+      "crc32c": "+5vvsQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/checkpoints/model_e94de860/000012.tar.gz",
+      "source_generation": "1789731927129123",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-qwen-runtime-001/checkpoints/model_e94de860/000012.tar.gz",
+      "size": 1925557154,
+      "crc32c": "dLAXSw=="
+    }
+  ]
+}

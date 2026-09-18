@@ -1,0 +1,86 @@
+[
+  {
+    "spot_job_id": 978,
+    "name": "science-circuit-v4-qwen-cpu-seeded-train-001",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "status": "RUNNING"
+  },
+  {
+    "spot_job_id": 979,
+    "name": "science-circuit-v4-gemma-cpu-seeded-train-001",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "status": "RUNNING"
+  },
+  {
+    "spot_job_id": 980,
+    "name": "science-routing-v4-qwen-bootstrap-l2-001",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "status": "RUNNING"
+  },
+  {
+    "spot_job_id": 981,
+    "name": "science-routing-v4-gemma-bootstrap-l2-001",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "status": "RUNNING"
+  },
+  {
+    "spot_job_id": 982,
+    "name": "science-routing-v4-muse-seeded-train-002",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "status": "RUNNING"
+  },
+  {
+    "spot_job_id": 983,
+    "name": "science-qubit-v6e-gemma-runtime-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4065",
+    "status": "PENDING"
+  },
+  {
+    "spot_job_id": 984,
+    "name": "science-circuit-v4-muse-cpu-seeded-train-001",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "status": "RUNNING"
+  },
+  {
+    "spot_job_id": 991,
+    "name": "science-qubit-v6e-qwen-runtime-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4109",
+    "status": "RECOVERING"
+  },
+  {
+    "spot_job_id": 992,
+    "name": "science-qubit-v6e-muse-runtime-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "status": "RUNNING"
+  },
+  {
+    "spot_job_id": 999,
+    "name": "science-qubit-q20-v6e-gemma-seeded-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4174",
+    "status": "RECOVERING"
+  },
+  {
+    "spot_job_id": 1000,
+    "name": "science-qubit-q20-v6e-qwen-seeded-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4317",
+    "status": "RECOVERING"
+  },
+  {
+    "spot_job_id": 1001,
+    "name": "science-qubit-q20-v6e-muse-seeded-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "current_cluster_name": null,
+    "status": "STARTING"
+  }
+]

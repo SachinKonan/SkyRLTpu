@@ -44,14 +44,15 @@ def test_reference_gate_requires_every_host_case_and_cpu_device():
         check_references('placement', rows, placement_backend='cpu')
 
 
-def test_cpu_dispatch_never_requests_a_tpu_placement_group():
+@pytest.mark.parametrize("helper", ["none", "fast_proxy_v1"])
+def test_cpu_dispatch_never_requests_a_tpu_placement_group(helper):
     from tpu.science import training_env as env, placement_ray, challenge_contract
     class Ref:
         def future(self):
             f=Future(); f.set_result({'reward':.5,'raw_score':.5}); return f
     with patch.object(env, 'connect'), patch.dict(os.environ,
             SCIENCE_WORKER_ROOT='/payload', SCIENCE_PLACEMENT_BACKEND='cpu',
-            SCIENCE_PLACEMENT_SLOTS_PER_HOST='16'), \
+            SCIENCE_PLACEMENT_SLOTS_PER_HOST='16', SCIENCE_PLACEMENT_HELPER=helper), \
             patch.object(placement_ray.grade_cpu_case, 'options') as opts, \
             patch('ray.util.placement_group.get_placement_group') as pg, \
             patch.object(env.ray,'cancel'), \
@@ -60,7 +61,7 @@ def test_cpu_dispatch_never_requests_a_tpu_placement_group():
         assert asyncio.run(env.evaluate('placement','candidate',1200))['reward']==.5
         assert opts.return_value.remote.call_count==4
         for call in opts.return_value.remote.call_args_list:
-            assert call.kwargs==dict(admission_timeout_s=1200,slots_per_host=16)
+            assert call.kwargs==dict(admission_timeout_s=1200,slots_per_host=16,helper=helper)
         pg.assert_not_called()
         prompt=env.task_prompt('placement')
         assert 'CPU only' in prompt and '8 GiB' in prompt

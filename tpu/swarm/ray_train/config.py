@@ -425,6 +425,10 @@ class Config:
                 raise ValueError('CPU placement requires RAM caches capped at 128 GiB')
         elif placement_slots != 2:
             raise ValueError('placement CPU slots require the CPU backend')
+        helper = self.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none')
+        if helper not in ('none', 'fast_proxy_v1') or (helper != 'none' and (
+                self.science_task != 'placement' or self.science_placement_backend != 'cpu')):
+            raise ValueError('fast proxy requires CPU science placement')
         routing_suite = self.client_env.get('SCIENCE_ROUTING_SUITE', 'full')
         if routing_suite not in ('full', 'q20') or (routing_suite != 'full' and self.science_task != 'routing'):
             raise ValueError('SCIENCE_ROUTING_SUITE must be full or q20 for science routing')
@@ -444,11 +448,18 @@ class Config:
             raise ValueError('bootstrap_layers must be 0, 1, or 2')
         if self.bootstrap_all_hosts and not self.bootstrap_layers:
             raise ValueError('bootstrap_all_hosts requires bootstrap_layers')
-        if self.bootstrap_only and (not self.bootstrap_layers or not self.inference_only
-                or self.science_task != 'routing' or self.accelerator != 'tpu-v4-32'
-                or self.trainer.hosts != 0 or self.inference_only_ranks is not None
-                or self.frozen_benchmark or self.arena_samples or self.arena_service_only):
-            raise ValueError('bootstrap-only requires routing on all four v4-32 inference hosts and no trainer')
+        if self.bootstrap_only:
+            routing_seeds = (self.science_task == 'routing' and self.accelerator == 'tpu-v4-32'
+                             and self.inference_only and self.trainer.hosts == 0)
+            circuit_seeds = (self.science_task == 'placement' and self.accelerator == 'tpu-v4-64'
+                             and not self.inference_only and self.trainer.hosts == 4
+                             and self.science_placement_backend == 'cpu'
+                             and self.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1'
+                             and self.bootstrap_layers == 1 and self.bootstrap_all_hosts)
+            if (not self.bootstrap_layers or not (routing_seeds or circuit_seeds)
+                    or self.inference_only_ranks is not None or self.frozen_benchmark
+                    or self.arena_samples or self.arena_service_only):
+                raise ValueError('bootstrap-only requires v4-32 routing seeds or all-host v4-64 CPU helper circuit drafts')
         if self.bootstrap_layers and (not self.science_task
                 or (self.inference_only and not self.bootstrap_only)
                 or self.adapter_count != 1 or (self.accelerator not in ('tpu-v4-64', 'tpu-v6e-32') and not self.bootstrap_only)
@@ -461,8 +472,11 @@ class Config:
                 raise ValueError("answer-only extraction requires a supported math, RG-LRU or science environment")
             if self.client_env.get("TTD_ANSWER_MODEL_FAMILY") not in ("qwen", "gemma", "muse"):
                 raise ValueError("answer-only extraction requires an explicit model family")
-        if self.has_adaptive_pwc_overlay and not (self.has_problem_prompt_overlay or self.is_recurrent_gemma):
-            raise ValueError("adaptive PWC is enabled only for AC2, circle packing and RG-LRU")
+        if self.has_adaptive_pwc_overlay and not (self.has_problem_prompt_overlay or self.is_recurrent_gemma
+                or (self.science_task == 'routing' and routing_suite == 'q20')
+                or (self.science_task == 'placement' and self.science_placement_backend == 'cpu'
+                    and self.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1')):
+            raise ValueError("adaptive PWC is enabled only for AC2, circle packing, RG-LRU and Q20 science qubit or helper-enabled CPU circuit")
         if self.training_smoke and (self.inference_only or self.adapter_count != 1 or self.client_env.get('NUM_EPOCHS') != '1'):
             raise ValueError('training smoke requires one adapter and exactly one training step')
         if self.arena_grader_rank is not None:

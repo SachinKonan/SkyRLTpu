@@ -37,6 +37,14 @@ def evaluate(request):
                    XLA_FLAGS='--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=4')
     mounts = python_mounts(python)+[(source,'/candidate.py'),(problem,'/problem.npz'),
         (root/'tpu/science/challenge_candidate_child.py','/runner.py')]
+    helper = request.get('helper', 'none')
+    if helper not in ('none', 'fast_proxy_v1') or (helper != 'none' and not cpu_jax):
+        raise ValueError('fast proxy requires CPU placement')
+    helper_hashes = {}
+    if helper == 'fast_proxy_v1':
+        from .fast_proxy_deployment import verified_mounts
+        helper_mounts, helper_hashes = verified_mounts(root)
+        mounts += helper_mounts
     if tpu:
         chip = assigned_chip({'TPU': request.get('tpu_ids', [])})
         devices = device_paths(chip, request.get('accelerator', 'tpu-v4-64'))
@@ -46,7 +54,7 @@ def evaluate(request):
             raise RuntimeError('candidate chip is occupied or ownership check failed')
         mounts += [('/sys','/sys'),('/etc/hosts','/etc/hosts')]
         env.update(tpu_environment(chip, request.get('accelerator', 'tpu-v4-64'), isolated=True))
-    cmd = command([str(python),'/runner.py','170','tpu' if tpu else 'cpu-jax' if cpu_jax else 'cpu'],
+    cmd = command([str(python),'/runner.py','170','tpu' if tpu else 'cpu-jax' if cpu_jax else 'cpu',helper],
                   readonly=mounts,writable=[(work,'/output')],env=env)
     if tpu:
         at = cmd.index('--dev')+2
@@ -83,7 +91,8 @@ def evaluate(request):
     return valid(max(1e-6,1/(1+cost)), dict(**scores,
                  candidate_wall_seconds=candidate_seconds,candidate_started_unix=candidate_started_unix,
                  candidate_finished_unix=candidate_finished_unix,case=case,backend='tpu' if tpu else 'cpu',
-                 candidate_device=json.loads((work/'child.json').read_text())))
+                 candidate_device=json.loads((work/'child.json').read_text()),
+                 helper=helper,helper_hashes=helper_hashes))
 
 
 def main():

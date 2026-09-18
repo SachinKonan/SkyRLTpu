@@ -55,6 +55,15 @@ with np.load('/problem.npz', allow_pickle=False) as data:
 for key in ('num_hard', 'wirelength_normalizer', 'congestion_smoothing_range', 'schema_version'):
     problem[key] = problem[key].item()
 namespace = {'__name__': 'candidate'}
+helper = sys.argv[3] if len(sys.argv) > 3 else 'none'
+if helper == 'fast_proxy_v1':
+    if not use_cpu_jax:
+        raise ValueError('fast proxy requires CPU placement')
+    from fast_proxy import Evaluator
+    namespace['Evaluator'] = Evaluator
+elif helper != 'none':
+    raise ValueError('unknown placement helper')
+device_info['helper'] = helper
 exec(compile(tree, '/candidate.py', 'exec'), namespace)
 remaining = float(sys.argv[1]) - (time.monotonic()-started)
 result = namespace['place'](problem, 42, time_budget_s=max(0, remaining))

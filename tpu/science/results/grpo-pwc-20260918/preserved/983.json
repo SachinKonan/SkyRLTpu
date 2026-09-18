@@ -1,0 +1,63 @@
+{
+  "job": 983,
+  "name": "science-qubit-v6e-gemma-runtime-001",
+  "root": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/global_step.json",
+      "source_generation": "1789702924345145",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/global_step.json",
+      "size": 18,
+      "crc32c": "daG7Hw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/life_state.json",
+      "source_generation": "1789702924441753",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/life_state.json",
+      "size": 81,
+      "crc32c": "/lKB+Q=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/member_gemma/checkpoints.jsonl",
+      "source_generation": "1789702924256455",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/member_gemma/checkpoints.jsonl",
+      "size": 137,
+      "crc32c": "iGNGVA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/metrics.jsonl",
+      "source_generation": "1789702924420598",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/metrics.jsonl",
+      "size": 14858,
+      "crc32c": "We7A8Q=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000000.json",
+      "source_generation": "1789702924432004",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000000.json",
+      "size": 149662,
+      "crc32c": "Zq3C0w=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000001.json",
+      "source_generation": "1789702924244583",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000001.json",
+      "size": 558733,
+      "crc32c": "FTNN1A=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000002.json",
+      "source_generation": "1789702924424195",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000002.json",
+      "size": 987586,
+      "crc32c": "zQvfRQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/checkpoints/model_0bfeb293/000001.tar.gz",
+      "source_generation": "1789671354693517",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-v6e-gemma-runtime-001/checkpoints/model_0bfeb293/000001.tar.gz",
+      "size": 2938939279,
+      "crc32c": "hmCtmA=="
+    }
+  ]
+}

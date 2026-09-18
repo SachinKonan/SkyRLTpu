@@ -1,0 +1,77 @@
+{
+  "job": 981,
+  "name": "science-routing-v4-gemma-bootstrap-l2-001",
+  "root": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/global_step.json",
+      "source_generation": "1789743902560567",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/global_step.json",
+      "size": 18,
+      "crc32c": "D8xyWg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/life_state.json",
+      "source_generation": "1789743902999244",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/life_state.json",
+      "size": 113,
+      "crc32c": "MV+hcA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/member_gemma/checkpoints.jsonl",
+      "source_generation": "1789743902556705",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/member_gemma/checkpoints.jsonl",
+      "size": 548,
+      "crc32c": "2SuTAQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/metrics.jsonl",
+      "source_generation": "1789743902561366",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/metrics.jsonl",
+      "size": 38288,
+      "crc32c": "8n/NWA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000000.json",
+      "source_generation": "1789743916055009",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000000.json",
+      "size": 149662,
+      "crc32c": "Zq3C0w=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000001.json",
+      "source_generation": "1789743903178835",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000001.json",
+      "size": 558733,
+      "crc32c": "FTNN1A=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000002.json",
+      "source_generation": "1789743916063558",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000002.json",
+      "size": 1324800,
+      "crc32c": "Y+bFvw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000003.json",
+      "source_generation": "1789743902733152",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000003.json",
+      "size": 1669065,
+      "crc32c": "gAIibg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000004.json",
+      "source_generation": "1789743915996929",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/client/tinker_log/science-routing-v4-gemma-bootstrap-l2-001/puct_sampler_step_000004.json",
+      "size": 1954448,
+      "crc32c": "uog8vQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/checkpoints/model_5457599b/000004.tar.gz",
+      "source_generation": "1789731968563098",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-gemma-bootstrap-l2-001/checkpoints/model_5457599b/000004.tar.gz",
+      "size": 2938939279,
+      "crc32c": "WvXheQ=="
+    }
+  ]
+}

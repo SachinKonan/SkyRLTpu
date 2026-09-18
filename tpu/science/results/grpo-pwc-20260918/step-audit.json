@@ -1,0 +1,376 @@
+{
+  "observed_at": "2026-09-18T15:03:46.604096+00:00",
+  "jobs": [
+    {
+      "spot_job_id": 983,
+      "name": "science-qubit-v6e-gemma-runtime-001",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "status": "RECOVERING",
+      "model": "gemma",
+      "metrics_steps": [
+        1,
+        2
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000001",
+          "batch": 1,
+          "state_path": "tinker://model_0bfeb293/weights/000001",
+          "sampler_path": "tinker://model_0bfeb293/000001"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 2,
+      "last_checkpoint_step": 1,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/checkpoints/model_0bfeb293/000001.tar.gz"
+    },
+    {
+      "spot_job_id": 979,
+      "name": "science-circuit-v4-gemma-cpu-seeded-train-001",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "status": "RUNNING",
+      "model": "gemma",
+      "metrics_steps": [
+        1,
+        2,
+        3
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000002",
+          "batch": 2,
+          "state_path": "tinker://model_c56ccd9f/weights/000002",
+          "sampler_path": "tinker://model_c56ccd9f/000002"
+        },
+        {
+          "name": "000003",
+          "batch": 3,
+          "state_path": "tinker://model_c56ccd9f/weights/000003",
+          "sampler_path": "tinker://model_c56ccd9f/000003"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 3,
+      "last_checkpoint_step": 3,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/checkpoints/model_c56ccd9f/000003.tar.gz"
+    },
+    {
+      "spot_job_id": 980,
+      "name": "science-routing-v4-qwen-bootstrap-l2-001",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "status": "RUNNING",
+      "model": "qwen",
+      "metrics_steps": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000005",
+          "batch": 5,
+          "state_path": "tinker://model_14add79b/weights/000005",
+          "sampler_path": "tinker://model_14add79b/000005"
+        },
+        {
+          "name": "000006",
+          "batch": 6,
+          "state_path": "tinker://model_14add79b/weights/000006",
+          "sampler_path": "tinker://model_14add79b/000006"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 6,
+      "last_checkpoint_step": 6,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/checkpoints/model_14add79b/000006.tar.gz"
+    },
+    {
+      "spot_job_id": 981,
+      "name": "science-routing-v4-gemma-bootstrap-l2-001",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "status": "RUNNING",
+      "model": "gemma",
+      "metrics_steps": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000003",
+          "batch": 3,
+          "state_path": "tinker://model_c1f79658/weights/000003",
+          "sampler_path": "tinker://model_c1f79658/000003"
+        },
+        {
+          "name": "000004",
+          "batch": 4,
+          "state_path": "tinker://model_5457599b/weights/000004",
+          "sampler_path": "tinker://model_5457599b/000004"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 5,
+      "last_checkpoint_step": 4,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/checkpoints/model_5457599b/000004.tar.gz"
+    },
+    {
+      "spot_job_id": 978,
+      "name": "science-circuit-v4-qwen-cpu-seeded-train-001",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "status": "RUNNING",
+      "model": "qwen",
+      "metrics_steps": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000004",
+          "batch": 4,
+          "state_path": "tinker://model_7ea7fc14/weights/000004",
+          "sampler_path": "tinker://model_7ea7fc14/000004"
+        },
+        {
+          "name": "000005",
+          "batch": 5,
+          "state_path": "tinker://model_5db2a6d5/weights/000005",
+          "sampler_path": "tinker://model_5db2a6d5/000005"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 5,
+      "last_checkpoint_step": 5,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-qwen-cpu-seeded-train-001/checkpoints/model_5db2a6d5/000005.tar.gz"
+    },
+    {
+      "spot_job_id": 982,
+      "name": "science-routing-v4-muse-seeded-train-002",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "status": "RUNNING",
+      "model": "muse",
+      "metrics_steps": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000007",
+          "batch": 7,
+          "state_path": "tinker://model_c4d9bb44/weights/000007",
+          "sampler_path": "tinker://model_c4d9bb44/000007"
+        },
+        {
+          "name": "000008",
+          "batch": 8,
+          "state_path": "tinker://model_c4d9bb44/weights/000008",
+          "sampler_path": "tinker://model_c4d9bb44/000008"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 8,
+      "last_checkpoint_step": 8,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/checkpoints/model_c4d9bb44/000008.tar.gz"
+    },
+    {
+      "spot_job_id": 1001,
+      "name": "science-qubit-q20-v6e-muse-seeded-001",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "status": "STARTING",
+      "model": "muse",
+      "metrics_steps": [],
+      "checkpoint_records": [],
+      "metrics_error": "ERROR: (gcloud.storage.cat) The following URLs matched no objects or files:\ngs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-muse-seeded-001/client/tinker_log/science-qubit-q20-v6e-muse-seeded-001/metrics.jsonl\n",
+      "checkpoint_error": "ERROR: (gcloud.storage.cat) The following URLs matched no objects or files:\ngs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-muse-seeded-001/client/tinker_log/science-qubit-q20-v6e-muse-seeded-001/member_muse/checkpoints.jsonl\n",
+      "last_training_step": null,
+      "last_checkpoint_step": null
+    },
+    {
+      "spot_job_id": 984,
+      "name": "science-circuit-v4-muse-cpu-seeded-train-001",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "status": "RUNNING",
+      "model": "muse",
+      "metrics_steps": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000004",
+          "batch": 4,
+          "state_path": "tinker://model_dd68f095/weights/000004",
+          "sampler_path": "tinker://model_dd68f095/000004"
+        },
+        {
+          "name": "000005",
+          "batch": 5,
+          "state_path": "tinker://model_dd68f095/weights/000005",
+          "sampler_path": "tinker://model_dd68f095/000005"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 5,
+      "last_checkpoint_step": 5,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-muse-cpu-seeded-train-001/checkpoints/model_dd68f095/000005.tar.gz"
+    },
+    {
+      "spot_job_id": 991,
+      "name": "science-qubit-v6e-qwen-runtime-001",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "status": "PENDING",
+      "model": "qwen",
+      "metrics_steps": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000011",
+          "batch": 11,
+          "state_path": "tinker://model_e94de860/weights/000011",
+          "sampler_path": "tinker://model_e94de860/000011"
+        },
+        {
+          "name": "000012",
+          "batch": 12,
+          "state_path": "tinker://model_e94de860/weights/000012",
+          "sampler_path": "tinker://model_e94de860/000012"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 12,
+      "last_checkpoint_step": 12,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-qwen-runtime-001/checkpoints/model_e94de860/000012.tar.gz"
+    },
+    {
+      "spot_job_id": 999,
+      "name": "science-qubit-q20-v6e-gemma-seeded-001",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "status": "RECOVERING",
+      "model": "gemma",
+      "metrics_steps": [
+        1,
+        2
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000001",
+          "batch": 1,
+          "state_path": "tinker://model_7c3e4a6f/weights/000001",
+          "sampler_path": "tinker://model_7c3e4a6f/000001"
+        },
+        {
+          "name": "000002",
+          "batch": 2,
+          "state_path": "tinker://model_7c3e4a6f/weights/000002",
+          "sampler_path": "tinker://model_7c3e4a6f/000002"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 2,
+      "last_checkpoint_step": 2,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/checkpoints/model_7c3e4a6f/000002.tar.gz"
+    },
+    {
+      "spot_job_id": 992,
+      "name": "science-qubit-v6e-muse-runtime-001",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "status": "RUNNING",
+      "model": "muse",
+      "metrics_steps": [
+        1
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000001",
+          "batch": 1,
+          "state_path": "tinker://model_676a3887/weights/000001",
+          "sampler_path": "tinker://model_676a3887/000001"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 1,
+      "last_checkpoint_step": 1,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-muse-runtime-001/checkpoints/model_676a3887/000001.tar.gz"
+    },
+    {
+      "spot_job_id": 1000,
+      "name": "science-qubit-q20-v6e-qwen-seeded-001",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "status": "PENDING",
+      "model": "qwen",
+      "metrics_steps": [
+        1,
+        2
+      ],
+      "checkpoint_records": [
+        {
+          "name": "000001",
+          "batch": 1,
+          "state_path": "tinker://model_32fa360a/weights/000001",
+          "sampler_path": "tinker://model_32fa360a/000001"
+        },
+        {
+          "name": "000002",
+          "batch": 2,
+          "state_path": "tinker://model_32fa360a/weights/000002",
+          "sampler_path": "tinker://model_32fa360a/000002"
+        }
+      ],
+      "metrics_error": null,
+      "checkpoint_error": null,
+      "last_training_step": 2,
+      "last_checkpoint_step": 2,
+      "checkpoint_archive_exists": true,
+      "checkpoint_archive": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-qwen-seeded-001/checkpoints/model_32fa360a/000002.tar.gz"
+    }
+  ]
+}

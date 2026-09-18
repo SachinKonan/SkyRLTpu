@@ -37,5 +37,13 @@ for name,version,lock,extras in [
     elif marker.read_text()!=digest:raise RuntimeError('environment lock mismatch; use a new runtime directory')
 subprocess.run(['bwrap','--version'],check=True)
 subprocess.run(['sudo','-n','systemctl','--version'],check=True)
+helper = os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')
+if helper == 'fast_proxy_v1':
+    if not cpu:raise RuntimeError('fast proxy requires CPU backend')
+    subprocess.run([str(root/'.science/candidate-venv/bin/python'), str(root/'tpu/science/fast_proxy/build.py')], check=True)
+    from .fast_proxy_deployment import verified_mounts
+    _, hashes = verified_mounts(root)
+    print(json.dumps(dict(event='fast_proxy_ready', hashes=hashes)), flush=True)
+elif helper != 'none':raise RuntimeError('unknown placement helper')
 (root/'.science/ready.json').write_text(json.dumps(dict(rank=rank,
     profile='placement_jax_cpu_v1' if cpu else 'placement_jax_v1',chips=chips,accelerator=accelerator)))

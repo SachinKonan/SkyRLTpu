@@ -38,7 +38,9 @@ def task_prompt(task, *, include_starter=True):
     name = 'prompts/rendered/routing.txt' if task == 'routing' else 'prompts/placement-jax-v6e.txt'
     cpu = task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu'
     if cpu:
-        name = 'prompts/placement-jax-cpu.txt'
+        name = ('prompts/placement-fast-proxy-cpu-v1.txt'
+                if os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none') == 'fast_proxy_v1'
+                else 'prompts/placement-jax-cpu.txt')
     prompt = (Path(__file__).parent / name).read_text()
     if task == 'placement' and not cpu and placement_accelerator() == 'tpu-v4-64':
         prompt = prompt.replace('TPU v6e chip', 'TPU v4 chip')
@@ -86,7 +88,8 @@ async def evaluate(task, source, timeout):
             for case in CASES:
                 refs.append(grade_cpu_case.options(scheduling_strategy='SPREAD').remote(
                     source, case, root, admission_timeout_s=timeout,
-                    slots_per_host=int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16'))))
+                    slots_per_host=int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16')),
+                    helper=os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')))
         elif task == 'placement':
             from ray.util.placement_group import get_placement_group
             from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy

@@ -21,8 +21,11 @@ def package(profile, output):
     files = {str(p.relative_to(root)): p for p in (root / 'tpu/science').glob('*.py')}
     for name in ('prepare_cpu_host.sh', 'requirements-cpu.lock', 'requirements-challenge-pilot.lock',
                  'requirements-placement-candidate.lock', 'prompts/rendered/routing.txt',
-                 'prompts/placement-jax-v6e.txt', 'prompts/placement-jax-cpu.txt', 'manifests/routing-v1.json'):
+                 'prompts/placement-jax-v6e.txt', 'prompts/placement-jax-cpu.txt', 'prompts/placement-fast-proxy-cpu-v1.txt', 'manifests/routing-v1.json'):
         files['tpu/science/' + name] = root / 'tpu/science' / name
+    if config.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1':
+        for name in ('__init__.py', 'build.py', 'congestion.c', 'LICENSE-AbuPlace', 'README.md'):
+            files['tpu/science/fast_proxy/' + name] = root / 'tpu/science/fast_proxy' / name
     if config.science_task == 'placement':
         from .challenge_contract import CASES
         from .placement_warm_start import verified_inputs, DESTINATION
@@ -50,6 +53,7 @@ def package(profile, output):
     doc['envs'].update(RAY_TRAIN_CODE=config.bucket + '/code-bundles/science-training-' + digest + '.tar.gz',
                        RAY_TRAIN_CODE_SHA256=digest, SCIENCE_ACCELERATOR=config.accelerator,
                        SCIENCE_PLACEMENT_BACKEND=config.science_placement_backend,
+                       SCIENCE_PLACEMENT_HELPER=config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none'),
                        SCIENCE_PLACEMENT_SLOTS_PER_HOST=str(config.science_placement_slots_per_host))
     prep = '''cd "$code"
 export SCIENCE_WORKER_ROOT="$code"

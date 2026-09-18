@@ -1,0 +1,450 @@
+[
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 0,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.126.111' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 1,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '108.59.91.89' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 2,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '108.59.92.23' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 3,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.106.63' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 4,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.15.89' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 5,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.28.79' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 6,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.62.136' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 978,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 7,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.78.157' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 0,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.109.251' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 1,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '107.167.162.131' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 2,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.116.138' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 3,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.122.201' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 4,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.142.116' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 5,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.5.192' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 6,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.57.47' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 979,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-498",
+    "rank": 7,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.77.14' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 0,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.46.42' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 1,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '107.167.162.181' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 2,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '108.59.90.208' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 3,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.102.200' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 4,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.130.50' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 5,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.52.156' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 6,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.57.229' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 980,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-457",
+    "rank": 7,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.67.51' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 0,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.109.7' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 1,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '107.167.161.4' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 2,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '108.59.94.198' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 3,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.108.26' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 4,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.18.25' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 5,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.2.149' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 6,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.77.212' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 981,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-468",
+    "rank": 7,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.78.60' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 0,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.62.201' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 1,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '107.167.174.152' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 2,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.122.170' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 3,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.3.65' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 4,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.33.217' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 5,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.57.88' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 6,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.74.173' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 982,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 7,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.78.193' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 0,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.82.182' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 1,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '173.255.125.208' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 2,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.105.218' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 3,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.127.79' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 4,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.39.26' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 5,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.44.168' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 6,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.66.200' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 984,
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-488",
+    "rank": 7,
+    "exit": 0,
+    "output": "",
+    "error": "Warning: Permanently added '35.186.7.234' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 0,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-88ca3c0a607d5fcaa091.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-a1ab88f345f644cda3720d5ff95f3e3b/payload.json",
+    "error": "Warning: Permanently added '34.162.171.139' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 1,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-6ee55111a5ae23cb8bf2.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-0cd35753fb3f4f74bdbd214943bed245/payload.json",
+    "error": "Warning: Permanently added '136.83.14.54' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 2,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-9a4afa74d34a57ebdc88.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-cbe9523a673847c38341267c0660ca98/payload.json",
+    "error": "Warning: Permanently added '136.83.19.186' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 3,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-115ac8c12d3f3b056ae7.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-e0bd174f402d479a8b543df8a6fd310a/payload.json",
+    "error": "Warning: Permanently added '136.83.59.200' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 4,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-39c7c8ba5eb2fdf26211.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-5085d46e38f445b4b0037906137ce60c/payload.json",
+    "error": "Warning: Permanently added '136.83.62.191' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 5,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-9b8e5944baa1866222ec.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-00153315c6a04dad97c57f2d277cb8e5/payload.json",
+    "error": "Warning: Permanently added '34.162.78.189' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 6,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-1cdad40cf52c27c2d9be.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-dee1aa2b93534935901d5ccb23923d18/payload.json",
+    "error": "Warning: Permanently added '34.186.233.182' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "job": 992,
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-4340",
+    "rank": 7,
+    "exit": 0,
+    "output": "\u25cf skyrl-runtime-f5b4f4868c63a94d807d.service loaded failed failed /usr/bin/python3 /home/gcpuser/.cache/skyrl-ray-code/aac01e9bdf19eba004057b7e7cfd08dab3e5e70ec36b163245e404fb0be63083/tpu/swarm/ray_train/runtime_service.py supervise /home/gcpuser/.cache/science-qubit-v6e-muse-runtime-001/runs/science-qubit-v6e-muse-runtime-001/systemd-0d8b901b53344c47940b998071686f67/payload.json",
+    "error": "Warning: Permanently added '8.234.52.8' (ED25519) to the list of known hosts.\n"
+  }
+]
