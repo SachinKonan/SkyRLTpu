@@ -49,7 +49,7 @@ def main():
             from .routing import evaluate
             result=evaluate(source,root=root/'.science/routing-task',work=request['work'],
                 python=sys.executable,cargo_home=root/'.science/cargo',rustup_home=root/'.science/rustup',
-                target_cache=root/'.science/router-target')
+                target_cache=root/'.science/router-target',routing_suite=request.get('routing_suite','full'))
         else:raise ValueError('unknown science task')
     except Exception as exc:
         result=invalid(f'{type(exc).__name__}: {exc}')

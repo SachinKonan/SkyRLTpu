@@ -271,7 +271,8 @@ class Controller:
                 self.report('science_reference_result', task=self.config.science_task,
                             index=index, verdict=verdict)
             result = check_references(self.config.science_task, references, expected_hosts=self.config.hosts,
-                                      placement_backend=self.config.science_placement_backend)
+                                      placement_backend=self.config.science_placement_backend,
+                                      routing_suite=self.config.client_env.get("SCIENCE_ROUTING_SUITE", "full"))
             self.report('science_reference_passed', **result)
             self.science_refs = []
         if self.config.arena_grader_rank is not None:

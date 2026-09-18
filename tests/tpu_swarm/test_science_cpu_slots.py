@@ -140,13 +140,15 @@ class DispatchTest(unittest.IsolatedAsyncioTestCase):
         future = Future(); future.set_result({'reward': .5, 'raw_score': .5})
         class Ref:
             def future(self): return future
-        with patch.object(env, 'connect'), patch.dict(os.environ, SCIENCE_WORKER_ROOT='/payload',
-                SCIENCE_ROUTING_SLOTS_PER_HOST='16'), patch.object(ray_cpu.grade, 'options') as opts, \
-                patch.object(env.ray, 'cancel'):
-            opts.return_value.remote.return_value = Ref()
-            await env.evaluate('routing', 'code', 100)
-            self.assertEqual(opts.return_value.remote.call_args.kwargs,
-                             {'admission_timeout_s': 100, 'slots_per_host': 16})
+        for suite in ('full', 'q20'):
+            with patch.object(env, 'connect'), patch.dict(os.environ, SCIENCE_WORKER_ROOT='/payload',
+                    SCIENCE_ROUTING_SLOTS_PER_HOST='16', SCIENCE_ROUTING_SUITE=suite), \
+                    patch.object(ray_cpu.grade, 'options') as opts, patch.object(env.ray, 'cancel'):
+                opts.return_value.remote.return_value = Ref()
+                await env.evaluate('routing', 'code', 100)
+                self.assertEqual(opts.return_value.remote.call_args.kwargs,
+                                 {'admission_timeout_s': 100, 'slots_per_host': 16, 'routing_suite': suite})
+
 
 
 if __name__ == '__main__':

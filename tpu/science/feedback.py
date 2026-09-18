@@ -23,7 +23,7 @@ def observation(task, result):
     metrics = result['metrics']
     feedback = {k: v for k, v in metrics.items() if k in (
         'mean_proxy_cost', 'weighted_candidate_cnots', 'weighted_baseline_cnots',
-        'swaps', 'added_cnots', 'improvement', 'case_count', 'total_seconds')}
+        'swaps', 'added_cnots', 'improvement', 'case_count', 'total_seconds', 'routing_suite')}
     message = result['msg'][:1600]
     if task == 'placement' and 'cases' in metrics:
         from .challenge_contract import CASES, CANDIDATE_LIMIT_SECONDS

@@ -251,6 +251,7 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
     if config.science_task:
         # Use the deployed profile even if the parent carries another TPU family.
         defaults["SCIENCE_ACCELERATOR"] = config.accelerator
+        defaults["SCIENCE_ROUTING_SUITE"] = config.client_env.get("SCIENCE_ROUTING_SUITE", "full")
         defaults["SCIENCE_ROUTING_SLOTS_PER_HOST"] = str(config.science_routing_slots_per_host)
         defaults["SCIENCE_PLACEMENT_BACKEND"] = config.science_placement_backend
         defaults["SCIENCE_PLACEMENT_SLOTS_PER_HOST"] = str(config.science_placement_slots_per_host)

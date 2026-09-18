@@ -49,6 +49,13 @@ def task_prompt(task, *, include_starter=True):
         if not separator:
             raise ValueError(f'{task} prompt is missing its starter boundary')
         prompt = instructions.rstrip()
+    if task == 'routing':
+        from .routing_suite import validate_suite
+        if validate_suite(os.environ.get('SCIENCE_ROUTING_SUITE', 'full')) == 'q20':
+            prompt = ('Benchmark scope: Q20 ONLY, the 24 pinned circuits on the Q20 coupling graph. '
+                      'Only their total added SWAPs S determines reward: max(1e-6,22714/(22714+S)). '
+                      'Lower SWAPs and higher reward are better. All 24 cases must pass. '
+                      'Willow and Heron are not evaluated in this experiment.\n\n') + prompt
     return prompt
 
 
@@ -71,7 +78,8 @@ async def evaluate(task, source, timeout):
             from .ray_cpu import grade
             refs.append(grade.options(scheduling_strategy='SPREAD').remote(
                 'routing', source, root, admission_timeout_s=timeout,
-                slots_per_host=int(os.environ.get('SCIENCE_ROUTING_SLOTS_PER_HOST', '2'))))
+                slots_per_host=int(os.environ.get('SCIENCE_ROUTING_SLOTS_PER_HOST', '2')),
+                routing_suite=os.environ.get('SCIENCE_ROUTING_SUITE','full')))
         elif task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu':
             from .placement_ray import grade_cpu_case
             from .placement_task import CASES

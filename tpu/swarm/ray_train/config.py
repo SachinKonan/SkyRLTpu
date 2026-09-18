@@ -425,6 +425,9 @@ class Config:
                 raise ValueError('CPU placement requires RAM caches capped at 128 GiB')
         elif placement_slots != 2:
             raise ValueError('placement CPU slots require the CPU backend')
+        routing_suite = self.client_env.get('SCIENCE_ROUTING_SUITE', 'full')
+        if routing_suite not in ('full', 'q20') or (routing_suite != 'full' and self.science_task != 'routing'):
+            raise ValueError('SCIENCE_ROUTING_SUITE must be full or q20 for science routing')
         slots = self.science_routing_slots_per_host
         if type(slots) is not int or not 1 <= slots <= 16:
             raise ValueError('routing grading slots must be an integer in [1,16] (128 GiB maximum)')

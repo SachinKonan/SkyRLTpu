@@ -48,11 +48,14 @@ def prepare(config, ips, nodes, grading_rank):
         for ip in ips:
             refs.append(grade.options(scheduling_strategy=NodeAffinitySchedulingStrategy(
                 nodes[ip]['NodeID'], soft=False)).remote('routing', source, root,
-                    slots_per_host=config.science_routing_slots_per_host))
+                    slots_per_host=config.science_routing_slots_per_host,
+                    routing_suite=config.client_env.get("SCIENCE_ROUTING_SUITE", "full")))
     return group, refs
 
 
-def check_references(task, results, *, expected_hosts=8, placement_backend='tpu'):
+def check_references(task, results, *, expected_hosts=8, placement_backend='tpu', routing_suite='full'):
+    from .routing_suite import validate_suite
+    validate_suite(routing_suite)
     cpu_placement = task == 'placement' and placement_backend == 'cpu'
     expected = 8 * expected_hosts if cpu_placement else 8 if task == 'placement' else expected_hosts
     if len(results) != expected or any(r['correctness'] != 1 for r in results):
@@ -75,6 +78,7 @@ def check_references(task, results, *, expected_hosts=8, placement_backend='tpu'
             raise RuntimeError('placement references did not exercise all four chips')
         if len({r['metrics']['ray_node_id'] for r in results}) != 1:
             raise RuntimeError('placement grading escaped the selected host')
-    elif any(r['metrics'].get('case_count') != 72 for r in results):
-        raise RuntimeError('routing reference did not verify all 72 cases')
+    elif any(r['metrics'].get('case_count') != (24 if routing_suite == 'q20' else 72)
+             or r['metrics'].get('routing_suite', 'full') != routing_suite for r in results):
+        raise RuntimeError('routing reference did not verify the selected suite')
     return dict(task=task, evaluations=len(results), rewards=[r['reward'] for r in results])

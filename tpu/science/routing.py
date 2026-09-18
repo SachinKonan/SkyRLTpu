@@ -67,7 +67,7 @@ def verify(root, suite_path, output, progress=None):
     return reward,metrics
 
 
-def evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cache, suite=None, seconds=1800):
+def evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cache, suite=None, seconds=1800, routing_suite='full'):
     memory_group,_=envelope(8)
     root,work=Path(root).resolve(),Path(work).resolve()
     work.mkdir(parents=True,exist_ok=False)
@@ -75,7 +75,8 @@ def evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cach
     target=work/'target'
     # A private copy prevents candidate builds from modifying another candidate's cache.
     shutil.copytree(target_cache,target)
-    suite=Path(suite or root/'python/benchmarks/sabre_suite.json').resolve()
+    from .routing_suite import select_suite
+    suite=select_suite(root, work, routing_suite, suite)
     body=rust_literal(source);(rust/'router_core/src/candidate.rs').write_text(scaffold(root,body))
     started=time.monotonic();times={}
     py_mounts=python_mounts(python)
@@ -116,6 +117,7 @@ def evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cach
     times['verify_seconds']=time.monotonic()-checked
     times['total_seconds']=time.monotonic()-started
     if times['total_seconds']>seconds:raise TimeoutError('independent verification exhausted budget')
+    metrics.update(routing_suite=routing_suite)
     metrics.update(times,seed=42,layout_trials=20,routing_trials=20,hardware='cpu',cpus=4,memory_gib=8,
                    source_sha256=hashlib.sha256(source.encode()).hexdigest(),allocation_memory=memory_metrics(memory_group))
     result=valid(reward,metrics);(work/'verdict.json').write_text(json.dumps(result,indent=2)+'\n')
@@ -125,5 +127,6 @@ def evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cach
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('--root',required=True);p.add_argument('--work',required=True)
     p.add_argument('--target-cache',required=True);p.add_argument('--suite');p.add_argument('--python',default=sys.executable)
+    p.add_argument('--routing-suite', choices=('full','q20'), default='full')
     p.add_argument('--cargo-home',default=str(Path.home()/'.cargo'));p.add_argument('--rustup-home',default=str(Path.home()/'.rustup'))
     a=p.parse_args();kwargs=vars(a);source=Path(kwargs.pop('source')).read_text();print(json.dumps(evaluate(source,**kwargs),indent=2))

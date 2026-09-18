@@ -35,8 +35,11 @@ def cleanup_builds(folder):
 
 
 @ray.remote(num_cpus=4,memory=8*1024**3,max_retries=0)
-def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2):
+def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, routing_suite='full'):
     if task not in ('portfolio','portfolio_v2','routing'):raise ValueError('unsupported science task')
+    from .routing_suite import validate_suite
+    validate_suite(routing_suite)
+    if task != 'routing' and routing_suite != 'full':raise ValueError('Q20 requires routing')
     validate_slots(slots_per_host)
     if task != 'routing' and slots_per_host != 2:raise ValueError('expanded slots apply only to routing')
     root=Path(root).resolve();jobs=root/'.science/ray-jobs';jobs.mkdir(exist_ok=True)
@@ -45,10 +48,10 @@ def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2):
     # Locks are shared across payload directories; never unlink them on release.
     slot,lock=acquire_slot(slots=slots_per_host, deadline_seconds=admission_timeout_s)
     with lock:
-        return _grade_admitted(task, source, root, jobs, slot, slots_per_host)
+        return _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite)
 
 
-def _grade_admitted(task, source, root, jobs, slot, slots_per_host):
+def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite='full'):
     from .cgroup_limits import runtime_owner_properties
     from .worker import process_identity
     from .rewards import invalid
@@ -56,7 +59,7 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host):
     folder=jobs/job_id;folder.mkdir()
     (folder/'candidate.py').write_text(source)
     (folder/'request.json').write_text(json.dumps(dict(task=task,source=str(folder/'candidate.py'),
-        work=str(folder/'evaluation'),root=str(root))))
+        work=str(folder/'evaluation'),root=str(root),routing_suite=routing_suite)))
     seconds=1800 if task=='routing' else 300
     # Sixteen disjoint four-CPU sets, leaving CPUs 0-15 and 80+ for the host.
     cpus=slot_cpus(slot)
