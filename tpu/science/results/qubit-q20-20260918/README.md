@@ -44,3 +44,9 @@ Validation: 84 tests and 24 subtests passed across Q20 selection/rescoring,
 science prompts/rewards, bootstrap, seed handoff, CPU admission, and launcher
 commands. The deployed native suite checksum and all 24 input paths were checked
 read-only. All three seed pools were uploaded and verified by exact readback.
+
+Submitted 2026-09-18 03:45-03:46 UTC to `tpuswarm-v6e32-east5b-qwen35`:
+Gemma job 999, Qwen job 1000, Muse job 1001. At the post-submission check,
+all three were waiting for workers (no optimizer steps). Existing combined
+Gemma and Muse runs had been preempted and their recoveries claimed the two
+previously idle replicas. No existing job was canceled. Runtime commit: `89f211e0`.
