@@ -150,7 +150,8 @@ class Inference:
     max_adapter_upload_bytes: int = 2 * 1024**3
     # Legacy start_vllm_tpu.sh always passes --enable-prefix-caching and never
     # --enable-chunked-prefill; the 2026-09-07 profiles had the opposite.
-    # False means omit the flag, retaining the installed vLLM default.
+    # Prefix caching now emits an explicit positive/negative flag; chunked
+    # prefill retains the legacy omit-when-false behavior.
     prefix_caching: bool = True
     chunked_prefill: bool = False
     # Engine environment (legacy per-model values: qwen/gemma 0/0/0, muse 1/1/1).
