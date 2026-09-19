@@ -74,6 +74,8 @@ NATIVE_FILES = {"skyrl/tinker/dispatch.py", "skyrl/tinker/extra/external_inferen
 
 ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
+BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
+                   'tpu/swarm/ray_train/borrowing_phase.py'}
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py"}
 WARMUP_FILES = REPEATED_KV_FILES | {"skyrl/backends/backward_warmup.py", "tpu/swarm/ray_train/warmup_contract.py"}
@@ -127,6 +129,8 @@ def manifest(repo, config=None):
         names.update(SMOKE_FILES)
     if config is not None and config.inference.native_thinking_budget and not config.inference_only:
         names.update(NATIVE_FILES | set(SMOKE_FILES))
+    if config is not None and config.borrows_inference:
+        names.update(BORROWING_FILES)
     return {name: hashlib.sha256((Path(repo) / name).read_bytes()).hexdigest() for name in sorted(names)}
 
 
@@ -154,6 +158,7 @@ def install(directory, destination):
     allowed.extend([base | REPEATED_KV_FILES for base in [set(), *allowed]])
     allowed.extend([base | WARMUP_FILES for base in [set(), *allowed]])
     allowed.extend([base | {"tpu/vllm_tpu_server.py"} for base in [set(), *allowed]])
+    allowed.extend([base | BORROWING_FILES for base in [set(), *allowed]])
     if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")
     for name, expected in records.items():

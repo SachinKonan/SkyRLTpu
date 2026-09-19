@@ -175,6 +175,17 @@ class Inference:
     # adapters to each one (legacy). "ingress": every request and adapter goes
     # through the Ray Serve ingress (the 2026-09-07 executor behaviour).
     routing: str = "direct"
+    # Optional serving farms keyed by exact HF base-model ID. Empty is legacy.
+    external_pool_urls: dict[str, list[str]] = field(default_factory=dict)
+    external_pool_engines: int = 4
+    # Raise only after accepting the farm's batching/concurrency validation.
+    external_pool_max_n: int = 1
+    external_pool_max_concurrent_requests: int = 1
+    external_pool_rpc_timeout: int = 3
+    external_pool_prepare_timeout: int = 120
+    external_pool_release_timeout: int = 15
+    external_pool_lease_seconds: int = 300
+    external_pool_heartbeat_seconds: int = 30
 
 
 @dataclass(frozen=True)
@@ -353,6 +364,10 @@ class Config:
         return {"science_routing": "routing", "science_placement": "placement"}.get(self.client_env.get("TTD_ENV"))
 
     @property
+    def borrows_inference(self):
+        return bool(self.inference.external_pool_urls.get(self.model))
+
+    @property
     def ray_cpus_per_host(self):
         # Leave scheduler capacity for controller/Serve actors as well as graders.
         if self.science_task == 'placement' and self.science_placement_backend == 'cpu':
@@ -420,6 +435,46 @@ class Config:
         return asdict(self)
 
     def validate(self):
+        from urllib.parse import urlsplit
+        pool = self.inference.external_pool_urls
+        if not isinstance(pool, dict):
+            raise ValueError('external_pool_urls must map exact model IDs to URL lists')
+        for model, urls in pool.items():
+            if not isinstance(model, str) or not model or not isinstance(urls, list):
+                raise ValueError('external_pool_urls must map exact model IDs to URL lists')
+            if any(not isinstance(value, str) for value in urls):
+                raise ValueError('external service URL must be a string')
+            if len(urls) > 2 or len(set(urls)) != len(urls):
+                raise ValueError('at most two distinct external service URLs per model')
+            for value in urls:
+                if not isinstance(value, str):
+                    raise ValueError('external service URL must be a string')
+                url = urlsplit(value)
+                if (url.scheme not in ('http', 'https') or not url.hostname or url.username
+                        or url.password or url.query or url.fragment or url.path not in ('', '/')
+                        or value.endswith('/')):
+                    raise ValueError('external service URL must be an HTTP(S) origin without credentials or trailing slash')
+                try:
+                    url.port
+                except ValueError as exc:
+                    raise ValueError('invalid external service port') from exc
+        for name in ('engines', 'max_n', 'max_concurrent_requests', 'rpc_timeout', 'prepare_timeout', 'release_timeout',
+                     'lease_seconds', 'heartbeat_seconds'):
+            value = getattr(self.inference, 'external_pool_' + name)
+            if type(value) is not int or value <= 0:
+                raise ValueError('external pool limits must be positive integers')
+        if (self.inference.external_pool_lease_seconds <=
+                3 * max(self.inference.external_pool_heartbeat_seconds, self.inference.external_pool_rpc_timeout)):
+            raise ValueError('external lease must allow at least three heartbeat/RPC intervals')
+        if not 30 <= self.inference.external_pool_lease_seconds <= 86400:
+            raise ValueError('external lease TTL must satisfy the farm API range of 30..86400 seconds')
+        if self.borrows_inference:
+            if (self.inference.routing != 'ingress' or self.adapter_count != 1 or self.inference_only
+                    or self.arena_models or self.arena_samples or not self.inference.native_thinking_budget):
+                raise ValueError('inference borrowing requires single-model native training through ingress')
+            if (self.client_env.get('TTD_LEAGUE_PIPELINE', '1') != '1'
+                    or self.client_env.get('TTD_DISTILL_ENABLED', '0') != '0'):
+                raise ValueError('inference borrowing requires the pipelined sampling phase without distillation')
         placement_suite = self.client_env.get('SCIENCE_PLACEMENT_SUITE', 'ibm17-proxy-v1')
         if placement_suite != 'ibm17-proxy-v1':
             raise ValueError('Circuit reward requires all 17 IBM cases: SCIENCE_PLACEMENT_SUITE=ibm17-proxy-v1')

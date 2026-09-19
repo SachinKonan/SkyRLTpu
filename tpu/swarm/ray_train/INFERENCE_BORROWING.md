@@ -1,0 +1,127 @@
+# Borrowing an external inference service
+
+Optional consumer integration for single-model, single-adapter native-budget
+training through the Ray Serve ingress. The default URL map is empty: existing
+profiles keep their local inference path. No remote Ray connection is required.
+This does not change GRPO/PWC, trajectory grouping, grading, or optimizer steps.
+
+## Configuration
+
+Merge these fields into a profile's `inference` object. Keys are **exact** base
+model IDs, identical to `config.model` and the farm's `/v1/models` entry. A shared
+map can contain Qwen, Gemma and Muse entries; a run only uses its own entry.
+
+```json
+{
+  "routing": "ingress",
+  "external_pool_urls": {
+    "Qwen/Qwen3.5-27B": ["http://qwen-farm-1:8000", "http://qwen-farm-2:8000"]
+  },
+  "external_pool_engines": 4,
+  "external_pool_max_n": 1,
+  "external_pool_max_concurrent_requests": 1,
+  "external_pool_rpc_timeout": 3,
+  "external_pool_prepare_timeout": 120,
+  "external_pool_release_timeout": 15,
+  "external_pool_lease_seconds": 300,
+  "external_pool_heartbeat_seconds": 30
+}
+```
+
+These are placeholder URLs, not deployed endpoints. Each URL addresses one farm
+ingress controlling four engines. At most two candidate URLs may be listed per
+model. A sampling phase borrows **at most one farm** alongside the job's existing
+local engines. Requests are balanced by active requests per engine; each whole
+`n`-completion request goes to one destination, preserving group construction.
+The farm performs its own routing among its four engines.
+
+**Batching/concurrency acceptance is explicit.** Defaults allow only `n=1` and
+one simultaneous remote HTTP request, reflecting the reported sequential-only
+validation. A normal `GROUP_SIZE=32` phase therefore stays local and does not
+claim a farm with these defaults. After validating the farm at the intended
+batch size, set `external_pool_max_n` to 32. Raise
+`external_pool_max_concurrent_requests` separately after concurrent validation
+(for example, 4 permits four simultaneous full-group requests). Exclusivity
+does not establish numerical parity or concurrent generation correctness.
+
+## Sampling lifecycle
+
+1. At the pipelined sampling boundary, inspect the committed local adapter and
+   try the two services. Health and base-model identity must match. An atomic
+   lease claim is authoritative; an empty adapter list alone is not.
+2. Upload the immutable committed adapter archive with its SHA-256. Require
+   matching lease owner, adapter alias/hash and readiness on every remote engine
+   before admitting remote generation. The local adapter publication barrier
+   still covers only local engines. External preparation is bounded separately.
+3. Route eligible requests to local and borrowed engines, retaining the exact
+   native token/logprob/mask/audit response. Only the outgoing remote model alias
+   changes. No per-token streaming or thinking-budget bypass is introduced.
+4. Release after the sampling phase finishes, including its grading and streamed
+   forward/backward work, before member finish/optimizer publication. We retain
+   the existing sampling/training overlap rather than releasing on the first
+   forward/backward call. Adapter replacement also closes a borrowed phase.
+5. Base-model science bootstrap uses the same ownership lifecycle without a
+   LoRA upload. Its batch/concurrency limits still apply.
+
+The training client heartbeats its local ingress, which independently renews
+the remote lease. If the client disappears, the local phase expires after 300s
+by default, interrupts outstanding borrowed waits, and attempts release. If the
+ingress disappears, remote lease expiry permits later ownership transfer. A
+server can still need time to drain old admitted operations before reuse.
+
+## Failure behavior
+
+- Busy/offline farms at phase start: use another listed farm or stay local.
+- A disconnected/erroring remote request: disable that farm for this phase and
+  retry the unfinished request locally using the original adapter and payload.
+- A hung remote request: heartbeat/lease-loss detection interrupts its HTTP wait
+  and triggers the same local retry. With defaults, a failed heartbeat is usually
+  detected within roughly 30s + 3s RPC timeout, rather than the long generation
+  timeout. This is an operational target, not a hard bound during local overload.
+- Other in-flight requests on that failed lease also retry locally. Successfully
+  returned responses are kept. The original remote operation might still run;
+  its abandoned result cannot enter the local training batch a second time.
+- Lease/hash mismatch or incomplete readiness: no remote sampling.
+- An ambiguous **acquire** acknowledgement disables further borrowing for that
+  consumer process. A queued server acquire could execute late; waiting one TTL
+  is insufficient evidence that a second farm can safely be acquired.
+- Unconfirmed release stops renewal and pauses subsequent acquisitions through
+  a conservative expiry interval. Cleanup calls include phase identity, so a
+  stale client cannot release a newer local phase.
+- Local inference failure retains existing job error/recovery behavior. External
+  borrowing cannot make the local service itself fault tolerant.
+
+## Required serving-side contract
+
+This matches the lease API in `SkyRLTpu-science-multi-lora` (`LORA_FARM.md`):
+
+| Operation | API |
+| --- | --- |
+| Claim | `POST /acquire_lease`: `owner_run`, `ttl_seconds` |
+| Renew | Same endpoint plus the returned `lease_id` |
+| Upload | `POST /skyrl/v1/upload_lora_adapter?lora_name=borrow-<lease_id>`; headers `X-Lease-ID`, `X-Adapter-SHA256`; tar body |
+| Verify | `GET /status`: owner/lease, adapter hash/name, `ready_engines`, `expected_engines`, state |
+| Generate | `POST /v1/completions` with `X-Lease-ID` and the verified model alias |
+| Release | `POST /release_lease`: `lease_id`; require `state=unleased`, `released=true` |
+
+The farm must fence admission by lease, independently verify loaded adapter
+hashes, and drain actual operations during ownership handoff, including requests
+whose HTTP caller disconnected. Release quarantines the old adapter; physical
+unload and an empty `/v1/models` list are not required. A plain v2 ingress without
+this lease contract is ineligible. The farm must also use the matching model
+revision, tokenizer, adapter settings and native-budget runtime; the current API
+does not attest the complete runtime configuration. Use trusted private endpoints.
+
+Local control endpoints are `/skyrl/v1/borrowing/{begin,heartbeat,end}`. Status is
+included under `borrowing` in local `/status`; events use the `borrow_` prefix in
+`inference-events.jsonl`. Lease tokens and full transport exceptions are excluded
+from these events. The packaging overlay includes the client phase hook.
+
+## Validation scope
+
+Local HTTP/ASGI fault-injection tests exercise ownership conflicts, lost acquire
+acknowledgements, hash mismatch, remote request/heartbeat failure, client expiry,
+cancellation, draining, stale cleanup, disabled configuration, and bundle overlay
+installation. Existing serving tests cover unchanged local adapter handling.
+These checks do not establish live TPU throughput or numerical parity. No farm
+was claimed and no running experiment changed during implementation.

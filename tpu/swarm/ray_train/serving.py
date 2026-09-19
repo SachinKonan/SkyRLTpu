@@ -240,13 +240,66 @@ class Ingress:
         self.condition = asyncio.Condition()
         self.upload_lock = asyncio.Lock()
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
+        self.borrower = None
+        if self.config.borrows_inference:
+            from .borrowing import Borrower
+            self.borrower = Borrower(self.config, self.http,
+                lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields))
 
     @app.get("/status")
     async def status(self):
         result = await self.catalog.snapshot.remote()
         result.update(active=self.active, updating=self.updating, committed=self.version,
                       committed_adapters=sorted(self.versions))
+        if self.borrower:
+            result['borrowing'] = self.borrower.snapshot()
         return result
+
+    @app.post('/skyrl/v1/borrowing/begin')
+    async def begin_borrowing(self, request: Request):
+        if not self.borrower:
+            return {'enabled': False}
+        body = await request.json()
+        try:
+            phase = adapter_name(body.get('phase_id'))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        expected_n = body.get('expected_n', 1)
+        if type(expected_n) is not int or expected_n <= 0:
+            raise HTTPException(400, 'expected_n must be a positive integer')
+        async with self.upload_lock:
+            if self.updating:
+                raise HTTPException(409, 'adapter update in progress')
+            # Base-model bootstrap needs ownership but no uploaded adapter.
+            model = self.config.model if body.get('bootstrap') else self.version
+            if not model:
+                return {'enabled': True, 'ready': False, 'reason': 'no committed adapter'}
+            archive = None if model == self.config.model else self.archives / (adapter_name(model) + '.tar')
+            from .borrowing import BorrowingProtocolError
+            try:
+                return await self.borrower.begin(phase, model, archive, expected_n=expected_n)
+            except BorrowingProtocolError as exc:
+                raise HTTPException(409, str(exc))
+
+    @app.post('/skyrl/v1/borrowing/heartbeat')
+    async def heartbeat_borrowing(self, request: Request):
+        if not self.borrower:
+            return {'enabled': False}
+        body = await request.json()
+        phase = body.get('phase_id')
+        if not isinstance(phase, str) or not phase:
+            raise HTTPException(400, 'phase_id is required')
+        return {'renewed': self.borrower.touch(phase)}
+
+    @app.post('/skyrl/v1/borrowing/end')
+    async def end_borrowing(self, request: Request):
+        if not self.borrower:
+            return {'enabled': False}
+        body = await request.json()
+        phase = body.get('phase_id')
+        if not isinstance(phase, str) or not phase:
+            raise HTTPException(400, 'phase_id is required')
+        return {'ended': await self.borrower.end(phase)}
 
     @app.get("/health")
     async def health(self):
@@ -287,6 +340,8 @@ class Ingress:
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         async with self.upload_lock:
+            if self.borrower:
+                await self.borrower.end()
             # Single-adapter clients historically omit the previous name.
             previous = previous_lora_name
             if self.config.inference.max_loras == 1 and version != self.version:
@@ -384,6 +439,8 @@ class Ingress:
         Neither adapter fanout nor tokenization can address a retired host.
         """
         async with self.upload_lock:
+            if self.borrower:
+                await self.borrower.end()
             async with self.condition:
                 self.updating = True
                 await self.condition.wait_for(lambda: self.active == 0)
@@ -433,6 +490,12 @@ class Ingress:
                 raise HTTPException(400, "model is required")
             self.active += 1
         try:
+            if self.borrower:
+                external_active = self.borrower.lease.active if self.borrower.lease else 0
+                result = await self.borrower.generate(payload,
+                    local_active=max(0, self.active - external_active - 1), local_engines=len(self.engines))
+                if result is not None:
+                    return result
             handle = self.select_engine(payload["model"])
             return await handle.generate.remote(payload)
         finally:

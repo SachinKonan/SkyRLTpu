@@ -212,6 +212,10 @@ def main() -> None:
           f"pairs={cfg.distill_pairs_per_step} betters={cfg.distill_num_betters} "
           f"elite_slots={os.environ.get('TTD_ELITE_SLOTS', '0')}")
     print(f"[ensemble] experiment : {experiment_name}")
+    if os.environ.get('SKYRL_BORROWING_URL'):
+        from tpu.swarm.ray_train.borrowing_phase import install
+        from ttt_discover.rl import ensemble
+        install(ensemble, cfg)
     ensemble_discover(cfg)
     print("[ensemble] done — loop returned without raising.")
 

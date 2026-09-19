@@ -273,7 +273,14 @@ def main():
                               bootstrap=__file__, config=config_module.__file__,
                               layers=config.bootstrap_layers)), flush=True)
         return
-    asyncio.run(run(config, args.snapshot, args.head))
+    if config.borrows_inference:
+        from tpu.swarm.ray_train.borrowing_phase import sampling_phase
+        async def borrowed_run():
+            async with sampling_phase(f'http://{args.head}:{config.ports.inference}', bootstrap=True):
+                return await run(config, args.snapshot, args.head)
+        asyncio.run(borrowed_run())
+    else:
+        asyncio.run(run(config, args.snapshot, args.head))
 
 
 if __name__ == '__main__':

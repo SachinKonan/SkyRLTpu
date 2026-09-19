@@ -264,6 +264,16 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults["ARENA_RAY_TASKS"] = "1"
         defaults["ARENA_RAY_ROOT"] = str(root)
     defaults["TTD_NATIVE_THINKING_BUDGET"] = _flag(config.inference.native_thinking_budget)
+    if config.borrows_inference:
+        defaults['SKYRL_BORROWING_URL'] = f'http://{head}:{config.ports.inference}'
+        defaults['SKYRL_BORROWING_PREPARE_TIMEOUT'] = str(config.inference.external_pool_prepare_timeout + 10)
+        defaults['SKYRL_BORROWING_RELEASE_TIMEOUT'] = str(config.inference.external_pool_release_timeout + 5)
+        defaults['SKYRL_BORROWING_HEARTBEAT_SECONDS'] = str(config.inference.external_pool_heartbeat_seconds)
+    else:
+        # Do not accidentally enable a phase hook via an inherited client env.
+        for key in ('SKYRL_BORROWING_URL', 'SKYRL_BORROWING_PREPARE_TIMEOUT', 'SKYRL_BORROWING_RELEASE_TIMEOUT', 'SKYRL_BORROWING_HEARTBEAT_SECONDS'):
+            defaults.pop(key, None)
+            env.pop(key, None)
     if config.adapter_count > 1:
         renderer = config.client_member_spec.split(":")[1]
         defaults.update(
