@@ -4,7 +4,7 @@
 Ray v2 executor in inference-only mode. Ranks 0, 1, 2 and 3 each run one TP4
 engine; no TPU is reserved for training. Ray Serve ingress listens on port
 24800 and engines on 24801. The profile uses systemd ownership, native thinking,
-two adapter slots, and a private compilation-cache destination seeded from the
+one adapter slot, and a private compilation-cache destination seeded from the
 previous native multi-LoRA run. No alternate engine launcher is involved.
 
 Prefix caching is explicitly disabled with `--no-enable-prefix-caching`.
@@ -25,6 +25,12 @@ the archive, drains active generation, publishes to every engine, then commits
 the version. Use `previous_lora_name=OLD` when replacing an adapter at capacity.
 Generation uses `/v1/completions` with `model=NAME`. The native token IDs, masks,
 log probabilities and thinking audit pass through the shared ingress.
+
+Each September 19 production farm is limited to one active adapter, replicated
+to its four engines, pending investigation of concurrency-dependent logprobs.
+A new version replaces the previous adapter; it does not add a second policy.
+The two-adapter acceptance procedure below requires a separate capacity-two
+test profile and is not enabled on these farms.
 
 ## Hardware acceptance
 

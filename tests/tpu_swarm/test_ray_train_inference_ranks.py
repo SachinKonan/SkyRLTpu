@@ -32,6 +32,10 @@ def test_lora_slot_count_must_be_a_positive_integer(value):
 def test_population_serving_does_not_require_a_backward_output_mode():
     config = Config.load(
         "tpu/swarm/ray_train/profiles/qwen35-v432-native-multi-lora-inference-20260919.json")
+    # Fleet profiles run one adapter; retain population-mode coverage here.
+    config = replace(config, adapter_count=2,
+                     inference=replace(config.inference, max_loras=2))
+    config.validate()
     assert config.inference_only and config.trainer.hosts == 0
     assert config.inference_only_ranks == [0, 1, 2, 3]
     assert len(config.engine_slots(["host0", "host1", "host2", "host3"])) == 4

@@ -22,7 +22,7 @@
     "request_timeout": 21600,
     "native_thinking_budget": true,
     "prefix_caching": false,
-    "max_loras": 2
+    "max_loras": 1
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-gemma4-v1",
@@ -64,6 +64,6 @@
     2,
     3
   ],
-  "adapter_count": 2,
+  "adapter_count": 1,
   "pooled_group_size": 32
 }
