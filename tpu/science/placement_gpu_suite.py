@@ -76,7 +76,7 @@ def child(args):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--method', choices=['xplace', 'archgen', 'abuplace'], required=True)
-    p.add_argument('--case', choices=['ibm01', 'ibm04', 'ibm08', 'ibm18'], required=True)
+    p.add_argument('--case', choices=[f'ibm{i:02d}' for i in range(1, 19) if i != 5], required=True)
     p.add_argument('--output', required=True)
     p.add_argument('--repository', required=True)
     p.add_argument('--xplace-root', required=True)
