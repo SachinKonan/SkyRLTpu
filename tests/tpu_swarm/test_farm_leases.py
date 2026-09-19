@@ -77,7 +77,10 @@ def test_exclusive_lease_hash_status_and_stale_owner_fencing(tmp_path, monkeypat
             headers = {'X-Lease-ID': a['lease_id']}
             assert (await client.post('/acquire_lease', json={'owner_run': 'run-b'})).status_code == 409
             assert (await client.post('/acquire_lease', json={'owner_run': 'run-a'})).status_code == 409
-            renewed = await client.post('/acquire_lease', json={'owner_run': 'run-a', 'lease_id': a['lease_id'], 'ttl_seconds': 600})
+            # Renewal must remain available while an upload owns this lock.
+            async with gateway.upload_lock:
+                renewed = await asyncio.wait_for(client.post('/acquire_lease', json={
+                    'owner_run': 'run-a', 'lease_id': a['lease_id'], 'ttl_seconds': 600}), 1)
             assert renewed.json()['lease_id'] == a['lease_id']
             assert (await client.post('/release_lease', json={'lease_id': 'wrong'})).status_code == 409
             assert (await client.post('/skyrl/v1/upload_lora_adapter?lora_name=A', content=b'weights')).status_code == 409

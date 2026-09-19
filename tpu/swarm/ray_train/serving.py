@@ -314,15 +314,20 @@ class Ingress:
             raise HTTPException(400, "owner_run must be a nonempty string of at most 256 characters")
         if type(ttl) is not int or not 30 <= ttl <= 86400:
             raise HTTPException(400, "ttl_seconds must be an integer between 30 and 86400")
+        if payload.get("lease_id"):
+            # Renewals must not queue behind a large upload or its first-load
+            # compilation; otherwise an active owner could expire mid-upload.
+            async with self.condition:
+                self.require_lease(payload["lease_id"])
+                if owner != self.lease["owner_run"]:
+                    raise HTTPException(409, "lease belongs to another run")
+                self.lease.update(deadline=time.monotonic() + ttl, expires_at=time.time() + ttl)
+            return await self.lease_status()
         async with self.upload_lock:
             async with self.condition:
                 if self.lease and time.monotonic() < self.lease["deadline"]:
-                    self.require_lease(payload.get("lease_id"))
-                    if owner != self.lease["owner_run"]:
-                        raise HTTPException(409, "lease belongs to another run")
+                    raise HTTPException(409, "farm is already leased; provide the lease ID to renew")
                 else:
-                    if payload.get("lease_id"):
-                        raise HTTPException(409, "expired lease cannot be renewed; acquire a new lease")
                     if self.lease:
                         self.lease["releasing"] = True
                     await self.condition.wait_for(lambda: self.active == 0)
