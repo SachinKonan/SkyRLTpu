@@ -1,20 +1,21 @@
-name: stageK-rootsQ-g
-# Stage K (2026-09-19): PAIRED-ROOTS gen-0 run. Row Q = the 16 initial constructions of stageC-pwc-n's
-# step-0 tree, shared by all three models of the row (the origin run is the row's own-model member).
-# Identical per-model config to stageG-g-rep1; differences: bundle v30 (LORA_SEED plumbed to tinker
-# LoraConfig.seed), META_SEED_ONLY=1, LORA_SEED=1001. Fresh run: GCS_RUN holds only the staged step-0 tree.
+name: stageK-Q-qs1
+# Stage K (2026-09-19, option B): seed 1 of this model restarted from ITS OWN ORIGIN's roots -- the 16
+# initial constructions of stageC-pwc-n's step-0 tree. The origin gen-0 run is seed 0 of the same triple.
+# Identical per-model config to stageG-q-rep1; differences: bundle v30 (LORA_SEED -> tinker LoraConfig.seed),
+# META_SEED_ONLY=1, LORA_SEED=1. Fresh run: GCS_RUN holds only the staged step-0 tree.
 
-# Stage G seed replication 1/2: gemma centered piecewise, lr 4e-5, 16x32 elite 2
-# (stageB2-g-pwc-n reached 0.380863427 @12). SAME config, SAME original prompt (no exemplars),
-# bundle v23; a fresh independent draw of the random initial states. Mixture-of-Models question 1:
-# what is the seed-to-seed spread any transfer effect has to beat?
+# Stage G seed replication 1/2: qwen centered piecewise, lr 1.5e-4, 16x32 elite 2 (stageC-pwc-n reached 0.380857586 @11).
+# SAME config, SAME original prompt (no exemplars), bundle v23; a fresh independent draw of the
+# random initial states (env.create_initial_state is unseeded). Question 1 of the Mixture-of-Models
+# plan: is the gen-0 result reproducible across seeds, and what is the seed-to-seed spread that any
+# cross-model delta must beat? Parent for the matched child generation stageH-m-on-q-rep1.
 # piecewise_valid_entropic_centered: A = (r - mean r) + alpha*(w - 1)*[valid]; GRPO carries validity,
 # w = exp(beta r) / mean_valid exp(beta r): the ranking term averages to ZERO over the valid
 # cluster (zero-sum comparison among working programs); one-bit beta solved on that subset.
 # One complete four-host tpu-v5p-32 slice from pool tpuswarm-v5p32-east5a-erdos:
 # rank 0 = trainer + client + grader Ray head, ranks 1-3 = vLLM engines
 # (cell_worker.sh per-model defaults; CELL prefix selects the model).
-# Fresh run: GCS_RUN must not exist before launch (a reused GCS_RUN would RESUME).
+# Fresh run: the GCS_RUN below must not exist before launch (a reused GCS_RUN would RESUME).
 
 resources:
   cloud: gcp
@@ -37,20 +38,24 @@ envs:
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
   TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v30.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v30-stageK-rootsQ-g
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v30-stageK-Q-qs1
 
+  # cell_worker.sh defaults qwen to gs://.../hf-cache/models--Qwen--Qwen3.5-27B,
+  # which holds only 4 GB of metadata (jobman engines fetched the rest from
+  # HuggingFace). Pool workers are offline: use the complete 55.6 GB snapshot.
+  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1
   # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
   # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the
   # LoRA template is built (RUNBOOK 4.4: ~35 GiB, memory-only).
   TUNIX_FREE_BASE_STATE: "1"
 
-  CELL: g-pwc-n
-  RUN_DIR_NAME: stageK-rootsQ-g
-  EXPERIMENT_NAME: stageK-rootsQ-g
-  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageK-rootsQ-g
-  # Stage K paired roots: the step-0 tree (16 random initial constructions of stageC-pwc-n, no PUCT
-  # stats) was copied to this GCS_RUN before launch; the sampler resumes from step 0 and
-  # META_SEED_ONLY keeps a cold tree from ever outranking it. Fresh base weights + LoRA.
+  CELL: pwc-n
+  RUN_DIR_NAME: stageK-Q-qs1
+  EXPERIMENT_NAME: stageK-Q-qs1
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageK-Q-qs1
+  # Stage K seed 1: the step-0 tree (16 random initial constructions of stageC-pwc-n, no PUCT stats)
+  # was copied to this GCS_RUN before launch; the sampler resumes from step 0 and META_SEED_ONLY keeps
+  # a cold tree from ever outranking it. Fresh base weights + LoRA.
   META_SEED_ONLY: "1"
   # Every rank installs the same bundle generation in `run`, so the head must
   # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
@@ -63,7 +68,7 @@ envs:
   GROUPS_PER_BATCH: "16"
   GROUP_SIZE: "32"
   NUM_EPOCHS: "15"
-  LEARNING_RATE: "4e-5"
+  LEARNING_RATE: "1.5e-4"
   LORA_RANK: "32"
   KL_PENALTY_COEF: "0"
   TTD_RESTART_RATIO: "0"
@@ -83,8 +88,8 @@ envs:
   # the tmux command because a reused tmux server keeps its creator's env.
   TINKER_API_KEY: tml-local-skyrl-no-auth
   TINKER_BASE_URL: http://127.0.0.1:8000
-  # LORA_SEED: fixed adapter-init seed (bundle v30), one value per roots row.
-  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0 LORA_SEED=1001
+  # LORA_SEED: fixed adapter-init seed (bundle v30) = the seed index.
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0 LORA_SEED=1
 
 run: |
   set -euo pipefail

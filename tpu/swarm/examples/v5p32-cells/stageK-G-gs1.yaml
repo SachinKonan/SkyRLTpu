@@ -1,8 +1,8 @@
-name: stageK-rootsM-g
-# Stage K (2026-09-19): PAIRED-ROOTS gen-0 run. Row M = the 16 initial constructions of stageB-m-pw-n's
-# step-0 tree, shared by all three models of the row (the origin run is the row's own-model member).
-# Identical per-model config to stageG-g-rep1; differences: bundle v30 (LORA_SEED plumbed to tinker
-# LoraConfig.seed), META_SEED_ONLY=1, LORA_SEED=1003. Fresh run: GCS_RUN holds only the staged step-0 tree.
+name: stageK-G-gs1
+# Stage K (2026-09-19, option B): seed 1 of this model restarted from ITS OWN ORIGIN's roots -- the 16
+# initial constructions of stageB2-g-pwc-n's step-0 tree. The origin gen-0 run is seed 0 of the same triple.
+# Identical per-model config to stageG-g-rep1; differences: bundle v30 (LORA_SEED -> tinker LoraConfig.seed),
+# META_SEED_ONLY=1, LORA_SEED=1. Fresh run: GCS_RUN holds only the staged step-0 tree.
 
 # Stage G seed replication 1/2: gemma centered piecewise, lr 4e-5, 16x32 elite 2
 # (stageB2-g-pwc-n reached 0.380863427 @12). SAME config, SAME original prompt (no exemplars),
@@ -37,7 +37,7 @@ envs:
   REMOTE_USER: gcpuser
   SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
   TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v30.tar.gz
-  TPUSWARM_BUNDLE_ID: v5p32-cells-v30-stageK-rootsM-g
+  TPUSWARM_BUNDLE_ID: v5p32-cells-v30-stageK-G-gs1
 
   # Trainer fb program needs 51.00 GB scratch vs 50.81 GB free per chip on this
   # runtime (job 189, 2026-09-05). Free the duplicate base-weight copy after the
@@ -45,12 +45,12 @@ envs:
   TUNIX_FREE_BASE_STATE: "1"
 
   CELL: g-pwc-n
-  RUN_DIR_NAME: stageK-rootsM-g
-  EXPERIMENT_NAME: stageK-rootsM-g
-  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageK-rootsM-g
-  # Stage K paired roots: the step-0 tree (16 random initial constructions of stageB-m-pw-n, no PUCT
-  # stats) was copied to this GCS_RUN before launch; the sampler resumes from step 0 and
-  # META_SEED_ONLY keeps a cold tree from ever outranking it. Fresh base weights + LoRA.
+  RUN_DIR_NAME: stageK-G-gs1
+  EXPERIMENT_NAME: stageK-G-gs1
+  GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageK-G-gs1
+  # Stage K seed 1: the step-0 tree (16 random initial constructions of stageB2-g-pwc-n, no PUCT stats)
+  # was copied to this GCS_RUN before launch; the sampler resumes from step 0 and META_SEED_ONLY keeps
+  # a cold tree from ever outranking it. Fresh base weights + LoRA.
   META_SEED_ONLY: "1"
   # Every rank installs the same bundle generation in `run`, so the head must
   # not rsync its worktree to the engine hosts (that SSH sync corrupted live).
@@ -83,8 +83,8 @@ envs:
   # the tmux command because a reused tmux server keeps its creator's env.
   TINKER_API_KEY: tml-local-skyrl-no-auth
   TINKER_BASE_URL: http://127.0.0.1:8000
-  # LORA_SEED: fixed adapter-init seed (bundle v30), one value per roots row.
-  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0 LORA_SEED=1003
+  # LORA_SEED: fixed adapter-init seed (bundle v30) = the seed index.
+  EXTRA_TTD_ENV: TINKER_API_KEY=tml-local-skyrl-no-auth TTD_ADV_PIECEWISE_ALPHA=1.0 LORA_SEED=1
 
 run: |
   set -euo pipefail

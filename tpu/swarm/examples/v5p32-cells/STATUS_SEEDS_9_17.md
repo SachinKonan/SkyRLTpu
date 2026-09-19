@@ -57,6 +57,28 @@ rejects per-request seeds; one engine key split per decode step, batch-compositi
 (programs run `run(seed=42, budget_s=1000)` on WALL CLOCK -> iterations depend on host load), pipelined fb
 accumulation order (TTD_LEAGUE_PIPELINE=1). So: statistically paired rows, never bit-identical reruns.
 
+## 2026-09-19 20:02Z: Stage K corrected to OPTION B (user: "we were meant to do B")
+
+The A runs (cross-model on shared roots, 1209-1214) were cancelled at 20:02Z with zero banked steps; their yamls
+are removed (the staged step-0 trees remain in GCS under stageK-roots*/ and can be reused if A is ever wanted).
+
+**Design B.** Each model's seeds 1 and 2 restart from ITS OWN ORIGIN's 16 initial constructions: qwen seeds from
+stageC-pwc-n's step-0 tree, gemma seeds from stageB2-g-pwc-n's, muse seeds from stageB-m-pw-n's. The origin gen-0
+run is seed 0 of each triple. LORA_SEED = seed index (1, 2). Then, per seed i, the best gen-0 result across the
+three models at step 15 is the parent: its tree gets the two takeover children (other models' step-15 weights on
+the parent's top-48) and the parent continues alone to 30 ("after we get these new seeds ... then we start the
+branching process"). What B measures: whether each model's origin outcome reproduces when the start is fixed
+(sampling + LoRA variance only). Models are still not compared on shared roots.
+
+| Seed | Qwen (roots = qwen origin) | Gemma (roots = gemma origin) | Muse (roots = muse origin) |
+|---|---|---|---|
+| 0 = origin | 0.380857128 (done) | 0.380863326 (done) | 0.380859181 (done) |
+| 1 | **1216** stageK-Q-qs1 | **1218** stageK-G-gs1 | **1220** stageK-M-ms1 |
+| 2 | **1217** stageK-Q-qs2 | **1219** stageK-G-gs2 | **1221** stageK-M-ms2 |
+
+Launched 20:05Z, bundle v30, META_SEED_ONLY=1, 15 steps. Priority tier 1. Then 941 (gemma-on-qwen-origin child),
+then origin continuations (owed: cont27-q-orig cont28-g-orig cont26-m-orig), then inspiration (owed: g, m; 1205 q runs).
+
 ## The table (snapshot 2026-09-19 17:15Z)
 
 Status key: DONE = all steps banked; RUN = running; WAIT = lost its worker, back in the race.
@@ -624,3 +646,10 @@ Controls were queued as "old batch count + 15", so caps differ: qwen origin 27,
 gemma origin 28, muse origin 26, all seed replications 30. If a 45-step column is
 wanted later, a run is extended in place by resuming the same `GCS_RUN` with a higher
 `NUM_EPOCHS` once it reaches its current cap.
+
+## 2026-09-19 19:35Z: post-launch state
+Pool fell to 3/48 minutes after the Stage K launch. 941 runs on 1149, 1205 on 1147; 1209-1214 waiting. Cancelled the
+waiting lower-tier jobs 1198 1201 1204 1206 1207 (free) so the next grants go to Stage K. Owed re-queue once all six
+Stage K runs are RUNNING: cont27-q-orig, cont28-g-orig, cont26-m-orig, stageI-g-insp-n, stageI-m-insp-n.
+Commits: discover 9d312a5 (submodule), superproject a60af3da pushed to origin/agent/tunix-multihost-ctxmix. The
+submodule push to its origin (the main checkout's discover repo) is still pending -- classifier-blocked.
