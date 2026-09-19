@@ -59,9 +59,18 @@ files. Worker startup imports setuptools and torch.utils.cpp_extension before
 claiming work. The grading wrapper rejects a completed run that logged a
 ModuleNotFoundError, even when it returned legal coordinates.
 
-Production array 14145560 uses indices 0-7%3. Single-GPU ArchGen ibm06 had
+Production array 14145619 uses indices 0-7%3. Single-GPU ArchGen ibm06 had
 started during the old queue cancellation; it was cancelled to free a QoS job
 slot and returned to the shared queue. Its partial legacy output is preserved.
 Completed ArchGen results remain in use. summarize.py combines these retained
 results with atomic done.json pointers from the new workers, and never reports
 a qualifying mean while any required case is missing or invalid.
+
+Sandbox compiler recovery: array 14145560 was cancelled after the enabled GPU
+stage hit home-directory resolution inside the isolated namespace. Those
+attempts remain under infrastructure-attempts/before-triton-cache. The sandbox
+now provides a synthetic passwd entry with /tmp as the candidate home, explicit
+Triton/Torch compiler cache directories, and the read-only ldconfig/compiler
+lookup files. It does not mount the real user home or credentials. A real Triton
+CUDA kernel passed inside the sandbox on the local A40; this same preflight now
+runs before every AbuPlace case, inside its assigned A100 sandbox.

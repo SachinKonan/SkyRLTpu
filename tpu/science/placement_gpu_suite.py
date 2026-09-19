@@ -36,12 +36,30 @@ def require_finite_xplace_log(log):
         raise ValueError('Xplace reported nonfinite optimization metrics; exported coordinates are not a valid successful start')
 
 
+def gpu_runtime_mounts(out):
+    # The cluster resolves users through NSS; its /etc/passwd alone does not
+    # resolve our UID inside the network-isolated namespace. Give compiler
+    # caches a private home, without mounting the user's home or credentials.
+    passwd = Path(out) / 'sandbox-passwd'
+    passwd.write_text(f'candidate:x:{os.getuid()}:{os.getgid()}:candidate:/tmp:/bin/false\n')
+    mounts = [(passwd, '/etc/passwd'), ('/sbin', '/sbin')]
+    for f in ['/etc/alternatives/ld', '/etc/ld.so.cache', '/etc/group']:
+        if Path(f).exists():
+            mounts.append((f, f))
+    return mounts
+
+
 def child(args):
     import numpy as np
     import torch
     from macro_place.loader import load_benchmark_from_dir
     started = time.monotonic()
     assert torch.cuda.is_available(), 'CUDA required; CPU fallback is not a reproduction'
+    for directory in ['/tmp/cache/torch/kernels', '/tmp/torch_extensions', '/tmp/triton/cache']:
+        Path(directory).mkdir(parents=True, exist_ok=True)
+    if args.method == 'abuplace':
+        from tpu.science.gpu_dependency_probe import check
+        check()
     torch.set_num_threads(args.cpus)
     torch.set_num_interop_threads(1)
     Path('/work/external').symlink_to('/eval/external', target_is_directory=True)
@@ -127,6 +145,8 @@ def main():
         'CUDA_HOME': '/usr/local/cuda-12.6', 'MPLCONFIGDIR': '/tmp/matplotlib',
         'MPLBACKEND': 'Agg', 'XDG_CACHE_HOME': '/tmp/cache',
         'CUDA_CACHE_PATH': '/tmp/cuda-cache', 'TORCH_HOME': '/tmp/torch',
+        'TORCH_EXTENSIONS_DIR': '/tmp/torch_extensions',
+        'TRITON_CACHE_DIR': '/tmp/triton/cache',
         'LD_LIBRARY_PATH': str(xp/'cpp_to_py/cpybin'),
         'OMP_NUM_THREADS': str(args.cpus), 'MKL_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1',
         'NUMEXPR_NUM_THREADS': '1', 'XPLACE_PYTHON': sys.executable,
@@ -138,9 +158,8 @@ def main():
     }
     mounts = python_mounts(sys.executable)+[
         (root/'.science/challenge-probe', '/eval'), (root/'tpu', '/source/tpu'),
-        (Path(__file__), '/runner.py'), ('/usr/local', '/usr/local'), ('/sys', '/sys')]
-    for f in ['/etc/alternatives/ld', '/etc/ld.so.cache', '/etc/passwd', '/etc/group']:
-        if Path(f).exists(): mounts.append((f, f))
+           (Path(__file__), '/runner.py'), ('/usr/local', '/usr/local'), ('/sys', '/sys')]
+    mounts += gpu_runtime_mounts(out)
     argv = [sys.executable, '/runner.py', '--child', '--method', args.method,
             '--case', args.case, '--output', '/output', '--repository', str(repo),
             '--xplace-root', str(xp), '--legalization-seconds', str(args.legalization_seconds),
@@ -172,7 +191,9 @@ def main():
             report['exit_code'] = code
             if code: raise RuntimeError('candidate failed; see candidate.log')
             report['candidate'] = json.loads((out/'candidate.json').read_text())
-            if 'ModuleNotFoundError' in (out/'candidate.log').read_text(errors='replace'):
+            candidate_log = (out/'candidate.log').read_text(errors='replace')
+            if any(error in candidate_log for error in
+                   ['ModuleNotFoundError', 'Could not determine home directory']):
                 report['reproduction_complete'] = False
                 raise RuntimeError('placer skipped work after a missing dependency; see candidate.log')
             report['reproduction_complete'] = True
