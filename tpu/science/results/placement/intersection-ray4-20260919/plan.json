@@ -1,0 +1,174 @@
+{
+  "cases": [
+    "ibm01",
+    "ibm02",
+    "ibm03",
+    "ibm04",
+    "ibm06",
+    "ibm07",
+    "ibm08",
+    "ibm10",
+    "ibm11",
+    "ibm12",
+    "ibm13",
+    "ibm14",
+    "ibm15",
+    "ibm16",
+    "ibm17",
+    "ibm18"
+  ],
+  "excluded": [
+    "ibm09"
+  ],
+  "reason": "intersection of valid frozen Qwen/Gemma/Muse full17 outputs",
+  "jobs": [
+    {
+      "method": "abuplace",
+      "case": "ibm01"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm02"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm03"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm04"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm06"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm07"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm08"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm10"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm11"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm12"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm13"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm14"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm15"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm16"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm17"
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm18"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm01"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm02"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm03"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm04"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm06"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm07"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm08"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm10"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm11"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm12"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm13"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm14"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm15"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm16"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm17"
+    },
+    {
+      "method": "archgen",
+      "case": "ibm18"
+    }
+  ],
+  "source_xplace": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/xplace-cuda",
+  "build_xplace": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/xplace-a100-intersection-20260919",
+  "hardware": "A100",
+  "candidate_seconds": 3180,
+  "parallelism": 12,
+  "legacy": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/intersection-a100-20260919",
+  "gpus_per_allocation": 4,
+  "cpus_per_task": 8,
+  "host_memory_gib_per_allocation": 64,
+  "task_wall_seconds": 3300,
+  "search_target_seconds": 3150,
+  "legacy_active": {
+    "archgen-ibm06": "14143859_9",
+    "archgen-ibm04": "14143859_7"
+  },
+  "candidate_python": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv-cuda-ray4/bin/python",
+  "ignore_legacy_methods": [
+    "abuplace"
+  ],
+  "dependency_recovery": "Legacy AbuPlace reports have skipped stages from missing setuptools; rerun all 16. Preserve ArchGen reports."
+}

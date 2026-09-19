@@ -1,0 +1,10 @@
+{
+  "first_array": "14145288",
+  "submitted_unix": 1789838631.7529724,
+  "state": "production array submitted with dependency-complete candidate environment",
+  "first_attempt_cancelled": "AbuPlace skipped polish/basin-jump: missing setuptools; rebuild candidate environment before comparison",
+  "production_array": "14145560",
+  "production_submitted_unix": 1789838999.1156523,
+  "array_indices": "0-7%3",
+  "cancelled_single_gpu": "14143859_9"
+}

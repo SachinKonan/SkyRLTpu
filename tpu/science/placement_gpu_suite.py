@@ -42,7 +42,7 @@ def child(args):
     from macro_place.loader import load_benchmark_from_dir
     started = time.monotonic()
     assert torch.cuda.is_available(), 'CUDA required; CPU fallback is not a reproduction'
-    torch.set_num_threads(16)
+    torch.set_num_threads(args.cpus)
     torch.set_num_interop_threads(1)
     Path('/work/external').symlink_to('/eval/external', target_is_directory=True)
     b, plc = load_benchmark_from_dir('/eval/external/MacroPlacement/Testcases/ICCAD04/' + args.case)
@@ -97,6 +97,7 @@ def main():
     p.add_argument('--repository', required=True)
     p.add_argument('--xplace-root', required=True)
     p.add_argument('--seconds', type=int, default=3450)
+    p.add_argument('--cpus', type=int, default=16)
     p.add_argument('--legalization-seconds', type=float, default=120)
     p.add_argument('--child', action='store_true')
     args = p.parse_args()
@@ -127,7 +128,7 @@ def main():
         'MPLBACKEND': 'Agg', 'XDG_CACHE_HOME': '/tmp/cache',
         'CUDA_CACHE_PATH': '/tmp/cuda-cache', 'TORCH_HOME': '/tmp/torch',
         'LD_LIBRARY_PATH': str(xp/'cpp_to_py/cpybin'),
-        'OMP_NUM_THREADS': '16', 'MKL_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1',
+        'OMP_NUM_THREADS': str(args.cpus), 'MKL_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1',
         'NUMEXPR_NUM_THREADS': '1', 'XPLACE_PYTHON': sys.executable,
         'PYTHONUNBUFFERED': '1',
         'EVO_XRA_XPLACE_ROOT': str(xp), 'EVO_XRA_ENABLE': '1',
@@ -142,7 +143,8 @@ def main():
         if Path(f).exists(): mounts.append((f, f))
     argv = [sys.executable, '/runner.py', '--child', '--method', args.method,
             '--case', args.case, '--output', '/output', '--repository', str(repo),
-            '--xplace-root', str(xp), '--legalization-seconds', str(args.legalization_seconds)]
+            '--xplace-root', str(xp), '--legalization-seconds', str(args.legalization_seconds),
+            '--cpus', str(args.cpus)]
     cmd = command(argv, readonly=mounts, writable=[(out, '/output'), (repo, repo), (xp, xp)],
                   env=env, cwd='/work')
     devices = []
@@ -154,7 +156,7 @@ def main():
     idx = cmd.index('--dev')+2
     cmd[idx:idx] = devices+['--tmpfs', '/dev/shm']
     report = dict(method=args.method, case=args.case, host=platform.node(),
-                  job=os.environ.get('SLURM_JOB_ID'), seconds_limit=args.seconds,
+                  job=os.environ.get('SLURM_JOB_ID'), seconds_limit=args.seconds, cpus=args.cpus,
                   environment=env, valid=False, reward=0.0,
                   postprocess='deterministic CPU legalization' if args.method=='xplace' else 'none')
     for label, path in [('repository', args.repository), ('xplace', args.xplace_root)]:
@@ -170,6 +172,10 @@ def main():
             report['exit_code'] = code
             if code: raise RuntimeError('candidate failed; see candidate.log')
             report['candidate'] = json.loads((out/'candidate.json').read_text())
+            if 'ModuleNotFoundError' in (out/'candidate.log').read_text(errors='replace'):
+                report['reproduction_complete'] = False
+                raise RuntimeError('placer skipped work after a missing dependency; see candidate.log')
+            report['reproduction_complete'] = True
         except BaseException as exc:
             if proc.poll() is None:
                 os.killpg(proc.pid, signal.SIGKILL); proc.wait()
