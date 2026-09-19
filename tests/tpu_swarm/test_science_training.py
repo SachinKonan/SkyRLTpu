@@ -15,6 +15,13 @@ from tpu.science.training_setup import split_roles, check_references
 from tpu.science.placement_slots import device_paths, tpu_environment
 
 
+def placement_feedback():
+    from tpu.science.challenge_contract import CASES, aggregate
+    from tpu.science.rewards import valid
+    from tpu.science.feedback import observation
+    return observation('placement', aggregate([valid(.5, dict(case=c, proxy_cost=1., overlap_count=0)) for c in CASES]))
+
+
 class ScienceTopologyTest(unittest.TestCase):
     def test_packaged_cpu_placement_prompts_for_all_models(self):
         from tpu.science import training_env
@@ -157,7 +164,7 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn('Macros 0 and 166 overlap', row['message'])
         self.assertNotIn('NOISY_INIT', verdict.stdout)
         self.assertNotIn('/long/path/', verdict.stdout)
-        self.assertLessEqual(len(verdict.stdout), 3000)
+        self.assertLessEqual(len(verdict.stdout), 10000)
         with patch.dict('os.environ', SCIENCE_ACCELERATOR='tpu-v4-64'):
             prompt = env.candidate_prompt('placement', 'candidate', verdict.stdout, repair=True)
         self.assertIn('Macros 0 and 166 overlap', prompt)
@@ -174,8 +181,8 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
                 'jax.errors.ConcretizationTypeError: invalid dynamic shape ' + 'x' * 8000)}
             rows.append(row)
         output = observation('placement', aggregate(rows))
-        self.assertLessEqual(len(output), 3000)
-        self.assertEqual(len(json.loads(output)['metrics']['cases']), 4)
+        self.assertLessEqual(len(output), 10000)
+        self.assertEqual(len(json.loads(output)['metrics']['cases']), len(CASES))
         self.assertIn('ConcretizationTypeError', output)
 
     async def test_placement_components_reach_next_prompt_without_worker_logs(self):
@@ -183,7 +190,7 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
         from tpu.science.challenge_contract import CASES, aggregate
         from tpu.science.rewards import valid
         from ttt_discover import State
-        rows = [valid(.5, dict(case=case, proxy_cost=1.2 + i,
+        rows = [valid(.5, dict(case=case, proxy_cost=1.2 + i, overlap_count=0,
                                wirelength_cost=.2 + i, density_cost=.8, congestion_cost=1.2,
                                candidate_wall_seconds=170.123456789, grading_seconds=6.123456789,
                                **{'candidate.log': 'DO_NOT_FORWARD' * 4000}))
@@ -210,7 +217,7 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(row['congestion_cost'], 1.2)
             self.assertAlmostEqual(row['candidate_wall_seconds'], 170.123, places=3)
             self.assertAlmostEqual(row['grading_seconds'], 6.12346, places=5)
-        self.assertLess(len(state.observation), 3000)
+        self.assertLess(len(state.observation), 10000)
         self.assertNotIn('DO_NOT_FORWARD', state.observation)
         e.initial_state = state
         with patch.dict('os.environ', SCIENCE_ACCELERATOR='tpu-v4-64'):
@@ -232,12 +239,12 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(initial, env.task_prompt(task))
                 self.assertIn(marker, initial)
                 e.initial_state = State(timestep=0, construction=None, code='SELECTED_PROGRAM',
-                                        value=.5, observation='SAVED_FEEDBACK')
+                                        value=.5, observation=placement_feedback() if task == 'placement' else 'SAVED_FEEDBACK')
                 improved = e.get_question()
             self.assertTrue(improved.startswith(initial.partition(marker)[0].rstrip()))
             self.assertNotIn(marker, improved)
             self.assertEqual(improved.count('SELECTED_PROGRAM'), 1)
-            self.assertIn('SAVED_FEEDBACK', improved)
+            self.assertIn(e.initial_state.observation, improved)
             if task == 'routing':
                 self.assertIn('Fixed Rust scaffold (read-only):', improved)
 
@@ -258,7 +265,7 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
                     patch.object(env.ray, 'cancel'):
                 opts.return_value.remote.side_effect = lambda *a, **k: Ref()
                 self.assertEqual(await env.evaluate('placement', 'code', 10), result)
-                self.assertEqual(opts.return_value.remote.call_count, 4)
+                self.assertEqual(opts.return_value.remote.call_count, len(challenge_contract.CASES))
                 for call in opts.return_value.remote.call_args_list:
                     self.assertEqual(call.kwargs['accelerator'], accelerator)
                 prompt = env.task_prompt('placement')

@@ -18,11 +18,15 @@ def verify(client, source, targets):
     folder = Path(client) / 'bootstrap'
     record, summary = read(folder / 'contract.json'), read(folder / 'complete.json')
     contract = record['contract']
+    from .training_env import task_prompt
+    from .placement_suite_guard import validate_state
+    expected_prompt = task_prompt('placement', environment=dict(source.client_env,
+        SCIENCE_PLACEMENT_BACKEND=source.science_placement_backend, SCIENCE_ACCELERATOR=source.accelerator))
     if (Config.from_dict(contract['config']) != source
             or identity(contract) != record['sha256']
             or summary['contract_sha256'] != record['sha256']
             or contract['implementation_sha256'] != hashlib.sha256(Path(__file__).with_name('bootstrap.py').read_bytes()).hexdigest()
-            or contract['prompt'] != (Path(__file__).parent / 'prompts/placement-fast-proxy-cpu-v1.txt').read_text()
+            or contract['prompt'] != expected_prompt
             or contract['policy'] != 'frozen-base-no-adapter'
             or not source.bootstrap_only or source.bootstrap_layers != 1
             or source.science_task != 'placement' or summary['layers'] != 1
@@ -76,6 +80,7 @@ def verify(client, source, targets):
     if len({s['code'] for s in admitted}) != len(admitted):
         raise ValueError('duplicate retained programs')
     for s in admitted:
+        validate_state(s)
         r = valid.get(s['id'])
         if not r or s['code'] != r['code'] or s['value'] != r['reward']:
             raise ValueError('retained program has no matching valid grade')

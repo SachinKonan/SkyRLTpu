@@ -5,8 +5,11 @@ instead of the challenge loader's unit-weight, macro-deduplicated graph.
 """
 import numpy as np
 
-CASES = ('ibm01', 'ibm04', 'ibm08', 'ibm18')
+CASES = tuple(f'ibm{i:02d}' for i in range(1, 19) if i != 5)
+SUITE = 'ibm17-proxy-v1'
 CANDIDATE_LIMIT_SECONDS = 180
+GRADING_LIMIT_SECONDS = 180
+TASK_ENVELOPE_SECONDS = 390
 
 
 def problem_from_native(benchmark, plc):
@@ -67,10 +70,19 @@ def reward(costs, *, all_valid):
 def aggregate(rows):
     from .rewards import invalid, valid
     by_case={r['metrics'].get('case'):r for r in rows}
+    metadata = dict(benchmark_suite=SUITE, case_count=len(by_case), required_case_count=len(CASES),
+                    leaderboard_verified=False, cases=rows)
     if len(rows)!=len(CASES) or set(by_case)!=set(CASES):
-        return invalid('incomplete or duplicate placement suite',phase='suite')
+        result = invalid('incomplete or duplicate placement suite: all 17 IBM cases are required',phase='suite')
+        result['metrics'].update(metadata)
+        return result
     if not all(r['correctness']==1 for r in rows):
         result=invalid('Invalid case: '+'; '.join(f"{c}: {r['msg']}" for c,r in by_case.items() if r['correctness']!=1))
-        result['metrics']['cases']=rows;return result
-    costs=[by_case[c]['metrics']['proxy_cost'] for c in CASES]
-    return valid(reward(costs,all_valid=True),dict(mean_proxy_cost=sum(costs)/len(costs),cases=rows))
+        result['metrics'].update(metadata);return result
+    costs=[by_case[c]['metrics'].get('proxy_cost', float('nan')) for c in CASES]
+    if (not np.isfinite(costs).all() or min(costs) < 0
+            or any(by_case[c]['metrics'].get('overlap_count') != 0 for c in CASES)):
+        result = invalid('nonfinite/negative proxy cost or missing/nonzero overlap count', phase='suite')
+        result['metrics'].update(metadata)
+        return result
+    return valid(reward(costs,all_valid=True),dict(mean_proxy_cost=sum(costs)/len(CASES), **metadata))

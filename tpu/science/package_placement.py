@@ -22,7 +22,7 @@ def package(profile, output, *, probe=False):
     archive, _, task = build(profile, out)
     files = {}
     names = ('__init__.py sample.py rewards.py isolation.py worker.py cgroup_limits.py '
-             'challenge_contract.py challenge_seed.py challenge_seed_jax.py '
+             'challenge_contract.py placement_warm_start.py challenge_seed.py challenge_seed_jax.py '
              'challenge_candidate_child.py challenge_score_child.py placement_task.py '
              'placement_ray.py placement_slots.py placement_model_driver.py placement_model_host.py '
              'placement_probe_driver.py placement_probe_bootstrap.py prepare_placement_host.py '
@@ -34,6 +34,9 @@ def package(profile, output, *, probe=False):
               else root/'tpu/science/prompts/placement-jax.txt')
     files[str(prompt.relative_to(root))] = prompt
     challenge = root/'.science/challenge-probe'
+    from .placement_warm_start import verified_inputs, DESTINATION
+    starts = verified_inputs(root)
+    files['.science/placement-inputs/manifest.json'] = root/DESTINATION/'manifest.json'
     for path in challenge.rglob('*'):
         if path.is_file() and '__pycache__' not in path.parts and (
                 path.suffix == '.py' or path.name == 'sources.json' or set(CASES) & set(path.parts)):
@@ -42,8 +45,7 @@ def package(profile, output, *, probe=False):
         for name in ('netlist.pb.txt', 'initial.plc'):
             if not (challenge/'external/MacroPlacement/Testcases/ICCAD04'/case/name).is_file():
                 raise FileNotFoundError(f'missing pinned {case}/{name}')
-        files[f'.science/placement-inputs/{case}-problem.npz'] = (
-            root/'tpu/science/results/placement/scaffold-pilot'/f'{case}-problem.npz')
+        files[f'.science/placement-inputs/{case}-problem.npz'] = starts[case]
     for path in (root/'tpu/swarm/bench').glob('*.py'):
         files[str(path.relative_to(root))] = path
     destination = out/'placement-bundle.tar.gz'

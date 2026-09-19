@@ -9,7 +9,8 @@ import time
 import numpy as np
 import torch
 from . import Evaluator
-from ..challenge_contract import problem_from_native, CASES
+from ..challenge_contract import CASES
+from ..placement_warm_start import verified_inputs
 
 
 def main():
@@ -21,10 +22,12 @@ def main():
     from macro_place.objective import compute_proxy_cost
     keys = ('proxy_cost', 'wirelength_cost', 'density_cost', 'congestion_cost')
     failures = []
+    inputs = verified_inputs(root)
     for case in CASES:
         b, plc = load_benchmark_from_dir(str(root / '.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04' / case))
-        p = problem_from_native(b, plc)
-        pos = np.load(root / 'tpu/science/results/placement/gpu-suite-20260916' / ('xplace-' + case) / 'positions.npy')
+        with np.load(inputs[case], allow_pickle=False) as data:
+            p = {k:data[k].copy() for k in data.files}
+        pos = p['initial_positions']
         start = time.perf_counter()
         with Evaluator(p, pos) as ev:
             setup = time.perf_counter() - start

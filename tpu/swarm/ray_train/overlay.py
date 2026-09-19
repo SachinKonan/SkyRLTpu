@@ -72,7 +72,9 @@ SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/r
         'placement_ray.py', 'placement_slots.py', 'placement_task.py', 'fast_proxy_deployment.py', 'challenge_seed_fast_proxy.py', 'challenge_contract.py',
         'seed_routing.py', 'challenge_seed.py', 'challenge_seed_jax.py', 'requirements-cpu.lock',
         'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt',
-        'prompts/placement-jax-cpu.txt', 'prompts/placement-fast-proxy-cpu-v1.txt')}
+        'prompts/placement-jax-cpu.txt', 'prompts/placement-fast-proxy-cpu-v1.txt',
+        'placement_suite_guard.py', 'placement_warm_start.py',
+        'prompts/placement-fast-proxy-cpu-ibm17-v2.txt')}
 
 
 def manifest(repo, config=None):

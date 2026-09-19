@@ -15,7 +15,7 @@ from .isolation import command, python_mounts
 from .rewards import invalid, valid
 from .worker import watch_owner
 
-from .challenge_contract import CASES, CANDIDATE_LIMIT_SECONDS
+from .challenge_contract import CASES, CANDIDATE_LIMIT_SECONDS, GRADING_LIMIT_SECONDS
 from .placement_slots import device_paths, tpu_environment, assigned_chip
 
 
@@ -84,7 +84,7 @@ def evaluate(request):
            '--root',str(root),'--case',case,'--positions',str(work/'positions.npy'),
            '--result',str(work/'score.json')]
     with (work/'grader.log').open('wb') as log:
-        subprocess.run(cmd,check=True,timeout=90,stdout=log,stderr=subprocess.STDOUT,
+        subprocess.run(cmd,check=True,timeout=GRADING_LIMIT_SECONDS,stdout=log,stderr=subprocess.STDOUT,
                        env=dict(os.environ,OPENBLAS_NUM_THREADS='4',OMP_NUM_THREADS='4',MKL_NUM_THREADS='4'))
     scores = json.loads((work/'score.json').read_text())
     cost = scores['proxy_cost']

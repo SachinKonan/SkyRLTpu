@@ -360,8 +360,9 @@ class Host:
             self.store.restore_tree(orbax, "orbax/" + self.config.trainer.maxtext_model)
         self.snapshot = self.store.restore_hf(self.config.cache.hf, self.config.model, weights=role == "inference")
         self.store.scope_compile(self.compile_prefix())
-        if role == "inference" and self.config.cache.inference_compile_seed:
-            self.store.restore_compile(self.config.cache.inference_compile_seed)
+        seed = getattr(self.config.cache, role + "_compile_seed", "")
+        if seed:
+            self.store.restore_compile(seed)
         self.store.restore_compile(self.compile_prefix())
         self.phase = "environment_setup"
         self.install_role(role)
@@ -564,6 +565,9 @@ class Host:
             from tpu.science.seed_pool import verify_pool
             verify_pool(local / 'tinker_log' / self.config.run_id / 'puct_sampler_step_000000.json',
                         self.config.seed_pool_sha256)
+        if self.rank == 0 and self.config.science_task == 'placement':
+            from tpu.science.placement_suite_guard import validate_restored_pools
+            validate_restored_pools(local / 'tinker_log' / self.config.run_id)
         if self.rank == 0 and getattr(self.config, 'resume_min_checkpoint_step', 0):
             from .database_snapshot import require_checkpoint_client
             require_checkpoint_client(local, self.config.run_id,

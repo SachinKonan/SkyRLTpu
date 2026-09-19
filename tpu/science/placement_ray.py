@@ -12,6 +12,7 @@ from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 from ray.util.placement_group import placement_group, remove_placement_group
 from .placement_slots import chip_lock, chip_cpus, task_resources, assigned_chip, grading_nodes, grading_bundles
 from .cpu_slots import acquire_slot, slot_cpus
+from .challenge_contract import TASK_ENVELOPE_SECONDS
 
 
 @ray.remote(num_cpus=4, memory=8*1024**3, resources={'placement_cpu_host': 1}, max_retries=0)
@@ -94,7 +95,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
          f'--property=MemoryMax={memory_gib}G','--property=MemorySwapMax=0',
          '--property=LimitMEMLOCK=infinity',
          '--property=CPUQuota=400%','--property=AllowedCPUs='+','.join(map(str,cpus)),
-         '--property=TasksMax=1024','--property=RuntimeMaxSec=300','--property=KillMode=control-group',
+         '--property=TasksMax=1024',f'--property=RuntimeMaxSec={TASK_ENVELOPE_SECONDS}','--property=KillMode=control-group',
          '--property=TimeoutStopSec=2','--property=OOMPolicy=stop','--working-directory='+str(root),
          str(root/'.science/venv/bin/python'),'-m','tpu.science.placement_task',
          '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
@@ -103,7 +104,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
     try:
         with (folder/'worker.log').open('wb') as log:
             proc=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT)
-            try: code=proc.wait(timeout=320)
+            try: code=proc.wait(timeout=TASK_ENVELOPE_SECONDS+20)
             finally:
                 if proc.poll() is None: proc.terminate();proc.wait(timeout=5)
         if code or not (folder/'result.json').exists():

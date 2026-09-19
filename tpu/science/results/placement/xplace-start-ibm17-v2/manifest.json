@@ -1,0 +1,555 @@
+{
+  "schema": "xplace-start-ibm17-v2",
+  "benchmark_suite": "ibm17-proxy-v1",
+  "case_count": 17,
+  "cases": {
+    "ibm01": {
+      "valid": true,
+      "problem_sha256": "09ea9fc8c565e2226b59abe6b087c44119d24808455f02ac3c06a1ccb08502ce",
+      "positions_sha256": "8b8e8a1b09946cad8cc63fb22b649a448aed60582b279a2d6013bf1b85b78fe0",
+      "native_sha256": {
+        "netlist.pb.txt": "ca97cee4652966bc0afc16562ccc9aec224de31de1cfb317b61972a4ba1a4c96",
+        "initial.plc": "f5202ce7295ba2ae38781a6a658b5affaa0ee933110ec071f41dd14961b133ad"
+      },
+      "metrics": {
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 7.70294972800184
+      },
+      "source_provenance": {
+        "case": "ibm01",
+        "provenance": "existing immutable training start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/gpu-suite-20260916/xplace-ibm01/report.json",
+        "xplace_seconds": 22.19229555502534,
+        "problem_sha256": "09ea9fc8c565e2226b59abe6b087c44119d24808455f02ac3c06a1ccb08502ce",
+        "native_sha256": {
+          "netlist.pb.txt": "ca97cee4652966bc0afc16562ccc9aec224de31de1cfb317b61972a4ba1a4c96",
+          "initial.plc": "f5202ce7295ba2ae38781a6a658b5affaa0ee933110ec071f41dd14961b133ad"
+        }
+      }
+    },
+    "ibm02": {
+      "valid": true,
+      "problem_sha256": "999348aa883d6cddf84bd89ee2a6b109c3bcd276c1e858be22198d4725e42f2f",
+      "positions_sha256": "1b2e3abf83313f7215ce62bb11267881592cab8569cf7167905ffb19c03ab4f9",
+      "native_sha256": {
+        "netlist.pb.txt": "fd4a02890a7c69c9af5669f0122cfef7d179275eca768829e3f1acb8a32a542e",
+        "initial.plc": "fde119c62b066294f640f1e656e63030396e8b0fe30ca6a59d8a08b4dfa86e38"
+      },
+      "metrics": {
+        "proxy_cost": 1.5060312747955322,
+        "wirelength_cost": 0.09037356078624725,
+        "density_cost": 0.5676779747009277,
+        "congestion_cost": 2.263637456517671,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 11.777393531985581
+      },
+      "source_provenance": {
+        "case": "ibm02",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm02/report.json",
+        "xplace_seconds": 36.21225127496291,
+        "problem_sha256": "999348aa883d6cddf84bd89ee2a6b109c3bcd276c1e858be22198d4725e42f2f",
+        "native_sha256": {
+          "netlist.pb.txt": "fd4a02890a7c69c9af5669f0122cfef7d179275eca768829e3f1acb8a32a542e",
+          "initial.plc": "fde119c62b066294f640f1e656e63030396e8b0fe30ca6a59d8a08b4dfa86e38"
+        }
+      }
+    },
+    "ibm03": {
+      "valid": true,
+      "problem_sha256": "4935de8bea1b9d68f64da5b845f6e54e22e0889aaca405ba8804b39a28a5d2e7",
+      "positions_sha256": "5a162f63ead9c0471690d4c3599240321a288c6698f0e7de372c2554ff6d32de",
+      "native_sha256": {
+        "netlist.pb.txt": "41e9a03d9188ce8c28da45b012974e65b3988433c7215e6d6a906506ad6c9214",
+        "initial.plc": "706d69c6f30a8a7e8a145bca67682a92a233755a0a5ac9e9b974fa9bbcd55898"
+      },
+      "metrics": {
+        "proxy_cost": 1.1757888793945312,
+        "wirelength_cost": 0.08408422023057938,
+        "density_cost": 0.5023567080497742,
+        "congestion_cost": 1.6810525453521021,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 9.585542118991725
+      },
+      "source_provenance": {
+        "case": "ibm03",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm03/report.json",
+        "xplace_seconds": 21.47726812097244,
+        "problem_sha256": "4935de8bea1b9d68f64da5b845f6e54e22e0889aaca405ba8804b39a28a5d2e7",
+        "native_sha256": {
+          "netlist.pb.txt": "41e9a03d9188ce8c28da45b012974e65b3988433c7215e6d6a906506ad6c9214",
+          "initial.plc": "706d69c6f30a8a7e8a145bca67682a92a233755a0a5ac9e9b974fa9bbcd55898"
+        }
+      }
+    },
+    "ibm04": {
+      "valid": true,
+      "problem_sha256": "8cccea125ac7d15d5d067d7ec32bba5196e966b67c21145be09964b004133a5e",
+      "positions_sha256": "16876f3b595d5eb7343b5de2e8b76b026c09642924accfc4f42de48481080397",
+      "native_sha256": {
+        "netlist.pb.txt": "347924f72a646c0295f32858b4e58c41b1f18739286e8e5c8250226222ca188a",
+        "initial.plc": "94aa5b8956d87b8851cf5bc156d4b0a14a8bdcfcdb6282bc41ed281ce7671f0b"
+      },
+      "metrics": {
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 11.254764589015394
+      },
+      "source_provenance": {
+        "case": "ibm04",
+        "provenance": "existing immutable training start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/gpu-suite-20260916/xplace-ibm04/report.json",
+        "xplace_seconds": 20.997947281925008,
+        "problem_sha256": "8cccea125ac7d15d5d067d7ec32bba5196e966b67c21145be09964b004133a5e",
+        "native_sha256": {
+          "netlist.pb.txt": "347924f72a646c0295f32858b4e58c41b1f18739286e8e5c8250226222ca188a",
+          "initial.plc": "94aa5b8956d87b8851cf5bc156d4b0a14a8bdcfcdb6282bc41ed281ce7671f0b"
+        }
+      }
+    },
+    "ibm06": {
+      "valid": true,
+      "problem_sha256": "7f82f1870ea5230c6e1a07ea5325a5b75650b5b8ec2f047979e07946ee4826c0",
+      "positions_sha256": "44b961fc2c17b75590bc1aa0d2010718912b3db4d4bb2dfbd7d022798506809b",
+      "native_sha256": {
+        "netlist.pb.txt": "6c5bc1d6eaceb7b816345ba9dab7351a1215a2a9cb7baf3d17f9d7c2eeb84e9e",
+        "initial.plc": "9c195b80537e7a2ffd8efc62eb08a934f4cfb927fd7c0c6e7a3ae666829662b8"
+      },
+      "metrics": {
+        "proxy_cost": 1.6795094013214111,
+        "wirelength_cost": 0.07733907550573349,
+        "density_cost": 0.504063069820404,
+        "congestion_cost": 2.7002774562578424,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 10.682825348922051
+      },
+      "source_provenance": {
+        "case": "ibm06",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm06/report.json",
+        "xplace_seconds": 20.47543091303669,
+        "problem_sha256": "7f82f1870ea5230c6e1a07ea5325a5b75650b5b8ec2f047979e07946ee4826c0",
+        "native_sha256": {
+          "netlist.pb.txt": "6c5bc1d6eaceb7b816345ba9dab7351a1215a2a9cb7baf3d17f9d7c2eeb84e9e",
+          "initial.plc": "9c195b80537e7a2ffd8efc62eb08a934f4cfb927fd7c0c6e7a3ae666829662b8"
+        }
+      }
+    },
+    "ibm07": {
+      "valid": true,
+      "problem_sha256": "b2eaf097f9436181b7832495636c222e7131e55a44d654fc1a104132817d7f94",
+      "positions_sha256": "88a843bfa47e9d1fe485d2a476c0bee99cd3e0b228e53604121bc3a48c98ee44",
+      "native_sha256": {
+        "netlist.pb.txt": "035e1c6869cb3a3abf944eef248858fd04c1771b6607d39242e5cf9b201b841c",
+        "initial.plc": "f7f8be92e8aad1558e5e3cd16678f1d2e66f65c94daf3bb34821ca51d5d9f606"
+      },
+      "metrics": {
+        "proxy_cost": 2.5744142532348633,
+        "wirelength_cost": 0.03898875042796135,
+        "density_cost": 2.7024738788604736,
+        "congestion_cost": 2.368377391761237,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 15.28839203401003
+      },
+      "source_provenance": {
+        "case": "ibm07",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm07/report.json",
+        "xplace_seconds": 83.64590485102963,
+        "problem_sha256": "b2eaf097f9436181b7832495636c222e7131e55a44d654fc1a104132817d7f94",
+        "native_sha256": {
+          "netlist.pb.txt": "035e1c6869cb3a3abf944eef248858fd04c1771b6607d39242e5cf9b201b841c",
+          "initial.plc": "f7f8be92e8aad1558e5e3cd16678f1d2e66f65c94daf3bb34821ca51d5d9f606"
+        }
+      }
+    },
+    "ibm08": {
+      "valid": true,
+      "problem_sha256": "a124ba699816b23110d2beac983037e7f99d9462a0be3d49cb32069fd79744ca",
+      "positions_sha256": "9cee83dcf3f5b4d6d969a18eef98204f038f5e5960c03ddd78d38a8ccec44ece",
+      "native_sha256": {
+        "netlist.pb.txt": "68d592796012b4885a5d65d2df646597061f77c245ce92a2bb85334ffc0138de",
+        "initial.plc": "243811e78c80c71e268b8143d94a6f3ac25230f105e38f60c2be190d50c2f5eb"
+      },
+      "metrics": {
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 17.087703611934558
+      },
+      "source_provenance": {
+        "case": "ibm08",
+        "provenance": "existing immutable training start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/gpu-suite-20260916/xplace-ibm08/report.json",
+        "xplace_seconds": 18.16964482900221,
+        "problem_sha256": "a124ba699816b23110d2beac983037e7f99d9462a0be3d49cb32069fd79744ca",
+        "native_sha256": {
+          "netlist.pb.txt": "68d592796012b4885a5d65d2df646597061f77c245ce92a2bb85334ffc0138de",
+          "initial.plc": "243811e78c80c71e268b8143d94a6f3ac25230f105e38f60c2be190d50c2f5eb"
+        }
+      }
+    },
+    "ibm09": {
+      "valid": true,
+      "problem_sha256": "7bb370c1d49ad8d681a77e5ee9bd30001c9a9fff9f4aff0300aef527e3fb6190",
+      "positions_sha256": "2e7a965c38fb29c54b97530d4bd1f3a334a7a12656ec39d453933be183fdd331",
+      "native_sha256": {
+        "netlist.pb.txt": "fa99a121294cb2b8b050ae69e9e3af28ea1443d39cb0e8ddee7c2c39d66439e4",
+        "initial.plc": "3c09e6bbf8291ec9c90e7f86b42bef9aecb9d49ab0e05750245ae6fd72e069e9"
+      },
+      "metrics": {
+        "proxy_cost": 0.9414782524108887,
+        "wirelength_cost": 0.062337104231119156,
+        "density_cost": 0.5188467502593994,
+        "congestion_cost": 1.2394355292333643,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 12.405697437003255
+      },
+      "source_provenance": {
+        "case": "ibm09",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm09/report.json",
+        "xplace_seconds": 22.111933532054536,
+        "problem_sha256": "7bb370c1d49ad8d681a77e5ee9bd30001c9a9fff9f4aff0300aef527e3fb6190",
+        "native_sha256": {
+          "netlist.pb.txt": "fa99a121294cb2b8b050ae69e9e3af28ea1443d39cb0e8ddee7c2c39d66439e4",
+          "initial.plc": "3c09e6bbf8291ec9c90e7f86b42bef9aecb9d49ab0e05750245ae6fd72e069e9"
+        }
+      }
+    },
+    "ibm10": {
+      "valid": true,
+      "problem_sha256": "47b8ead6fb1bfbf9b9c5cb721e4cc42cc81a6ec9dcdf9fcbaac98539e6ac03c9",
+      "positions_sha256": "c642b4d1b3523dbfbeeca8cafbd870d484d3a6be78c11ba3840c552a40addbbd",
+      "native_sha256": {
+        "netlist.pb.txt": "ffb653f7a13fd9645385e4bd74c2c42c76a261a05e58d4a2490f4b73cd4c6ede",
+        "initial.plc": "a5dfc34b7b0dd2a4c7cb0c9a46f115f65fd9e0986895b1c4eef87b8274c6f149"
+      },
+      "metrics": {
+        "proxy_cost": 1.1886942386627197,
+        "wirelength_cost": 0.05678778514266014,
+        "density_cost": 0.5367239713668823,
+        "congestion_cost": 1.7270887601259683,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 50.09065023402218
+      },
+      "source_provenance": {
+        "case": "ibm10",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm10/report.json",
+        "xplace_seconds": 122.26204234501347,
+        "problem_sha256": "47b8ead6fb1bfbf9b9c5cb721e4cc42cc81a6ec9dcdf9fcbaac98539e6ac03c9",
+        "native_sha256": {
+          "netlist.pb.txt": "ffb653f7a13fd9645385e4bd74c2c42c76a261a05e58d4a2490f4b73cd4c6ede",
+          "initial.plc": "a5dfc34b7b0dd2a4c7cb0c9a46f115f65fd9e0986895b1c4eef87b8274c6f149"
+        }
+      }
+    },
+    "ibm11": {
+      "valid": true,
+      "problem_sha256": "fc7397ace1a09705cc7ff05aef0c5aad8cd3592c85014bac2ac8754c58552764",
+      "positions_sha256": "2fd57ffbfacef207d21b9d7ea6c95cbb0d85895d958362c14d6c7edacd75bdd5",
+      "native_sha256": {
+        "netlist.pb.txt": "e3b1d5a8d8d1908bd4f07c744c4bcf70ebe47bb11cb1ab5ebe0a8b8b45be0733",
+        "initial.plc": "e3701970f61454b7b84b7d0c9e3aa0fe6e3d5e93c0f94b7a88b85311a637d11f"
+      },
+      "metrics": {
+        "proxy_cost": 0.9855403900146484,
+        "wirelength_cost": 0.06182125210762024,
+        "density_cost": 0.5022883415222168,
+        "congestion_cost": 1.3451498752695104,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 16.89700445602648
+      },
+      "source_provenance": {
+        "case": "ibm11",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm11/report.json",
+        "xplace_seconds": 33.27337699895725,
+        "problem_sha256": "fc7397ace1a09705cc7ff05aef0c5aad8cd3592c85014bac2ac8754c58552764",
+        "native_sha256": {
+          "netlist.pb.txt": "e3b1d5a8d8d1908bd4f07c744c4bcf70ebe47bb11cb1ab5ebe0a8b8b45be0733",
+          "initial.plc": "e3701970f61454b7b84b7d0c9e3aa0fe6e3d5e93c0f94b7a88b85311a637d11f"
+        }
+      }
+    },
+    "ibm12": {
+      "valid": true,
+      "problem_sha256": "29c04059c9ba93c82d8e343d075ff511523b256846585f3f49b0653876afca58",
+      "positions_sha256": "b2ee7358150e37a89b7765e6a6978e84b55c1715da633be09731a5ad594edc52",
+      "native_sha256": {
+        "netlist.pb.txt": "19145521d76b05b8522f564cabb5863b6c7ecdaf9efc50d3a70536bcc1513b0d",
+        "initial.plc": "1d99f17549974a69fc9756e2517ad97114d89d9ae0e9fa67a3190062a1289723"
+      },
+      "metrics": {
+        "proxy_cost": 1.384427547454834,
+        "wirelength_cost": 0.06858306378126144,
+        "density_cost": 0.5024675726890564,
+        "congestion_cost": 2.1292213483684805,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 51.905973558081314
+      },
+      "source_provenance": {
+        "case": "ibm12",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm12/report.json",
+        "xplace_seconds": 70.39547853695694,
+        "problem_sha256": "29c04059c9ba93c82d8e343d075ff511523b256846585f3f49b0653876afca58",
+        "native_sha256": {
+          "netlist.pb.txt": "19145521d76b05b8522f564cabb5863b6c7ecdaf9efc50d3a70536bcc1513b0d",
+          "initial.plc": "1d99f17549974a69fc9756e2517ad97114d89d9ae0e9fa67a3190062a1289723"
+        }
+      }
+    },
+    "ibm13": {
+      "valid": true,
+      "problem_sha256": "254e8ddf7d49dee632eace2f979be30d101f71bc3b5591995e7cc251cf9d30c9",
+      "positions_sha256": "cbb3b26f2cdefb22ffc72d35dad34d0ca5f704d9244789c440b11123c4d70925",
+      "native_sha256": {
+        "netlist.pb.txt": "d0323244eaf4192aea823164a8d0e13176411bd6a861ca8ea660cf4fb2034d2f",
+        "initial.plc": "71a912a8176d286ce43c0e65e93fc01ed349f9e79ced5cfa1d68a3b95a9491e7"
+      },
+      "metrics": {
+        "proxy_cost": 1.0881571769714355,
+        "wirelength_cost": 0.05872771516442299,
+        "density_cost": 0.5342002511024475,
+        "congestion_cost": 1.5246586794174015,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 21.438206416089088
+      },
+      "source_provenance": {
+        "case": "ibm13",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm13/report.json",
+        "xplace_seconds": 34.721287258085795,
+        "problem_sha256": "254e8ddf7d49dee632eace2f979be30d101f71bc3b5591995e7cc251cf9d30c9",
+        "native_sha256": {
+          "netlist.pb.txt": "d0323244eaf4192aea823164a8d0e13176411bd6a861ca8ea660cf4fb2034d2f",
+          "initial.plc": "71a912a8176d286ce43c0e65e93fc01ed349f9e79ced5cfa1d68a3b95a9491e7"
+        }
+      }
+    },
+    "ibm14": {
+      "valid": true,
+      "problem_sha256": "5cacee4607a659e4e3257a6e764a75457a8164e5dd316a7b0cd43a9ef9c687f1",
+      "positions_sha256": "4615726a30b163fa8195d8c30249ecea8ddcae816b679c569c64b3a3ec82482a",
+      "native_sha256": {
+        "netlist.pb.txt": "93ddc832033e693da578eb638d7b95badad91cc1258c503db9a3e4488218004b",
+        "initial.plc": "df7f5675eb6652893f8192f2c9bcd382fe5036956adde15824f575a462d6b3b7"
+      },
+      "metrics": {
+        "proxy_cost": 1.3670120239257812,
+        "wirelength_cost": 0.06216858699917793,
+        "density_cost": 0.48962295055389404,
+        "congestion_cost": 2.1200639346406898,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 61.09805766295176
+      },
+      "source_provenance": {
+        "case": "ibm14",
+        "provenance": "Xplace with positive finite Nesterov step guard; original hyperparameters and seed 42; 7200s deterministic legalization",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm14/report.json",
+        "recovery_score": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/xplace-nan-audit-20260919/ibm14/score.json",
+        "recovery_legalizer_seconds": 37.53335145500023,
+        "xplace_seconds": 241.46167611305137,
+        "problem_sha256": "5cacee4607a659e4e3257a6e764a75457a8164e5dd316a7b0cd43a9ef9c687f1",
+        "optimizer_patch": "tpu/science/results/placement/xplace-nan-20260919/nesterov-positive-step.patch",
+        "guarded_xplace_log": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/xplace-nan-audit-20260919/guarded/run.log"
+      }
+    },
+    "ibm15": {
+      "valid": true,
+      "problem_sha256": "9ad70c86908f4e69c35154e2df601d1c1ae3d57ef946696b60ab28fdd0404e9a",
+      "positions_sha256": "74492cc2b52903a73be20b02ee71eb6a1477b3d4f05a57e03e9cf6f69500abce",
+      "native_sha256": {
+        "netlist.pb.txt": "ebd20e3d1284eebcd7891a1274ac5f00db23f76f7a91b614a52f4a36e24fc3a2",
+        "initial.plc": "2b9b3dc59e3b0ab564007b0d44924f40549dd06116dad11a2f84238df70eb3a2"
+      },
+      "metrics": {
+        "proxy_cost": 1.4475622177124023,
+        "wirelength_cost": 0.06685428321361542,
+        "density_cost": 0.5329058766365051,
+        "congestion_cost": 2.2285098585875027,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 37.453305792063475
+      },
+      "source_provenance": {
+        "case": "ibm15",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm15/report.json",
+        "xplace_seconds": 44.834932218072936,
+        "problem_sha256": "9ad70c86908f4e69c35154e2df601d1c1ae3d57ef946696b60ab28fdd0404e9a",
+        "native_sha256": {
+          "netlist.pb.txt": "ebd20e3d1284eebcd7891a1274ac5f00db23f76f7a91b614a52f4a36e24fc3a2",
+          "initial.plc": "2b9b3dc59e3b0ab564007b0d44924f40549dd06116dad11a2f84238df70eb3a2"
+        }
+      }
+    },
+    "ibm16": {
+      "valid": true,
+      "problem_sha256": "0e2542926ca952a4a3122e92c5277e9fbe3a6304dea7286ddc48147eb18202a5",
+      "positions_sha256": "73db5c37b77b05df672d800002fc7a6e701b04647aa2ac881e5e786d127948b9",
+      "native_sha256": {
+        "netlist.pb.txt": "999b1dabb47938c7d6043505b3cf408975fd619d30701955d0cc8733efe0beb3",
+        "initial.plc": "48b3a612008611ebf3ce0bbece5579d111ea5c32caf000b5c2acd843e9bb2bef"
+      },
+      "metrics": {
+        "proxy_cost": 1.350287914276123,
+        "wirelength_cost": 0.05837025120854378,
+        "density_cost": 0.5380566716194153,
+        "congestion_cost": 2.0457784920739646,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 61.96736875199713
+      },
+      "source_provenance": {
+        "case": "ibm16",
+        "provenance": "new full-suite Xplace start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm16/report.json",
+        "xplace_seconds": 42.5319314240478,
+        "problem_sha256": "0e2542926ca952a4a3122e92c5277e9fbe3a6304dea7286ddc48147eb18202a5",
+        "native_sha256": {
+          "netlist.pb.txt": "999b1dabb47938c7d6043505b3cf408975fd619d30701955d0cc8733efe0beb3",
+          "initial.plc": "48b3a612008611ebf3ce0bbece5579d111ea5c32caf000b5c2acd843e9bb2bef"
+        }
+      }
+    },
+    "ibm17": {
+      "valid": true,
+      "problem_sha256": "394606b918812c7aba35a10d661babb7ccfb61856ea3d294dca30968225fd98a",
+      "positions_sha256": "776c4ea72edba0e96d2e6fadabb67c2c3212ea47a993af385f7c0d836ab492e8",
+      "native_sha256": {
+        "netlist.pb.txt": "746185b7579805362449ea9827553a8e3424223d2f0ffac149d37cdf63c927ba",
+        "initial.plc": "041f13191e83f9f4e4173e473d040cebb95221a439fdd25bf5c2f3e4fef5e549"
+      },
+      "metrics": {
+        "proxy_cost": 1.5687366724014282,
+        "wirelength_cost": 0.06552994251251221,
+        "density_cost": 0.4896678924560547,
+        "congestion_cost": 2.5167456219311184,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 91.81391511997208
+      },
+      "source_provenance": {
+        "case": "ibm17",
+        "provenance": "same original finite Xplace raw output; deterministic legalizer with 7200s preparation allowance",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/full17-20260919/xplace-ibm17/report.json",
+        "recovery_score": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/xplace-nan-audit-20260919/ibm17/score.json",
+        "recovery_legalizer_seconds": 291.5402100299252,
+        "xplace_seconds": 440.59855384984985,
+        "problem_sha256": "394606b918812c7aba35a10d661babb7ccfb61856ea3d294dca30968225fd98a"
+      }
+    },
+    "ibm18": {
+      "valid": true,
+      "problem_sha256": "3a1622d6b29834b87c97c8aafd859a6a8b379732285bc1f8069e420f18aa6297",
+      "positions_sha256": "45ea2241d51fcde0dcbd2fa52639fe662cfa160d87308a08feb3f504112dadf6",
+      "native_sha256": {
+        "netlist.pb.txt": "7e2bc08b5c1ff6ad659df9e1c639a1b6f8e9f867e4446a367fd1d9d8fccab773",
+        "initial.plc": "75a04aae366df17b34f2089ddc0f19e475fb4c6bcae4229842b60310eadeff96"
+      },
+      "metrics": {
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 36.393809569999576
+      },
+      "source_provenance": {
+        "case": "ibm18",
+        "provenance": "existing immutable training start",
+        "xplace_report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/tpu/science/results/placement/gpu-suite-20260916/xplace-ibm18/report.json",
+        "xplace_seconds": 23.21906308096368,
+        "problem_sha256": "3a1622d6b29834b87c97c8aafd859a6a8b379732285bc1f8069e420f18aa6297",
+        "native_sha256": {
+          "netlist.pb.txt": "7e2bc08b5c1ff6ad659df9e1c639a1b6f8e9f867e4446a367fd1d9d8fccab773",
+          "initial.plc": "75a04aae366df17b34f2089ddc0f19e475fb4c6bcae4229842b60310eadeff96"
+        }
+      }
+    }
+  },
+  "method": "Pinned Xplace starts from full17 audit; includes documented ibm14 numerical recovery",
+  "candidate_budget_excludes_precomputation": true,
+  "mean_proxy_cost": 1.37480890750885,
+  "reward": 0.4210865121981497,
+  "leaderboard_verified": false,
+  "grader_sha256": "93a54dbcdc2468b52615e7f419af716677ad36f6f3f5bdf8641a46f44b9376db"
+}

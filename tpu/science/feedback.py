@@ -3,6 +3,10 @@ import json
 import re
 
 
+def feedback_limit(task):
+    return 10000 if task == 'placement' else 3000
+
+
 def case_error(row):
     """Keep the terminal exception, not the subprocess command wrapping it.
 
@@ -23,7 +27,8 @@ def observation(task, result):
     metrics = result['metrics']
     feedback = {k: v for k, v in metrics.items() if k in (
         'mean_proxy_cost', 'weighted_candidate_cnots', 'weighted_baseline_cnots',
-        'swaps', 'added_cnots', 'improvement', 'case_count', 'total_seconds', 'routing_suite')}
+        'swaps', 'added_cnots', 'improvement', 'case_count', 'total_seconds', 'routing_suite',
+        'benchmark_suite', 'required_case_count', 'leaderboard_verified')}
     message = result['msg'][:1600]
     if task == 'placement' and 'cases' in metrics:
         from .challenge_contract import CASES, CANDIDATE_LIMIT_SECONDS
@@ -37,7 +42,7 @@ def observation(task, result):
                     'candidate_limit_seconds': row['metrics'].get(
                         'candidate_limit_seconds', CANDIDATE_LIMIT_SECONDS)}
             for key in ('proxy_cost', 'wirelength_cost', 'density_cost', 'congestion_cost',
-                        'candidate_wall_seconds', 'grading_seconds'):
+                        'candidate_wall_seconds', 'grading_seconds', 'overlap_count'):
                 if key in row['metrics']:
                     item[key] = float(format(row['metrics'][key], '.6g'))
             if not item['valid']:
@@ -48,13 +53,13 @@ def observation(task, result):
     # Bound fields before serialization, so feedback is always complete JSON.
     value = dict(reward=result['reward'], message=message, metrics=feedback)
     encoded = json.dumps(value, separators=(',', ':'), ensure_ascii=False)
-    if len(encoded) > 3000:
+    if len(encoded) > feedback_limit(task):
         value['message'] = message[:600]
         for case in feedback.get('cases', []):
             if 'message' in case:
                 case['message'] = case['message'][:160]
         encoded = json.dumps(value, separators=(',', ':'), ensure_ascii=False)
-    if len(encoded) > 3000:
+    if len(encoded) > feedback_limit(task):
         raise ValueError('science feedback exceeded its diagnostic budget')
     return encoded
 

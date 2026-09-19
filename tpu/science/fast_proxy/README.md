@@ -1,7 +1,8 @@
 # CPU circuit proxy helper
 
 Opt-in CPU circuit component, enabled with `SCIENCE_PLACEMENT_HELPER=fast_proxy_v1`.
-Existing profiles retain their original prompt and sandbox behavior.
+Helper selection remains explicit. Circuit training now requires the IBM17 suite;
+old prompt files and historical result artifacts are retained.
 
 A NumPy/ctypes interface to AbuPlace's C incremental proxy evaluator. No Torch,
 JAX, GPU, network, subprocess or compiler is required at evaluation time.
@@ -62,7 +63,7 @@ OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
   .science/venv/bin/python -m tpu.science.fast_proxy.verify
 ```
 
-The latter uses the actual four Xplace layouts and two perturbed layouts per
+The latter uses the published 17 Xplace layouts and two perturbed layouts per
 netlist, checking all components against the pinned independent scorer with
 absolute tolerance 1e-5. It also checks 200 incremental apply/revert cycles
 against full scoring (tolerance 1e-7), and reports timings. It requires local
@@ -93,7 +94,7 @@ Trusted host preparation compiles the C library and records source, adapter and
 binary SHA256 hashes. The worker verifies these hashes and mounts only the
 adapter and shared library read-only. The candidate runner injects `Evaluator`
 into the program namespace; generated programs need no helper import.
-The new `placement-fast-proxy-cpu-v1.txt` prompt documents the full contract.
+The current `placement-fast-proxy-cpu-ibm17-v2.txt` prompt documents the full contract.
 The final scorer remains independent. Helper work counts against the same
 4 CPU, 8 GiB and 180-second limits. Startup reference checks require the helper
 identity and CPU device on every host and case before generation starts.
@@ -105,3 +106,12 @@ all four netlists passed scorer comparison; maximum component error was
 5.02e-7. Full evaluate-and-restore took approximately 1.3–5.7 ms; sampled
 single-block apply-and-revert took 0.04–0.08 ms. See verification-results.json.
 These are warm local timings, not guaranteed per-move timings for all blocks.
+
+## IBM17 preparation (2026-09-19)
+
+All 17 published starting layouts passed independent legality checks. Helper
+components on those same layouts matched the trusted scorer within 1.83e-6
+(maximum absolute component error; tolerance 1e-5). This extends baseline-layout
+coverage; the previously recorded changed-layout and incremental-cycle tests
+covered four cases. No claim of new TPU-host throughput measurements is made.
+See `tpu/science/results/circuit-ibm17-v5p-20260919/helper-parity.json`.

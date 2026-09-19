@@ -6,10 +6,12 @@ from ray.util.placement_group import placement_group
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy, PlacementGroupSchedulingStrategy
 
 
-def split_roles(task, train_ranks, inference_ranks, *, placement_backend='tpu'):
+def split_roles(task, train_ranks, inference_ranks, *, placement_backend='tpu', accelerator=None):
     train, inference = list(train_ranks), list(inference_ranks)
-    if len(train) != 4 or len(inference) != 4 or set(train) & set(inference):
-        raise ValueError('science topology requires disjoint four-host blocks')
+    v5p_cpu = accelerator == 'tpu-v5p-32' and task == 'placement' and placement_backend == 'cpu'
+    expected = (1, 3) if v5p_cpu else (4, 4)
+    if ((len(train), len(inference)) != expected or len(set(train + inference)) != sum(expected)):
+        raise ValueError(f'science topology requires disjoint host blocks {expected}')
     grading = inference.pop() if task == 'placement' and placement_backend == 'tpu' else None
     return train, inference, grading
 
@@ -58,7 +60,8 @@ def check_references(task, results, *, expected_hosts=8, placement_backend='tpu'
     from .routing_suite import validate_suite
     validate_suite(routing_suite)
     cpu_placement = task == 'placement' and placement_backend == 'cpu'
-    expected = 8 * expected_hosts if cpu_placement else 8 if task == 'placement' else expected_hosts
+    from .challenge_contract import CASES
+    expected = 2 * len(CASES) * expected_hosts if cpu_placement else 2 * len(CASES) if task == 'placement' else expected_hosts
     if len(results) != expected or any(r['correctness'] != 1 for r in results):
         raise RuntimeError('science reference failed; refusing to train on a broken grader')
     if cpu_placement:

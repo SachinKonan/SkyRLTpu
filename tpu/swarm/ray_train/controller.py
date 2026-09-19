@@ -231,7 +231,7 @@ class Controller:
             from tpu.science.training_setup import split_roles
             train_ranks, inference_ranks, science_grading_rank = split_roles(
                 self.config.science_task, train_ranks, inference_ranks,
-                placement_backend=self.config.science_placement_backend)
+                placement_backend=self.config.science_placement_backend, accelerator=self.config.accelerator)
         self.trainer_leader = train_ranks[0] if train_ranks else 0
         self.checked_get([host.set_trainer_leader.remote(self.trainer_leader) for host in self.hosts], 30)
         bootstrap_pending = False

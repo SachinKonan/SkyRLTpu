@@ -35,6 +35,9 @@ for name,version,lock,extras in [
         subprocess.run([uv,'--no-config','pip','sync','--python',str(target/'bin/python'),str(req),*extras],check=True)
         marker.write_text(digest)
     elif marker.read_text()!=digest:raise RuntimeError('environment lock mismatch; use a new runtime directory')
+subprocess.run([str(root/'.science/venv/bin/python'), '-c',
+    "from pathlib import Path; from tpu.science.placement_warm_start import verified_inputs; "
+    "verified_inputs(Path.cwd(), folder=Path('.science/placement-inputs'))"], check=True)
 subprocess.run(['bwrap','--version'],check=True)
 subprocess.run(['sudo','-n','systemctl','--version'],check=True)
 helper = os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')

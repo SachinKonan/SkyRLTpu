@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from tpu.science.placement_warm_start import CASES, DESTINATION, digest, verified_inputs
+from tpu.science.placement_warm_start import CASES, SUITE, SCHEMA, DESTINATION, digest, verified_inputs
 
 
 @pytest.fixture
 def published(tmp_path):
     folder = tmp_path / DESTINATION
     folder.mkdir(parents=True)
-    manifest = {'schema': 'xplace-start-v1', 'cases': {}}
+    manifest = {'schema': SCHEMA, 'benchmark_suite': SUITE, 'cases': {}}
     for case in CASES:
         problem = folder / f'{case}-problem.npz'
         problem.write_bytes(b'published-layout')

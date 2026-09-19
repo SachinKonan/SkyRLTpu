@@ -1,3 +1,4 @@
+from tpu.science.challenge_contract import CASES
 """CPU placement admission, topology and feedback contracts."""
 import asyncio
 from concurrent.futures import Future
@@ -59,7 +60,7 @@ def test_cpu_dispatch_never_requests_a_tpu_placement_group(helper):
             patch.object(challenge_contract,'aggregate',return_value={'reward':.5,'raw_score':.5}):
         opts.return_value.remote.side_effect=lambda *a,**k: Ref()
         assert asyncio.run(env.evaluate('placement','candidate',1200))['reward']==.5
-        assert opts.return_value.remote.call_count==4
+        assert opts.return_value.remote.call_count==len(CASES)
         for call in opts.return_value.remote.call_args_list:
             assert call.kwargs==dict(admission_timeout_s=1200,slots_per_host=16,helper=helper)
         pg.assert_not_called()

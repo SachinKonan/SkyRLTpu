@@ -34,16 +34,34 @@ def placement_accelerator():
     return accelerator
 
 
-def task_prompt(task, *, include_starter=True):
+def task_prompt(task, *, include_starter=True, environment=None):
+    environment = os.environ if environment is None else environment
     name = 'prompts/rendered/routing.txt' if task == 'routing' else 'prompts/placement-jax-v6e.txt'
-    cpu = task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu'
+    cpu = task == 'placement' and environment.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu'
     if cpu:
-        name = ('prompts/placement-fast-proxy-cpu-v1.txt'
-                if os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none') == 'fast_proxy_v1'
+        name = ('prompts/placement-fast-proxy-cpu-ibm17-v2.txt'
+                if environment.get('SCIENCE_PLACEMENT_HELPER', 'none') == 'fast_proxy_v1'
                 else 'prompts/placement-jax-cpu.txt')
     prompt = (Path(__file__).parent / name).read_text()
-    if task == 'placement' and not cpu and placement_accelerator() == 'tpu-v4-64':
-        prompt = prompt.replace('TPU v6e chip', 'TPU v4 chip')
+    if task == 'placement':
+        from .challenge_contract import CASES, SUITE
+        if environment.get('SCIENCE_PLACEMENT_SUITE', SUITE) != SUITE:
+            raise ValueError('Circuit training requires the full IBM17 suite')
+        prompt = prompt.replace('Trusted CPU grading has a separate 90-second cap; a case has a 300-second total cap.',
+            'Trusted grading has a separate 180-second cap; each case has a 390-second worker envelope.')
+        prompt = prompt.replace('The four-case suite has a 1,200-second execution cap, excluding queue wait.',
+            'All 17 cases are required; queue waiting does not consume the candidate time budget.')
+        prompt = (f'Benchmark scope: {SUITE}. Every submission is evaluated on ALL 17 IBM cases: '
+                  + ', '.join(CASES) + '. The scientific objective is their equally weighted '
+                  'arithmetic mean proxy cost, lower is better. No subset or baseline normalization. '
+                  'Every case must be legal with zero hard-macro overlaps. Any invalid or missing '
+                  'case gives reward zero; otherwise reward = max(1e-6, 1/(1+mean_proxy_cost)).\n\n') + prompt
+    if task == 'placement' and not cpu:
+        accelerator = environment['SCIENCE_ACCELERATOR']
+        if accelerator not in ('tpu-v4-64', 'tpu-v6e-32'):
+            raise ValueError('unsupported science placement accelerator')
+        if accelerator == 'tpu-v4-64':
+            prompt = prompt.replace('TPU v6e chip', 'TPU v4 chip')
     if not include_starter:
         marker = ('Valid initial policy block:' if task == 'routing' else
                   'Starting implementation (replace with your improved algorithm):')
@@ -53,7 +71,7 @@ def task_prompt(task, *, include_starter=True):
         prompt = instructions.rstrip()
     if task == 'routing':
         from .routing_suite import validate_suite
-        if validate_suite(os.environ.get('SCIENCE_ROUTING_SUITE', 'full')) == 'q20':
+        if validate_suite(environment.get('SCIENCE_ROUTING_SUITE', 'full')) == 'q20':
             prompt = ('Benchmark scope: Q20 ONLY, the 24 pinned circuits on the Q20 coupling graph. '
                       'Only their total added SWAPs S determines reward: max(1e-6,22714/(22714+S)). '
                       'Lower SWAPs and higher reward are better. All 24 cases must pass. '
@@ -62,12 +80,13 @@ def task_prompt(task, *, include_starter=True):
 
 
 def candidate_prompt(task, code='', feedback='', *, repair=False):
+    from .feedback import feedback_limit
     prompt = task_prompt(task, include_starter=not bool(code))
     if code:
         instruction = ('Repair this invalid program using the grading error. First make it valid; '
                        'return a complete replacement program.' if repair else 'Improve this candidate.')
         prompt += ('\nPrevious candidate:\n```python\n' + code + '\n```\n'
-                   + 'Grader feedback:\n' + feedback[-3000:] + '\n' + instruction + '\n')
+                   + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n' + instruction + '\n')
     return prompt
 
 
@@ -141,6 +160,9 @@ class ScienceTrainingEnv(Environment):
 
     def get_question(self):
         state = self.initial_state
+        if self.problem_type == 'placement':
+            from .placement_suite_guard import validate_state
+            validate_state(state.to_dict())
         return candidate_prompt(self.problem_type, state.code, state.observation)
 
     async def _safe_grade(self, given_answer, step):

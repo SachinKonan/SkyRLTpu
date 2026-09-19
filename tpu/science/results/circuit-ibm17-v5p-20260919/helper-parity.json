@@ -1,0 +1,465 @@
+{
+  "case_count": 17,
+  "max_component_error": 1.8201723146482607e-06,
+  "cases": [
+    {
+      "case": "ibm01",
+      "helper": {
+        "proxy_cost": 0.9239043452106261,
+        "wirelength_cost": 0.06846078710742627,
+        "density_cost": 0.525943802343985,
+        "congestion_cost": 1.1849433138624148
+      },
+      "trusted": {
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 7.70294972800184
+      },
+      "errors": {
+        "proxy_cost": 4.5474603194151086e-08,
+        "wirelength_cost": 5.195659055767798e-09,
+        "density_cost": 4.624046934242898e-08,
+        "congestion_cost": 2.9228643949608113e-09
+      }
+    },
+    {
+      "case": "ibm02",
+      "helper": {
+        "proxy_cost": 1.5060313009556148,
+        "wirelength_cost": 0.09037345584019156,
+        "density_cost": 0.5676781684624386,
+        "congestion_cost": 2.2636375217684077
+      },
+      "trusted": {
+        "proxy_cost": 1.5060312747955322,
+        "wirelength_cost": 0.09037356078624725,
+        "density_cost": 0.5676779747009277,
+        "congestion_cost": 2.263637456517671,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 11.777393531985581
+      },
+      "errors": {
+        "proxy_cost": 2.6160082544635088e-08,
+        "wirelength_cost": 1.049460556928894e-07,
+        "density_cost": 1.9376151083605464e-07,
+        "congestion_cost": 6.525073681373783e-08
+      }
+    },
+    {
+      "case": "ibm03",
+      "helper": {
+        "proxy_cost": 1.1757890377929683,
+        "wirelength_cost": 0.08408440340634857,
+        "density_cost": 0.5023567311141443,
+        "congestion_cost": 1.681052537659095
+      },
+      "trusted": {
+        "proxy_cost": 1.1757888793945312,
+        "wirelength_cost": 0.08408422023057938,
+        "density_cost": 0.5023567080497742,
+        "congestion_cost": 1.6810525453521021,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 9.585542118991725
+      },
+      "errors": {
+        "proxy_cost": 1.58398437033469e-07,
+        "wirelength_cost": 1.831757691916902e-07,
+        "density_cost": 2.3064370080483343e-08,
+        "congestion_cost": 7.693007120224138e-09
+      }
+    },
+    {
+      "case": "ibm04",
+      "helper": {
+        "proxy_cost": 1.175055619545501,
+        "wirelength_cost": 0.07757484612719238,
+        "density_cost": 0.5871685915589725,
+        "congestion_cost": 1.6077929552776447
+      },
+      "trusted": {
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 11.254764589015394
+      },
+      "errors": {
+        "proxy_cost": 1.1570028624063866e-07,
+        "wirelength_cost": 4.91525334184173e-08,
+        "density_cost": 7.683042635431292e-08,
+        "congestion_cost": 8.58644275680831e-08
+      }
+    },
+    {
+      "case": "ibm06",
+      "helper": {
+        "proxy_cost": 1.6795093788400985,
+        "wirelength_cost": 0.07733912429614781,
+        "density_cost": 0.504063052830067,
+        "congestion_cost": 2.7002774562578344
+      },
+      "trusted": {
+        "proxy_cost": 1.6795094013214111,
+        "wirelength_cost": 0.07733907550573349,
+        "density_cost": 0.504063069820404,
+        "congestion_cost": 2.7002774562578424,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 10.682825348922051
+      },
+      "errors": {
+        "proxy_cost": 2.2481312589306413e-08,
+        "wirelength_cost": 4.879041431982145e-08,
+        "density_cost": 1.6990337026179247e-08,
+        "congestion_cost": 7.993605777301127e-15
+      }
+    },
+    {
+      "case": "ibm07",
+      "helper": {
+        "proxy_cost": 2.5744136050553634,
+        "wirelength_cost": 0.03898885180098631,
+        "density_cost": 2.702472058688159,
+        "congestion_cost": 2.3683774478205954
+      },
+      "trusted": {
+        "proxy_cost": 2.5744142532348633,
+        "wirelength_cost": 0.03898875042796135,
+        "density_cost": 2.7024738788604736,
+        "congestion_cost": 2.368377391761237,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 15.28839203401003
+      },
+      "errors": {
+        "proxy_cost": 6.48179499851409e-07,
+        "wirelength_cost": 1.0137302496049383e-07,
+        "density_cost": 1.8201723146482607e-06,
+        "congestion_cost": 5.6059358488624866e-08
+      }
+    },
+    {
+      "case": "ibm08",
+      "helper": {
+        "proxy_cost": 1.4131467341450457,
+        "wirelength_cost": 0.07833090667353619,
+        "density_cost": 0.5814117176806187,
+        "congestion_cost": 2.0882199372624
+      },
+      "trusted": {
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 17.087703611934558
+      },
+      "errors": {
+        "proxy_cost": 2.3851120434237316e-07,
+        "wirelength_cost": 2.5834216128839405e-07,
+        "density_cost": 5.7963058908150344e-08,
+        "congestion_cost": 9.716864202147235e-09
+      }
+    },
+    {
+      "case": "ibm09",
+      "helper": {
+        "proxy_cost": 0.941478106549353,
+        "wirelength_cost": 0.06233696944929972,
+        "density_cost": 0.518846760765307,
+        "congestion_cost": 1.2394355134347996
+      },
+      "trusted": {
+        "proxy_cost": 0.9414782524108887,
+        "wirelength_cost": 0.062337104231119156,
+        "density_cost": 0.5188467502593994,
+        "congestion_cost": 1.2394355292333643,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 12.405697437003255
+      },
+      "errors": {
+        "proxy_cost": 1.458615356275672e-07,
+        "wirelength_cost": 1.3478181943443746e-07,
+        "density_cost": 1.0505907588331809e-08,
+        "congestion_cost": 1.5798564678703997e-08
+      }
+    },
+    {
+      "case": "ibm10",
+      "helper": {
+        "proxy_cost": 1.188694137285509,
+        "wirelength_cost": 0.05678784572349916,
+        "density_cost": 0.5367238565696443,
+        "congestion_cost": 1.7270887265543757
+      },
+      "trusted": {
+        "proxy_cost": 1.1886942386627197,
+        "wirelength_cost": 0.05678778514266014,
+        "density_cost": 0.5367239713668823,
+        "congestion_cost": 1.7270887601259683,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 50.09065023402218
+      },
+      "errors": {
+        "proxy_cost": 1.0137721062619676e-07,
+        "wirelength_cost": 6.058083901888667e-08,
+        "density_cost": 1.1479723804885822e-07,
+        "congestion_cost": 3.357159261696552e-08
+      }
+    },
+    {
+      "case": "ibm11",
+      "helper": {
+        "proxy_cost": 0.9855404740868028,
+        "wirelength_cost": 0.06182135236451117,
+        "density_cost": 0.5022883461727462,
+        "congestion_cost": 1.345149897271837
+      },
+      "trusted": {
+        "proxy_cost": 0.9855403900146484,
+        "wirelength_cost": 0.06182125210762024,
+        "density_cost": 0.5022883415222168,
+        "congestion_cost": 1.3451498752695104,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 16.89700445602648
+      },
+      "errors": {
+        "proxy_cost": 8.407215434935722e-08,
+        "wirelength_cost": 1.0025689092807433e-07,
+        "density_cost": 4.650529406013959e-09,
+        "congestion_cost": 2.2002326627301727e-08
+      }
+    },
+    {
+      "case": "ibm12",
+      "helper": {
+        "proxy_cost": 1.3844271695196646,
+        "wirelength_cost": 0.06858270219421385,
+        "density_cost": 0.5024676054624159,
+        "congestion_cost": 2.1292213291884856
+      },
+      "trusted": {
+        "proxy_cost": 1.384427547454834,
+        "wirelength_cost": 0.06858306378126144,
+        "density_cost": 0.5024675726890564,
+        "congestion_cost": 2.1292213483684805,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 51.905973558081314
+      },
+      "errors": {
+        "proxy_cost": 3.779351693822264e-07,
+        "wirelength_cost": 3.6158704759536864e-07,
+        "density_cost": 3.277335947071691e-08,
+        "congestion_cost": 1.9179994925622168e-08
+      }
+    },
+    {
+      "case": "ibm13",
+      "helper": {
+        "proxy_cost": 1.0881569031166043,
+        "wirelength_cost": 0.058727426880776507,
+        "density_cost": 0.5342002012393358,
+        "congestion_cost": 1.5246587512323198
+      },
+      "trusted": {
+        "proxy_cost": 1.0881571769714355,
+        "wirelength_cost": 0.05872771516442299,
+        "density_cost": 0.5342002511024475,
+        "congestion_cost": 1.5246586794174015,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 21.438206416089088
+      },
+      "errors": {
+        "proxy_cost": 2.7385483125641485e-07,
+        "wirelength_cost": 2.8828364648236793e-07,
+        "density_cost": 4.9863111750703126e-08,
+        "congestion_cost": 7.18149182343808e-08
+      }
+    },
+    {
+      "case": "ibm14",
+      "helper": {
+        "proxy_cost": 1.3670124661654515,
+        "wirelength_cost": 0.062168914817332395,
+        "density_cost": 0.4896231748331926,
+        "congestion_cost": 2.1200639278630455
+      },
+      "trusted": {
+        "proxy_cost": 1.3670120239257812,
+        "wirelength_cost": 0.06216858699917793,
+        "density_cost": 0.48962295055389404,
+        "congestion_cost": 2.1200639346406898,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 61.09805766295176
+      },
+      "errors": {
+        "proxy_cost": 4.4223967021750354e-07,
+        "wirelength_cost": 3.2781815446220053e-07,
+        "density_cost": 2.2427929857737894e-07,
+        "congestion_cost": 6.777644223632251e-09
+      }
+    },
+    {
+      "case": "ibm15",
+      "helper": {
+        "proxy_cost": 1.4475624529276319,
+        "wirelength_cost": 0.06685462538176008,
+        "density_cost": 0.5329058158010223,
+        "congestion_cost": 2.228509839290721
+      },
+      "trusted": {
+        "proxy_cost": 1.4475622177124023,
+        "wirelength_cost": 0.06685428321361542,
+        "density_cost": 0.5329058766365051,
+        "congestion_cost": 2.2285098585875027,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 37.453305792063475
+      },
+      "errors": {
+        "proxy_cost": 2.3521522951597262e-07,
+        "wirelength_cost": 3.421681446652558e-07,
+        "density_cost": 6.083548287350027e-08,
+        "congestion_cost": 1.9296781506028537e-08
+      }
+    },
+    {
+      "case": "ibm16",
+      "helper": {
+        "proxy_cost": 1.3502880804961583,
+        "wirelength_cost": 0.05837048292826218,
+        "density_cost": 0.5380567371983783,
+        "congestion_cost": 2.045778457937414
+      },
+      "trusted": {
+        "proxy_cost": 1.350287914276123,
+        "wirelength_cost": 0.05837025120854378,
+        "density_cost": 0.5380566716194153,
+        "congestion_cost": 2.0457784920739646,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 61.96736875199713
+      },
+      "errors": {
+        "proxy_cost": 1.6622003529143115e-07,
+        "wirelength_cost": 2.317197183993036e-07,
+        "density_cost": 6.557896303771571e-08,
+        "congestion_cost": 3.413655047523889e-08
+      }
+    },
+    {
+      "case": "ibm17",
+      "helper": {
+        "proxy_cost": 1.5687374553881244,
+        "wirelength_cost": 0.0655307026349538,
+        "density_cost": 0.4896678835752149,
+        "congestion_cost": 2.5167456219311264
+      },
+      "trusted": {
+        "proxy_cost": 1.5687366724014282,
+        "wirelength_cost": 0.06552994251251221,
+        "density_cost": 0.4896678924560547,
+        "congestion_cost": 2.5167456219311184,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 91.81391511997208
+      },
+      "errors": {
+        "proxy_cost": 7.829866961461818e-07,
+        "wirelength_cost": 7.601224415870744e-07,
+        "density_cost": 8.880839785785355e-09,
+        "congestion_cost": 7.993605777301127e-15
+      }
+    },
+    {
+      "case": "ibm18",
+      "helper": {
+        "proxy_cost": 1.602004740169281,
+        "wirelength_cost": 0.06962606294194258,
+        "density_cost": 0.4991865016412696,
+        "congestion_cost": 2.565570852813407
+      },
+      "trusted": {
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 36.393809569999576
+      },
+      "errors": {
+        "proxy_cost": 3.313329162146772e-07,
+        "wirelength_cost": 8.924046553115961e-08,
+        "density_cost": 4.924726447197436e-07,
+        "congestion_cost": 2.0924195709426385e-09
+      }
+    }
+  ]
+}

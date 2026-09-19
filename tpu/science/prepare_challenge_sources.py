@@ -14,7 +14,8 @@ def main():
     parser.add_argument('--all', action='store_true', help='Fetch all 17 public IBM inputs')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]/'.science/challenge-probe'
-    cases = [f'ibm{i:02d}' for i in range(1, 19) if i != 5] if args.all else ['ibm01','ibm04','ibm08','ibm18']
+    from .challenge_contract import CASES
+    cases = list(CASES)
     files = []
     for name in ['__init__.py','_plc.py','benchmark.py','loader.py','objective.py','utils.py']:
         path = 'macro_place/' + name

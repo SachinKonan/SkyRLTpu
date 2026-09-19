@@ -48,6 +48,7 @@ class Cache:
     trainer_compile: str = ""
     inference_compile: str = ""
     inference_compile_seed: str = ""
+    trainer_compile_seed: str = ""
     trainer_gib: int = 128
     inference_gib: int = 96
     reserve_gib: int = 128
@@ -413,6 +414,9 @@ class Config:
         return asdict(self)
 
     def validate(self):
+        placement_suite = self.client_env.get('SCIENCE_PLACEMENT_SUITE', 'ibm17-proxy-v1')
+        if placement_suite != 'ibm17-proxy-v1':
+            raise ValueError('Circuit reward requires all 17 IBM cases: SCIENCE_PLACEMENT_SUITE=ibm17-proxy-v1')
         if self.science_placement_backend not in ('cpu', 'tpu'):
             raise ValueError('placement backend must be cpu or tpu')
         placement_slots = self.science_placement_slots_per_host
@@ -570,10 +574,13 @@ class Config:
                 raise ValueError("inference_only_ranks requires unique valid ranks in inference-only mode")
         placement_ranks = self.placement_ranks
         if self.science_task:
+            science_shape = ((self.accelerator in ("tpu-v6e-32", "tpu-v4-64") and self.trainer.hosts == 4)
+                or (self.accelerator == "tpu-v5p-32" and self.trainer.hosts == 1
+                    and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
             if ((not self.bootstrap_only and (self.inference_only
-                    or self.accelerator not in ("tpu-v6e-32", "tpu-v4-64") or self.trainer.hosts != 4))
+                    or not science_shape))
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
-                raise ValueError("Science training requires v6e-32 or v4-64, four trainer hosts and dynamically assigned grading")
+                raise ValueError("Science training requires four trainer hosts on v6e-32/v4-64, or one trainer host on v5p-32 for CPU circuit grading")
             # TP8 uses the checkpoint loader's repeat-interleaved KV heads,
             # with tied gradients/Adam moments and native-shape adapter export.
             if (self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2)
