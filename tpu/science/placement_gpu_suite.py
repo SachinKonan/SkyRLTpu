@@ -7,11 +7,13 @@ submissions are graded as returned, without silently repairing their outputs.
 import argparse
 import contextlib
 import glob
+import io
 import importlib.util
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -25,6 +27,13 @@ def load_module(path):
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def require_finite_xplace_log(log):
+    # DEF export/parser can turn a failed numeric trajectory into finite
+    # coordinates. Reject the failed optimization before legalization.
+    if re.search(r'(?:masked_hpwl|exact HPWL|density_weight|obj):\s*[-+]?(?:nan|inf)\b', log, re.I):
+        raise ValueError('Xplace reported nonfinite optimization metrics; exported coordinates are not a valid successful start')
 
 
 def child(args):
@@ -41,12 +50,19 @@ def child(args):
     if args.method == 'xplace':
         sys.path.insert(0, str(Path(args.repository)/'submissions'))
         from bookshelf_to_lefdef import run_xplace_lefdef
-        raw = run_xplace_lefdef(
-            b, plc=plc, work_dir=out/'xplace', xplace_root=args.xplace_root,
-            inner_iter=1200, target_density=.8, use_route_force=True,
-            use_cell_inflate=False, route_weight=.01, congest_weight=.01,
-            num_route_iter=20, num_bin_x=128, num_bin_y=128,
-            timeout_s=900, verbose=True, extra_args=['--seed=42'])
+        captured = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(captured):
+                raw = run_xplace_lefdef(
+                    b, plc=plc, work_dir=out/'xplace', xplace_root=args.xplace_root,
+                    inner_iter=1200, target_density=.8, use_route_force=True,
+                    use_cell_inflate=False, route_weight=.01, congest_weight=.01,
+                    num_route_iter=20, num_bin_x=128, num_bin_y=128,
+                    timeout_s=900, verbose=True, extra_args=['--seed=42'])
+        finally:
+            print(captured.getvalue(), flush=True)
+            (out/'xplace.log').write_text(captured.getvalue())
+        require_finite_xplace_log(captured.getvalue())
         raw = np.asarray(raw, dtype=np.float32)
         if raw.shape != tuple(b.macro_positions.shape) or not np.isfinite(raw).all():
             raise ValueError('invalid Xplace output')
@@ -56,7 +72,7 @@ def child(args):
         p = problem_from_native(b, plc)
         p['initial_positions'] = raw.copy()
         p['initial_positions'][p['fixed']] = b.macro_positions.numpy()[p['fixed']]
-        positions = legalize(p, 42, time_budget_s=120)['positions']
+        positions = legalize(p, 42, time_budget_s=args.legalization_seconds)['positions']
     else:
         source, cls = (('submissions/final_placer.py', 'OptimalPlacer')
                        if args.method == 'archgen' else ('abuplace/placer.py', 'XplacePlacer'))
@@ -81,6 +97,7 @@ def main():
     p.add_argument('--repository', required=True)
     p.add_argument('--xplace-root', required=True)
     p.add_argument('--seconds', type=int, default=3450)
+    p.add_argument('--legalization-seconds', type=float, default=120)
     p.add_argument('--child', action='store_true')
     args = p.parse_args()
     if args.child:
@@ -120,7 +137,7 @@ def main():
         if Path(f).exists(): mounts.append((f, f))
     argv = [sys.executable, '/runner.py', '--child', '--method', args.method,
             '--case', args.case, '--output', '/output', '--repository', str(repo),
-            '--xplace-root', str(xp)]
+            '--xplace-root', str(xp), '--legalization-seconds', str(args.legalization_seconds)]
     cmd = command(argv, readonly=mounts, writable=[(out, '/output'), (repo, repo), (xp, xp)],
                   env=env, cwd='/work')
     devices = []

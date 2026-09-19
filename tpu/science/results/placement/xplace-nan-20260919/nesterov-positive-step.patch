@@ -1,0 +1,38 @@
+--- a/src/nesterov_optimizer.py
++++ b/src/nesterov_optimizer.py
+@@ -2,6 +2,7 @@
+ # unused var and pre-computing step size
+ 
+ import torch
++import math
+ from torch.optim.optimizer import Optimizer, required
+ import numpy as np
+ 
+@@ -81,7 +82,13 @@
+                     self.coef = self.coef.to(g_k.device)
+                     v_k_1 = (group['v_k'][i] - group['lr'] * g_k).detach().requires_grad_(True)
+                     obj_k_1, g_k_1 = closure(v_k_1)
+-                    group['alpha_k'].append((v_k-v_k_1).norm(p=2) / (g_k-g_k_1).norm(p=2))
++                    estimate = (v_k-v_k_1).norm(p=2) / (g_k-g_k_1).norm(p=2)
++                    if not math.isfinite(estimate.item()) or estimate.item() <= 0:
++                        if not math.isfinite(float(group['lr'])) or float(group['lr']) <= 0:
++                            raise RuntimeError('no positive finite optimizer fallback step')
++                        print(f'NAN_GUARD init using lr={group["lr"]}', flush=True)
++                        estimate = g_k.new_tensor(float(group['lr']))
++                    group['alpha_k'].append(estimate)
+                 alpha_k = group['alpha_k'][i]
+ 
+                 if not group['v_kp1']:
+@@ -103,6 +110,12 @@
+                     f_kp1, g_kp1 = closure(v_kp1)
+ 
+                     alpha_kp1 = (v_kp1.data-v_k.data).norm(2) / (g_kp1.data-g_k.data).norm(2)
++                    if not math.isfinite(alpha_kp1.item()) or alpha_kp1.item() <= 0:
++                        if not torch.isfinite(v_kp1).all() or not torch.isfinite(g_kp1).all() or not torch.isfinite(f_kp1).all():
++                            raise RuntimeError('nonfinite optimizer trial; refusing export')
++                        print(f'NAN_GUARD retain step={alpha_k.item()} iteration={self.steps}', flush=True)
++                        alpha_kp1 = alpha_k.clone()
++                        break
+                     backtrack_cnt += 1
+ 
+                     if alpha_kp1 > 0.95 * alpha_k or backtrack_cnt >= max_backtrack_cnt:
