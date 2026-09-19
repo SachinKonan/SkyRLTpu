@@ -122,6 +122,7 @@ def main():
         'CUDA_HOME': '/usr/local/cuda-12.6', 'MPLCONFIGDIR': '/tmp/matplotlib',
         'MPLBACKEND': 'Agg', 'XDG_CACHE_HOME': '/tmp/cache',
         'CUDA_CACHE_PATH': '/tmp/cuda-cache', 'TORCH_HOME': '/tmp/torch',
+        'LD_LIBRARY_PATH': str(xp/'cpp_to_py/cpybin'),
         'OMP_NUM_THREADS': '16', 'MKL_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1',
         'NUMEXPR_NUM_THREADS': '1', 'XPLACE_PYTHON': sys.executable,
         'PYTHONUNBUFFERED': '1',

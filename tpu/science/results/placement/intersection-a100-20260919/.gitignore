@@ -1,0 +1,7 @@
+logs/
+runtime-*/
+abuplace-*/
+archgen-*/
+*.lock
+*.tmp
+build-ready

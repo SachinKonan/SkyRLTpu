@@ -1,0 +1,16 @@
+{
+  "abuplace": {
+    "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+    "status": ""
+  },
+  "archgen-cuda-run": {
+    "commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+    "status": ""
+  },
+  "xplace-cuda": {
+    "commit": "49cf66bc75ba9908f145bb6686f03cde692367cf",
+    "status": " M CMakeLists.txt\n M README.md\n M cpp_to_py/gpugr/db/GRDatabase.cpp\n M cpp_to_py/gpugr/gr/GPURouter.cu\n M cpp_to_py/gpugr/gr/PatternRoute.cu\n M main.py\n M src/calculator.py\n M src/core/macro_legalization.py\n M src/core/route_force.py\n M src/initializer.py\n M src/run_placement_nesterov.py\n?? src/proxy_cong.py\n"
+  },
+  "optimizer_sha256": "df13e9abb46f07dbea3d3046127767b79d925cb5bf504dbe92983988c78a42a8",
+  "model_source_selection": "../full17-20260919/selection.json"
+}
