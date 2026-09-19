@@ -1,0 +1,71 @@
+[
+  {
+    "model": "gemma",
+    "source_run": "science-routing-v4-gemma-bootstrap-l2-001",
+    "hardware": "v4",
+    "source_state": "f9c5fe24-47a1-47a0-a8be-3374d4d22890",
+    "state_timestep": 1,
+    "source_sha256": "49c84cefea2bcfb362394765c9e45c4ea2edf90eafc33e9158470e094daab703",
+    "recorded_reward": 0.5445367798767509,
+    "recorded": {
+      "reward": 0.5445367798767509,
+      "message": "Valid",
+      "metrics": {
+        "weighted_baseline_cnots": 119874.00000000001,
+        "weighted_candidate_cnots": 100265.40000000001,
+        "added_cnots": 273615.0,
+        "swaps": 91205.0,
+        "improvement": 0.16357675559337304,
+        "case_count": 72,
+        "total_seconds": 1200.5638549779997
+      }
+    },
+    "status": "verified_72_of_72"
+  },
+  {
+    "model": "qwen",
+    "source_run": "science-qubit-v6e-qwen-runtime-001",
+    "hardware": "v6e",
+    "source_state": "49ab9f20-bfac-4236-8725-f8a573fbbd5d",
+    "state_timestep": 10,
+    "source_sha256": "ab7df3690a2406a0942f500e16c3dd18f010e461eb3363865c36e395a1b0a8c4",
+    "recorded_reward": 0.5414084369639504,
+    "recorded": {
+      "reward": 0.5414084369639504,
+      "message": "Valid",
+      "metrics": {
+        "weighted_baseline_cnots": 119874.00000000001,
+        "weighted_candidate_cnots": 101537.40000000001,
+        "added_cnots": 276729.0,
+        "swaps": 92243.0,
+        "improvement": 0.1529656138945894,
+        "case_count": 72,
+        "total_seconds": 961.761145673001
+      }
+    },
+    "status": "verified_72_of_72"
+  },
+  {
+    "model": "muse",
+    "source_run": "science-routing-v4-muse-seeded-train-002",
+    "hardware": "v4",
+    "source_state": "40eb3ea1-7510-4e21-ad7b-d5eb6c5c3154",
+    "state_timestep": 7,
+    "source_sha256": "56156921b43edb6f5e6bd8442e3ca429452cd247726e2482acea3a489b94c5e8",
+    "recorded_reward": 0.5231871495871643,
+    "recorded": {
+      "reward": 0.5231871495871643,
+      "message": "Valid",
+      "metrics": {
+        "weighted_baseline_cnots": 119874.00000000001,
+        "weighted_candidate_cnots": 109248.59999999999,
+        "added_cnots": 298431.0,
+        "swaps": 99477.0,
+        "improvement": 0.08863806997347234,
+        "case_count": 72,
+        "total_seconds": 1229.7903729219997
+      }
+    },
+    "status": "verified_72_of_72"
+  }
+]

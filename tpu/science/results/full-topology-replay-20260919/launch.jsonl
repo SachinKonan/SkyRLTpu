@@ -1,0 +1,3 @@
+{"model": "gemma", "pid": 133209, "path": "/home/gcpuser/full-topology-replay-20260919/gemma", "root": "/home/gcpuser/.cache/skyrl-ray-code/76dcccfa55d0c2715b73d663e1ca3b28a5fd22fab067cac814222f148bfcbe7a"}
+{"model": "qwen", "pid": 133210, "path": "/home/gcpuser/full-topology-replay-20260919/qwen", "root": "/home/gcpuser/.cache/skyrl-ray-code/76dcccfa55d0c2715b73d663e1ca3b28a5fd22fab067cac814222f148bfcbe7a"}
+{"model": "muse", "pid": 133211, "path": "/home/gcpuser/full-topology-replay-20260919/muse", "root": "/home/gcpuser/.cache/skyrl-ray-code/76dcccfa55d0c2715b73d663e1ca3b28a5fd22fab067cac814222f148bfcbe7a"}
