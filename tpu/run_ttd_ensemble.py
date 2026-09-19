@@ -104,6 +104,9 @@ def main() -> None:
             renderer_name=renderer,
             metric_prefix=tag,
             lora_rank=_env_int(f"TTD_M{i}_LORA_RANK", _env_int("LORA_RANK", 32)),
+            # Fixed adapter-init seed for paired runs; unset = random (server default).
+            lora_seed=(_env_optional_int(f"TTD_M{i}_LORA_SEED")
+                       if os.environ.get(f"TTD_M{i}_LORA_SEED") else _env_optional_int("LORA_SEED")),
             phase1_max_tokens=_env_int(f"TTD_M{i}_PHASE1_MAX_TOKENS",
                                        _env_int("PHASE1_MAX_TOKENS", 26000)),
             # Nemotron/ChatML has no phase-2 forcing: a hard cap turns long thinking
