@@ -190,14 +190,14 @@ def test_engine_environment_cannot_redirect_owned_caches(key):
 
 
 @pytest.mark.parametrize('enabled', [False, True])
-def test_boolean_flags_preserve_legacy_omit_when_false(enabled):
+def test_prefix_cache_flag_is_explicit_and_chunked_prefill_preserves_legacy_default(enabled):
     from tpu.swarm.ray_train.commands import inference_command
     data = raw(); data['inference'].update(prefix_caching=enabled, chunked_prefill=enabled)
     cfg = Config.from_dict(data)
     cmd = inference_command(cfg, Path('/cache'), Path('/source'), Path('/model'), Path('/run'))
     assert ('--enable-prefix-caching' in cmd) is enabled
     assert ('--enable-chunked-prefill' in cmd) is enabled
-    assert '--no-enable-prefix-caching' not in cmd
+    assert ('--no-enable-prefix-caching' in cmd) is (not enabled)
     assert '--no-enable-chunked-prefill' not in cmd
 
 
@@ -376,5 +376,5 @@ def test_all_profiles_preserve_legacy_chunked_prefill_emission():
         cfg = Config.load(path)
         cmd = inference_command(cfg, Path('/cache'), Path('/source'), Path('/model'), Path('/run'))
         assert '--no-enable-chunked-prefill' not in cmd, path.name
-        assert '--no-enable-prefix-caching' not in cmd, path.name
+        assert ('--no-enable-prefix-caching' in cmd) == (not cfg.inference.prefix_caching), path.name
         assert ('--enable-chunked-prefill' in cmd) == cfg.inference.chunked_prefill, path.name

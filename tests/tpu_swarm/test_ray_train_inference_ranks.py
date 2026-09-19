@@ -37,6 +37,14 @@ def test_population_serving_does_not_require_a_backward_output_mode():
     assert len(config.engine_slots(["host0", "host1", "host2", "host3"])) == 4
     assert config.inference.max_loras == config.adapter_count == 2
     assert not config.sequential_probe and not config.stacked_probe
+    # vLLM's default can enable prefix caching; the CLI must explicitly
+    # turn it off for this farm rather than omit the positive flag.
+    from tpu.swarm.ray_train.commands import inference_command
+    command = inference_command(config, Path('/root'), Path('/source'),
+                                Path('/snapshot'), Path('/run'))
+    assert not config.inference.prefix_caching
+    assert '--enable-prefix-caching' not in command
+    assert '--no-enable-prefix-caching' in command
     # The same defaults must still fail closed if a trainer is introduced.
     training = replace(config, inference_only=False, inference_only_ranks=None,
                        trainer=replace(config.trainer, hosts=1))

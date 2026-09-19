@@ -142,6 +142,7 @@ def test_inference_isolation_and_explicit_overrides(monkeypatch):
                        ("--gpu-memory-utilization", "0.9"), ("--max-num-batched-tokens", "4096")):
         assert cmd[cmd.index(key)+1] == value
     assert "--enable-chunked-prefill" in cmd and "--enable-prefix-caching" not in cmd
+    assert "--no-enable-prefix-caching" in cmd
     env = inference_environment(cfg, ROOT, ROOT / "run")
     assert env["TPU_PROCESS_BOUNDS"] == "1,1,1"
     assert env["TPU_PROCESS_ADDRESSES"] == "localhost:24805"

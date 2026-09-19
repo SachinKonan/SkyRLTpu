@@ -22,7 +22,7 @@
     "request_timeout": 21600,
     "native_thinking_budget": true,
     "ragged_conv1d": true,
-    "prefix_caching": true,
+    "prefix_caching": false,
     "max_loras": 2
   },
   "cache": {

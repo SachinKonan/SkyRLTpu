@@ -199,10 +199,10 @@ def inference_command(config, root, source, snapshot, run, group=None, slot=0):
                "--host", "0.0.0.0", "--port", str(config.ports.engine + slot),
                "--tensor-parallel-size", str(v.tp), "--max-model-len", str(v.max_model_length),
                "--max-num-seqs", str(v.max_sequences)]
-    # These booleans preserve the legacy shell contract: false omits the
-    # option and leaves vLLM's default alone; it does not force the feature off.
-    if v.prefix_caching:
-        command.append("--enable-prefix-caching")
+    # vLLM enables prefix caching by default. Omitting the positive flag does
+    # not disable it, so honor the configured value explicitly in both cases.
+    command.append("--enable-prefix-caching" if v.prefix_caching
+                   else "--no-enable-prefix-caching")
     command += ["--enable-lora", "--max-loras", str(v.max_loras), "--max-lora-rank", str(v.max_lora_rank),
                 "--download-dir", str(root / "ram/hf/hub")]
     if v.limit_mm_per_prompt:
