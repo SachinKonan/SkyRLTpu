@@ -16,6 +16,8 @@ import sys
 import time
 import uuid
 
+_JOB_STATUS = {}
+
 
 def atomic_json(path, value):
     path = Path(path)
@@ -26,11 +28,22 @@ def atomic_json(path, value):
 
 def job_alive(job):
     # Fail closed on scheduler communication errors.
-    r = subprocess.run(['squeue', '-h', '-j', job, '-o', '%T'],
-                       capture_output=True, text=True, timeout=15)
+    now = time.monotonic()
+    cached = _JOB_STATUS.get(job)
+    if cached and now - cached[0] < 30:
+        return cached[1]
+    try:
+        r = subprocess.run(['squeue', '-h', '-j', job, '-o', '%T'],
+                           capture_output=True, text=True, timeout=15)
+    except (subprocess.TimeoutExpired, OSError):
+        _JOB_STATUS[job] = (now, True)
+        return True
     if r.returncode and 'Invalid job id' in r.stderr:
-        return False
-    return r.returncode != 0 or bool(r.stdout.strip())
+        alive = False
+    else:
+        alive = r.returncode != 0 or bool(r.stdout.strip())
+    _JOB_STATUS[job] = (now, alive)
+    return alive
 
 
 class Queue:

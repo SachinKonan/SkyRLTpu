@@ -4,8 +4,11 @@ import multiprocessing as mp
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
+import subprocess
 
 from tpu.science.gpu_ray_queue import Queue, atomic_json, has_time
+from tpu.science.gpu_ray_queue import job_alive, _JOB_STATUS
 
 
 def try_claim(path, output):
@@ -17,6 +20,15 @@ def try_claim(path, output):
 
 
 class QueueTests(unittest.TestCase):
+    def test_scheduler_timeout_preserves_owner_and_is_cached(self):
+        _JOB_STATUS.clear()
+        self.addCleanup(_JOB_STATUS.clear)
+        with mock.patch('tpu.science.gpu_ray_queue.subprocess.run',
+                        side_effect=subprocess.TimeoutExpired('squeue', 15)) as run:
+            self.assertTrue(job_alive('owner'))
+            self.assertTrue(job_alive('owner'))
+            self.assertEqual(run.call_count, 1)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
