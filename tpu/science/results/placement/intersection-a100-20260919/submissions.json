@@ -5,6 +5,28 @@
       "id": "14143859",
       "indices": "0-15",
       "submitted_unix": 1789835085.6497924
+    },
+    {
+      "id": "14143899",
+      "indices": "16-31",
+      "submitted_unix": 1789835205.9106195
     }
-  ]
+  ],
+  "cpu_portability_recovery": {
+    "first_retry": "14143969_0",
+    "original_failed": [
+      "14143859_0",
+      "14143859_2"
+    ],
+    "cancelled_pending": [
+      "14143859_4",
+      "14143859_6",
+      "14143859_8",
+      "14143859_10",
+      "14143859_12",
+      "14143859_14"
+    ],
+    "reschedule_for_slot": "14143859_5",
+    "remaining_indices": "2,4,5,6,8,10,12,14"
+  }
 }

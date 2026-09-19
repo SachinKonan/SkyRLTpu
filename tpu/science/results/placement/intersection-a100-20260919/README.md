@@ -49,3 +49,19 @@ indices 0–15. The detached submitter records/queues the second wave automatica
 `submit-launch.json` identifies its process. The isolated wrapper explicitly
 includes the private Xplace library directory in LD_LIBRARY_PATH so installed
 ELF dependencies resolve after relocation.
+
+CPU portability recovery: the first two AbuPlace jobs exited with SIGILL (132)
+in refinement. A cached liblegalize.so from the A40 host contained AVX-512 mask
+instructions, while these NVIDIA A100 nodes have AMD host CPUs. Private-copy
+AbuPlace C helpers are now removed and rebuilt on the assigned CPU using the
+unchanged upstream -march=native build. Retry 14143969_0 passed refinement and
+completed a valid internal trajectory. Two original ArchGen tasks continued.
+One newly started ArchGen task (index 5) was rescheduled to free a validation
+slot; its partial artifacts and the two failed AbuPlace attempts are retained
+under infrastructure-attempts. All 21 temporary pending-job holds were released.
+
+Second wave 14143899 (indices 16–31) is submitted. The remaining cancelled /
+interrupted indices 2,4,5,6,8,10,12,14 are automatically resubmitted by
+submit_retries.py once QoS submission slots are available. Its PID is in
+retry-submit-launch.json, and the resulting array ID goes to retry-submission.json.
+These infrastructure retries do not alter the frozen algorithms or case set.

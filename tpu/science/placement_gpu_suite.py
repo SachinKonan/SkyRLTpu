@@ -115,6 +115,10 @@ def main():
     if args.method == 'abuplace':
         # Keep AbuPlace's own Xplace Python code; use its separately built binaries.
         shutil.copytree(xp/'cpp_to_py/cpybin', repo/'abuplace/Xplace/cpp_to_py/cpybin', dirs_exist_ok=True)
+        # These C helpers are compiled with -march=native. A cached helper
+        # from a different CPU can SIGILL; rebuild within this private copy.
+        for cached in (repo/'abuplace/extensions').glob('*.so'):
+            cached.unlink()
     env = {
         'PATH': str(Path(sys.executable).parent)+':/usr/local/cuda-12.6/bin:/usr/bin:/bin',
         'PYTHONPATH': '/eval:/source:'+str(repo),
