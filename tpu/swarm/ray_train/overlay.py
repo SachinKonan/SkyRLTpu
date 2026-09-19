@@ -36,6 +36,19 @@ ARENA_FILES = (
     "tpu/pallas_arena/judge/collect.py",
     "tpu/pallas_arena/judge/timing.py",
     "tpu/pallas_arena/judge/observation.py",
+    # Ray tasks are imported from this frozen source on the grader host too.
+    # Include the subprocess judge and its transitive imports, not only the
+    # client transport. Otherwise the standalone self-test can pass while the
+    # training client's child cannot import ray_pool/worker/child_runner.
+    "tpu/pallas_arena/judge/ray_pool.py",
+    "tpu/pallas_arena/judge/worker.py",
+    "tpu/pallas_arena/judge/grader.py",
+    "tpu/pallas_arena/judge/gates.py",
+    "tpu/pallas_arena/judge/child_runner.py",
+    "tpu/pallas_arena/judge/cache.py",
+    "tpu/pallas_arena/judge/aot_gate.py",
+    "tpu/pallas_arena/judge/problems/__init__.py",
+    "tpu/pallas_arena/judge/problems/base.py",
     "tpu/pallas_arena/judge/problems/rg_lru.py",
     "tpu/pallas_arena/rl/__init__.py",
     "tpu/pallas_arena/rl/task.py",

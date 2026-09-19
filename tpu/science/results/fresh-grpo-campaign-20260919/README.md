@@ -257,3 +257,7 @@ it stops for uncertain attempts rather than creating duplicates.
 Submitted v6e RG-LRU jobs: Qwen **1256**, Gemma **1257**, Muse **1258**.
 At submission verification Qwen/Gemma were assigned to cleaned slices; Muse
 was awaiting assignment. No optimizer steps had completed at this check.
+
+The initial v6e jobs 1256–1258 were cancelled after a frozen-client grader
+import failure. [Corrected retries](../rglru-client-import-fix-20260919/README.md)
+are Qwen **1259**, Gemma **1260**, and Muse **1261**.
