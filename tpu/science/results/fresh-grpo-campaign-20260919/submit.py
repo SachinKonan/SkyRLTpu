@@ -32,7 +32,7 @@ def save(path, value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--hardware', choices=('v4', 'v5p'), required=True)
+    parser.add_argument('--hardware', choices=('v4', 'v5p', 'v6e'), required=True)
     parser.add_argument('--stage', choices=('math', 'science', 'rglru', 'all'), default='all')
     parser.add_argument('--gcloud', default='/scratch/gpfs/ZHUANGL/sk7524/google-cloud-sdk/bin/gcloud')
     parser.add_argument('--sky', default=str(ROOT.parent / 'SkyRLTpu-multihost/third_party/TPUSwarm/.venv/bin/sky'))

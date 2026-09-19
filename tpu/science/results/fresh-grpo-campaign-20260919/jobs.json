@@ -449,6 +449,51 @@
       "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-fd46e0b0b95adaa9566176ad7c042f7850f174effd90deaddfcb04cd436be77a.tar.gz",
       "archive_sha256": "fd46e0b0b95adaa9566176ad7c042f7850f174effd90deaddfcb04cd436be77a",
       "yaml_sha256": "a7a1c5b130b092ed5aedb079a44405d0dc855d29513a0043e359ca1f887750eb"
+    },
+    {
+      "hardware": "v6e",
+      "task": "rglru",
+      "model": "qwen",
+      "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v6e/qwen/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v6e/qwen/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v6e/qwen/rglru/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-d134eef3eeca12af9a6ce607db8a608b58da07790bcfe69e84d4e9c1cd829460.tar.gz",
+      "archive_sha256": "d134eef3eeca12af9a6ce607db8a608b58da07790bcfe69e84d4e9c1cd829460",
+      "yaml_sha256": "3143cb6664dfea1d98264a6e5569d7ab41fb647d18202dd87320b5affda37631"
+    },
+    {
+      "hardware": "v6e",
+      "task": "rglru",
+      "model": "gemma",
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v6e/gemma/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v6e/gemma/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v6e/gemma/rglru/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-1042c62aaaa85ec66bd2abceb9e0a86dcb77facdc567856a961a9720b9162714.tar.gz",
+      "archive_sha256": "1042c62aaaa85ec66bd2abceb9e0a86dcb77facdc567856a961a9720b9162714",
+      "yaml_sha256": "dfd4b00e12ca069c1a1d70b98bb012497cbb343b817f74de57b0426b5f225882"
+    },
+    {
+      "hardware": "v6e",
+      "task": "rglru",
+      "model": "muse",
+      "run_id": "fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v6e/muse/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v6e/muse/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v6e/muse/rglru/fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-454f360eb1d5053a18d7f3d872be5714389221a03c07192b2a600ade323a05b9.tar.gz",
+      "archive_sha256": "454f360eb1d5053a18d7f3d872be5714389221a03c07192b2a600ade323a05b9",
+      "yaml_sha256": "aa4d8edef4dae00346132e318ed807bc0ea5425a96a4e3c1218d330069efa12e"
     }
   ],
   "deferred": []

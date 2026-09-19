@@ -14,14 +14,14 @@ from tpu.science.package_training import package
 ROOT = Path(__file__).resolve().parents[4]
 HERE = Path(__file__).resolve().parent
 PROFILES = ROOT / 'tpu/swarm/ray_train/profiles'
-POOLS = {'v4': 'tpuswarm-v4-64-central2-qwen35-erdos', 'v5p': 'tpuswarm-v5p32-east5a-erdos'}
+POOLS = {'v4': 'tpuswarm-v4-64-central2-qwen35-erdos', 'v5p': 'tpuswarm-v5p32-east5a-erdos', 'v6e': 'tpuswarm-v6e32-east5b-qwen35'}
 
 
-def profiles(tasks=None):
+def profiles(tasks=None, hardware_types=None):
     rows = []
-    for hardware in ('v4', 'v5p'):
+    for hardware in (hardware_types or ('v4', 'v5p')):
         for task in ('ac2', 'cp26', 'qubit', 'circuit', 'rglru'):
-            if tasks and task not in tasks:
+            if (tasks and task not in tasks) or (hardware == 'v6e' and task != 'rglru'):
                 continue
             for model in ('qwen', 'gemma', 'muse'):
                 lr = 'lr15e4' if model == 'qwen' else 'lr4e5'
@@ -47,6 +47,14 @@ def profiles(tasks=None):
                     config['cache']['trainer_compile_seed'] = native['cache']['trainer_compile']
                     config['cache']['inference_compile_seed'] = (
                         native['cache']['inference_compile'] if native['inference']['tp'] == 4 else '')
+                if hardware == 'v6e':
+                    native = json.loads((PROFILES / f'science-q20-v6e-{model}-grpo-hedge-20260918.json').read_text())
+                    config.update(accelerator='tpu-v6e-32', zone='us-east5-b', bucket=native['bucket'],
+                                  trainer=copy.deepcopy(native['trainer']), inference=copy.deepcopy(native['inference']))
+                    for key in ('hf', 'orbax'):
+                        config['cache'][key] = native['cache'][key]
+                    for phase in ('trainer', 'inference'):
+                        config['cache'][phase + '_compile_seed'] = native['cache'][phase + '_compile']
                 for phase in ('trainer', 'inference'):
                     config['cache'][phase + '_compile'] = f"{config['bucket']}/{run}-{phase}_compile-v1"
                 config['client_env']['TTD_SICK_MARKER'] = f'/home/gcpuser/.cache/{run}/runs/{run}/ENGINE-SICK'
@@ -77,10 +85,11 @@ def main():
     parser.add_argument('--profiles-only', action='store_true')
     parser.add_argument('--task', action='append', choices=('ac2','cp26','qubit','circuit','rglru'),
                         help='Only prepare selected tasks; retain other indexed packages')
+    parser.add_argument('--hardware', action='append', choices=('v4','v5p','v6e'))
     args = parser.parse_args()
     index_path = HERE / 'jobs.json'
     previous = {r['run_id']: r for r in json.loads(index_path.read_text())['jobs']} if index_path.exists() else {}
-    rows = profiles(args.task)
+    rows = profiles(args.task, args.hardware)
     for row in rows:
         # Never repackage a submitted run: recovery uses its original archive.
         if (ROOT / row['package_dir'] / 'submission.json').exists():

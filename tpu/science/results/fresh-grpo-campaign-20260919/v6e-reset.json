@@ -1,0 +1,557 @@
+{
+  "checked_at": "2026-09-19T21:58:04.919146+00:00",
+  "cancelled_jobs": [
+    {
+      "spot_job_id": 1062,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-circuit-v6e-muse-helper-grpo-direct-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1064,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-circuit-v6e-qwen-helper-grpo-direct-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1065,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-circuit-v6e-gemma-helper-pwc-direct-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1066,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-circuit-v6e-muse-helper-pwc-direct-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1067,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-circuit-v6e-qwen-helper-pwc-direct-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1069,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-q20-v6e-gemma-pwc-seedonly-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1071,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-q20-v6e-muse-pwc-seedonly-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1073,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-q20-v6e-qwen-pwc-seedonly-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1075,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-q20-v6e-gemma-grpo-hedge-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1076,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-q20-v6e-muse-grpo-hedge-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1077,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "science-q20-v6e-qwen-grpo-hedge-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1157,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "stageb-m-v32-grpo-n-v6e-resume-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1158,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "stageb-m-v32-ttd-n-v6e-resume-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1159,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "stageb2-g-v32-grpo-n-v6e-resume-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1160,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "stageb2-g-v32-ttd-n-v6e-resume-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1161,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "stagec-v32-grpo-n-v6e-resume-20260918",
+      "status": "CANCELLED"
+    },
+    {
+      "spot_job_id": 1162,
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "name": "stagec-v32-ttd-n-v6e-resume-20260918",
+      "status": "CANCELLED"
+    }
+  ],
+  "health": [
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 73.52,
+            "free_inodes": 12274940
+          },
+          "tmp": {
+            "free_gib": 73.52,
+            "free_inodes": 12274940
+          }
+        },
+        "mem_available_gib": 642.83,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143-worker1",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 69.32,
+            "free_inodes": 12266742
+          },
+          "tmp": {
+            "free_gib": 69.32,
+            "free_inodes": 12266742
+          }
+        },
+        "mem_available_gib": 641.34,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143-worker2",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 75.33,
+            "free_inodes": 12301929
+          },
+          "tmp": {
+            "free_gib": 75.33,
+            "free_inodes": 12301929
+          }
+        },
+        "mem_available_gib": 655.43,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143-worker3",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 75.62,
+            "free_inodes": 12300583
+          },
+          "tmp": {
+            "free_gib": 75.62,
+            "free_inodes": 12300583
+          }
+        },
+        "mem_available_gib": 655.44,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143-worker4",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 69.43,
+            "free_inodes": 12268102
+          },
+          "tmp": {
+            "free_gib": 69.43,
+            "free_inodes": 12268102
+          }
+        },
+        "mem_available_gib": 641.31,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143-worker5",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 69.43,
+            "free_inodes": 12268116
+          },
+          "tmp": {
+            "free_gib": 69.43,
+            "free_inodes": 12268116
+          }
+        },
+        "mem_available_gib": 641.37,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143-worker6",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 69.43,
+            "free_inodes": 12268109
+          },
+          "tmp": {
+            "free_gib": 69.43,
+            "free_inodes": 12268109
+          }
+        },
+        "mem_available_gib": 641.36,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/0",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5143-worker7",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 74.91,
+            "free_inodes": 12301694
+          },
+          "tmp": {
+            "free_gib": 74.91,
+            "free_inodes": 12301694
+          }
+        },
+        "mem_available_gib": 655.42,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 78.57,
+            "free_inodes": 12305373
+          },
+          "tmp": {
+            "free_gib": 78.57,
+            "free_inodes": 12305373
+          }
+        },
+        "mem_available_gib": 648.88,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/1",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198-worker1",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 71.09,
+            "free_inodes": 12274757
+          },
+          "tmp": {
+            "free_gib": 71.09,
+            "free_inodes": 12274757
+          }
+        },
+        "mem_available_gib": 647.92,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198-worker2",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 71.52,
+            "free_inodes": 12275731
+          },
+          "tmp": {
+            "free_gib": 71.52,
+            "free_inodes": 12275731
+          }
+        },
+        "mem_available_gib": 647.97,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/2",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198-worker3",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 78.65,
+            "free_inodes": 12308748
+          },
+          "tmp": {
+            "free_gib": 78.65,
+            "free_inodes": 12308748
+          }
+        },
+        "mem_available_gib": 661.01,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/0",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198-worker4",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 71.25,
+            "free_inodes": 12274671
+          },
+          "tmp": {
+            "free_gib": 71.25,
+            "free_inodes": 12274671
+          }
+        },
+        "mem_available_gib": 647.96,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198-worker5",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 78.46,
+            "free_inodes": 12308283
+          },
+          "tmp": {
+            "free_gib": 78.46,
+            "free_inodes": 12308283
+          }
+        },
+        "mem_available_gib": 661.0,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/1",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198-worker6",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 71.45,
+            "free_inodes": 12274987
+          },
+          "tmp": {
+            "free_gib": 71.45,
+            "free_inodes": 12274987
+          }
+        },
+        "mem_available_gib": 648.02,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    },
+    {
+      "host": "tpuswarm-v6e32-east5b-qwen35-5198-worker7",
+      "exit": 0,
+      "audit": {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 78.57,
+            "free_inodes": 12307380
+          },
+          "tmp": {
+            "free_gib": 78.57,
+            "free_inodes": 12307380
+          }
+        },
+        "mem_available_gib": 661.0,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/2",
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      }
+    }
+  ]
+}

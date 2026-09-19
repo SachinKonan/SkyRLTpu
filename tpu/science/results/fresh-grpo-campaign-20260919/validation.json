@@ -1,5 +1,5 @@
 {
-  "profile_count": 30,
+  "profile_count": 33,
   "profile_tests_passed": 25,
   "other_regression_tests_passed": 52,
   "subtests_passed": 11,
@@ -12,7 +12,7 @@
   ],
   "credential_preflight": "gcloud and refreshed ADC match approved compute service account; TPU node/queued-resource and storage reads passed",
   "hardware_execution": "pending; no claim that bounded bootstrap transition has completed on TPU",
-  "packaged_profiles_verified": 30,
+  "packaged_profiles_verified": 33,
   "actual_initial_prompts_verified": 30,
   "checks": [
     "exact profile bytes in each archive",
@@ -22,7 +22,7 @@
     "clean-host gate present in every task YAML",
     "full 72-case qubit prompt; all 17-case circuit prompt"
   ],
-  "skypilot_task_yaml_parser_passed": 30,
+  "skypilot_task_yaml_parser_passed": 33,
   "submission_schema_fix": "Priority is nested under resources, also passed explicitly to sky jobs launch. First local YAML rejection created no job; receipt archived.",
   "rglru_addition": {
     "profiles": 6,
@@ -38,5 +38,20 @@
     "archive_source_parity": true,
     "original_24_package_index_records_preserved": true,
     "hardware_tested": false
+  },
+  "v6e_rglru_addition": {
+    "profiles": 3,
+    "tests_passed": 129,
+    "test_runtime_s": 64.68,
+    "archive_source_parity": true,
+    "skypilot_yaml_parser_passed": 3,
+    "clean_hosts_passed": 16,
+    "cancelled_jobs": 17,
+    "hardware_tested": false,
+    "submitted_job_ids": [
+      1256,
+      1257,
+      1258
+    ]
   }
 }

@@ -1,10 +1,12 @@
-# Fresh GRPO campaign: v4-64 and v5p-32
+# Fresh GRPO campaign: v4-64, v5p-32, and v6e-32 RG-LRU
 
 Authorized 2026-09-19. Fifteen logical experiments, each with two hardware
 profiles (30 configs). Launch one hardware variant per experiment unless a
 duplicate is explicitly desired. The initial deployment uses v4-64; v5p is
 prepared as an alternative. RG-LRU was added after the initial twelve launches;
-its six profiles are prepared and packaged, but have not been submitted.
+its v4/v5p profiles remain prepared alternatives. Three additional v6e-32 RG-LRU
+profiles bring the total to 33 configs. The v6e deployment replaces the old
+v6e jobs only; v4/v5p jobs are untouched.
 
 | RG-LRU model | v4-64 profile | v5p-32 profile |
 |---|---|---|
@@ -211,3 +213,47 @@ Snapshot at 2026-09-19T21:19:22.810676+00:00.
 | circuit | 1236 | 1237 | 1238 | 50 |
 
 All twelve were accepted by the v4-64 pool. Startup/queue state is recorded in submissions.json; no bootstrap completion or optimizer step is claimed yet. No v5p duplicate was submitted.
+
+## v6e-32 RG-LRU deployment
+
+The user authorized replacing queued/running v6e jobs with three fresh RG-LRU
+GRPO runs. [Cleanup evidence](v6e-reset.json) records cancellation of 17 jobs
+and successful checks on all 16 hosts of the two ready slices. The checks
+confirmed no TPU owners or old private workload processes and sufficient disk,
+inodes and available memory. Every new worker also runs this gate at startup.
+
+| Model | Profile | Learning rate |
+|---|---|---:|
+| Qwen | [Config](../../../swarm/ray_train/profiles/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919.json) | 1.5e-4 |
+| Gemma | [Config](../../../swarm/ray_train/profiles/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919.json) | 4e-5 |
+| Muse | [Config](../../../swarm/ray_train/profiles/fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919.json) | 4e-5 |
+
+Pool: `tpuswarm-v6e32-east5b-qwen35`, zone `us-east5-b`. Each slice has eight
+hosts with four chips each. Bootstrap uses seven TP4 inference engines and one
+dedicated grader host. It generates at most 1,024 drafts, stopping new requests
+when 512 distinct valid programs are available; at most 32 requests of 16
+completions are outstanding. In-flight work finishes normally. No repair pass.
+
+Training uses a physically aligned 2x2 trainer-host block, three TP4 inference
+engines and the same dedicated grader. Rank 1 is reserved for grading; the
+physical trainer block is selected from the live topology to exclude it.
+Qwen/Muse use TP8/FSDP2; Gemma uses TP4/FSDP4. All preserve
+the native 16K prompt-plus-thinking allowance and 22,528-token context, GRPO,
+15 training steps and 16x32 training batches. Compilation caches read existing
+matching v6e caches, then write to unique run prefixes; model/optimizer and
+program pools start fresh. Four one-chip grading tasks can execute together.
+
+```bash
+# Build locally; does not upload or launch.
+python tpu/science/results/fresh-grpo-campaign-20260919/prepare.py --hardware v6e --task rglru
+# With the approved gcloud/ADC identity and existing TPU-only Sky API environment:
+python tpu/science/results/fresh-grpo-campaign-20260919/submit.py --hardware v6e --stage rglru
+```
+
+Submission receipts are in each indexed package directory and summarized in
+[submissions.json](submissions.json). Re-running submit skips confirmed receipts;
+it stops for uncertain attempts rather than creating duplicates.
+
+Submitted v6e RG-LRU jobs: Qwen **1256**, Gemma **1257**, Muse **1258**.
+At submission verification Qwen/Gemma were assigned to cleaned slices; Muse
+was awaiting assignment. No optimizer steps had completed at this check.

@@ -8,7 +8,7 @@ workers 0, 6, 2, 7 and libtpu aborted the slice with CHIP_DRIVER_ERROR). The
 trainer must be a contiguous 2x2 block of hosts declared to libtpu as
 TPU_PROCESS_BOUNDS=2,2,1 with CLOUD_TPU_TASK_ID x-fastest, so pick the block
 that contains rank 0 (the API/client host) and order it that way; every other
-host serves.
+host serves. With a reserved grader rank, select the aligned block excluding it.
 """
 from __future__ import annotations
 
@@ -45,23 +45,33 @@ def host_positions(records: list[dict]) -> dict[int, tuple[int, int]]:
     return by_rank
 
 
-def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
+def select_split(records: list[dict], *, excluded_rank: int | None = None) -> tuple[list[int], list[int]]:
     by_rank = host_positions(records)
     x0, y0 = by_rank[0]
     width = max(p[0] for p in by_rank.values()) + 1
-    height = max(p[1] for p in by_rank.values()) + 1
     # A contiguous window crossing the middle of the long axis (host rows
     # 1..2) is not a valid aligned 4x4-chip subslice. Replica 65's head sat
     # on row 1 and the old forward-neighbor choice aborted libtpu.
     x0, y0 = (x0 // 2) * 2, (y0 // 2) * 2
+    if excluded_rank is not None:
+        if type(excluded_rank) is not int or excluded_rank not in by_rank:
+            raise ValueError('excluded rank must be a Sky rank in 0..7')
+        ex, ey = by_rank[excluded_rank]
+        if (ex // 2) * 2 == x0 and (ey // 2) * 2 == y0:
+            # Exactly two aligned blocks exist. Reserve the grader's block
+            # for inference/grading and train on the other physical block.
+            if width == 4:
+                x0 = 2 - x0
+            else:
+                y0 = 2 - y0
     x1, y1 = x0 + 1, y0 + 1
     block = {(x, y) for x in (x0, x1) for y in (y0, y1)}
     at = {pos: rank for rank, pos in by_rank.items()}
     # TPU_PROCESS_BOUNDS=2,2,1: task id = local_x + 2 * local_y.
     xs, ys = sorted((x0, x1)), sorted((y0, y1))
     train = [at[(x, y)] for y in ys for x in xs]
-    if 0 not in train or len(block) != 4:
-        raise ValueError("could not form a 2x2 host block containing Sky rank 0")
+    if (excluded_rank is None and 0 not in train) or excluded_rank in train or len(block) != 4:
+        raise ValueError("could not form the requested aligned 2x2 trainer block")
     serving = sorted(set(range(8)) - set(train))
     return train, serving
 

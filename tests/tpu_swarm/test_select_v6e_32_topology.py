@@ -60,3 +60,24 @@ def test_replica65_head_on_inner_row_uses_aligned_block_and_distinct_leader():
     train, serving = select_split(_records((2, 4), rank_of))
     assert train == [7, 3, 0, 2]
     assert serving == [1, 4, 5, 6]
+
+
+@pytest.mark.parametrize("grid", [(4, 2), (2, 4)])
+@pytest.mark.parametrize("seed", range(12))
+def test_reserved_grader_preserves_aligned_x_fastest_block(grid, seed):
+    positions = [(x, y) for x in range(grid[0]) for y in range(grid[1])]
+    ranks = list(range(8)); random.Random(seed).shuffle(ranks)
+    rank_of = dict(zip(positions, ranks))
+    records = _records(grid, rank_of)
+    train, others = select_split(records, excluded_rank=1)
+    assert len(train) == 4 and 1 not in train and 1 in others
+    assert sorted(train + others) == list(range(8))
+    pos_of = {r:p for p,r in rank_of.items()}
+    block = [pos_of[r] for r in train]
+    xs = sorted({x for x,y in block}); ys = sorted({y for x,y in block})
+    assert len(xs) == len(ys) == 2
+    assert xs[0] % 2 == ys[0] % 2 == 0
+    assert block == [(x,y) for y in ys for x in xs]
+    for bad in (-1, 8, True):
+        with pytest.raises(ValueError):
+            select_split(records, excluded_rank=bad)

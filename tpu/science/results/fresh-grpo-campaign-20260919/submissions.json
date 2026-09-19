@@ -264,8 +264,75 @@
         "exit_code": 0,
         "job_id": 1238
       }
+    },
+    {
+      "job_id": 1256,
+      "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5143",
+      "priority": 50,
+      "model": "qwen",
+      "task": "rglru",
+      "hardware": "v6e",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "receipt": {
+        "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919",
+        "pool": "tpuswarm-v6e32-east5b-qwen35",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-d134eef3eeca12af9a6ce607db8a608b58da07790bcfe69e84d4e9c1cd829460.tar.gz",
+        "archive_sha256": "d134eef3eeca12af9a6ce607db8a608b58da07790bcfe69e84d4e9c1cd829460",
+        "submitted_at": "2026-09-19T21:58:20.343533+00:00",
+        "exit_code": 0,
+        "job_id": 1256
+      }
+    },
+    {
+      "job_id": 1257,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5198",
+      "priority": 50,
+      "model": "gemma",
+      "task": "rglru",
+      "hardware": "v6e",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "receipt": {
+        "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v6e32-east5b-qwen35",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-1042c62aaaa85ec66bd2abceb9e0a86dcb77facdc567856a961a9720b9162714.tar.gz",
+        "archive_sha256": "1042c62aaaa85ec66bd2abceb9e0a86dcb77facdc567856a961a9720b9162714",
+        "submitted_at": "2026-09-19T21:58:28.691198+00:00",
+        "exit_code": 0,
+        "job_id": 1257
+      }
+    },
+    {
+      "job_id": 1258,
+      "run_id": "fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": null,
+      "priority": 50,
+      "model": "muse",
+      "task": "rglru",
+      "hardware": "v6e",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "receipt": {
+        "run_id": "fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v6e32-east5b-qwen35",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-454f360eb1d5053a18d7f3d872be5714389221a03c07192b2a600ade323a05b9.tar.gz",
+        "archive_sha256": "454f360eb1d5053a18d7f3d872be5714389221a03c07192b2a600ade323a05b9",
+        "submitted_at": "2026-09-19T21:58:38.393753+00:00",
+        "exit_code": 0,
+        "job_id": 1258
+      }
     }
   ],
   "hardware_alternatives": "v5p prepared; not submitted",
-  "optimizer_steps_completed": 0
+  "optimizer_steps_completed": 0,
+  "v6e_checked_at": "2026-09-19T21:59:15.599809+00:00"
 }

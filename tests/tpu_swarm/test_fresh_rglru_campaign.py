@@ -64,8 +64,8 @@ def test_v4_topology_preserves_physical_trainer_row_and_excludes_grader(shift):
     assert all((b-a)%4 == 1 for a,b in zip(zs,zs[1:]))
 
 
-def test_six_rglru_profiles_and_reserved_rank_validation():
-    assert len(PROFILES) == 6
+def test_nine_rglru_profiles_and_reserved_rank_validation():
+    assert len(PROFILES) == 9
     for bad in (-1,8,True):
         c=Config.load(PROFILES[0])
         with pytest.raises(ValueError):
