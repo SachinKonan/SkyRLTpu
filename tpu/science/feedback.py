@@ -4,7 +4,44 @@ import re
 
 
 def feedback_limit(task):
+    if task == 'routing':
+        return 12000
     return 10000 if task == 'placement' else 3000
+
+
+def routing_cases(metrics):
+    """Compact, lossless counts from trusted verification, including old journals.
+
+    Column names are supplied once to avoid repeating four keys for 72 cases.
+    Baselines for older verdicts come from the pinned public suite, never from
+    candidate output. Missing measurements remain null, not invented zeros.
+    """
+    from pathlib import Path
+    from .routing_suite import manifest
+    specs = {row['id']: row for row in manifest()['cases']}
+    cases, topologies = [], {}
+    for row in metrics['cases']:
+        spec = specs.get(row['case'], {})
+        baseline_cnots = row.get('baseline_added_cnots', spec.get('original_cnot_added'))
+        baseline = baseline_cnots / 3 if baseline_cnots is not None else None
+        if baseline is not None and baseline.is_integer():
+            baseline = int(baseline)
+        swaps = row['swaps']
+        delta = swaps - baseline if baseline is not None else None
+        cases.append([row['case'], swaps, baseline, delta])
+        topology = row.get('topology') or Path(spec.get('topology_path', 'unknown')).stem
+        totals = topologies.setdefault(topology, dict(case_count=0, swaps=0, baseline_swaps=0))
+        totals['case_count'] += 1
+        totals['swaps'] += swaps
+        if baseline is None:
+            totals['baseline_swaps'] = None
+        elif totals['baseline_swaps'] is not None:
+            totals['baseline_swaps'] += baseline
+    for totals in topologies.values():
+        baseline = totals['baseline_swaps']
+        totals['delta_swaps'] = totals['swaps'] - baseline if baseline is not None else None
+    return dict(case_columns=['case', 'swaps', 'baseline_swaps', 'delta_swaps'],
+                cases=cases, topologies=topologies)
 
 
 def case_error(row):
@@ -30,6 +67,8 @@ def observation(task, result):
         'swaps', 'added_cnots', 'improvement', 'case_count', 'total_seconds', 'routing_suite',
         'benchmark_suite', 'required_case_count', 'leaderboard_verified')}
     message = result['msg'][:1600]
+    if task == 'routing' and 'cases' in metrics:
+        feedback.update(routing_cases(metrics))
     if task == 'placement' and 'cases' in metrics:
         from .challenge_contract import CASES, CANDIDATE_LIMIT_SECONDS
         by_case = {row['metrics'].get('case'): row for row in metrics['cases']}
@@ -56,7 +95,7 @@ def observation(task, result):
     if len(encoded) > feedback_limit(task):
         value['message'] = message[:600]
         for case in feedback.get('cases', []):
-            if 'message' in case:
+            if isinstance(case, dict) and 'message' in case:
                 case['message'] = case['message'][:160]
         encoded = json.dumps(value, separators=(',', ':'), ensure_ascii=False)
     if len(encoded) > feedback_limit(task):

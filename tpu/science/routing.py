@@ -60,7 +60,8 @@ def verify(root, suite_path, output, progress=None):
         if type(row.get('swap_count')) is not int or row['swap_count']!=swaps:
             raise ValueError(f'{name}: reported SWAP count disagrees with independently parsed circuit')
         baseline.append(spec.original_cnot_added);candidate.append(3*swaps);weights.append(spec.weight)
-        diagnostics.append(dict(case=name,swaps=swaps,added_cnots=3*swaps))
+        diagnostics.append(dict(case=name,swaps=swaps,added_cnots=3*swaps,
+                                baseline_added_cnots=spec.original_cnot_added,weight=spec.weight))
         if progress is not None:progress(diagnostics[-1],len(diagnostics))
     reward,metrics=qubit(baseline,candidate,weights)
     metrics.update(cases=diagnostics,case_count=len(rows))

@@ -70,6 +70,12 @@ def task_prompt(task, *, include_starter=True, environment=None):
             raise ValueError(f'{task} prompt is missing its starter boundary')
         prompt = instructions.rstrip()
     if task == 'routing':
+        prompt = ('Grader feedback includes a compact per-case SWAP table with columns named '
+                  'in case_columns, plus per-topology totals. baseline_swaps is the fixed SABRE '
+                  'reference; delta_swaps = candidate minus baseline, so negative is better. '
+                  'Case IDs identify diagnostics only; do not hardcode cases. The single aggregate '
+                  'reward remains the optimization objective. Failed execution may stop before '
+                  'case counts are available; use the reported error in that situation.\n\n') + prompt
         from .routing_suite import validate_suite
         if validate_suite(environment.get('SCIENCE_ROUTING_SUITE', 'full')) == 'q20':
             prompt = ('Benchmark scope: Q20 ONLY, the 24 pinned circuits on the Q20 coupling graph. '
