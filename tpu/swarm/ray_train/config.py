@@ -294,6 +294,10 @@ class Config:
     bootstrap_layers: int = 0
     bootstrap_all_hosts: bool = False
     bootstrap_only: bool = False
+    bootstrap_max_drafts: int = 0
+    bootstrap_target_valid: int = 512
+    bootstrap_group_size: int = 16
+    bootstrap_max_groups: int = 32
     seed_pool_sha256: str = ""
     arena_service_only: bool = False
     arena_grader_rank: int | None = None
@@ -464,7 +468,23 @@ class Config:
                     or self.inference_only_ranks is not None or self.frozen_benchmark
                     or self.arena_samples or self.arena_service_only):
                 raise ValueError('bootstrap-only requires v4-32 routing seeds or all-host v4-64 CPU helper circuit drafts')
-        if self.bootstrap_layers and (not self.science_task
+        if self.bootstrap_max_drafts:
+            if (type(self.bootstrap_max_drafts) is not int or self.bootstrap_max_drafts < 1
+                    or type(self.bootstrap_target_valid) is not int or not 1 <= self.bootstrap_target_valid <= min(1000, self.bootstrap_max_drafts)
+                    or type(self.bootstrap_group_size) is not int or not 1 <= self.bootstrap_group_size <= 32
+                    or type(self.bootstrap_max_groups) is not int or not 1 <= self.bootstrap_max_groups <= 64
+                    or self.bootstrap_max_drafts % self.bootstrap_group_size):
+                raise ValueError('invalid bounded bootstrap budgets')
+            if (self.accelerator != 'tpu-v4-64' or self.hosts != 8 or self.trainer.hosts != 4
+                    or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
+                    or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
+                    or not (self.science_task or self.has_problem_prompt_overlay)
+                    or self.is_recurrent_gemma or self.arena_grader_rank is not None
+                    or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
+                    or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
+                    or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
+                raise ValueError('bounded bootstrap requires native v4-64 math or science training with CPU grading')
+        elif self.bootstrap_layers and (not self.science_task
                 or (self.inference_only and not self.bootstrap_only)
                 or self.adapter_count != 1 or (self.accelerator not in ('tpu-v4-64', 'tpu-v6e-32') and not self.bootstrap_only)
                 or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
@@ -868,6 +888,10 @@ class Config:
     def served_models(self):
         return ([PRESETS[e["model_preset"]].hf_model for e in self.arena_models]
                 if self.arena_models else [self.model])
+
+    @property
+    def bootstrap_module(self):
+        return 'tpu.swarm.ray_train.seed_bootstrap' if self.bootstrap_max_drafts else 'tpu.science.bootstrap'
 
     @property
     def engines_per_host(self):

@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "jobs": [
+    {
+      "model": "qwen",
+      "task": "ac2",
+      "run_id": "single-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-qwen-ac2-grpo-lr15e4-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-qwen-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/qwen/ac2",
+      "archive_sha256": "0602e74f839e7ff24a6cc00282736fcda9550ac9bd28e49c3f9dc954188d2390"
+    },
+    {
+      "model": "qwen",
+      "task": "cp26",
+      "run_id": "single-v4-qwen-cp26-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-qwen-cp26-grpo-lr15e4-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-qwen-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/qwen/cp26",
+      "archive_sha256": "aae55c4d250574b5269906ee40760025f5fcd4c129d0455ff5138a7de882db19"
+    },
+    {
+      "model": "qwen",
+      "task": "circuit",
+      "run_id": "single-v4-qwen-circuit-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-qwen-circuit-grpo-lr15e4-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-qwen-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/qwen/circuit",
+      "archive_sha256": "f6ca18f4db00e9341954429a877bd70c0d40b2d94416a3fe4fc3a24b69e1c61f"
+    },
+    {
+      "model": "qwen",
+      "task": "q20",
+      "run_id": "single-v4-qwen-q20-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-qwen-q20-grpo-lr15e4-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-qwen-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/qwen/q20",
+      "archive_sha256": "be843f3c61bdd30b38ffa8f0d3a105add86099eeb9137cefc9065a59e672dcf0"
+    },
+    {
+      "model": "gemma",
+      "task": "ac2",
+      "run_id": "single-v4-gemma-ac2-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-gemma-ac2-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-gemma-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/gemma/ac2",
+      "archive_sha256": "1808e78fc6b550f863ec2841e1caf10cd6a5006c2752d6028bf6e9b71a643ac3"
+    },
+    {
+      "model": "gemma",
+      "task": "cp26",
+      "run_id": "single-v4-gemma-cp26-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-gemma-cp26-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-gemma-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/gemma/cp26",
+      "archive_sha256": "d161663581bf37f79d53a56a7125645c56e71e02187185777231dbe218332633"
+    },
+    {
+      "model": "gemma",
+      "task": "circuit",
+      "run_id": "single-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-gemma-circuit-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-gemma-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/gemma/circuit",
+      "archive_sha256": "33db3ef554b2476f64f491fa6e2258bd4ebadb009b3c8bba3295b47767b56540"
+    },
+    {
+      "model": "gemma",
+      "task": "q20",
+      "run_id": "single-v4-gemma-q20-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-gemma-q20-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-gemma-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/gemma/q20",
+      "archive_sha256": "e8a53da6e846845cd1072d48ba5b557eb4a0d39d4f326929788ee46d764bc831"
+    },
+    {
+      "model": "muse",
+      "task": "ac2",
+      "run_id": "single-v4-muse-ac2-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-muse-ac2-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-muse-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/muse/ac2",
+      "archive_sha256": "9836ff31fec54e82f688347ab776618f3007519f27baade11f96e5d4238eccef"
+    },
+    {
+      "model": "muse",
+      "task": "cp26",
+      "run_id": "single-v4-muse-cp26-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-muse-cp26-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-muse-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/muse/cp26",
+      "archive_sha256": "64f863302e330dfe887e0ea5b1797506b93bc867ebc1b1dfb07a2428d6086e2d"
+    },
+    {
+      "model": "muse",
+      "task": "circuit",
+      "run_id": "single-v4-muse-circuit-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-muse-circuit-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-muse-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/muse/circuit",
+      "archive_sha256": "3022207d278e8c5df5c92ff7006e93568bbdd821970ed24496dbd761a3849100"
+    },
+    {
+      "model": "muse",
+      "task": "q20",
+      "run_id": "single-v4-muse-q20-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/single-v4-muse-q20-grpo-lr4e5-s1-20260919.json",
+      "runtime_reference": "tpu/swarm/ray_train/profiles/science-q20-v4-muse-grpo-clean-20260918.json",
+      "submitted": false,
+      "package_dir": ".science/packages/single-v4-20260919/muse/q20",
+      "archive_sha256": "e3fad5ba1b85ba4c4c43f69a5f050c49916653dcd555ae985971884aeee0bbc2"
+    }
+  ],
+  "deferred": [
+    "rglru"
+  ]
+}

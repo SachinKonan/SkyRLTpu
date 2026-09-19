@@ -470,7 +470,8 @@ class Host:
         contract = json.loads((path.parent/'contract.json').read_text())['contract']
         if Config.from_dict(contract['config']).to_dict() != self.config.to_dict():
             raise RuntimeError('bootstrap config changed; use a new run ID')
-        implementation = Path(__file__).resolve().parents[2] / 'science/bootstrap.py'
+        implementation = (Path(__file__).with_name('seed_bootstrap.py') if self.config.bootstrap_max_drafts
+                          else Path(__file__).resolve().parents[2] / 'science/bootstrap.py')
         if hashlib.sha256(implementation.read_bytes()).hexdigest() != contract['implementation_sha256']:
             raise RuntimeError('bootstrap implementation changed; use a new run ID')
         summary = json.loads(path.read_text())
@@ -492,9 +493,9 @@ class Host:
         env = client_environment(self.config, self.root, self.ips[0],
                                  trainer_head=self.ips[self.trainer_leader])
         package = Path(__file__).resolve().parents[3]
-        env['PYTHONPATH'] = f'{package}:{self.source}:{self.source / "third_party/discover"}'
+        env['PYTHONPATH'] = f'{package}:{self.source}:{self.source / "tpu"}:{self.source / "third_party/discover"}'
         command = [str(self.root/'envs/client/bin/python'), '-m',
-            'tpu.science.bootstrap', '--config-json', json.dumps(self.config.to_dict()),
+            self.config.bootstrap_module, '--config-json', json.dumps(self.config.to_dict()),
             '--snapshot', str(self.snapshot), '--head', self.ips[0]]
         # Python -m puts cwd before PYTHONPATH. The frozen source contains an
         # older regular ray_train package, so launching there silently mixes
