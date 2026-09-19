@@ -27,3 +27,18 @@ def test_lora_slot_count_must_be_a_positive_integer(value):
     config = Config.load(PROFILE)
     with pytest.raises(ValueError, match="max_loras"):
         replace(config, inference=replace(config.inference, max_loras=value)).validate()
+
+
+def test_population_serving_does_not_require_a_backward_output_mode():
+    config = Config.load(
+        "tpu/swarm/ray_train/profiles/qwen35-v432-native-multi-lora-inference-20260919.json")
+    assert config.inference_only and config.trainer.hosts == 0
+    assert config.inference_only_ranks == [0, 1, 2, 3]
+    assert len(config.engine_slots(["host0", "host1", "host2", "host3"])) == 4
+    assert config.inference.max_loras == config.adapter_count == 2
+    assert not config.sequential_probe and not config.stacked_probe
+    # The same defaults must still fail closed if a trainer is introduced.
+    training = replace(config, inference_only=False, inference_only_ranks=None,
+                       trainer=replace(config.trainer, hosts=1))
+    with pytest.raises(ValueError, match="full backward logprobs"):
+        training.validate()

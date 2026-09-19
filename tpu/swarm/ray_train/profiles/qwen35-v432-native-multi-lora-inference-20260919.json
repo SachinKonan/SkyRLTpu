@@ -1,0 +1,70 @@
+{
+  "run_id": "qwen35-v432-native-multi-lora-inference-20260919",
+  "accelerator": "tpu-v4-32",
+  "hosts": 4,
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
+  "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
+  "root": "~/.cache/qwen35-v432-native-multi-lora-inference-20260919",
+  "model_preset": "qwen3.5-27b",
+  "training_smoke": false,
+  "trainer": {
+    "hosts": 0
+  },
+  "inference": {
+    "tp": 4,
+    "max_sequences": 16,
+    "memory_utilization": 0.8,
+    "routing": "ingress",
+    "restart_limit": 0,
+    "chunk_tokens": 1024,
+    "max_model_length": 22528,
+    "request_timeout": 21600,
+    "native_thinking_budget": true,
+    "ragged_conv1d": true,
+    "prefix_caching": true,
+    "max_loras": 2
+  },
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/qwen35-v432-native-multi-lora-inference-20260919-unused-trainer-compile",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/qwen35-v432-native-multi-lora-inference-20260919-inference-compile",
+    "trainer_gib": 128,
+    "inference_gib": 128,
+    "reserve_gib": 128,
+    "sync_seconds": 60,
+    "process_count": 4,
+    "thread_count": 8,
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/qwen35-v432-native-multi-lora-probe-20260918-inference-compile"
+  },
+  "checkpoint_cleanup_timeout": 0,
+  "ready_timeout": 7200,
+  "client_context_window": 22528,
+  "client_phase1_max_tokens": 16384,
+  "client_hf_offline": true,
+  "client_env": {},
+  "client_learning_rate": "4e-5",
+  "trainer_env": {
+    "TUNIX_UNIFORM_SEQ_LEN": "0",
+    "SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC": "25200",
+    "SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC": "28800"
+  },
+  "zone": "us-central2-b",
+  "bootstrap_layers": 0,
+  "bootstrap_all_hosts": false,
+  "seed_pool_sha256": "",
+  "checkpoint_resume": false,
+  "max_restarts_on_errors": 0,
+  "systemd_runtime": true,
+  "resume_min_checkpoint_step": 0,
+  "inference_only": true,
+  "inference_only_ranks": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "adapter_count": 2,
+  "pooled_group_size": 32
+}

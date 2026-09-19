@@ -642,7 +642,8 @@ class Config:
         if self.adapter_count > 1:
             if self.model not in ("Qwen/Qwen3.5-27B", "openai/gpt-oss-120b", "openai/gpt-oss-20b"):
                 raise ValueError("pooled multi-LoRA supports Qwen3.5 and GPT-OSS")
-            if self.trainer.minimal_fb_output or self.trainer_env.get("TUNIX_MINIMAL_FB_OUTPUT", "0") != "0":
+            if not self.inference_only and (self.trainer.minimal_fb_output
+                                           or self.trainer_env.get("TUNIX_MINIMAL_FB_OUTPUT", "0") != "0"):
                 raise ValueError("pooled multi-LoRA requires full backward logprobs; set trainer.minimal_fb_output=false")
             if self.inference.routing != "ingress":
                 raise ValueError("pooled multi-LoRA requires ingress routing for adapter publication")
