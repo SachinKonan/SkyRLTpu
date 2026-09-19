@@ -71,3 +71,69 @@ python validate_lora_farm.py farm --manifest manifest.json \
 The second command must run after copying the reference artifacts to its host.
 Raw responses and measured differences are saved; only a successful
 `farm/complete.json` is an acceptance result. Starting the service is not a pass.
+
+## Exclusive leases
+
+The six September 19 farm profiles enable `inference.require_lease`. This is
+opt-in and does not change the API contract of existing training jobs.
+
+1. `POST /acquire_lease` with `{"owner_run":"my-run","ttl_seconds":300}`.
+   Save the returned `lease_id`. The default TTL is 300 seconds; allowed values
+   are integer seconds from 30 to 86,400. A conflicting claim returns 409.
+2. Upload the PEFT tar using `X-Lease-ID: ID`. Optionally send
+   `X-Adapter-SHA256: HEX` to verify the client-side archive identity too.
+3. `GET /status` reports `lease_id`, `owner_run`, `adapter_name`,
+   `adapter_sha256`, `ready_engines`, `expected_engines`, `expires_at` (Unix
+   seconds), and `state`. `ready` requires every engine's health and loaded
+   adapter archive hash to match. This hashes the exact tar bytes, not the
+   in-memory tensors. `/v1/models` remains the standard names-only API.
+4. Send `X-Lease-ID` with `/v1/completions` and `/tokenize`. A new owner cannot
+   generate using its predecessor's adapter until it uploads/verifies an
+   adapter for its own lease. Base-model requests are permitted under a lease.
+5. Renew using `/acquire_lease` with the same `owner_run` and `lease_id` before
+   expiry. Renew during long generations. An expired token cannot be renewed;
+   omit it to acquire a fresh lease after the prior requests drain.
+6. `POST /release_lease` with `{"lease_id":"ID"}`. Release closes admission and
+   waits for in-flight requests before freeing the farm. Expiry rejects new
+   requests; a successor claim also drains the old requests. HTTP disconnects
+   do not remove unfinished engine work from this drain accounting.
+
+Example lifecycle (use a reachable ingress address):
+
+```python
+import hashlib
+import requests
+
+url = "http://FARM_IP:24800"
+lease = requests.post(url + "/acquire_lease", json={
+    "owner_run": "experiment-42", "ttl_seconds": 3600,
+}).json()
+headers = {"X-Lease-ID": lease["lease_id"]}
+try:
+    with open("adapter.tar", "rb") as f:
+        digest = hashlib.file_digest(f, "sha256").hexdigest()
+        f.seek(0)
+        uploaded = requests.post(url + "/skyrl/v1/upload_lora_adapter",
+            params={"lora_name": "experiment-42-step-1"}, data=f,
+            headers={**headers, "X-Adapter-SHA256": digest})
+        uploaded.raise_for_status()
+    status = requests.get(url + "/status").json()
+    assert status["state"] == "ready" and status["adapter_sha256"] == digest
+    response = requests.post(url + "/v1/completions", headers=headers,
+        json={"model": "experiment-42-step-1", "prompt": "Hello", "max_tokens": 32})
+    response.raise_for_status()
+finally:
+    requests.post(url + "/release_lease", json={"lease_id": lease["lease_id"]}).raise_for_status()
+```
+
+Lease state belongs to the ingress process. Restart invalidates its leases;
+clients must reacquire and republish. Release does not unload the physical
+adapter immediately: admission quarantines it until the next owner verifies
+its own upload. A failed fanout keeps generation closed, including across
+lease handoff, until a full upload succeeds. Never reuse a version name for
+different bytes. The engine independently rejects an immutable-name mismatch.
+
+Leases coordinate trusted clients; they are not an authentication boundary.
+Use the ingress on port 24800: direct backend ports bypass lease admission and
+must not be used by lease clients. No public authentication or firewall change
+is included in this deployment.

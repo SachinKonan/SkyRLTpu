@@ -45,7 +45,16 @@ logger = logging.getLogger(__name__)
 
 def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
                          expert_lora_slots: bool = False) -> None:
+    import hashlib
     lora_dir.mkdir(parents=True, exist_ok=True)
+
+    @app.get("/skyrl/v1/adapter_status")
+    async def _adapter_status(request: Request):
+        adapters = {}
+        for name in request.app.state.openai_serving_models.lora_requests:
+            marker = lora_dir / name / ".skyrl-archive-sha256"
+            adapters[name] = marker.read_text().strip() if marker.is_file() else None
+        return {"adapters": adapters}
 
     @app.post("/skyrl/v1/upload_lora_adapter")
     async def _upload_lora_adapter(request: Request):
@@ -69,6 +78,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
                 pass
 
         target = lora_dir / lora_name
+        digest = hashlib.sha256()
         if not target.exists():
             # Stream the tar body to disk (payloads are up to ~GBs of f32
             # LoRA factors; never buffer fully in RAM).
@@ -76,6 +86,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
                 tmp_path = Path(tmp.name)
                 async for chunk in request.stream():
                     tmp.write(chunk)
+                    digest.update(chunk)
             staging = lora_dir / f".{lora_name}.staging"
             shutil.rmtree(staging, ignore_errors=True)
             staging.mkdir(parents=True)
@@ -93,6 +104,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
             if not (staging / "adapter_config.json").exists():
                 shutil.rmtree(staging, ignore_errors=True)
                 raise HTTPException(status_code=400, detail="tar does not contain adapter_config.json at its root")
+            (staging / ".skyrl-archive-sha256").write_text(digest.hexdigest())
             staging.replace(target)
         else:
             # The adapter is already extracted (a retry after a lost ACK), but
@@ -100,8 +112,11 @@ def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
             # request unread makes uvicorn close the socket mid-upload, the
             # client sees ECONNRESET instead of our 200, and every retry
             # repeats the cycle — the trainer never learns the push succeeded.
-            async for _ in request.stream():
-                pass
+            async for chunk in request.stream():
+                digest.update(chunk)
+            marker = target / ".skyrl-archive-sha256"
+            if not marker.is_file() or marker.read_text().strip() != digest.hexdigest():
+                raise HTTPException(status_code=409, detail="adapter version is immutable or has no verified archive hash; use a new name")
 
         # Load the ordinary PEFT half first. vLLM assigns the adapter a
         # physical Punica slot here; the expert sidecar must be installed in
@@ -109,6 +124,13 @@ def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
         # attention, and expert factors.
         models = request.app.state.openai_serving_models
 
+        if max_loras == 1:
+            # A failed fanout may have installed an uncommitted version on
+            # this engine. A new lease must also replace that partial version.
+            for stale in list(models.lora_requests):
+                if stale != lora_name and stale != previous:
+                    await models.unload_lora_adapter(UnloadLoRAAdapterRequest(lora_name=stale))
+                    shutil.rmtree(lora_dir / stale, ignore_errors=True)
         if previous and previous != lora_name:
             await models.unload_lora_adapter(
                 UnloadLoRAAdapterRequest(lora_name=previous))
@@ -258,6 +280,7 @@ def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
             "status": "ok",
             "lora_name": lora_name,
             "lora_int_id": lora_int_id,
+            "sha256": digest.hexdigest(),
             "moe_update": moe_update,
         }
 

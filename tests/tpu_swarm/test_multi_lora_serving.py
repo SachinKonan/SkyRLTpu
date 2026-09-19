@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import hashlib
 import json
 from pathlib import Path
 import tarfile
@@ -86,6 +87,7 @@ def test_engine_upload_replaces_only_the_selected_adapter(tmp_path, max_loras, e
                 response = await client.post("/skyrl/v1/upload_lora_adapter", params=params, content=body.getvalue())
                 assert response.status_code == 200, response.text
                 assert (response.json()["moe_update"] is not None) == expert_lora_slots
+                assert response.json()["sha256"] == hashlib.sha256(body.getvalue()).hexdigest()
 
             await upload("A-0")
             await upload("B-0")
@@ -93,6 +95,10 @@ def test_engine_upload_replaces_only_the_selected_adapter(tmp_path, max_loras, e
             await upload("B-1", "B-0")
             await upload("B-1", "B-0")  # Retry after a lost acknowledgement.
             assert loaded == ({"A-0", "B-1"} if max_loras == 2 else {"B-1"})
+            state = (await client.get("/skyrl/v1/adapter_status")).json()["adapters"]
+            assert state == {name: hashlib.sha256(body.getvalue()).hexdigest() for name in loaded}
+            tampered = await client.post("/skyrl/v1/upload_lora_adapter?lora_name=B-1", content=b"changed")
+            assert tampered.status_code == 409
             expected_ids = ([1, 2, 2, 2] if max_loras == 2 else [1, 1, 1, 1]) if expert_lora_slots else []
             assert cleared_ids == expected_ids
             assert not (tmp_path / "B-0").exists()

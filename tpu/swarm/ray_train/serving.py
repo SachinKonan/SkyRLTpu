@@ -244,6 +244,8 @@ class Ingress:
         self.updating = False
         self.condition = asyncio.Condition()
         self.upload_lock = asyncio.Lock()
+        self.lease = None
+        self.inflight = set()
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.borrower = None
         self.borrowing_instance = uuid.uuid4().hex
@@ -252,6 +254,98 @@ class Ingress:
             self.borrower = Borrower(self.config, self.http,
                 lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields))
 
+    def require_lease(self, lease_id, *, allow_expired=False):
+        if not self.config.inference.require_lease:
+            return
+        lease = self.lease
+        if not lease or not lease_id or lease_id != lease["lease_id"]:
+            raise HTTPException(409, "missing or stale lease ID")
+        if not allow_expired and (lease["releasing"] or time.monotonic() >= lease["deadline"]):
+            raise HTTPException(409, "lease is expired or draining")
+
+    async def lease_status(self):
+        lease = self.lease
+        version = lease["adapter_name"] if lease else None
+        identity = lease["adapter_sha256"] if lease else None
+
+        async def probe(url):
+            try:
+                response = await self.http.get(url + "/health", timeout=5)
+                response.raise_for_status()
+                if identity:
+                    response = await self.http.get(url + "/skyrl/v1/adapter_status", timeout=5)
+                    response.raise_for_status()
+                    return response.json().get("adapters", {}).get(version) == identity
+                return False
+            except (httpx.HTTPError, ValueError, AttributeError):
+                return False
+
+        ready = sum(await asyncio.gather(*(probe(url) for url in self.engine_urls)))
+        if lease is not self.lease:
+            # Do not report a previous owner's hash as ready after reassignment.
+            return {"lease_id": None, "owner_run": None, "adapter_sha256": None,
+                    "ready_engines": 0, "state": "transitioning"}
+        if not lease:
+            state = "unleased"
+        elif lease["releasing"]:
+            state = "draining"
+        elif time.monotonic() >= lease["deadline"]:
+            state = "expired"
+        elif self.updating or (version, identity) != (lease["adapter_name"], lease["adapter_sha256"]):
+            state = "updating"
+        elif not identity:
+            state = "awaiting_adapter"
+        else:
+            state = "ready" if ready == len(self.engine_urls) else "degraded"
+        return dict(lease_id=lease["lease_id"] if lease else None,
+                    owner_run=lease["owner_run"] if lease else None,
+                    adapter_name=version, adapter_sha256=identity,
+                    expires_at=lease["expires_at"] if lease else None,
+                    ready_engines=ready, expected_engines=len(self.engine_urls), state=state)
+
+    @app.post("/acquire_lease")
+    async def acquire_lease(self, request: Request):
+        if not self.config.inference.require_lease:
+            raise HTTPException(409, "leases are not enabled on this farm")
+        payload = await request.json()
+        owner = payload.get("owner_run")
+        ttl = payload.get("ttl_seconds", 300)
+        if not isinstance(owner, str) or not owner.strip() or len(owner) > 256:
+            raise HTTPException(400, "owner_run must be a nonempty string of at most 256 characters")
+        if type(ttl) is not int or not 30 <= ttl <= 86400:
+            raise HTTPException(400, "ttl_seconds must be an integer between 30 and 86400")
+        async with self.upload_lock:
+            async with self.condition:
+                if self.lease and time.monotonic() < self.lease["deadline"]:
+                    self.require_lease(payload.get("lease_id"))
+                    if owner != self.lease["owner_run"]:
+                        raise HTTPException(409, "lease belongs to another run")
+                else:
+                    if payload.get("lease_id"):
+                        raise HTTPException(409, "expired lease cannot be renewed; acquire a new lease")
+                    if self.lease:
+                        self.lease["releasing"] = True
+                    await self.condition.wait_for(lambda: self.active == 0)
+                    self.lease = dict(lease_id=uuid.uuid4().hex, owner_run=owner,
+                                      adapter_name=None, adapter_sha256=None, releasing=False)
+                self.lease.update(deadline=time.monotonic() + ttl, expires_at=time.time() + ttl)
+            result = await self.lease_status()
+        return result
+
+    @app.post("/release_lease")
+    async def release_lease(self, request: Request):
+        if not self.config.inference.require_lease:
+            raise HTTPException(409, "leases are not enabled on this farm")
+        payload = await request.json()
+        async with self.upload_lock:
+            async with self.condition:
+                self.require_lease(payload.get("lease_id"), allow_expired=True)
+                self.lease["releasing"] = True
+                await self.condition.wait_for(lambda: self.active == 0)
+                self.lease = None
+                self.condition.notify_all()
+        return {"state": "unleased", "released": True}
+
     @app.get("/status")
     async def status(self):
         result = await self.catalog.snapshot.remote()
@@ -259,6 +353,8 @@ class Ingress:
                       committed_adapters=sorted(self.versions))
         if self.borrower:
             result['borrowing'] = self.borrower.snapshot()
+        if self.config.inference.require_lease:
+            result.update(await self.lease_status())
         return result
 
     @app.post('/skyrl/v1/borrowing/begin')
@@ -359,6 +455,11 @@ class Ingress:
 
     @app.post("/skyrl/v1/upload_lora_adapter")
     async def upload(self, request: Request, lora_name: str, previous_lora_name: str | None = None):
+        # Keep the upload lock until fanout actually finishes, even when the
+        # caller disconnects. A successor lease must not race a late load ACK.
+        return await self.track_operation(self.upload_adapter(request, lora_name, previous_lora_name))
+
+    async def upload_adapter(self, request, lora_name, previous_lora_name):
         if self.engine_models:
             raise HTTPException(400, "multi-model arena is inference-only")
         try:
@@ -370,6 +471,7 @@ class Ingress:
         async with self.upload_lock:
             if self.borrower:
                 await self.borrower.end()
+            self.require_lease(request.headers.get("x-lease-id"))
             # Single-adapter clients historically omit the previous name.
             previous = previous_lora_name
             if self.config.inference.max_loras == 1 and version != self.version:
@@ -395,6 +497,9 @@ class Ingress:
                         output.write(chunk)
                         digest.update(chunk)
                 identity = digest.hexdigest()
+                expected = request.headers.get("x-adapter-sha256")
+                if expected is not None and expected != identity:
+                    raise HTTPException(400, "uploaded archive does not match X-Adapter-SHA256")
                 if target.exists():
                     with target.open("rb") as stream:
                         if hashlib.file_digest(stream, "sha256").hexdigest() != identity:
@@ -404,6 +509,7 @@ class Ingress:
             finally:
                 stage.unlink(missing_ok=True)
             async with self.condition:
+                self.require_lease(request.headers.get("x-lease-id"))
                 self.updating = True
                 await self.condition.wait_for(lambda: self.active == 0)
             started = time.monotonic()
@@ -423,6 +529,8 @@ class Ingress:
                                                       params=params, content=chunks(),
                                                       timeout=min(300, max(1, deadline-time.monotonic())))
                         result.raise_for_status()
+                        if self.config.inference.require_lease and result.json().get("sha256") != identity:
+                            raise ValueError("engine did not acknowledge the expected adapter hash")
                         return url
                     except httpx.HTTPError:
                         if time.monotonic() > deadline:
@@ -443,6 +551,8 @@ class Ingress:
                     self.retired.add(previous)
                 self.versions.add(version)
                 self.version, self.updating = version, False
+                if self.config.inference.require_lease:
+                    self.lease.update(adapter_name=version, adapter_sha256=identity)
                 self.condition.notify_all()
             emit(self.run / "inference-events.jsonl", "adapter_committed", version=version,
                  bytes=size, sha256=identity, hosts=loaded, load_seconds=time.monotonic()-started)
@@ -489,20 +599,52 @@ class Ingress:
         payload = await request.json()
         if payload.get("model") not in self.config.served_models:
             raise HTTPException(400, "unknown base model")
-        if not self.config.bootstrap_all_hosts:
+        if not self.config.bootstrap_all_hosts and not self.config.inference.require_lease:
             # Preserve legacy tokenization admission when role transitions are
             # disabled. Only expanded bootstrap needs tokenization draining.
             return await self.select_engine(payload["model"]).tokenize.remote(payload)
         async with self.condition:
+            self.require_lease(request.headers.get("x-lease-id"))
             if self.updating:
                 raise HTTPException(409, 'engine transition or adapter update in progress')
             self.active += 1
-        try:
-            return await self.select_engine(payload["model"]).tokenize.remote(payload)
-        finally:
-            async with self.condition:
-                self.active -= 1
-                self.condition.notify_all()
+        return await self.finish_admitted("tokenize", payload)
+
+    async def finish_admitted(self, method, payload):
+        async def run():
+            try:
+                if method == "generate" and self.borrower:
+                    external_active = self.borrower.lease.active if self.borrower.lease else 0
+                    result = await self.borrower.generate(payload,
+                        local_active=max(0, self.active - external_active - 1), local_engines=len(self.engines))
+                    if result is not None:
+                        return result
+                try:
+                    return await getattr(self.select_engine(payload["model"]), method).remote(payload)
+                except Exception:
+                    if method == "generate" and self.config.inference.restart_limit == 0:
+                        await self.catalog.fail.remote('local generation failed')
+                    raise
+            finally:
+                async with self.condition:
+                    self.active -= 1
+                    self.condition.notify_all()
+
+        # An HTTP disconnect must not make a still-running engine request
+        # disappear from the drain count and allow a lease handoff underneath it.
+        return await self.track_operation(run())
+
+    async def track_operation(self, operation):
+        task = asyncio.create_task(operation)
+        self.inflight.add(task)
+
+        def done(completed):
+            self.inflight.discard(completed)
+            if not completed.cancelled():
+                completed.exception()  # Retrieve errors even if the caller disconnected.
+
+        task.add_done_callback(done)
+        return await asyncio.shield(task)
 
     @app.post("/v1/completions")
     async def generate(self, request: Request):
@@ -512,29 +654,16 @@ class Ingress:
         if payload.get("seed") is not None:
             raise HTTPException(400, "TPU backend does not support per-request seeds")
         async with self.condition:
+            self.require_lease(request.headers.get("x-lease-id"))
+            if (self.config.inference.require_lease and payload.get("model") not in self.config.served_models
+                    and payload.get("model") != self.lease["adapter_name"]):
+                raise HTTPException(409, "adapter has not been verified for this lease")
             if self.updating or payload.get("model") not in self.versions | set(self.config.served_models):
                 raise HTTPException(409, "adapter update in progress or uncommitted model")
             if not payload.get("model"):
                 raise HTTPException(400, "model is required")
             self.active += 1
-        try:
-            if self.borrower:
-                external_active = self.borrower.lease.active if self.borrower.lease else 0
-                result = await self.borrower.generate(payload,
-                    local_active=max(0, self.active - external_active - 1), local_engines=len(self.engines))
-                if result is not None:
-                    return result
-            handle = self.select_engine(payload["model"])
-            try:
-                return await handle.generate.remote(payload)
-            except Exception:
-                if self.config.inference.restart_limit == 0:
-                    await self.catalog.fail.remote('local generation failed')
-                raise
-        finally:
-            async with self.condition:
-                self.active -= 1
-                self.condition.notify_all()
+        return await self.finish_admitted("generate", payload)
 
 
 def engine_version(raw_config, prepared, head, slot=0):

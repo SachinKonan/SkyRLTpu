@@ -148,6 +148,8 @@ class Inference:
     restart_limit: int = 3
     max_loras: int = 8
     max_adapter_upload_bytes: int = 2 * 1024**3
+    # Shared inference farms require an exclusive, expiring ingress lease.
+    require_lease: bool = False
     # Legacy start_vllm_tpu.sh always passes --enable-prefix-caching and never
     # --enable-chunked-prefill; the 2026-09-07 profiles had the opposite.
     # Prefix caching now emits an explicit positive/negative flag; chunked
@@ -384,7 +386,7 @@ class Config:
 
     @property
     def requires_source_overlay(self):
-        return (not self.inference_only or self.adapter_count > 1 or self.is_recurrent_gemma or self.training_smoke
+        return (not self.inference_only or self.adapter_count > 1 or self.inference.require_lease or self.is_recurrent_gemma or self.training_smoke
                 or self.has_problem_prompt_overlay or self.has_adaptive_pwc_overlay
                 or self.has_answer_only_overlay or self.trainer.backward_warmup
                 or self.inference.hosts_per_engine > 1
@@ -740,6 +742,11 @@ class Config:
             raise ValueError("inference.routing must be 'direct' or 'ingress'")
         if type(self.inference.max_loras) is not int or self.inference.max_loras < 1:
             raise ValueError("inference.max_loras must be a positive integer")
+        if type(self.inference.require_lease) is not bool:
+            raise ValueError("inference.require_lease must be a boolean")
+        if self.inference.require_lease and (not self.inference_only or self.inference.routing != "ingress"
+                                           or self.inference.max_loras != 1 or self.arena_models):
+            raise ValueError("leases require a single-adapter inference-only farm through ingress")
         if type(self.inference.max_adapter_upload_bytes) is not int or self.inference.max_adapter_upload_bytes < 1:
             raise ValueError("max_adapter_upload_bytes must be a positive integer")
         if self.inference.max_sequences < 1 or self.inference.restart_limit < 0:

@@ -23,7 +23,8 @@
     "native_thinking_budget": true,
     "ragged_conv1d": true,
     "prefix_caching": false,
-    "max_loras": 1
+    "max_loras": 1,
+    "require_lease": true
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",

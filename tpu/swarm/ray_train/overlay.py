@@ -94,6 +94,8 @@ SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/r
 
 def manifest(repo, config=None):
     names = set(FILES) if config is None or config.adapter_count > 1 else set()
+    if config is not None and config.inference.require_lease:
+        names.add("tpu/vllm_tpu_server.py")
     if config is not None and config.inference.hosts_per_engine > 1:
         names.add("tpu/vllm_tpu_server.py")
     # The updated backend imports the helper only for an explicitly enabled
