@@ -480,12 +480,12 @@ class Config:
             if (not bootstrap_shape
                     or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
                     or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
-                    or not (self.science_task or self.has_problem_prompt_overlay)
-                    or self.is_recurrent_gemma or self.arena_grader_rank is not None
+                    or not (self.science_task or self.has_problem_prompt_overlay or self.is_recurrent_gemma)
+                    or (self.is_recurrent_gemma != (self.arena_grader_rank is not None))
                     or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
                     or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
                     or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
-                raise ValueError('bounded bootstrap requires native v4-64 or v5p-32 math or science training with CPU grading')
+                raise ValueError('bounded bootstrap requires native v4-64/v5p-32 math, CPU science, or dedicated-grader RG training')
         elif self.bootstrap_layers and (not self.science_task
                 or (self.inference_only and not self.bootstrap_only)
                 or self.adapter_count != 1 or (self.accelerator not in ('tpu-v4-64', 'tpu-v6e-32') and not self.bootstrap_only)
@@ -506,12 +506,13 @@ class Config:
         if self.training_smoke and (self.inference_only or self.adapter_count != 1 or self.client_env.get('NUM_EPOCHS') != '1'):
             raise ValueError('training smoke requires one adapter and exactly one training step')
         if self.arena_grader_rank is not None:
+            grader_shape = ((self.accelerator == 'tpu-v5p-32' and self.hosts == 4 and self.trainer.hosts == 1)
+                            or (self.accelerator == 'tpu-v4-64' and self.hosts == 8 and self.trainer.hosts == 4))
             if (type(self.arena_grader_rank) is not int or self.arena_grader_rank != 1
-                    or self.accelerator != "tpu-v5p-32" or self.hosts != 4
-                    or self.trainer.hosts != 1 or not self.is_recurrent_gemma
+                    or not grader_shape or not self.is_recurrent_gemma
                     or self.inference_only or self.inference_only_ranks is not None
                     or self.arena_samples or self.arena_service_only or self.frozen_benchmark):
-                raise ValueError("Dedicated RG grader requires v5p-32 training: trainer 0, grader 1, inference 2/3")
+                raise ValueError("Dedicated RG grader requires v5p-32 or v4-64 training with reserved grader rank 1")
             if self.client_env.get("ARENA_QUEUE_URL"):
                 raise ValueError("Dedicated RG grader uses workload Ray tasks; remove ARENA_QUEUE_URL")
         if self.arena_service_only and (not self.inference_only or not self.arena_samples):

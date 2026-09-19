@@ -203,7 +203,11 @@ class Controller:
         elif self.config.accelerator == "tpu-v4-64":
             full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
                                      for host in self.hosts], 300)
-            train_ranks, inference_ranks = select_split(full)
+            if self.config.arena_grader_rank is None:
+                train_ranks, inference_ranks = select_split(full)
+            else:
+                train_ranks, inference_ranks = select_split(full, excluded_rank=self.config.arena_grader_rank)
+                inference_ranks.remove(self.config.arena_grader_rank)
             self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
                               for r in train_ranks], 300)
         elif self.config.accelerator == "tpu-v6e-32":

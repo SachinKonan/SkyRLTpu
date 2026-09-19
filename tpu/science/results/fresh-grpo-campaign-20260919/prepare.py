@@ -17,13 +17,15 @@ PROFILES = ROOT / 'tpu/swarm/ray_train/profiles'
 POOLS = {'v4': 'tpuswarm-v4-64-central2-qwen35-erdos', 'v5p': 'tpuswarm-v5p32-east5a-erdos'}
 
 
-def profiles():
+def profiles(tasks=None):
     rows = []
     for hardware in ('v4', 'v5p'):
-        for task in ('ac2', 'cp26', 'qubit', 'circuit'):
+        for task in ('ac2', 'cp26', 'qubit', 'circuit', 'rglru'):
+            if tasks and task not in tasks:
+                continue
             for model in ('qwen', 'gemma', 'muse'):
                 lr = 'lr15e4' if model == 'qwen' else 'lr4e5'
-                old_task = 'q20' if task == 'qubit' else task
+                old_task = 'ac2' if task == 'rglru' else 'q20' if task == 'qubit' else task
                 original = PROFILES / f'single-v4-{model}-{old_task}-grpo-{lr}-s1-20260919.json'
                 config = json.loads(original.read_text())
                 run = f'fresh-{hardware}-{model}-{task}-grpo-{lr}-s1-20260919'
@@ -50,9 +52,19 @@ def profiles():
                 config['client_env']['TTD_SICK_MARKER'] = f'/home/gcpuser/.cache/{run}/runs/{run}/ENGINE-SICK'
                 if task == 'qubit':
                     config['client_env']['SCIENCE_ROUTING_SUITE'] = 'full'
+                if task == 'rglru':
+                    config['arena_grader_rank'] = 1
+                    config['client_env'].update(TTD_ENV='recurrent_gemma', TTD_PROBLEM_TYPE='rg_lru',
+                                                ARENA_WAIT_TIMEOUT='14400', EVAL_TIMEOUT='14400')
                 path = PROFILES / f'{run}.json'
                 Config.from_dict(config).validate()
-                path.write_text(json.dumps(config, indent=2) + '\n')
+                encoded = json.dumps(config, indent=2) + '\n'
+                receipt = ROOT / f'.science/packages/fresh-grpo-20260919/{hardware}/{model}/{task}/submission.json'
+                if receipt.exists():
+                    if not path.exists() or path.read_text() != encoded:
+                        raise RuntimeError(f'Refusing to change submitted profile: {run}')
+                else:
+                    path.write_text(encoded)
                 rows.append(dict(hardware=hardware, task=task, model=model, run_id=run,
                                  profile=str(path.relative_to(ROOT)), pool=POOLS[hardware],
                                  priority=100 if task in ('ac2', 'cp26') else 50,
@@ -63,10 +75,22 @@ def profiles():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--profiles-only', action='store_true')
+    parser.add_argument('--task', action='append', choices=('ac2','cp26','qubit','circuit','rglru'),
+                        help='Only prepare selected tasks; retain other indexed packages')
     args = parser.parse_args()
-    rows = profiles()
+    index_path = HERE / 'jobs.json'
+    previous = {r['run_id']: r for r in json.loads(index_path.read_text())['jobs']} if index_path.exists() else {}
+    rows = profiles(args.task)
     for row in rows:
+        # Never repackage a submitted run: recovery uses its original archive.
+        if (ROOT / row['package_dir'] / 'submission.json').exists():
+            if row['run_id'] not in previous:
+                raise RuntimeError('Submitted run is missing its package index')
+            row.update(previous[row['run_id']])
+            continue
         if args.profiles_only:
+            if row['run_id'] in previous:
+                row.update(previous[row['run_id']])
             continue
         profile, output = ROOT / row['profile'], ROOT / row['package_dir']
         if row['task'] in ('qubit', 'circuit'):
@@ -92,7 +116,8 @@ def main():
             manifest_path.write_text(json.dumps(science_manifest, indent=2) + '\n')
         (output / 'submission-manifest.json').write_text(json.dumps(row, indent=2) + '\n')
         print(json.dumps(dict(run_id=row['run_id'], packaged=True)), flush=True)
-    (HERE / 'jobs.json').write_text(json.dumps(dict(jobs=rows, deferred=['rglru']), indent=2) + '\n')
+    previous.update({r['run_id']:r for r in rows})
+    index_path.write_text(json.dumps(dict(jobs=list(previous.values()), deferred=[]), indent=2) + '\n')
 
 
 if __name__ == '__main__':

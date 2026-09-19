@@ -8,7 +8,8 @@ from tpu.science.training_setup import split_roles
 from tpu.swarm.ray_train.config import Config
 from tpu.swarm.ray_train.commands import client_environment
 
-PROFILES = sorted(Path('tpu/swarm/ray_train/profiles').glob('fresh-*-20260919.json'))
+PROFILES = sorted(p for p in Path('tpu/swarm/ray_train/profiles').glob('fresh-*-20260919.json')
+                  if '-rglru-' not in p.name)
 
 
 @pytest.mark.parametrize('profile', PROFILES, ids=lambda p:p.stem)
@@ -60,5 +61,5 @@ def test_unique_twenty_four_configs_and_cache_destinations():
     assert len({c.run_id for c in configs}) == 24
     assert len({getattr(c.cache,k) for c in configs for k in ('trainer_compile','inference_compile')}) == 48
     rows = json.loads(Path('tpu/science/results/fresh-grpo-campaign-20260919/jobs.json').read_text())['jobs']
-    assert len(rows) == 24
+    assert len(rows) == 30
     assert all(r['priority'] == (100 if r['task'] in ('ac2','cp26') else 50) for r in rows)

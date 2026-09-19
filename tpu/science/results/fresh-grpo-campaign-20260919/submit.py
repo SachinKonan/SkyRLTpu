@@ -33,7 +33,7 @@ def save(path, value):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--hardware', choices=('v4', 'v5p'), required=True)
-    parser.add_argument('--stage', choices=('math', 'science', 'all'), default='all')
+    parser.add_argument('--stage', choices=('math', 'science', 'rglru', 'all'), default='all')
     parser.add_argument('--gcloud', default='/scratch/gpfs/ZHUANGL/sk7524/google-cloud-sdk/bin/gcloud')
     parser.add_argument('--sky', default=str(ROOT.parent / 'SkyRLTpu-multihost/third_party/TPUSwarm/.venv/bin/sky'))
     args = parser.parse_args()
@@ -48,8 +48,9 @@ def main():
     for row in rows:
         if row['hardware'] != args.hardware:
             continue
-        math = row['task'] in ('ac2', 'cp26')
-        if (args.stage == 'math' and not math) or (args.stage == 'science' and math):
+        stage = ('math' if row['task'] in ('ac2','cp26') else
+                 'rglru' if row['task'] == 'rglru' else 'science')
+        if args.stage != 'all' and args.stage != stage:
             continue
         folder = ROOT / row['package_dir']
         receipt = folder / 'submission.json'

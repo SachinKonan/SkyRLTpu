@@ -359,9 +359,97 @@
       "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-462354157d57962753a898580e5f234345255f3d1f017030e6e8168c03724dd0.tar.gz",
       "archive_sha256": "462354157d57962753a898580e5f234345255f3d1f017030e6e8168c03724dd0",
       "yaml_sha256": "dba62ca7556684eb9235fa00530e84ac312ba8f27695aff8a099c13eaee9a47f"
+    },
+    {
+      "hardware": "v4",
+      "task": "rglru",
+      "model": "qwen",
+      "run_id": "fresh-v4-qwen-rglru-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v4-qwen-rglru-grpo-lr15e4-s1-20260919.json",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v4/qwen/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v4/qwen/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v4/qwen/rglru/fresh-v4-qwen-rglru-grpo-lr15e4-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-fee14b2ed5e94f57b52a0b02b8c40d46158c281e77d61fc52c2a218c60453320.tar.gz",
+      "archive_sha256": "fee14b2ed5e94f57b52a0b02b8c40d46158c281e77d61fc52c2a218c60453320",
+      "yaml_sha256": "a53496b335ee3621801012ebd9f9a91c503ddb84d5c542903b828ca7cd33db40"
+    },
+    {
+      "hardware": "v4",
+      "task": "rglru",
+      "model": "gemma",
+      "run_id": "fresh-v4-gemma-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v4-gemma-rglru-grpo-lr4e5-s1-20260919.json",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v4/gemma/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v4/gemma/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v4/gemma/rglru/fresh-v4-gemma-rglru-grpo-lr4e5-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-fb78e3da93bcfd2ed5bde8e12c9c643cc77339bd003603005ca0a58f3557e77d.tar.gz",
+      "archive_sha256": "fb78e3da93bcfd2ed5bde8e12c9c643cc77339bd003603005ca0a58f3557e77d",
+      "yaml_sha256": "3d9d2269fac1d439f0bb978ec94a571cbe023200d1d75f69df6efe2da907a59f"
+    },
+    {
+      "hardware": "v4",
+      "task": "rglru",
+      "model": "muse",
+      "run_id": "fresh-v4-muse-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v4-muse-rglru-grpo-lr4e5-s1-20260919.json",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v4/muse/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v4/muse/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v4/muse/rglru/fresh-v4-muse-rglru-grpo-lr4e5-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-10be82cacbab8d71bd4b4e219a6bf7c280514cf96e86a2d0518948c26c3252fd.tar.gz",
+      "archive_sha256": "10be82cacbab8d71bd4b4e219a6bf7c280514cf96e86a2d0518948c26c3252fd",
+      "yaml_sha256": "db5e0bbbfd7f4b9264a0e1bd6660698b06b180a45702c6483930b1bd4965052e"
+    },
+    {
+      "hardware": "v5p",
+      "task": "rglru",
+      "model": "qwen",
+      "run_id": "fresh-v5p-qwen-rglru-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v5p-qwen-rglru-grpo-lr15e4-s1-20260919.json",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v5p/qwen/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v5p/qwen/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v5p/qwen/rglru/fresh-v5p-qwen-rglru-grpo-lr15e4-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-247fc08c101257b59b459034c4203ea5b8bd787d3f6d0848dc4055e953d3fb0b.tar.gz",
+      "archive_sha256": "247fc08c101257b59b459034c4203ea5b8bd787d3f6d0848dc4055e953d3fb0b",
+      "yaml_sha256": "a3b4b80b9bd059b4cc693ca0d8038f163186df9c1c3b10f9f6c2d016a5b0e4ad"
+    },
+    {
+      "hardware": "v5p",
+      "task": "rglru",
+      "model": "gemma",
+      "run_id": "fresh-v5p-gemma-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v5p-gemma-rglru-grpo-lr4e5-s1-20260919.json",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v5p/gemma/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v5p/gemma/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v5p/gemma/rglru/fresh-v5p-gemma-rglru-grpo-lr4e5-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-212a417fadd2719e33549eec86b1c457091810f451a91e30179e6992091f8f99.tar.gz",
+      "archive_sha256": "212a417fadd2719e33549eec86b1c457091810f451a91e30179e6992091f8f99",
+      "yaml_sha256": "d7d953cbc3ff5bfee9c1f2ad602438bef6cce1511c25a03be3e97c8c272bf368"
+    },
+    {
+      "hardware": "v5p",
+      "task": "rglru",
+      "model": "muse",
+      "run_id": "fresh-v5p-muse-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v5p-muse-rglru-grpo-lr4e5-s1-20260919.json",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 50,
+      "package_dir": ".science/packages/fresh-grpo-20260919/v5p/muse/rglru",
+      "archive": ".science/packages/fresh-grpo-20260919/v5p/muse/rglru/ray-training.tar.gz",
+      "task_yaml": ".science/packages/fresh-grpo-20260919/v5p/muse/rglru/fresh-v5p-muse-rglru-grpo-lr4e5-s1-20260919.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-fd46e0b0b95adaa9566176ad7c042f7850f174effd90deaddfcb04cd436be77a.tar.gz",
+      "archive_sha256": "fd46e0b0b95adaa9566176ad7c042f7850f174effd90deaddfcb04cd436be77a",
+      "yaml_sha256": "a7a1c5b130b092ed5aedb079a44405d0dc855d29513a0043e359ca1f887750eb"
     }
   ],
-  "deferred": [
-    "rglru"
-  ]
+  "deferred": []
 }

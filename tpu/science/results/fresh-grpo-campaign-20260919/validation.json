@@ -1,5 +1,5 @@
 {
-  "profile_count": 24,
+  "profile_count": 30,
   "profile_tests_passed": 25,
   "other_regression_tests_passed": 52,
   "subtests_passed": 11,
@@ -12,8 +12,8 @@
   ],
   "credential_preflight": "gcloud and refreshed ADC match approved compute service account; TPU node/queued-resource and storage reads passed",
   "hardware_execution": "pending; no claim that bounded bootstrap transition has completed on TPU",
-  "packaged_profiles_verified": 24,
-  "actual_initial_prompts_verified": 24,
+  "packaged_profiles_verified": 30,
+  "actual_initial_prompts_verified": 30,
   "checks": [
     "exact profile bytes in each archive",
     "config and bootstrap source parity",
@@ -22,6 +22,21 @@
     "clean-host gate present in every task YAML",
     "full 72-case qubit prompt; all 17-case circuit prompt"
   ],
-  "skypilot_task_yaml_parser_passed": 24,
-  "submission_schema_fix": "Priority is nested under resources, also passed explicitly to sky jobs launch. First local YAML rejection created no job; receipt archived."
+  "skypilot_task_yaml_parser_passed": 30,
+  "submission_schema_fix": "Priority is nested under resources, also passed explicitly to sky jobs launch. First local YAML rejection created no job; receipt archived.",
+  "rglru_addition": {
+    "profiles": 6,
+    "submitted": false,
+    "tests_passed": 102,
+    "files": [
+      "tests/tpu_swarm/test_fresh_rglru_campaign.py",
+      "tests/tpu_swarm/test_fresh_grpo_campaign.py",
+      "tests/tpu_swarm/test_bounded_seed_bootstrap.py",
+      "tests/tpu_swarm/test_grader_actor.py",
+      "tests/tpu_swarm/test_select_v6e_32_topology.py"
+    ],
+    "archive_source_parity": true,
+    "original_24_package_index_records_preserved": true,
+    "hardware_tested": false
+  }
 }

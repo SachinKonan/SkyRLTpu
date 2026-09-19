@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 
 
-def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
+def select_split(records: list[dict], *, excluded_rank: int | None = None) -> tuple[list[int], list[int]]:
     by_rank: dict[int, list[tuple[int, int, int]]] = {}
     for record in records:
         rank = int(record["process_id"])
@@ -46,7 +46,11 @@ def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
     if len(rows) != 2 or any(len(row) != 4 for row in rows.values()):
         raise ValueError(f"expected two four-host rows, got {dict(rows)}")
 
-    train_row = next((row for row in rows.values() if any(rank == 0 for _, rank in row)), None)
+    if excluded_rank is not None and (type(excluded_rank) is not int or excluded_rank not in expected_ranks):
+        raise ValueError('excluded rank must be a Sky rank in 0..7')
+    train_row = next((row for row in rows.values()
+                      if (all(rank != excluded_rank for _, rank in row) if excluded_rank is not None
+                          else any(rank == 0 for _, rank in row))), None)
     if train_row is None:
         raise ValueError("Sky rank 0 is not present in either physical row")
     train_row.sort()
@@ -54,7 +58,7 @@ def select_split(records: list[dict]) -> tuple[list[int], list[int]]:
         raise ValueError(f"trainer row does not span z=0..3: {train_row}")
 
     ordered = [rank for _, rank in train_row]
-    rank_zero_index = ordered.index(0)
+    rank_zero_index = ordered.index(0) if 0 in ordered else 0
     train = ordered[rank_zero_index:] + ordered[:rank_zero_index]
     serving = sorted(expected_ranks - set(train))
     return train, serving

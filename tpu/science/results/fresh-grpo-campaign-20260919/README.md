@@ -1,9 +1,16 @@
 # Fresh GRPO campaign: v4-64 and v5p-32
 
-Authorized 2026-09-19. Twelve logical experiments, each with two hardware
-profiles (24 configs). Launch one hardware variant per experiment unless a
+Authorized 2026-09-19. Fifteen logical experiments, each with two hardware
+profiles (30 configs). Launch one hardware variant per experiment unless a
 duplicate is explicitly desired. The initial deployment uses v4-64; v5p is
-prepared as an alternative. RG-LRU remains deferred.
+prepared as an alternative. RG-LRU was added after the initial twelve launches;
+its six profiles are prepared and packaged, but have not been submitted.
+
+| RG-LRU model | v4-64 profile | v5p-32 profile |
+|---|---|---|
+| Qwen | [Config](../../../swarm/ray_train/profiles/fresh-v4-qwen-rglru-grpo-lr15e4-s1-20260919.json) | [Config](../../../swarm/ray_train/profiles/fresh-v5p-qwen-rglru-grpo-lr15e4-s1-20260919.json) |
+| Gemma | [Config](../../../swarm/ray_train/profiles/fresh-v4-gemma-rglru-grpo-lr4e5-s1-20260919.json) | [Config](../../../swarm/ray_train/profiles/fresh-v5p-gemma-rglru-grpo-lr4e5-s1-20260919.json) |
+| Muse | [Config](../../../swarm/ray_train/profiles/fresh-v4-muse-rglru-grpo-lr4e5-s1-20260919.json) | [Config](../../../swarm/ray_train/profiles/fresh-v5p-muse-rglru-grpo-lr4e5-s1-20260919.json) |
 
 Every run starts from the pretrained model and a fresh optimizer. No previous
 bootstrap, discovered-program pool, or optimizer checkpoint is imported.
@@ -18,9 +25,11 @@ Recovery resumes only this new run's own journal/checkpoints.
 | Circle packing n=26 | 1 run | 1 run | 1 run | 100 (high) | Existing n=26 constraints; maximize sum of radii |
 | Qubit | 1 run | 1 run | 1 run | 50 | All 72 cases; one policy across Q20, Willow, Heron |
 | Circuit | 1 run | 1 run | 1 run | 50 | All 17 IBM benchmarks; zero overlaps on every case |
+| RG-LRU | 1 run | 1 run | 1 run | 50 | Pallas kernel forward/backward correctness and speedup on the pinned shape suite |
 
 Submit all six math jobs before the six science jobs. These numeric priorities
 control queue ordering; they do not preempt unrelated running jobs.
+RG-LRU has its own explicit submission stage after these tasks.
 
 Qubit: weighted added-CNOT costs, weights Q20=0.2, Willow=0.4, Heron=0.4 per
 case. Reward B/(B+C), B=119874, equivalent to applying the same ratio to
@@ -28,6 +37,15 @@ weighted averages. All cases must pass; invalid submissions receive zero.
 The model receives all 72 case counts, SABRE baselines and differences, plus
 per-topology totals. This is not Q20-only. Case counts support separate
 comparisons against published SABRE, LightSABRE and SimpleTES results.
+
+RG-LRU: implement the existing `kernel(x, a, reset)` Pallas contract, including
+forward and backward. Raw score is the geometric mean speedup over the fastest
+calibrated honest baseline per shape (RecurrentGemma scan or XLA associative
+scan), including the ragged holdout. Higher is better; raw speedup above 1 is
+faster. Training reward retains the existing noise-floor adjustment and invalid
+kernels receive zero. Grader infrastructure failures abort the rollout rather
+than masquerading as candidate failures. TPU generations are separate benchmark
+conditions; do not compare v4 and v5p raw latency as matched hardware results.
 
 Circuit: unweighted arithmetic mean of proxy cost across all 17 cases,
 reward 1/(1+mean_proxy_cost); any missing/illegal case receives zero. Xplace
@@ -42,6 +60,28 @@ and separate grading time. Scores are not competition-judge verification.
 | Bootstrap inference | 8 TP4 engines | 4 TP4 engines |
 | Training | 4 trainer hosts + 4 TP4 inference engines | 1 trainer host + 3 TP4 inference engines |
 | Science CPU grading | 16 slots/host, 128 total | 16 slots/host, 64 total |
+
+RG-LRU is the exception because its kernel grader needs TPU chips throughout:
+
+| RG-LRU phase | v4-64 | v5p-32 |
+|---|---|---|
+| Bootstrap | 7 TP4 inference hosts + 1 grader host | 3 TP4 inference hosts + 1 grader host |
+| Training | 4 trainer hosts + 3 TP4 inference hosts + 1 grader host | 1 trainer host + 2 TP4 inference hosts + 1 grader host |
+| Grader concurrency | 4 independent one-chip case tasks | 4 independent one-chip case tasks |
+
+Logical rank 1 is reserved for grading. On v4, physical topology is probed and
+the four-host trainer row that excludes rank 1 is selected; the trainer leader
+need not be rank 0. The client stays on rank 0, which remains an inference or
+trainer host. The grader is never included in the bootstrap inference deployment.
+On v5p, trainer rank 0 and inference ranks 2/3 retain the existing host layout.
+Both use workload Ray v2 grader tasks, with no separate queue host or external
+ARENA_QUEUE_URL. Startup runs grader and client-transport self-tests before
+generation. Kernel grading uses the pinned JAX 0.10.2 environment, 20 timing
+pairs, 180 s compilation and 900 s grading budgets per case; end-to-end waiting
+retains the existing 14400 s allowance. Each case reserves 2 host CPUs and one
+exclusive TPU chip. Candidate children retain the existing 64 GiB RLIMIT;
+this is not a new hard cgroup memory reservation. Grader caches are scoped to
+the run ID so v4 and v5p never share a write destination.
 
 Bootstrap has no gradient updates. Up to 32 concurrent requests, each with 16
 completions, share the initial task parent. Generate at most 1024 journaled
@@ -85,10 +125,10 @@ caches may seed compilation; they do not import trained weights or seeds.
 ## Files and submission path
 
 Worktree: `/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement`.
-The exact 24-profile index is [jobs.json](jobs.json). Profile filenames:
+The exact 30-profile index is [jobs.json](jobs.json). Profile filenames:
 
 ```
-tpu/swarm/ray_train/profiles/fresh-{v4|v5p}-{qwen|gemma|muse}-{ac2|cp26|qubit|circuit}-grpo-{lr15e4|lr4e5}-s1-20260919.json
+tpu/swarm/ray_train/profiles/fresh-{v4|v5p}-{qwen|gemma|muse}-{ac2|cp26|qubit|circuit|rglru}-grpo-{lr15e4|lr4e5}-s1-20260919.json
 ```
 
 Qwen uses `lr15e4`; Gemma and Muse use `lr4e5`. Packages and individual
@@ -109,6 +149,8 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
 
 Do not rebuild already submitted run IDs and use them as changed experiments.
 Their recovery contract pins configuration and bootstrap implementation.
+To build only the six RG-LRU additions, append `--task rglru` to `prepare.py`.
+The existing indexed packages and submission receipts are preserved.
 
 After matching gcloud/ADC identity, TPU/storage read probes, and fleet inventory:
 
@@ -126,7 +168,9 @@ export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_TH
   tpu/science/results/fresh-grpo-campaign-20260919/submit.py --hardware v4 --stage science
 ```
 
-Use `--hardware v5p` to choose the alternative pool. The submitter checks
+Use `--hardware v5p` to choose the alternative pool. Use `--stage rglru` to
+submit only its three models on the selected hardware. RG-LRU is not included
+in `--stage science`; that stage remains qubit and circuit. The submitter checks
 identities, fresh output paths and package hashes, uploads and reads back each
 archive, and saves an attempt receipt before dispatch. It calls:
 
@@ -149,6 +193,9 @@ for this deployment's test and receipt summaries. Local tests verify both
 hardware contracts, bounded bootstrap recovery/admission, full-suite feedback,
 CPU role allocation and legacy compatibility. The new bounded 32x16 path and
 its v5p extension are not claimed hardware-proven before these jobs execute.
+The six RG-LRU additions passed local config, initial-prompt, package and
+topology tests, including trainer rows with a nonzero leader. Their owned-grader
+bootstrap/transition has not yet been executed on TPU hardware.
 Existing jobs/checkpoints are not inputs to this campaign and are not deleted
 by either script.
 

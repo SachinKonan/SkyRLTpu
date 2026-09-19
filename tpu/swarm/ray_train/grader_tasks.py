@@ -30,7 +30,7 @@ def run_child(root, run_id, mode, payload, tag, case=None):
             raise RuntimeError(f'Grading task requires exactly one TPU, got {ids}')
         chip = str(int(ids[0]))
     request.write_text(json.dumps(dict(mode=mode, payload=payload, case=case, chip=chip,
-        cache=str(root / 'arena-cache/tpu-v5p-32/jax-0.10.2'))))
+        cache=str(root / 'arena-cache' / run_id / 'jax-0.10.2'))))
     code = Path(__file__).resolve().parents[3]
     env = dict(os.environ, PYTHONPATH=f'{code / "tpu"}:{code}',
                JAX_PLATFORMS='cpu' if mode == 'pregate' else 'tpu',
