@@ -1,0 +1,27 @@
+{
+  "profile_count": 24,
+  "profile_tests_passed": 25,
+  "other_regression_tests_passed": 52,
+  "subtests_passed": 11,
+  "test_files": [
+    "tests/tpu_swarm/test_fresh_grpo_campaign.py",
+    "tests/tpu_swarm/test_bounded_seed_bootstrap.py",
+    "tests/tpu_swarm/test_circuit_ibm17_v5p.py",
+    "tests/tpu_swarm/test_qubit_case_feedback.py",
+    "tests/tpu_swarm/test_science_training.py"
+  ],
+  "credential_preflight": "gcloud and refreshed ADC match approved compute service account; TPU node/queued-resource and storage reads passed",
+  "hardware_execution": "pending; no claim that bounded bootstrap transition has completed on TPU",
+  "packaged_profiles_verified": 24,
+  "actual_initial_prompts_verified": 24,
+  "checks": [
+    "exact profile bytes in each archive",
+    "config and bootstrap source parity",
+    "science feedback and role source parity",
+    "AC2/circle queue priority 100; qubit/circuit 50",
+    "clean-host gate present in every task YAML",
+    "full 72-case qubit prompt; all 17-case circuit prompt"
+  ],
+  "skypilot_task_yaml_parser_passed": 24,
+  "submission_schema_fix": "Priority is nested under resources, also passed explicitly to sky jobs launch. First local YAML rejection created no job; receipt archived."
+}

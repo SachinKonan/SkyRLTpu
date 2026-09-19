@@ -475,7 +475,9 @@ class Config:
                     or type(self.bootstrap_max_groups) is not int or not 1 <= self.bootstrap_max_groups <= 64
                     or self.bootstrap_max_drafts % self.bootstrap_group_size):
                 raise ValueError('invalid bounded bootstrap budgets')
-            if (self.accelerator != 'tpu-v4-64' or self.hosts != 8 or self.trainer.hosts != 4
+            bootstrap_shape = ((self.accelerator == 'tpu-v4-64' and self.hosts == 8 and self.trainer.hosts == 4)
+                               or (self.accelerator == 'tpu-v5p-32' and self.hosts == 4 and self.trainer.hosts == 1))
+            if (not bootstrap_shape
                     or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
                     or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
                     or not (self.science_task or self.has_problem_prompt_overlay)
@@ -483,7 +485,7 @@ class Config:
                     or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
                     or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
                     or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
-                raise ValueError('bounded bootstrap requires native v4-64 math or science training with CPU grading')
+                raise ValueError('bounded bootstrap requires native v4-64 or v5p-32 math or science training with CPU grading')
         elif self.bootstrap_layers and (not self.science_task
                 or (self.inference_only and not self.bootstrap_only)
                 or self.adapter_count != 1 or (self.accelerator not in ('tpu-v4-64', 'tpu-v6e-32') and not self.bootstrap_only)
@@ -596,11 +598,11 @@ class Config:
         if self.science_task:
             science_shape = ((self.accelerator in ("tpu-v6e-32", "tpu-v4-64") and self.trainer.hosts == 4)
                 or (self.accelerator == "tpu-v5p-32" and self.trainer.hosts == 1
-                    and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
+                    and (self.science_task == 'routing' or self.science_placement_backend == 'cpu')))
             if ((not self.bootstrap_only and (self.inference_only
                     or not science_shape))
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
-                raise ValueError("Science training requires four trainer hosts on v6e-32/v4-64, or one trainer host on v5p-32 for CPU circuit grading")
+                raise ValueError("Science training requires four trainer hosts on v6e-32/v4-64, or one trainer host on v5p-32 for CPU grading")
             # TP8 uses the checkpoint loader's repeat-interleaved KV heads,
             # with tied gradients/Adam moments and native-shape adapter export.
             if (self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2)

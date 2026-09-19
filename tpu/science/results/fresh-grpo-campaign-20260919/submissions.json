@@ -1,0 +1,271 @@
+{
+  "checked_at": "2026-09-19T21:19:22.809000+00:00",
+  "jobs": [
+    {
+      "job_id": 1227,
+      "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-647",
+      "priority": 100,
+      "model": "qwen",
+      "task": "ac2",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 100,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-371dcff9f4d978e34ef4841fbe62bf8f3d271974261b292b051e9d866f05dcaf.tar.gz",
+        "archive_sha256": "371dcff9f4d978e34ef4841fbe62bf8f3d271974261b292b051e9d866f05dcaf",
+        "submitted_at": "2026-09-19T21:15:53.440912+00:00",
+        "exit_code": 0,
+        "job_id": 1227
+      }
+    },
+    {
+      "job_id": 1228,
+      "run_id": "fresh-v4-gemma-ac2-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-651",
+      "priority": 100,
+      "model": "gemma",
+      "task": "ac2",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-gemma-ac2-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 100,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-2333ec25d6726feafc82d5ebbf7ae7fb87051a29a880fb09b8b600c7ebfcd13d.tar.gz",
+        "archive_sha256": "2333ec25d6726feafc82d5ebbf7ae7fb87051a29a880fb09b8b600c7ebfcd13d",
+        "submitted_at": "2026-09-19T21:16:14.989150+00:00",
+        "exit_code": 0,
+        "job_id": 1228
+      }
+    },
+    {
+      "job_id": 1229,
+      "run_id": "fresh-v4-muse-ac2-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-652",
+      "priority": 100,
+      "model": "muse",
+      "task": "ac2",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-muse-ac2-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 100,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-57a3169ec86fe566028714f7474578b0b3556560b85868c4e2029fc900428006.tar.gz",
+        "archive_sha256": "57a3169ec86fe566028714f7474578b0b3556560b85868c4e2029fc900428006",
+        "submitted_at": "2026-09-19T21:16:29.609266+00:00",
+        "exit_code": 0,
+        "job_id": 1229
+      }
+    },
+    {
+      "job_id": 1230,
+      "run_id": "fresh-v4-qwen-cp26-grpo-lr15e4-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-664",
+      "priority": 100,
+      "model": "qwen",
+      "task": "cp26",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-qwen-cp26-grpo-lr15e4-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 100,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-ceefb3a7a15444eabaa18225b53b407608b164ecddc94655c9bda41853d66015.tar.gz",
+        "archive_sha256": "ceefb3a7a15444eabaa18225b53b407608b164ecddc94655c9bda41853d66015",
+        "submitted_at": "2026-09-19T21:16:37.715745+00:00",
+        "exit_code": 0,
+        "job_id": 1230
+      }
+    },
+    {
+      "job_id": 1231,
+      "run_id": "fresh-v4-gemma-cp26-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-668",
+      "priority": 100,
+      "model": "gemma",
+      "task": "cp26",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-gemma-cp26-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 100,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-e7cb522ba9ce88b31a934d237ee440ae9903dd1a66721ca7522e3a0cac97d659.tar.gz",
+        "archive_sha256": "e7cb522ba9ce88b31a934d237ee440ae9903dd1a66721ca7522e3a0cac97d659",
+        "submitted_at": "2026-09-19T21:16:48.416063+00:00",
+        "exit_code": 0,
+        "job_id": 1231
+      }
+    },
+    {
+      "job_id": 1232,
+      "run_id": "fresh-v4-muse-cp26-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-675",
+      "priority": 100,
+      "model": "muse",
+      "task": "cp26",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-muse-cp26-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 100,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-551b004732be4d3934fdb70eb31db4c2a99e2683df3e7547d77b410d402c0d7e.tar.gz",
+        "archive_sha256": "551b004732be4d3934fdb70eb31db4c2a99e2683df3e7547d77b410d402c0d7e",
+        "submitted_at": "2026-09-19T21:16:56.950336+00:00",
+        "exit_code": 0,
+        "job_id": 1232
+      }
+    },
+    {
+      "job_id": 1233,
+      "run_id": "fresh-v4-qwen-qubit-grpo-lr15e4-s1-20260919",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-679",
+      "priority": 50,
+      "model": "qwen",
+      "task": "qubit",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-qwen-qubit-grpo-lr15e4-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-7793c9d54c3260a3971e153fb89947d30e9204e2b5676d078c5490332a85dadc.tar.gz",
+        "archive_sha256": "7793c9d54c3260a3971e153fb89947d30e9204e2b5676d078c5490332a85dadc",
+        "submitted_at": "2026-09-19T21:17:30.171519+00:00",
+        "exit_code": 0,
+        "job_id": 1233
+      }
+    },
+    {
+      "job_id": 1234,
+      "run_id": "fresh-v4-gemma-qubit-grpo-lr4e5-s1-20260919",
+      "status": "PENDING",
+      "cluster": null,
+      "priority": 50,
+      "model": "gemma",
+      "task": "qubit",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-gemma-qubit-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-44549404e4a0eb8ff38ea33b481769c8ab82dcbac41644134b5c7a8f374fc90a.tar.gz",
+        "archive_sha256": "44549404e4a0eb8ff38ea33b481769c8ab82dcbac41644134b5c7a8f374fc90a",
+        "submitted_at": "2026-09-19T21:17:37.411292+00:00",
+        "exit_code": 0,
+        "job_id": 1234
+      }
+    },
+    {
+      "job_id": 1235,
+      "run_id": "fresh-v4-muse-qubit-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": null,
+      "priority": 50,
+      "model": "muse",
+      "task": "qubit",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-muse-qubit-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-678cbe413108dcc652a3fd5d9605d2cf4bec49de1434b6c6d8f7687ef7a33e88.tar.gz",
+        "archive_sha256": "678cbe413108dcc652a3fd5d9605d2cf4bec49de1434b6c6d8f7687ef7a33e88",
+        "submitted_at": "2026-09-19T21:17:46.505847+00:00",
+        "exit_code": 0,
+        "job_id": 1235
+      }
+    },
+    {
+      "job_id": 1236,
+      "run_id": "fresh-v4-qwen-circuit-grpo-lr15e4-s1-20260919",
+      "status": "PENDING",
+      "cluster": null,
+      "priority": 50,
+      "model": "qwen",
+      "task": "circuit",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-qwen-circuit-grpo-lr15e4-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-1863cc20350f422ffd0cc55b1153460ea432f559204c43c3d586a67901060c36.tar.gz",
+        "archive_sha256": "1863cc20350f422ffd0cc55b1153460ea432f559204c43c3d586a67901060c36",
+        "submitted_at": "2026-09-19T21:17:57.721259+00:00",
+        "exit_code": 0,
+        "job_id": 1236
+      }
+    },
+    {
+      "job_id": 1237,
+      "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": null,
+      "priority": 50,
+      "model": "gemma",
+      "task": "circuit",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-30d94e14be519bd563f82b60b19628a9b0f33d89c0381268c4432c51d15ee125.tar.gz",
+        "archive_sha256": "30d94e14be519bd563f82b60b19628a9b0f33d89c0381268c4432c51d15ee125",
+        "submitted_at": "2026-09-19T21:18:13.448152+00:00",
+        "exit_code": 0,
+        "job_id": 1237
+      }
+    },
+    {
+      "job_id": 1238,
+      "run_id": "fresh-v4-muse-circuit-grpo-lr4e5-s1-20260919",
+      "status": "STARTING",
+      "cluster": null,
+      "priority": 50,
+      "model": "muse",
+      "task": "circuit",
+      "hardware": "v4",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "receipt": {
+        "run_id": "fresh-v4-muse-circuit-grpo-lr4e5-s1-20260919",
+        "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+        "priority": 50,
+        "state": "submitted",
+        "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-7fb9e9a9808ccfd81bbda65dac4974a1e2626627f9949a082620bfc39ee02219.tar.gz",
+        "archive_sha256": "7fb9e9a9808ccfd81bbda65dac4974a1e2626627f9949a082620bfc39ee02219",
+        "submitted_at": "2026-09-19T21:18:27.964420+00:00",
+        "exit_code": 0,
+        "job_id": 1238
+      }
+    }
+  ],
+  "hardware_alternatives": "v5p prepared; not submitted",
+  "optimizer_steps_completed": 0
+}

@@ -1,5 +1,11 @@
 # Twelve v4-64 single-job GRPO runs
 
+**Superseded before submission:** use the
+[fresh v4/v5p campaign](../fresh-grpo-campaign-20260919/README.md), which starts
+all bootstraps from scratch and evaluates qubit across all 72 cases with
+per-case feedback. The Q20-only profiles and archives below are historical
+preparation artifacts, not the current submission list.
+
 Prepared 2026-09-19. **Not submitted.** RG-LRU is deferred; no v5p or sidecar jobs.
 `jobs.json` lists each profile, local package, and committed v4 runtime reference.
 
