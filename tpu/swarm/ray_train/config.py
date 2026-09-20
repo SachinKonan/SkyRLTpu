@@ -186,6 +186,7 @@ class Inference:
     external_pool_release_timeout: int = 15
     external_pool_lease_seconds: int = 300
     external_pool_heartbeat_seconds: int = 30
+    external_pool_health_grace_seconds: int = 90
 
 
 @dataclass(frozen=True)
@@ -459,7 +460,7 @@ class Config:
                 except ValueError as exc:
                     raise ValueError('invalid external service port') from exc
         for name in ('engines', 'max_n', 'max_concurrent_requests', 'rpc_timeout', 'prepare_timeout', 'release_timeout',
-                     'lease_seconds', 'heartbeat_seconds'):
+                     'lease_seconds', 'heartbeat_seconds', 'health_grace_seconds'):
             value = getattr(self.inference, 'external_pool_' + name)
             if type(value) is not int or value <= 0:
                 raise ValueError('external pool limits must be positive integers')

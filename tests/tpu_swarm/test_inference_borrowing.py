@@ -35,6 +35,10 @@ class Farm:
         self.lost_acquire = False
         self.fail_generate = False
         self.fail_heartbeat = False
+        self.heartbeat_override = {}
+        self.heartbeat_error = None
+        self.heartbeat_gate = None
+        self.heartbeat_seen = asyncio.Event()
         self.fail_release = False
         self.max_n = 32
         self.release_seen = asyncio.Event()
@@ -63,9 +67,15 @@ class Farm:
         if path == '/acquire_lease':
             body = json.loads(request.content)
             if body.get('lease_id'):
+                self.heartbeat_seen.set()
+                if self.heartbeat_gate:
+                    await self.heartbeat_gate.wait()
+                if self.heartbeat_error:
+                    raise self.heartbeat_error
                 lease = self.owners[host]
                 assert body['lease_id'] == lease['lease_id']
-                return httpx.Response(503 if self.fail_heartbeat else 200, json=self.status(lease))
+                return httpx.Response(503 if self.fail_heartbeat else 200,
+                                      json=self.status(lease) | self.heartbeat_override)
             if host in self.owners or host in self.busy:
                 return httpx.Response(409, json={'state': 'busy'})
             lease = dict(body, lease_id='lease-'+host, adapter_name=None, adapter_sha256=None)
@@ -299,10 +309,11 @@ def test_phase_hook_releases_on_failure(tmp_path, monkeypatch):
     assert calls[0][1]['phase_id'] == calls[-1][1]['phase_id']
 
 
-def test_heartbeat_failure_interrupts_hung_generation(tmp_path):
+def test_persistent_heartbeat_failure_interrupts_hung_generation(tmp_path):
     async def test(b, farm, archive, events):
         # Speed up only the watchdog clock; production remains 30s/300s.
-        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01)
+        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01,
+                             external_pool_health_grace_seconds=.04)
         await b.begin('phase1', 'adapter', archive)
         farm.generation_gate = asyncio.Event()
         request = asyncio.create_task(b.generate({'model': 'adapter'}, 0, 4))
@@ -400,7 +411,8 @@ def test_actual_ingress_retries_hung_remote_locally_without_changing_payload(tmp
         farm = Farm()
         gateway.http = httpx.AsyncClient(transport=httpx.MockTransport(farm))
         gateway.borrower.http = gateway.http
-        gateway.borrower.settings = replace(cfg.inference, external_pool_heartbeat_seconds=.01)
+        gateway.borrower.settings = replace(cfg.inference, external_pool_heartbeat_seconds=.01,
+                                            external_pool_health_grace_seconds=.04)
         monkeypatch.setattr(serving.serve, 'get_replica_context', lambda: SimpleNamespace(servable_object=gateway))
         app = inspect.getclosurevars(serving.Ingress.func_or_class.__init__).nonlocals['frozen_app_or_func']
         payload = {'model': gateway.version, 'n': 2, 'prompt': [1, 2, 3], 'temperature': .8,
@@ -473,3 +485,143 @@ def test_client_heartbeats_during_sampling_then_stops_on_release(monkeypatch):
     assert calls[0][1]['expected_n'] == 8
     assert calls[-1][0].endswith('/end')
     assert len({body['phase_id'] for _, body in calls}) == 1
+
+
+async def wait_event(events, name):
+    async def wait():
+        while not any(event == name for event, _ in events):
+            await asyncio.sleep(.001)
+    await asyncio.wait_for(wait(), 1)
+
+
+@pytest.mark.parametrize('failure', ['degraded', '503', 'timeout'])
+@pytest.mark.parametrize('complete_while_paused', [False, True])
+def test_transient_health_failure_preserves_inflight_and_blocks_new_work(tmp_path, failure, complete_while_paused):
+    async def test(b, farm, archive, events):
+        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01,
+                             external_pool_health_grace_seconds=.3)
+        await b.begin('phase1', 'adapter', archive)
+        farm.generation_gate = asyncio.Event()
+        pending = [asyncio.create_task(b.generate({'model': 'adapter', 'n': 32}, 4, 4)) for _ in range(4)]
+        await farm.generation_started.wait()
+        if failure == 'degraded':
+            farm.heartbeat_override = {'state': 'degraded', 'ready_engines': 3}
+        elif failure == '503':
+            farm.fail_heartbeat = True
+        else:
+            farm.heartbeat_error = httpx.ReadTimeout('secret-transport-detail')
+        await wait_event(events, 'borrow_health_paused')
+        assert all(not task.done() for task in pending)
+        assert await b.generate({'model': 'adapter'}, 10, 4) is None
+        assert sum(path == '/v1/completions' for _, path in farm.requests) == 4
+        if complete_while_paused:
+            farm.generation_gate.set()
+            results = await asyncio.wait_for(asyncio.gather(*pending), 1)
+        farm.heartbeat_override = {}
+        farm.fail_heartbeat = False
+        farm.heartbeat_error = None
+        await wait_event(events, 'borrow_health_recovered')
+        if not complete_while_paused:
+            farm.generation_gate.set()
+            results = await asyncio.wait_for(asyncio.gather(*pending), 1)
+        assert all(len(result['choices']) == 32 for result in results)
+        assert b.snapshot()['ready']
+        assert (await b.generate({'model': 'adapter'}, 0, 4))['choices'][0]['text'] == 'test'
+        assert not any(event in ('borrow_generation_failed', 'borrow_heartbeat_failed') for event, _ in events)
+    run_case(tmp_path, test)
+
+
+def test_persistent_degradation_has_fixed_grace_despite_successful_renewals(tmp_path):
+    async def test(b, farm, archive, events):
+        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01,
+                             external_pool_health_grace_seconds=.06)
+        await b.begin('phase1', 'adapter', archive)
+        farm.generation_gate = asyncio.Event()
+        pending = asyncio.create_task(b.generate({'model': 'adapter'}, 0, 4))
+        await farm.generation_started.wait()
+        farm.heartbeat_override = {'state': 'degraded', 'ready_engines': 3}
+        await wait_event(events, 'borrow_health_paused')
+        assert not pending.done()
+        assert await asyncio.wait_for(pending, .5) is None
+        assert sum(event == 'borrow_health_paused' for event, _ in events) == 1
+        assert sum(path == '/acquire_lease' for _, path in farm.requests) >= 3
+        assert not b.snapshot()['ready']
+    run_case(tmp_path, test)
+
+
+@pytest.mark.parametrize('change', [
+    {'adapter_sha256': 'different'}, {'adapter_name': 'different'},
+    {'owner_run': 'different'}, {'lease_id': 'different'},
+    {'state': 'expired'}, {'state': 'draining'}, {'state': 'updating'},
+    {'expected_engines': 8}, {'ready_engines': -1},
+])
+def test_identity_or_contract_change_is_immediately_fatal_even_during_grace(tmp_path, change):
+    async def test(b, farm, archive, events):
+        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01,
+                             external_pool_health_grace_seconds=10)
+        await b.begin('phase1', 'adapter', archive)
+        farm.generation_gate = asyncio.Event()
+        pending = asyncio.create_task(b.generate({'model': 'adapter'}, 0, 4))
+        await farm.generation_started.wait()
+        farm.heartbeat_override = {'state': 'degraded', 'ready_engines': 3}
+        await wait_event(events, 'borrow_health_paused')
+        farm.heartbeat_override.update(change)
+        assert await asyncio.wait_for(pending, .5) is None
+        assert not b.snapshot()['ready']
+        assert any(event == 'borrow_heartbeat_failed' for event, _ in events)
+    run_case(tmp_path, test)
+
+
+def test_unacknowledged_renewal_never_extends_lease_past_expiry(tmp_path):
+    async def test(b, farm, archive, events):
+        import time
+        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01,
+                             external_pool_health_grace_seconds=10)
+        await b.begin('phase1', 'adapter', archive)
+        deadline = b.lease.valid_until = time.monotonic() + .08
+        farm.generation_gate = asyncio.Event()
+        farm.fail_heartbeat = True
+        assert await asyncio.wait_for(b.generate({'model': 'adapter'}, 0, 4), .5) is None
+        assert b.lease.valid_until == deadline
+    run_case(tmp_path, test)
+
+
+def test_late_renewal_does_not_resurrect_expired_lease(tmp_path):
+    async def test(b, farm, archive, events):
+        import time
+        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01)
+        await b.begin('phase1', 'adapter', archive)
+        b.lease.valid_until = time.monotonic() + .07
+        farm.heartbeat_gate = asyncio.Event()
+        farm.generation_gate = asyncio.Event()
+        pending = asyncio.create_task(b.generate({'model': 'adapter'}, 0, 4))
+        await farm.heartbeat_seen.wait()
+        assert await asyncio.wait_for(pending, .5) is None
+        farm.heartbeat_gate.set()
+        await asyncio.wait_for(b.lease.heartbeat, .5)
+        assert not b.snapshot()['ready']
+        assert await b.generate({'model': 'adapter'}, 0, 4) is None
+    run_case(tmp_path, test)
+
+
+def test_recovery_during_release_cannot_reopen_admission(tmp_path):
+    async def test(b, farm, archive, events):
+        b.settings = replace(b.settings, external_pool_heartbeat_seconds=.01,
+                             external_pool_health_grace_seconds=1)
+        await b.begin('phase1', 'adapter', archive)
+        farm.generation_gate = asyncio.Event()
+        pending = asyncio.create_task(b.generate({'model': 'adapter'}, 0, 4))
+        await farm.generation_started.wait()
+        farm.heartbeat_override = {'state': 'degraded', 'ready_engines': 3}
+        await wait_event(events, 'borrow_health_paused')
+        release = asyncio.create_task(b.end('phase1'))
+        await asyncio.sleep(0)
+        farm.heartbeat_override = {}
+        await wait_event(events, 'borrow_health_recovered')
+        assert not release.done()
+        assert await b.generate({'model': 'adapter'}, 50, 4) is None
+        farm.generation_gate.set()
+        assert await asyncio.wait_for(pending, .5) is not None
+        await asyncio.wait_for(release, .5)
+        assert not farm.owners
+    run_case(tmp_path, test)

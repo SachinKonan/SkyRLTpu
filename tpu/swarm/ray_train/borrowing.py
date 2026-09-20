@@ -26,12 +26,16 @@ class Lease:
     digest: str | None = None
     valid_until: float = 0
     ready: bool = False
+    attested: bool = False
+    draining: bool = False
+    health_deadline: float = float('inf')
     engines: int = 0
     max_requests: int = 0
     max_n: int = 0
     active: int = 0
     heartbeat: asyncio.Task | None = field(default=None, repr=False)
     lost: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    deadline_changed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
     def headers(self):
@@ -81,7 +85,11 @@ class Borrower:
                     active=lease.active if lease else 0)
 
     def _eligible(self, lease):
-        return lease.ready and not lease.lost.is_set() and time.monotonic() < lease.valid_until
+        return (lease.ready and not lease.draining and not lease.lost.is_set()
+                and time.monotonic() < self._deadline(lease))
+
+    def _deadline(self, lease):
+        return min(lease.valid_until, lease.health_deadline, self.phase_deadline)
 
     def _expiry(self, response, sent):
         # Use the request's send time and requested TTL, avoiding clock skew
@@ -95,23 +103,57 @@ class Borrower:
         if body.get('lease_id') != lease.lease_id or body.get('owner_run') != self.owner:
             raise BorrowingProtocolError('lease identity mismatch')
 
-    def _verify(self, lease, body):
+    def _attestation(self, lease, body):
+        """Identity must hold even while an engine's health probe is uncertain."""
         self._identity(lease, body)
         if body.get('expected_engines') != self.settings.external_pool_engines:
             raise BorrowingProtocolError('unexpected farm size')
         if lease.digest is not None:
-            if (body.get('state') != 'ready' or body.get('adapter_sha256') != lease.digest
-                    or body.get('adapter_name') != lease.adapter
-                    or body.get('ready_engines') != self.settings.external_pool_engines):
-                raise BorrowingProtocolError('adapter not verified on every engine')
+            if (body.get('adapter_sha256') != lease.digest
+                    or body.get('adapter_name') != lease.adapter):
+                raise BorrowingProtocolError('adapter identity mismatch')
+            if body.get('state') not in ('ready', 'degraded'):
+                raise BorrowingProtocolError('adapter no longer serving under this lease')
+            count = body.get('ready_engines')
+            if type(count) is not int or not 0 <= count <= self.settings.external_pool_engines:
+                raise BorrowingProtocolError('invalid engine readiness count')
+            return body['state'] == 'ready' and count == self.settings.external_pool_engines
         elif body.get('state') != 'awaiting_adapter':
             raise BorrowingProtocolError('base bootstrap lease is not available')
+        return True
+
+    def _verify(self, lease, body):
+        if not self._attestation(lease, body):
+            raise BorrowingProtocolError('adapter not verified on every engine')
         # The current farm API does not advertise validated sampling limits.
         # These are explicit client-side acceptance settings, not inferred from
         # max_num_sequences or from having a single resident adapter.
         lease.engines = self.settings.external_pool_engines
         lease.max_requests = self.settings.external_pool_max_concurrent_requests
         lease.max_n = self.settings.external_pool_max_n
+
+    def _pause(self, lease, reason, **fields):
+        lease.ready = False
+        if lease.health_deadline == float('inf'):
+            lease.health_deadline = time.monotonic() + self.settings.external_pool_health_grace_seconds
+            lease.deadline_changed.set()
+            self._event('health_paused', service=lease.url, reason=reason,
+                        grace_seconds=self.settings.external_pool_health_grace_seconds, **fields)
+
+    def _resume(self, lease):
+        recovering = lease.health_deadline != float('inf')
+        lease.health_deadline = float('inf')
+        lease.ready = not lease.draining
+        lease.deadline_changed.set()
+        if recovering:
+            self._event('health_recovered', service=lease.url)
+
+    def _lose(self, lease, reason):
+        lease.ready = False
+        if lease.lost.is_set():
+            return
+        lease.lost.set()
+        self._event('heartbeat_failed', service=lease.url, reason=reason)
 
     def touch(self, phase):
         if phase != self.phase:
@@ -223,7 +265,10 @@ class Borrower:
                     raise BorrowingProtocolError('lease lost during preparation')
                 if status.get('state') not in ('updating', 'transitioning'):
                     self._verify(lease, status)
-                    lease.ready = True
+                    if time.monotonic() >= self._deadline(lease):
+                        raise BorrowingProtocolError('lease expired during preparation')
+                    lease.attested = True
+                    self._resume(lease)
                     self._event('ready', service=url, phase=phase, sha256=digest, engines=lease.engines)
                     return
                 await asyncio.sleep(.2)
@@ -232,39 +277,69 @@ class Borrower:
     async def _heartbeat(self, lease):
         try:
             while True:
-                await asyncio.sleep(self.settings.external_pool_heartbeat_seconds)
-                if time.monotonic() >= self.phase_deadline or lease.lost.is_set():
-                    lease.ready = False
-                    lease.lost.set()
+                await asyncio.sleep(max(0, min(self.settings.external_pool_heartbeat_seconds,
+                                               self._deadline(lease) - time.monotonic())))
+                if lease.lost.is_set():
+                    return
+                if time.monotonic() >= self._deadline(lease):
+                    self._lose(lease, 'lease, phase or health grace expired')
                     return
                 sent = time.monotonic()
-                response = await self.http.post(lease.path + '/acquire_lease', headers=lease.headers,
-                    json={'lease_id': lease.lease_id, 'owner_run': self.owner,
-                          'ttl_seconds': self.settings.external_pool_lease_seconds},
-                    timeout=self.settings.external_pool_rpc_timeout)
-                response.raise_for_status()
+                try:
+                    response = await self.http.post(lease.path + '/acquire_lease', headers=lease.headers,
+                        json={'lease_id': lease.lease_id, 'owner_run': self.owner,
+                              'ttl_seconds': self.settings.external_pool_lease_seconds},
+                        timeout=self.settings.external_pool_rpc_timeout)
+                    response.raise_for_status()
+                except httpx.RequestError as exc:
+                    self._pause(lease, type(exc).__name__)
+                    continue  # No acknowledgement: never extend the lease deadline.
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code in (408, 429) or exc.response.status_code >= 500:
+                        self._pause(lease, 'renewal temporarily unavailable', http_status=exc.response.status_code)
+                        continue
+                    raise BorrowingProtocolError('lease renewal rejected') from None
                 body = response.json()
+                if not isinstance(body, dict):
+                    raise BorrowingProtocolError('invalid renewal acknowledgement')
                 self._identity(lease, body)
-                if lease.ready:
-                    self._verify(lease, body)
-                lease.valid_until = self._expiry(body, sent)
+                healthy = self._attestation(lease, body) if lease.attested else True
+                renewed_until = self._expiry(body, sent)
+                # An acknowledgement arriving after loss/expiry cannot revive
+                # a lease, even if no generation watchdog happened to run first.
+                if lease.lost.is_set() or time.monotonic() >= min(self._deadline(lease), renewed_until):
+                    self._lose(lease, 'renewal arrived after lease or grace expired')
+                    return
+                lease.valid_until = renewed_until
+                lease.deadline_changed.set()
+                if not healthy:
+                    self._pause(lease, 'engine readiness uncertain', state=body['state'],
+                                ready_engines=body['ready_engines'], expected_engines=body['expected_engines'])
+                elif lease.attested:
+                    self._resume(lease)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            lease.ready = False
-            lease.lost.set()
-            self._event('heartbeat_failed', service=lease.url, reason=type(exc).__name__)
+            self._lose(lease, str(exc) if isinstance(exc, BorrowingProtocolError) else type(exc).__name__)
 
     async def _wait_lost(self, lease):
         while not lease.lost.is_set():
-            remaining = lease.valid_until - time.monotonic()
+            lease.deadline_changed.clear()
+            remaining = self._deadline(lease) - time.monotonic()
             if remaining <= 0:
-                lease.lost.set()
+                self._lose(lease, 'lease, phase or health grace expired')
                 break
+            lost = asyncio.create_task(lease.lost.wait())
+            changed = asyncio.create_task(lease.deadline_changed.wait())
             try:
-                await asyncio.wait_for(lease.lost.wait(), timeout=remaining)
-            except TimeoutError:
-                pass  # A heartbeat may have extended the deadline meanwhile.
+                # Wake immediately on confirmed loss or a changed deadline.
+                await asyncio.wait((lost, changed), timeout=remaining,
+                                   return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for task in (lost, changed):
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(lost, changed, return_exceptions=True)
 
     async def generate(self, payload, local_active, local_engines):
         lease = self.lease
@@ -282,7 +357,7 @@ class Borrower:
                 timeout=self.settings.request_timeout))
             watcher = asyncio.create_task(self._wait_lost(lease))
             done, _ = await asyncio.wait((request, watcher), return_when=asyncio.FIRST_COMPLETED)
-            if watcher in done:
+            if watcher in done or lease.lost.is_set() or time.monotonic() >= self._deadline(lease):
                 raise BorrowingProtocolError('borrowed service lost or lease expired')
             response = await request
             response.raise_for_status()
@@ -313,6 +388,7 @@ class Borrower:
                 self.changed.notify_all()
 
     async def _release(self, lease):
+        lease.draining = True
         lease.ready = False
         acknowledged = False
         try:

@@ -24,7 +24,8 @@ map can contain Qwen, Gemma and Muse entries; a run only uses its own entry.
   "external_pool_prepare_timeout": 120,
   "external_pool_release_timeout": 15,
   "external_pool_lease_seconds": 300,
-  "external_pool_heartbeat_seconds": 30
+  "external_pool_heartbeat_seconds": 30,
+  "external_pool_health_grace_seconds": 90
 }
 ```
 
@@ -74,14 +75,25 @@ server can still need time to drain old admitted operations before reuse.
 - Busy/offline farms at phase start: use another listed farm or stay local.
 - A disconnected/erroring remote request: disable that farm for this phase and
   retry the unfinished request locally using the original adapter and payload.
-- A hung remote request: heartbeat/lease-loss detection interrupts its HTTP wait
-  and triggers the same local retry. With defaults, a failed heartbeat is usually
-  detected within roughly 30s + 3s RPC timeout, rather than the long generation
-  timeout. This is an operational target, not a hard bound during local overload.
+- A renewed lease with the same owner/adapter but degraded engine health pauses
+  **new** remote requests. Previously admitted requests may complete during a
+  fixed 90-second health grace period. A healthy renewal resumes admission.
+  Repeated degraded renewals do not restart the grace timer.
+- Transport errors and temporary renewal responses (408, 429, 5xx) also pause
+  admission and retry on the heartbeat interval. They never extend the last
+  acknowledged lease deadline. In-flight work falls back when the first of
+  health grace, acknowledged lease, or client phase expires. Successful degraded
+  renewals extend the lease, but not the health grace. These are monotonic-clock
+  deadlines; event-loop scheduling can delay detection during local overload.
+- A confirmed owner/lease/adapter change, explicit renewal rejection, expired or
+  draining remote lease, or malformed protocol response immediately invalidates
+  the lease. Late renewal acknowledgements cannot revive an expired/lost lease.
+- Release keeps admission closed even if a concurrent heartbeat recovers health.
 - Other in-flight requests on that failed lease also retry locally. Successfully
   returned responses are kept. The original remote operation might still run;
   its abandoned result cannot enter the local training batch a second time.
-- Lease/hash mismatch or incomplete readiness: no remote sampling.
+- Initial lease/hash mismatch or incomplete readiness: no remote sampling; the
+  grace period only protects requests admitted after full identity verification.
 - An ambiguous **acquire** acknowledgement disables further borrowing for that
   consumer process. A queued server acquire could execute late; waiting one TTL
   is insufficient evidence that a second farm can safely be acquired.
@@ -116,6 +128,9 @@ Local control endpoints are `/skyrl/v1/borrowing/{begin,heartbeat,end}`. Status 
 included under `borrowing` in local `/status`; events use the `borrow_` prefix in
 `inference-events.jsonl`. Lease tokens and full transport exceptions are excluded
 from these events. The packaging overlay includes the client phase hook.
+`borrow_health_paused` records a safe reason and, for degraded acknowledgements,
+state and ready/expected engine counts. `borrow_health_recovered` records resumed
+health. Neither event includes a lease token or raw response body.
 
 ## Validation scope
 
@@ -125,3 +140,9 @@ cancellation, draining, stale cleanup, disabled configuration, and bundle overla
 installation. Existing serving tests cover unchanged local adapter handling.
 These checks do not establish live TPU throughput or numerical parity. No farm
 was claimed and no running experiment changed during implementation.
+
+The September 20 heartbeat correction additionally tests transient degraded
+status, 503s and transport timeouts, successful in-flight completion during grace,
+recovery, persistent degradation, identity changes during grace, acknowledged
+lease expiry, late renewal and release/recovery races. It is a consumer-only
+change; the existing farm API is unchanged. Running bundles do not hot-reload it.
