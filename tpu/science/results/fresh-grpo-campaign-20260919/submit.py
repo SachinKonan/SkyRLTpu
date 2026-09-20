@@ -34,6 +34,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--hardware', choices=('v4', 'v5p', 'v6e'), required=True)
     parser.add_argument('--stage', choices=('math', 'science', 'rglru', 'all'), default='all')
+    parser.add_argument('--run-id', action='append', help='Submit only these run IDs; repeat to select several')
     parser.add_argument('--gcloud', default='/scratch/gpfs/ZHUANGL/sk7524/google-cloud-sdk/bin/gcloud')
     parser.add_argument('--sky', default=str(ROOT.parent / 'SkyRLTpu-multihost/third_party/TPUSwarm/.venv/bin/sky'))
     args = parser.parse_args()
@@ -45,7 +46,11 @@ def main():
         raise RuntimeError('gcloud and ADC must both use the approved compute service account')
     storage_client = storage.Client(project='vision-mix', credentials=creds)
     rows = json.loads((HERE / 'jobs.json').read_text())['jobs']
+    if args.run_id and set(args.run_id) - {row['run_id'] for row in rows}:
+        raise ValueError('Requested run ID is absent from the campaign manifest')
     for row in rows:
+        if args.run_id and row['run_id'] not in args.run_id:
+            continue
         if row['hardware'] != args.hardware:
             continue
         stage = ('math' if row['task'] in ('ac2','cp26') else

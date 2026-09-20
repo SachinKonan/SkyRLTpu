@@ -199,7 +199,7 @@ ACCELERATOR_ZONES = {
     "tpu-v4-64": ("us-central2-b",),
     "tpu-v4-32": ("us-central2-b",),
     "tpu-v5p-32": ("us-east5-a",),
-    "tpu-v6e-32": ("asia-northeast1-b", "us-east5-b", "europe-west4-a"),
+    "tpu-v6e-32": ("asia-northeast1-b", "us-east5-b", "us-central1-b", "europe-west4-a"),
 }
 ACCELERATOR_RUNTIME = {
     "tpu-v4-64": "tpu-ubuntu2204-base",
@@ -476,8 +476,7 @@ class Config:
                     or self.bootstrap_max_drafts % self.bootstrap_group_size):
                 raise ValueError('invalid bounded bootstrap budgets')
             bootstrap_shape = ((self.accelerator == 'tpu-v4-64' and self.hosts == 8 and self.trainer.hosts == 4)
-                               or (self.accelerator == 'tpu-v6e-32' and self.hosts == 8 and self.trainer.hosts == 4
-                                   and self.is_recurrent_gemma and self.arena_grader_rank is not None)
+                               or (self.accelerator == 'tpu-v6e-32' and self.hosts == 8 and self.trainer.hosts == 4)
                                or (self.accelerator == 'tpu-v5p-32' and self.hosts == 4 and self.trainer.hosts == 1))
             if (not bootstrap_shape
                     or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
@@ -487,7 +486,7 @@ class Config:
                     or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
                     or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
                     or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
-                raise ValueError('bounded bootstrap requires native v4-64/v5p-32 math, CPU science, or v4-64/v5p-32/v6e-32 dedicated-grader RG training')
+                raise ValueError('bounded bootstrap requires native v4-64/v5p-32/v6e-32 math, CPU science, or dedicated-grader RG training')
         elif self.bootstrap_layers and (not self.science_task
                 or (self.inference_only and not self.bootstrap_only)
                 or self.adapter_count != 1 or (self.accelerator not in ('tpu-v4-64', 'tpu-v6e-32') and not self.bootstrap_only)

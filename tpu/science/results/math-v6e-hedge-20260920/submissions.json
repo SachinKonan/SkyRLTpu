@@ -1,0 +1,73 @@
+{
+  "checked_at": "2026-09-20T00:32:57.675060+00:00",
+  "jobs": [
+    {
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-central1b",
+      "priority": 100,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-ab2a414fa9ef7c2ad7aad376e1538686aff8f9881633dc9481670a3158b7c735.tar.gz",
+      "archive_sha256": "ab2a414fa9ef7c2ad7aad376e1538686aff8f9881633dc9481670a3158b7c735",
+      "submitted_at": "2026-09-20T00:32:10.790812+00:00",
+      "exit_code": 0,
+      "job_id": 1275,
+      "task": "ac2",
+      "model": "gemma",
+      "parallel_v4_job": 1228,
+      "v4_status": "RECOVERING",
+      "status": "STARTING",
+      "worker": "tpuswarm-v6e32-central1b-8"
+    },
+    {
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-central1b",
+      "priority": 100,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-baab0d2882ecc4e29b62dcaf8dac1ffd155f9b4d48f09294612b3cb822009eec.tar.gz",
+      "archive_sha256": "baab0d2882ecc4e29b62dcaf8dac1ffd155f9b4d48f09294612b3cb822009eec",
+      "submitted_at": "2026-09-20T00:30:13.372719+00:00",
+      "exit_code": 0,
+      "job_id": 1273,
+      "task": "ac2",
+      "model": "muse",
+      "parallel_v4_job": 1229,
+      "v4_status": "RECOVERING",
+      "status": "STARTING",
+      "worker": "tpuswarm-v6e32-central1b-4"
+    },
+    {
+      "run_id": "math-v6e-gemma-cp26-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-central1b",
+      "priority": 100,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-32b97afdcb276ef47aed68a3c92d7ba794f28b2df34808771a605ac35deb2fd0.tar.gz",
+      "archive_sha256": "32b97afdcb276ef47aed68a3c92d7ba794f28b2df34808771a605ac35deb2fd0",
+      "submitted_at": "2026-09-20T00:32:21.945564+00:00",
+      "exit_code": 0,
+      "job_id": 1276,
+      "task": "cp26",
+      "model": "gemma",
+      "parallel_v4_job": 1231,
+      "v4_status": "PENDING",
+      "status": "PENDING",
+      "worker": null
+    },
+    {
+      "run_id": "math-v6e-muse-cp26-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 100,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-78947f8dadf512f99c7f5a2b75aa236a2e66ca782dec9dcf9254baf91b5bb0de.tar.gz",
+      "archive_sha256": "78947f8dadf512f99c7f5a2b75aa236a2e66ca782dec9dcf9254baf91b5bb0de",
+      "submitted_at": "2026-09-20T00:30:27.667478+00:00",
+      "exit_code": 0,
+      "job_id": 1274,
+      "task": "cp26",
+      "model": "muse",
+      "parallel_v4_job": 1232,
+      "v4_status": "RECOVERING",
+      "status": "STARTING",
+      "worker": null
+    }
+  ]
+}

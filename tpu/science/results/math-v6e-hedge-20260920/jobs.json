@@ -1,0 +1,72 @@
+{
+  "jobs": [
+    {
+      "hardware": "v6e",
+      "task": "ac2",
+      "model": "gemma",
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "parallel_v4_job": 1228,
+      "profile": "tpu/swarm/ray_train/profiles/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920.json",
+      "pool": "tpuswarm-v6e32-central1b",
+      "zone": "us-central1-b",
+      "priority": 100,
+      "package_dir": ".science/packages/math-v6e-hedge-20260920/gemma/ac2",
+      "archive": ".science/packages/math-v6e-hedge-20260920/gemma/ac2/ray-training.tar.gz",
+      "task_yaml": ".science/packages/math-v6e-hedge-20260920/gemma/ac2/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-ab2a414fa9ef7c2ad7aad376e1538686aff8f9881633dc9481670a3158b7c735.tar.gz",
+      "archive_sha256": "ab2a414fa9ef7c2ad7aad376e1538686aff8f9881633dc9481670a3158b7c735",
+      "yaml_sha256": "b028990f22c527294a4fc640ff6dbd4640aae1e510bc5cfb62743f995aead016"
+    },
+    {
+      "hardware": "v6e",
+      "task": "ac2",
+      "model": "muse",
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "parallel_v4_job": 1229,
+      "profile": "tpu/swarm/ray_train/profiles/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920.json",
+      "pool": "tpuswarm-v6e32-central1b",
+      "zone": "us-central1-b",
+      "priority": 100,
+      "package_dir": ".science/packages/math-v6e-hedge-20260920/muse/ac2",
+      "archive": ".science/packages/math-v6e-hedge-20260920/muse/ac2/ray-training.tar.gz",
+      "task_yaml": ".science/packages/math-v6e-hedge-20260920/muse/ac2/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-baab0d2882ecc4e29b62dcaf8dac1ffd155f9b4d48f09294612b3cb822009eec.tar.gz",
+      "archive_sha256": "baab0d2882ecc4e29b62dcaf8dac1ffd155f9b4d48f09294612b3cb822009eec",
+      "yaml_sha256": "7c06a33a00117e7397ea2d1081746a6cfa46ad331216c9d31fc7acfd27ffdf10"
+    },
+    {
+      "hardware": "v6e",
+      "task": "cp26",
+      "model": "gemma",
+      "run_id": "math-v6e-gemma-cp26-grpo-lr4e5-s1-20260920",
+      "parallel_v4_job": 1231,
+      "profile": "tpu/swarm/ray_train/profiles/math-v6e-gemma-cp26-grpo-lr4e5-s1-20260920.json",
+      "pool": "tpuswarm-v6e32-central1b",
+      "zone": "us-central1-b",
+      "priority": 100,
+      "package_dir": ".science/packages/math-v6e-hedge-20260920/gemma/cp26",
+      "archive": ".science/packages/math-v6e-hedge-20260920/gemma/cp26/ray-training.tar.gz",
+      "task_yaml": ".science/packages/math-v6e-hedge-20260920/gemma/cp26/math-v6e-gemma-cp26-grpo-lr4e5-s1-20260920.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-32b97afdcb276ef47aed68a3c92d7ba794f28b2df34808771a605ac35deb2fd0.tar.gz",
+      "archive_sha256": "32b97afdcb276ef47aed68a3c92d7ba794f28b2df34808771a605ac35deb2fd0",
+      "yaml_sha256": "d09ef22036c1115771a31f2ce048d24deff6bb6cbead48b6322fda3e499038c6"
+    },
+    {
+      "hardware": "v6e",
+      "task": "cp26",
+      "model": "muse",
+      "run_id": "math-v6e-muse-cp26-grpo-lr4e5-s1-20260920",
+      "parallel_v4_job": 1232,
+      "profile": "tpu/swarm/ray_train/profiles/math-v6e-muse-cp26-grpo-lr4e5-s1-20260920.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "zone": "us-east5-b",
+      "priority": 100,
+      "package_dir": ".science/packages/math-v6e-hedge-20260920/muse/cp26",
+      "archive": ".science/packages/math-v6e-hedge-20260920/muse/cp26/ray-training.tar.gz",
+      "task_yaml": ".science/packages/math-v6e-hedge-20260920/muse/cp26/math-v6e-muse-cp26-grpo-lr4e5-s1-20260920.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-78947f8dadf512f99c7f5a2b75aa236a2e66ca782dec9dcf9254baf91b5bb0de.tar.gz",
+      "archive_sha256": "78947f8dadf512f99c7f5a2b75aa236a2e66ca782dec9dcf9254baf91b5bb0de",
+      "yaml_sha256": "371cb2d75d986492d09380303187628f36fef7731b0037de2371db35e6f43c20"
+    }
+  ]
+}

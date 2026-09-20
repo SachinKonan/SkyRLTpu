@@ -1,0 +1,22 @@
+[
+  {
+    "phase": "hf",
+    "objects": 15,
+    "gib": 55.49
+  },
+  {
+    "phase": "orbax",
+    "objects": 29,
+    "gib": 40.58
+  },
+  {
+    "phase": "trainer",
+    "objects": 196,
+    "gib": 0.13
+  },
+  {
+    "phase": "inference",
+    "objects": 309,
+    "gib": 1.33
+  }
+]
