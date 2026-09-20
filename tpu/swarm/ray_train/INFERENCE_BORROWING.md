@@ -205,3 +205,21 @@ Validation on September 20: a live `--once --dry-run` found six healthy farms
 target job 1270 because it was no longer RUNNING. It made no HTTP writes.
 The supervisor, borrower, ingress, package, command and serving checks passed
 110 tests. The daemon has not been started against a newly packaged target yet.
+
+### Local failure policy for the supervised trial
+
+Borrowed-farm failure is recoverable only while local inference remains healthy.
+With `inference.restart_limit=0`, the controller pins the local ingress instance
+once startup succeeds and probes `/status` during execution. An unreachable or
+replaced ingress, exhausted engine restart budget, or recorded local generation
+failure fails the run and enters owned-process cleanup. It does not borrow a farm
+to recover local inference. `/status` stays available during normal adapter
+updates; `/health` returning 503 during an update is not used as a fatal signal.
+Intentional bootstrap topology changes suspend this monitor until readiness.
+
+The supervised Qwen trial also sets `max_restarts_on_errors=0`, so SkyPilot does
+not repeatedly relaunch application failures. Provider preemption remains a
+separate job-recovery mechanism. Already durable checkpoints are preserved.
+Remote health grace is unchanged: pause new remote admission for up to 90 seconds
+while preserving pending work, then fall back locally if it cannot recover.
+Retries regenerate a whole unfinished request group; partial KV state is lost.

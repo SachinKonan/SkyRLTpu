@@ -72,6 +72,35 @@ class Controller:
         self.science_refs = []
         self.transitioning = False
         self.shutdown_errors = []
+        self.local_inference_instance = None
+
+    def arm_local_inference(self, client):
+        if self.config.inference.restart_limit != 0:
+            return
+        response = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/status")
+        response.raise_for_status()
+        instance = response.json()['instance']
+        if not isinstance(instance, str) or not instance:
+            raise RuntimeError('local inference instance identity missing')
+        self.local_inference_instance = instance
+
+    def check_local_inference(self):
+        # /health intentionally returns 503 during adapter updates. /status
+        # remains available and identifies replacement of the owning ingress.
+        if self.local_inference_instance is None or self.transitioning:
+            return
+        try:
+            with httpx.Client(timeout=10) as client:
+                response = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/status")
+                response.raise_for_status()
+                state = response.json()
+            if state.get('instance') != self.local_inference_instance:
+                raise RuntimeError('local ingress was replaced')
+            if state.get('fatal_error') or state.get('exhausted'):
+                raise RuntimeError('local inference failed')
+        except Exception as exc:
+            self.failure = f'local inference fatal: {type(exc).__name__}: {exc}'
+            self.report('local_inference_failed', detail=self.failure)
 
     def report(self, event, **fields):
         return emit(self.log, event, run_id=self.config.run_id, **fields)
@@ -158,6 +187,7 @@ class Controller:
             except Exception as exc:
                 self.report("monitor_error", detail=str(exc))
                 # A transient polling timeout does not cancel a healthy workload.
+            self.check_local_inference()
             try:
                 self.writeback_tick()
             except Exception as exc:
@@ -402,6 +432,7 @@ class Controller:
                     if set(state['expected']) != expected or {r['ip'] for r in state['replicas']} != expected:
                         raise RuntimeError('endpoint still contains a retired or unexpected engine')
                     self.report("services_ready", trainer=not self.config.inference_only, inference_replicas=len(state["replicas"]))
+                    self.arm_local_inference(client)
                     return self
                 time.sleep(5)
         raise TimeoutError("trainer/inference readiness deadline exceeded")
@@ -423,6 +454,7 @@ class Controller:
                         and {r['ip'] for r in state['replicas']} == expected
                         and set(endpoint['expected']) == expected and not endpoint['active']):
                     self.report('inference_membership_verified', hosts=sorted(expected))
+                    self.arm_local_inference(client)
                     return
                 time.sleep(5)
         raise TimeoutError('inference membership/health deadline exceeded')

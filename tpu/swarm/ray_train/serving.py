@@ -36,6 +36,11 @@ class Catalog:
         self.versions = set()
         self.starts = {}
         self.restart_limit = restart_limit
+        self.fatal_error = None
+
+    def fail(self, reason):
+        if self.restart_limit == 0 and self.fatal_error is None:
+            self.fatal_error = reason
 
     def claim(self, ip):
         if ip not in self.expected:
@@ -68,7 +73,7 @@ class Catalog:
         self.versions.add(version)
 
     def snapshot(self):
-        return dict(version=self.version, versions=sorted(self.versions), expected=sorted(self.expected), replicas=list(self.replicas.values()), starts=self.starts,
+        return dict(fatal_error=self.fatal_error, version=self.version, versions=sorted(self.versions), expected=sorted(self.expected), replicas=list(self.replicas.values()), starts=self.starts,
                     exhausted=[ip for ip, count in self.starts.items() if count > self.restart_limit+1])
 
 
@@ -250,7 +255,7 @@ class Ingress:
     @app.get("/status")
     async def status(self):
         result = await self.catalog.snapshot.remote()
-        result.update(active=self.active, updating=self.updating, committed=self.version,
+        result.update(instance=self.borrowing_instance, active=self.active, updating=self.updating, committed=self.version,
                       committed_adapters=sorted(self.versions))
         if self.borrower:
             result['borrowing'] = self.borrower.snapshot()
@@ -520,7 +525,12 @@ class Ingress:
                 if result is not None:
                     return result
             handle = self.select_engine(payload["model"])
-            return await handle.generate.remote(payload)
+            try:
+                return await handle.generate.remote(payload)
+            except Exception:
+                if self.config.inference.restart_limit == 0:
+                    await self.catalog.fail.remote('local generation failed')
+                raise
         finally:
             async with self.condition:
                 self.active -= 1

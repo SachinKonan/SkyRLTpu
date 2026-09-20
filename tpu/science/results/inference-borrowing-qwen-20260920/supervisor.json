@@ -1,0 +1,15 @@
+{
+  "pid": 2596245,
+  "started": "2026-09-20T16:30:14.767127+00:00",
+  "command": [
+    "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-multihost/third_party/TPUSwarm/.venv/bin/python",
+    "-m",
+    "tpu.swarm.ray_train.borrowing_supervisor",
+    "--farm-pool",
+    "tpuswarm-v4-32-central2-smoke",
+    "--trainer-job-id",
+    "1324",
+    "--ssh-config-dir",
+    "/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh"
+  ]
+}
