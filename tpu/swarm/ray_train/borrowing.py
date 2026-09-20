@@ -4,7 +4,7 @@ Farm contract: INFERENCE_BORROWING.md (multi-LoRA farm lease API). An unmodified
 ineligible: ordinary /v1/models is not evidence of ownership or adapter identity.
 """
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import hashlib
 from pathlib import Path
 import time
@@ -68,6 +68,17 @@ class Borrower:
         self.next_url = 0
         self.phase_deadline = 0
         self.phase_watchdog = None
+
+    def update_urls(self, model, urls):
+        if not self.settings.external_pool_updates:
+            raise BorrowingProtocolError('service list updates are disabled')
+        if model != self.config.model:
+            raise BorrowingProtocolError('service list model mismatch')
+        # Reuse the profile's origin/count validation; do not mutate the active
+        # lease or the configuration used to validate already admitted requests.
+        settings = replace(self.settings, external_pool_urls={model: urls})
+        replace(self.config, inference=settings).validate()
+        self.urls = list(urls)
 
     def _event(self, event, **fields):
         # Never serialize a Lease or transport exception: both can expose tokens.
@@ -200,8 +211,11 @@ class Borrower:
             return self.snapshot()
 
     async def _acquire(self, phase, digest, archive):
-        count = len(self.urls)
-        urls = [self.urls[(self.next_url + i) % count] for i in range(count)]
+        candidates = list(self.urls)  # Pin this attempt across live list updates.
+        count = len(candidates)
+        if not count:
+            return
+        urls = [candidates[(self.next_url + i) % count] for i in range(count)]
         self.next_url = (self.next_url + 1) % count
         for url in urls:
             try:

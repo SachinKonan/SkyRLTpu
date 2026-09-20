@@ -241,6 +241,7 @@ class Ingress:
         self.upload_lock = asyncio.Lock()
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.borrower = None
+        self.borrowing_instance = uuid.uuid4().hex
         if self.config.borrows_inference:
             from .borrowing import Borrower
             self.borrower = Borrower(self.config, self.http,
@@ -280,6 +281,28 @@ class Ingress:
                 return await self.borrower.begin(phase, model, archive, expected_n=expected_n)
             except BorrowingProtocolError as exc:
                 raise HTTPException(409, str(exc))
+
+    @app.get('/skyrl/v1/borrowing/services')
+    async def borrowing_services(self):
+        return dict(enabled=self.config.inference.external_pool_updates,
+                    model=self.config.model, run_id=self.config.run_id,
+                    instance=self.borrowing_instance,
+                    urls=list(self.borrower.urls) if self.borrower else [])
+
+    @app.post('/skyrl/v1/borrowing/services')
+    async def update_borrowing_services(self, request: Request):
+        if not self.borrower or not self.config.inference.external_pool_updates:
+            raise HTTPException(409, 'service list updates are disabled')
+        body = await request.json()
+        if (not isinstance(body, dict) or body.get('run_id') != self.config.run_id
+                or body.get('instance') != self.borrowing_instance):
+            raise HTTPException(409, 'stale or incorrect target service')
+        from .borrowing import BorrowingProtocolError
+        try:
+            self.borrower.update_urls(body.get('model'), body.get('urls'))
+        except (ValueError, BorrowingProtocolError) as exc:
+            raise HTTPException(400, str(exc))
+        return await self.borrowing_services()
 
     @app.post('/skyrl/v1/borrowing/heartbeat')
     async def heartbeat_borrowing(self, request: Request):

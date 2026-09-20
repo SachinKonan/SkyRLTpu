@@ -1,0 +1,164 @@
+"""Controller-local discovery and push; never claims leases or submits jobs.
+
+Run with the existing SkyPilot environment and SSH configs. Only explicitly
+listed training job IDs may receive updates. --dry-run performs no HTTP writes.
+"""
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+import json
+from pathlib import Path
+import re
+import subprocess
+import time
+
+
+# Private TPU addresses are reachable from the TPU hosts, not necessarily from
+# this controller. Use its existing SSH access for localhost control requests.
+REMOTE = r'''
+import ipaddress, json, urllib.request, urllib.error
+def call(path, body=None):
+    request = urllib.request.Request('http://127.0.0.1:'+str(PARAMS['port'])+path,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={'Content-Type': 'application/json'})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return json.load(response)
+try:
+    if PARAMS['action'] == 'farm':
+        call('/health')
+        status = call('/status')
+        count = status.get('expected_engines')
+        if (type(count) is not int or count != 4 or status.get('exhausted')
+                or status.get('updating') or len(status.get('replicas', [])) != count
+                or status.get('state') not in ('unleased', 'ready', 'awaiting_adapter', 'expired')):
+            raise ValueError('not a healthy lease-capable farm')
+        names = [item['id'] for item in call('/v1/models')['data']
+                 if item['id'] not in status.get('versions', [])]
+        request = urllib.request.Request(
+            'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip',
+            headers={'Metadata-Flavor': 'Google'})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            ip = str(ipaddress.ip_address(response.read().decode().strip()))
+        if ip not in status.get('expected', []):
+            raise ValueError('farm head is not in the expected engine set')
+        result = dict(models=names, url='http://'+ip+':'+str(PARAMS['port']))
+    else:
+        result = call('/skyrl/v1/borrowing/services', PARAMS.get('body'))
+    print(json.dumps(dict(ok=True, result=result)))
+except Exception as exc:
+    print(json.dumps(dict(ok=False, error=type(exc).__name__,
+                         http_status=exc.code if isinstance(exc, urllib.error.HTTPError) else None)))
+'''
+
+
+def rpc(ssh_dir, cluster, action, port, body=None):
+    if not isinstance(cluster, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]+', cluster):
+        return {'ok': False, 'error': 'invalid_cluster'}
+    config = Path(ssh_dir) / cluster
+    if not config.is_file():
+        return {'ok': False, 'error': 'missing_ssh_config'}
+    params = dict(action=action, port=port)
+    if body is not None:
+        params['body'] = body
+    try:
+        proc = subprocess.run(['ssh', '-F', str(config), '-o', 'BatchMode=yes',
+                               '-o', 'ConnectTimeout=8', cluster, 'python3 -'],
+            input='PARAMS = '+repr(params)+'\n'+REMOTE, text=True,
+            capture_output=True, timeout=50)
+        if proc.returncode:
+            return {'ok': False, 'error': 'ssh_failed', 'exit_code': proc.returncode}
+        return json.loads(proc.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        return {'ok': False, 'error': type(exc).__name__}
+
+
+def inventory():
+    import sky
+    rows, *_ = sky.get(sky.jobs.queue_v2(refresh=False, skip_finished=True,
+        fields=['job_id', 'job_name', 'status', 'current_cluster_name']))
+    return [dict(job_id=r.job_id, status=getattr(r.status, 'value', str(r.status)),
+                 cluster=r.current_cluster_name, run_id=r.job_name) for r in rows]
+
+
+def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False):
+    """One replace-list update per target, using this tick's observed farms."""
+    running = {r['job_id']: r for r in rows if r['status'] == 'RUNNING' and r.get('cluster')}
+    farm_rows = [r for r in running.values()
+                 if re.fullmatch(re.escape(farm_pool)+r'-\d+', r['cluster'])]
+    def probe(row):
+        result = call(row['cluster'], 'farm')
+        return row, result
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        probes = list(workers.map(probe, farm_rows))
+    farms = []
+    unavailable = []
+    for row, result in probes:
+        if result.get('ok'):
+            farms.append(dict(job_id=row['job_id'], **result['result']))
+        else:
+            unavailable.append(dict(job_id=row['job_id'], **result))
+
+    def update(job_id):
+        row = running.get(job_id)
+        if not row:
+            return dict(job_id=job_id, state='not_running')
+        descriptor = call(row['cluster'], 'target')
+        if not descriptor.get('ok'):
+            return dict(job_id=job_id, state='unreachable_or_not_supported', detail=descriptor)
+        target = descriptor['result']
+        if target.get('run_id') != row.get('run_id') or not row.get('run_id'):
+            return dict(job_id=job_id, state='target_identity_mismatch')
+        if target.get('enabled') is not True:
+            return dict(job_id=job_id, state='not_opted_in')
+        urls = sorted({f['url'] for f in farms if target['model'] in f['models']})[:2]
+        if target.get('urls') == urls:
+            return dict(job_id=job_id, state='unchanged', model=target['model'], urls=urls)
+        body = {k: target[k] for k in ('model', 'run_id', 'instance')}
+        body['urls'] = urls
+        if dry_run:
+            return dict(job_id=job_id, state='would_update', model=target['model'], urls=urls)
+        result = call(row['cluster'], 'target', body)
+        return dict(job_id=job_id, state='updated' if result.get('ok') else 'update_failed',
+                    model=target['model'], urls=urls, detail=result if not result.get('ok') else None)
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        targets = list(workers.map(update, trainer_ids))
+    return dict(farms=farms, unavailable=unavailable, targets=targets)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--farm-pool', required=True)
+    parser.add_argument('--trainer-job-id', type=int, action='append', required=True)
+    parser.add_argument('--ssh-config-dir', type=Path, required=True)
+    parser.add_argument('--port', type=int, default=24800)
+    parser.add_argument('--interval', type=int, default=30)
+    parser.add_argument('--once', action='store_true')
+    parser.add_argument('--dry-run', action='store_true')
+    args = parser.parse_args()
+    if args.interval < 10 or not 1 <= args.port <= 65535:
+        parser.error('interval must be >=10 seconds and port must be valid')
+    # Prevent two supervisors under this login from competing to replace lists.
+    import fcntl
+    lock_path = Path.home() / '.cache/skyrl/borrowing-supervisor.lock'
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock = lock_path.open('a')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        parser.error('another borrowing supervisor is already running under this login')
+    def call(cluster, action, body=None):
+        return rpc(args.ssh_config_dir, cluster, action, args.port, body)
+    while True:
+        try:
+            result = tick(inventory(), args.farm_pool, args.trainer_job_id, call, dry_run=args.dry_run)
+            print(json.dumps(dict(time=time.time(), **result)), flush=True)
+        except Exception as exc:
+            # An inventory outage must not look like an empty farm pool. Keep
+            # the last list; borrowers still independently verify every acquire.
+            print(json.dumps(dict(time=time.time(), error=type(exc).__name__)), flush=True)
+        if args.once:
+            break
+        time.sleep(args.interval)
+
+
+if __name__ == '__main__':
+    main()

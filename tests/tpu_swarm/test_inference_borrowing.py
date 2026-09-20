@@ -625,3 +625,54 @@ def test_recovery_during_release_cannot_reopen_admission(tmp_path):
         await asyncio.wait_for(release, .5)
         assert not farm.owners
     run_case(tmp_path, test)
+
+
+def test_service_list_update_preserves_active_lease_and_changes_next_acquisition(tmp_path):
+    async def test(b, farm, archive, events):
+        b.settings = replace(b.settings, external_pool_updates=True)
+        await b.begin('phase1', 'adapter', archive)
+        lease = b.lease
+        assert lease.url == 'http://farm1'
+        b.update_urls(b.config.model, ['http://farm2'])
+        assert b.lease is lease and b.snapshot()['ready']
+        assert (await b.generate({'model': 'adapter'}, 0, 4))['choices']
+        b.update_urls(b.config.model, [])
+        assert b.lease is lease and b.snapshot()['ready']
+        await b.end()
+        b.update_urls(b.config.model, ['http://farm2'])
+        await b.begin('phase2', 'adapter', archive)
+        assert b.lease.url == 'http://farm2'
+    run_case(tmp_path, test)
+
+
+def test_dynamic_service_api_is_opt_in_and_fences_target_instance(tmp_path, monkeypatch):
+    from tpu.swarm.ray_train import serving
+    from tpu.swarm.ray_train.commands import client_environment
+    async def run():
+        raw = config(tmp_path, enabled=False).to_dict()
+        raw['inference']['external_pool_updates'] = True
+        cfg = Config.from_dict(raw)
+        assert cfg.borrows_inference
+        assert 'SKYRL_BORROWING_URL' in client_environment(cfg, tmp_path, '10.0.0.1')
+        gateway = serving.Ingress.func_or_class.__mro__[1](cfg.to_dict(), [], None, [])
+        monkeypatch.setattr(serving.serve, 'get_replica_context', lambda: SimpleNamespace(servable_object=gateway))
+        app = inspect.getclosurevars(serving.Ingress.func_or_class.__init__).nonlocals['frozen_app_or_func']
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://local') as client:
+                path = '/skyrl/v1/borrowing/services'
+                descriptor = (await client.get(path)).json()
+                assert descriptor['enabled'] and descriptor['urls'] == []
+                payload = {k:descriptor[k] for k in ('model', 'run_id', 'instance')}
+                payload['urls'] = ['http://farm1']
+                response = await client.post(path, json=payload)
+                assert response.status_code == 200 and response.json()['urls'] == ['http://farm1']
+                for change, status in [({'model': 'wrong'}, 400), ({'instance': 'stale'}, 409),
+                        ({'run_id': 'other'}, 409), ({'urls': ['file:///tmp']}, 400),
+                        ({'urls': None}, 400), ({'urls': ['http://user:secret@farm']}, 400)]:
+                    assert (await client.post(path, json=payload | change)).status_code == status
+                    assert gateway.borrower.urls == ['http://farm1']
+                gateway.config = replace(cfg, inference=replace(cfg.inference, external_pool_updates=False))
+                assert (await client.post(path, json=payload)).status_code == 409
+        finally:
+            await gateway.http.aclose()
+    asyncio.run(run())

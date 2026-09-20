@@ -17,6 +17,7 @@ map can contain Qwen, Gemma and Muse entries; a run only uses its own entry.
   "external_pool_urls": {
     "Qwen/Qwen3.5-27B": ["http://qwen-farm-1:8000", "http://qwen-farm-2:8000"]
   },
+  "external_pool_updates": false,
   "external_pool_engines": 4,
   "external_pool_max_n": 1,
   "external_pool_max_concurrent_requests": 1,
@@ -146,3 +147,61 @@ status, 503s and transport timeouts, successful in-flight completion during grac
 recovery, persistent degradation, identity changes during grace, acknowledged
 lease expiry, late renewal and release/recovery races. It is a consumer-only
 change; the existing farm API is unchanged. Running bundles do not hot-reload it.
+
+## Controller-local endpoint supervisor
+
+For spot workers whose addresses change, set `external_pool_updates: true` in
+each participating training profile. `external_pool_urls` may be empty. This
+creates the borrower and client sampling hook even before endpoints are known.
+The default is false; static profiles retain their existing behavior.
+
+Run one `borrowing_supervisor` process on the controller node with its existing
+SkyPilot environment and SSH configs. It reads current RUNNING job assignments
+in the named farm pool, probes `/health`, the lease-capable `/status`, and the
+model list, and obtains each farm's private address from its VM metadata. It
+then updates only the explicitly listed training job IDs with matching model
+URLs. It never claims a lease, uploads an adapter, launches a job, or resizes a
+pool. It uses SSH for localhost HTTP calls because the controller may not have
+a direct route to the private TPU addresses. Borrowers independently check
+connectivity from their own hosts before acquisition.
+
+Using the SkyPilot Python environment, first run a read-only pass:
+
+```bash
+python -m tpu.swarm.ray_train.borrowing_supervisor \
+  --farm-pool tpuswarm-v4-32-central2-smoke \
+  --trainer-job-id TRAINER_JOB_ID \
+  --ssh-config-dir /path/to/sky-home/.sky/generated/ssh \
+  --once --dry-run
+```
+
+Replace `TRAINER_JOB_ID` with the intended job ID and repeat the flag for other
+authorized training jobs. To keep updating in the background, use the same
+command without `--once --dry-run`, with `nohup` and log redirection. The default
+interval is 30 seconds after each pass. A per-login file lock prevents competing
+supervisors on this node. Stop it with SIGTERM; training continues locally or
+with the last known candidate list, subject to the normal acquisition checks.
+
+The trainer's new `GET/POST /skyrl/v1/borrowing/services` endpoint is opt-in.
+GET supplies model, run ID, service instance ID and current candidate URLs. POST
+must match all target identity fields and replaces the list atomically. The
+supervisor also requires the managed job name to match the run ID, preventing
+a reused worker from receiving an update intended for an older job. These are
+identity checks, not public endpoint authentication; use the existing trusted
+private control network/SSH access. URLs use the same origin validation and
+two-farms-per-model limit as static configuration.
+
+List updates never modify an active lease or redirect an in-flight request.
+The next sampling-phase acquisition uses a snapshot of the current list.
+Unavailable farms are removed on a successful discovery pass. A controller
+inventory error leaves lists unchanged, and borrowers still verify every
+acquisition. No registry service, cloud object store, farm publisher, or new
+heartbeat protocol is needed. Older running bundles lack this endpoint and
+must be repackaged before they can participate; the supervisor reports them
+as unsupported instead of modifying their processes.
+
+Validation on September 20: a live `--once --dry-run` found six healthy farms
+(two each for Qwen, Gemma and Muse) at their current addresses, and skipped
+target job 1270 because it was no longer RUNNING. It made no HTTP writes.
+The supervisor, borrower, ingress, package, command and serving checks passed
+110 tests. The daemon has not been started against a newly packaged target yet.

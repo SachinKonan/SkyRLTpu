@@ -177,6 +177,7 @@ class Inference:
     routing: str = "direct"
     # Optional serving farms keyed by exact HF base-model ID. Empty is legacy.
     external_pool_urls: dict[str, list[str]] = field(default_factory=dict)
+    external_pool_updates: bool = False
     external_pool_engines: int = 4
     # Raise only after accepting the farm's batching/concurrency validation.
     external_pool_max_n: int = 1
@@ -366,7 +367,7 @@ class Config:
 
     @property
     def borrows_inference(self):
-        return bool(self.inference.external_pool_urls.get(self.model))
+        return self.inference.external_pool_updates or bool(self.inference.external_pool_urls.get(self.model))
 
     @property
     def ray_cpus_per_host(self):
@@ -437,6 +438,8 @@ class Config:
 
     def validate(self):
         from urllib.parse import urlsplit
+        if type(self.inference.external_pool_updates) is not bool:
+            raise ValueError('external_pool_updates must be boolean')
         pool = self.inference.external_pool_urls
         if not isinstance(pool, dict):
             raise ValueError('external_pool_urls must map exact model IDs to URL lists')
