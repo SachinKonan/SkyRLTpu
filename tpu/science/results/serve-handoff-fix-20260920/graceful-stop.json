@@ -1,0 +1,160 @@
+[
+  {
+    "old_job": 1227,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "status": "RECOVERING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1228,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-651",
+    "status": "PENDING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1229,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-652",
+    "status": "RECOVERING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1230,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-664",
+    "status": "RECOVERING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1231,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-668",
+    "status": "RECOVERING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1232,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-675",
+    "status": "PENDING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1233,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-679",
+    "status": "PENDING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1234,
+    "worker": null,
+    "status": "STARTING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1235,
+    "worker": null,
+    "status": "STARTING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1236,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '35.186.108.26' (ED25519) to the list of known hosts.\n2026-09-20 01:38:51,685\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.130.0.38:24679...\n2026-09-20 01:38:51,906\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1237,
+    "worker": null,
+    "status": "STARTING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1238,
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "status": "STARTING",
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "old_job": 1259,
+    "worker": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '8.234.54.245' (ED25519) to the list of known hosts.\n2026-09-20 01:38:50,720\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.202.0.120:24679...\n2026-09-20 01:38:50,845\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1260,
+    "worker": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '34.162.19.183' (ED25519) to the list of known hosts.\n2026-09-20 01:38:50,708\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.202.0.157:24679...\n2026-09-20 01:38:50,836\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1261,
+    "worker": "tpuswarm-v6e32-east5b-qwen35-5239",
+    "status": "RECOVERING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1273,
+    "worker": "tpuswarm-v6e32-central1b-4",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '136.115.225.61' (ED25519) to the list of known hosts.\n2026-09-20 01:38:50,878\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.128.0.78:24679...\n2026-09-20 01:38:51,003\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1274,
+    "worker": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '136.83.51.203' (ED25519) to the list of known hosts.\n2026-09-20 01:38:50,700\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.202.0.239:24679...\n2026-09-20 01:38:50,823\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1275,
+    "worker": "tpuswarm-v6e32-central1b-8",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '34.170.30.248' (ED25519) to the list of known hosts.\n2026-09-20 01:38:50,937\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.128.0.66:24679...\n2026-09-20 01:38:51,063\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1276,
+    "worker": "tpuswarm-v6e32-central1b-7",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '35.253.73.120' (ED25519) to the list of known hosts.\n2026-09-20 01:38:50,911\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.128.1.50:24679...\n2026-09-20 01:38:51,038\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1277,
+    "worker": "tpuswarm-v6e32-east5b-qwen35-5241",
+    "status": "RECOVERING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1278,
+    "worker": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "status": "RUNNING",
+    "exit": 0,
+    "stdout": "{\"stop_requested\": true}\n{\"terminal\": true, \"exit_code\": 1}\n",
+    "stderr": "Warning: Permanently added '34.162.251.141' (ED25519) to the list of known hosts.\n2026-09-20 01:38:50,719\tINFO worker.py:1833 -- Connecting to existing Ray cluster at address: 10.202.0.115:24679...\n2026-09-20 01:38:50,848\tINFO worker.py:2015 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32mhttp://127.0.0.1:24680 \u001b[39m\u001b[22m\n"
+  },
+  {
+    "old_job": 1279,
+    "worker": null,
+    "status": "PENDING",
+    "action": "no active assigned attempt"
+  },
+  {
+    "old_job": 1280,
+    "worker": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "status": "STARTING",
+    "exit": 0,
+    "stdout": "{\"runtime_not_started\": true}\n",
+    "stderr": "Warning: Permanently added '8.234.47.182' (ED25519) to the list of known hosts.\n"
+  }
+]

@@ -1,0 +1,96 @@
+{
+  "artifacts": [
+    {
+      "old_job_id": 1227,
+      "sha256": "f6ad812d65ac42260f69ede2363f12af2c78eeaba9b2936c35ee6cca631546b7"
+    },
+    {
+      "old_job_id": 1228,
+      "sha256": "a0240183b18049aa1f50a6977ec0ea1a32cd8c8f66b462e29c835c86f7ebf3ad"
+    },
+    {
+      "old_job_id": 1229,
+      "sha256": "d2332022f895333c1fbe2fbb3e3d16c4b7cdeeb149011bcac73c64fd448e779d"
+    },
+    {
+      "old_job_id": 1230,
+      "sha256": "45b04cd6d4cd9caa35d8c576147766621bc8015b3ebc2396c1807f089f57e1f9"
+    },
+    {
+      "old_job_id": 1231,
+      "sha256": "ec82eca97ab28f46050f1421af81ba40f68463cb3682e2f6c066ec7be35f25eb"
+    },
+    {
+      "old_job_id": 1232,
+      "sha256": "b32e47ace21c504756d35ec5f846c3aab8f129750a467b69079c886145816b82"
+    },
+    {
+      "old_job_id": 1233,
+      "sha256": "717e3122785eabb775aae1b5161556cc14b27b54d33839018f21d02a33ad03a0"
+    },
+    {
+      "old_job_id": 1234,
+      "sha256": "4d9941a9e7a0e3fd6a4f9d63ec20703b912678d02f66d98062c6f972cc0d304c"
+    },
+    {
+      "old_job_id": 1235,
+      "sha256": "b29edc0586063d1de78814c81e65dc1f1511de337ff4c59aeb578ee3e69f443b"
+    },
+    {
+      "old_job_id": 1236,
+      "sha256": "fc2aa6b4dce62d1cd01b981aaf6006474d758bc8921bb141b30b0bcc50280d24"
+    },
+    {
+      "old_job_id": 1237,
+      "sha256": "762512830bbcf1b6a0286b4a9306e2a8f8b97bfa82d3b1934b3ccac1010d9b58"
+    },
+    {
+      "old_job_id": 1238,
+      "sha256": "d4d1ca8e1779c803d4e6cca352983c4ca6e3f9eabe9fce4186a3cdf26765c457"
+    },
+    {
+      "old_job_id": 1259,
+      "sha256": "a2da33918da245c532a352678bf2f0f798c572a2226820602effcbb7a34eb001"
+    },
+    {
+      "old_job_id": 1260,
+      "sha256": "58f20aaecb47f0483a4a1fa8c57fb178586fe68ed41764a8bdf327684cb57897"
+    },
+    {
+      "old_job_id": 1261,
+      "sha256": "0f8b8a8d074acf886e7e73b00a05c6b5a474f8b8ffdabdf7092aa3095102b00f"
+    },
+    {
+      "old_job_id": 1273,
+      "sha256": "6cf79806ccf6c5941b59ad533450e9cad9a73cebe7e3caf808045130553c37e1"
+    },
+    {
+      "old_job_id": 1274,
+      "sha256": "0dadeab23b26e7732fb5a3bbe9b38e925dd40557882d00175a2cd4c748713068"
+    },
+    {
+      "old_job_id": 1275,
+      "sha256": "b47d7e4d81a90a5527ab4f678f49252091176cf694e7e2d58fb3e8b5d04e372b"
+    },
+    {
+      "old_job_id": 1276,
+      "sha256": "76a663d9c3f22d604c98e1e9dffe3c3f7c8d168bf7f3630c7b07bbe8330ef5a5"
+    },
+    {
+      "old_job_id": 1277,
+      "sha256": "459d935eac04599ddf8826504cada569667015635adbd3040fe0fc1a582aac92"
+    },
+    {
+      "old_job_id": 1278,
+      "sha256": "f10c5069faec266720e7e816ad556f29415fb9cc8ceeb0bab714ddaa8c6ec204"
+    },
+    {
+      "old_job_id": 1279,
+      "sha256": "bb3a0a040baa0880744a660cba29ffae87031de017fe7fcfe59aa7013441ff3d"
+    },
+    {
+      "old_job_id": 1280,
+      "sha256": "2042438daddb5958187c8bbf245d208eb2ea66163e55208623fbaee7b15c64fd"
+    }
+  ]
+}

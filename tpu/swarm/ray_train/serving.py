@@ -441,19 +441,48 @@ class Ingress:
                 self.condition.notify_all()
 
 
+def engine_version(raw_config, prepared, head, slot=0):
+    """Keep unchanged engines alive across a reduced Serve application graph.
+
+    A deployment name alone is insufficient: Serve generates a random code
+    version on every run_many() when version is omitted. Include the engine's
+    own inputs, not the application's engine list, so retiring its neighbors
+    preserves this replica. Changed code or initialization still replaces it.
+    """
+    inputs = json.dumps([raw_config, prepared, head, slot], sort_keys=True).encode()
+    return hashlib.sha256(Path(__file__).read_bytes() + b'\0' + inputs).hexdigest()
+
+
+def pin_deployment_version(deployment, version):
+    # Pinned Ray 2.58 removed options(version=...), but its application client
+    # still consumes Deployment._version and otherwise generates a random one.
+    # Keep this compatibility access isolated; the real Serve handoff probe
+    # verifies that graph rebuilding preserves it through binding/serialization.
+    if not hasattr(deployment, '_version'):
+        raise RuntimeError('Ray Serve no longer exposes the pinned version contract')
+    deployment._version = version
+    return deployment
+
+
+def versioned_engine(*, engine_identity, **options):
+    return pin_deployment_version(Engine.options(**options), engine_identity)
+
+
 def deploy(config, prepared, catalog, head):
     serving = {ip: info for ip, info in prepared.items() if info["role"] == "inference"}
     heads = sorted(ip for ip, info in serving.items() if (info.get("group") or [ip])[0] == ip)
     engine_models = None
     if config.arena_models:
         engine_models = [serving[ip]["config"]["model"] for ip in heads]
-        engines = [Engine.options(name=f"arena-engine-{i}", num_replicas=1,
+        engines = [versioned_engine(name=f"arena-engine-{i}", num_replicas=1,
+                    engine_identity=engine_version(serving[ip]["config"], {ip: serving[ip]}, head),
                     ray_actor_options={"num_cpus": 8, "resources": {"TPU": 4, f"node:{ip}": 0.01}})
                    .bind(serving[ip]["config"], {ip: serving[ip]}, catalog, head)
                    for i, ip in enumerate(heads)]
     elif config.inference.hosts_per_engine == 1:
-        engines = [Engine.options(name=(f"engine-{s['ip'].replace('.', '-')}-{s['slot']}"
+        engines = [versioned_engine(name=(f"engine-{s['ip'].replace('.', '-')}-{s['slot']}"
                                        if config.bootstrap_all_hosts else f"engine-{i}"), num_replicas=1,
+                   engine_identity=engine_version(config.to_dict(), {s['ip']: serving[s['ip']]}, head, s['slot']),
                    ray_actor_options={"num_cpus": 8, "resources": {"TPU": config.inference.tp, f"node:{s['ip']}": 0.01}})
                    .bind(config.to_dict(), {s["ip"]: serving[s["ip"]]}, catalog, head, slot=s["slot"])
                    for i, s in enumerate(config.engine_slots(heads))]
@@ -461,7 +490,8 @@ def deploy(config, prepared, catalog, head):
         # One deployment per engine group, pinned to the group's first host and
         # claiming NO TPU: vLLM's Ray executor takes TPU:4 on both hosts of the
         # group through the placement group tpu/vllm_tpu_server.py creates.
-        engines = [Engine.options(name=f"engine-{i}", num_replicas=1,
+        engines = [versioned_engine(name=f"engine-{i}", num_replicas=1,
+                                  engine_identity=engine_version(config.to_dict(), serving, head),
                                   ray_actor_options={"num_cpus": 8, "resources": {f"node:{ip}": 0.01}})
                    .bind(config.to_dict(), serving, catalog, head) for i, ip in enumerate(heads)]
     ingress = Ingress.options(ray_actor_options={"num_cpus": 1, "resources": {f"node:{head}": 0.01}})
