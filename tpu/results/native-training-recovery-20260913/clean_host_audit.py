@@ -22,6 +22,15 @@ result = subprocess.run(['sudo', '-n', 'fuser', *devices], capture_output=True, 
 if result.returncode != 1 or result.stdout.strip() or result.stderr.strip():
     raise RuntimeError('TPU device already owned or audit failed: ' + result.stdout.strip() + result.stderr.strip())
 
+# libtpu reports "already in use" even for an unlocked, mode-0600 file
+# left by another login user. Device-owner checks alone cannot detect this.
+# Keep this gate read-only: removing a lock requires a separate ownership audit.
+tpu_lock = Path('/tmp/libtpu_lockfile')
+if tpu_lock.exists() and not os.access(tpu_lock, os.R_OK | os.W_OK):
+    raise RuntimeError(
+        f'TPU lock is inaccessible to uid {os.getuid()}: {tpu_lock}; '
+        'audit its owner and open handles before repairing the stale lock')
+
 modules = {'skyrl.tinker.api', 'skyrl.tinker.engine', 'skyrl.backends.rpc',
            'tpu.thinking_budget.server', 'tpu.swarm.ray_train.thinking_budget.server',
            'tpu.swarm.ray_train.grader_child', 'tpu.swarm.ray_train.bootstrap',

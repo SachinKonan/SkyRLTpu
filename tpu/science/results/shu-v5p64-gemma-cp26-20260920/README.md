@@ -18,3 +18,9 @@ This is an existing provider machine, not a newly provisioned SkyPilot pool memb
 The live controller confirmed `train_ranks=[0]` and `inference_ranks=[1,2,3,4,5,6,7]`, with all eight hosts entering cache setup. Service readiness and an optimizer update are not yet claimed. The four-minute monitor includes this direct run.
 
 `launch.py` uploads and verifies the immutable bundle and seed pool, writes a receipt before dispatch, and starts the eight units. Before using it on another newly prepared standalone host, install uv 0.8.22 in the user environment. Do not rerun over an existing receipt without reconciling all host units and GCS state. `prepare.py`, `seed-import.json` and the profile record the reproducible setup.
+
+## Stale-lock repair
+
+The first trainer startup after uv installation failed before model loading: libtpu reported the TPU was already in use. All eight hosts had no device owners and all launcher units had stopped. Rank 0 still had `/tmp/libtpu_lockfile`, owned by uid 2014 with mode 0600, inaccessible to gcpuser. No process held the file. The error therefore came from the inaccessible stale lock, not a concurrent trainer.
+
+A targeted root check confirmed no device or lock-file handles, acquired both advisory lock forms without blocking, verified the inode, and removed that one file. The clean-host gate now rejects inaccessible TPU lock files early and remains read-only. The updated gate was inserted into all eight existing launch scripts. Every host passed it before restarting the same systemd units and run namespace. Seeds and runtime settings were preserved. See `lock-failure-evidence.json`, `lock-repair-audit.json`, and `retry-lock-repair.json`.
