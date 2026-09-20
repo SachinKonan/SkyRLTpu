@@ -30,7 +30,7 @@ def launch(pair):
  body='export SKYPILOT_NODE_RANK='+str(rank)+'\n'+common
  remote='/home/gcpuser/.cache/'+run+'/launch.sh';log='/home/gcpuser/.cache/'+run+'/launcher.log'
  code='import os,subprocess\nfrom pathlib import Path\np=Path('+repr(remote)+');p.parent.mkdir(parents=True,exist_ok=True);p.write_text('+repr(body)+');p.chmod(0o700)\n'
- args=['sudo','-n','systemd-run','--quiet','--unit='+unit,'--uid=gcpuser','--gid=gcpuser','--property=Type=exec','--property=KillMode=control-group','--property=TimeoutStopSec=120','--property=TasksMax=infinity','--property=LimitNOFILE=1048576','--property=StandardOutput=append:'+log,'--property=StandardError=append:'+log,'--working-directory=/home/gcpuser','/bin/bash',remote]
+ args=['sudo','-n','systemd-run','--quiet','--unit='+unit,'--uid=gcpuser','--gid=gcpuser','--property=Type=exec','--property=KillMode=control-group','--property=TimeoutStopSec=120','--property=TasksMax=infinity','--property=LimitNOFILE=1048576','--property=LimitMEMLOCK=infinity','--property=StandardOutput=append:'+log,'--property=StandardError=append:'+log,'--working-directory=/home/gcpuser','/bin/bash',remote]
  code+='subprocess.run('+repr(args)+',check=True)\nsubprocess.run('+repr(['systemctl','show',unit,'-p','ActiveState','-p','MainPID'])+',check=True)\n'
  p=subprocess.run(['ssh','-i','/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/clients/7bfcb694/ssh/sky-key','-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','ConnectTimeout=8','gcpuser@'+ip,'python3 -'],input=code,capture_output=True,text=True,timeout=35)
  return dict(rank=rank,exit=p.returncode,stdout=p.stdout,stderr=p.stderr)
