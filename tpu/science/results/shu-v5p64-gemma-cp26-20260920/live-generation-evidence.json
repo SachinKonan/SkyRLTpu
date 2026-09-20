@@ -1,0 +1,180 @@
+{
+  "time": "2026-09-20T17:11:19.713674+00:00",
+  "engines": [
+    {
+      "rank": 1,
+      "exit": 0,
+      "result": {
+        "log": [
+          "INFO:     10.128.1.94:35486 - \"POST /skyrl/v1/upload_lora_adapter?lora_name=model_2635337d_ss0_seq1 HTTP/1.1\" 200 OK",
+          "INFO 09-20 17:10:45 [loggers.py:271] Engine 000: Avg prompt throughput: 233.6 tokens/s, Avg generation throughput: 41.6 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 1.0%, Prefix cache hit rate: 93.3%",
+          "INFO 09-20 17:10:55 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 587.2 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 3.1%, Prefix cache hit rate: 93.3%",
+          "INFO 09-20 17:11:05 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 585.5 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 5.2%, Prefix cache hit rate: 93.3%",
+          "INFO 09-20 17:11:15 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 584.0 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 7.3%, Prefix cache hit rate: 93.3%"
+        ],
+        "metrics": [
+          "vllm:num_requests_running{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 16.0",
+          "vllm:num_requests_waiting{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"capacity\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"deferred\"} 0.0",
+          "vllm:generation_tokens_total{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 20144.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"stop\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"length\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"abort\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"error\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"repetition\",model_name=\"google/gemma-4-31B-it\"} 0.0"
+        ]
+      }
+    },
+    {
+      "rank": 2,
+      "exit": 0,
+      "result": {
+        "log": [
+          "INFO:     10.128.1.94:39440 - \"POST /skyrl/v1/upload_lora_adapter?lora_name=model_2635337d_ss0_seq1 HTTP/1.1\" 200 OK",
+          "INFO 09-20 17:10:45 [loggers.py:271] Engine 000: Avg prompt throughput: 276.7 tokens/s, Avg generation throughput: 43.2 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 1.2%, Prefix cache hit rate: 93.2%",
+          "INFO 09-20 17:10:55 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 585.5 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 3.3%, Prefix cache hit rate: 93.2%",
+          "INFO 09-20 17:11:05 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 585.6 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 5.4%, Prefix cache hit rate: 93.2%",
+          "INFO 09-20 17:11:15 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 583.9 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 7.5%, Prefix cache hit rate: 93.2%"
+        ],
+        "metrics": [
+          "vllm:num_requests_running{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 16.0",
+          "vllm:num_requests_waiting{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"capacity\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"deferred\"} 0.0",
+          "vllm:generation_tokens_total{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 20240.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"stop\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"length\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"abort\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"error\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"repetition\",model_name=\"google/gemma-4-31B-it\"} 0.0"
+        ]
+      }
+    },
+    {
+      "rank": 3,
+      "exit": 0,
+      "result": {
+        "log": [
+          "INFO:     10.128.1.94:52510 - \"POST /skyrl/v1/upload_lora_adapter?lora_name=model_2635337d_ss0_seq1 HTTP/1.1\" 200 OK",
+          "INFO 09-20 17:10:47 [loggers.py:271] Engine 000: Avg prompt throughput: 174.4 tokens/s, Avg generation throughput: 128.0 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 1.1%, Prefix cache hit rate: 93.0%",
+          "INFO 09-20 17:10:57 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 592.0 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 3.2%, Prefix cache hit rate: 93.0%",
+          "INFO 09-20 17:11:07 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 588.7 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 5.3%, Prefix cache hit rate: 93.0%",
+          "INFO 09-20 17:11:17 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 587.2 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 7.4%, Prefix cache hit rate: 93.0%"
+        ],
+        "metrics": [
+          "vllm:num_requests_running{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 16.0",
+          "vllm:num_requests_waiting{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"capacity\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"deferred\"} 0.0",
+          "vllm:generation_tokens_total{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 20304.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"stop\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"length\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"abort\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"error\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"repetition\",model_name=\"google/gemma-4-31B-it\"} 0.0"
+        ]
+      }
+    },
+    {
+      "rank": 4,
+      "exit": 0,
+      "result": {
+        "log": [
+          "INFO:     10.128.1.94:54876 - \"POST /skyrl/v1/upload_lora_adapter?lora_name=model_2635337d_ss0_seq1 HTTP/1.1\" 200 OK",
+          "INFO 09-20 17:10:48 [loggers.py:271] Engine 000: Avg prompt throughput: 281.6 tokens/s, Avg generation throughput: 185.6 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 1.7%, Prefix cache hit rate: 93.5%",
+          "INFO 09-20 17:10:58 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 585.5 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 3.8%, Prefix cache hit rate: 93.5%",
+          "INFO 09-20 17:11:08 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 584.0 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 5.9%, Prefix cache hit rate: 93.5%",
+          "INFO 09-20 17:11:18 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 583.9 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 8.0%, Prefix cache hit rate: 93.5%"
+        ],
+        "metrics": [
+          "vllm:num_requests_running{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 16.0",
+          "vllm:num_requests_waiting{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 80.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"capacity\"} 80.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"deferred\"} 0.0",
+          "vllm:generation_tokens_total{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 20224.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"stop\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"length\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"abort\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"error\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"repetition\",model_name=\"google/gemma-4-31B-it\"} 0.0"
+        ]
+      }
+    },
+    {
+      "rank": 5,
+      "exit": 0,
+      "result": {
+        "log": [
+          "INFO:     10.128.1.94:43592 - \"POST /skyrl/v1/upload_lora_adapter?lora_name=model_2635337d_ss0_seq1 HTTP/1.1\" 200 OK",
+          "INFO 09-20 17:10:45 [loggers.py:271] Engine 000: Avg prompt throughput: 304.0 tokens/s, Avg generation throughput: 48.0 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 1.3%, Prefix cache hit rate: 93.4%",
+          "INFO 09-20 17:10:55 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 585.6 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 3.4%, Prefix cache hit rate: 93.4%",
+          "INFO 09-20 17:11:05 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 582.3 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 5.5%, Prefix cache hit rate: 93.4%",
+          "INFO 09-20 17:11:15 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 582.3 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 7.5%, Prefix cache hit rate: 93.4%"
+        ],
+        "metrics": [
+          "vllm:num_requests_running{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 16.0",
+          "vllm:num_requests_waiting{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"capacity\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"deferred\"} 0.0",
+          "vllm:generation_tokens_total{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 20208.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"stop\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"length\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"abort\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"error\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"repetition\",model_name=\"google/gemma-4-31B-it\"} 0.0"
+        ]
+      }
+    },
+    {
+      "rank": 6,
+      "exit": 0,
+      "result": {
+        "log": [
+          "INFO:     10.128.1.94:34182 - \"POST /skyrl/v1/upload_lora_adapter?lora_name=model_2635337d_ss0_seq1 HTTP/1.1\" 200 OK",
+          "INFO 09-20 17:10:45 [loggers.py:271] Engine 000: Avg prompt throughput: 238.4 tokens/s, Avg generation throughput: 35.2 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 1.0%, Prefix cache hit rate: 93.7%",
+          "INFO 09-20 17:10:55 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 585.6 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 3.1%, Prefix cache hit rate: 93.7%",
+          "INFO 09-20 17:11:05 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 584.0 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 5.2%, Prefix cache hit rate: 93.7%",
+          "INFO 09-20 17:11:15 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 584.0 tokens/s, Running: 16 reqs, Waiting: 80 reqs, GPU KV cache usage: 7.2%, Prefix cache hit rate: 93.7%"
+        ],
+        "metrics": [
+          "vllm:num_requests_running{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 16.0",
+          "vllm:num_requests_waiting{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 80.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"capacity\"} 80.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"deferred\"} 0.0",
+          "vllm:generation_tokens_total{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 20144.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"stop\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"length\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"abort\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"error\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"repetition\",model_name=\"google/gemma-4-31B-it\"} 0.0"
+        ]
+      }
+    },
+    {
+      "rank": 7,
+      "exit": 0,
+      "result": {
+        "log": [
+          "INFO:     10.128.1.94:34906 - \"POST /skyrl/v1/upload_lora_adapter?lora_name=model_2635337d_ss0_seq1 HTTP/1.1\" 200 OK",
+          "INFO 09-20 17:10:45 [loggers.py:271] Engine 000: Avg prompt throughput: 212.8 tokens/s, Avg generation throughput: 44.2 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 0.9%, Prefix cache hit rate: 93.0%",
+          "INFO 09-20 17:10:55 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 588.8 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 3.0%, Prefix cache hit rate: 93.0%",
+          "INFO 09-20 17:11:05 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 588.8 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 5.1%, Prefix cache hit rate: 93.0%",
+          "INFO 09-20 17:11:15 [loggers.py:271] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 585.5 tokens/s, Running: 16 reqs, Waiting: 48 reqs, GPU KV cache usage: 7.2%, Prefix cache hit rate: 93.0%"
+        ],
+        "metrics": [
+          "vllm:num_requests_running{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 16.0",
+          "vllm:num_requests_waiting{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"capacity\"} 48.0",
+          "vllm:num_requests_waiting_by_reason{engine=\"0\",model_name=\"google/gemma-4-31B-it\",reason=\"deferred\"} 0.0",
+          "vllm:generation_tokens_total{engine=\"0\",model_name=\"google/gemma-4-31B-it\"} 20314.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"stop\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"length\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"abort\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"error\",model_name=\"google/gemma-4-31B-it\"} 0.0",
+          "vllm:request_success_total{engine=\"0\",finished_reason=\"repetition\",model_name=\"google/gemma-4-31B-it\"} 0.0"
+        ]
+      }
+    }
+  ]
+}

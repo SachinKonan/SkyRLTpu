@@ -28,3 +28,7 @@ A targeted root check confirmed no device or lock-file handles, acquired both ad
 The retry cleared the lock failure but exposed the outer standalone systemd unit's default 8 MiB `LimitMEMLOCK`. The nested runtime correctly inherited that limit; TPU mmap initialization then failed. Normal SSH sessions have unlimited locked memory. Set `LimitMEMLOCK=infinity` only on the eight dedicated launcher units and added it to `launch.py` for future launches. Before restarting, all eight hosts passed the clean-host audit again.
 
 Each host also had a `/tmp/tpu_logs` directory owned by the previous user. After confirming no open handles, preserved each directory at `/tmp/tpu_logs.uid2014.before-skyrl-20260920` and created a writable gcpuser-owned replacement. No previous logs were deleted. `memlock-repair.json` and `retry-memlock.json` record these changes.
+
+## Live acceptance after repair
+
+At 17:09:26 UTC the controller reported `services_ready` with one trainer and seven inference replicas and started the GRPO client. The client restored all 51 PUCT seed states and entered step 0 with 16 rollout groups. At 2026-09-20T17:11:19.713674+00:00, every inference host had accepted the same `model_2635337d_ss0_seq1` adapter (HTTP 200) and had positive generated-token counters. There were 112 active generations across the seven engines; the latest per-engine log samples totaled approximately 4091 generated tokens/s. These are live generation measurements, not a completed optimizer-step or grading result. See `live-generation-evidence.json`.
