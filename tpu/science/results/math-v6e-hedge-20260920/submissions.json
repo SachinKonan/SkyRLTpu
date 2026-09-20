@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-09-20T00:32:57.675060+00:00",
+  "checked_at": "2026-09-20T01:18:12.564377+00:00",
   "jobs": [
     {
       "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
@@ -14,8 +14,8 @@
       "task": "ac2",
       "model": "gemma",
       "parallel_v4_job": 1228,
-      "v4_status": "RECOVERING",
-      "status": "STARTING",
+      "v4_status": "PENDING",
+      "status": "RUNNING",
       "worker": "tpuswarm-v6e32-central1b-8"
     },
     {
@@ -32,7 +32,7 @@
       "model": "muse",
       "parallel_v4_job": 1229,
       "v4_status": "RECOVERING",
-      "status": "STARTING",
+      "status": "RUNNING",
       "worker": "tpuswarm-v6e32-central1b-4"
     },
     {
@@ -48,9 +48,9 @@
       "task": "cp26",
       "model": "gemma",
       "parallel_v4_job": 1231,
-      "v4_status": "PENDING",
-      "status": "PENDING",
-      "worker": null
+      "v4_status": "RECOVERING",
+      "status": "RUNNING",
+      "worker": "tpuswarm-v6e32-central1b-7"
     },
     {
       "run_id": "math-v6e-muse-cp26-grpo-lr4e5-s1-20260920",
@@ -66,6 +66,74 @@
       "model": "muse",
       "parallel_v4_job": 1232,
       "v4_status": "RECOVERING",
+      "status": "RUNNING",
+      "worker": "tpuswarm-v6e32-east5b-qwen35-5229"
+    },
+    {
+      "run_id": "math-v6e-qwen-cp26-grpo-lr15e4-s1-20260920",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 100,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-99b7ada259fe3c113d9edc256151f1e7905559ed435a964637a9d588ad2c81d6.tar.gz",
+      "archive_sha256": "99b7ada259fe3c113d9edc256151f1e7905559ed435a964637a9d588ad2c81d6",
+      "submitted_at": "2026-09-20T01:16:58.878639+00:00",
+      "exit_code": 0,
+      "job_id": 1277,
+      "task": "cp26",
+      "model": "qwen",
+      "parallel_v4_job": 1230,
+      "v4_status": "RECOVERING",
+      "status": "STARTING",
+      "worker": "tpuswarm-v6e32-east5b-qwen35-5241"
+    },
+    {
+      "run_id": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 90,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-cca435100a23e18d6422efa587ef4d0e1fe45def6d6743070a5d215f1578562b.tar.gz",
+      "archive_sha256": "cca435100a23e18d6422efa587ef4d0e1fe45def6d6743070a5d215f1578562b",
+      "submitted_at": "2026-09-20T01:17:16.441864+00:00",
+      "exit_code": 0,
+      "job_id": 1278,
+      "task": "qubit",
+      "model": "qwen",
+      "parallel_v4_job": 1233,
+      "v4_status": "RECOVERING",
+      "status": "STARTING",
+      "worker": "tpuswarm-v6e32-east5b-qwen35-5242"
+    },
+    {
+      "run_id": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 90,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-fbfcf8b0669c77be8e2aba7b0d542702b09c3865f35f8c63a2b0b7cf78e7ba14.tar.gz",
+      "archive_sha256": "fbfcf8b0669c77be8e2aba7b0d542702b09c3865f35f8c63a2b0b7cf78e7ba14",
+      "submitted_at": "2026-09-20T01:17:23.946292+00:00",
+      "exit_code": 0,
+      "job_id": 1279,
+      "task": "qubit",
+      "model": "gemma",
+      "parallel_v4_job": 1234,
+      "v4_status": "STARTING",
+      "status": "STARTING",
+      "worker": null
+    },
+    {
+      "run_id": "science-v6e-muse-qubit-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 90,
+      "state": "submitted",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-39c53a32730090e6598a1e3338c5610ceb29e69214c205be365e1a0995815161.tar.gz",
+      "archive_sha256": "39c53a32730090e6598a1e3338c5610ceb29e69214c205be365e1a0995815161",
+      "submitted_at": "2026-09-20T01:17:34.804216+00:00",
+      "exit_code": 0,
+      "job_id": 1280,
+      "task": "qubit",
+      "model": "muse",
+      "parallel_v4_job": 1235,
+      "v4_status": "STARTING",
       "status": "STARTING",
       "worker": null
     }

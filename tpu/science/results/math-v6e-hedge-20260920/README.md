@@ -1,6 +1,6 @@
-# Parallel v6e math runs
+# Parallel v6e math and qubit runs
 
-The v4 runs remain scheduled with their existing progress. These four v6e runs
+The v4 runs remain scheduled with their existing progress. These eight v6e runs
 are independent branches of the same fresh-bootstrap GRPO experiment; nothing
 in this campaign cancels or modifies a v4 job.
 
@@ -10,6 +10,10 @@ in this campaign cancels or modifies a v4 job.
 | Muse AC2 | tpuswarm-v6e32-central1b | 1273 | 1229 |
 | Gemma circle packing n=26 | tpuswarm-v6e32-central1b | 1276 | 1231 |
 | Muse circle packing n=26 | tpuswarm-v6e32-east5b-qwen35 | 1274 | 1232 |
+| Qwen circle packing n=26 | tpuswarm-v6e32-east5b-qwen35 | 1277 | 1230 |
+| Qwen qubit | tpuswarm-v6e32-east5b-qwen35 | 1278 | 1233 |
+| Gemma qubit | tpuswarm-v6e32-east5b-qwen35 | 1279 | 1234 |
+| Muse qubit | tpuswarm-v6e32-east5b-qwen35 | 1280 | 1235 |
 
 `jobs.json` records profiles, immutable package hashes, and submission paths.
 `submissions.json` records confirmed job receipts after dispatch.
@@ -20,11 +24,13 @@ in this campaign cancels or modifies a v4 job.
   generate at most 1,024 drafts, stopping at the configured 512 distinct valid
   programs target. No separate repair round.
 - Training: four physically adjacent trainer hosts and four TP4 inference
-  engines; 15 GRPO steps, 16 groups of 32, learning rate 4e-5 for both models.
-- Gemma trainer TP4/FSDP4; Muse TP8/FSDP2. Native thinking budget and 22,528-token
+  engines; 15 GRPO steps, 16 groups of 32, learning rate 1.5e-4 for Qwen and 4e-5 for Gemma/Muse.
+- Gemma trainer TP4/FSDP4; Qwen and Muse TP8/FSDP2. Native thinking budget and 22,528-token
   context are inherited from the validated v6e model configurations.
-- Math task prompts, grading, and rewards are inherited from the matching v4
-  profile. CPU grading retains two CPUs per task.
+- Task prompts, grading, and rewards are inherited from the matching v4
+  profile. Math grading retains two CPUs per task. Qubit uses all three
+  topologies (Q20, Willow, Heron), 16 grading slots per host, four CPUs and
+  8 GiB per candidate; its reward and per-case feedback match the v4 run.
 - Each run has an independent output namespace and writable compilation-cache
   destinations. Recovery restores only that run's own state.
 
@@ -51,7 +57,7 @@ compute service-account identity for both gcloud and ADC:
 
 ```bash
 /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-multihost/third_party/TPUSwarm/.venv/bin/python \
-  tpu/science/results/math-v6e-hedge-20260920/submit.py --hardware v6e --stage math
+  tpu/science/results/math-v6e-hedge-20260920/submit.py --hardware v6e --stage all
 ```
 
 Complete each model's required cache replication before submitting that model.
@@ -79,3 +85,18 @@ Bootstrap completion is bound to configuration/implementation fingerprints, so
 copying a v6e bootstrap directory into an existing v4 run is insufficient. Equal
 chip counts alone do not prove checkpoint portability. A future transfer must
 pass real restoration; weights-only recovery would lose optimizer/search state.
+
+## Additional east5b submissions
+
+`prepare_qwen_cp26.py` adds Qwen circle packing; `prepare_qubit.py` adds all
+three qubit models through the science packager, including Rust runtime setup.
+The original submitted artifacts are not rebuilt. New runs start their own
+bounded bootstrap and GRPO training; they do not import partial v4 progress.
+Qwen circle packing has priority 100 and qubit priority 90, retaining math
+priority. All four use independent east5 output and compilation-cache prefixes,
+with existing v6e caches as read-only seeds.
+
+Both idle east5b slices 5241 and 5242 passed all eight host checks before
+submission; `extra-host-checks.json` records the 16 successful checks. The
+startup gate also checks the actual assigned hosts. At preparation there were
+only two idle ready slices, so some additions may wait for pool capacity.
