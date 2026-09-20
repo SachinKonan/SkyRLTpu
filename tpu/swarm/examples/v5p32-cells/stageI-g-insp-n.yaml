@@ -45,6 +45,10 @@ envs:
   TUNIX_FREE_BASE_STATE: "1"
 
   CELL: g-pwc-n
+  # 2026-09-20: per-engine concurrency cap 32 -> 64 (cell_worker.sh default was 32). Live vLLM counters
+  # showed gemma queue-bound (32 running / 160 waiting, KV 21%, 0 preemptions, queue wait 3-4x decode);
+  # serving concurrency changes speed only, not what is sampled. Expect a cold XLA compile once per worker.
+  VLLM_MAX_NUM_SEQS: "64"
   RUN_DIR_NAME: stageI-g-insp-n
   EXPERIMENT_NAME: stageI-g-insp-n
   GCS_RUN: gs://sk7524-tinker-tpu-us-east5/skyrl-runs/stageI-g-insp-n
