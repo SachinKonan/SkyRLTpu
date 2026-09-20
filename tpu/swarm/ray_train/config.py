@@ -199,12 +199,14 @@ ACCELERATOR_ZONES = {
     "tpu-v4-64": ("us-central2-b",),
     "tpu-v4-32": ("us-central2-b",),
     "tpu-v5p-32": ("us-east5-a",),
+    "tpu-v5p-64": ("us-central1-a", "us-east5-a"),
     "tpu-v6e-32": ("asia-northeast1-b", "us-east5-b", "us-central1-b", "europe-west4-a"),
 }
 ACCELERATOR_RUNTIME = {
     "tpu-v4-64": "tpu-ubuntu2204-base",
     "tpu-v4-32": "tpu-ubuntu2204-base",
     "tpu-v5p-32": "v2-alpha-tpuv5",
+    "tpu-v5p-64": "v2-alpha-tpuv5",
     "tpu-v6e-32": "v2-alpha-tpuv6e",
 }
 
@@ -633,7 +635,7 @@ class Config:
             raise ValueError("checkpoint_cleanup_timeout must be a nonnegative integer (0 disables)")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}", self.run_id):
             raise ValueError("run_id must be a safe unique name")
-        expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4, "tpu-v6e-32": 8}
+        expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4, "tpu-v5p-64": 8, "tpu-v6e-32": 8}
         if expected.get(self.accelerator) != self.hosts:
             raise ValueError("accelerator/host count mismatch")
         if self.zone and self.zone not in ACCELERATOR_ZONES.get(self.accelerator, ()):
@@ -644,6 +646,10 @@ class Config:
             raise ValueError("require disjoint nonempty trainer and inference roles")
         if not self.inference_only and self.accelerator == "tpu-v4-64" and self.trainer.hosts != 4:
             raise ValueError("v4-64 currently requires the validated four-host row")
+        if self.accelerator == "tpu-v5p-64" and (
+                self.inference_only or self.trainer.hosts != 1
+                or self.inference.hosts_per_engine != 1 or self.inference.tp != 4):
+            raise ValueError("v5p-64 requires one trainer host and seven TP4 inference hosts")
         if not self.inference_only and self.accelerator in ("tpu-v5p-32", "tpu-v4-32") and self.trainer.hosts not in (1, 2):
             raise ValueError("32-core profiles support one or two trainer hosts")
         if not self.inference_only and self.accelerator == "tpu-v6e-32" and (

@@ -1,0 +1,53 @@
+{
+  "time": "2026-09-20T16:02:33.174384+00:00",
+  "hosts": [
+    {
+      "rank": 0,
+      "exit": 0,
+      "stdout": "MainPID=2281722\nActiveState=active\n",
+      "stderr": ""
+    },
+    {
+      "rank": 1,
+      "exit": 0,
+      "stdout": "MainPID=539876\nActiveState=active\n",
+      "stderr": ""
+    },
+    {
+      "rank": 2,
+      "exit": 0,
+      "stdout": "MainPID=1771981\nActiveState=active\n",
+      "stderr": ""
+    },
+    {
+      "rank": 3,
+      "exit": 0,
+      "stdout": "MainPID=1555810\nActiveState=active\n",
+      "stderr": ""
+    },
+    {
+      "rank": 4,
+      "exit": 0,
+      "stdout": "MainPID=4165501\nActiveState=active\n",
+      "stderr": ""
+    },
+    {
+      "rank": 5,
+      "exit": 0,
+      "stdout": "MainPID=25343\nActiveState=active\n",
+      "stderr": ""
+    },
+    {
+      "rank": 6,
+      "exit": 0,
+      "stdout": "MainPID=129852\nActiveState=active\n",
+      "stderr": ""
+    },
+    {
+      "rank": 7,
+      "exit": 0,
+      "stdout": "MainPID=3534361\nActiveState=active\n",
+      "stderr": ""
+    }
+  ]
+}
