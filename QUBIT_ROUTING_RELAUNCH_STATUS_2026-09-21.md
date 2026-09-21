@@ -1,6 +1,6 @@
 # Qubit routing relaunch — implementation and live validation
 
-Updated 2026-09-21, 17:07 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
+Updated 2026-09-21, 17:30 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
 
 ## Authorized deployment
 
@@ -101,3 +101,18 @@ All three use the same corrected `regrade-v3` evaluator. Each model maps its uni
 The two new execution requests were waiting in the shared API long-request queue. Only those exact existing requests were run through SkyPilot's status- and lock-guarded standard executor on the connected API host. No duplicate managed job was submitted and the shared API was not restarted. Executor records are `qwen-regrade-v3-executor.log` and `muse-regrade-v3-executor.log` under the private evidence directory.
 
 The rollout watcher was stopped during this state transition and is active again. Regrades may run concurrently on all three original slices. Fresh ten-step training still follows the Gemma-first full-cycle gate, including a real remote farm generation. No new training is claimed yet. Preservation and submission receipts: `parallel-regrade-retirement.json`, `parallelize-regrades.log`, `retired/20260921T205932Z/`, and `rollout-state.json` under `.science/routing-relaunch-20260921`.
+
+## Completed Gemma/Qwen regrades and Gemma training launch (17:30 EDT)
+
+| Model | Drafts | Unique evaluated | Valid drafts before → after | Unique valid before → after | Unique timeouts before → after | Retained seeds | Best regraded reward |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Gemma | 1024 | 196 | 494 → 579 | 96 → 111 | 25 → 10 | 111 | 0.5329396105 |
+| Qwen | 1024 | 114 | 725 → 725 | 46 → 46 | 0 → 0 | 46 | 0.5202905231 |
+
+Both imports use the common corrected evaluator hash. All exact original sources have verdicts, all retained programs passed the 72-case suite, and seed imports start fresh PUCT statistics and adapter/optimizer state. No infrastructure verdicts were accepted. Qwen's slowest host took 354.687 seconds; Gemma's 2,243.511 seconds, excluding setup. Aggregate evaluator CPU cost was 37,360.050 and 93,752.067 seconds respectively. Full source provenance, per-topology combined-policy scores, separate topology minima, and costs are in `seeds/<model>/{seed-import.json,rank-completion.json}`.
+
+Gemma training **1453**, `qubit-v4-gemma-parallel2-20260921`, has been submitted. Its immutable training bundle is `00e9db115a7e11e562e6990a19a482233f9bf71147f1cd628eb2b22bd32437ba`, built at commit `ba9a5ccc1983487c75e88d5c0277f26dbc2a16eb`; its seed pool hash is `3360bd344a015350e2c84e374020d92538de5ee08ded58e532e68a7446f58453`. The first attempt on worker 681 failed the read-only disk preflight before training: rank 1 had only 19.74 GiB free. The controller selected existing worker 718 for recovery. All eight hosts there had 76–79 GiB free; the recovered job is RUNNING and compiling its runtime. No optimizer update or new farm generation is claimed yet.
+
+Qwen's training bundle/profile is prepared, with seed hash `b7d12ba1ed47a8fab47d5bc8839fb9c32f5e1e4cbe7c7f22d4efdc71a0a95e29`; admission still waits for Gemma's full cycle. Muse regrade 1452 continues on worker 724: latest detailed snapshot 120/245 verdicts, 54 valid, no infrastructure errors. Worker 681's low-space inventory identified completed Qwen checkpoint/upload copies; targeted cleanup verifies durable copies before removing local duplicates and retains restoration receipts. Results, database, and source GCS archives are preserved.
+
+All model recipes remain 16 parents × 32 rollouts, 10 optimizer steps, mean-baseline advantages with importance-sampling loss, two elite parent slots, and top-two child retention per parent. Elite slots exclude initial seeds in the current sampler. Final generated profile diffs explicitly record the parallel evaluator/resources, regraded seeds, fresh paths, and farm borrowing settings.
