@@ -43,3 +43,11 @@ and unchanged-file checks passed on allocation 14221328.
 Attempt 6 was dispatched on all eight hosts after successful clean-host audits.
 Its immutable Gemma bundle is `808ec4ff390c67bfe7dcf401f143a085e58cbec2b17c6da9e081d8edd88a66b3`.
 Actual optimizer restore and resumed sampling remain to be observed.
+
+At 08:20 UTC attempt 6 completed CREATE_MODEL 144, LOAD_WEIGHTS 145 from
+model_a0eb148b/000001, and sampler export 146. The client logged checkpoint-1
+resume and sampling step 1 with 16 groups of 32. All seven engines registered,
+16 requests were active, and ingress reported no fatal or exhausted engines.
+See resume-proof.json. Step 2 is not yet completed. A bounded signal trace
+observed 45 later uploads without capturing SIGTERM; the original uploader's
+terminating cause remains unproven.

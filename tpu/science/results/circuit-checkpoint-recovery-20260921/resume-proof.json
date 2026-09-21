@@ -1,0 +1,79 @@
+{
+  "time": 1789978878.9542313,
+  "requests": [
+    [
+      144,
+      "CREATE_MODEL",
+      "model_73f90900",
+      "COMPLETED",
+      "{\"lora_config\": {\"rank\": 32, \"alpha\": 32.0, \"seed\": 1756587406, \"train_attn\": true, \"train_mlp\": true, \"train_unembed\": false}, \"model_role\": \"policy\"}"
+    ],
+    [
+      145,
+      "LOAD_WEIGHTS",
+      "model_73f90900",
+      "COMPLETED",
+      "{\"source_model_id\": \"model_a0eb148b\", \"checkpoint_id\": \"000001\"}"
+    ],
+    [
+      146,
+      "SAVE_WEIGHTS_FOR_SAMPLER",
+      "model_73f90900",
+      "COMPLETED",
+      "{\"path\": \"ss0_seq2\", \"sampling_session_seq_id\": 0, \"seq_id\": 2, \"sampling_session_id\": \"sampling_858a0059\"}"
+    ]
+  ],
+  "client_evidence": [
+    "\u001b[36m(pid=)\u001b[0m I0921 08:13:21.374114 3192600 allocator_stats_reporter.cc:117] Starting AllocatorStats Reporter with reporting interval: 5s",
+    "\u001b[36m(pid=)\u001b[0m I0921 08:13:21.374114 3192600 allocator_stats_reporter.cc:117] Starting AllocatorStats Reporter with reporting interval: 5s",
+    "ttt_discover.rl.ensemble:1177 [\u001b[92mINFO\u001b[0m] member gemma resumed from tinker://model_a0eb148b/weights/000001",
+    "[ensemble] members: ['gemma']  steps=10 group_size=32 groups/member=[16]",
+    "ttt_discover.tinker_utils.misc_utils:21 [\u001b[92mINFO\u001b[0m] Starting save_checkpoint",
+    "[ensemble] step 1: sampling gemma:16g [pipelined dataflow] ...",
+    "ttt_discover.tinker_utils.misc_utils:21 [\u001b[92mINFO\u001b[0m] Starting sampling"
+  ],
+  "trainer_evidence": [],
+  "inference": {
+    "active": 16,
+    "version": "model_73f90900_ss0_seq2",
+    "replicas": [
+      {
+        "ip": "10.128.1.88",
+        "instance": "6a2691cdd2e74e959a55b956286ee29a",
+        "registered": 1789978776.2233193
+      },
+      {
+        "ip": "10.128.1.92",
+        "instance": "e14b31345bd44e58a40615c51783aa2e",
+        "registered": 1789978780.2286537
+      },
+      {
+        "ip": "10.128.1.89",
+        "instance": "5db533784572462abe4c30d640262cd1",
+        "registered": 1789978784.2673693
+      },
+      {
+        "ip": "10.128.1.93",
+        "instance": "dc0c54f9d71c424c82786f21b8b56679",
+        "registered": 1789978784.3517578
+      },
+      {
+        "ip": "10.128.1.90",
+        "instance": "837b82f45f8a49c4a0593eda789bd495",
+        "registered": 1789978786.23262
+      },
+      {
+        "ip": "10.128.1.95",
+        "instance": "52d0baa0e426475fa42d4e6cd5d520e4",
+        "registered": 1789978786.335969
+      },
+      {
+        "ip": "10.128.1.91",
+        "instance": "c0e4c194a64343fbb6f58debe045840a",
+        "registered": 1789978790.2518618
+      }
+    ],
+    "fatal_error": null,
+    "exhausted": []
+  }
+}
