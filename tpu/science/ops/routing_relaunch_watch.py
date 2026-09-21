@@ -176,11 +176,15 @@ class Rollout:
                     if attempt==2:raise
         metrics=rows(client+'metrics.jsonl');checkpoints=rows(client+'member_gemma/checkpoints.jsonl')
         if not metrics or not checkpoints:return False
-        metric=next((m for m in metrics if m.get('step')==0),metrics[0])
+        metric=next((m for m in metrics if m.get('progress/batch')==0 or m.get('life_step')==0),None)
+        if metric is None:return False
         if metric.get('gemma/train_error',0) or metric.get('gemma/train_skipped',0):
             raise RuntimeError('Gemma first optimizer step failed or skipped; do not admit other models')
         if not any('time/train' in k and isinstance(v,(int,float)) and v>0 for k,v in metric.items()):return False
         if metric.get('gemma/rollout_groups_failed',0):raise RuntimeError('Gemma first batch has failed rollout groups')
+        if (metric.get('gemma/puct/sampled_size')!=16 or
+                metric.get('gemma/env/all/total_episodes')!=32):
+            raise RuntimeError('Gemma first cycle does not attest the full 16 x 32 rollout batch')
         checkpoint=next((c for c in checkpoints if c.get('batch')==1),None)
         if not checkpoint or not checkpoint.get('sampler_path'):return False
         model_id,checkpoint_id=checkpoint['sampler_path'].removeprefix('tinker://').split('/',1)

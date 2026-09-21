@@ -40,7 +40,8 @@ def evidence(monkeypatch,tmp_path,*,train_error=0,skip=0,remote=True,reload=True
     if reload:events.append(dict(event='adapter_committed',time=2,version='model_000001',sha256='abc'))
     if post_reload:events.append(dict(event='hybrid_generated',time=3,route='local',output_tokens=20))
     blobs={
-      client+'metrics.jsonl':Blob('',[{'step':0,'gemma/time/train':3,'gemma/train_error':train_error,'gemma/train_skipped':skip}]),
+      client+'metrics.jsonl':Blob('',[{'step':1,'progress/batch':0,'gemma/puct/sampled_size':16,
+          'gemma/env/all/total_episodes':32,'gemma/time/train':3,'gemma/train_error':train_error,'gemma/train_skipped':skip}]),
       client+'member_gemma/checkpoints.jsonl':Blob('',[dict(batch=1,sampler_path='tinker://model/000001')]),
       prefix+'logs/inference-events.jsonl':Blob(prefix+'logs/inference-events.jsonl',events)}
     if checkpoint:blobs[prefix+'checkpoints/model/000001.tar.gz']=Blob('',[])
