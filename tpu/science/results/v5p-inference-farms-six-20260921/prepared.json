@@ -1,0 +1,62 @@
+[
+  {
+    "run_id": "inference-farm-v5p32-muse-1-20260921",
+    "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-muse-1-20260921.json",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-muse-1-20260921/ray-training.tar.gz",
+    "archive_sha256": "e83ba87f8071a926d908fc7c32caca04341613717e95f5e1570c3d5961b1da99",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-e83ba87f8071a926d908fc7c32caca04341613717e95f5e1570c3d5961b1da99.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-muse-1-20260921/inference-farm-v5p32-muse-1-20260921.yaml",
+    "task_sha256": "a9729dd027609a30b49082a4e77d27fb67a7034d9b7db8618eedf6d1e786aaf1",
+    "pool": "tpuswarm-v5p32-east5a-erdos"
+  },
+  {
+    "run_id": "inference-farm-v5p32-muse-2-20260921",
+    "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-muse-2-20260921.json",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-muse-2-20260921/ray-training.tar.gz",
+    "archive_sha256": "ef57b0e781d576fd2187b9c36a5bb9ad7633e5f2dc66199247cd32f3a00e3eca",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-ef57b0e781d576fd2187b9c36a5bb9ad7633e5f2dc66199247cd32f3a00e3eca.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-muse-2-20260921/inference-farm-v5p32-muse-2-20260921.yaml",
+    "task_sha256": "b6f6ba2511f52fe60d12a0c523b4822391f1b4359a25d2dc4555ba3896f84375",
+    "pool": "tpuswarm-v5p32-east5a-erdos"
+  },
+  {
+    "run_id": "inference-farm-v5p32-gemma-1-20260921",
+    "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-gemma-1-20260921.json",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-gemma-1-20260921/ray-training.tar.gz",
+    "archive_sha256": "e71ea08661b844716fe4254f8e8f466fc09366718a59f7d414eb2cf37eebae68",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-e71ea08661b844716fe4254f8e8f466fc09366718a59f7d414eb2cf37eebae68.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-gemma-1-20260921/inference-farm-v5p32-gemma-1-20260921.yaml",
+    "task_sha256": "c39bc2004db0bcdb1e60de2b32b78a7c2e38dbffdc2a29f7355f1550f10b06f7",
+    "pool": "tpuswarm-v5p32-east5a-erdos"
+  },
+  {
+    "run_id": "inference-farm-v5p32-gemma-2-20260921",
+    "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-gemma-2-20260921.json",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-gemma-2-20260921/ray-training.tar.gz",
+    "archive_sha256": "e00dbb6be464b8bcb4560f876387876d9ba853b06aeb5df808b9ec1a255defaf",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-e00dbb6be464b8bcb4560f876387876d9ba853b06aeb5df808b9ec1a255defaf.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-gemma-2-20260921/inference-farm-v5p32-gemma-2-20260921.yaml",
+    "task_sha256": "ff6f6777751abdc94b909f21fff5f961227081849729689c4ff079302403516d",
+    "pool": "tpuswarm-v5p32-east5a-erdos"
+  },
+  {
+    "run_id": "inference-farm-v5p32-qwen-1-20260921",
+    "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-qwen-1-20260921.json",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-qwen-1-20260921/ray-training.tar.gz",
+    "archive_sha256": "7134947399342e30defe746be1d802029929ce60769d02ff346f4b9bdb2d583d",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-7134947399342e30defe746be1d802029929ce60769d02ff346f4b9bdb2d583d.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-qwen-1-20260921/inference-farm-v5p32-qwen-1-20260921.yaml",
+    "task_sha256": "b48ac1727658197562962f3904f23bddc1833f12f04ddf798af2c05deffd3b5d",
+    "pool": "tpuswarm-v5p32-east5a-erdos"
+  },
+  {
+    "run_id": "inference-farm-v5p32-qwen-2-20260921",
+    "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-qwen-2-20260921.json",
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-qwen-2-20260921/ray-training.tar.gz",
+    "archive_sha256": "a430bc5b48967400dcba4a169bdcc419e5c0570361df17e375cb817c7b0d608f",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-a430bc5b48967400dcba4a169bdcc419e5c0570361df17e375cb817c7b0d608f.tar.gz",
+    "task": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-qwen-2-20260921/inference-farm-v5p32-qwen-2-20260921.yaml",
+    "task_sha256": "3383a59b9e357fcd3463ae110dd2fa10c988e6552b914839f51c8587c15957f6",
+    "pool": "tpuswarm-v5p32-east5a-erdos"
+  }
+]

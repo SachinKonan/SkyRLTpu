@@ -1,0 +1,62 @@
+[
+  {
+    "run_id": "inference-farm-v5p32-muse-1-20260921",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "state": "submitted",
+    "time": 1789963720.1815474,
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-e83ba87f8071a926d908fc7c32caca04341613717e95f5e1570c3d5961b1da99.tar.gz",
+    "generation": 1789963719912080,
+    "archive_sha256": "e83ba87f8071a926d908fc7c32caca04341613717e95f5e1570c3d5961b1da99",
+    "job_id": 1353
+  },
+  {
+    "run_id": "inference-farm-v5p32-muse-2-20260921",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "state": "submitted",
+    "time": 1789963726.603412,
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-ef57b0e781d576fd2187b9c36a5bb9ad7633e5f2dc66199247cd32f3a00e3eca.tar.gz",
+    "generation": 1789963726343223,
+    "archive_sha256": "ef57b0e781d576fd2187b9c36a5bb9ad7633e5f2dc66199247cd32f3a00e3eca",
+    "job_id": 1354
+  },
+  {
+    "run_id": "inference-farm-v5p32-gemma-1-20260921",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "state": "submitted",
+    "time": 1789963734.7659786,
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-e71ea08661b844716fe4254f8e8f466fc09366718a59f7d414eb2cf37eebae68.tar.gz",
+    "generation": 1789963734519451,
+    "archive_sha256": "e71ea08661b844716fe4254f8e8f466fc09366718a59f7d414eb2cf37eebae68",
+    "job_id": 1355
+  },
+  {
+    "run_id": "inference-farm-v5p32-gemma-2-20260921",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "state": "submitted",
+    "time": 1789963742.3487625,
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-e00dbb6be464b8bcb4560f876387876d9ba853b06aeb5df808b9ec1a255defaf.tar.gz",
+    "generation": 1789963742094779,
+    "archive_sha256": "e00dbb6be464b8bcb4560f876387876d9ba853b06aeb5df808b9ec1a255defaf",
+    "job_id": 1356
+  },
+  {
+    "run_id": "inference-farm-v5p32-qwen-1-20260921",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "state": "submitted",
+    "time": 1789963750.02721,
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-7134947399342e30defe746be1d802029929ce60769d02ff346f4b9bdb2d583d.tar.gz",
+    "generation": 1789963749719465,
+    "archive_sha256": "7134947399342e30defe746be1d802029929ce60769d02ff346f4b9bdb2d583d",
+    "job_id": 1357
+  },
+  {
+    "run_id": "inference-farm-v5p32-qwen-2-20260921",
+    "pool": "tpuswarm-v5p32-east5a-erdos",
+    "state": "submitted",
+    "time": 1789963768.2228847,
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-a430bc5b48967400dcba4a169bdcc419e5c0570361df17e375cb817c7b0d608f.tar.gz",
+    "generation": 1789963767981720,
+    "archive_sha256": "a430bc5b48967400dcba4a169bdcc419e5c0570361df17e375cb817c7b0d608f",
+    "job_id": 1358
+  }
+]

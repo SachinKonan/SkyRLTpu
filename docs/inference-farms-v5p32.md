@@ -72,3 +72,17 @@ The builder packages and checksums the runtime. Omit `--upload` and the `sky`
 command to prepare artifacts locally only. Before submitting, inventory the
 pool and verify credentials/cache access using the usual launch procedure.
 Do not submit another active job with the same run name/cache destinations.
+
+## Six-farm deployment (September 21)
+
+The authorized deployment uses two independent runs per model. Their profiles
+append `-1` or `-2` before the date, for example
+`inference-farm-v5p32-muse-1-20260921.json`. Each has its own run root and both
+compile-cache destinations. The three unnumbered profiles above remain templates.
+
+Submission IDs and immutable artifact receipts are recorded in
+[`launches.json`](../tpu/science/results/v5p-inference-farms-six-20260921/launches.json).
+All six target `tpuswarm-v5p32-east5a-erdos` in `us-east5-a`. Once healthy, they
+are automatically eligible for the already deployed name-based discovery.
+Together they provide 24 engines and a configured maximum of 384 simultaneous
+sequences; achieved throughput and full-length capacity require live observation.
