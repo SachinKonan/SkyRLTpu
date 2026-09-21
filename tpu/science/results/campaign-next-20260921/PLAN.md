@@ -105,6 +105,16 @@ Validation: 16 focused handoff/watcher tests passed on CPU Slurm job 14219921,
 including unfinished-gate refusal, source-change refusal, uncertain-intent
 refusal, and receipt-to-live-queue identity checks.
 
+## East maintenance recovery
+
+The 06:22 UTC east maintenance interruption displaced all original east jobs.
+Gemma and Muse AC2 were still waiting for replacement capacity while central
+had idle workers. Their original run IDs and immutable bundles were resumed
+in central as jobs 1363 and 1364, from saved steps 2 and 4, after cancellation
+of the old jobs 1335 and 1336 was verified. Only task placement changed; see
+`../ac2-central-recovery-20260921/README.md` and its receipts. Qwen retains its
+existing east recovery. The completion gate follows the newest job per run ID.
+
 ## Central capacity update
 
 A third central worker became READY while Muse successor 1361 was unassigned
