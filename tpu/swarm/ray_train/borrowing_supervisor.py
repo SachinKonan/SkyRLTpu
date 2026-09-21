@@ -54,6 +54,15 @@ except Exception as exc:
 '''
 
 
+def target_identity_matches(job_run_id, target_run_id):
+    """Accept the explicit optional-farm job suffix used by duplicated runs."""
+    if not job_run_id or not target_run_id:
+        return False
+    if job_run_id == target_run_id:
+        return True
+    return bool(re.fullmatch(re.escape(target_run_id) + r'-optional-farm-r[0-9]+', job_run_id))
+
+
 def rpc(ssh_dir, cluster, action, port, body=None):
     if not isinstance(cluster, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]+', cluster):
         return {'ok': False, 'error': 'invalid_cluster'}
@@ -116,7 +125,7 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
         descriptors.update(zip(jobs, values))
     reserving = {job: value['result'] for job, value in descriptors.items()
                  if value.get('ok') and value['result'].get('enabled') is True
-                 and value['result'].get('run_id') == running[job].get('run_id')
+                 and target_identity_matches(running[job].get('run_id'), value['result'].get('run_id'))
                  and value['result'].get('lease_scope') == 'run'}
     from .farm_admission import assignments
     assigned = assignments([r for r in rows if r['job_id'] in trainer_ids], farms, reserving)
@@ -129,7 +138,7 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
         if not descriptor.get('ok'):
             return dict(job_id=job_id, state='unreachable_or_not_supported', detail=descriptor)
         target = descriptor['result']
-        if target.get('run_id') != row.get('run_id') or not row.get('run_id'):
+        if not target_identity_matches(row.get('run_id'), target.get('run_id')):
             return dict(job_id=job_id, state='target_identity_mismatch')
         if target.get('enabled') is not True:
             return dict(job_id=job_id, state='not_opted_in')

@@ -1,6 +1,15 @@
 import copy
 
-from tpu.swarm.ray_train.borrowing_supervisor import tick
+from tpu.swarm.ray_train.borrowing_supervisor import target_identity_matches, tick
+
+
+def test_optional_farm_identity_suffix_is_explicitly_scoped():
+    assert target_identity_matches('run-optional-farm-r1', 'run')
+    assert target_identity_matches('run-optional-farm-r27', 'run')
+    assert target_identity_matches('run', 'run')
+    assert not target_identity_matches('run-optional-farm', 'run')
+    assert not target_identity_matches('run-optional-farm-r1-extra', 'run')
+    assert not target_identity_matches('other-optional-farm-r1', 'run')
 
 
 def fixture():
