@@ -174,3 +174,22 @@ def test_zero_baseline_case_is_verified_without_individual_reward():
     assert verified_case('zero',zero)['swaps']==0
     r=aggregate(['zero','nonzero'],dict(zero=zero,nonzero=case('nonzero',1)))
     assert r['reward']==pytest.approx(12/(12+3))
+
+
+@pytest.mark.parametrize('model',['gemma','qwen','muse'])
+def test_relaunch_profiles_preserve_training_recipe_and_enable_farm(tmp_path,model):
+    from tpu.science.routing_relaunch_profile import build,SOURCES
+    from tpu.science.bootstrap import identity
+    pool=dict(step=0,states=[dict(code='fixture',value=.5)],initial_states=[],puct_n={},puct_m={},puct_T=0)
+    (tmp_path/'puct_sampler_step_000000.json').write_text(json.dumps(pool))
+    (tmp_path/'seed-import.json').write_text(json.dumps(dict(model=model,pool_sha256=identity(pool),
+        target_run='qubit-v4-'+model+'-parallel2-20260921',source_manifest_sha256='source',evaluator_sha256='grader')))
+    fresh=build(model,tmp_path,tmp_path/'profile.json')
+    old=json.loads((Path('tpu/swarm/ray_train/profiles')/SOURCES[model]).read_text())
+    assert fresh['trainer']==old['trainer'] and fresh['client_learning_rate']==old['client_learning_rate']
+    assert fresh['accelerator']=='tpu-v4-64' and fresh['hosts']==8
+    for key in ['GROUP_SIZE','GROUPS_PER_BATCH','NUM_EPOCHS','TTD_LOSS_FN','TTD_ADV_ESTIMATOR','TTD_M0_LORA_SEED']:
+        assert fresh['client_env'][key]==old['client_env'][key]
+    for key in old['inference']:
+        if not key.startswith('external_pool_'):assert fresh['inference'][key]==old['inference'][key]
+    assert fresh['inference']['external_pool_updates'] and fresh['inference']['external_pool_lease_scope']=='run'

@@ -79,7 +79,17 @@ def evaluate_one(root,output,source,mode,seconds,label,slots=1):
         finally:
             subprocess.run(['sudo','-n','systemctl','stop',unit],capture_output=True,timeout=15)
         if not (folder/'result.json').exists():
-            raise RuntimeError('benchmark child did not report: '+(folder/'unit.log').read_text(errors='replace')[-3000:])
+            if mode!='production':
+                raise RuntimeError('benchmark child did not report: '+(folder/'unit.log').read_text(errors='replace')[-3000:])
+            from .rewards import invalid
+            from .routing_parallel import partial_metrics
+            result=invalid('CPU task exited '+str(p.returncode)+' without result (timeout, resource limit, or worker failure)',phase='worker')
+            result['stdout']=(folder/'unit.log').read_text(errors='replace')[-3000:]
+            result['metrics'].update(partial_metrics(folder/'evaluation'),resource_contract=contract(),
+                source_sha256=hashlib.sha256(source.encode()).hexdigest(),
+                grader_sha256=hashlib.sha256(b''.join(f.name.encode()+b'\0'+f.read_bytes()
+                    for f in sorted((root/'tpu/science').glob('*.py')))).hexdigest())
+            save(folder/'result.json',result)
         result=json.loads((folder/'result.json').read_text());result.update(mode=mode,label=label,
             seconds=seconds,unit_exit=p.returncode,queue_seconds=waited,outer_wall_seconds=time.monotonic()-started,
             unit=unit,host=__import__('socket').gethostname())
