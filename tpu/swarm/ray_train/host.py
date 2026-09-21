@@ -463,19 +463,26 @@ class Host:
     def bootstrap_status(self):
         path = self.run / 'client/bootstrap/complete.json'
         if not path.exists():
+            if self.config.bootstrap_reuse_contract_sha256:
+                raise RuntimeError('pinned bootstrap reuse is missing its completion record; refusing regeneration')
             # Never apply a newly enabled bootstrap to an old training history.
             log = self.run / 'client/tinker_log' / self.config.run_id
             if list(log.glob('member_*/checkpoints.jsonl')):
                 raise RuntimeError('bootstrap requested for existing training history')
             return None
-        contract = json.loads((path.parent/'contract.json').read_text())['contract']
-        if Config.from_dict(contract['config']).to_dict() != self.config.to_dict():
+        document = json.loads((path.parent/'contract.json').read_text())
+        contract = document['contract']
+        summary = json.loads(path.read_text())
+        reuse = bool(self.config.bootstrap_reuse_contract_sha256)
+        if reuse:
+            from .bootstrap_reuse import validate_reuse
+            validate_reuse(self.config, document, summary)
+        elif Config.from_dict(contract['config']).to_dict() != self.config.to_dict():
             raise RuntimeError('bootstrap config changed; use a new run ID')
         implementation = (Path(__file__).with_name('seed_bootstrap.py') if self.config.bootstrap_max_drafts
                           else Path(__file__).resolve().parents[2] / 'science/bootstrap.py')
-        if hashlib.sha256(implementation.read_bytes()).hexdigest() != contract['implementation_sha256']:
+        if not reuse and hashlib.sha256(implementation.read_bytes()).hexdigest() != contract['implementation_sha256']:
             raise RuntimeError('bootstrap implementation changed; use a new run ID')
-        summary = json.loads(path.read_text())
         if summary.get('retained', 0) < 1:
             raise RuntimeError('completed bootstrap has no valid seeds')
         pool = self.run / 'client/tinker_log' / self.config.run_id / 'puct_sampler_step_000000.json'
@@ -486,6 +493,9 @@ class Host:
         digest = hashlib.sha256(json.dumps(json.loads(pool.read_text()), sort_keys=True).encode()).hexdigest()
         if digest != summary['pool_sha256']:
             raise RuntimeError('completed bootstrap PUCT snapshot checksum mismatch')
+        if reuse:
+            emit(self.log, 'bootstrap_reuse_verified', contract_sha256=self.config.bootstrap_reuse_contract_sha256,
+                 pool_sha256=digest, retained=summary['retained'], optimizer_steps=0)
         return summary
 
     def bootstrap_launch(self):

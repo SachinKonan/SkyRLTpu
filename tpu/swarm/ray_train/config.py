@@ -325,6 +325,9 @@ class Config:
     bootstrap_target_valid: int = 512
     bootstrap_group_size: int = 16
     bootstrap_max_groups: int = 32
+    # Explicit migration of a completed bootstrap; never permits regeneration.
+    bootstrap_reuse_contract_sha256: str = ""
+    bootstrap_reuse_pool_sha256: str = ""
     seed_pool_sha256: str = ""
     arena_service_only: bool = False
     arena_grader_rank: int | None = None
@@ -532,6 +535,11 @@ class Config:
             raise ValueError('expanded routing grading requires RAM caches capped at 128 GiB')
         if type(self.bootstrap_only) is not bool:
             raise ValueError('bootstrap_only must be a boolean')
+        if self.bootstrap_reuse_contract_sha256 or self.bootstrap_reuse_pool_sha256:
+            if (not all(isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value)
+                        for value in (self.bootstrap_reuse_contract_sha256, self.bootstrap_reuse_pool_sha256))
+                    or not self.bootstrap_layers or not self.checkpoint_resume or self.bootstrap_only):
+                raise ValueError('bootstrap reuse requires both SHA256 pins, bootstrap layers, and checkpoint resume')
         if self.seed_pool_sha256 and (not re.fullmatch(r'[0-9a-f]{64}', self.seed_pool_sha256)
                 or not self.science_task or self.inference_only or self.bootstrap_layers):
             raise ValueError('imported seed checksum requires science training without local bootstrap')
