@@ -22,17 +22,19 @@ def test_v5p64_cpu_placement_bootstraps_and_trains(model, lr):
         split_roles('placement',[0],[1,2,3],placement_backend='cpu',accelerator=cfg.accelerator)
 
 
-def test_spare_gemma_farm_admits_rg_after_ac2_reservation():
+def test_free_farms_are_candidates_for_both_rg_and_ac2():
     rows=[dict(job_id=i,run_id=n,status='RUNNING') for i,n in [(1,'gemma-rglru'),(2,'gemma-ac2'),(3,'qwen-ac2')]]
     targets={r['job_id']:dict(run_id=r['run_id'],model=r['run_id'].split('-')[0]) for r in rows}
     farms=[dict(job_id=i,models=['gemma'],url=f'g{i}',state='unleased') for i in [4,5]]
-    assert assignments(rows,farms,targets)=={1:['g5'],2:['g4'],3:[]}
-    assert assignments(rows,farms[:1],targets)=={1:[],2:['g4'],3:[]}
+    result = assignments(rows,farms,targets)
+    assert set(result[1]) == set(result[2]) == {'g4', 'g5'}
+    assert result[3] == []
+    assert assignments(rows,farms[:1],targets)=={1:['g4'],2:['g4'],3:[]}
     rows[1]['status']='PENDING'
     targets.pop(2)
-    assert assignments(rows,farms,targets)[1]==[]
+    assert set(assignments(rows,farms,targets)[1])=={'g4','g5'}
     rows[1]['status']='SUCCEEDED'
-    assert assignments(rows,farms,targets)[1]==['g4']
+    assert set(assignments(rows,farms,targets)[1])=={'g4','g5'}
 
 
 def test_attested_target_skips_legacy_and_incompatible_farms():

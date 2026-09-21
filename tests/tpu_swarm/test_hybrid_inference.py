@@ -121,14 +121,14 @@ def test_slow_remote_tail_is_not_dispatched():
     assert router._choose(100, False) is None  # Wait ~0.1s, then finish locally in 1s.
 
 
-def test_ac2_admission_precedes_qubit_and_preserves_existing_owners():
+def test_free_farms_are_shared_candidates_but_live_owners_are_preserved():
     rows = [dict(job_id=i, run_id=name, status='RUNNING', priority=0) for i, name in
             [(10, 'qwen-qubit'), (11, 'qwen-ac2'), (12, 'gemma-ac2')]]
     farms = [dict(job_id=1, models=['qwen'], url='q1', state='unleased'),
              dict(job_id=2, models=['qwen'], url='q2', state='ready', owner_run='unrelated:instance'),
              dict(job_id=3, models=['gemma'], url='g1', state='unleased')]
     targets = {r['job_id']: dict(run_id=r['run_id'], model=r['run_id'].split('-')[0]) for r in rows}
-    assert assignments(rows, farms, targets) == {10: [], 11: ['q1'], 12: ['g1']}
+    assert assignments(rows, farms, targets) == {10: ['q1'], 11: ['q1'], 12: ['g1']}
     farms[1]['owner_run'] = 'qwen-qubit:instance'
     assert assignments(rows, farms, targets) == {10: ['q2'], 11: ['q1'], 12: ['g1']}
     # Expired requests still draining are not a free reservation.
@@ -136,12 +136,27 @@ def test_ac2_admission_precedes_qubit_and_preserves_existing_owners():
     assert assignments(rows, farms, targets)[11] == []
 
 
-def test_pending_ac2_prevents_new_qubit_admission():
+def test_pending_ac2_does_not_reserve_capacity_from_qubit():
     rows = [dict(job_id=1, run_id='muse-ac2', status='PENDING'),
             dict(job_id=2, run_id='qwen-qubit', status='RUNNING')]
     farms = [dict(job_id=3, models=['qwen'], url='q1', state='unleased')]
     targets = {2: dict(run_id='qwen-qubit', model='qwen')}
-    assert assignments(rows, farms, targets) == {2: []}
+    assert assignments(rows, farms, targets) == {2: ['q1']}
+
+
+def test_workload_and_queue_priority_do_not_change_farm_candidates():
+    rows = [dict(job_id=1, run_id='muse-ac2', status='RUNNING', priority=120),
+            dict(job_id=2, run_id='muse-qubit', status='RUNNING', priority=0)]
+    targets = {r['job_id']: dict(run_id=r['run_id'], model='muse') for r in rows}
+    farms = [dict(job_id=i, models=['muse'], url=f'm{i}', state='unleased') for i in range(3)]
+    result = assignments(rows, farms, targets)
+    assert all(len(urls) == 2 and len(set(urls)) == 2 for urls in result.values())
+    assert set().union(*map(set, result.values())) == {'m0', 'm1', 'm2'}
+    rows[0].update(run_id='muse-qubit', priority=0)
+    rows[1].update(run_id='muse-ac2', priority=120)
+    for r in rows:
+        targets[r['job_id']]['run_id'] = r['run_id']
+    assert assignments(rows, farms, targets) == result
 
 
 def test_runtime_mismatch_is_rejected_before_acquiring(tmp_path):
@@ -186,7 +201,7 @@ def test_orphaned_farm_is_quarantined_instead_of_reassigned(tmp_path, monkeypatc
     asyncio.run(run())
 
 
-def test_supervisor_assigns_one_farm_per_run_in_priority_order():
+def test_supervisor_advertises_free_farms_to_qubit_while_ac2_runs():
     from test_borrowing_supervisor import fixture
     from tpu.swarm.ray_train.borrowing_supervisor import tick
     rows, farms, targets, calls, call = fixture()
@@ -195,7 +210,7 @@ def test_supervisor_assigns_one_farm_per_run_in_priority_order():
     for row in rows[4:]: row['pool'] = 'east'
     for target in targets.values(): target['lease_scope'] = 'run'
     tick(rows, 'farm', [], call, trainer_pools=['east'])
-    assert targets['train-10']['urls'] == []
+    assert targets['train-10']['urls'] == ['http://10.0.0.1:24800']
     assert targets['train-11']['urls'] == ['http://10.0.0.2:24800']
 
 
