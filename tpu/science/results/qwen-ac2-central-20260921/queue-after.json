@@ -1,0 +1,26 @@
+[
+  {
+    "job_id": 1372,
+    "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+    "status": "STARTING",
+    "cluster": "tpuswarm-v6e32-central1b-172",
+    "pool": "tpuswarm-v6e32-central1b",
+    "priority": 120
+  },
+  {
+    "job_id": 1334,
+    "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+    "status": "CANCELLED",
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5689",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "priority": 120
+  },
+  {
+    "job_id": 1227,
+    "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+    "status": "CANCELLED",
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+    "priority": 100
+  }
+]

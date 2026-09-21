@@ -1,0 +1,22 @@
+{
+  "database_generation": 1789977896282755,
+  "database_quick_check": "ok",
+  "registrations": [
+    [
+      "SAMPLER",
+      "COMPLETED"
+    ],
+    [
+      "TRAINING",
+      "COMPLETED"
+    ]
+  ],
+  "checkpoint": {
+    "name": "000003",
+    "batch": 3,
+    "state_path": "tinker://model_4ea0adcc/weights/000003",
+    "sampler_path": "tinker://model_4ea0adcc/000003"
+  },
+  "epochs": 10,
+  "checkpoint_resume": true
+}

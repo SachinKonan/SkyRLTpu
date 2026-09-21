@@ -1,0 +1,47 @@
+{
+  "job": {
+    "job_id": 1334,
+    "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+    "status": "RECOVERING",
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5689",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "priority": 120
+  },
+  "idle": [
+    "tpuswarm-v6e32-central1b              173   1        18 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              177   1        20 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              182   1        21 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              183   1        19 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              186   1        15 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              188   1        22 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              189   1        20 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              192   1        18 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           ",
+    "tpuswarm-v6e32-central1b              194   1        21 mins ago  GCP (us-central1-b)  1x[spot](gpus=tpu-v6e-32:1, TPU-VM, disk=150)  READY             -           "
+  ],
+  "audited_worker": "tpuswarm-v6e32-central1b-173",
+  "audit": {
+    "event": "native_sweep_clean_host_audit",
+    "rank": null,
+    "storage": {
+      "home": {
+        "free_gib": 85.43,
+        "free_inodes": 12451406
+      },
+      "tmp": {
+        "free_gib": 85.43,
+        "free_inodes": 12451406
+      }
+    },
+    "mem_available_gib": 688.85,
+    "devices": [
+      "/dev/vfio/0",
+      "/dev/vfio/2",
+      "/dev/vfio/devices",
+      "/dev/vfio/3",
+      "/dev/vfio/1"
+    ],
+    "owners": [],
+    "stray_workloads": []
+  },
+  "identity": "289186856710-compute@developer.gserviceaccount.com"
+}

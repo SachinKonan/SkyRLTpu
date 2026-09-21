@@ -1,0 +1,8 @@
+{
+  "job_id": 1334,
+  "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+  "status": "CANCELLED",
+  "cluster": "tpuswarm-v6e32-east5b-qwen35-5689",
+  "pool": "tpuswarm-v6e32-east5b-qwen35",
+  "priority": 120
+}
