@@ -95,7 +95,7 @@ class Rollout:
         self.state['jobs'][key]=int(ids[-1]);self.persist();return int(ids[-1])
 
     def regrade(self,model):
-        folder=BASE/'regrade-v2'/model;m=json.loads((folder/'manifest.json').read_text())
+        folder=BASE/self.state.get('regrade_revision','regrade-v2')/model;m=json.loads((folder/'manifest.json').read_text())
         assert hashlib.sha256((folder/'task.yaml').read_bytes()).hexdigest()==m['task_sha256']
         digest=hashlib.sha256(b''.join(p.name.encode()+b'\0'+p.read_bytes() for p in sorted((ROOT/'tpu/science').glob('*.py')))).hexdigest()
         assert digest==m['evaluator_sha256'],'grading source changed after frozen regrade bundle'
@@ -105,7 +105,7 @@ class Rollout:
         if model in self.state['artifacts']:return self.state['artifacts'][model]
         from tpu.science.routing_regrade import import_pool
         from tpu.science.routing_relaunch_profile import build
-        recipe=json.loads((BASE/'regrade-v2'/model/'manifest.json').read_text())
+        recipe=json.loads((BASE/self.state.get('regrade_revision','regrade-v2')/model/'manifest.json').read_text())
         source=json.loads((BASE/'sources-v2'/model/'source-manifest.json').read_text())
         bucket,key=recipe['results_uri'].removeprefix('gs://').split('/',1)
         verdicts={Path(b.name).stem:json.loads(b.download_as_bytes(if_generation_match=b.generation))
@@ -241,6 +241,7 @@ def main():
     lock=(BASE/'rollout.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     rollout=Rollout()
     if rollout.state.get('error'):raise RuntimeError('Review recorded error before resuming')
+    if rollout.state.get('hold'):raise RuntimeError('Review recorded validation hold before resuming')
     while rollout.state['phase']!='submitted_all':
         try:rollout.tick();rollout.persist()
         except Exception as exc:

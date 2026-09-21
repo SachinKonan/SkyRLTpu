@@ -1,6 +1,6 @@
 # Qubit routing relaunch — implementation and live validation
 
-Updated 2026-09-21, 16:08 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
+Updated 2026-09-21, 16:30 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
 
 ## Authorized deployment
 
@@ -59,3 +59,15 @@ Regrade bundles for all three models use commit `3e888b8e`, code SHA `e5baf2e25b
 ## Not yet established
 
 Complete bootstrap regrades and new seed pools; any new Gemma/Qwen/Muse training submission; a new optimizer update or farm lease. Keep these gates explicit when reporting progress.
+
+## Regrade setup failure and corrected validation (16:30 EDT)
+
+The rollout service is **held and inactive**; job 1444 may continue evaluating, but its results must not be imported into a training pool. At 16:19 it had 137/196 durable verdicts, including 64 valid, with all eight hosts still evaluating candidates. Two historically valid sources failed before any case with `OSError: [Errno 16] Device or resource busy`.
+
+Commit `70629a51` creates the cgroup hierarchy before spawning compiler descendants, leaves the compile phase its 10-CPU/20-GiB allowance, and narrows the coordinator to 2 CPUs/4 GiB before admitting four 2-CPU/4-GiB case workers. Setup errors are explicitly infrastructure failures, rejected by the regrade runner and seed importer; Ray records the evidence and raises instead of returning a candidate grade. Worker exception tracebacks are retained. The latest focused suite passed 54 tests plus 9 subtests.
+
+A bounded live cgroup probe reproduced errno 16 when the old order enabled controllers while a child remained in the service root. The new order succeeded with the same child workload; root processes were empty, and coordinator/case memory limits were each 4 GiB. This reproduces a mechanism consistent with the original failures; their original verdicts did not contain a syscall traceback. See `.science/routing-relaunch-20260921/cgroup-order-evidence.json`. Relevant kernel constraint: <https://docs.kernel.org/admin-guide/cgroup-v2.html#no-internal-process-constraint>.
+
+Three real production-worker full-suite canaries are live on ranks 0, 2, and 3 of existing worker 718, sharing the same host admission locks and ten-program ceiling with job 1444. Their process identities and immutable code SHA are in `cgroup-canary-receipts.json`; poll with `probe_cgroup_canaries.py`. These checks cover the archived winner and the two formerly valid programs rejected during setup. They have passed setup and begun verifying cases; complete results are still pending.
+
+Prepared replacement regrades for all three models are under `regrade-v3`, code SHA `961a0f90bcdfe2904166ed67e5dcc0da1e67e5690986ea7f3d16ff2edbe52acc`, evaluator SHA `cc7b510448d67a1f9a776fbcf83e187c72ec3b428b6a3fc1f9f00ca18e35fbe1`. They have not been submitted. After the canaries pass, preserve/supersede job 1444, run the corrected regrades under one common evaluator identity, and resume the three-model deployment sequence. Do not mix pre-fix verdicts into the new seeds. No old Gemma/Muse training job or inference farm has been cancelled.
