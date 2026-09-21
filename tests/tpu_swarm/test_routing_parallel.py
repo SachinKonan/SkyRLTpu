@@ -193,3 +193,28 @@ def test_relaunch_profiles_preserve_training_recipe_and_enable_farm(tmp_path,mod
     for key in old['inference']:
         if not key.startswith('external_pool_'):assert fresh['inference'][key]==old['inference'][key]
     assert fresh['inference']['external_pool_updates'] and fresh['inference']['external_pool_lease_scope']=='run'
+
+
+def test_regrade_resume_uploads_a_locally_saved_verdict(tmp_path):
+    import hashlib
+    from types import SimpleNamespace
+    from tpu.science.routing_regrade import digest
+    from tpu.science.routing_regrade_runner import run
+    code='cached source';sha=hashlib.sha256(code.encode()).hexdigest()
+    source=dict(programs=[dict(source_sha256=sha,code=code)])
+    source['sha256']=digest(source);path=tmp_path/'manifest.json';path.write_text(json.dumps(source))
+    evaluator=hashlib.sha256(b''.join(p.name.encode()+b'\0'+p.read_bytes() for p in sorted(Path('tpu/science').glob('*.py')))).hexdigest()
+    out=tmp_path/'out';out.mkdir()
+    (out/(sha+'.json')).write_text(json.dumps(dict(correctness=0,reward=0,metrics=dict(
+        source_sha256=sha,regrade_evaluator_sha256=evaluator,source_manifest_sha256=source['sha256'],
+        resource_contract=resources.contract()))))
+    calls=[]
+    def cloud(args,**kwargs):
+        calls.append(args)
+        return SimpleNamespace(returncode=1 if args[2]=='cp' and args[3].endswith('-complete.json') else 0,
+                               stdout='',stderr='404')
+    with patch.dict(os.environ,SKYPILOT_NODE_RANK='0',SKYPILOT_NODE_IPS=' '.join(map(str,range(8)))), \
+         patch('tpu.science.routing_regrade_runner.subprocess.run',side_effect=cloud):
+        result=run(path,out,'gs://fixture/run',slots=1)
+    assert result['programs']==1 and result['valid']==0
+    assert any(args[3]==str(out/(sha+'.json')) and '--if-generation-match=0' in args for args in calls)

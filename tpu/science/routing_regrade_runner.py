@@ -24,8 +24,12 @@ def run(manifest_path,output,destination,slots):
     output=Path(output).resolve();output.mkdir(parents=True,exist_ok=True)
     selected=[p for i,p in enumerate(sorted(manifest['programs'],key=lambda p:p['source_sha256'])) if i%hosts==rank]
     def upload(path,uri):
-        subprocess.run(['gcloud','storage','cp',str(path),uri,'--if-generation-match=0'],check=True,
-                       stdout=subprocess.DEVNULL,timeout=180)
+        copied=subprocess.run(['gcloud','storage','cp',str(path),uri,'--if-generation-match=0'],
+                              capture_output=True,text=True,timeout=180)
+        if copied.returncode:
+            existing=subprocess.run(['gcloud','storage','cat',uri],capture_output=True,text=True,timeout=180)
+            if existing.returncode or digest(json.loads(existing.stdout))!=digest(json.loads(path.read_text())):
+                raise RuntimeError('durable upload failed or conflicting verdict exists: '+copied.stderr[-800:])
     def grade(program):
         sha=program['source_sha256'];path=output/(sha+'.json');uri=destination+'/verdicts/'+sha+'.json'
         # Durable completed results are reused; never choose a best duplicate replay.
@@ -36,7 +40,12 @@ def run(manifest_path,output,destination,slots):
         if path.exists():
             result=json.loads(path.read_text())
             if (result['metrics'].get('regrade_evaluator_sha256')!=evaluator or
-                    result['metrics'].get('source_sha256')!=sha):raise ValueError('resume identity mismatch')
+                    result['metrics'].get('source_sha256')!=sha or
+                    result['metrics'].get('resource_contract')!=contract() or
+                    result['metrics'].get('source_manifest_sha256')!=manifest['sha256']):
+                raise ValueError('resume identity mismatch')
+            # A previous attempt can die after local save but before upload.
+            upload(path,uri)
             return result
         folder=output/'evaluations';folder.mkdir(exist_ok=True)
         # The isolated child is the same production worker used by Ray grading.
@@ -54,7 +63,14 @@ def run(manifest_path,output,destination,slots):
     summary=dict(rank=rank,source_manifest_sha256=manifest['sha256'],evaluator_sha256=evaluator,
         programs=len(selected),valid=sum(r['correctness']==1 for r in results),wall_seconds=time.monotonic()-start,
         cpu_seconds=sum(r['metrics'].get('process_cpu_seconds',0) for r in results),slots_per_host=slots)
-    path=output/'complete.json';save(path,summary);upload(path,destination+'/rank-'+str(rank)+'-complete.json')
+    path=output/'complete.json';uri=destination+'/rank-'+str(rank)+'-complete.json'
+    prior=subprocess.run(['gcloud','storage','cp',uri,str(path)],capture_output=True,text=True,timeout=180)
+    if prior.returncode==0:
+        saved=json.loads(path.read_text())
+        if any(saved.get(k)!=summary[k] for k in ('rank','source_manifest_sha256','evaluator_sha256','programs','valid')):
+            raise ValueError('completed rank identity mismatch')
+        return saved
+    save(path,summary);upload(path,uri)
     return summary
 
 
