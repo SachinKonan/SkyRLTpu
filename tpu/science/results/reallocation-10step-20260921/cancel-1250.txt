@@ -1,0 +1,1 @@
+Job with ID 1250 is scheduled to be cancelled.

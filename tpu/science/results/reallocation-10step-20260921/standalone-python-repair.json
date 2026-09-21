@@ -1,0 +1,50 @@
+[
+  {
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 1.05s\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  },
+  {
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading uv (19.5MiB)\n Downloading uv\nInstalled 1 package in 18ms\nDownloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 996ms\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  },
+  {
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading uv (19.5MiB)\n Downloading uv\nInstalled 1 package in 18ms\nDownloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 893ms\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  },
+  {
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading uv (19.5MiB)\n Downloading uv\nInstalled 1 package in 18ms\nDownloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 865ms\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  },
+  {
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading uv (19.5MiB)\n Downloading uv\nInstalled 1 package in 19ms\nDownloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 785ms\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  },
+  {
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading uv (19.5MiB)\n Downloading uv\nInstalled 1 package in 19ms\nDownloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 1.01s\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  },
+  {
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading uv (19.5MiB)\n Downloading uv\nInstalled 1 package in 18ms\nDownloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 888ms\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  },
+  {
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"interpreter\": \"/home/gcpuser/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/bin/python3.12\"}\n",
+    "stderr": "Downloading uv (19.5MiB)\n Downloading uv\nInstalled 1 package in 18ms\nDownloading cpython-3.12.12-linux-x86_64-gnu (download) (32.3MiB)\n Downloaded cpython-3.12.12-linux-x86_64-gnu (download)\nInstalled Python 3.12.12 in 869ms\n + cpython-3.12.12-linux-x86_64-gnu (python3.12)\nwarning: `/home/gcpuser/.local/bin` is not on your PATH. To use installed Python executables, run `export PATH=\"/home/gcpuser/.local/bin:$PATH\"` or `uv python update-shell`.\n"
+  }
+]

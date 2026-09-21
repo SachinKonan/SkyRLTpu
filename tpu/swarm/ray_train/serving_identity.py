@@ -25,7 +25,7 @@ def identity(config, root, source, snapshot):
     for site in (root / 'envs/serving/lib').glob('python*/site-packages'):
         for dist in importlib.metadata.distributions(path=[str(site)]):
             name = dist.metadata['Name'].lower().replace('_', '-')
-            if name in ('vllm', 'tpu-inference', 'jax', 'jaxlib', 'torch', 'torchax', 'transformers'):
+            if name in ('vllm', 'vllm-tpu', 'tpu-inference', 'jax', 'jaxlib', 'torch', 'torchax', 'transformers'):
                 provenance = json.loads(dist.read_text('direct_url.json') or '{}')
                 # Installation directories differ by run; compare content and
                 # immutable VCS/archive provenance rather than local file URLs.
@@ -41,7 +41,8 @@ def identity(config, root, source, snapshot):
                     commit=provenance.get('vcs_info', {}).get('commit_id'),
                     archive=provenance.get('archive_info', {}).get('hashes'),
                     python_sha256=digest(source_hashes))
-    if not {'vllm', 'tpu-inference', 'transformers', 'jax', 'jaxlib'} <= packages.keys():
+    if (not {'tpu-inference', 'transformers', 'jax', 'jaxlib'} <= packages.keys()
+            or not {'vllm', 'vllm-tpu'} & packages.keys()):
         raise RuntimeError('installed serving package identity is incomplete')
     contract = dict(model=config.model, revision=snapshot.name, files=files, code=code,
                     packages=packages, native_thinking=config.inference.native_thinking_budget,

@@ -1,0 +1,137 @@
+[
+  {
+    "source": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/client/tinker_log/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/member_qwen/checkpoints.jsonl",
+    "generation": 1789880291573275,
+    "destination": "gs://sk7524-tinker-tpu-us-central2/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/client/tinker_log/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/member_qwen/checkpoints.jsonl"
+  },
+  {
+    "source": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/client/tinker_log/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/metrics.jsonl",
+    "generation": 1789880291533010,
+    "destination": "gs://sk7524-tinker-tpu-us-central2/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/client/tinker_log/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/metrics.jsonl"
+  },
+  {
+    "source": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/client/tinker_log/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/puct_sampler_step_000001.json",
+    "generation": 1789880292935476,
+    "destination": "gs://sk7524-tinker-tpu-us-central2/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/client/tinker_log/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/puct_sampler_step_000001.json"
+  },
+  {
+    "source": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/tinker-backup.db",
+    "generation": 1789880258489805,
+    "destination": "gs://sk7524-tinker-tpu-us-central2/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/tinker-backup.db"
+  },
+  {
+    "source": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/member_gemma/checkpoints.jsonl",
+    "generation": 1789897872416844,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/member_gemma/checkpoints.jsonl"
+  },
+  {
+    "source": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/puct_sampler_step_000001.json",
+    "generation": 1789897872643100,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/puct_sampler_step_000001.json"
+  },
+  {
+    "source": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/tinker-backup.db",
+    "generation": 1789897872741502,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/tinker-backup.db"
+  },
+  {
+    "source": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/member_muse/checkpoints.jsonl",
+    "generation": 1789887367335886,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/member_muse/checkpoints.jsonl"
+  },
+  {
+    "source": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/metrics.jsonl",
+    "generation": 1789887367203520,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/metrics.jsonl"
+  },
+  {
+    "source": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/puct_sampler_step_000002.json",
+    "generation": 1789887368339445,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/puct_sampler_step_000002.json"
+  },
+  {
+    "source": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/tinker-backup.db",
+    "generation": 1789887381725730,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/tinker-backup.db"
+  },
+  {
+    "source": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json",
+    "generation": 1789955602258815,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json"
+  },
+  {
+    "source": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/tinker-backup.db",
+    "generation": 1789955609693592,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/tinker-backup.db"
+  },
+  {
+    "source": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/client/tinker_log/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/member_qwen/checkpoints.jsonl",
+    "generation": 1789955614922984,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/client/tinker_log/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/member_qwen/checkpoints.jsonl"
+  },
+  {
+    "source": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/client/tinker_log/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/metrics.jsonl",
+    "generation": 1789955614906500,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/client/tinker_log/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/metrics.jsonl"
+  },
+  {
+    "source": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/client/tinker_log/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/puct_sampler_step_000003.json",
+    "generation": 1789955614977305,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/client/tinker_log/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/puct_sampler_step_000003.json"
+  },
+  {
+    "source": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/tinker-backup.db",
+    "generation": 1789955641611452,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/tinker-backup.db"
+  },
+  {
+    "source": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/client/tinker_log/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/member_gemma/checkpoints.jsonl",
+    "generation": 1789955622685236,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/client/tinker_log/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/member_gemma/checkpoints.jsonl"
+  },
+  {
+    "source": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/client/tinker_log/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/metrics.jsonl",
+    "generation": 1789955622663982,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/client/tinker_log/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/metrics.jsonl"
+  },
+  {
+    "source": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/client/tinker_log/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/puct_sampler_step_000001.json",
+    "generation": 1789955622739212,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/client/tinker_log/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/puct_sampler_step_000001.json"
+  },
+  {
+    "source": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/tinker-backup.db",
+    "generation": 1789955645712303,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/reallocation-10step-20260921/ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/tinker-backup.db"
+  },
+  {
+    "source": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/member_muse/checkpoints.jsonl",
+    "generation": 1789950979584493,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/member_muse/checkpoints.jsonl"
+  },
+  {
+    "source": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/metrics.jsonl",
+    "generation": 1789950979495475,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/metrics.jsonl"
+  },
+  {
+    "source": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/puct_sampler_step_000003.json",
+    "generation": 1789950979574596,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/puct_sampler_step_000003.json"
+  },
+  {
+    "source": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/tinker-backup.db",
+    "generation": 1789951000284914,
+    "destination": "gs://sk7524-tinker-tpu-us-central1/migration-snapshots/reallocation-10step-20260921/ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/tinker-backup.db"
+  },
+  {
+    "source": "ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/client/tinker_log/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/puct_sampler_step_000000.json",
+    "generation": 1789955653967215,
+    "destination": "gs://sk7524-tinker-tpu-us-central2/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/client/tinker_log/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/puct_sampler_step_000000.json"
+  },
+  {
+    "source": "ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/tinker-backup.db",
+    "generation": 1789955614443013,
+    "destination": "gs://sk7524-tinker-tpu-us-central2/migration-snapshots/reallocation-10step-20260921/ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/tinker-backup.db"
+  }
+]

@@ -1,0 +1,1 @@
+Job with ID 1302 is scheduled to be cancelled.

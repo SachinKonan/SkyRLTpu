@@ -10,7 +10,8 @@ def split_roles(task, train_ranks, inference_ranks, *, placement_backend='tpu', 
     train, inference = list(train_ranks), list(inference_ranks)
     v5p_cpu = accelerator == 'tpu-v5p-32' and (task == 'routing' or
                                              (task == 'placement' and placement_backend == 'cpu'))
-    expected = (1, 3) if v5p_cpu else (4, 4)
+    v5p64_placement = accelerator == 'tpu-v5p-64' and task == 'placement' and placement_backend == 'cpu'
+    expected = (1, 7) if v5p64_placement else (1, 3) if v5p_cpu else (4, 4)
     if ((len(train), len(inference)) != expected or len(set(train + inference)) != sum(expected)):
         raise ValueError(f'science topology requires disjoint host blocks {expected}')
     grading = inference.pop() if task == 'placement' and placement_backend == 'tpu' else None

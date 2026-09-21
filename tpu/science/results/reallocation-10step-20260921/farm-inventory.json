@@ -1,0 +1,74 @@
+[
+  {
+    "job_id": 1254,
+    "cluster": "tpuswarm-v4-32-central2-smoke-177",
+    "status": "RUNNING",
+    "probe": {
+      "ok": true,
+      "result": {
+        "models": [
+          "meta-models/Muse-Glimmer-30B"
+        ],
+        "url": "http://10.130.0.26:24800",
+        "owner_run": null,
+        "state": "unleased",
+        "active": 0,
+        "capabilities": null
+      }
+    }
+  },
+  {
+    "job_id": 1253,
+    "cluster": "tpuswarm-v4-32-central2-smoke-176",
+    "status": "RUNNING",
+    "probe": {
+      "ok": true,
+      "result": {
+        "models": [
+          "google/gemma-4-31B-it"
+        ],
+        "url": "http://10.130.1.54:24800",
+        "owner_run": null,
+        "state": "unleased",
+        "active": 0,
+        "capabilities": null
+      }
+    }
+  },
+  {
+    "job_id": 1252,
+    "cluster": "tpuswarm-v4-32-central2-smoke-175",
+    "status": "RUNNING",
+    "probe": {
+      "ok": true,
+      "result": {
+        "models": [
+          "google/gemma-4-31B-it"
+        ],
+        "url": "http://10.130.0.105:24800",
+        "owner_run": null,
+        "state": "unleased",
+        "active": 0,
+        "capabilities": null
+      }
+    }
+  },
+  {
+    "job_id": 1250,
+    "cluster": "tpuswarm-v4-32-central2-smoke-173",
+    "status": "RUNNING",
+    "probe": {
+      "ok": true,
+      "result": {
+        "models": [
+          "Qwen/Qwen3.5-27B"
+        ],
+        "url": "http://10.130.0.171:24800",
+        "owner_run": null,
+        "state": "unleased",
+        "active": 0,
+        "capabilities": null
+      }
+    }
+  }
+]

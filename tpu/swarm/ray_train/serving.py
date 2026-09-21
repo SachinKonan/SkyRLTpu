@@ -486,7 +486,9 @@ class Ingress:
                     model=self.config.model, run_id=self.config.run_id,
                     instance=self.borrowing_instance,
                     lease_scope=self.config.inference.external_pool_lease_scope,
+                    compatibility_sha256=self.compatibility['sha256'] if self.compatibility else None,
                     workload=('ac2' if self.config.client_env.get('TTD_PROBLEM_TYPE') == 'ac2'
+                              else 'rglru' if self.config.is_recurrent_gemma
                               else 'qubit' if self.config.science_task == 'routing' else 'other'),
                     borrowing=self.borrower.snapshot() if self.borrower else None,
                     urls=list(self.borrower.urls) if self.borrower else [])

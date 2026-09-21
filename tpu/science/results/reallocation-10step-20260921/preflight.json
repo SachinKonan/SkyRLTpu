@@ -1,0 +1,409 @@
+[
+  {
+    "run_id": "farm10-qwen-1-20260921",
+    "kind": "farm",
+    "verified": true
+  },
+  {
+    "run_id": "farm10-gemma-1-20260921",
+    "kind": "farm",
+    "verified": true
+  },
+  {
+    "run_id": "farm10-gemma-2-20260921",
+    "kind": "farm",
+    "verified": true
+  },
+  {
+    "run_id": "farm10-muse-1-20260921",
+    "kind": "farm",
+    "verified": true
+  },
+  {
+    "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+    "kind": "ac2",
+    "step": 1,
+    "checkpoint": {
+      "name": "000001",
+      "batch": 1,
+      "state_path": "tinker://model_e37ed8e4/weights/000001",
+      "sampler_path": "tinker://model_e37ed8e4/000001"
+    },
+    "pool": {
+      "name": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/client/tinker_log/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/puct_sampler_step_000001.json",
+      "size": 46883303,
+      "generation": 1789880292935476
+    },
+    "database": {
+      "name": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/tinker-backup.db",
+      "size": 208461824,
+      "generation": 1789880258489805
+    },
+    "weights": [
+      {
+        "name": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/checkpoints/model_e37ed8e4/000001.tar.gz",
+        "size": 1925557154,
+        "generation": 1789876694113935
+      },
+      {
+        "name": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/checkpoints/model_e37ed8e4/sampler_weights/000001.tar.gz",
+        "size": 641859234,
+        "generation": 1789876719511200
+      },
+      {
+        "name": "ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919/checkpoints/model_e37ed8e4/sampler_weights/ss0_seq1.tar.gz",
+        "size": 641859236,
+        "generation": 1789870262630597
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+    "kind": "ac2",
+    "step": 1,
+    "checkpoint": {
+      "name": "000001",
+      "batch": 1,
+      "state_path": "tinker://model_25a9d811/weights/000001",
+      "sampler_path": "tinker://model_25a9d811/000001"
+    },
+    "pool": {
+      "name": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/puct_sampler_step_000001.json",
+      "size": 16447178,
+      "generation": 1789897872643100
+    },
+    "database": {
+      "name": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/tinker-backup.db",
+      "size": 93569024,
+      "generation": 1789897872741502
+    },
+    "weights": [
+      {
+        "name": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_25a9d811/000001.tar.gz",
+        "size": 2938929039,
+        "generation": 1789891780504684
+      },
+      {
+        "name": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_25a9d811/sampler_weights/000001.tar.gz",
+        "size": 979646449,
+        "generation": 1789891804179372
+      },
+      {
+        "name": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_25a9d811/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789884454500926
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+    "kind": "ac2",
+    "step": 2,
+    "checkpoint": {
+      "name": "000002",
+      "batch": 2,
+      "state_path": "tinker://model_7056acdd/weights/000002",
+      "sampler_path": "tinker://model_7056acdd/000002"
+    },
+    "pool": {
+      "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/client/tinker_log/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/puct_sampler_step_000002.json",
+      "size": 79967457,
+      "generation": 1789887368339445
+    },
+    "database": {
+      "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/tinker-backup.db",
+      "size": 341565440,
+      "generation": 1789887381725730
+    },
+    "weights": [
+      {
+        "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_7056acdd/000001.tar.gz",
+        "size": 2331471244,
+        "generation": 1789878746639342
+      },
+      {
+        "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_7056acdd/000002.tar.gz",
+        "size": 2331471244,
+        "generation": 1789882964939443
+      },
+      {
+        "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_7056acdd/sampler_weights/000001.tar.gz",
+        "size": 777160514,
+        "generation": 1789878762627990
+      },
+      {
+        "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_7056acdd/sampler_weights/000002.tar.gz",
+        "size": 777160514,
+        "generation": 1789882980499782
+      },
+      {
+        "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_7056acdd/sampler_weights/ss0_seq1.tar.gz",
+        "size": 777160516,
+        "generation": 1789874418825062
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+    "kind": "rglru",
+    "step": 0,
+    "checkpoint": null,
+    "pool": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json",
+      "size": 236909,
+      "generation": 1789954821888614
+    },
+    "database": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/tinker-backup.db",
+      "size": 34291712,
+      "generation": 1789954827589957
+    },
+    "weights": [
+      {
+        "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/checkpoints/model_07024d1d/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789951921577271
+      },
+      {
+        "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/checkpoints/model_14659063/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789903926357173
+      },
+      {
+        "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/checkpoints/model_cd57b2aa/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789910018515676
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+    "kind": "qubit",
+    "step": 3,
+    "checkpoint": {
+      "name": "000003",
+      "batch": 3,
+      "state_path": "tinker://model_93368d2b/weights/000003",
+      "sampler_path": "tinker://model_93368d2b/000003"
+    },
+    "pool": {
+      "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/client/tinker_log/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/puct_sampler_step_000003.json",
+      "size": 2530437,
+      "generation": 1789954834851140
+    },
+    "database": {
+      "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/tinker-backup.db",
+      "size": 355942400,
+      "generation": 1789954860401224
+    },
+    "weights": [
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_732d0523/sampler_weights/ss0_seq1.tar.gz",
+        "size": 641859236,
+        "generation": 1789903289043871
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_93368d2b/000001.tar.gz",
+        "size": 1925557154,
+        "generation": 1789948441552182
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_93368d2b/000002.tar.gz",
+        "size": 1925557154,
+        "generation": 1789951595876014
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_93368d2b/000003.tar.gz",
+        "size": 1925557154,
+        "generation": 1789954699881209
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_93368d2b/sampler_weights/000001.tar.gz",
+        "size": 641859234,
+        "generation": 1789948455592893
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_93368d2b/sampler_weights/000002.tar.gz",
+        "size": 641859234,
+        "generation": 1789951610562817
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_93368d2b/sampler_weights/000003.tar.gz",
+        "size": 641859234,
+        "generation": 1789954714783201
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_93368d2b/sampler_weights/ss0_seq1.tar.gz",
+        "size": 641859236,
+        "generation": 1789945281922133
+      },
+      {
+        "name": "ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/checkpoints/model_be5f26ef/sampler_weights/ss0_seq1.tar.gz",
+        "size": 641859236,
+        "generation": 1789910110653503
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920",
+    "kind": "qubit",
+    "step": 1,
+    "checkpoint": {
+      "name": "000001",
+      "batch": 1,
+      "state_path": "tinker://model_677dd3c7/weights/000001",
+      "sampler_path": "tinker://model_677dd3c7/000001"
+    },
+    "pool": {
+      "name": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/client/tinker_log/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/puct_sampler_step_000001.json",
+      "size": 2333598,
+      "generation": 1789954842792070
+    },
+    "database": {
+      "name": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/tinker-backup.db",
+      "size": 204058624,
+      "generation": 1789954863863952
+    },
+    "weights": [
+      {
+        "name": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/checkpoints/model_677dd3c7/000001.tar.gz",
+        "size": 2938939279,
+        "generation": 1789952335381789
+      },
+      {
+        "name": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/checkpoints/model_677dd3c7/sampler_weights/000001.tar.gz",
+        "size": 979646449,
+        "generation": 1789952362857138
+      },
+      {
+        "name": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/checkpoints/model_677dd3c7/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789946069250644
+      },
+      {
+        "name": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/checkpoints/model_6df8ed62/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789906974253025
+      },
+      {
+        "name": "ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/checkpoints/model_e709c262/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789926657783740
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "capacity-v6e-muse-qubit-grpo-4e5-20260920",
+    "kind": "qubit",
+    "step": 3,
+    "checkpoint": {
+      "name": "000003",
+      "batch": 3,
+      "state_path": "tinker://model_910b8d08/weights/000003",
+      "sampler_path": "tinker://model_910b8d08/000003"
+    },
+    "pool": {
+      "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/puct_sampler_step_000003.json",
+      "size": 2513573,
+      "generation": 1789950979574596
+    },
+    "database": {
+      "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/tinker-backup.db",
+      "size": 382894080,
+      "generation": 1789951000284914
+    },
+    "weights": [
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_910b8d08/000001.tar.gz",
+        "size": 2331471244,
+        "generation": 1789930723323812
+      },
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_910b8d08/000002.tar.gz",
+        "size": 2331471244,
+        "generation": 1789934638339918
+      },
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_910b8d08/000003.tar.gz",
+        "size": 2331471244,
+        "generation": 1789938746810180
+      },
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_910b8d08/sampler_weights/000001.tar.gz",
+        "size": 777160514,
+        "generation": 1789930739563869
+      },
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_910b8d08/sampler_weights/000002.tar.gz",
+        "size": 777160514,
+        "generation": 1789934655211666
+      },
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_910b8d08/sampler_weights/000003.tar.gz",
+        "size": 777160514,
+        "generation": 1789938763107767
+      },
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_910b8d08/sampler_weights/ss0_seq1.tar.gz",
+        "size": 777160516,
+        "generation": 1789926851818544
+      },
+      {
+        "name": "ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/checkpoints/model_9a69932b/sampler_weights/ss0_seq2.tar.gz",
+        "size": 777160516,
+        "generation": 1789950659833646
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+    "kind": "circuit",
+    "step": 0,
+    "checkpoint": null,
+    "pool": {
+      "name": "ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/client/tinker_log/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/puct_sampler_step_000000.json",
+      "size": 831037,
+      "generation": 1789954873764171
+    },
+    "database": {
+      "name": "ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/tinker-backup.db",
+      "size": 37011456,
+      "generation": 1789954833557884
+    },
+    "weights": [
+      {
+        "name": "ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/checkpoints/model_bf4ff6b7/sampler_weights/ss0_seq1.tar.gz",
+        "size": 979646451,
+        "generation": 1789949962560914
+      }
+    ],
+    "verified": true
+  },
+  {
+    "run_id": "placement-v5p64-muse-10step-20260921",
+    "kind": "circuit",
+    "step": 0,
+    "checkpoint": null,
+    "pool": null,
+    "database": null,
+    "weights": [],
+    "verified": true
+  },
+  {
+    "run_id": "placement-v5p64-qwen-10step-20260921",
+    "kind": "circuit",
+    "step": 0,
+    "checkpoint": null,
+    "pool": null,
+    "database": null,
+    "weights": [],
+    "verified": true
+  }
+]

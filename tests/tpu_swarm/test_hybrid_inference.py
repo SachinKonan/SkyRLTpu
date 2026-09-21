@@ -237,7 +237,8 @@ def test_controller_waits_for_reservation_and_pins_ingress_identity(tmp_path, mo
     assert actions == ['acquire', 'acquire'] and owner.farm_instance == 'current-ingress'
 
 
-def test_runtime_identity_detects_installed_patch_but_allows_hardware_flags(tmp_path):
+@pytest.mark.parametrize('vllm_distribution', ['vllm', 'vllm_tpu'])
+def test_runtime_identity_detects_installed_patch_but_allows_hardware_flags(tmp_path, vllm_distribution):
     from tpu.swarm.ray_train.serving_identity import identity
     cfg = config(tmp_path)
     source = tmp_path / 'source'
@@ -250,7 +251,7 @@ def test_runtime_identity_detects_installed_patch_but_allows_hardware_flags(tmp_
     for name in ('config.json', 'tokenizer.json'):
         (snapshot / name).write_text('{}')
     site = tmp_path / 'envs/serving/lib/python3.12/site-packages'
-    for name in ('vllm', 'tpu_inference', 'transformers', 'jax', 'jaxlib'):
+    for name in (vllm_distribution, 'tpu_inference', 'transformers', 'jax', 'jaxlib'):
         metadata = site / f'{name}-1.0.dist-info'
         metadata.mkdir(parents=True)
         (metadata / 'METADATA').write_text(f'Name: {name}\nVersion: 1.0\n')

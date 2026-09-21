@@ -558,7 +558,9 @@ class Config:
                 raise ValueError('invalid bounded bootstrap budgets')
             bootstrap_shape = ((self.accelerator == 'tpu-v4-64' and self.hosts == 8 and self.trainer.hosts == 4)
                                or (self.accelerator == 'tpu-v6e-32' and self.hosts == 8 and self.trainer.hosts == 4)
-                               or (self.accelerator == 'tpu-v5p-32' and self.hosts == 4 and self.trainer.hosts == 1))
+                               or (self.accelerator == 'tpu-v5p-32' and self.hosts == 4 and self.trainer.hosts == 1)
+                               or (self.accelerator == 'tpu-v5p-64' and self.hosts == 8 and self.trainer.hosts == 1
+                                   and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
             if (not bootstrap_shape
                     or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
                     or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
@@ -682,11 +684,13 @@ class Config:
         if self.science_task:
             science_shape = ((self.accelerator in ("tpu-v6e-32", "tpu-v4-64") and self.trainer.hosts == 4)
                 or (self.accelerator == "tpu-v5p-32" and self.trainer.hosts == 1
-                    and (self.science_task == 'routing' or self.science_placement_backend == 'cpu')))
+                    and (self.science_task == 'routing' or self.science_placement_backend == 'cpu'))
+                or (self.accelerator == "tpu-v5p-64" and self.trainer.hosts == 1
+                    and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
             if ((not self.bootstrap_only and (self.inference_only
                     or not science_shape))
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):
-                raise ValueError("Science training requires four trainer hosts on v6e-32/v4-64, or one trainer host on v5p-32 for CPU grading")
+                raise ValueError("Science training requires four trainer hosts on v6e-32/v4-64, one on v5p-32 for CPU grading, or one on v5p-64 for CPU placement")
             # TP8 uses the checkpoint loader's repeat-interleaved KV heads,
             # with tied gradients/Adam moments and native-shape adapter export.
             if (self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2)

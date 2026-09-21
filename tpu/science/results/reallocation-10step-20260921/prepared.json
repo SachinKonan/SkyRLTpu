@@ -1,0 +1,292 @@
+{
+  "jobs": [
+    {
+      "kind": "farm",
+      "model": "qwen",
+      "run_id": "farm10-qwen-1-20260921",
+      "profile": "tpu/swarm/ray_train/profiles/farm10-qwen-1-20260921-10step-deployment.json",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1250
+      ],
+      "label": "farm10-qwen-1-20260921-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central2",
+      "epochs": null,
+      "archive": ".science/reallocation-10step/packages/farm10-qwen-1-20260921-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
+      "archive_sha256": "8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86",
+      "task": ".science/reallocation-10step/packages/farm10-qwen-1-20260921-10step-deployment/farm10-qwen-1-20260921.yaml",
+      "task_sha256": "afdd426b794b5c8a01e94fb259c22b3d8cd43d198fd321d3a9bbe551c74c7950"
+    },
+    {
+      "kind": "farm",
+      "model": "gemma",
+      "run_id": "farm10-gemma-1-20260921",
+      "profile": "tpu/swarm/ray_train/profiles/farm10-gemma-1-20260921-10step-deployment.json",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1252
+      ],
+      "label": "farm10-gemma-1-20260921-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central2",
+      "epochs": null,
+      "archive": ".science/reallocation-10step/packages/farm10-gemma-1-20260921-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
+      "archive_sha256": "8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86",
+      "task": ".science/reallocation-10step/packages/farm10-gemma-1-20260921-10step-deployment/farm10-gemma-1-20260921.yaml",
+      "task_sha256": "3f65d4803abcc6db07a59e926af55bc9b8327400e86c924418529fa5fbb6ec82"
+    },
+    {
+      "kind": "farm",
+      "model": "gemma",
+      "run_id": "farm10-gemma-2-20260921",
+      "profile": "tpu/swarm/ray_train/profiles/farm10-gemma-2-20260921-10step-deployment.json",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1253
+      ],
+      "label": "farm10-gemma-2-20260921-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central2",
+      "epochs": null,
+      "archive": ".science/reallocation-10step/packages/farm10-gemma-2-20260921-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
+      "archive_sha256": "8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86",
+      "task": ".science/reallocation-10step/packages/farm10-gemma-2-20260921-10step-deployment/farm10-gemma-2-20260921.yaml",
+      "task_sha256": "d84ce1a7e55c758f6efc897f65851aeb0bce39ad0e345b8ad27483265a7b1ccc"
+    },
+    {
+      "kind": "farm",
+      "model": "muse",
+      "run_id": "farm10-muse-1-20260921",
+      "profile": "tpu/swarm/ray_train/profiles/farm10-muse-1-20260921-10step-deployment.json",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1254
+      ],
+      "label": "farm10-muse-1-20260921-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central2",
+      "epochs": null,
+      "archive": ".science/reallocation-10step/packages/farm10-muse-1-20260921-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
+      "archive_sha256": "8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86",
+      "task": ".science/reallocation-10step/packages/farm10-muse-1-20260921-10step-deployment/farm10-muse-1-20260921.yaml",
+      "task_sha256": "2a52fe78538ca09bafed9154be608547e08671d420489c055e38a4dcdaca8a33"
+    },
+    {
+      "kind": "ac2",
+      "model": "qwen",
+      "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919-10step-deployment.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 120,
+      "resume_min_checkpoint_step": 1,
+      "supersedes": [
+        1318
+      ],
+      "label": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central2",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d.tar.gz",
+      "archive_sha256": "8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d",
+      "task": ".science/reallocation-10step/packages/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919-10step-deployment/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919.yaml",
+      "task_sha256": "192f638b8106b7c363a4621c520f3acc23b82477176f3d3f8aa73335f73509cf"
+    },
+    {
+      "kind": "ac2",
+      "model": "gemma",
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "profile": "tpu/swarm/ray_train/profiles/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920-10step-deployment.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 120,
+      "resume_min_checkpoint_step": 1,
+      "supersedes": [],
+      "label": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central1",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d.tar.gz",
+      "archive_sha256": "8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d",
+      "task": ".science/reallocation-10step/packages/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920-10step-deployment/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920.yaml",
+      "task_sha256": "4f9cf6a44bea1d5e55729308c31ed62980b3d9b3368e9794594eba615d19d435"
+    },
+    {
+      "kind": "ac2",
+      "model": "muse",
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "profile": "tpu/swarm/ray_train/profiles/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920-10step-deployment.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 120,
+      "resume_min_checkpoint_step": 2,
+      "supersedes": [
+        1321
+      ],
+      "label": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central1",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d.tar.gz",
+      "archive_sha256": "8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d",
+      "task": ".science/reallocation-10step/packages/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920-10step-deployment/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920.yaml",
+      "task_sha256": "c9e5bb773847bb97ef746aff30c028fa956bbc959cd8f6427d8b58b85827840d"
+    },
+    {
+      "kind": "rglru",
+      "model": "gemma",
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1-10step-deployment.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1294
+      ],
+      "label": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-east5",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5.tar.gz",
+      "archive_sha256": "2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5",
+      "task": ".science/reallocation-10step/packages/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1-10step-deployment/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1.yaml",
+      "task_sha256": "4f0a28641af1fd68010d8b235975ffe730ecc984f3ff6041cf651a5fb303ed59"
+    },
+    {
+      "kind": "qubit",
+      "model": "qwen",
+      "run_id": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "profile": "tpu/swarm/ray_train/profiles/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920-10step-deployment.json",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 110,
+      "resume_min_checkpoint_step": 2,
+      "supersedes": [
+        1287,
+        1301,
+        1322
+      ],
+      "label": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-east5",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920-10step-deployment/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-4a30c937d8b1ccee5acf333d088cfd6d6c2443a9530ac2e86237732051494e9a.tar.gz",
+      "archive_sha256": "4a30c937d8b1ccee5acf333d088cfd6d6c2443a9530ac2e86237732051494e9a",
+      "task": ".science/reallocation-10step/packages/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920-10step-deployment/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920.yaml",
+      "task_sha256": "f3dbc2b283bc9865fdf480cacc84183759c1f8e49e60c885d731d310896b70c0"
+    },
+    {
+      "kind": "qubit",
+      "model": "gemma",
+      "run_id": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920",
+      "profile": "tpu/swarm/ray_train/profiles/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920-10step-deployment.json",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 110,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1288,
+        1302
+      ],
+      "label": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-east5",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920-10step-deployment/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-4a30c937d8b1ccee5acf333d088cfd6d6c2443a9530ac2e86237732051494e9a.tar.gz",
+      "archive_sha256": "4a30c937d8b1ccee5acf333d088cfd6d6c2443a9530ac2e86237732051494e9a",
+      "task": ".science/reallocation-10step/packages/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920-10step-deployment/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920.yaml",
+      "task_sha256": "e2486b6a757f1f59b2b997d5136e2255a6931001e77b3b2c9cddc6b399c36b81"
+    },
+    {
+      "kind": "qubit",
+      "model": "muse",
+      "run_id": "capacity-v6e-muse-qubit-grpo-4e5-20260920",
+      "profile": "tpu/swarm/ray_train/profiles/capacity-v6e-muse-qubit-grpo-4e5-20260920-10step-deployment.json",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 110,
+      "resume_min_checkpoint_step": 3,
+      "supersedes": [
+        1289,
+        1303,
+        1323
+      ],
+      "label": "capacity-v6e-muse-qubit-grpo-4e5-20260920-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-central1",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/capacity-v6e-muse-qubit-grpo-4e5-20260920-10step-deployment/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-4a30c937d8b1ccee5acf333d088cfd6d6c2443a9530ac2e86237732051494e9a.tar.gz",
+      "archive_sha256": "4a30c937d8b1ccee5acf333d088cfd6d6c2443a9530ac2e86237732051494e9a",
+      "task": ".science/reallocation-10step/packages/capacity-v6e-muse-qubit-grpo-4e5-20260920-10step-deployment/capacity-v6e-muse-qubit-grpo-4e5-20260920.yaml",
+      "task_sha256": "66dfeb2d124782f0260e7277997071f928f352d015855ead4bfe3543c19c1ed4"
+    },
+    {
+      "kind": "circuit",
+      "model": "gemma",
+      "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/placement-v5p64-gemma-10step-20260921.json",
+      "pool": null,
+      "priority": 100,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1291
+      ],
+      "label": "placement-v5p64-gemma-10step-20260921",
+      "bucket": "gs://sk7524-tinker-tpu-us-central2",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/placement-v5p64-gemma-10step-20260921/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-8f333ebe1e39f8afbc49b7ce4dd7102443094c6018f4922d8c22a524fd109f3d.tar.gz",
+      "archive_sha256": "8f333ebe1e39f8afbc49b7ce4dd7102443094c6018f4922d8c22a524fd109f3d",
+      "task": ".science/reallocation-10step/packages/placement-v5p64-gemma-10step-20260921/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919.yaml",
+      "task_sha256": "9ca652c91b5b9b2e305d11add301bbbc9ed2f659bf95a5e9920709b1cbad44d3"
+    },
+    {
+      "kind": "circuit",
+      "model": "muse",
+      "run_id": "placement-v5p64-muse-10step-20260921",
+      "profile": "tpu/swarm/ray_train/profiles/placement-v5p64-muse-10step-20260921.json",
+      "pool": null,
+      "priority": 100,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1292
+      ],
+      "label": "placement-v5p64-muse-10step-20260921",
+      "bucket": "gs://sk7524-tinker-tpu-us-central1",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/placement-v5p64-muse-10step-20260921/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-dc4a8dd86b431b2d96ffedab0e94debbfe31028765a20d48478d17c7479b6bf8.tar.gz",
+      "archive_sha256": "dc4a8dd86b431b2d96ffedab0e94debbfe31028765a20d48478d17c7479b6bf8",
+      "task": ".science/reallocation-10step/packages/placement-v5p64-muse-10step-20260921/placement-v5p64-muse-10step-20260921.yaml",
+      "task_sha256": "f56b448a2751f28f228ada08d995af7ff31d3816d52eb5e0aca315d1990adfe0"
+    },
+    {
+      "kind": "circuit",
+      "model": "qwen",
+      "run_id": "placement-v5p64-qwen-10step-20260921",
+      "profile": "tpu/swarm/ray_train/profiles/placement-v5p64-qwen-10step-20260921.json",
+      "pool": null,
+      "priority": 100,
+      "resume_min_checkpoint_step": 0,
+      "supersedes": [
+        1290,
+        1324
+      ],
+      "label": "placement-v5p64-qwen-10step-20260921",
+      "bucket": "gs://sk7524-tinker-tpu-us-central1",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/placement-v5p64-qwen-10step-20260921/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-1fe36bb3b1ffc9314b10fb0897fef4a8cc378075c49d80212d7fc878f4e5ba3c.tar.gz",
+      "archive_sha256": "1fe36bb3b1ffc9314b10fb0897fef4a8cc378075c49d80212d7fc878f4e5ba3c",
+      "task": ".science/reallocation-10step/packages/placement-v5p64-qwen-10step-20260921/placement-v5p64-qwen-10step-20260921.yaml",
+      "task_sha256": "de35cb41751f949617ca6ee0eeff1867dea48a4493ce43893c17e358513ab446"
+    }
+  ],
+  "defer_jobs": [
+    1293
+  ],
+  "total_step_cap": 10
+}

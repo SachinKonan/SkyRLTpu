@@ -302,7 +302,7 @@ class ServingTransitionTest(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0)
                 self.assertTrue(gateway.updating)
                 self.assertEqual(retired, [])
-                request = SimpleNamespace(json=lambda: None)
+                request = SimpleNamespace(json=lambda: None, headers={})
                 async def data():
                     return {'model': cfg.model}
                 request.json = data

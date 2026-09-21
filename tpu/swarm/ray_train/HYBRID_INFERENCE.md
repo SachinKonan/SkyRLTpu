@@ -4,7 +4,9 @@ This opt-in path keeps a v6e run's four local TP4 inference engines and adds one
 exclusive v4-32 farm with four TP4 engines. It serves one policy, with identical
 adapter archives on both sides. It does not implement multi-policy training.
 Approved regions are **us-east5-b and us-central1-b**. AC2 for Qwen3.5-27B,
-Muse-Glimmer-30B and Gemma4-31B precedes qubit routing.
+Muse-Glimmer-30B and Gemma4-31B precedes Gemma RG-LRU. The current campaign
+uses ten total training steps, including restored steps; see
+`../../science/results/reallocation-10step-20260921/README.md`.
 
 ## Admission and ownership
 
@@ -17,7 +19,9 @@ borrowing unless explicitly opted in.
 The controller starts local inference first and waits for a farm reservation
 before starting trainers. The supervised discovery process only updates an
 explicit set of pools/jobs. It preserves existing lease owners, prioritizes AC2,
-and does not issue new qubit reservations while AC2 is outstanding. Farm claims
+and reserves matching farms for AC2 first. A spare Gemma farm may serve RG-LRU
+after Gemma AC2 is reserved; pending AC2 keeps precedence. Incompatible and
+legacy farms are excluded from attested assignments. Farm claims
 are atomic; discovery assignments are advisory. A recovering job can therefore
 wait for the previous owner's lease to expire without stealing its engines.
 
@@ -39,7 +43,8 @@ The initial recipe retains 16 groups of 32 completions (512 rollouts), original
 thinking/context budgets, loss, seed, parent pool, masks and logprobs. Each HTTP
 request stays whole. No regrouping, chunking, or cross-policy importance weights
 are introduced. Four local and at most four remote groups execute at once;
-remaining groups wait in one ingress queue. Dispatch uses measured completion
+remaining groups wait in one ingress queue. RG-LRU reserves one local host for
+its TPU grader and therefore uses three local inference engines plus the farm. Dispatch uses measured completion
 rates and avoids a remote dispatch when waiting for a local engine predicts an
 earlier finish. These estimates require TPU measurement before claiming speedup.
 
