@@ -115,6 +115,12 @@ of the old jobs 1335 and 1336 was verified. Only task placement changed; see
 `../ac2-central-recovery-20260921/README.md` and its receipts. Qwen retains its
 existing east recovery. The completion gate follows the newest job per run ID.
 
+Gemma RG-LRU's displaced job 1343 was likewise still waiting in east. It was
+resubmitted as 1365 on central worker 176 with its exact repaired bundle and
+verified 29-candidate bootstrap, after cancellation was confirmed. It has no
+optimizer checkpoint yet and retains ten total steps; see
+`../rglru-central-recovery-20260921/README.md`.
+
 ## Central capacity update
 
 A third central worker became READY while Muse successor 1361 was unassigned
