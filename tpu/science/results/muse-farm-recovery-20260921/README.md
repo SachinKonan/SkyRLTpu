@@ -19,7 +19,7 @@ to preserve the AC2 ordering.
 | Workload | Current replacement job | Priority | Placement at submission |
 |---|---:|---:|---|
 | Muse farm | 1368 | 120 | v4-32 worker 177 |
-| Second Gemma farm | 1370 | 110 | Pending |
+| Second Gemma farm | 1371 | 110 | Pending |
 
 Only Muse `inference.memory_utilization` changes, from 0.80 to 0.70. This leaves
 more HBM headroom for runtime programs. It is a mitigation requiring generation
@@ -73,3 +73,24 @@ This operational reconciliation addresses one stranded reservation. It does
 not repair the general SkyPilot failure path or prove farm generation health.
 The committed state-helper script has one-use intent checks and exact job/worker
 preconditions; do not rerun it against a later allocation.
+
+## Corrected generation canary at 07:59 UTC
+
+The first test mistakenly combined temperature 0 with n=16. vLLM correctly
+rejected this combination with HTTP 400; the current farm treats the forwarded
+error as fatal and shut down. This was a test-request error, not an HBM failure.
+After remote Sky job 5 was confirmed FAILED and all four hosts stopped, the
+existing managed job 1368 was reconciled and restarted through accepted exec
+request `971198c9-543b-409b-9218-d6756884ae91`. Queued Gemma 1370 was replaced
+by 1371 during reconciliation. The API server was not restarted.
+
+The corrected test acquired an idle lease, uploaded a preserved real Muse
+rank-32 adapter, and verified the same archive SHA256 on all four engines.
+Four concurrent requests, each n=16, temperature=1.0 and max_tokens=64,
+completed successfully: 64 completions, 4096 generated tokens, all requested
+token log-probabilities finite. Requests took 154-162 seconds including the
+initial compilation. The lease released successfully. See canary-v2-result.json.
+This establishes short decoding and adapter distribution at memory utilization
+0.70. It does not establish full-context stability, native-thinking boundary
+equivalence, or a resumed training update. The client-error-to-fatal-shutdown
+behavior remains a separate limitation.

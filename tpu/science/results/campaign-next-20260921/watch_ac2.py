@@ -31,9 +31,14 @@ def write(path, value):
 def source_guard():
     def git(*args):
         return subprocess.check_output(['git', *args], cwd=ROOT)
-    # This tracked observation file changes on every completion poll.
+    # These tracked observations change during normal service operation. The
+    # completion poll regenerates its evidence; guard code and recipes here.
     diff = git('diff', '--binary', 'HEAD', '--', '.',
-               ':(exclude)tpu/science/results/campaign-next-20260921/ac2-completion.json')
+               ':(exclude)tpu/science/results/campaign-next-20260921/ac2-completion.json',
+               ':(exclude)tpu/science/results/reallocation-10step-20260921/circuit-queue-state.json',
+               *(':(exclude)tpu/science/results/reallocation-10step-20260921/'
+                 f'placement-v5p64-{model}-10step-20260921-launch.json'
+                 for model in sorted(MODELS)))
     return dict(head=git('rev-parse', 'HEAD').decode().strip(),
                 diff_sha256=hashlib.sha256(diff).hexdigest())
 

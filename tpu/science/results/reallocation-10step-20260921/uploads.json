@@ -88,5 +88,20 @@
     "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-3a656763f241df56c4ee7fe4e90dd3957aaf6390e25c2d9157553d8e9bd84091.tar.gz",
     "sha256": "3a656763f241df56c4ee7fe4e90dd3957aaf6390e25c2d9157553d8e9bd84091",
     "generation": 1789963262460237
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-808ec4ff390c67bfe7dcf401f143a085e58cbec2b17c6da9e081d8edd88a66b3.tar.gz",
+    "sha256": "808ec4ff390c67bfe7dcf401f143a085e58cbec2b17c6da9e081d8edd88a66b3",
+    "generation": 1789978153714913
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-81a6e5c00a209c1771d27cc05bd7b896715c54ba5881d744f495648a1fa09daf.tar.gz",
+    "sha256": "81a6e5c00a209c1771d27cc05bd7b896715c54ba5881d744f495648a1fa09daf",
+    "generation": 1789978155135283
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-34f61d881e7c89237def840f340c76d7692f1ca50293c645df1780efc2651073.tar.gz",
+    "sha256": "34f61d881e7c89237def840f340c76d7692f1ca50293c645df1780efc2651073",
+    "generation": 1789978156468278
   }
 ]

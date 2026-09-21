@@ -78,6 +78,7 @@ ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_build
 BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
                    'tpu/swarm/ray_train/borrowing_phase.py'}
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
+CHECKPOINT_FILES = {"skyrl/utils/checkpoint_mirror.py"}
 REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py"}
 WARMUP_FILES = REPEATED_KV_FILES | {"skyrl/backends/backward_warmup.py", "tpu/swarm/ray_train/warmup_contract.py"}
 
@@ -107,6 +108,7 @@ def manifest(repo, config=None):
         names.update(WARMUP_FILES)
     if config is None or not config.inference_only:
         names.update(DATABASE_FILES)
+        names.update(CHECKPOINT_FILES)
     if config is not None and config.is_recurrent_gemma:
         names.update(ARENA_FILES)
         names.update(SMOKE_FILES)  # Propagate fatal grader errors through the training loop.
@@ -159,6 +161,7 @@ def install(directory, destination):
     allowed.extend([base | {ANSWER_ONLY_FILE} for base in [set(), *allowed]])
     allowed.extend([base | NATIVE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
     allowed.extend([base | DATABASE_FILES for base in [set(), *allowed]])
+    allowed.extend([base | CHECKPOINT_FILES for base in [set(), *allowed]])
     allowed.extend([base | SCIENCE_FILES | set(SMOKE_FILES) for base in [set(), *allowed]])
     allowed.extend([base | REPEATED_KV_FILES for base in [set(), *allowed]])
     allowed.extend([base | WARMUP_FILES for base in [set(), *allowed]])

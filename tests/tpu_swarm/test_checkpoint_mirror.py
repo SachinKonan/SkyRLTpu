@@ -64,6 +64,34 @@ def test_checkpoint_mirror_rejects_size_mismatch(monkeypatch, tmp_path):
         )
 
 
+@pytest.mark.parametrize('always_fail', [False, True])
+def test_checkpoint_mirror_retries_interrupted_uploads(monkeypatch, tmp_path, always_fail):
+    checkpoint = tmp_path / 'step.tar.gz'
+    checkpoint.write_bytes(b'checkpoint')
+    uploads = []
+    monkeypatch.setenv('CLOUDSDK_STORAGE_PROCESS_COUNT', '32')
+    monkeypatch.setattr('skyrl.utils.checkpoint_mirror.time.sleep', lambda _: None)
+
+    def fake_run(command, **kwargs):
+        if 'describe' in command:
+            return subprocess.CompletedProcess(command, 0, stdout='10', stderr='')
+        uploads.append(command)
+        assert kwargs['env']['CLOUDSDK_STORAGE_PROCESS_COUNT'] == '1'
+        assert kwargs['env']['CLOUDSDK_STORAGE_THREAD_COUNT'] == '1'
+        return subprocess.CompletedProcess(command, -15 if always_fail or len(uploads) == 1 else 0,
+                                           stdout='', stderr='interrupted')
+
+    monkeypatch.setattr('skyrl.utils.checkpoint_mirror.subprocess.run', fake_run)
+    if always_fail:
+        with pytest.raises(RuntimeError, match=r'after 3 attempts \(exit -15\)'):
+            mirror_checkpoint_to_gcs(checkpoint, 'gs://bucket/checkpoints', 'model')
+        assert len(uploads) == 3
+    else:
+        assert mirror_checkpoint_to_gcs(checkpoint, 'gs://bucket/checkpoints', 'model').endswith('/step.tar.gz')
+        assert len(uploads) == 2
+    assert all(command == uploads[0] for command in uploads)
+
+
 def test_checkpoint_restore_downloads_and_verifies_size(monkeypatch, tmp_path):
     checkpoint = tmp_path / "model_test" / "000003.tar.gz"
     payload = b"distributed-checkpoint"

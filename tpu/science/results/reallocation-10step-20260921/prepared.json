@@ -237,11 +237,11 @@
       "label": "placement-v5p64-gemma-10step-20260921",
       "bucket": "gs://sk7524-tinker-tpu-us-central2",
       "epochs": 10,
-      "archive": ".science/reallocation-10step/circuit-repair/gemma/science-training.tar.gz",
-      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-06dd9c468c31327230653a8983121d3ce5748aae422cdc38fb1366621ce0542d.tar.gz",
-      "archive_sha256": "06dd9c468c31327230653a8983121d3ce5748aae422cdc38fb1366621ce0542d",
-      "task": ".science/reallocation-10step/circuit-repair/gemma/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919.yaml",
-      "task_sha256": "e5f49db35220e614b01212e80c794c6ccd3d75641c94c355ef5b95c51d05be43"
+      "archive": ".science/reallocation-10step/checkpoint-retry/gemma/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-808ec4ff390c67bfe7dcf401f143a085e58cbec2b17c6da9e081d8edd88a66b3.tar.gz",
+      "archive_sha256": "808ec4ff390c67bfe7dcf401f143a085e58cbec2b17c6da9e081d8edd88a66b3",
+      "task": ".science/reallocation-10step/checkpoint-retry/gemma/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919.yaml",
+      "task_sha256": "3610365e48cace0e2fb94bfa002d44d873a45f27d7e62c638c141a27c22a6be0"
     },
     {
       "kind": "circuit",
@@ -257,11 +257,11 @@
       "label": "placement-v5p64-muse-10step-20260921",
       "bucket": "gs://sk7524-tinker-tpu-us-central1",
       "epochs": 10,
-      "archive": ".science/reallocation-10step/circuit-repair/muse/science-training.tar.gz",
-      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-6b014d0d96eb894218a389ef053e71755696ceac81e698f057050fcd2f44ade1.tar.gz",
-      "archive_sha256": "6b014d0d96eb894218a389ef053e71755696ceac81e698f057050fcd2f44ade1",
-      "task": ".science/reallocation-10step/circuit-repair/muse/placement-v5p64-muse-10step-20260921.yaml",
-      "task_sha256": "5c1c19d2c9529737445ef371dfbdb838f2fbb817220d81f7fd1c644a93375c3f"
+      "archive": ".science/reallocation-10step/checkpoint-retry/muse/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-81a6e5c00a209c1771d27cc05bd7b896715c54ba5881d744f495648a1fa09daf.tar.gz",
+      "archive_sha256": "81a6e5c00a209c1771d27cc05bd7b896715c54ba5881d744f495648a1fa09daf",
+      "task": ".science/reallocation-10step/checkpoint-retry/muse/placement-v5p64-muse-10step-20260921.yaml",
+      "task_sha256": "b81b979cb3b685aa5ccd8280b76c692f48387be8f2fea3772aaa3ff0c14d5a28"
     },
     {
       "kind": "circuit",
@@ -278,11 +278,11 @@
       "label": "placement-v5p64-qwen-10step-20260921",
       "bucket": "gs://sk7524-tinker-tpu-us-central1",
       "epochs": 10,
-      "archive": ".science/reallocation-10step/circuit-repair/qwen/science-training.tar.gz",
-      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-3a656763f241df56c4ee7fe4e90dd3957aaf6390e25c2d9157553d8e9bd84091.tar.gz",
-      "archive_sha256": "3a656763f241df56c4ee7fe4e90dd3957aaf6390e25c2d9157553d8e9bd84091",
-      "task": ".science/reallocation-10step/circuit-repair/qwen/placement-v5p64-qwen-10step-20260921.yaml",
-      "task_sha256": "15eddae74639f3e087e8f7fa27e85be66ee419eff39050428d7b49d5f24637ef"
+      "archive": ".science/reallocation-10step/checkpoint-retry/qwen/science-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-34f61d881e7c89237def840f340c76d7692f1ca50293c645df1780efc2651073.tar.gz",
+      "archive_sha256": "34f61d881e7c89237def840f340c76d7692f1ca50293c645df1780efc2651073",
+      "task": ".science/reallocation-10step/checkpoint-retry/qwen/placement-v5p64-qwen-10step-20260921.yaml",
+      "task_sha256": "e85549598242ec67185b80d5aca60f7c8c3da24a8d8e1d5347de848a6e0d1681"
     },
     {
       "kind": "rglru",

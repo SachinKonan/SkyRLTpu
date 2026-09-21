@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -100,3 +101,30 @@ def test_receipts_need_matching_live_queue_jobs():
     queue[0]['status'] = 'FAILED'
     with pytest.raises(ValueError, match='failed or was cancelled'):
         watch.verify_queue(rows, queue)
+
+
+def test_guard_ignores_observations_but_detects_recipe_changes(tmp_path, monkeypatch):
+    monkeypatch.setattr(watch, 'ROOT', tmp_path)
+    def git(*args):
+        return subprocess.run(['git', *args], cwd=tmp_path, check=True,
+                              capture_output=True)
+    git('init')
+    paths = [
+        'tpu/science/results/campaign-next-20260921/ac2-completion.json',
+        'tpu/science/results/reallocation-10step-20260921/circuit-queue-state.json',
+        'tpu/science/results/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921-launch.json',
+        'tpu/swarm/ray_train/profiles/recipe.json',
+    ]
+    for name in paths:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{}\n')
+    git('add', '.')
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+        'commit', '-m', 'initial')
+    baseline = watch.source_guard()
+    for name in paths[:-1]:
+        (tmp_path / name).write_text('{"phase": "updated"}\n')
+    assert watch.source_guard() == baseline
+    (tmp_path / paths[-1]).write_text('{"epochs": 20}\n')
+    assert watch.source_guard() != baseline

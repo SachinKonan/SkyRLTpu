@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -30,15 +31,27 @@ def mirror_checkpoint_to_gcs(
 
     destination = _checkpoint_uri(mirror_base, model_id, local_path.name, family)
 
-    copied = subprocess.run(
-        ["gcloud", "storage", "cp", str(local_path), destination],
-        capture_output=True,
-        text=True,
-        timeout=1800,
-    )
-    if copied.returncode != 0:
-        detail = (copied.stderr or copied.stdout).strip()[-2000:]
-        raise RuntimeError(f"checkpoint mirror upload failed for {destination}: {detail}")
+    # A checkpoint is one immutable archive, not a many-object cache download.
+    # Bound uploader concurrency and retry interrupted uploads of the same bytes.
+    transfer_env = dict(os.environ, CLOUDSDK_STORAGE_PROCESS_COUNT="1",
+                        CLOUDSDK_STORAGE_THREAD_COUNT="1")
+    for attempt in range(3):
+        copied = subprocess.run(
+            ["gcloud", "storage", "cp", str(local_path), destination],
+            capture_output=True,
+            text=True,
+            timeout=1800,
+            env=transfer_env,
+        )
+        if copied.returncode == 0:
+            break
+        if attempt == 2:
+            detail = (copied.stderr or copied.stdout).strip()[-2000:]
+            raise RuntimeError(
+                f"checkpoint mirror upload failed for {destination} after 3 attempts "
+                f"(exit {copied.returncode}): {detail}"
+            )
+        time.sleep(attempt + 1)
 
     described = subprocess.run(
         [
