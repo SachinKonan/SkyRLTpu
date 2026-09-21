@@ -1,0 +1,44 @@
+[
+  {
+    "rank": 0,
+    "data": {
+      "transfers/compile-restore.log": [],
+      "transfers/cache-events.jsonl": [
+        "{\"event\": \"transfer_complete\", \"host\": \"t1v-n-addd4d77-w-0\", \"pid\": 2743593, \"seconds\": 6.001085144933313, \"time\": 1789956438.414111, \"transfer\": \"compile-restore\"}",
+        "{\"elapsed_seconds\": 4.0458980947732925e-06, \"event\": \"transfer_progress\", \"filesystem_free_bytes\": 89567830016, \"host\": \"t1v-n-addd4d77-w-0\", \"pid\": 2743593, \"time\": 1789956438.4152937, \"transfer\": \"compile-restore\"}",
+        "{\"event\": \"transfer_complete\", \"host\": \"t1v-n-addd4d77-w-0\", \"pid\": 2743593, \"seconds\": 6.00113105494529, \"time\": 1789956444.4163756, \"transfer\": \"compile-restore\"}",
+        "{\"elapsed_seconds\": 3.899913281202316e-06, \"event\": \"transfer_progress\", \"filesystem_free_bytes\": 89566502912, \"host\": \"t1v-n-addd4d77-w-0\", \"pid\": 2743593, \"time\": 1789956444.41759, \"transfer\": \"compile-restore\"}",
+        "{\"event\": \"tree_reused\", \"host\": \"t1v-n-addd4d77-w-0\", \"objects\": 34, \"pid\": 2759666, \"source\": \"gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts/gemma4-31b\", \"time\": 1789957110.191942}",
+        "{\"event\": \"hf_cache_ready\", \"files\": 7, \"host\": \"t1v-n-addd4d77-w-0\", \"pid\": 2759666, \"reused\": true, \"revision\": \"842da3794eaa0b77d5f08bae87a17459d91ff475\", \"time\": 1789957113.5608804, \"weights\": false}",
+        "{\"cold\": false, \"event\": \"compile_cache_ready\", \"host\": \"t1v-n-addd4d77-w-0\", \"pid\": 2759666, \"restored\": 0, \"reused\": 239, \"source\": \"gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-smoke9-v5p-gemma-tp4-fsdp1-r32-s18432-s22528-dq3-v1-bwd256\", \"time\": 1789957115.2829795}",
+        "{\"cold\": false, \"event\": \"compile_cache_ready\", \"host\": \"t1v-n-addd4d77-w-0\", \"pid\": 2759666, \"restored\": 0, \"reused\": 177, \"source\": \"gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/trainer\", \"time\": 1789957116.8486278}"
+      ],
+      "host-0.jsonl": [],
+      "kernel": "",
+      "unit": "Result=exit-code\nExecMainCode=1\nExecMainStatus=1\n",
+      "memory": "               total        used        free      shared  buff/cache   available\nMem:             440           6         319          89         114         341\nSwap:              0           0           0\n",
+      "disk": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root        97G   47G   51G  49% /\ntmpfs           128G   45G   84G  35% /home/gcpuser/.cache/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/ram\n"
+    }
+  },
+  {
+    "rank": 3,
+    "data": {
+      "transfers/compile-restore.log": [],
+      "transfers/cache-events.jsonl": [
+        "{\"event\": \"transfer_complete\", \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"seconds\": 6.50108930002898, \"time\": 1789957362.7470045, \"transfer\": \"compile-restore\"}",
+        "{\"elapsed_seconds\": 3.949971869587898e-06, \"event\": \"transfer_progress\", \"filesystem_free_bytes\": 74858852352, \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"time\": 1789957362.748232, \"transfer\": \"compile-restore\"}",
+        "{\"event\": \"transfer_complete\", \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"seconds\": 6.50108992587775, \"time\": 1789957369.2492774, \"transfer\": \"compile-restore\"}",
+        "{\"elapsed_seconds\": 3.628898411989212e-06, \"event\": \"transfer_progress\", \"filesystem_free_bytes\": 74857205760, \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"time\": 1789957369.250494, \"transfer\": \"compile-restore\"}",
+        "{\"event\": \"transfer_complete\", \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"seconds\": 6.501086144009605, \"time\": 1789957375.7515316, \"transfer\": \"compile-restore\"}",
+        "{\"elapsed_seconds\": 3.898050636053085e-06, \"event\": \"transfer_progress\", \"filesystem_free_bytes\": 74853486592, \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"time\": 1789957375.7527988, \"transfer\": \"compile-restore\"}",
+        "{\"event\": \"transfer_complete\", \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"seconds\": 6.501105304108933, \"time\": 1789957382.253854, \"transfer\": \"compile-restore\"}",
+        "{\"elapsed_seconds\": 3.635883331298828e-06, \"event\": \"transfer_progress\", \"filesystem_free_bytes\": 74851934208, \"host\": \"t1v-n-addd4d77-w-3\", \"pid\": 1741550, \"time\": 1789957382.2550967, \"transfer\": \"compile-restore\"}"
+      ],
+      "host-3.jsonl": [],
+      "kernel": "",
+      "unit": "Result=exit-code\nExecMainCode=1\nExecMainStatus=1\n",
+      "memory": "               total        used        free      shared  buff/cache   available\nMem:             440           4         290         117         145         315\nSwap:              0           0           0\n",
+      "disk": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root        97G   52G   45G  54% /\ntmpfs           128G   59G   70G  46% /home/gcpuser/.cache/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/ram\n"
+    }
+  }
+]

@@ -1,0 +1,213 @@
+{
+  "time": 1789963418.0483835,
+  "hosts": [
+    {
+      "rank": 0,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-0",
+          "pid": 2786515,
+          "restored": 0,
+          "reused": 239,
+          "source": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-smoke9-v5p-gemma-tp4-fsdp1-r32-s18432-s22528-dq3-v1-bwd256",
+          "time": 1789963389.290719
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-0",
+          "pid": 2786515,
+          "restored": 0,
+          "reused": 239,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/trainer",
+          "time": 1789963391.0077195
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    },
+    {
+      "rank": 1,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-1",
+          "pid": 748365,
+          "restored": 0,
+          "reused": 355,
+          "source": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-native-gemma-tp4-seq16-s22528-v1",
+          "time": 1789963415.7857425
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-1",
+          "pid": 748365,
+          "restored": 0,
+          "reused": 282,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/inference",
+          "time": 1789963417.0496447
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    },
+    {
+      "rank": 2,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-2",
+          "pid": 1979856,
+          "restored": 0,
+          "reused": 355,
+          "source": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-native-gemma-tp4-seq16-s22528-v1",
+          "time": 1789963415.0356176
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-2",
+          "pid": 1979856,
+          "restored": 0,
+          "reused": 282,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/inference",
+          "time": 1789963416.2953403
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    },
+    {
+      "rank": 3,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-3",
+          "pid": 1763238,
+          "restored": 0,
+          "reused": 355,
+          "source": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-native-gemma-tp4-seq16-s22528-v1",
+          "time": 1789963415.6276407
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-3",
+          "pid": 1763238,
+          "restored": 0,
+          "reused": 282,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/inference",
+          "time": 1789963416.8874252
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    },
+    {
+      "rank": 4,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-4",
+          "pid": 183128,
+          "restored": 0,
+          "reused": 355,
+          "source": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-native-gemma-tp4-seq16-s22528-v1",
+          "time": 1789963414.2436948
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-4",
+          "pid": 183128,
+          "restored": 0,
+          "reused": 282,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/inference",
+          "time": 1789963415.500031
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    },
+    {
+      "rank": 5,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-5",
+          "pid": 235310,
+          "restored": 0,
+          "reused": 355,
+          "source": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-native-gemma-tp4-seq16-s22528-v1",
+          "time": 1789963415.6085513
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-5",
+          "pid": 235310,
+          "restored": 0,
+          "reused": 282,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/inference",
+          "time": 1789963416.8772779
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    },
+    {
+      "rank": 6,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-6",
+          "pid": 343318,
+          "restored": 0,
+          "reused": 355,
+          "source": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-native-gemma-tp4-seq16-s22528-v1",
+          "time": 1789963415.7183516
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-6",
+          "pid": 343318,
+          "restored": 0,
+          "reused": 282,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/inference",
+          "time": 1789963416.9627426
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    },
+    {
+      "rank": 7,
+      "cache_events": [
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-7",
+          "pid": 3744692,
+          "restored": 0,
+          "reused": 355,
+          "source": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-native-gemma-tp4-seq16-s22528-v1",
+          "time": 1789963413.703089
+        },
+        {
+          "cold": false,
+          "event": "compile_cache_ready",
+          "host": "t1v-n-addd4d77-w-7",
+          "pid": 3744692,
+          "restored": 0,
+          "reused": 282,
+          "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/inference",
+          "time": 1789963414.9947546
+        }
+      ],
+      "unit": "ActiveState=active\nSubState=running\n"
+    }
+  ]
+}

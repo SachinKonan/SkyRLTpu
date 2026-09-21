@@ -73,5 +73,20 @@
     "uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-3cc363fdf3cb9da824dd6cf00be582f14388376e877ec0a87224a0f82054fad7.tar.gz",
     "sha256": "3cc363fdf3cb9da824dd6cf00be582f14388376e877ec0a87224a0f82054fad7",
     "generation": 1789957418448198
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-06dd9c468c31327230653a8983121d3ce5748aae422cdc38fb1366621ce0542d.tar.gz",
+    "sha256": "06dd9c468c31327230653a8983121d3ce5748aae422cdc38fb1366621ce0542d",
+    "generation": 1789963260027318
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-6b014d0d96eb894218a389ef053e71755696ceac81e698f057050fcd2f44ade1.tar.gz",
+    "sha256": "6b014d0d96eb894218a389ef053e71755696ceac81e698f057050fcd2f44ade1",
+    "generation": 1789963261381235
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-3a656763f241df56c4ee7fe4e90dd3957aaf6390e25c2d9157553d8e9bd84091.tar.gz",
+    "sha256": "3a656763f241df56c4ee7fe4e90dd3957aaf6390e25c2d9157553d8e9bd84091",
+    "generation": 1789963262460237
   }
 ]
