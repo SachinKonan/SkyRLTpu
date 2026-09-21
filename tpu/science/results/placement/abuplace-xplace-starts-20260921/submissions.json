@@ -15,8 +15,8 @@
     "tpu/swarm/ray_train/profiles/circuit300-v6e-muse-central-three-starts-10step-20260921.json",
     "tpu/swarm/ray_train/profiles/circuit300-v6e-qwen-central-three-starts-10step-20260921.json"
   ],
-  "pilot_allocation_minutes": 45,
+  "pilot_allocation_minutes": 60,
   "array_allocation_minutes": 60,
-  "pilot_adjustment": "Pending pilot time limit reduced from 60 to 45 minutes after scheduler test predicted earlier start; unchanged 1800-second candidate and 1980-second task envelopes.",
+  "pilot_adjustment": "User requires one-hour gpu-test allocations; restored pending pilot to 60 minutes.",
   "build_job": "14242391"
 }

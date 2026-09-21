@@ -35,6 +35,7 @@ Submission remains gated on complete independently verified Xplace publication.
 Publication job 14241687 depends on array 14241497, which depends on pilot 14241324.
 No Central training job has been submitted yet.
 
-The pending pilot allocation was shortened to 45 minutes for backfill eligibility;
-its 1800s candidate and 1980s task caps remain unchanged. Remaining array
-allocations still request one hour. No job was cancelled or replaced.
+The user requires one-hour gpu-test allocations. The pilot was restored to
+60 minutes after a temporary 45-minute scheduling experiment. Both pilot and
+array now request one hour; the 1800s candidate and 1980s task caps are unchanged.
+No job was cancelled or replaced.
