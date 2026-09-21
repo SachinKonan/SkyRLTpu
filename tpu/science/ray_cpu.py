@@ -124,4 +124,6 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suit
         from .routing_parallel import partial_metrics
         result['metrics'].update(partial_metrics(folder/'evaluation'))
     (folder/'verdict.json').write_text(json.dumps(result,allow_nan=False,indent=2)+'\n')
+    if result.get('failure_class')=='infrastructure':
+        raise RuntimeError('Routing grader infrastructure failed: '+result['msg'])
     return result

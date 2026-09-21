@@ -218,3 +218,23 @@ def test_regrade_resume_uploads_a_locally_saved_verdict(tmp_path):
         result=run(path,out,'gs://fixture/run',slots=1)
     assert result['programs']==1 and result['valid']==0
     assert any(args[3]==str(out/(sha+'.json')) and '--if-generation-match=0' in args for args in calls)
+
+
+def test_cgroup_configuration_error_is_an_infrastructure_failure(tmp_path):
+    import errno
+    from tpu.science.routing_parallel import CaseGroups
+    from tpu.science.routing_resources import RoutingInfrastructureError
+    groups=object.__new__(CaseGroups);groups.root=tmp_path
+    (tmp_path/'cgroup.procs').write_text('123\n')
+    with patch.object(Path,'write_text',side_effect=OSError(errno.EBUSY,'Device or resource busy')):
+        with pytest.raises(RoutingInfrastructureError,match="cgroup.subtree_control.*123"):
+            groups.write(tmp_path/'cgroup.subtree_control','+memory')
+
+
+def test_regrade_seed_import_rejects_infrastructure_zero_reward(tmp_path):
+    from tpu.science.routing_regrade import digest,import_pool
+    data=dict(programs=[dict(source_sha256='source',code='code')],unique_programs=1)
+    data['sha256']=digest(data)
+    with pytest.raises(ValueError,match='infrastructure failure'):
+        import_pool(data,{'source':dict(correctness=0,reward=0,failure_class='infrastructure')},
+                    tmp_path/'import',target_run='never',evaluator_sha256='grader')

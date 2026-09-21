@@ -96,6 +96,8 @@ def import_pool(manifest, verdicts, destination, *, target_run, evaluator_sha256
         raise ValueError('incomplete or duplicate regrading outcomes')
     good=[]
     for sha,verdict in verdicts.items():
+        if verdict.get('failure_class')=='infrastructure':
+            raise ValueError('infrastructure failure is not a regrade outcome')
         m=verdict['metrics']
         if (m.get('source_sha256')!=sha or m.get('resource_contract')!=contract()
                 or m.get('regrade_evaluator_sha256')!=evaluator_sha256):

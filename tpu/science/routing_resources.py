@@ -22,6 +22,10 @@ OUTER_SECONDS = 2100
 GEMINI_TARGETS = {'q20': 13470, 'willow': 31481, 'heron_fez': 42396}
 
 
+class RoutingInfrastructureError(RuntimeError):
+    """The grader could not establish its contract; this is not a candidate grade."""
+
+
 def contract():
     return dict(version=VERSION, case_workers=CASE_WORKERS, case_cpus=CASE_CPUS,
                 case_memory_gib=CASE_GIB, program_cpus=PROGRAM_CPUS,

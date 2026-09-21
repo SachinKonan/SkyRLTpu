@@ -12,7 +12,7 @@ import sys
 import time
 
 from .isolation import Limits, python_mounts, run
-from .routing_resources import CASE_CPUS, CASE_GIB, CASE_WORKERS, PROGRAM_GIB, CANDIDATE_SECONDS, contract
+from .routing_resources import CASE_CPUS, CASE_GIB, CASE_WORKERS, PROGRAM_GIB, CANDIDATE_SECONDS, contract, RoutingInfrastructureError
 from .routing import scaffold, verify
 from .contracts import rust_literal
 from .cgroup_limits import envelope, metrics as memory_metrics
@@ -110,20 +110,37 @@ class CaseGroups:
         if 'science-grade-' not in str(self.root) and 'routing-benchmark-' not in str(self.root):
             raise RuntimeError('case groups require an owned delegated grading service')
         self.cpus, self.groups = cpus, []
-        coord = self.root / 'coordinator'; coord.mkdir()
-        (coord / 'cgroup.procs').write_text(str(os.getpid()))
-        (self.root / 'cgroup.subtree_control').write_text('+cpu +cpuset +memory +pids')
-        (coord / 'cpuset.cpus').write_text(','.join(map(str, cpus[8:])))
-        (coord / 'cpu.max').write_text('200000 100000')
-        (coord / 'memory.max').write_text(str(4*1024**3))
+        self.coord = self.root / 'coordinator'; self.coord.mkdir()
+        self.write(self.coord / 'cgroup.procs', str(os.getpid()))
+        self.write(self.root / 'cgroup.subtree_control', '+cpu +cpuset +memory +pids')
+        # Establish the hierarchy before spawning compiler/bwrap descendants.
+        # They are born in this leaf, so their exit cannot keep the service root
+        # populated while domain controllers are being enabled.
+        self.write(self.coord / 'cpuset.cpus', ','.join(map(str, cpus)))
+        self.write(self.coord / 'cpu.max', '1000000 100000')
+        self.write(self.coord / 'memory.max', str(PROGRAM_GIB*1024**3))
         for index in range(CASE_WORKERS):
             group = self.root / f'case-{index}'; group.mkdir()
-            (group / 'cpuset.cpus').write_text(','.join(map(str, cpus[index*2:index*2+2])))
-            (group / 'cpu.max').write_text('200000 100000')
-            (group / 'memory.max').write_text(str(CASE_GIB*1024**3))
-            (group / 'memory.swap.max').write_text('0')
-            (group / 'pids.max').write_text('128')
+            self.write(group / 'cpuset.cpus', ','.join(map(str, cpus[index*2:index*2+2])))
+            self.write(group / 'cpu.max', '200000 100000')
+            self.write(group / 'memory.max', str(CASE_GIB*1024**3))
+            self.write(group / 'memory.swap.max', '0')
+            self.write(group / 'pids.max', '128')
             self.groups.append(group)
+
+    def write(self, path, value):
+        try:
+            path.write_text(value)
+        except OSError as exc:
+            raise RoutingInfrastructureError(
+                f'cannot configure {path.name} in {path.parent.name}: {exc}; '
+                f'root processes={(self.root / "cgroup.procs").read_text().split()}') from exc
+
+    def begin_cases(self):
+        """Release the compilation allowance before any case is admitted."""
+        self.write(self.coord / 'cpuset.cpus', ','.join(map(str, self.cpus[8:])))
+        self.write(self.coord / 'cpu.max', '200000 100000')
+        self.write(self.coord / 'memory.max', str(4*1024**3))
 
     def kill(self, slot):
         group = self.groups[slot]
@@ -172,6 +189,7 @@ def _evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cac
     root,work=Path(root).resolve(),Path(work).resolve(); work.mkdir(parents=True,exist_ok=False)
     cpus=sorted(os.sched_getaffinity(0))
     if len(cpus)!=10: raise RuntimeError('parallel routing requires an exact ten-CPU program allocation')
+    groups=CaseGroups(cpus)
     # Preparation and compilation consume the same deadline as cases.
     rust=work/'rust';shutil.copytree(root/'rust',rust,ignore=shutil.ignore_patterns('target','.cargo_target'))
     target=work/'target';shutil.copytree(target_cache,target);remaining(deadline)
@@ -191,7 +209,7 @@ def _evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cac
         readonly=readonly,writable=[(work,'/work')],cwd='/work/rust',env=dict(CARGO_HOME=str(cargo),
         RUSTUP_HOME=str(rustup),PYO3_PYTHON=str(python),CARGO_TARGET_DIR='/work/target',
         CARGO_NET_OFFLINE='true',CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER='/usr/bin/gcc',PATH=f'{cargo}/bin:/usr/bin:/bin'))
-    groups=CaseGroups(cpus); active={}; results={}; index=0; peaks={}; progress=work/'case-progress.jsonl'
+    groups.begin_cases(); active={}; results={}; index=0; peaks={}; progress=work/'case-progress.jsonl'
     old_handler=signal.getsignal(signal.SIGTERM)
     def terminate(*_): raise InterruptedError('routing coordinator terminated')
     signal.signal(signal.SIGTERM,terminate)

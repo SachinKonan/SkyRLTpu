@@ -50,6 +50,10 @@ def run(manifest_path,output,destination,slots):
         folder=output/'evaluations';folder.mkdir(exist_ok=True)
         # The isolated child is the same production worker used by Ray grading.
         result=evaluate_one(root,folder,program['code'],'production',1900,sha,slots=slots)
+        if result.get('failure_class')=='infrastructure':
+            failure=output/(sha+'.infrastructure.json');save(failure,result)
+            upload(failure,destination+'/infrastructure/'+sha+'.json')
+            raise RuntimeError('Grading infrastructure failed; do not publish a candidate verdict: '+result['msg'])
         m=result['metrics']
         if m.get('grader_sha256')!=evaluator or m.get('resource_contract')!=contract():
             raise ValueError('worker evaluator/resource mismatch')

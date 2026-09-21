@@ -61,6 +61,12 @@ def main():
         else:raise ValueError('unknown science task')
     except Exception as exc:
         result=invalid(f'{type(exc).__name__}: {exc}')
+        if resource_contract:
+            from .routing_resources import RoutingInfrastructureError
+            if isinstance(exc, RoutingInfrastructureError):
+                result['failure_class']='infrastructure'
+            import traceback
+            result['exception_traceback']=traceback.format_exc()
     if resource_contract:
         from .routing_parallel import cpu_seconds, partial_metrics
         if result['correctness'] != 1:
