@@ -208,3 +208,10 @@ A second preflight found worker 681 head disk at 28.04 GiB, below the 30 GiB lau
 Provider inventory then showed only one READY/HEALTHY v4-64 node, corresponding to worker 681. Workers 718 and 724, used by Gemma and Muse before recovery, were absent. The pool reports no idle replicas; the 1473 controller is waiting for capacity. This thread did not change pool sizing, remove TPU VMs, cancel Gemma/Muse, or mutate farms. The existing pool provisioning/recovery machinery remains responsible for supplying workers. The reduced cache configuration has not yet passed a live startup because Qwen has no assigned slice; do not report training or farm success for 1473.
 
 Evidence under `.science/routing-relaunch-20260921/`: `qwen-memory-audit.json`, `qwen-cache-budget.json`, `qwen-recovery-preflight.json`, `qwen-recovery-cancel-intent.json`, `qwen-r2-launch-requests.json`, `qwen-recovery-provider.json`, and `training/qwen-r2/`.
+
+
+## Pool workload scope reaffirmed (19:50 EDT)
+
+The user explicitly directed: "keep this pool focused on qubit routing." The v4-64 pool `tpuswarm-v4-64-central2-qwen35-erdos` is reserved in this workflow for the Gemma, Muse, and Qwen qubit-routing runs and their replacements. Do not place AC2, circuit optimization, or standalone inference farms in this pool. Continue borrowing external inference-farm capacity; farm management belongs to another agent. This is the operational allocation instruction, not a newly installed scheduler admission filter.
+
+A fresh inventory found exactly three nonterminal jobs in the pool: Gemma 1453, Muse 1467, and Qwen replacement 1473; all are qubit-routing jobs. No unrelated jobs required cancellation. GCP showed worker 681's v4-64 node READY/HEALTHY and one replacement v4-64 node CREATING. The prior 718/724 nodes were absent. Qubit recovery/submission remains queued against that changing capacity. Evidence: `.science/routing-relaunch-20260921/qubit-pool-workload-inventory.json` and `v464-loss-latest.json`.
