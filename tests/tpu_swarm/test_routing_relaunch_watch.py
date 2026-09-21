@@ -14,6 +14,13 @@ def rollout():
     return r
 
 
+def test_recorded_phase_transition_is_resumable(tmp_path,capsys):
+    r=rollout();r.path=tmp_path/'state.json'
+    r.persist(phase='qwen_launch')
+    assert json.loads(r.path.read_text())['phase']=='qwen_launch'
+    assert json.loads(capsys.readouterr().out)['phase']=='qwen_launch'
+
+
 @pytest.mark.parametrize('status',['FAILED','FAILED_SETUP','FAILED_CONTROLLER','CANCELLED'])
 def test_failed_gemma_holds_admission(status):
     r=rollout();r.job=lambda jid:dict(job_id=jid,status=status)

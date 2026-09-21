@@ -43,7 +43,7 @@ class Rollout:
 
     def persist(self,**fields):
         self.state.update(fields,updated=time.time());save(self.path,self.state)
-        print(json.dumps(dict(time=time.time(),phase=self.state['phase'],jobs=self.state['jobs'],**fields)),flush=True)
+        print(json.dumps({'time':time.time(),'phase':self.state['phase'],'jobs':self.state['jobs'],**fields}),flush=True)
 
     def query(self,where,args):
         c=sqlite3.connect('file:'+str(self.db)+'?mode=ro',uri=True);c.row_factory=sqlite3.Row
