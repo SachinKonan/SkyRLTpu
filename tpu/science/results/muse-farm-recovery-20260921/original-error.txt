@@ -24,4 +24,3 @@ ERROR 09-21 02:32:04 [async_llm.py:704]   File "/home/gcpuser/.cache/farm10-muse
 ERROR 09-21 02:32:04 [async_llm.py:704]     raise self._format_exception(outputs) from None
 ERROR 09-21 02:32:04 [async_llm.py:704] vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered an issue. See stack trace (above) for the root cause.
 INFO:     127.0.0.1:33990 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
-

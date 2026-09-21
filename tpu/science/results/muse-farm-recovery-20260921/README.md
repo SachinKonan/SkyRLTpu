@@ -19,7 +19,7 @@ to preserve the AC2 ordering.
 | Workload | Current replacement job | Priority | Placement at submission |
 |---|---:|---:|---|
 | Muse farm | 1368 | 120 | v4-32 worker 177 |
-| Second Gemma farm | 1369 | 110 | Pending |
+| Second Gemma farm | 1370 | 110 | Pending |
 
 Only Muse `inference.memory_utilization` changes, from 0.80 to 0.70. This leaves
 more HBM headroom for runtime programs. It is a mitigation requiring generation
@@ -48,3 +48,28 @@ and Muse checkpoint-4 resume before declaring recovery complete.
 During the same check, Gemma RG-LRU passed its 300-second optional farm wait and
 started sampling locally; it need not wait for the second Gemma farm to place.
 The AC2 follow-up service is rearmed after this reviewed profile/receipt commit.
+
+## Launch-request reconciliation at 07:18 UTC
+
+Job 1368 initially reserved worker 177, but `sdk.exec` hit its five-second HTTP
+read timeout against the local Sky API. The controller returned to PENDING while
+retaining that reservation. Before any repair, persistent API records showed
+only CANCELLED older exec requests, the remote Sky queue had no new job, all
+remote jobs were terminal, and managed state held `(worker-177, None)` with no
+remote job ID. These checks distinguish this case from an accepted launch that
+is merely slow to finish.
+
+After withdrawing queued second Gemma farm 1369, the recovery script took the
+same pool lock as the scheduler, rechecked job 1368 was PENDING with that exact
+unlaunched association, and used SkyPilot's `set_current_cluster_name` helper
+to clear only that job's stale reservation. Its existing controller retried;
+no training or API-server process was restarted. The retry created durable
+exec request `6435873a-1fa9-4682-9709-a350dc374879`. At 07:20 UTC this request
+was PENDING in the API executor queue, with no remote farm start yet. It must
+be observed to completion, not resubmitted based on elapsed time. The second
+Gemma farm was restored as 1370 after confirming that accepted request.
+
+This operational reconciliation addresses one stranded reservation. It does
+not repair the general SkyPilot failure path or prove farm generation health.
+The committed state-helper script has one-use intent checks and exact job/worker
+preconditions; do not rerun it against a later allocation.
