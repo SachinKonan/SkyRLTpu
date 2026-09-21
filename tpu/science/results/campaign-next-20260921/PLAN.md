@@ -57,3 +57,24 @@ matching SHA256 checksums. Archive inspection verified the ten-step limit,
 seed pin, optional farm admission, and compilation-copy retry fix. Focused
 seed/farm validation passed 62 tests plus three subtests (Slurm 14217483).
 No existing jobs were cancelled.
+
+## Executable AC2 handoff
+
+`prepare_ac2_handoff.py fetch` checks live completion and downloads all three
+final pools at pinned GCS generations. It currently reports WAIT and creates no
+handoff while the first round is running. Once ready, run its `build` action on
+a CPU allocation. `tpu.science.ac2_handoff` chooses the maximum valid saved score,
+recomputes it with the trusted AC2 evaluator without executing candidate code,
+and resets PUCT history. All three recipients get byte-identical seed pools and
+new run IDs with fresh adapters/optimizers. Source run, state, generation,
+verifier hash, and candidate hash are recorded. Configurations retain their
+model-specific optimizer recipe and use independent cache-write prefixes.
+
+Inspect the resulting `ac2-shared-best-20260921/prepared.json` and provenance,
+then use `submit.py --ac2-handoff` for the same upload verification, duplicate
+checks, durable submission intent and receipts as the qubit campaign. Its AC2
+priority is 120. This handoff is not yet built or submitted.
+
+Validation: six focused tests passed (Slurm 14217850), including unfinished
+round rejection, saved-score mismatch rejection, construction-only evaluation,
+fresh root history, recipient isolation, and preserving the source recipe.

@@ -1,5 +1,5 @@
-"""Submit only the three receipt-backed v6e qubit jobs; never cancel work."""
-import fcntl,hashlib,importlib.util,json,os,re,time
+"""Submit the prepared v6e campaign or AC2 handoff; never cancel work."""
+import argparse,fcntl,hashlib,importlib.util,json,os,re,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[4];HERE=Path(__file__).parent
 s=importlib.util.spec_from_file_location('o',ROOT/'tpu/science/results/reallocation-10step-20260921/operations.py');o=importlib.util.module_from_spec(s);s.loader.exec_module(o);os.environ.update(o.ops.env)
@@ -32,4 +32,9 @@ def main():
   ids=re.findall(r'(?:Job ID|Job id|job ID|job id)[:\s]+(\d+)',result)
   if not ids:raise RuntimeError('Uncertain submission; reconcile before retrying')
   receipt.update(job_id=int(ids[-1]),state='submitted');save(receipts_path,receipts);print('Submitted',receipt['job_id'],r['run_id'],r['pool'],flush=True)
-if __name__=='__main__':main()
+if __name__=='__main__':
+ p=argparse.ArgumentParser();p.add_argument('--ac2-handoff',action='store_true');args=p.parse_args()
+ if args.ac2_handoff:
+  HERE=ROOT/'tpu/science/results/ac2-shared-best-20260921'
+  if not (HERE/'provenance.json').exists():raise RuntimeError('Completed AC2 handoff has not been prepared')
+ main()
