@@ -79,6 +79,32 @@ Validation: six focused tests passed (Slurm 14217850), including unfinished
 round rejection, saved-score mismatch rejection, construction-only evaluation,
 fresh root history, recipient isolation, and preserving the source recipe.
 
+## Supervised AC2 follow-up
+
+`watch_ac2.py` wraps the same fetch/build/submit commands. Arm it after review
+with `--arm` to record HEAD and a checksum of the tracked working diff (excluding
+the changing completion observation). It polls the live completion gate every
+60 seconds. Once all three originals succeed with checkpoint 10 and final pools,
+it freezes the sources, builds on a CPU Slurm allocation, independently checks
+the winner, profiles, identical seeds, bundle hashes and ten-step settings,
+then submits and confirms the receipts against the live queue.
+
+`skyrl-ac2-followup.service` runs this watcher. Observation-command failures are
+retried; source changes, preparation errors, and uncertain submission intent
+stop it in `needs_review`. It has no automatic restart on failure, never cancels
+jobs, and never retries an uncertain launch. Fully confirmed partial receipts
+can be resumed without resubmitting those runs. The service exits after all
+three follow-ups have confirmed queue entries; experiment monitoring continues.
+
+Runtime evidence is under `.science/ac2-shared-best-20260921/`. A future code
+change requires revalidation and explicit replacement of the source guard
+before restarting this service. Do not bypass a `needs_review` state without
+checking its cause and the existing submission receipts.
+
+Validation: 16 focused handoff/watcher tests passed on CPU Slurm job 14219921,
+including unfinished-gate refusal, source-change refusal, uncertain-intent
+refusal, and receipt-to-live-queue identity checks.
+
 ## Central capacity update
 
 A third central worker became READY while Muse successor 1361 was unassigned
