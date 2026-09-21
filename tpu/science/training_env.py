@@ -56,6 +56,14 @@ def task_prompt(task, *, include_starter=True, environment=None):
                   'arithmetic mean proxy cost, lower is better. No subset or baseline normalization. '
                   'Every case must be legal with zero hard-macro overlaps. Any invalid or missing '
                   'case gives reward zero; otherwise reward = max(1e-6, 1/(1+mean_proxy_cost)).\n\n') + prompt
+    if cpu and environment.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1':
+        prompt=prompt.replace('8 GiB', '4 GiB')
+        import re
+        prompt=re.sub(r'Each case has a hard 180-second candidate deadline.*?Return before it expires\.',
+            'Each case supplies 300 seconds of search time to place(). Return your best legal positions '
+            'before this budget expires. The external candidate cap is 310 seconds, including startup and output.',
+            prompt,flags=re.S)
+        prompt=prompt.replace('390-second', '510-second')
     if task == 'placement' and not cpu:
         accelerator = environment['SCIENCE_ACCELERATOR']
         if accelerator not in ('tpu-v4-64', 'tpu-v6e-32'):
@@ -69,6 +77,23 @@ def task_prompt(task, *, include_starter=True, environment=None):
         if not separator:
             raise ValueError(f'{task} prompt is missing its starter boundary')
         prompt = instructions.rstrip()
+    if cpu and environment.get('SCIENCE_PLACEMENT_STARTS') == 'abuplace-xplace-three-starts-v1':
+        prompt += ('\n\nAdditional starting layouts: problem["starting_layouts"] has shape [3,M,2], '
+            'in the order problem["starting_names"]: off, rudy, rudy_hv. These are AbuPlace\'s '
+            'three Xplace global-placement configurations, independently legalized and verified. '
+            'They do not include AbuPlace\'s later refinement pipeline. '
+            'problem["starting_scores"] has shape [3,4], with columns named by '
+            'problem["starting_score_columns"]: proxy_cost, wirelength_cost, density_cost, congestion_cost. '
+            'All starts use the same circuit and object ordering. initial_positions remains the '
+            'original verified legal fallback. You may choose, copy, or refine any start. '
+            'Do not assume the lowest initial cost has the best potential after optimization. '
+            'Consider brief exploration of several starts, then allocate the remaining time to '
+            'promising layouts. Preserve your best legal result across all attempts. '
+            'Perturbations, swaps and coarse-to-fine moves may escape local minima; check legality '
+            'and evaluate their actual benefit. Averaging layouts does not preserve legality. '
+            'There is ONE shared 300-second search budget per case across all starts, not 300 '
+            'seconds per start. Precomputation is excluded; evaluator construction and search '
+            'consume your budget. Return only the single best legal layout you found.\n')
     if task == 'routing':
         prompt = ('Grader feedback includes a compact per-case SWAP table with columns named '
                   'in case_columns, plus per-topology totals. baseline_swaps is the fixed SABRE '
@@ -110,11 +135,14 @@ async def evaluate(task, source, timeout):
         elif task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu':
             from .placement_ray import grade_cpu_case
             from .placement_task import CASES
+            from .placement_resources import contract
+            resources = contract() if os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1' else None
             for case in CASES:
-                refs.append(grade_cpu_case.options(scheduling_strategy='SPREAD').remote(
+                refs.append(grade_cpu_case.options(scheduling_strategy='SPREAD', **(dict(memory=4*1024**3) if resources else {})).remote(
                     source, case, root, admission_timeout_s=timeout,
                     slots_per_host=int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16')),
-                    helper=os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')))
+                    helper=os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none'),
+                    **(dict(resource_contract=resources) if resources else {})))
         elif task == 'placement':
             from ray.util.placement_group import get_placement_group
             from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
@@ -174,7 +202,19 @@ class ScienceTrainingEnv(Environment):
     async def _safe_grade(self, given_answer, step):
         ScienceTrainingReward(self.problem_type, self.log_path, self.eval_timeout,
                               self.num_cpus_per_task, self.eval_backend)
-        result = await evaluate(self.problem_type, given_answer, self.eval_timeout)
+        if (self.problem_type == 'placement'
+                and os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1'):
+            from .grading_dedup import grade_once
+            scope = (step, self.eval_timeout, self.eval_backend,
+                     tuple((key, os.environ.get(key)) for key in (
+                         'TTD_RUN_DIR', 'RAY_NAMESPACE', 'SCIENCE_WORKER_ROOT',
+                         'SCIENCE_PLACEMENT_RUNTIME', 'SCIENCE_PLACEMENT_BACKEND',
+                         'SCIENCE_PLACEMENT_HELPER', 'SCIENCE_PLACEMENT_SUITE', 'SCIENCE_PLACEMENT_STARTS')))
+            result, reused = await grade_once(scope, given_answer,
+                lambda: evaluate(self.problem_type, given_answer, self.eval_timeout))
+            result['metrics'] = dict(result.get('metrics', {}), grading_dedup_hit=reused)
+        else:
+            result = await evaluate(self.problem_type, given_answer, self.eval_timeout)
         from .feedback import diagnostic_message, observation
         result = dict(result, stdout=observation(self.problem_type, result),
                       msg=diagnostic_message(self.problem_type, result))

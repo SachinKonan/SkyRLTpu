@@ -25,14 +25,17 @@ def prepare(config, ips, nodes, grading_rank):
     if config.science_task == 'placement' and config.science_placement_backend == 'cpu':
         from .placement_ray import grade_cpu_case
         from .placement_task import CASES
+        from .placement_resources import contract
+        resources=contract() if config.science_placement_runtime=='cpu300-4g-v1' else None
         for ip in ips:
             helper = config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none')
             for name in ('challenge_seed.py', 'challenge_seed_fast_proxy.py' if helper == 'fast_proxy_v1' else 'challenge_seed_jax.py'):
                 source = (Path(root) / 'tpu/science' / name).read_text()
                 for case in CASES:
                     refs.append(grade_cpu_case.options(scheduling_strategy=NodeAffinitySchedulingStrategy(
-                        nodes[ip]['NodeID'], soft=False)).remote(source, case, root,
-                            slots_per_host=config.science_placement_slots_per_host, helper=helper))
+                        nodes[ip]['NodeID'], soft=False), **(dict(memory=4*1024**3) if resources else {})).remote(source, case, root,
+                            slots_per_host=config.science_placement_slots_per_host, helper=helper,
+                            **(dict(resource_contract=resources) if resources else {})))
     elif config.science_task == 'placement':
         from .placement_slots import grading_bundles
         from .placement_ray import grade_case
@@ -72,7 +75,7 @@ def check_references(task, results, *, expected_hosts=8, placement_backend='tpu'
         by_host = {}
         for row in results:
             m = row['metrics']
-            if (m.get('physical_tpu_chips') != 0 or m.get('hard_memory_gib') != 8
+            if (m.get('physical_tpu_chips') != 0 or m.get('hard_memory_gib') != (4 if m.get('resource_contract') else 8)
                     or len(m.get('hard_cpus', [])) != 4
                     or m.get('candidate_device', {}).get('device_kind') != 'cpu'):
                 raise RuntimeError('CPU placement reference escaped its resource contract')

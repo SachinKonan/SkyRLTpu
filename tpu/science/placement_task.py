@@ -21,6 +21,13 @@ from .placement_slots import device_paths, tpu_environment, assigned_chip
 
 def evaluate(request):
     root = Path(request['root']); work = Path(request['work']); work.mkdir()
+    runtime=request.get('resource_contract')
+    if runtime:
+        from .placement_resources import validate
+        validate(runtime)
+        if request.get('backend')!='cpu-jax':raise ValueError('CPU resource contract requires CPU backend')
+    candidate_limit=runtime['candidate_seconds'] if runtime else CANDIDATE_LIMIT_SECONDS
+    grading_limit=runtime['grading_seconds'] if runtime else GRADING_LIMIT_SECONDS
     case = request['case']
     if case not in CASES: raise ValueError('unknown placement case')
     python = root/'.science/candidate-venv/bin/python'
@@ -35,6 +42,7 @@ def evaluate(request):
         env.update(JAX_PLATFORMS='cpu', JAX_NUM_THREADS='4', TF_NUM_INTRAOP_THREADS='4',
                    TF_NUM_INTEROP_THREADS='1',
                    XLA_FLAGS='--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=4')
+    if runtime:env['SCIENCE_PLACEMENT_SEARCH_SECONDS']=str(runtime['search_seconds'])
     mounts = python_mounts(python)+[(source,'/candidate.py'),(problem,'/problem.npz'),
         (root/'tpu/science/challenge_candidate_child.py','/runner.py')]
     helper = request.get('helper', 'none')
@@ -66,14 +74,14 @@ def evaluate(request):
         resource.setrlimit(resource.RLIMIT_FSIZE,(2*1024**2,)*2)
         resource.setrlimit(resource.RLIMIT_CORE,(0,0))
         resource.setrlimit(resource.RLIMIT_NOFILE,(1024,1024))
-        resource.setrlimit(resource.RLIMIT_CPU,(725,725))
+        resource.setrlimit(resource.RLIMIT_CPU,((candidate_limit*4+5),)*2)
     candidate_started_unix = time.time()
     started = time.monotonic()
     with (work/'candidate.log').open('wb') as log:
         proc = subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,
                                 start_new_session=True,preexec_fn=constrain,env={'PATH':'/usr/bin:/bin'})
         try:
-            code = proc.wait(timeout=CANDIDATE_LIMIT_SECONDS)
+            code = proc.wait(timeout=candidate_limit)
         finally:
             # Kill any detached work inside the child's PID namespace on exit.
             if proc.poll() is None: os.killpg(proc.pid,signal.SIGKILL); proc.wait()
@@ -84,7 +92,7 @@ def evaluate(request):
            '--root',str(root),'--case',case,'--positions',str(work/'positions.npy'),
            '--result',str(work/'score.json')]
     with (work/'grader.log').open('wb') as log:
-        subprocess.run(cmd,check=True,timeout=GRADING_LIMIT_SECONDS,stdout=log,stderr=subprocess.STDOUT,
+        subprocess.run(cmd,check=True,timeout=grading_limit,stdout=log,stderr=subprocess.STDOUT,
                        env=dict(os.environ,OPENBLAS_NUM_THREADS='4',OMP_NUM_THREADS='4',MKL_NUM_THREADS='4'))
     scores = json.loads((work/'score.json').read_text())
     cost = scores['proxy_cost']
@@ -100,13 +108,15 @@ def main():
     p.add_argument('--owner-pid',type=int,required=True);p.add_argument('--owner-start',required=True)
     args=p.parse_args();watch_owner(args.owner_pid,args.owner_start)
     request=json.loads(Path(args.request).read_text());started=time.monotonic()
-    memory_gib = 8 if request.get('backend') == 'cpu-jax' else 16
+    runtime=request.get('resource_contract')
+    memory_gib = runtime['memory_gib'] if runtime else (8 if request.get('backend') == 'cpu-jax' else 16)
     group,_=envelope(memory_gib)
     try: result=evaluate(request)
     except Exception as exc: result=invalid(f'{type(exc).__name__}: {exc}')
     result['metrics'].update(allocation_memory=metrics(group),worker_seconds=time.monotonic()-started,
                              cpu_affinity=sorted(os.sched_getaffinity(0)),case=request['case'],
-                             candidate_limit_seconds=CANDIDATE_LIMIT_SECONDS)
+                             candidate_limit_seconds=runtime['candidate_seconds'] if runtime else CANDIDATE_LIMIT_SECONDS,
+                             resource_contract=runtime)
     for name in ['candidate.log','grader.log','child.json']:
         f=Path(request['work'])/name
         if f.exists():result['metrics'][name]=f.read_text(errors='replace')[-4000:]

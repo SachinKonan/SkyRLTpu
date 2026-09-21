@@ -65,7 +65,28 @@ def child(args):
     Path('/work/external').symlink_to('/eval/external', target_is_directory=True)
     b, plc = load_benchmark_from_dir('/eval/external/MacroPlacement/Testcases/ICCAD04/' + args.case)
     out = Path('/output')
-    if args.method == 'xplace':
+    if args.method == 'xplace-abu':
+        from tpu.science.abuplace_starts import run
+        module = load_module(Path(args.repository) / 'abuplace/placer.py')
+        captured = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(captured):
+                raw = run(module, b, plc, out, args.variant)
+        finally:
+            print(captured.getvalue(), flush=True)
+            (out/'xplace.log').write_text(captured.getvalue())
+        require_finite_xplace_log(captured.getvalue())
+        raw = np.asarray(raw, dtype=np.float32)
+        if raw.shape != tuple(b.macro_positions.shape) or not np.isfinite(raw).all():
+            raise ValueError('invalid AbuPlace Xplace output')
+        np.save(out/'raw_positions.npy', raw, allow_pickle=False)
+        from tpu.science.challenge_contract import problem_from_native
+        from tpu.science.challenge_seed_jax import legalize
+        problem = problem_from_native(b, plc)
+        problem['initial_positions'] = raw.copy()
+        problem['initial_positions'][problem['fixed']] = b.macro_positions.numpy()[problem['fixed']]
+        positions = legalize(problem, 42, time_budget_s=args.legalization_seconds)['positions']
+    elif args.method == 'xplace':
         sys.path.insert(0, str(Path(args.repository)/'submissions'))
         from bookshelf_to_lefdef import run_xplace_lefdef
         captured = io.StringIO()
@@ -109,7 +130,7 @@ def child(args):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--method', choices=['xplace', 'archgen', 'abuplace'], required=True)
+    p.add_argument('--method', choices=['xplace', 'xplace-abu', 'archgen', 'abuplace'], required=True)
     p.add_argument('--case', choices=[f'ibm{i:02d}' for i in range(1, 19) if i != 5], required=True)
     p.add_argument('--output', required=True)
     p.add_argument('--repository', required=True)
@@ -117,8 +138,11 @@ def main():
     p.add_argument('--seconds', type=int, default=3450)
     p.add_argument('--cpus', type=int, default=16)
     p.add_argument('--legalization-seconds', type=float, default=120)
+    p.add_argument('--variant', choices=['off', 'rudy', 'rudy_hv'])
     p.add_argument('--child', action='store_true')
     args = p.parse_args()
+    if (args.method == 'xplace-abu') != (args.variant is not None):
+        p.error('--variant is required only for xplace-abu')
     if args.child:
         return child(args)
     from isolation import command, python_mounts
@@ -131,7 +155,7 @@ def main():
     shutil.copytree(Path(args.repository).resolve(), repo, ignore=shutil.ignore_patterns(
         '.git', '__pycache__', 'build', 'results', 'output'), symlinks=True)
     xp = Path(args.xplace_root).resolve()
-    if args.method == 'abuplace':
+    if args.method in ('abuplace', 'xplace-abu'):
         # Keep AbuPlace's own Xplace Python code; use its separately built binaries.
         shutil.copytree(xp/'cpp_to_py/cpybin', repo/'abuplace/Xplace/cpp_to_py/cpybin', dirs_exist_ok=True)
         # These C helpers are compiled with -march=native. A cached helper
@@ -164,6 +188,8 @@ def main():
             '--case', args.case, '--output', '/output', '--repository', str(repo),
             '--xplace-root', str(xp), '--legalization-seconds', str(args.legalization_seconds),
             '--cpus', str(args.cpus)]
+    if args.variant:
+        argv += ['--variant', args.variant]
     cmd = command(argv, readonly=mounts, writable=[(out, '/output'), (repo, repo), (xp, xp)],
                   env=env, cwd='/work')
     devices = []
@@ -177,7 +203,10 @@ def main():
     report = dict(method=args.method, case=args.case, host=platform.node(),
                   job=os.environ.get('SLURM_JOB_ID'), seconds_limit=args.seconds, cpus=args.cpus,
                   environment=env, valid=False, reward=0.0,
-                  postprocess='deterministic CPU legalization' if args.method=='xplace' else 'none')
+                  postprocess='deterministic CPU legalization' if args.method in ('xplace', 'xplace-abu') else 'none')
+    if args.variant:
+        report['variant'] = args.variant
+        report['stage'] = 'AbuPlace global placement plus deterministic legalization only'
     for label, path in [('repository', args.repository), ('xplace', args.xplace_root)]:
         result = subprocess.run(['git','-C',path,'rev-parse','HEAD'],capture_output=True,text=True)
         report[label+'_commit'] = result.stdout.strip()

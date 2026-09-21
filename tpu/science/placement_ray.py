@@ -16,8 +16,16 @@ from .challenge_contract import TASK_ENVELOPE_SECONDS
 
 
 @ray.remote(num_cpus=4, memory=8*1024**3, resources={'placement_cpu_host': 1}, max_retries=0)
-def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s=2400, helper='none'):
+def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s=2400, helper='none', resource_contract=None):
     """One case on host CPUs; no Ray TPU request and no device mounts."""
+    if resource_contract is not None:
+        from .placement_resources import validate, acquire
+        validate(resource_contract)
+        slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s)
+        with lock:
+            return _grade_case(source, case, root, 'cpu-jax', None, None,
+                cpu_slot=slot, slots_per_host=slots_per_host, helper=helper,
+                resource_contract=resource_contract, reserved_cpus=cpus)
     slot, lock = acquire_slot(slots=slots_per_host, deadline_seconds=admission_timeout_s)
     with lock:
         return _grade_case(source, case, root, 'cpu-jax', None, None,
@@ -70,7 +78,7 @@ class PlacementPool:
             self.pending.clear()
 
 
-def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None, slots_per_host=None, helper='none'):
+def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None, slots_per_host=None, helper='none', resource_contract=None, reserved_cpus=None):
     if helper not in ('none', 'fast_proxy_v1') or (helper != 'none' and backend != 'cpu-jax'):
         raise ValueError('fast proxy requires CPU placement')
     from .worker import process_identity
@@ -79,12 +87,13 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
     folder=jobs/uuid.uuid4().hex;folder.mkdir();unit='placement-grade-'+folder.name
     (folder/'candidate.py').write_text(source)
     cpu = backend == 'cpu-jax'
-    memory_gib = 8 if cpu else 16
+    memory_gib = resource_contract["memory_gib"] if resource_contract else (8 if cpu else 16)
+    envelope_seconds = resource_contract["envelope_seconds"] if resource_contract else TASK_ENVELOPE_SECONDS
     request=dict(source=str(folder/'candidate.py'),case=case,root=str(root),
                  work=str(folder/'evaluation'),backend=backend,tpu_ids=[] if cpu else [str(chip)],
-                 accelerator=accelerator,memory_gib=memory_gib,helper=helper)
+                 accelerator=accelerator,memory_gib=memory_gib,helper=helper,resource_contract=resource_contract)
     (folder/'request.json').write_text(json.dumps(request))
-    cpus=slot_cpus(cpu_slot) if cpu else chip_cpus(chip)
+    cpus=reserved_cpus if resource_contract else (slot_cpus(cpu_slot) if cpu else chip_cpus(chip))
     if not set(cpus)<=os.sched_getaffinity(0):raise RuntimeError('placement CPU set unavailable')
     user=pwd.getpwuid(os.getuid()).pw_name
     # TPU driver mappings need a permissive memlock limit. MemoryMax still
@@ -95,7 +104,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
          f'--property=MemoryMax={memory_gib}G','--property=MemorySwapMax=0',
          '--property=LimitMEMLOCK=infinity',
          '--property=CPUQuota=400%','--property=AllowedCPUs='+','.join(map(str,cpus)),
-         '--property=TasksMax=1024',f'--property=RuntimeMaxSec={TASK_ENVELOPE_SECONDS}','--property=KillMode=control-group',
+         '--property=TasksMax=1024',f'--property=RuntimeMaxSec={envelope_seconds}','--property=KillMode=control-group',
          '--property=TimeoutStopSec=2','--property=OOMPolicy=stop','--working-directory='+str(root),
          str(root/'.science/venv/bin/python'),'-m','tpu.science.placement_task',
          '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
@@ -104,7 +113,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
     try:
         with (folder/'worker.log').open('wb') as log:
             proc=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT)
-            try: code=proc.wait(timeout=TASK_ENVELOPE_SECONDS+20)
+            try: code=proc.wait(timeout=envelope_seconds+20)
             finally:
                 if proc.poll() is None: proc.terminate();proc.wait(timeout=5)
         if code or not (folder/'result.json').exists():
@@ -121,7 +130,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
         accelerator=accelerator,physical_tpu_chips=1 if backend=='tpu' else 0,ray_executor=True)
     if cpu:
         result['metrics'].update(grading_slots_per_host=slots_per_host,
-                                 grading_memory_cap_gib=8*slots_per_host, cpu_slot=cpu_slot)
+                                 grading_memory_cap_gib=memory_gib*slots_per_host,resource_contract=resource_contract, cpu_slot=cpu_slot)
     (folder/'verdict.json').write_text(json.dumps(result,allow_nan=False,indent=2))
     return result
 

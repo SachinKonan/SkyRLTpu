@@ -1,0 +1,18 @@
+{
+  "pilot": "14241324",
+  "array": "14241497",
+  "array_indices": "0-11%3",
+  "partition": "gpu-test",
+  "gpus_per_allocation": 4,
+  "cpus_per_gpu_task": 8,
+  "submitted_unix": 1790021454.734119,
+  "stage": "awaiting pilot GPU execution",
+  "publication": "14241687",
+  "central_pool": "tpuswarm-v6e32-central1b",
+  "training_submitted": false,
+  "training_profiles": [
+    "tpu/swarm/ray_train/profiles/circuit300-v6e-gemma-central-three-starts-10step-20260921.json",
+    "tpu/swarm/ray_train/profiles/circuit300-v6e-muse-central-three-starts-10step-20260921.json",
+    "tpu/swarm/ray_train/profiles/circuit300-v6e-qwen-central-three-starts-10step-20260921.json"
+  ]
+}

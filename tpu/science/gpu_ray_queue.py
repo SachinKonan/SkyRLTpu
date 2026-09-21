@@ -114,12 +114,20 @@ def run_task(root, queue, task, attempt, gpu_uuid, cpus, task_seconds):
         else:
             shutil.copy2(source, xp / name)
     method = task['method']
-    repo = root / '.science' / ('abuplace' if method == 'abuplace' else 'archgen-cuda-run')
+    source_root = Path(queue.plan.get('source_root', root))
+    variant = task.get('variant')
+    if variant is not None:
+        from .abuplace_starts import VARIANTS
+        if variant not in VARIANTS or method != 'xplace-' + variant:
+            raise ValueError('invalid Xplace variant task')
+    repo = source_root / '.science' / ('abuplace' if method == 'abuplace' or variant else 'archgen-cuda-run')
     output = attempt / 'evaluation'
     cmd = [queue.plan['candidate_python'],
-           str(root / 'tpu/science/placement_gpu_suite.py'), '--method', method,
+           str(root / 'tpu/science/placement_gpu_suite.py'), '--method', 'xplace-abu' if variant else method,
            '--case', task['case'], '--repository', str(repo), '--xplace-root', str(xp),
-           '--output', str(output), '--cpus', str(cpus), '--seconds', '3180']
+           '--output', str(output), '--cpus', str(cpus), '--seconds', str(queue.plan.get('candidate_seconds', 3180))]
+    if variant:
+        cmd += ['--variant', variant]
     env = dict(os.environ, CUDA_VISIBLE_DEVICES=gpu_uuid, OMP_NUM_THREADS=str(cpus),
                OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='1')
     proc = None

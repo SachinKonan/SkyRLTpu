@@ -95,6 +95,10 @@ class Host:
                 raise RuntimeError("host is stopping")
             if name in self.processes and self.processes[name].poll() is None:
                 raise RuntimeError(f"owned process already active: {name}")
+            if self.config.science_placement_runtime == 'cpu300-4g-v1':
+                from tpu.science.placement_resources import partition
+                _, service_cpus = partition()
+                command = ['taskset', '--cpu-list', ','.join(map(str, service_cpus)), *command]
             process = Process(command, self.run / f"{name}.log", env=env, cwd=cwd or self.root)
             self.processes[name] = process
             emit(self.log, "process_started", rank=self.rank, process=name, pid_owned=process.process.pid)
