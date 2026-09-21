@@ -173,10 +173,13 @@ creates the borrower and client sampling hook even before endpoints are known.
 The default is false; static profiles retain their existing behavior.
 
 Run one `borrowing_supervisor` process on the controller node with its existing
-SkyPilot environment and SSH configs. It reads current RUNNING job assignments
-in the named farm pool, probes `/health`, the lease-capable `/status`, and the
+SkyPilot environment and SSH configs. It reads current RUNNING managed jobs
+whose names contain `inference-farm` (case-insensitive), across all pools visible
+to that SkyPilot API server. An optional `--farm-pool` additionally includes
+legacy farms without the naming convention. It probes `/health`, the lease-capable `/status`, and the
 model list, and obtains each farm's private address from its VM metadata. It
-then updates only the explicitly listed training job IDs with matching model
+then updates only explicitly listed training job IDs or opted-in jobs in listed
+trainer pools with matching model
 URLs. It never claims a lease, uploads an adapter, launches a job, or resizes a
 pool. It uses SSH for localhost HTTP calls because the controller may not have
 a direct route to the private TPU addresses. Borrowers independently check
@@ -186,11 +189,19 @@ Using the SkyPilot Python environment, first run a read-only pass:
 
 ```bash
 python -m tpu.swarm.ray_train.borrowing_supervisor \
+  --farm-name-contains inference-farm \
   --farm-pool tpuswarm-v4-32-central2-smoke \
   --trainer-job-id TRAINER_JOB_ID \
   --ssh-config-dir /path/to/sky-home/.sky/generated/ssh \
   --once --dry-run
 ```
+
+For discovery by name only, omit `--farm-pool`. Job names select candidates;
+they do not bypass health, four-engine readiness, exclusive leases, or the
+borrower's model/runtime/adapter compatibility checks. v4-32 and v5p-32 farms
+can coexist. New capacity does not preempt a healthy existing reservation.
+The current borrower reserves one farm per training run, not every discovered
+farm simultaneously. See [v5p farm profiles and submission](../../../docs/inference-farms-v5p32.md).
 
 Replace `TRAINER_JOB_ID` with the intended job ID and repeat the flag for other
 authorized training jobs. To keep updating in the background, use the same

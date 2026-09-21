@@ -68,3 +68,50 @@ def test_reused_worker_or_disabled_target_is_never_updated():
     result = tick(rows, 'farm', [10, 11, 99], call)
     assert [r['state'] for r in result['targets']] == ['target_identity_mismatch', 'not_opted_in', 'not_running']
     assert all(body is None for _, _, body in calls)
+
+
+def test_named_farms_across_pools_keep_existing_reservations():
+    rows, farms, targets, calls, call = fixture()
+    rows.append(dict(job_id=20, status='RUNNING', cluster='v5p-20',
+                     run_id='Inference-Farm-v5p32-qwen', pool='v5p'))
+    farms['v5p-20'] = dict(models=['qwen'], url='http://10.0.5.1:24800',
+                           state='unleased', capabilities={'compatibility_sha256': 'match'})
+    target = targets['train-10']
+    target.update(lease_scope='run', compatibility_sha256='match')
+    farms['farm-1'].update(state='ready', owner_run='train-qwen:instance', active=4)
+    tick(rows, 'farm', [10], call, run_scoped_only=True)
+    assert target['urls'] == ['http://10.0.0.1:24800']
+    # When the old farm disappears, the named v5p capacity becomes eligible.
+    rows[0]['status'] = 'PENDING'
+    tick(rows, 'farm', [10], call, run_scoped_only=True)
+    assert target['urls'] == ['http://10.0.5.1:24800']
+
+
+def test_name_only_discovery_skips_unready_unrelated_and_incompatible_farms():
+    rows, farms, targets, calls, call = fixture()
+    target = targets['train-10']
+    target.update(lease_scope='run', compatibility_sha256='match')
+    for job, state, digest in [(20, 'RUNNING', 'wrong'), (21, 'STARTING', 'match'),
+                                (22, 'RUNNING', 'match')]:
+        cluster = f'v5p-{job}'
+        rows.append(dict(job_id=job, status=state, cluster=cluster,
+                         run_id=f'inference-farm-qwen-{job}', pool='v5p'))
+        farms[cluster] = dict(models=['qwen'], url=f'http://10.0.5.{job}:24800',
+                               state='unleased', capabilities={'compatibility_sha256': digest})
+    # A name match alone cannot make an unreachable/non-farm service eligible.
+    rows.append(dict(job_id=23, status='RUNNING', cluster='v5p-23',
+                     run_id='inference-farm-broken', pool='v5p'))
+    result = tick(rows, None, [10], call, run_scoped_only=True)
+    assert target['urls'] == ['http://10.0.5.22:24800']
+    assert result['unavailable'][0]['job_id'] == 23
+    assert {c for c, action, _ in calls if action == 'farm'} == {'v5p-20', 'v5p-22', 'v5p-23'}
+
+
+def test_named_farm_dry_run_and_trainer_scope():
+    rows, farms, targets, calls, call = fixture()
+    rows[0]['run_id'] = 'qwen-inference-farm'
+    result = tick(rows, None, [10], call, dry_run=True)
+    assert result['targets'][0]['state'] == 'would_update'
+    assert targets['train-10']['urls'] == []
+    assert all(body is None for _, _, body in calls)
+    assert not any(cluster == 'train-11' for cluster, _, _ in calls)

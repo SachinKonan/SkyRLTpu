@@ -2,6 +2,7 @@
 
 Run with the existing SkyPilot environment and SSH configs. Only explicitly
 listed training job IDs or opted-in jobs in listed pools may receive updates.
+Farms are discovered by job name across pools, plus an optional legacy pool.
 --dry-run performs no HTTP writes.
 """
 import argparse
@@ -83,11 +84,14 @@ def inventory():
                  priority=r.priority or 0) for r in rows]
 
 
-def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(), run_scoped_only=False):
+def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
+         run_scoped_only=False, farm_name_contains='inference-farm'):
     """One replace-list update per target, using this tick's observed farms."""
     running = {r['job_id']: r for r in rows if r['status'] == 'RUNNING' and r.get('cluster')}
     farm_rows = [r for r in running.values()
-                 if re.fullmatch(re.escape(farm_pool)+r'-\d+', r['cluster'])]
+                 if (farm_pool and re.fullmatch(re.escape(farm_pool)+r'-\d+', r['cluster']))
+                 or (farm_name_contains and farm_name_contains.casefold()
+                     in (r.get('run_id') or '').casefold())]
     def probe(row):
         result = call(row['cluster'], 'farm')
         return row, result
@@ -147,7 +151,9 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--farm-pool', required=True)
+    parser.add_argument('--farm-pool', help='Also discover farms in this legacy pool')
+    parser.add_argument('--farm-name-contains', default='inference-farm',
+                        help='Case-insensitive job-name substring across all pools (default: inference-farm)')
     parser.add_argument('--trainer-job-id', type=int, action='append', default=[])
     parser.add_argument('--trainer-pool', action='append', default=[])
     parser.add_argument('--ssh-config-dir', type=Path, required=True)
@@ -160,6 +166,8 @@ def main():
     args = parser.parse_args()
     if not args.trainer_job_id and not args.trainer_pool:
         parser.error('at least one explicit trainer job or pool is required')
+    if not args.farm_pool and not args.farm_name_contains.strip():
+        parser.error('a farm pool or nonempty farm name selector is required')
     if args.interval < 10 or not 1 <= args.port <= 65535:
         parser.error('interval must be >=10 seconds and port must be valid')
     # Prevent two supervisors under this login from competing to replace lists.
@@ -177,7 +185,8 @@ def main():
         try:
             result = tick(inventory(), args.farm_pool, args.trainer_job_id, call,
                           dry_run=args.dry_run, trainer_pools=args.trainer_pool,
-                          run_scoped_only=args.run_scoped_only)
+                          run_scoped_only=args.run_scoped_only,
+                          farm_name_contains=args.farm_name_contains)
             print(json.dumps(dict(time=time.time(), **result)), flush=True)
         except Exception as exc:
             # An inventory outage must not look like an empty farm pool. Keep

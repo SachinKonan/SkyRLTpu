@@ -14,12 +14,17 @@ def quote(value):
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%').replace('$', '$$') + '"'
 
 
-def unit(checkout, python, environment, ssh_dir, farm_pool, trainer_pools, lock_file):
+def unit(checkout, python, environment, ssh_dir, farm_pool, trainer_pools, lock_file,
+         *, farm_name_contains='inference-farm'):
     if not trainer_pools:
         raise ValueError('at least one explicit trainer pool is required')
+    if not farm_pool and not farm_name_contains.strip():
+        raise ValueError('a farm pool or nonempty farm name selector is required')
     command = [python, '-u', '-m', 'tpu.swarm.ray_train.borrowing_supervisor',
-               '--farm-pool', farm_pool, '--ssh-config-dir', ssh_dir, '--lock-file', lock_file,
-               '--run-scoped-only']
+               '--farm-name-contains', farm_name_contains,
+               '--ssh-config-dir', ssh_dir, '--lock-file', lock_file, '--run-scoped-only']
+    if farm_pool:
+        command += ['--farm-pool', farm_pool]
     for pool in trainer_pools:
         command += ['--trainer-pool', pool]
     working = str(checkout)
@@ -42,12 +47,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('checkout', 'python', 'environment', 'ssh-dir', 'lock-file', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--farm-pool', required=True)
+    parser.add_argument('--farm-pool')
+    parser.add_argument('--farm-name-contains', default='inference-farm')
     parser.add_argument('--trainer-pool', action='append', required=True)
     args = parser.parse_args()
     # Do not resolve the virtualenv Python symlink to the global interpreter.
     text = unit(args.checkout.resolve(), args.python.absolute(), args.environment.resolve(),
-                args.ssh_dir.resolve(), args.farm_pool, args.trainer_pool, args.lock_file.resolve())
+                args.ssh_dir.resolve(), args.farm_pool, args.trainer_pool, args.lock_file.resolve(),
+                farm_name_contains=args.farm_name_contains)
     # Refuse to silently replace an existing service definition.
     with args.output.open('x') as stream:
         stream.write(text)
