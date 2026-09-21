@@ -262,7 +262,15 @@ def main():
         if not e.get_question().strip(): raise RuntimeError('empty bootstrap prompt')
         print(json.dumps(dict(event='bootstrap_import_check_passed', layers=config.bootstrap_layers)))
         return
-    asyncio.run(run(config, args.snapshot, args.head))
+    if config.borrows_inference:
+        from .borrowing_phase import sampling_phase
+        async def borrowed_run():
+            async with sampling_phase(f'http://{args.head}:{config.ports.inference}',
+                                      bootstrap=True, expected_n=config.bootstrap_group_size):
+                return await run(config, args.snapshot, args.head)
+        asyncio.run(borrowed_run())
+    else:
+        asyncio.run(run(config, args.snapshot, args.head))
 
 
 if __name__ == '__main__': main()

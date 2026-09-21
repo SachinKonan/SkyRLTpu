@@ -71,7 +71,8 @@ def prepare_host(host):
     ram=mount_cache(host.root/'ram',host.config.cache.inference_gib,host.config.cache.reserve_gib)
     host.store=CacheStore(ram,host.gcs)
     host.store.scope_compile(host.config.cache.inference_compile)
-    host.snapshot=host.store.restore_hf(host.config.cache.hf,host.config.model,weights=False)
+    host.snapshot=host.store.restore_hf(host.config.cache.hf,host.config.model,weights=False,
+                                      layout=host.config.cache.hf_layout)
     host.install_client()
     if host.config.arena_samples:
         from .arena_sampling import prepare_host as prepare_judge

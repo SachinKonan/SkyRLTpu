@@ -73,6 +73,35 @@ class Controller:
         self.transitioning = False
         self.shutdown_errors = []
         self.local_inference_instance = None
+        self.farm_instance = None
+
+    def reservation_rpc(self, action, timeout=10):
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(f'http://{self.ips[0]}:{self.config.ports.inference}/skyrl/v1/borrowing/reservation',
+                json=dict(run_id=self.config.run_id, instance=self.farm_instance, action=action))
+            response.raise_for_status()
+            return response.json()
+
+    def wait_farm_admission(self):
+        if self.config.inference.external_pool_lease_scope != 'run':
+            return
+        self.report('waiting_for_farm', model=self.config.model)
+        while not self.stopping.is_set():
+            if self.failure:
+                raise RuntimeError(self.failure)
+            try:
+                with httpx.Client(timeout=10) as client:
+                    response = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/skyrl/v1/borrowing/services')
+                    response.raise_for_status()
+                    self.farm_instance = response.json()['instance']
+                status = self.reservation_rpc('acquire', self.config.inference.external_pool_prepare_timeout + 5)
+                if status.get('reserved') or not self.config.inference.external_pool_require_initial:
+                    self.report('farm_admitted', **status)
+                    return
+            except (httpx.HTTPError, ValueError, KeyError) as exc:
+                self.report('farm_admission_pending', reason=type(exc).__name__)
+            self.stopping.wait(5)
+        raise RuntimeError('farm admission interrupted')
 
     def arm_local_inference(self, client):
         if self.config.inference.restart_limit != 0:
@@ -188,6 +217,11 @@ class Controller:
                 self.report("monitor_error", detail=str(exc))
                 # A transient polling timeout does not cancel a healthy workload.
             self.check_local_inference()
+            if self.farm_instance and not self.transitioning and not self.failure:
+                try:
+                    self.reservation_rpc('heartbeat')
+                except (httpx.HTTPError, ValueError) as exc:
+                    self.report('farm_controller_heartbeat_failed', reason=type(exc).__name__)
             try:
                 self.writeback_tick()
             except Exception as exc:
@@ -353,6 +387,7 @@ class Controller:
                 [s['key'] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
             ingress = deploy(self.config, self.prepared, self.catalog, self.ips[0])
             self.wait_inference(engine_ips)
+            self.wait_farm_admission()
             self.checked_get([self.hosts[0].start_bootstrap.remote()], 30)
             self.report('bootstrap_started', layers=self.config.bootstrap_layers,
                         inference_hosts=engine_ips, optimizer_steps=0)
@@ -399,6 +434,17 @@ class Controller:
                 engine_ips = remaining
                 self.transitioning = False
                 self.report('bootstrap_roles_transitioned', train_ranks=train_ranks, inference_hosts=remaining)
+                self.wait_farm_admission()
+        # An opted-in run gets a farm before starting any trainer process.
+        predeployed = False
+        if not bootstrap_pending and self.config.inference.external_pool_lease_scope == 'run':
+            if self.catalog is None:
+                self.catalog = Catalog.options(name="inference-catalog").remote(
+                    [s['key'] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
+            deploy(self.config, self.prepared, self.catalog, self.ips[0])
+            self.wait_inference(engine_ips)
+            self.wait_farm_admission()
+            predeployed = True
         for rank in train_ranks:
             self.trainers.append(TrainerRank.options(
                 scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[self.ips[rank]]["NodeID"], soft=False))
@@ -409,7 +455,7 @@ class Controller:
         inference_ips = engine_ips
         trainer_starts = [trainer.start.remote(train_ranks, inference_ips) for trainer in self.trainers]
         # Both services start concurrently; our readiness loop owns the deadline.
-        if not bootstrap_pending:
+        if not bootstrap_pending and not predeployed:
             deploy(self.config, self.prepared, self.catalog, self.ips[0])
         self.checked_get(trainer_starts, self.config.ready_timeout)
         deadline = time.monotonic() + self.config.ready_timeout
@@ -503,6 +549,11 @@ class Controller:
         # before bootstrap shuts down the private Ray runtime.
         if self.hosts:
             self.drain_phase({self.hosts[0].stop_client.remote(): 0}, "client_stop", timeout=40)
+        if self.farm_instance:
+            try:
+                self.reservation_rpc('close', self.config.inference.external_pool_release_timeout + 5)
+            except (httpx.HTTPError, ValueError) as exc:
+                self.report('farm_release_pending', reason=type(exc).__name__)
         for ref in self.science_refs:
             ray.cancel(ref, force=True)
         if self.science_group is not None:

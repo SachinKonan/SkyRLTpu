@@ -345,12 +345,78 @@ class CacheStore:
              reused=len(objects)-len(missing), cold=not objects)
         return cache
 
-    def restore_hf(self, prefix, model_name, weights):
+    def restore_hf_snapshot(self, source, model_key, revision, weights):
+        """Restore legacy materialized snapshots, pinned by GCS generation.
+
+        These caches have complete named files instead of the manifest/blob
+        layout. Do not synthesize blob IDs or silently fall back on corruption.
+        """
+        objects = self.gcs.list(source + "/snapshots/" + revision)
+        objects = [o for o in objects if weights or not o.relative.endswith(
+            (".safetensors", ".bin", ".pt", ".pth"))]
+        if any("/" in o.relative for o in objects):
+            raise ValueError("materialized HF snapshot must contain flat file names")
+        required = {"config.json", "tokenizer.json"}
+        if weights:
+            required.add("model.safetensors.index.json")
+        if not required.issubset(o.relative for o in objects):
+            raise ValueError("HF snapshot lacks required model/tokenizer metadata")
+        snapshot = self.owned("hf") / "hub" / model_key / "snapshots" / revision
+        identity = hashlib.sha256(json.dumps(
+            ["snapshot", source, revision, weights, [o.identity() for o in objects]],
+            sort_keys=True).encode()).hexdigest()
+        marker = self.owned("hf") / ".complete.json"
+        complete = marker.exists() and json.loads(marker.read_text()).get("identity") == identity
+        if not complete:
+            self.clear("hf")
+        snapshot.mkdir(parents=True, exist_ok=True)
+        for attempt in range(3):
+            missing = [o for o in objects if not valid_file(snapshot / o.relative, o)]
+            if not missing:
+                break
+            stat = os.statvfs(snapshot)
+            if sum(o.size for o in missing) + 2 * GIB > stat.f_bavail * stat.f_frsize:
+                raise RuntimeError("HF cache exceeds remaining tmpfs budget")
+            try:
+                for offset in range(0, len(missing), 64):
+                    batch = missing[offset:offset+64]
+                    for obj in batch:
+                        (snapshot / obj.relative).unlink(missing_ok=True)
+                        (snapshot / (obj.relative + "_.gstmp")).unlink(missing_ok=True)
+                    self.gcs.transfer(["cp", *[o.uri + "#" + o.generation for o in batch], str(snapshot)],
+                                      "hf-restore", snapshot)
+                if not all(valid_file(snapshot / o.relative, o) for o in objects):
+                    raise RuntimeError("HF snapshot checksum validation failed")
+                break
+            except (RuntimeError, TimeoutError):
+                if attempt == 2:
+                    marker.unlink(missing_ok=True)
+                    raise
+        if weights:
+            index = json.loads((snapshot / "model.safetensors.index.json").read_text())
+            selected = {o.relative for o in objects}
+            for name in set(index["weight_map"].values()):
+                safe_relative(name)
+                if name not in selected or not (snapshot / name).is_file():
+                    raise RuntimeError("HF index references an absent weight shard")
+        refs = snapshot.parent.parent / "refs"
+        refs.mkdir(exist_ok=True)
+        (refs / "main").write_text(revision)
+        marker.write_text(json.dumps({"identity": identity}))
+        emit(self.gcs.events, "hf_cache_ready", revision=revision, weights=weights,
+             files=len(objects), reused=bool(complete), layout="snapshot")
+        return snapshot
+
+    def restore_hf(self, prefix, model_name, weights, layout="manifest"):
         model_key = "models--" + model_name.replace("/", "--")
         source = prefix.rstrip("/") + "/" + model_key
         revision = self.gcs.metadata("cat", source + "/refs/main").strip()
         if not re.fullmatch(r"[a-f0-9]{40,64}", revision):
             raise ValueError("HF cache revision is not a pinned commit")
+        if layout == "snapshot":
+            return self.restore_hf_snapshot(source, model_key, revision, weights)
+        if layout != "manifest":
+            raise ValueError("unsupported HF cache layout")
         manifest = json.loads(self.gcs.metadata("cat", source + f"/trees/{revision}.json",
                                                 allow_empty=True))
         selected = {}

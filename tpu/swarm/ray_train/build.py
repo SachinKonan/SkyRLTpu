@@ -15,8 +15,15 @@ import yaml
 from .config import ACCELERATOR_RUNTIME, Config
 
 
-def build(profile, output):
+def build(profile, output, *, _executor_only=False):
     config = Config.load(profile)
+    if config.science_task and not _executor_only:
+        # A science launch also needs its grader code, inputs, environment and
+        # host preparation. Never return an executable generic-only science job.
+        from tpu.science.package_training import package
+        task = package(profile, output)
+        doc = yaml.safe_load(task.read_text())
+        return Path(output).resolve() / 'science-training.tar.gz', doc['envs']['RAY_TRAIN_CODE'], task
     package = Path(__file__).resolve().parent
     repo = package.parents[2]
     # Native client parity is checked by source_ready after extracting the

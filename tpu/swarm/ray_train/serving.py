@@ -42,6 +42,9 @@ class Catalog:
         if self.restart_limit == 0 and self.fatal_error is None:
             self.fatal_error = reason
 
+    def quarantine(self, reason):
+        self.fatal_error = self.fatal_error or reason
+
     def claim(self, ip):
         if ip not in self.expected:
             raise RuntimeError("refusing to initialize inference on a trainer host")
@@ -102,6 +105,10 @@ class Engine:
         self.engine_run = self.run / f"engine-slot-{slot}"
         (self.engine_run / "loras").mkdir(parents=True, exist_ok=True)
         self.instance = uuid.uuid4().hex
+        self.serving_identity = None
+        if self.config.inference.external_pool_attestation:
+            from .serving_identity import identity
+            self.serving_identity = identity(self.config, self.root, self.source, info['snapshot'])
         self.version = None
         self.lock = asyncio.Lock()
         self.retiring = False
@@ -135,6 +142,9 @@ class Engine:
             if await catalog.register.remote(self.key, self.instance, versions):
                 break
         emit(self.run / "inference-events.jsonl", "engine_ready", ip=self.ip, slot=slot, tp=self.config.inference.tp, instance=self.instance)
+
+    async def identity(self):
+        return self.serving_identity
 
     async def ensure_adapter(self, version):
         if version == self.config.model:
@@ -246,15 +256,29 @@ class Ingress:
         self.upload_lock = asyncio.Lock()
         self.lease = None
         self.inflight = set()
+        self.quarantined = False
+        self.compatibility = None
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.borrower = None
         self.borrowing_instance = uuid.uuid4().hex
         if self.config.borrows_inference:
             from .borrowing import Borrower
-            self.borrower = Borrower(self.config, self.http,
+            from .run_borrowing import RunBorrower
+            borrower_type = RunBorrower if self.config.inference.external_pool_lease_scope == 'run' else Borrower
+            self.borrower = borrower_type(self.config, self.http,
+                lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields))
+        self.lease_watchdog = (asyncio.create_task(self.watch_orphaned_lease())
+                               if self.config.inference.require_lease else None)
+        self.scheduler = None
+        if self.config.inference.external_pool_scheduler:
+            from .hybrid_scheduler import HybridScheduler
+            self.scheduler = HybridScheduler(len(self.engines), self.config.inference.external_pool_max_concurrent_requests,
+                lambda: bool(self.borrower and self.borrower.lease and self.borrower._eligible(self.borrower.lease)),
                 lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields))
 
     def require_lease(self, lease_id, *, allow_expired=False):
+        if self.quarantined:
+            raise HTTPException(503, 'farm quarantined pending owned runtime recycle')
         if not self.config.inference.require_lease:
             return
         lease = self.lease
@@ -262,6 +286,26 @@ class Ingress:
             raise HTTPException(409, "missing or stale lease ID")
         if not allow_expired and (lease["releasing"] or time.monotonic() >= lease["deadline"]):
             raise HTTPException(409, "lease is expired or draining")
+
+    async def watch_orphaned_lease(self):
+        orphan, started = None, None
+        while True:
+            await asyncio.sleep(.5)
+            lease = self.lease
+            expired = lease and (lease['releasing'] or time.monotonic() >= lease['deadline'])
+            if not expired or not (self.active or self.inflight or self.upload_lock.locked()):
+                orphan, started = None, None
+                continue
+            if lease is not orphan:
+                orphan, started = lease, time.monotonic()
+            if time.monotonic() - started >= self.config.inference.farm_drain_timeout:
+                # Do not grant another owner while an engine might still execute
+                # abandoned work. The controller tears down its owned runtime;
+                # the managed farm job's retry starts a fresh lease namespace.
+                self.quarantined = True
+                lease['releasing'] = True
+                await self.catalog.quarantine.remote('expired farm lease failed to drain')
+                return
 
     async def lease_status(self):
         lease = self.lease
@@ -285,7 +329,9 @@ class Ingress:
             # Do not report a previous owner's hash as ready after reassignment.
             return {"lease_id": None, "owner_run": None, "adapter_sha256": None,
                     "ready_engines": 0, "state": "transitioning"}
-        if not lease:
+        if self.quarantined:
+            state = 'quarantined'
+        elif not lease:
             state = "unleased"
         elif lease["releasing"]:
             state = "draining"
@@ -305,6 +351,8 @@ class Ingress:
 
     @app.post("/acquire_lease")
     async def acquire_lease(self, request: Request):
+        if self.quarantined:
+            raise HTTPException(503, 'farm quarantined')
         if not self.config.inference.require_lease:
             raise HTTPException(409, "leases are not enabled on this farm")
         payload = await request.json()
@@ -323,8 +371,14 @@ class Ingress:
                     raise HTTPException(409, "lease belongs to another run")
                 self.lease.update(deadline=time.monotonic() + ttl, expires_at=time.time() + ttl)
             return await self.lease_status()
+        if self.config.inference.external_pool_attestation:
+            capabilities = await self.capabilities()
+            if payload.get('compatibility_sha256') != capabilities['compatibility_sha256']:
+                raise HTTPException(409, 'compatible serving runtime attestation required')
         async with self.upload_lock:
             async with self.condition:
+                if self.quarantined:
+                    raise HTTPException(503, 'farm quarantined')
                 if self.lease and time.monotonic() < self.lease["deadline"]:
                     raise HTTPException(409, "farm is already leased; provide the lease ID to renew")
                 else:
@@ -358,9 +412,45 @@ class Ingress:
                       committed_adapters=sorted(self.versions))
         if self.borrower:
             result['borrowing'] = self.borrower.snapshot()
+        if self.scheduler:
+            result['scheduling'] = self.scheduler.snapshot()
         if self.config.inference.require_lease:
             result.update(await self.lease_status())
+        if self.config.inference.external_pool_attestation:
+            result['capabilities'] = await self.capabilities()
         return result
+
+    async def capabilities(self):
+        if self.compatibility is None:
+            identities = await asyncio.gather(*(e.identity.remote() for e in self.engines))
+            if not identities or any(not item or item != identities[0] for item in identities):
+                raise HTTPException(503, 'serving runtime identities disagree')
+            self.compatibility = identities[0]
+        if self.borrower:
+            self.borrower.required_contract = self.compatibility['sha256']
+        return dict(compatibility_sha256=self.compatibility['sha256'],
+                    contract=self.compatibility['contract'], engines=len(self.engines),
+                    max_sequences=self.config.inference.max_sequences,
+                    prefix_caching=self.config.inference.prefix_caching,
+                    max_loras=self.config.inference.max_loras)
+
+    @app.post('/skyrl/v1/borrowing/reservation')
+    async def reservation(self, request: Request):
+        if not self.borrower or self.config.inference.external_pool_lease_scope != 'run':
+            raise HTTPException(409, 'run reservations are disabled')
+        body = await request.json()
+        if body.get('run_id') != self.config.run_id or body.get('instance') != self.borrowing_instance:
+            raise HTTPException(409, 'stale reservation controller')
+        action = body.get('action')
+        if action == 'close':
+            await self.borrower.close()
+        elif action == 'heartbeat':
+            self.borrower.touch_run()
+        elif action == 'acquire':
+            return await self.borrower.reserve()
+        else:
+            raise HTTPException(400, 'unknown reservation action')
+        return self.borrower.snapshot()
 
     @app.post('/skyrl/v1/borrowing/begin')
     async def begin_borrowing(self, request: Request):
@@ -390,9 +480,15 @@ class Ingress:
 
     @app.get('/skyrl/v1/borrowing/services')
     async def borrowing_services(self):
+        if self.config.inference.external_pool_attestation:
+            await self.capabilities()
         return dict(enabled=self.config.inference.external_pool_updates,
                     model=self.config.model, run_id=self.config.run_id,
                     instance=self.borrowing_instance,
+                    lease_scope=self.config.inference.external_pool_lease_scope,
+                    workload=('ac2' if self.config.client_env.get('TTD_PROBLEM_TYPE') == 'ac2'
+                              else 'qubit' if self.config.science_task == 'routing' else 'other'),
+                    borrowing=self.borrower.snapshot() if self.borrower else None,
                     urls=list(self.borrower.urls) if self.borrower else [])
 
     @app.post('/skyrl/v1/borrowing/services')
@@ -432,6 +528,8 @@ class Ingress:
 
     @app.get("/health")
     async def health(self):
+        if self.quarantined:
+            raise HTTPException(503, 'farm quarantined')
         state = await self.catalog.snapshot.remote()
         if len(state["replicas"]) != len(self.engine_urls) or state["exhausted"]:
             raise HTTPException(503, "inference replicas not ready")
@@ -583,7 +681,10 @@ class Ingress:
         """
         async with self.upload_lock:
             if self.borrower:
-                await self.borrower.end()
+                if self.config.inference.external_pool_lease_scope == 'run':
+                    await self.borrower.close()
+                else:
+                    await self.borrower.end()
             async with self.condition:
                 self.updating = True
                 await self.condition.wait_for(lambda: self.active == 0)
@@ -597,6 +698,8 @@ class Ingress:
             self.engine_urls = [self.engine_urls[i] for i in keep]
             self.ips = list(remaining_ips)
             self.next_engine = 0
+            if self.scheduler:
+                self.scheduler.local = [None] * len(self.engines)
             return await asyncio.gather(*(e.retire.remote() for e in retired))
 
     @app.post("/tokenize")
@@ -615,10 +718,24 @@ class Ingress:
             self.active += 1
         return await self.finish_admitted("tokenize", payload)
 
-    async def finish_admitted(self, method, payload):
+    async def finish_admitted(self, method, payload, *, local_only=False):
+        async def local(index):
+            try:
+                return await getattr(self.engines[index], method).remote(payload)
+            except Exception:
+                if method == 'generate' and self.config.inference.restart_limit == 0:
+                    await self.catalog.fail.remote('local generation failed')
+                raise
+
+        async def remote():
+            return await self.borrower.generate(payload, local_active=0,
+                                               local_engines=len(self.engines), prefer_remote=True)
+
         async def run():
             try:
-                if method == "generate" and self.borrower:
+                if method == 'generate' and self.scheduler:
+                    return await self.scheduler.run(payload, local, remote, local_only=local_only)
+                if method == "generate" and self.borrower and not local_only:
                     external_active = self.borrower.lease.active if self.borrower.lease else 0
                     result = await self.borrower.generate(payload,
                         local_active=max(0, self.active - external_active - 1), local_engines=len(self.engines))
@@ -668,7 +785,8 @@ class Ingress:
             if not payload.get("model"):
                 raise HTTPException(400, "model is required")
             self.active += 1
-        return await self.finish_admitted("generate", payload)
+        return await self.finish_admitted("generate", payload,
+            local_only=request.headers.get('x-skyrl-local-only') == '1')
 
 
 def engine_version(raw_config, prepared, head, slot=0):

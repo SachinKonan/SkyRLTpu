@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 from pathlib import Path
 import zlib
 
@@ -107,6 +108,57 @@ def test_checksum_rejects_same_size_corruption(tmp_path):
     assert not valid_file(path, object_for(b"right"))
     path.write_bytes(b"right")
     assert valid_file(path, object_for(b"right"))
+
+
+@pytest.mark.parametrize("weights", [False, True])
+def test_materialized_hf_snapshot_is_verified_and_reused(tmp_path, weights):
+    data = {"config.json": b"{}", "tokenizer.json": b"{}",
+            "model.safetensors.index.json": json.dumps({"weight_map": {"w": "model-1.safetensors"}}).encode(),
+            "model-1.safetensors": b"weights"}
+    class GCS:
+        events = tmp_path / "events.jsonl"
+        copies = []
+        def metadata(self, *args):
+            assert args == ("cat", "gs://test/hf/models--test--model/refs/main")
+            return "a" * 40
+        def list(self, prefix):
+            assert prefix.endswith("/snapshots/" + "a" * 40)
+            return [object_for(value, name) for name, value in data.items()]
+        def transfer(self, args, *unused):
+            for uri in args[1:-1]:
+                assert uri.endswith("#123")
+                name = uri.split("#")[0].rsplit("/", 1)[1]
+                self.copies.append(name)
+                (Path(args[-1]) / name).write_bytes(data[name])
+    gcs = GCS()
+    store = CacheStore(tmp_path, gcs)
+    snapshot = store.restore_hf("gs://test/hf", "test/model", weights, layout="snapshot")
+    assert (snapshot / "model-1.safetensors").exists() == weights
+    assert (snapshot.parent.parent / "refs/main").read_text() == "a" * 40
+    count = len(gcs.copies)
+    assert store.restore_hf("gs://test/hf", "test/model", weights, layout="snapshot") == snapshot
+    assert len(gcs.copies) == count
+    (snapshot / "config.json").write_bytes(b"xx")
+    store.restore_hf("gs://test/hf", "test/model", weights, layout="snapshot")
+    assert (snapshot / "config.json").read_bytes() == b"{}"
+    assert len(gcs.copies) == count + 1
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_snapshot_rejects_missing_shards_and_corrupt_downloads(tmp_path, corrupt):
+    data = {"config.json": b"{}", "tokenizer.json": b"{}",
+            "model.safetensors.index.json": b'{"weight_map":{"w":"absent.safetensors"}}'}
+    class GCS:
+        events = tmp_path / "events.jsonl"
+        def metadata(self, *args): return "b" * 40
+        def list(self, prefix): return [object_for(value, name) for name, value in data.items()]
+        def transfer(self, args, *unused):
+            for uri in args[1:-1]:
+                name = uri.split("#")[0].rsplit("/", 1)[1]
+                (Path(args[-1]) / name).write_bytes(b"xx" if corrupt and name == "config.json" else data[name])
+    with pytest.raises(RuntimeError, match="checksum" if corrupt else "absent weight shard"):
+        CacheStore(tmp_path, GCS()).restore_hf("gs://test/hf", "test/model", True, layout="snapshot")
+    assert not (tmp_path / "hf/.complete.json").exists()
 
 
 def test_cleanup_stays_inside_owned_namespace(tmp_path):

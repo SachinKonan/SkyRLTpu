@@ -70,6 +70,7 @@ PROBLEM_PROMPT_FILES = {
 NATIVE_FILES = {"skyrl/tinker/dispatch.py", "skyrl/tinker/extra/external_inference.py",
                 "skyrl/tinker/extra/skyrl_train_inference_forwarding.py", "skyrl/tinker/types.py", "skyrl/tinker/api.py", "skyrl/backends/vllm_sampling.py",
                 "skyrl/backends/native_completion.py", "third_party/discover/ttt_discover/rl/train.py",
+                "third_party/discover/ttt_discover/rl/resume.py",
                 "third_party/discover/ttt_discover/tinker_utils/completers.py"}
 
 ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
@@ -95,6 +96,8 @@ SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/r
 def manifest(repo, config=None):
     names = set(FILES) if config is None or config.adapter_count > 1 else set()
     if config is not None and config.inference.require_lease:
+        names.add("tpu/vllm_tpu_server.py")
+    if config is not None and config.inference.external_pool_attestation:
         names.add("tpu/vllm_tpu_server.py")
     if config is not None and config.inference.hosts_per_engine > 1:
         names.add("tpu/vllm_tpu_server.py")
@@ -132,7 +135,7 @@ def manifest(repo, config=None):
     if config is not None and config.inference.native_thinking_budget and not config.inference_only:
         names.update(NATIVE_FILES | set(SMOKE_FILES))
     if config is not None and config.borrows_inference:
-        names.update(BORROWING_FILES)
+        names.update(BORROWING_FILES | REPEATED_KV_FILES)
     return {name: hashlib.sha256((Path(repo) / name).read_bytes()).hexdigest() for name in sorted(names)}
 
 

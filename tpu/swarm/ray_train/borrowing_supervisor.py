@@ -1,7 +1,8 @@
 """Controller-local discovery and push; never claims leases or submits jobs.
 
 Run with the existing SkyPilot environment and SSH configs. Only explicitly
-listed training job IDs may receive updates. --dry-run performs no HTTP writes.
+listed training job IDs or opted-in jobs in listed pools may receive updates.
+--dry-run performs no HTTP writes.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -40,7 +41,9 @@ try:
             ip = str(ipaddress.ip_address(response.read().decode().strip()))
         if ip not in status.get('expected', []):
             raise ValueError('farm head is not in the expected engine set')
-        result = dict(models=names, url='http://'+ip+':'+str(PARAMS['port']))
+        result = dict(models=names, url='http://'+ip+':'+str(PARAMS['port']),
+                      owner_run=status.get('owner_run'), state=status.get('state'),
+                      active=status.get('active', 0), capabilities=status.get('capabilities'))
     else:
         result = call('/skyrl/v1/borrowing/services', PARAMS.get('body'))
     print(json.dumps(dict(ok=True, result=result)))
@@ -74,12 +77,13 @@ def rpc(ssh_dir, cluster, action, port, body=None):
 def inventory():
     import sky
     rows, *_ = sky.get(sky.jobs.queue_v2(refresh=False, skip_finished=True,
-        fields=['job_id', 'job_name', 'status', 'current_cluster_name']))
+        fields=['job_id', 'job_name', 'status', 'current_cluster_name', 'pool', 'priority']))
     return [dict(job_id=r.job_id, status=getattr(r.status, 'value', str(r.status)),
-                 cluster=r.current_cluster_name, run_id=r.job_name) for r in rows]
+                 cluster=r.current_cluster_name, run_id=r.job_name, pool=r.pool,
+                 priority=r.priority or 0) for r in rows]
 
 
-def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False):
+def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(), run_scoped_only=False):
     """One replace-list update per target, using this tick's observed farms."""
     running = {r['job_id']: r for r in rows if r['status'] == 'RUNNING' and r.get('cluster')}
     farm_rows = [r for r in running.values()
@@ -97,11 +101,25 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False):
         else:
             unavailable.append(dict(job_id=row['job_id'], **result))
 
+    trainer_ids = list(dict.fromkeys([*trainer_ids, *[r['job_id'] for r in rows
+        if r.get('pool') in trainer_pools]]))
+    descriptors = {}
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        jobs = [job for job in trainer_ids if job in running]
+        values = workers.map(lambda job: call(running[job]['cluster'], 'target'), jobs)
+        descriptors.update(zip(jobs, values))
+    reserving = {job: value['result'] for job, value in descriptors.items()
+                 if value.get('ok') and value['result'].get('enabled') is True
+                 and value['result'].get('run_id') == running[job].get('run_id')
+                 and value['result'].get('lease_scope') == 'run'}
+    from .farm_admission import assignments
+    assigned = assignments([r for r in rows if r['job_id'] in trainer_ids], farms, reserving)
+
     def update(job_id):
         row = running.get(job_id)
         if not row:
             return dict(job_id=job_id, state='not_running')
-        descriptor = call(row['cluster'], 'target')
+        descriptor = descriptors[job_id]
         if not descriptor.get('ok'):
             return dict(job_id=job_id, state='unreachable_or_not_supported', detail=descriptor)
         target = descriptor['result']
@@ -109,7 +127,10 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False):
             return dict(job_id=job_id, state='target_identity_mismatch')
         if target.get('enabled') is not True:
             return dict(job_id=job_id, state='not_opted_in')
-        urls = sorted({f['url'] for f in farms if target['model'] in f['models']})[:2]
+        if run_scoped_only and target.get('lease_scope') != 'run':
+            return dict(job_id=job_id, state='legacy_scope_unchanged')
+        urls = (assigned[job_id] if job_id in assigned else
+                sorted({f['url'] for f in farms if target['model'] in f['models']})[:2])
         if target.get('urls') == urls:
             return dict(job_id=job_id, state='unchanged', model=target['model'], urls=urls)
         body = {k: target[k] for k in ('model', 'run_id', 'instance')}
@@ -127,18 +148,23 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--farm-pool', required=True)
-    parser.add_argument('--trainer-job-id', type=int, action='append', required=True)
+    parser.add_argument('--trainer-job-id', type=int, action='append', default=[])
+    parser.add_argument('--trainer-pool', action='append', default=[])
     parser.add_argument('--ssh-config-dir', type=Path, required=True)
     parser.add_argument('--port', type=int, default=24800)
     parser.add_argument('--interval', type=int, default=30)
     parser.add_argument('--once', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--lock-file', type=Path)
+    parser.add_argument('--run-scoped-only', action='store_true')
     args = parser.parse_args()
+    if not args.trainer_job_id and not args.trainer_pool:
+        parser.error('at least one explicit trainer job or pool is required')
     if args.interval < 10 or not 1 <= args.port <= 65535:
         parser.error('interval must be >=10 seconds and port must be valid')
     # Prevent two supervisors under this login from competing to replace lists.
     import fcntl
-    lock_path = Path.home() / '.cache/skyrl/borrowing-supervisor.lock'
+    lock_path = args.lock_file or Path.home() / '.cache/skyrl/borrowing-supervisor.lock'
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock = lock_path.open('a')
     try:
@@ -149,7 +175,9 @@ def main():
         return rpc(args.ssh_config_dir, cluster, action, args.port, body)
     while True:
         try:
-            result = tick(inventory(), args.farm_pool, args.trainer_job_id, call, dry_run=args.dry_run)
+            result = tick(inventory(), args.farm_pool, args.trainer_job_id, call,
+                          dry_run=args.dry_run, trainer_pools=args.trainer_pool,
+                          run_scoped_only=args.run_scoped_only)
             print(json.dumps(dict(time=time.time(), **result)), flush=True)
         except Exception as exc:
             # An inventory outage must not look like an empty farm pool. Keep

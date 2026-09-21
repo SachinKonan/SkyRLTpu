@@ -44,6 +44,7 @@ class Ports:
 @dataclass(frozen=True)
 class Cache:
     hf: str = ""
+    hf_layout: str = "manifest"
     orbax: str = ""
     trainer_compile: str = ""
     inference_compile: str = ""
@@ -191,6 +192,12 @@ class Inference:
     external_pool_lease_seconds: int = 300
     external_pool_heartbeat_seconds: int = 30
     external_pool_health_grace_seconds: int = 90
+    # Existing clients retain per-phase borrowing. Migration profiles opt in.
+    external_pool_lease_scope: str = "phase"
+    external_pool_require_initial: bool = False
+    external_pool_scheduler: bool = False
+    external_pool_attestation: bool = False
+    farm_drain_timeout: int = 120
 
 
 @dataclass(frozen=True)
@@ -475,6 +482,16 @@ class Config:
             raise ValueError('external lease must allow at least three heartbeat/RPC intervals')
         if not 30 <= self.inference.external_pool_lease_seconds <= 86400:
             raise ValueError('external lease TTL must satisfy the farm API range of 30..86400 seconds')
+        if self.inference.external_pool_lease_scope not in ('phase', 'run'):
+            raise ValueError('external lease scope must be phase or run')
+        if type(self.inference.farm_drain_timeout) is not int or self.inference.farm_drain_timeout <= 0:
+            raise ValueError('farm drain timeout must be a positive integer')
+        if self.inference.external_pool_lease_scope == 'run' and not self.borrows_inference:
+            raise ValueError('run reservations require inference borrowing')
+        if self.inference.external_pool_require_initial and self.inference.external_pool_lease_scope != 'run':
+            raise ValueError('initial reservation admission requires run scope')
+        if self.inference.external_pool_scheduler and not self.borrows_inference:
+            raise ValueError('hybrid scheduling requires inference borrowing')
         if self.borrows_inference:
             if (self.inference.routing != 'ingress' or self.adapter_count != 1 or self.inference_only
                     or self.arena_models or self.arena_samples or not self.inference.native_thinking_budget):
@@ -838,6 +855,8 @@ class Config:
             raise ValueError("trainer.extra_pins must be a list of exact 'name==version' pins")
         if min(self.cache.trainer_gib, self.cache.inference_gib) < 64 or self.cache.reserve_gib < 128:
             raise ValueError("RAM cache requires >=64 GiB cap and >=128 GiB runtime reserve")
+        if self.cache.hf_layout not in ("manifest", "snapshot"):
+            raise ValueError("HF cache layout must be manifest or snapshot")
         if min(self.cache.process_count, self.cache.thread_count, self.cache.sync_seconds,
                self.log_seconds, self.setup_timeout, self.ready_timeout) <= 0:
             raise ValueError("concurrency and timeouts must be positive")

@@ -17,7 +17,7 @@ def package(profile, output):
         raise ValueError('expected a science training profile')
     root = Path(__file__).resolve().parents[2]
     out = Path(output).resolve()
-    native, _, task = build(profile, out)
+    native, _, task = build(profile, out, _executor_only=True)
     files = {str(p.relative_to(root)): p for p in (root / 'tpu/science').glob('*.py')}
     for name in ('prepare_cpu_host.sh', 'requirements-cpu.lock', 'requirements-challenge-pilot.lock',
                  'requirements-placement-candidate.lock', 'prompts/rendered/routing.txt',

@@ -68,6 +68,7 @@ class Borrower:
         self.next_url = 0
         self.phase_deadline = 0
         self.phase_watchdog = None
+        self.required_contract = None
 
     def update_urls(self, model, urls):
         if not self.settings.external_pool_updates:
@@ -225,6 +226,13 @@ class Borrower:
                 response.raise_for_status()
                 if self.config.model not in {m['id'] for m in response.json()['data']}:
                     continue
+                if self.settings.external_pool_attestation:
+                    response = await self.http.get(url + '/status', timeout=self.settings.external_pool_rpc_timeout)
+                    response.raise_for_status()
+                    if (not self.required_contract or
+                            response.json().get('capabilities', {}).get('compatibility_sha256') != self.required_contract):
+                        self._event('incompatible_runtime', service=url)
+                        continue
             except (httpx.HTTPError, ValueError, KeyError, TypeError):
                 continue
             # Once an acquire is sent, ambiguous failure must not claim a second
@@ -233,7 +241,8 @@ class Borrower:
             sent = time.monotonic()
             self.uncertain_until = float('inf')
             response = await self.http.post(url + '/acquire_lease', json=dict(
-                owner_run=self.owner, ttl_seconds=self.settings.external_pool_lease_seconds),
+                owner_run=self.owner, ttl_seconds=self.settings.external_pool_lease_seconds,
+                compatibility_sha256=self.required_contract if self.settings.external_pool_attestation else None),
                 timeout=self.settings.external_pool_rpc_timeout)
             if response.status_code in (409, 423, 404):
                 # Explicit refusal/no lease API is safe to try on another URL.
@@ -355,12 +364,12 @@ class Borrower:
                         task.cancel()
                 await asyncio.gather(lost, changed, return_exceptions=True)
 
-    async def generate(self, payload, local_active, local_engines):
+    async def generate(self, payload, local_active, local_engines, *, prefer_remote=False):
         lease = self.lease
         if (not lease or not self._eligible(lease) or payload.get('model') != self.model
                 or type(payload.get('n', 1)) is not int or not 1 <= payload.get('n', 1) <= lease.max_n
                 or lease.active >= lease.max_requests
-                or lease.active / lease.engines > local_active / max(1, local_engines)):
+                or (not prefer_remote and lease.active / lease.engines > local_active / max(1, local_engines))):
             return None  # Caller uses its unchanged local path.
         lease.active += 1
         request_id = uuid.uuid4().hex

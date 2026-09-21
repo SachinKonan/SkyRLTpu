@@ -358,7 +358,8 @@ class Host:
                 # never restore a checkpoint whose upload did not finish.
                 raise RuntimeError(f"orbax checkpoint {orbax} has no CHECKPOINT_COMPLETE marker")
             self.store.restore_tree(orbax, "orbax/" + self.config.trainer.maxtext_model)
-        self.snapshot = self.store.restore_hf(self.config.cache.hf, self.config.model, weights=role == "inference")
+        self.snapshot = self.store.restore_hf(self.config.cache.hf, self.config.model,
+                                             weights=role == "inference", layout=self.config.cache.hf_layout)
         self.store.scope_compile(self.compile_prefix())
         seed = getattr(self.config.cache, role + "_compile_seed", "")
         if seed:

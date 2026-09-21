@@ -1,0 +1,57 @@
+"""Render a user-systemd unit for an explicitly scoped borrowing supervisor.
+
+Rendering does not install, start, stop, or alter any service. Use a frozen
+checkout for --checkout, and an explicit environment file for SkyPilot paths.
+"""
+import argparse
+from pathlib import Path
+
+
+def quote(value):
+    value = str(value)
+    if '\n' in value or '\r' in value or '\0' in value:
+        raise ValueError('systemd arguments must be single-line strings')
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%').replace('$', '$$') + '"'
+
+
+def unit(checkout, python, environment, ssh_dir, farm_pool, trainer_pools, lock_file):
+    if not trainer_pools:
+        raise ValueError('at least one explicit trainer pool is required')
+    command = [python, '-u', '-m', 'tpu.swarm.ray_train.borrowing_supervisor',
+               '--farm-pool', farm_pool, '--ssh-config-dir', ssh_dir, '--lock-file', lock_file,
+               '--run-scoped-only']
+    for pool in trainer_pools:
+        command += ['--trainer-pool', pool]
+    working = str(checkout)
+    environment = str(environment)
+    output = str(Path(lock_file).with_suffix('.log'))
+    for path in (working, environment, output):
+        if not path.startswith('/') or any(c in path for c in '\n\r\0'):
+            raise ValueError('unit paths must be absolute single-line paths')
+    return '\n'.join([
+        '[Unit]', 'Description=SkyRL exclusive inference farm discovery',
+        'After=network-online.target', 'StartLimitIntervalSec=0', '', '[Service]',
+        'Type=simple', 'WorkingDirectory=' + working.replace('%', '%%'),
+        'EnvironmentFile=' + environment.replace('%', '%%'), 'ExecStart=' + ' '.join(map(quote, command)),
+        'StandardOutput=append:' + output.replace('%', '%%'), 'StandardError=inherit',
+        'Restart=always', 'RestartSec=10', 'TimeoutStopSec=60',
+        'KillMode=control-group', 'UMask=0077', '', '[Install]', 'WantedBy=default.target', ''])
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ('checkout', 'python', 'environment', 'ssh-dir', 'lock-file', 'output'):
+        parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--farm-pool', required=True)
+    parser.add_argument('--trainer-pool', action='append', required=True)
+    args = parser.parse_args()
+    # Do not resolve the virtualenv Python symlink to the global interpreter.
+    text = unit(args.checkout.resolve(), args.python.absolute(), args.environment.resolve(),
+                args.ssh_dir.resolve(), args.farm_pool, args.trainer_pool, args.lock_file.resolve())
+    # Refuse to silently replace an existing service definition.
+    with args.output.open('x') as stream:
+        stream.write(text)
+
+
+if __name__ == '__main__':
+    main()

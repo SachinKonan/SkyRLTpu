@@ -1,0 +1,56 @@
+[
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-fc9899d321e561c4210b0c2f59f7a5a719c8457d0d10be55119b12107a79fedd.tar.gz",
+    "sha256": "fc9899d321e561c4210b0c2f59f7a5a719c8457d0d10be55119b12107a79fedd",
+    "generation": 1789951280382350,
+    "bytes": 2984486
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-east5/ray-training/hybrid-v6e-qwen-ac2-canary-east5b-20260920/client/tinker_log/hybrid-v6e-qwen-ac2-canary-east5b-20260920/puct_sampler_step_000000.json",
+    "sha256": "da5b12fd3ddc294b30bcd86ab9a7faa48345ba09404df2aaa57bde84d261d322",
+    "generation": 1789950994048920,
+    "bytes": 34305504
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-b126ad0f5dd401f65b04385bfa74204942cae566947132de1314dffbfded3e89.tar.gz",
+    "sha256": "b126ad0f5dd401f65b04385bfa74204942cae566947132de1314dffbfded3e89",
+    "generation": 1789951281777504,
+    "bytes": 2824829
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-c90086cd7ddd619f4dcb4a1e5248095a17202620659a8198a63398a362e709cd.tar.gz",
+    "sha256": "c90086cd7ddd619f4dcb4a1e5248095a17202620659a8198a63398a362e709cd",
+    "generation": 1789951282613861,
+    "bytes": 2984486
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-east5/ray-training/hybrid-v6e-gemma-ac2-canary-east5b-20260920/client/tinker_log/hybrid-v6e-gemma-ac2-canary-east5b-20260920/puct_sampler_step_000000.json",
+    "sha256": "8cd13848cf992b4737b8fd10fc0d078304f945dbf1ce2882ab7dcdcf53179674",
+    "generation": 1789950996688214,
+    "bytes": 9270630
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-0f529ef1d22e783531321f001ad270adfbfc7fa176b296123f87b4c4922ecc71.tar.gz",
+    "sha256": "0f529ef1d22e783531321f001ad270adfbfc7fa176b296123f87b4c4922ecc71",
+    "generation": 1789951283763165,
+    "bytes": 2824829
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-8d05a1106f2197ad9428d337565248a216aa5fe730f0cde396d366c1f930bb14.tar.gz",
+    "sha256": "8d05a1106f2197ad9428d337565248a216aa5fe730f0cde396d366c1f930bb14",
+    "generation": 1789951284874480,
+    "bytes": 2984486
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central1/ray-training/hybrid-v6e-muse-ac2-canary-central1b-20260920/client/tinker_log/hybrid-v6e-muse-ac2-canary-central1b-20260920/puct_sampler_step_000000.json",
+    "sha256": "4fa27900fef33721504027397006e6ad697d55b0ded21424f228c8ca3ef3c9c0",
+    "generation": 1789950999898796,
+    "bytes": 44760627
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-b61f5b0973ac4b8ed09600a63abdae6b2c3e49c1781ec4ce0669c94f584d1a76.tar.gz",
+    "sha256": "b61f5b0973ac4b8ed09600a63abdae6b2c3e49c1781ec4ce0669c94f584d1a76",
+    "generation": 1789951287126685,
+    "bytes": 2824829
+  }
+]
