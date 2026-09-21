@@ -15,7 +15,9 @@ def quote(value):
 
 
 def unit(checkout, python, environment, ssh_dir, farm_pool, trainer_pools, lock_file,
-         *, farm_name_contains='inference-farm'):
+         *, farm_name_contains='inference-farm', farm_pool_max_job_id=None):
+    if farm_pool_max_job_id is not None and (not farm_pool or farm_pool_max_job_id < 1):
+        raise ValueError('farm_pool_max_job_id requires farm_pool and a positive job ID')
     if not trainer_pools:
         raise ValueError('at least one explicit trainer pool is required')
     if not farm_pool and not farm_name_contains.strip():
@@ -25,6 +27,8 @@ def unit(checkout, python, environment, ssh_dir, farm_pool, trainer_pools, lock_
                '--ssh-config-dir', ssh_dir, '--lock-file', lock_file, '--run-scoped-only']
     if farm_pool:
         command += ['--farm-pool', farm_pool]
+    if farm_pool_max_job_id is not None:
+        command += ['--farm-pool-max-job-id', str(farm_pool_max_job_id)]
     for pool in trainer_pools:
         command += ['--trainer-pool', pool]
     working = str(checkout)
@@ -48,13 +52,15 @@ def main():
     for name in ('checkout', 'python', 'environment', 'ssh-dir', 'lock-file', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--farm-pool')
+    parser.add_argument('--farm-pool-max-job-id', type=int)
     parser.add_argument('--farm-name-contains', default='inference-farm')
     parser.add_argument('--trainer-pool', action='append', required=True)
     args = parser.parse_args()
     # Do not resolve the virtualenv Python symlink to the global interpreter.
     text = unit(args.checkout.resolve(), args.python.absolute(), args.environment.resolve(),
                 args.ssh_dir.resolve(), args.farm_pool, args.trainer_pool, args.lock_file.resolve(),
-                farm_name_contains=args.farm_name_contains)
+                farm_name_contains=args.farm_name_contains,
+                farm_pool_max_job_id=args.farm_pool_max_job_id)
     # Refuse to silently replace an existing service definition.
     with args.output.open('x') as stream:
         stream.write(text)

@@ -24,8 +24,9 @@ No trainer, optimizer, or grading task runs on a farm.
 
 The controller's `borrowing_supervisor` discovers RUNNING managed jobs whose
 names contain `inference-farm`, case-insensitively, across pools visible to its
-configured SkyPilot API server. The deployed service uses name matching only;
-pool membership alone does not qualify a job as a farm. Name matching only identifies candidates; the
+configured SkyPilot API server. The only legacy exception is jobs with IDs
+at most 1373 in `tpuswarm-v4-32-central2-smoke`. Pool membership alone does not
+qualify newer jobs. These selectors only identify candidates; the
 four-engine health, lease protocol, model/runtime fingerprint, and committed
 adapter checks still control actual use. Arbitrary public OpenAI endpoints and
 jobs on another SkyPilot API server are not automatically discovered.
@@ -46,9 +47,11 @@ The deployed `skyrl-hybrid-farm-discovery.service` includes these training pools
 - `tpuswarm-v5p32-east5a-erdos`
 
 Preserve all four `--trainer-pool` arguments when regenerating the service.
-Farm discovery uses only `--farm-name-contains inference-farm`; do not add a
-`--farm-pool` selector. Existing `farm10-*` names are excluded, even in the
-v4-32 pool. New farm job names must contain `inference-farm`. Adding a training pool
+Farm discovery uses `--farm-name-contains inference-farm`, plus the bounded
+exception `--farm-pool tpuswarm-v4-32-central2-smoke --farm-pool-max-job-id 1373`.
+The ceiling is inclusive and applies only to that pool exception. Never deploy
+the legacy pool selector without its ceiling. New farm job names must contain
+`inference-farm`. Adding a training pool
 allows updates only for opted-in, run-scoped borrowers; it does not launch or
 restart training jobs.
 

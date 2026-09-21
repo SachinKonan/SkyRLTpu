@@ -115,3 +115,25 @@ def test_named_farm_dry_run_and_trainer_scope():
     assert targets['train-10']['urls'] == []
     assert all(body is None for _, _, body in calls)
     assert not any(cluster == 'train-11' for cluster, _, _ in calls)
+
+
+def test_legacy_pool_job_ceiling_preserves_general_name_discovery():
+    rows, farms, targets, calls, call = fixture()
+    for job, pool, name in [(1372, 'farm', 'old'), (1373, 'farm', 'old-boundary'),
+                            (1374, 'farm', 'new-unrelated'), (1370, 'other', 'old-other-pool'),
+                            (2000, 'other', 'inference-farm-new')]:
+        cluster = f'{pool}-{job}'
+        rows.append(dict(job_id=job, pool=pool, cluster=cluster, run_id=name, status='RUNNING'))
+        farms[cluster] = dict(models=['qwen'], url=f'http://farm-{job}:24800')
+    tick(rows, 'farm', [10], call, farm_pool_max_job_id=1373)
+    assert {c for c, action, _ in calls if action == 'farm'} == {
+        'farm-1372', 'farm-1373', 'other-2000'}
+
+
+def test_render_bounded_legacy_pool_exception():
+    from tpu.swarm.ray_train.borrowing_service import unit
+    text = unit('/code', '/python', '/env', '/ssh', 'farm', ['train'], '/lock',
+                farm_pool_max_job_id=1373)
+    assert '"--farm-pool" "farm"' in text
+    assert '"--farm-pool-max-job-id" "1373"' in text
+    assert '"--farm-name-contains" "inference-farm"' in text

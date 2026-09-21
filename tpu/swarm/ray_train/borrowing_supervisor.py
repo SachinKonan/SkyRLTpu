@@ -85,11 +85,13 @@ def inventory():
 
 
 def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
-         run_scoped_only=False, farm_name_contains='inference-farm'):
+         run_scoped_only=False, farm_name_contains='inference-farm', farm_pool_max_job_id=None):
     """One replace-list update per target, using this tick's observed farms."""
     running = {r['job_id']: r for r in rows if r['status'] == 'RUNNING' and r.get('cluster')}
     farm_rows = [r for r in running.values()
-                 if (farm_pool and re.fullmatch(re.escape(farm_pool)+r'-\d+', r['cluster']))
+                 if (farm_pool and re.fullmatch(re.escape(farm_pool)+r'-\d+', r['cluster'])
+                     and (farm_pool_max_job_id is None or
+                          (r.get('pool') == farm_pool and r['job_id'] <= farm_pool_max_job_id)))
                  or (farm_name_contains and farm_name_contains.casefold()
                      in (r.get('run_id') or '').casefold())]
     def probe(row):
@@ -152,6 +154,8 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--farm-pool', help='Also discover farms in this legacy pool')
+    parser.add_argument('--farm-pool-max-job-id', type=int,
+                        help='Inclusive job-ID ceiling for the legacy pool exception only')
     parser.add_argument('--farm-name-contains', default='inference-farm',
                         help='Case-insensitive job-name substring across all pools (default: inference-farm)')
     parser.add_argument('--trainer-job-id', type=int, action='append', default=[])
@@ -164,6 +168,8 @@ def main():
     parser.add_argument('--lock-file', type=Path)
     parser.add_argument('--run-scoped-only', action='store_true')
     args = parser.parse_args()
+    if args.farm_pool_max_job_id is not None and (not args.farm_pool or args.farm_pool_max_job_id < 1):
+        parser.error('--farm-pool-max-job-id requires --farm-pool and a positive job ID')
     if not args.trainer_job_id and not args.trainer_pool:
         parser.error('at least one explicit trainer job or pool is required')
     if not args.farm_pool and not args.farm_name_contains.strip():
@@ -186,7 +192,8 @@ def main():
             result = tick(inventory(), args.farm_pool, args.trainer_job_id, call,
                           dry_run=args.dry_run, trainer_pools=args.trainer_pool,
                           run_scoped_only=args.run_scoped_only,
-                          farm_name_contains=args.farm_name_contains)
+                          farm_name_contains=args.farm_name_contains,
+                          farm_pool_max_job_id=args.farm_pool_max_job_id)
             print(json.dumps(dict(time=time.time(), **result)), flush=True)
         except Exception as exc:
             # An inventory outage must not look like an empty farm pool. Keep
