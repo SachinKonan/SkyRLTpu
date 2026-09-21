@@ -160,3 +160,17 @@ Gemma 1453 has returned four complete local generation groups, 128 rollouts out 
 The five valid candidates each passed 72 cases and took 327.724–391.352 seconds to grade under simultaneous inference/grading load. Their best reward is 0.5211400967, below the imported best seed's 0.5329396105; no learning improvement is claimed. This establishes completed new generation and successful grading, but not an optimizer update or checkpoint/reload cycle. The high initial rejection count reflects generated Rust errors, including duplicate imports and type/name errors; no source sanitization or reward changes were applied.
 
 Evidence: `gemma-first-group-return.json`, `gemma-training-start.json`, `gemma-training-verdicts.json`, and the timestamped `gemma-progress-timeline.jsonl`. The farm continues generating under the same Gemma lease, but no full remote group has returned in this snapshot. The admission gate still requires completed remote generation and the entire first training cycle. The read-only progress monitor is bounded; the independent systemd rollout watcher remains responsible for later submissions.
+
+## Pre-update search improvement (18:42 EDT)
+
+Gemma's first batch has produced a verified program with reward **0.5395005455**, above the best regraded seed's 0.5329396105. No optimizer update has occurred: this is sampling/search improvement, not evidence of learning from a gradient step. All 72 case identifiers, source hash, integer SWAP counts, and the original combined reward were checked against the pinned manifest before preservation. It is one observed full-suite evaluation, not an independent reproduction.
+
+| Topology | Best starting seed | New combined-policy winner | Change in SWAPs | Gap to Gemini |
+|---|---:|---:|---:|---:|
+| Q20 | 15,987 | 15,320 | −667 | +1,850 |
+| Willow | 34,661 | 32,351 | −2,310 | +870 |
+| Heron | 44,892 | 45,256 | +364 | +2,860 |
+
+Source SHA256: `ddf314d5eccc3922e8dd4486abeed4cf763f80285b347ed5345c4418cab9a37c`. Grader occurrence: `460e23275eff41bf9727af88b7a1261f`. Candidate, complete verdict, and run/bundle provenance are preserved locally under `.science/routing-relaunch-20260921/new-best/gemma/<source>/<occurrence>/` and immutably at `gs://sk7524-tinker-tpu-us-central2/routing-relaunch-20260921/live-best/gemma/ddf314d5eccc3922e8dd4486abeed4cf763f80285b347ed5345c4418cab9a37c/460e23275eff41bf9727af88b7a1261f/`. Receipt: `gemma-new-best-latest.json`.
+
+The latest live monitor at this snapshot reports 128 returned rollouts, 106 grades completed, 19 valid, and 22 active evaluations, with zero infrastructure failures. All four returned groups are local; completed farm groups, the remaining batch, and the first optimizer/checkpoint/reload cycle are still pending. Qwen and Muse remain prepared behind the explicit first-cycle gate.
