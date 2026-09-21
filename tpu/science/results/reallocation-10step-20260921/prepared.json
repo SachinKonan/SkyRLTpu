@@ -283,11 +283,29 @@
       "archive_sha256": "1fe36bb3b1ffc9314b10fb0897fef4a8cc378075c49d80212d7fc878f4e5ba3c",
       "task": ".science/reallocation-10step/packages/placement-v5p64-qwen-10step-20260921/placement-v5p64-qwen-10step-20260921.yaml",
       "task_sha256": "de35cb41751f949617ca6ee0eeff1867dea48a4493ce43893c17e358513ab446"
+    },
+    {
+      "kind": "rglru",
+      "model": "qwen",
+      "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1-10step-deployment.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110,
+      "resume_min_checkpoint_step": 5,
+      "supersedes": [
+        1293
+      ],
+      "label": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1-10step-deployment",
+      "bucket": "gs://sk7524-tinker-tpu-us-east5",
+      "epochs": 10,
+      "archive": ".science/reallocation-10step/packages/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1-10step-deployment/ray-training.tar.gz",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-3cc363fdf3cb9da824dd6cf00be582f14388376e877ec0a87224a0f82054fad7.tar.gz",
+      "archive_sha256": "3cc363fdf3cb9da824dd6cf00be582f14388376e877ec0a87224a0f82054fad7",
+      "task": ".science/reallocation-10step/packages/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1-10step-deployment/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1.yaml",
+      "task_sha256": "013dd076e0bad21da86824b1f9a51017c674959092f97cebe8c342fc429d388c"
     }
   ],
-  "defer_jobs": [
-    1293
-  ],
+  "defer_jobs": [],
   "total_step_cap": 10,
   "additional_retired_farms": [
     1255

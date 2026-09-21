@@ -14,6 +14,7 @@ steps. The existing ensemble loop uses `range(start_batch, cfg.num_epochs)`.
 | v6e-32 | Gemma AC2, restore checkpoint 1 | 1335 |
 | v6e-32 | Muse AC2, restore checkpoint 2 | 1336 |
 | v6e-32 | Gemma RG-LRU, existing bootstrap | 1337 |
+| v6e-32 | Qwen RG-LRU, restore checkpoint 5 | 1342 |
 | v4-64 | Qwen full qubit routing, latest checkpoint >=2 (3 verified at cutover) | 1338 |
 | v4-64 | Gemma full qubit routing, checkpoint 1 verified at cutover | 1339 |
 | v4-64 | Muse full qubit routing, restore checkpoint 3 | 1340 |
@@ -26,7 +27,26 @@ cross-pool migration of a live experiment. Future reassignment must cancel and
 verify the former owner before submitting the same canonical run elsewhere.
 No duplicate central copies were submitted.
 
-## Latest checked runtime (2026-09-21 02:18 UTC)
+## Fifth east workload (2026-09-21)
+
+The user requested all five ready east workers be used. Job 1342 resumes the
+previously deferred Qwen RG-LRU run 1293 from verified checkpoint 5 to total
+step 10. `prepare_fifth.py` appends its immutable bundle without rebuilding
+active deployments. Database integrity and completed checkpoint registration
+passed; recovery metadata was snapshotted before submission.
+
+This fifth run allows initial local inference (three TP4 engines and one TPU
+grader) while the scarce v4-32 farms serve AC2 first. Farm discovery remains
+enabled with an exclusive run lease and compatibility attestation. It can
+add farm assistance when a compatible Qwen farm becomes available. The recipe,
+16 x 32 batch and ten-total-step cap are unchanged.
+
+`fifth-east-preflight.json` records recovery evidence. The submitted bundle
+was checked for cap=10, resume minimum=5 and exact current Ray v2 runtime
+sources; its uploaded content hash was verified. No other run was cancelled
+to add this fifth experiment.
+
+## Earlier checked runtime (2026-09-21 02:18 UTC)
 
 All three AC2 jobs have active application controllers. Muse has all four local
 inference engines registered and is waiting for its external farm. Qwen and

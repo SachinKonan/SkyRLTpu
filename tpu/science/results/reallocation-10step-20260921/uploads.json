@@ -68,5 +68,10 @@
     "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-1fe36bb3b1ffc9314b10fb0897fef4a8cc378075c49d80212d7fc878f4e5ba3c.tar.gz",
     "sha256": "1fe36bb3b1ffc9314b10fb0897fef4a8cc378075c49d80212d7fc878f4e5ba3c",
     "generation": 1789955593769841
+  },
+  {
+    "uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-3cc363fdf3cb9da824dd6cf00be582f14388376e877ec0a87224a0f82054fad7.tar.gz",
+    "sha256": "3cc363fdf3cb9da824dd6cf00be582f14388376e877ec0a87224a0f82054fad7",
+    "generation": 1789957418448198
   }
 ]

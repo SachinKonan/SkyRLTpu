@@ -405,5 +405,109 @@
     "database": null,
     "weights": [],
     "verified": true
+  },
+  {
+    "time": 1789957293.7474906,
+    "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+    "kind": "rglru",
+    "step": 5,
+    "checkpoint": {
+      "name": "000005",
+      "batch": 5,
+      "state_path": "tinker://model_ab00c67f/weights/000005",
+      "sampler_path": "tinker://model_ab00c67f/000005"
+    },
+    "pool": {
+      "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/client/tinker_log/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/puct_sampler_step_000005.json",
+      "generation": 1789954694634500,
+      "size": 44781
+    },
+    "database": {
+      "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/tinker-backup.db",
+      "generation": 1789954690703369,
+      "size": 99086336
+    },
+    "weights": [
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/000001.tar.gz",
+        "generation": 1789927219596794,
+        "size": 1925557154
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/000002.tar.gz",
+        "generation": 1789928368740800,
+        "size": 1925557154
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/000003.tar.gz",
+        "generation": 1789929486718223,
+        "size": 1925557154
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/000004.tar.gz",
+        "generation": 1789930713789420,
+        "size": 1925557154
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/000005.tar.gz",
+        "generation": 1789931860920047,
+        "size": 1925557154
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/sampler_weights/000001.tar.gz",
+        "generation": 1789927233726285,
+        "size": 641859234
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/sampler_weights/000002.tar.gz",
+        "generation": 1789928383216859,
+        "size": 641859234
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/sampler_weights/000003.tar.gz",
+        "generation": 1789929500840374,
+        "size": 641859234
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/sampler_weights/000004.tar.gz",
+        "generation": 1789930727812631,
+        "size": 641859234
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/sampler_weights/000005.tar.gz",
+        "generation": 1789931875164801,
+        "size": 641859234
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_ab00c67f/sampler_weights/ss0_seq1.tar.gz",
+        "generation": 1789926145810857,
+        "size": 641859236
+      },
+      {
+        "name": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/checkpoints/model_bc009e1f/sampler_weights/ss0_seq1.tar.gz",
+        "generation": 1789887531220659,
+        "size": 641859236
+      }
+    ],
+    "snapshots": [
+      {
+        "source": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/client/tinker_log/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/member_qwen/checkpoints.jsonl",
+        "generation": 1789954697295454,
+        "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/fifth-east-10step-20260921/ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/client/tinker_log/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/member_qwen/checkpoints.jsonl"
+      },
+      {
+        "source": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/client/tinker_log/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/puct_sampler_step_000005.json",
+        "generation": 1789954694634500,
+        "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/fifth-east-10step-20260921/ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/client/tinker_log/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/puct_sampler_step_000005.json"
+      },
+      {
+        "source": "ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/tinker-backup.db",
+        "generation": 1789954690703369,
+        "destination": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/fifth-east-10step-20260921/ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1/tinker-backup.db"
+      }
+    ],
+    "verified": true,
+    "database_quick_check": "ok",
+    "checkpoint_registration": "COMPLETED"
   }
 ]

@@ -130,5 +130,16 @@
     "time": 1789956856.1129978,
     "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
     "job_id": 1341
+  },
+  {
+    "label": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1-10step-deployment",
+    "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+    "kind": "rglru",
+    "model": "qwen",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "state": "submitted",
+    "time": 1789957424.4963973,
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-3cc363fdf3cb9da824dd6cf00be582f14388376e877ec0a87224a0f82054fad7.tar.gz",
+    "job_id": 1342
   }
 ]
