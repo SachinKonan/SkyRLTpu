@@ -283,6 +283,59 @@ def test_cold_cache_upload_retry_and_warm_restore(tmp_path):
     assert (warm / "incomplete-cache").read_bytes() == payload
 
 
+def test_compile_restore_retries_only_unverified_pinned_files(tmp_path, monkeypatch):
+    from tpu.swarm.ray_train import cache as module
+    monkeypatch.setattr(module.time, 'sleep', lambda seconds: None)
+    contents = {'a-cache': compile_bytes(b'a'), 'b-cache': compile_bytes(b'b')}
+    objects = [object_for(data, name) for name, data in contents.items()]
+    calls = []
+    class GCS:
+        events = tmp_path/'events.jsonl'
+        def list(self, *args, **kw): return objects
+        def transfer(self, args, *unused):
+            calls.append(args[1:-1])
+            if len(calls) == 1:
+                (Path(args[-1])/'a-cache').write_bytes(contents['a-cache'])
+                (Path(args[-1])/'b-cache').write_bytes(b'partial')
+                raise module.TransferError('copy failed', 1)
+            assert args[1:-1] == [objects[1].uri+'#'+objects[1].generation]
+            (Path(args[-1])/'b-cache').write_bytes(contents['b-cache'])
+    path = CacheStore(tmp_path, GCS()).restore_compile('gs://test/cache')
+    assert len(calls) == 2 and all(valid_file(path/o.relative, o) for o in objects)
+
+
+@pytest.mark.parametrize('returncode,attempts', [(1, 3), (143, 1), (130, 1), (-15, 1), (-2, 1)])
+def test_compile_restore_bounds_retries_and_respects_cancellation(tmp_path, monkeypatch, returncode, attempts):
+    from tpu.swarm.ray_train import cache as module
+    monkeypatch.setattr(module.time, 'sleep', lambda seconds: None)
+    calls = []
+    class GCS:
+        events = tmp_path/'events.jsonl'
+        def list(self, *args, **kw): return [object_for(compile_bytes(), 'a-cache')]
+        def transfer(self, *args):
+            calls.append(args)
+            raise module.TransferError('copy failed', returncode)
+    with pytest.raises(module.TransferError): CacheStore(tmp_path, GCS()).restore_compile('gs://test/cache')
+    assert len(calls) == attempts
+
+
+def test_gcs_transfer_records_failure_exit_code(tmp_path, monkeypatch):
+    from tpu.swarm.ray_train import cache as module
+    stopped = []
+    class Process:
+        def __init__(self, *args, **kw): pass
+        def poll(self): return 17
+        def stop(self): stopped.append(True)
+    monkeypatch.setattr(module, 'Process', Process)
+    monkeypatch.setattr(module.shutil, 'which', lambda *args, **kw: '/usr/bin/gcloud')
+    gcs = module.GCS(tmp_path, Config.from_dict(config_dict()).cache)
+    with pytest.raises(module.TransferError, match='exit code 17') as error:
+        gcs.transfer(['cp', 'gs://test/object', str(tmp_path)], 'test-copy')
+    assert error.value.returncode == 17 and stopped == [True] and gcs.running is None
+    event = json.loads(gcs.events.read_text())
+    assert event['event'] == 'transfer_failed' and event['returncode'] == 17
+
+
 def test_upload_snapshot_is_independent_of_live_cache(tmp_path):
     cache = tmp_path / "compile"
     cache.mkdir()

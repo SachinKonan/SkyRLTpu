@@ -156,6 +156,15 @@ def mount_cache(root, cap_gib, reserve_gib):
     return root
 
 
+class TransferError(RuntimeError):
+    def __init__(self, message, returncode):
+        super().__init__(message, returncode)
+        self.returncode = returncode
+
+    def __str__(self):
+        return self.args[0]
+
+
 class GCS:
     def __init__(self, log_dir, config):
         self.logs = Path(log_dir)
@@ -205,8 +214,11 @@ class GCS:
                     emit(self.events, "transfer_progress", **fields)
                     next_report = elapsed + 30
                 time.sleep(0.5)
-            if self.running.poll() != 0:
-                raise RuntimeError(f"{label} failed; see {log}")
+            returncode = self.running.poll()
+            if returncode != 0:
+                emit(self.events, "transfer_failed", transfer=label, returncode=returncode,
+                     seconds=time.monotonic()-start, log=str(log))
+                raise TransferError(f"{label} failed with exit code {returncode}; see {log}", returncode)
             emit(self.events, "transfer_complete", transfer=label, seconds=time.monotonic()-start)
         finally:
             self.running.stop()
@@ -337,8 +349,23 @@ class CacheStore:
             # entirely to one native gcloud invocation at a time.
             for offset in range(0, len(missing), 64):
                 batch = missing[offset:offset+64]
-                self.gcs.transfer(["cp", *[o.uri + "#" + o.generation for o in batch], str(cache)],
-                                  "compile-restore", cache)
+                for attempt in range(3):
+                    pending = [o for o in batch if not valid_file(cache / o.relative, o)]
+                    if not pending:
+                        break
+                    try:
+                        self.gcs.transfer(["cp", *[o.uri + "#" + o.generation for o in pending], str(cache)],
+                                          "compile-restore", cache)
+                        break
+                    except TransferError as exc:
+                        # Preserve cancellation; do not resurrect work stopped by
+                        # its owner. Retry a failed copy in place, retaining only
+                        # files validated against the original pinned generations.
+                        if exc.returncode in (-15, -2, 130, 143) or attempt == 2:
+                            raise
+                        emit(self.gcs.events, "compile_restore_retry", source=prefix,
+                             attempt=attempt+1, returncode=exc.returncode)
+                        time.sleep(2 ** attempt)
             if not all(valid_file(cache / o.relative, o) for o in missing):
                 raise RuntimeError("compilation cache checksum validation failed")
         emit(self.gcs.events, "compile_cache_ready", source=prefix, restored=len(missing),
