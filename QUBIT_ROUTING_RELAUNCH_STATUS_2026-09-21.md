@@ -1,6 +1,6 @@
 # Qubit routing relaunch — implementation and live validation
 
-Updated 2026-09-21, 16:40 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
+Updated 2026-09-21, 17:07 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
 
 ## Authorized deployment
 
@@ -31,9 +31,9 @@ Each source manifest preserves 1,024 draft occurrences, source hashes, GCS objec
 
 Files: `.science/routing-relaunch-20260921/sources-v2/<model>/source-manifest.json` and the adjacent original grade records. These are pre-regrade results.
 
-## Live attempt history
+## Historical attempt record (superseded by the latest status below)
 
-- Worker 718 was idle; workers 717/681 still ran old Gemma 1339 / Muse 1340. No old training job has been cancelled.
+- Worker 718 was idle; workers 724/681 still ran old Gemma 1339 / Muse 1340 at that snapshot. Those jobs were subsequently retired at 17:00 EDT as recorded below.
 - Validation 1436 reached worker 718. It confirmed child cgroup execution and empty descendant lists after cleanup, but exposed the individual zero-baseline scoring bug. This is a failed validation, not an accepted result. Preserved evidence is under `benchmark-v1` and its manifest's GCS results URI. It was cancelled after the corrected immutable artifact was built.
 - Corrected validation 1437 used commit `936963e6` and `benchmark-v2`. Its execution request was delayed by the shared SkyPilot long-request queue. A temporary standard request executor on a Slurm CPU node failed its Google API DNS lookup before the payload ran. That attempt was cancelled for retry from a connected host. Neither attempt changed the shared API server or cancelled unrelated jobs.
 - Submission, cancellation, exact code/task hashes, and protected-job inventories live under `.science/routing-relaunch-20260921/benchmark-v*/`.
@@ -85,3 +85,19 @@ At the latest farm preflight, discovery reported healthy four-engine Muse 1373, 
 ## Opportunistic scheduling (16:53 EDT)
 
 The launch watcher can begin Muse's regrade while Qwen's regrade is running if fewer than three nonterminal jobs remain in the existing v4-64 pool. Pending, starting, recovering, and cancelling work all count against this check. It does not retire the old Muse run early or resize the pool. Once Gemma's complete cycle has passed and a slice is free, Qwen training may start while Muse's remaining regrade cases finish. This removes a serial wait while preserving the Gemma-first gate. The 21 watcher tests pass, including capacity and prerequisite checks.
+
+## All three regrades admitted (17:07 EDT)
+
+The old Gemma 1339 and Muse 1340 jobs are now CANCELLED in the controller. Before cancelling, the exact live identities were checked, checkpoint archives were verified, and latest metrics, checkpoint indexes, and PUCT pools were preserved locally and immutably in GCS. Gemma had reached step 4; Muse step 7. Original results and checkpoint archives remain in their source buckets. The three existing workers remain allocated; no pool size change was made.
+
+| Model | Corrected regrade job | Assigned worker | Latest observation |
+|---|---:|---:|---|
+| Gemma | 1450 | 718 | 180/196 unique verdicts saved; 105 valid; no infrastructure verdicts |
+| Qwen | 1451 | 681 | Submitted; its existing SkyPilot execution request has been dispatched |
+| Muse | 1452 | 724 | Submitted; its existing SkyPilot execution request has been dispatched |
+
+All three use the same corrected `regrade-v3` evaluator. Each model maps its unique verdicts back to all 1,024 frozen original draft occurrences. Gemma's best saved reward remains 0.5329396104918068; no historically valid program has failed among its saved verdicts at this snapshot. This is incomplete regrading, not completed new training.
+
+The two new execution requests were waiting in the shared API long-request queue. Only those exact existing requests were run through SkyPilot's status- and lock-guarded standard executor on the connected API host. No duplicate managed job was submitted and the shared API was not restarted. Executor records are `qwen-regrade-v3-executor.log` and `muse-regrade-v3-executor.log` under the private evidence directory.
+
+The rollout watcher was stopped during this state transition and is active again. Regrades may run concurrently on all three original slices. Fresh ten-step training still follows the Gemma-first full-cycle gate, including a real remote farm generation. No new training is claimed yet. Preservation and submission receipts: `parallel-regrade-retirement.json`, `parallelize-regrades.log`, `retired/20260921T205932Z/`, and `rollout-state.json` under `.science/routing-relaunch-20260921`.
