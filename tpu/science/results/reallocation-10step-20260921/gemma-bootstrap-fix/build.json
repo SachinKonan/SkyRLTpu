@@ -1,0 +1,10 @@
+{
+  "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1-bootstrap-reuse-20260921.json",
+  "profile_sha256": "9f9ebf6ee570fdbba8cf552c84327238ca0a3da899365efdc3c4cb361f6a66a1",
+  "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/reallocation-10step/gemma-bootstrap-fix/package/ray-training.tar.gz",
+  "uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-5d9638d7ebe5fa15b43546f5d3cbc0545bbc881e0fa4fbba595a4090857ec382.tar.gz",
+  "archive_sha256": "5d9638d7ebe5fa15b43546f5d3cbc0545bbc881e0fa4fbba595a4090857ec382",
+  "task": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/reallocation-10step/gemma-bootstrap-fix/package/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1.yaml",
+  "task_sha256": "89a34886d3e8614e8b7285392cac3d02dcc4b18c9cf6ff7dea3d11b4d6308ebd",
+  "verified_retained": 29
+}

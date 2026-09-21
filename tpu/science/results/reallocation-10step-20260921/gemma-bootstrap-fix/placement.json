@@ -1,0 +1,37 @@
+{
+  "time": 1789962250.7887952,
+  "runtime": {
+    "latest_logs": [
+      {
+        "path": "/home/gcpuser/sky_logs/4-fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/run.log",
+        "modified": 1789957543.0165496,
+        "tail": "2026-09-21 02:24:40,124\tINFO worker.py:1544 -- Connecting to existing Ray cluster at address: 10.202.0.71:6380...\n2026-09-21 02:24:40,130\tINFO worker.py:1719 -- Connected to Ray cluster. View the dashboard at \u001b[1m\u001b[32m127.0.0.1:8266 \u001b[39m\u001b[22m\n\u001b[2m\u251c\u2500\u2500 \u001b[0m\u001b[2mWaiting for task resources on 8 nodes.\u001b[0m\n\u001b[2m\u2514\u2500\u2500 \u001b[0mJob started. Streaming logs... \u001b[2m(Ctrl-C to exit log streaming; job will not be killed)\u001b[0m\nERROR: \u001b[31mJob 4 failed with return code list:\u001b[0m [137, 137, 137, 137, 137, 1, 137, 137] (A Worker failed with return code 1, SkyPilot cleaned up the processes on other nodes with return code 137)\n"
+      },
+      {
+        "path": "/home/gcpuser/sky_logs/3-fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/run.log",
+        "modified": 1789956529.0643463,
+        "tail": "66)\u001b[0m Average throughput: 249.8MiB/s\n\u001b[36m(head, rank=0, pid=40178)\u001b[0m \n\u001b[36m(worker3, rank=3, pid=36308, ip=10.202.0.70)\u001b[0m \n\u001b[36m(worker3, rank=3, pid=36308, ip=10.202.0.70)\u001b[0m Average throughput: 253.4MiB/s\n\u001b[36m(worker6, rank=6, pid=36853, ip=10.202.0.64)\u001b[0m \n\u001b[36m(worker6, rank=6, pid=36853, ip=10.202.0.64)\u001b[0m Average throughput: 190.3MiB/s\n\u001b[36m(worker5, rank=5, pid=42501, ip=10.202.0.65)\u001b[0m \n\u001b[36m(worker1, rank=1, pid=36646, ip=10.202.0.62)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\n\u001b[36m(worker2, rank=2, pid=39644, ip=10.202.0.63)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\n\u001b[36m(worker4, rank=4, pid=39811, ip=10.202.0.66)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\n\u001b[36m(head, rank=0, pid=40178)\u001b[0m \n\u001b[36m(head, rank=0, pid=40178)\u001b[0m Average throughput: 240.1MiB/s\n\u001b[36m(worker3, rank=3, pid=36308, ip=10.202.0.70)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\n\u001b[36m(worker6, rank=6, pid=36853, ip=10.202.0.64)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\n\u001b[36m(worker5, rank=5, pid=42501, ip=10.202.0.65)\u001b[0m \n\u001b[36m(worker5, rank=5, pid=42501, ip=10.202.0.65)\u001b[0m Average throughput: 253.8MiB/s\n\u001b[36m(worker7, rank=7, pid=37995, ip=10.202.0.61)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\n\u001b[36m(head, rank=0, pid=40178)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\n\u001b[36m(worker5, rank=5, pid=42501, ip=10.202.0.65)\u001b[0m /home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/code.tar.gz: OK\nERROR: \u001b[31mJob 3 failed with return code list:\u001b[0m [137, 137, 137, 137, 137, 137, 137, 1] (A Worker failed with return code 1, SkyPilot cleaned up the processes on other nodes with return code 137)\n"
+      }
+    ],
+    "bundle_ready": false,
+    "systemd_units": "UNIT LOAD ACTIVE SUB DESCRIPTION\n0 loaded units listed.\nTo show all installed unit files use 'systemctl list-unit-files'.\n"
+  },
+  "jobs": [
+    {
+      "job_id": 1343,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5590",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110
+    },
+    {
+      "job_id": 1337,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "status": "CANCELLED",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5590",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110
+    }
+  ]
+}

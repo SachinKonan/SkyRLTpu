@@ -1,0 +1,1084 @@
+[
+  {
+    "acceleratorConfig": {
+      "topology": "4x4",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-16",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-18T15:26:58.046833714Z",
+    "healthDescription": "The TPU had a maintenance event at 2026-09-18T18:40:29.324387565Z",
+    "id": "6028719598316395212",
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/taiming-tpuhost5-2",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "136.83.20.21"
+        },
+        "ipAddress": "10.202.0.148",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.13.78"
+        },
+        "ipAddress": "10.202.0.146",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.234.34.214"
+        },
+        "ipAddress": "10.202.0.145",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.157.137"
+        },
+        "ipAddress": "10.202.0.147",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/taiming-tpuhost5-2",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "PREEMPTED"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-20T22:29:06.659937736Z",
+    "health": "HEALTHY",
+    "id": "6733344712661814428",
+    "labels": {
+      "ray-cluster-name": "tpuswarm-v6e32-east5b-3qrh-7bfcb694",
+      "ray-node-type": "head",
+      "skypilot-cluster-name": "tpuswarm-v6e32-east5b-3qrh-7bfcb694",
+      "skypilot-head-node": "1",
+      "skypilot-user": "sk7524",
+      "use-managed-instance-group": "0"
+    },
+    "metadata": {
+      "ssh-keys": "gcpuser:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSITENTIzGK3aiZtVk/JXHZAz5bYme58kkXaGDCa6cNTYURjCFcZh7GZO7JR8wxYbx1NJomWCTZ3HmVSZ3OnKUo2nJ+ynVJv4G9Zo9kbYRR+9yR4YDHy4YQ2cUsxK+5y8z22lz28T0JYR6waP50Cj2/HbQSwtS5y5bxYiHvCtLUsOEYgw2JR/J4bjU7yixLIpj1OgxWY/zCvtcizUsNQtINjgBiQZ325LHAlvAkOWazEVhGFezRy9TctcJmX/qml8K0uzYG15y75GxWmhykRsVr9Gzb/R0BKOL+Wh8ggvoradWUq+syS/VM5UWmWcqiGGVjLBmVO30SXyqu0ljA10J"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/tpuswarm-v6e32-east5b-3qrh-7bfcb694-head-akvzv2ns-tpu",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "8.234.53.64"
+        },
+        "ipAddress": "10.202.0.41",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.10.111"
+        },
+        "ipAddress": "10.202.0.15",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.234.44.64"
+        },
+        "ipAddress": "10.202.0.17",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.144.182.31"
+        },
+        "ipAddress": "10.202.0.38",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.144.191.135"
+        },
+        "ipAddress": "10.202.0.37",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.33.8"
+        },
+        "ipAddress": "10.202.0.13",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.163.249"
+        },
+        "ipAddress": "10.202.0.26",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.5.41"
+        },
+        "ipAddress": "10.202.0.20",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/tpuswarm-v6e32-east5b-3qrh-7bfcb694-head-akvzv2ns-tpu-q",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "READY"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-18T15:27:39.674493642Z",
+    "healthDescription": "The TPU had a maintenance event at 2026-09-18T18:41:18.838092358Z",
+    "id": "5446596510947339011",
+    "metadata": {
+      "ssh-keys": "\nhk4638:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC2QhpJw6JkBt8/3QJci30FPaazL2wV+7hZzDRbvWVIj+gaZE4af5vYPuVpLwSjJTWcz5Z7hrwihxCiNTZpiSmwCxagFOiA5hTQYjG4lhIvpI3wslUFsHN1odA/iPjmNwYysA4ATf/aDGrLG3CUBwHMcBAjU7fgDWeVupNcXTAWYcIbQuy+UxaHQR8PRLObGsg1xX+VDYz+096+wxvkvteTWOu37y2XPABfPReX+fOzF2vYAVw+mXDd9cMmAxaaXbXae+feTNXjeLu9Xb9OzcDg3f6eFKnRNREhY3frjuAPFSznsgf8z05aI53/4pdbrXkIKAtKWGIJ7fKTk2BBx5VOvEG5VaFQ25jqUZV+pCXBHgzXSRJ2ibnvkfyRuKEpzetDXqPzRpTY/AVuLD1VOPa2/hK2n/oUmDhuKRw+52kJAEaMN2ojGrtDFxfhDZjhVIx1KSFXocdgox6nv2qmpj66cInewLI0ZcPE9A3I7HzPUpqU+jkk292WWWYFMlvnd4c= hk4638\nhk4638:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCiWDt6+JZ604p63LknkMEWLndj67VH1G3WcG8/3drIxqIyzv/VEyhHh5p8th4T5wRUDhzZsW9e5kswDTXp0k4LvwG2hoY0OcIolZLMt/5uAiTgFQLD6cBxySOSbP/zChufI3dJc5uYvHxeI4MkZFIAheuGXQEBAOkAACMa6gTUR05BO7OWLuL9fXkLu56Ka/PRqAL2ryUk+r3dKdfCW4i66eAchHvXrpt6Qf8ZCzscA67Hwmbbe5RKTG8tSRqfUlWHCUsAFBOwwki+8Y6fDdwpG1ZLnf+gyfQmJy0fxG3Rz6egmt4QWZri74zCjm7z6MXXwgUV466rr4oH+lPT7IvJzcGE7fxbFl6pgqvawpTJz+aNq1pe0HKP8KRQillPjSA+ooibDAwbVgzO6yIbqZQjKtDE3M9cww8bCXmuvkHseSUDswrHfvew9+Eak3C3wXf9r3ufA6TB1byNbQbR7sSAAnFtipVGoDuGtJiiQeHb9x6TRnx8RogIXizjkgQiXWE= hk4638"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/hk4638-q9b-gemma30k-cit-v6e32-e5-spot_1",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "34.162.205.227"
+        },
+        "ipAddress": "10.202.0.199",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.12.201"
+        },
+        "ipAddress": "10.202.0.195",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.129.43"
+        },
+        "ipAddress": "10.202.0.252",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.152.120.83"
+        },
+        "ipAddress": "10.202.0.254",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.231.38.246"
+        },
+        "ipAddress": "10.202.0.255",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.152.125.181"
+        },
+        "ipAddress": "10.202.0.196",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.144.182.31"
+        },
+        "ipAddress": "10.202.0.194",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.234.43.12"
+        },
+        "ipAddress": "10.202.15.192",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/hk4638-q9b-gemma30k-cit-v6e32-e5-spot_1",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "PREEMPTED"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-21T01:05:59.769980304Z",
+    "health": "HEALTHY",
+    "healthDescription": "The TPU had a maintenance event at 2026-09-21T02:54:44.02160943Z",
+    "id": "4445321305714035032",
+    "labels": {
+      "ray-cluster-name": "tpuswarm-v6e32-east5b-9f9k-7bfcb694",
+      "ray-node-type": "head",
+      "skypilot-cluster-name": "tpuswarm-v6e32-east5b-9f9k-7bfcb694",
+      "skypilot-head-node": "1",
+      "skypilot-user": "sk7524",
+      "use-managed-instance-group": "0"
+    },
+    "metadata": {
+      "ssh-keys": "gcpuser:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSITENTIzGK3aiZtVk/JXHZAz5bYme58kkXaGDCa6cNTYURjCFcZh7GZO7JR8wxYbx1NJomWCTZ3HmVSZ3OnKUo2nJ+ynVJv4G9Zo9kbYRR+9yR4YDHy4YQ2cUsxK+5y8z22lz28T0JYR6waP50Cj2/HbQSwtS5y5bxYiHvCtLUsOEYgw2JR/J4bjU7yixLIpj1OgxWY/zCvtcizUsNQtINjgBiQZ325LHAlvAkOWazEVhGFezRy9TctcJmX/qml8K0uzYG15y75GxWmhykRsVr9Gzb/R0BKOL+Wh8ggvoradWUq+syS/VM5UWmWcqiGGVjLBmVO30SXyqu0ljA10J"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/tpuswarm-v6e32-east5b-9f9k-7bfcb694-head-9a26hctl-tpu",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "34.162.141.72"
+        },
+        "ipAddress": "10.202.0.236",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.144.177.133"
+        },
+        "ipAddress": "10.202.0.234",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.29.118"
+        },
+        "ipAddress": "10.202.0.230",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.3.224"
+        },
+        "ipAddress": "10.202.0.233",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.255.242"
+        },
+        "ipAddress": "10.202.0.231",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.186.226.255"
+        },
+        "ipAddress": "10.202.0.235",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.38.59"
+        },
+        "ipAddress": "10.202.0.229",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.29.235"
+        },
+        "ipAddress": "10.202.0.232",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/tpuswarm-v6e32-east5b-9f9k-7bfcb694-head-9a26hctl-tpu-q",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "READY"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-21T03:38:58.037255222Z",
+    "id": "1939596860879078699",
+    "labels": {
+      "ray-cluster-name": "tpuswarm-v6e32-east5b-4g39-7bfcb694",
+      "ray-node-type": "head",
+      "skypilot-cluster-name": "tpuswarm-v6e32-east5b-4g39-7bfcb694",
+      "skypilot-head-node": "1",
+      "skypilot-user": "sk7524",
+      "use-managed-instance-group": "0"
+    },
+    "metadata": {
+      "ssh-keys": "gcpuser:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSITENTIzGK3aiZtVk/JXHZAz5bYme58kkXaGDCa6cNTYURjCFcZh7GZO7JR8wxYbx1NJomWCTZ3HmVSZ3OnKUo2nJ+ynVJv4G9Zo9kbYRR+9yR4YDHy4YQ2cUsxK+5y8z22lz28T0JYR6waP50Cj2/HbQSwtS5y5bxYiHvCtLUsOEYgw2JR/J4bjU7yixLIpj1OgxWY/zCvtcizUsNQtINjgBiQZ325LHAlvAkOWazEVhGFezRy9TctcJmX/qml8K0uzYG15y75GxWmhykRsVr9Gzb/R0BKOL+Wh8ggvoradWUq+syS/VM5UWmWcqiGGVjLBmVO30SXyqu0ljA10J"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/tpuswarm-v6e32-east5b-4g39-7bfcb694-head-8t68ho9g-tpu",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {},
+        "port": 8470
+      },
+      {
+        "accessConfig": {},
+        "port": 8470
+      },
+      {
+        "accessConfig": {},
+        "port": 8470
+      },
+      {
+        "accessConfig": {},
+        "port": 8470
+      },
+      {
+        "accessConfig": {},
+        "port": 8470
+      },
+      {
+        "accessConfig": {},
+        "port": 8470
+      },
+      {
+        "accessConfig": {},
+        "port": 8470
+      },
+      {
+        "accessConfig": {},
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/tpuswarm-v6e32-east5b-4g39-7bfcb694-head-8t68ho9g-tpu-q",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "CREATING"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-20T22:21:16.954452839Z",
+    "health": "HEALTHY",
+    "id": "6817030390659491105",
+    "labels": {
+      "ray-cluster-name": "tpuswarm-v6e32-east5b-23ge-7bfcb694",
+      "ray-node-type": "head",
+      "skypilot-cluster-name": "tpuswarm-v6e32-east5b-23ge-7bfcb694",
+      "skypilot-head-node": "1",
+      "skypilot-user": "sk7524",
+      "use-managed-instance-group": "0"
+    },
+    "metadata": {
+      "ssh-keys": "gcpuser:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSITENTIzGK3aiZtVk/JXHZAz5bYme58kkXaGDCa6cNTYURjCFcZh7GZO7JR8wxYbx1NJomWCTZ3HmVSZ3OnKUo2nJ+ynVJv4G9Zo9kbYRR+9yR4YDHy4YQ2cUsxK+5y8z22lz28T0JYR6waP50Cj2/HbQSwtS5y5bxYiHvCtLUsOEYgw2JR/J4bjU7yixLIpj1OgxWY/zCvtcizUsNQtINjgBiQZ325LHAlvAkOWazEVhGFezRy9TctcJmX/qml8K0uzYG15y75GxWmhykRsVr9Gzb/R0BKOL+Wh8ggvoradWUq+syS/VM5UWmWcqiGGVjLBmVO30SXyqu0ljA10J"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/tpuswarm-v6e32-east5b-23ge-7bfcb694-head-er4bbdr3-tpu",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "34.162.118.193"
+        },
+        "ipAddress": "10.202.0.244",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.153.17.223"
+        },
+        "ipAddress": "10.202.0.238",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.62.44"
+        },
+        "ipAddress": "10.202.0.241",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.231.32.206"
+        },
+        "ipAddress": "10.202.0.242",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.20.103"
+        },
+        "ipAddress": "10.202.0.243",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.59.197"
+        },
+        "ipAddress": "10.202.0.245",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.153.30.12"
+        },
+        "ipAddress": "10.202.0.239",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.49.36"
+        },
+        "ipAddress": "10.202.0.240",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/tpuswarm-v6e32-east5b-23ge-7bfcb694-head-er4bbdr3-tpu-q",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "READY"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-21T00:09:31.274199175Z",
+    "health": "HEALTHY",
+    "id": "1478646072909502339",
+    "labels": {
+      "ray-cluster-name": "tpuswarm-v6e32-east5b-4y27-7bfcb694",
+      "ray-node-type": "head",
+      "skypilot-cluster-name": "tpuswarm-v6e32-east5b-4y27-7bfcb694",
+      "skypilot-head-node": "1",
+      "skypilot-user": "sk7524",
+      "use-managed-instance-group": "0"
+    },
+    "metadata": {
+      "ssh-keys": "gcpuser:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSITENTIzGK3aiZtVk/JXHZAz5bYme58kkXaGDCa6cNTYURjCFcZh7GZO7JR8wxYbx1NJomWCTZ3HmVSZ3OnKUo2nJ+ynVJv4G9Zo9kbYRR+9yR4YDHy4YQ2cUsxK+5y8z22lz28T0JYR6waP50Cj2/HbQSwtS5y5bxYiHvCtLUsOEYgw2JR/J4bjU7yixLIpj1OgxWY/zCvtcizUsNQtINjgBiQZ325LHAlvAkOWazEVhGFezRy9TctcJmX/qml8K0uzYG15y75GxWmhykRsVr9Gzb/R0BKOL+Wh8ggvoradWUq+syS/VM5UWmWcqiGGVjLBmVO30SXyqu0ljA10J"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/tpuswarm-v6e32-east5b-4y27-7bfcb694-head-6anafvsk-tpu",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "34.162.73.89"
+        },
+        "ipAddress": "10.202.0.104",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.63.121"
+        },
+        "ipAddress": "10.202.0.107",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.15.51"
+        },
+        "ipAddress": "10.202.0.105",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.18.40"
+        },
+        "ipAddress": "10.202.0.109",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.3.216"
+        },
+        "ipAddress": "10.202.0.87",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.36.98"
+        },
+        "ipAddress": "10.202.0.106",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.57.181"
+        },
+        "ipAddress": "10.202.0.108",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.186.245.67"
+        },
+        "ipAddress": "10.202.0.85",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/tpuswarm-v6e32-east5b-4y27-7bfcb694-head-6anafvsk-tpu-q",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "READY"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "8x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-64",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-03T05:51:32.083370515Z",
+    "healthDescription": "The TPU had a maintenance event at 2026-09-03T05:55:26.111947572Z",
+    "id": "2313472927896125106",
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/q35-27b-gemma-can45k-v6e64-f8tp4sp2-east-r1_spot",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "136.83.45.120"
+        },
+        "ipAddress": "10.202.0.102",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.186.254.131"
+        },
+        "ipAddress": "10.202.0.95",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.234.61.248"
+        },
+        "ipAddress": "10.202.0.100",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.26.175"
+        },
+        "ipAddress": "10.202.0.89",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.237.226"
+        },
+        "ipAddress": "10.202.0.91",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.214.48"
+        },
+        "ipAddress": "10.202.0.96",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.19.101"
+        },
+        "ipAddress": "10.202.0.103",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.234.43.19"
+        },
+        "ipAddress": "10.202.0.97",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.232.207"
+        },
+        "ipAddress": "10.202.0.99",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.51.203"
+        },
+        "ipAddress": "10.202.0.90",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.76.235"
+        },
+        "ipAddress": "10.202.0.94",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.7.221"
+        },
+        "ipAddress": "10.202.0.98",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.54.184"
+        },
+        "ipAddress": "10.202.0.93",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.246.99"
+        },
+        "ipAddress": "10.202.0.101",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.234.54.245"
+        },
+        "ipAddress": "10.202.0.92",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.28.18"
+        },
+        "ipAddress": "10.202.0.88",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/q35-27b-gemma-can45k-v6e64-f8tp4sp2-east-r1_spot",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "PREEMPTED"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-20T22:21:07.296458797Z",
+    "health": "HEALTHY",
+    "id": "8712640326980045998",
+    "labels": {
+      "jobman-recovery": "0f84df15b907744c8973"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/rebecca-jobman-us-east5-v6e32-five-2026-r0f84df15b907744c8973",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "34.162.63.93"
+        },
+        "ipAddress": "10.202.0.153",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.231.38.246"
+        },
+        "ipAddress": "10.202.0.154",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.56.172"
+        },
+        "ipAddress": "10.202.0.155",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.27.215"
+        },
+        "ipAddress": "10.202.0.156",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.17.42"
+        },
+        "ipAddress": "10.202.0.152",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.28.18"
+        },
+        "ipAddress": "10.202.0.149",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.16.150"
+        },
+        "ipAddress": "10.202.0.151",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.251.141"
+        },
+        "ipAddress": "10.202.0.150",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/rebecca-jobman-us-east5-v6e32-five-2026-r0f84df15b907744c8973",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "READY"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x8",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-32",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-21T00:09:27.612857923Z",
+    "health": "HEALTHY",
+    "id": "6254524758006556054",
+    "labels": {
+      "ray-cluster-name": "tpuswarm-v6e32-east5b-at8w-7bfcb694",
+      "ray-node-type": "head",
+      "skypilot-cluster-name": "tpuswarm-v6e32-east5b-at8w-7bfcb694",
+      "skypilot-head-node": "1",
+      "skypilot-user": "sk7524",
+      "use-managed-instance-group": "0"
+    },
+    "metadata": {
+      "ssh-keys": "gcpuser:ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDSITENTIzGK3aiZtVk/JXHZAz5bYme58kkXaGDCa6cNTYURjCFcZh7GZO7JR8wxYbx1NJomWCTZ3HmVSZ3OnKUo2nJ+ynVJv4G9Zo9kbYRR+9yR4YDHy4YQ2cUsxK+5y8z22lz28T0JYR6waP50Cj2/HbQSwtS5y5bxYiHvCtLUsOEYgw2JR/J4bjU7yixLIpj1OgxWY/zCvtcizUsNQtINjgBiQZ325LHAlvAkOWazEVhGFezRy9TctcJmX/qml8K0uzYG15y75GxWmhykRsVr9Gzb/R0BKOL+Wh8ggvoradWUq+syS/VM5UWmWcqiGGVjLBmVO30SXyqu0ljA10J"
+    },
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/tpuswarm-v6e32-east5b-at8w-7bfcb694-head-5r2xg0lg-tpu",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "136.83.19.112"
+        },
+        "ipAddress": "10.202.0.71",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "8.234.33.181"
+        },
+        "ipAddress": "10.202.0.61",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.159.227"
+        },
+        "ipAddress": "10.202.0.65",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.53.68"
+        },
+        "ipAddress": "10.202.0.63",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.186.238.6"
+        },
+        "ipAddress": "10.202.0.64",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.127.168.37"
+        },
+        "ipAddress": "10.202.0.66",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.127.167.46"
+        },
+        "ipAddress": "10.202.0.70",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "136.83.3.118"
+        },
+        "ipAddress": "10.202.0.62",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/tpuswarm-v6e32-east5b-at8w-7bfcb694-head-5r2xg0lg-tpu-q",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "READY"
+  },
+  {
+    "acceleratorConfig": {
+      "topology": "4x4",
+      "type": "V6E"
+    },
+    "acceleratorType": "v6e-16",
+    "apiVersion": "V2_ALPHA1",
+    "cidrBlock": "10.202.0.0/20",
+    "createTime": "2026-09-18T15:27:49.901768980Z",
+    "healthDescription": "The TPU had a maintenance event at 2026-09-18T18:40:22.742224906Z",
+    "id": "8232627807338966886",
+    "name": "projects/vision-mix/locations/us-east5-b/nodes/taiming-tpu8b-1",
+    "networkConfig": {
+      "enableExternalIps": true,
+      "network": "projects/vision-mix/global/networks/default",
+      "subnetwork": "projects/vision-mix/regions/us-east5/subnetworks/default"
+    },
+    "networkEndpoints": [
+      {
+        "accessConfig": {
+          "externalIp": "34.162.71.189"
+        },
+        "ipAddress": "10.202.15.210",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.109.201"
+        },
+        "ipAddress": "10.202.15.211",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.90.134"
+        },
+        "ipAddress": "10.202.15.209",
+        "port": 8470
+      },
+      {
+        "accessConfig": {
+          "externalIp": "34.162.100.124"
+        },
+        "ipAddress": "10.202.15.212",
+        "port": 8470
+      }
+    ],
+    "queuedResource": "projects/289186856710/locations/us-east5-b/queuedResources/taiming-tpu8b-1",
+    "runtimeVersion": "v2-alpha-tpuv6e",
+    "schedulingConfig": {
+      "spot": true
+    },
+    "serviceAccount": {
+      "email": "289186856710-compute@developer.gserviceaccount.com",
+      "scope": [
+        "https://www.googleapis.com/auth/devstorage.read_write",
+        "https://www.googleapis.com/auth/logging.write",
+        "https://www.googleapis.com/auth/service.management",
+        "https://www.googleapis.com/auth/servicecontrol",
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/pubsub"
+      ]
+    },
+    "shieldedInstanceConfig": {},
+    "state": "PREEMPTED"
+  }
+]

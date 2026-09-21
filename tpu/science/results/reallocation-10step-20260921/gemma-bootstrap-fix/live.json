@@ -1,0 +1,26 @@
+{
+  "time": 1789962137.6881711,
+  "jobs": [
+    {
+      "job_id": 1343,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "status": "STARTING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5590",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110
+    },
+    {
+      "job_id": 1337,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "status": "CANCELLED",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5590",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110
+    }
+  ],
+  "runtime": {
+    "host-0.jsonl": [],
+    "controller.jsonl": [],
+    "bootstrap-0.jsonl": []
+  }
+}
