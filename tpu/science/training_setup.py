@@ -51,8 +51,11 @@ def prepare(config, ips, nodes, grading_rank):
         from .ray_cpu import grade
         source = (Path(root) / 'tpu/science/seed_routing.py').read_text()
         for ip in ips:
-            refs.append(grade.options(scheduling_strategy=NodeAffinitySchedulingStrategy(
-                nodes[ip]['NodeID'], soft=False)).remote('routing', source, root,
+            from .routing_resources import contract
+            resources = contract() if config.science_routing_evaluator == 'parallel-v2' else None
+            options = dict(scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[ip]['NodeID'], soft=False))
+            if resources: options.update(num_cpus=resources['program_cpus'],memory=resources['program_memory_gib']*1024**3)
+            refs.append(grade.options(**options).remote('routing', source, root,resource_contract=resources,
                     slots_per_host=config.science_routing_slots_per_host,
                     routing_suite=config.client_env.get("SCIENCE_ROUTING_SUITE", "full")))
     return group, refs

@@ -95,6 +95,10 @@ class Host:
                 raise RuntimeError("host is stopping")
             if name in self.processes and self.processes[name].poll() is None:
                 raise RuntimeError(f"owned process already active: {name}")
+            if self.config.science_routing_evaluator == 'parallel-v2':
+                from tpu.science.routing_resources import host_partition
+                _, service_cpus = host_partition()
+                command = ['taskset', '--cpu-list', ','.join(map(str, service_cpus)), *command]
             process = Process(command, self.run / f"{name}.log", env=env, cwd=cwd or self.root)
             self.processes[name] = process
             emit(self.log, "process_started", rank=self.rank, process=name, pid_owned=process.process.pid)
