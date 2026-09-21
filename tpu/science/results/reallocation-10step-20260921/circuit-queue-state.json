@@ -1,7 +1,7 @@
 {
   "index": 0,
   "attempt": 4,
-  "phase": "launched",
+  "phase": "blocked",
   "external_ips": [
     "34.58.61.190",
     "34.136.9.17",
@@ -12,6 +12,5 @@
     "35.239.3.84",
     "34.134.8.42"
   ],
-  "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
-  "unit": "skyrl-circuit10-gemma-a4"
+  "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919"
 }

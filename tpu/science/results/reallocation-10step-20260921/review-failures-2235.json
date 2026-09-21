@@ -1,0 +1,194 @@
+[
+  {
+    "id": 1333,
+    "observed": 1789958269.6726203,
+    "last_event": {
+      "event": "final_run_writeback_complete",
+      "host": "t1v-n-2f21feee-w-0",
+      "pid": 1081406,
+      "rank": 3,
+      "result": null,
+      "run_id": "farm10-muse-1-20260921",
+      "time": 1789957968.307357
+    },
+    "last_failure": {
+      "detail": "local inference fatal: RuntimeError: local inference failed",
+      "event": "controller_failed",
+      "host": "t1v-n-2f21feee-w-0",
+      "pid": 1081406,
+      "run_id": "farm10-muse-1-20260921",
+      "time": 1789957949.700872
+    },
+    "latest_hosts": {
+      "event": "hosts",
+      "host": "t1v-n-2f21feee-w-0",
+      "pid": 1081406,
+      "run_id": "farm10-muse-1-20260921",
+      "statuses": [
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": 1789957904.8234081,
+          "phase": "prepared",
+          "processes": {
+            "serving-import": 0,
+            "serving-install": 0,
+            "serving-overlay": 0,
+            "serving-runtime-inventory": 0,
+            "serving-venv": 0
+          },
+          "rank": 0,
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": 1789957906.343373,
+          "phase": "prepared",
+          "processes": {
+            "serving-import": 0,
+            "serving-install": 0,
+            "serving-overlay": 0,
+            "serving-runtime-inventory": 0,
+            "serving-venv": 0
+          },
+          "rank": 1,
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": 1789957906.9333262,
+          "phase": "prepared",
+          "processes": {
+            "serving-import": 0,
+            "serving-install": 0,
+            "serving-overlay": 0,
+            "serving-runtime-inventory": 0,
+            "serving-venv": 0
+          },
+          "rank": 2,
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": 1789957907.0333767,
+          "phase": "prepared",
+          "processes": {
+            "serving-import": 0,
+            "serving-install": 0,
+            "serving-overlay": 0,
+            "serving-runtime-inventory": 0,
+            "serving-venv": 0
+          },
+          "rank": 3,
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "time": 1789957947.2734175
+    }
+  },
+  {
+    "id": 1337,
+    "observed": 1789958268.9125473,
+    "last_event": {
+      "event": "final_run_writeback_complete",
+      "host": "t1v-n-be632f80-w-0",
+      "pid": 133980,
+      "rank": 0,
+      "result": null,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "time": 1789957539.0858834
+    },
+    "last_failure": {
+      "detail": "\u001b[36mray::Host.bootstrap_status()\u001b[39m (pid=132224, ip=10.202.0.71, actor_id=1d973d2e8b7991adea4abdbe09000000, repr=<tpu.swarm.ray_train.host.Host object at 0x735c531b1e80>)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/gcpuser/.cache/skyrl-ray-code/2bafae4c4d59408aed5d88e94d995f1a80b97f9245d2530056275d007a775cd5/tpu/swarm/ray_train/host.py\", line 473, in bootstrap_status\n    raise RuntimeError('bootstrap config changed; use a new run ID')\nRuntimeError: bootstrap config changed; use a new run ID",
+      "event": "controller_failed",
+      "host": "t1v-n-be632f80-w-0",
+      "pid": 133980,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "time": 1789957513.0499637
+    },
+    "latest_hosts": {
+      "event": "hosts",
+      "host": "t1v-n-be632f80-w-0",
+      "pid": 133980,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "statuses": [
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 0,
+          "role": null,
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 1,
+          "role": null,
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 2,
+          "role": null,
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 3,
+          "role": null,
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 4,
+          "role": null,
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 5,
+          "role": null,
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 6,
+          "role": null,
+          "stopped": false
+        },
+        {
+          "cache_sync_error": null,
+          "last_cache_sync": null,
+          "phase": "created",
+          "processes": {},
+          "rank": 7,
+          "role": null,
+          "stopped": false
+        }
+      ],
+      "time": 1789957490.2738729
+    }
+  }
+]

@@ -1,5 +1,8 @@
 # Ten-step science reassignment
 
+Latest review snapshot and known failures: [cr_9_20_10_35pm.md](../../../../cr_9_20_10_35pm.md).
+Older runtime sections below are timestamped historical observations.
+
 User-approved target: one active copy per model/problem. Every training profile
 sets `NUM_EPOCHS=10`, a total cap including restored steps, not ten additional
 steps. The existing ensemble loop uses `range(start_batch, cfg.num_epochs)`.

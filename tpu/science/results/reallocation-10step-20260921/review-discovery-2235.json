@@ -1,0 +1,57 @@
+{
+  "time": 1789958254.9206011,
+  "farms": [
+    {
+      "job_id": 1331,
+      "url": "http://10.130.1.54:24800",
+      "state": "ready",
+      "active": 4,
+      "owner_run": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920:712b19a3f75b45f7908443dd74c32906"
+    },
+    {
+      "job_id": 1330,
+      "url": "http://10.130.0.171:24800",
+      "state": "ready",
+      "active": 4,
+      "owner_run": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919:1c187f1972bd4c89828f5b8c283d3909"
+    }
+  ],
+  "unavailable": [],
+  "targets": [
+    {
+      "job_id": 1342,
+      "state": "unreachable_or_not_supported",
+      "detail": {
+        "ok": false,
+        "error": "TimeoutError",
+        "http_status": null
+      }
+    },
+    {
+      "job_id": 1337,
+      "state": "not_running"
+    },
+    {
+      "job_id": 1336,
+      "state": "unchanged",
+      "model": "meta-models/Muse-Glimmer-30B",
+      "urls": []
+    },
+    {
+      "job_id": 1335,
+      "state": "unchanged",
+      "model": "google/gemma-4-31B-it",
+      "urls": [
+        "http://10.130.1.54:24800"
+      ]
+    },
+    {
+      "job_id": 1334,
+      "state": "unchanged",
+      "model": "Qwen/Qwen3.5-27B",
+      "urls": [
+        "http://10.130.0.171:24800"
+      ]
+    }
+  ]
+}

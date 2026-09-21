@@ -1,0 +1,14 @@
+{
+  "skyrl-hybrid-farm-discovery.service": {
+    "NRestarts": "0",
+    "ExecMainStartTimestamp": "Sun 2026-09-20 21:51:24 EDT",
+    "Id": "skyrl-hybrid-farm-discovery.service",
+    "ActiveState": "active"
+  },
+  "skyrl-circuit10-queue.service": {
+    "NRestarts": "0",
+    "ExecMainStartTimestamp": "Sun 2026-09-20 22:16:37 EDT",
+    "Id": "skyrl-circuit10-queue.service",
+    "ActiveState": "active"
+  }
+}
