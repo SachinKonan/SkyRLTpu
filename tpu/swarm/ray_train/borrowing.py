@@ -65,6 +65,7 @@ class Borrower:
         self.lock = asyncio.Lock()
         self.changed = asyncio.Condition()
         self.uncertain_until = 0
+        self.pending_acquire = None
         self.next_url = 0
         self.phase_deadline = 0
         self.phase_watchdog = None
@@ -193,6 +194,7 @@ class Borrower:
             self.phase, self.model = phase, model
             self.touch(phase)
             self.phase_watchdog = asyncio.create_task(self._watch_phase(phase))
+            await self._reconcile_acquire()
             if (not self.urls or time.monotonic() < self.uncertain_until
                     or expected_n > self.settings.external_pool_max_n):
                 return self.snapshot()
@@ -211,6 +213,28 @@ class Borrower:
                     raise
             return self.snapshot()
 
+    async def _reconcile_acquire(self):
+        pending = self.pending_acquire
+        if not pending:
+            return
+        url, identity = pending
+        try:
+            async with asyncio.timeout(self.settings.external_pool_rpc_timeout):
+                response = await self.http.post(url + '/cancel_acquire',
+                    json=identity, timeout=self.settings.external_pool_rpc_timeout)
+                response.raise_for_status()
+                body = response.json()
+                if (body.get('cancelled') is not True or body.get('acquire_id') != identity['acquire_id']
+                        or body.get('instance') != identity['farm_instance']):
+                    raise BorrowingProtocolError('acquire cancellation not acknowledged')
+            self.pending_acquire = None
+            self.uncertain_until = 0
+            self._event('acquire_reconciled', service=url)
+        except Exception as exc:
+            # Never infer cancellation from elapsed TTL or an unreachable/new
+            # ingress: the old acquire may still be queued behind server work.
+            self._event('acquire_pending', service=url, reason=type(exc).__name__)
+
     async def _acquire(self, phase, digest, archive):
         candidates = list(self.urls)  # Pin this attempt across live list updates.
         count = len(candidates)
@@ -226,9 +250,10 @@ class Borrower:
                 response.raise_for_status()
                 if self.config.model not in {m['id'] for m in response.json()['data']}:
                     continue
+                response = await self.http.get(url + '/status', timeout=self.settings.external_pool_rpc_timeout)
+                response.raise_for_status()
+                descriptor = response.json()
                 if self.settings.external_pool_attestation:
-                    response = await self.http.get(url + '/status', timeout=self.settings.external_pool_rpc_timeout)
-                    response.raise_for_status()
                     if (not self.required_contract or
                             response.json().get('capabilities', {}).get('compatibility_sha256') != self.required_contract):
                         self._event('incompatible_runtime', service=url)
@@ -240,13 +265,19 @@ class Borrower:
             # so its eventual lease TTL cannot be inferred from our send time.
             sent = time.monotonic()
             self.uncertain_until = float('inf')
+            identity = {}
+            if descriptor.get('acquire_protocol') == 1 and descriptor.get('instance'):
+                identity = dict(acquire_id=uuid.uuid4().hex, farm_instance=descriptor['instance'], owner_run=self.owner)
+                self.pending_acquire = (url, identity)
             response = await self.http.post(url + '/acquire_lease', json=dict(
                 owner_run=self.owner, ttl_seconds=self.settings.external_pool_lease_seconds,
-                compatibility_sha256=self.required_contract if self.settings.external_pool_attestation else None),
+                compatibility_sha256=self.required_contract if self.settings.external_pool_attestation else None,
+                **{k: v for k, v in identity.items() if k != 'owner_run'}),
                 timeout=self.settings.external_pool_rpc_timeout)
-            if response.status_code in (409, 423, 404):
+            if response.status_code in (409, 423, 404, 410):
                 # Explicit refusal/no lease API is safe to try on another URL.
                 self.uncertain_until = 0
+                self.pending_acquire = None
                 continue
             response.raise_for_status()
             body = response.json()
@@ -261,6 +292,7 @@ class Borrower:
             self._identity(lease, body)
             lease.valid_until = self._expiry(body, sent)
             self.uncertain_until = 0
+            self.pending_acquire = None
             lease.adapter = ('borrow-' + lease_id) if archive else self.config.model
             lease.heartbeat = asyncio.create_task(self._heartbeat(lease))
             if archive:

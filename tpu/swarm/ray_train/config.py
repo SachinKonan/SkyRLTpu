@@ -195,6 +195,8 @@ class Inference:
     # Existing clients retain per-phase borrowing. Migration profiles opt in.
     external_pool_lease_scope: str = "phase"
     external_pool_require_initial: bool = False
+    # Prefer a reservation at startup, but never idle trainers indefinitely.
+    external_pool_initial_wait_seconds: int = 300
     external_pool_scheduler: bool = False
     external_pool_attestation: bool = False
     farm_drain_timeout: int = 120
@@ -473,7 +475,7 @@ class Config:
                 except ValueError as exc:
                     raise ValueError('invalid external service port') from exc
         for name in ('engines', 'max_n', 'max_concurrent_requests', 'rpc_timeout', 'prepare_timeout', 'release_timeout',
-                     'lease_seconds', 'heartbeat_seconds', 'health_grace_seconds'):
+                     'lease_seconds', 'heartbeat_seconds', 'health_grace_seconds', 'initial_wait_seconds'):
             value = getattr(self.inference, 'external_pool_' + name)
             if type(value) is not int or value <= 0:
                 raise ValueError('external pool limits must be positive integers')

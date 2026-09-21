@@ -73,6 +73,7 @@ class Controller:
         self.transitioning = False
         self.shutdown_errors = []
         self.local_inference_instance = None
+        self.local_inference_probe_failures = 0
         self.farm_instance = None
 
     def reservation_rpc(self, action, timeout=10):
@@ -86,37 +87,51 @@ class Controller:
         if self.config.inference.external_pool_lease_scope != 'run':
             return
         self.report('waiting_for_farm', model=self.config.model)
+        deadline = time.monotonic() + self.config.inference.external_pool_initial_wait_seconds
         while not self.stopping.is_set():
             if self.failure:
                 raise RuntimeError(self.failure)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.report('farm_admission_local_fallback', reason='initial reservation deadline exceeded')
+                return
             try:
-                with httpx.Client(timeout=10) as client:
+                with httpx.Client(timeout=min(10, remaining)) as client:
                     response = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/skyrl/v1/borrowing/services')
                     response.raise_for_status()
                     self.farm_instance = response.json()['instance']
-                status = self.reservation_rpc('acquire', self.config.inference.external_pool_prepare_timeout + 5)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    continue
+                status = self.reservation_rpc('acquire', min(remaining, self.config.inference.external_pool_prepare_timeout + 5))
                 if status.get('reserved') or not self.config.inference.external_pool_require_initial:
                     self.report('farm_admitted', **status)
                     return
             except (httpx.HTTPError, ValueError, KeyError) as exc:
                 self.report('farm_admission_pending', reason=type(exc).__name__)
-            self.stopping.wait(5)
+            self.stopping.wait(max(0, min(5, deadline - time.monotonic())))
         raise RuntimeError('farm admission interrupted')
 
     def arm_local_inference(self, client):
-        if self.config.inference.restart_limit != 0:
+        if (self.config.inference.restart_limit != 0
+                and self.config.inference.external_pool_lease_scope != 'run'):
             return
         response = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/status")
         response.raise_for_status()
         instance = response.json()['instance']
         if not isinstance(instance, str) or not instance:
             raise RuntimeError('local inference instance identity missing')
-        self.local_inference_instance = instance
+        if self.config.inference.restart_limit == 0:
+            self.local_inference_instance = instance
+        self.local_inference_probe_failures = 0
+        if self.config.inference.external_pool_lease_scope == 'run':
+            self.farm_instance = instance
 
     def check_local_inference(self):
         # /health intentionally returns 503 during adapter updates. /status
         # remains available and identifies replacement of the owning ingress.
         if self.local_inference_instance is None or self.transitioning:
+            self.local_inference_probe_failures = 0
             return
         try:
             with httpx.Client(timeout=10) as client:
@@ -127,7 +142,16 @@ class Controller:
                 raise RuntimeError('local ingress was replaced')
             if state.get('fatal_error') or state.get('exhausted'):
                 raise RuntimeError('local inference failed')
+            self.local_inference_probe_failures = 0
         except Exception as exc:
+            transient = (isinstance(exc, httpx.TransportError) or
+                         isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500)
+            if transient:
+                self.local_inference_probe_failures += 1
+                if self.local_inference_probe_failures < 3:
+                    self.report('local_inference_probe_pending', reason=type(exc).__name__,
+                                consecutive_failures=self.local_inference_probe_failures)
+                    return
             self.failure = f'local inference fatal: {type(exc).__name__}: {exc}'
             self.report('local_inference_failed', detail=self.failure)
 
@@ -435,7 +459,7 @@ class Controller:
                 self.transitioning = False
                 self.report('bootstrap_roles_transitioned', train_ranks=train_ranks, inference_hosts=remaining)
                 self.wait_farm_admission()
-        # An opted-in run gets a farm before starting any trainer process.
+        # Prefer a farm before starting trainers, with bounded local fallback.
         predeployed = False
         if not bootstrap_pending and self.config.inference.external_pool_lease_scope == 'run':
             if self.catalog is None:

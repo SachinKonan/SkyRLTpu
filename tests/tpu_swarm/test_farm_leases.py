@@ -13,6 +13,125 @@ from tpu.swarm.ray_train.config import Config
 from tpu.swarm.ray_train.overlay import manifest
 
 
+@pytest.mark.parametrize('timing', ['before_arrival', 'waiting_upload', 'waiting_drain', 'granted'])
+def test_cancel_acquire_fences_delayed_grants(tmp_path, monkeypatch, timing):
+    async def run():
+        async with farm(tmp_path, monkeypatch) as (client, gateway, _, __, entered, finish):
+            body = dict(owner_run='new-owner', acquire_id='a' * 32, farm_instance=gateway.borrowing_instance)
+            pending = generation = None
+            if timing == 'waiting_upload':
+                await gateway.upload_lock.acquire()
+            elif timing == 'waiting_drain':
+                old = (await client.post('/acquire_lease', json={'owner_run': 'old'})).json()
+                generation = asyncio.create_task(client.post('/v1/completions',
+                    json={'model': gateway.config.model, 'block': True}, headers={'X-Lease-ID': old['lease_id']}))
+                await entered.wait()
+                gateway.lease['deadline'] = 0
+            if timing in ('waiting_upload', 'waiting_drain'):
+                pending = asyncio.create_task(client.post('/acquire_lease', json=body))
+                async with asyncio.timeout(1):
+                    while body['acquire_id'] not in gateway.acquire_requests:
+                        await asyncio.sleep(0)
+            elif timing == 'granted':
+                assert (await client.post('/acquire_lease', json=body)).status_code == 200
+            result = await asyncio.wait_for(client.post('/cancel_acquire', json=body), 1)
+            assert result.status_code == 200 and result.json()['cancelled']
+            if timing == 'waiting_upload':
+                gateway.upload_lock.release()
+            if pending:
+                assert (await asyncio.wait_for(pending, 1)).status_code == 410
+            if generation:
+                finish.set()
+                await generation
+                assert gateway.lease['owner_run'] == 'old'
+            else:
+                assert gateway.lease is None
+            # Cancellation may arrive before the original HTTP request; replay
+            # cannot turn that acknowledged cancellation into a future grant.
+            assert (await client.post('/acquire_lease', json=body)).status_code == 410
+            assert (await client.post('/cancel_acquire', json=body)).status_code == 200
+            assert (await client.post('/cancel_acquire', json={**body, 'farm_instance': 'stale'})).status_code == 409
+            assert (await client.post('/cancel_acquire', json={**body, 'owner_run': 'wrong'})).status_code == 409
+            assert (await client.post('/acquire_lease', json={**body, 'acquire_id': 'b' * 32})).status_code == 200
+    asyncio.run(run())
+
+
+def test_cancellation_of_granted_acquire_drains_inflight_work(tmp_path, monkeypatch):
+    async def run():
+        async with farm(tmp_path, monkeypatch) as (client, gateway, _, __, entered, finish):
+            body = dict(owner_run='owner', acquire_id='a' * 32, farm_instance=gateway.borrowing_instance)
+            lease = (await client.post('/acquire_lease', json=body)).json()
+            generation = asyncio.create_task(client.post('/v1/completions',
+                json={'model': gateway.config.model, 'block': True}, headers={'X-Lease-ID': lease['lease_id']}))
+            await entered.wait()
+            cancel = asyncio.create_task(client.post('/cancel_acquire', json=body))
+            async with asyncio.timeout(1):
+                while not gateway.lease['releasing']:
+                    await asyncio.sleep(0)
+            assert not cancel.done()
+            finish.set()
+            await generation
+            assert (await cancel).json()['cancelled'] and gateway.lease is None
+            # A duplicate cancel never releases a subsequent unrelated lease.
+            new = (await client.post('/acquire_lease', json={'owner_run': 'other'})).json()
+            assert (await client.post('/cancel_acquire', json=body)).status_code == 200
+            assert gateway.lease['lease_id'] == new['lease_id']
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('scope', ['phase', 'run'])
+@pytest.mark.parametrize('cancel_reply', ['ok', 'lost', 'wrong_instance'])
+def test_borrower_recovers_lost_acquire_only_after_cancellation(tmp_path, monkeypatch, scope, cancel_reply):
+    from dataclasses import replace
+    from tpu.swarm.ray_train.borrowing import Borrower
+    from tpu.swarm.ray_train.run_borrowing import RunBorrower
+    from test_inference_borrowing import config
+    async def run():
+        async with farm(tmp_path, monkeypatch) as (farm_client, gateway, *_):
+            lost = True
+            cancel_mode = cancel_reply
+            async def transport(request):
+                nonlocal lost
+                response = await farm_client.request(request.method, request.url.path,
+                    content=request.content, headers=request.headers)
+                if request.url.path == '/acquire_lease' and lost:
+                    lost = False
+                    raise httpx.ReadTimeout('lost acquire reply', request=request)
+                if request.url.path == '/cancel_acquire':
+                    if cancel_mode == 'lost':
+                        raise httpx.ReadTimeout('lost cancel reply', request=request)
+                    if cancel_mode == 'wrong_instance':
+                        return httpx.Response(200, json={**response.json(), 'instance': 'different'})
+                return response
+            cfg = config(tmp_path)
+            cfg = replace(cfg, inference=replace(cfg.inference,
+                external_pool_urls={cfg.model: ['http://farm']}, external_pool_lease_scope=scope))
+            async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+                borrower = (RunBorrower if scope == 'run' else Borrower)(cfg, client)
+                async def attempt(n):
+                    if scope == 'run':
+                        return (await borrower.reserve())['reserved']
+                    await borrower.end()
+                    return (await borrower.begin(f'phase-{n}', cfg.model))['ready']
+                try:
+                    assert not await attempt(1)
+                    first_lease = gateway.lease['lease_id']
+                    assert borrower.pending_acquire and borrower.uncertain_until == float('inf')
+                    if cancel_reply != 'ok':
+                        assert not await attempt(2)
+                        assert borrower.pending_acquire and gateway.lease is None
+                    cancel_mode = 'ok'
+                    assert await attempt(3)
+                    assert not borrower.pending_acquire and borrower.uncertain_until == 0
+                    assert gateway.lease['lease_id'] != first_lease
+                finally:
+                    if scope == 'run':
+                        await borrower.close()
+                    else:
+                        await borrower.end()
+    asyncio.run(run())
+
+
 class Remote:
     def __init__(self, fn):
         self.fn = fn

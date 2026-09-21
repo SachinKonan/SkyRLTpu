@@ -21,6 +21,19 @@ from .events import emit
 from .process import Process
 
 
+class GenerationRequestError(Exception):
+    """A rejected request, safe to propagate through Ray without killing a farm."""
+    def __init__(self, status_code, detail):
+        super().__init__(status_code, detail)
+        self.status_code, self.detail = status_code, detail
+
+
+def request_error(exc):
+    # RayTaskError carries the original cause even when it cannot subclass it.
+    cause = exc.cause if isinstance(exc, ray.exceptions.RayTaskError) else exc
+    return cause if isinstance(cause, GenerationRequestError) else None
+
+
 def adapter_name(name):
     if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", name):
         raise ValueError("invalid adapter name")
@@ -180,6 +193,9 @@ class Engine:
             response = await self.http.post(self.url + "/v1/completions", json=payload)
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (400, 404, 413, 422, 429):
+                raise GenerationRequestError(exc.response.status_code,
+                    'Inference engine rejected the generation request') from exc
             # Preserve the local engine error before Ray wraps the exception or
             # the VM disappears. Never include request headers or prompt text.
             detail = dict(ip=self.ip, instance=self.instance, error=str(exc),
@@ -255,6 +271,9 @@ class Ingress:
         self.condition = asyncio.Condition()
         self.upload_lock = asyncio.Lock()
         self.lease = None
+        # Cancellation tombstones live for this ingress incarnation. Expiring
+        # them could allow an arbitrarily delayed acquire to grant afterward.
+        self.acquire_requests = {}
         self.inflight = set()
         self.quarantined = False
         self.compatibility = None
@@ -371,25 +390,82 @@ class Ingress:
                     raise HTTPException(409, "lease belongs to another run")
                 self.lease.update(deadline=time.monotonic() + ttl, expires_at=time.time() + ttl)
             return await self.lease_status()
-        if self.config.inference.external_pool_attestation:
-            capabilities = await self.capabilities()
-            if payload.get('compatibility_sha256') != capabilities['compatibility_sha256']:
-                raise HTTPException(409, 'compatible serving runtime attestation required')
-        async with self.upload_lock:
-            async with self.condition:
-                if self.quarantined:
-                    raise HTTPException(503, 'farm quarantined')
-                if self.lease and time.monotonic() < self.lease["deadline"]:
-                    raise HTTPException(409, "farm is already leased; provide the lease ID to renew")
-                else:
+        acquire_id = payload.get('acquire_id')
+        record = None
+        if acquire_id is not None:
+            self.validate_acquire_identity(payload)
+            record = self.acquire_requests.get(acquire_id)
+            if record:
+                raise HTTPException(410 if record['cancelled'] else 425, 'acquire already submitted')
+            record = self.acquire_requests[acquire_id] = dict(owner=owner, cancelled=False)
+
+        def check_cancelled():
+            if record and record['cancelled']:
+                raise HTTPException(410, 'acquire cancelled')
+
+        try:
+            if self.config.inference.external_pool_attestation:
+                capabilities = await self.capabilities()
+                if payload.get('compatibility_sha256') != capabilities['compatibility_sha256']:
+                    raise HTTPException(409, 'compatible serving runtime attestation required')
+            async with self.upload_lock:
+                async with self.condition:
+                    check_cancelled()
+                    if self.quarantined:
+                        raise HTTPException(503, 'farm quarantined')
+                    if self.lease and time.monotonic() < self.lease['deadline']:
+                        raise HTTPException(409, 'farm is already leased; provide the lease ID to renew')
                     if self.lease:
-                        self.lease["releasing"] = True
+                        self.lease['releasing'] = True
+                    await self.condition.wait_for(lambda: self.active == 0 or record and record['cancelled'])
+                    check_cancelled()
+                    self.lease = dict(lease_id=uuid.uuid4().hex, owner_run=owner, acquire_id=acquire_id,
+                                      adapter_name=None, adapter_sha256=None, releasing=False,
+                                      deadline=time.monotonic() + ttl, expires_at=time.time() + ttl)
+                return await self.lease_status()
+        except HTTPException:
+            if record:
+                record['cancelled'] = True
+            raise
+
+    def validate_acquire_identity(self, payload):
+        acquire_id, owner = payload.get('acquire_id'), payload.get('owner_run')
+        if not isinstance(acquire_id, str) or not re.fullmatch(r'[a-f0-9]{32}', acquire_id):
+            raise HTTPException(400, 'acquire_id must be a UUID hex string')
+        if not isinstance(owner, str) or not owner.strip() or len(owner) > 256:
+            raise HTTPException(400, 'invalid owner_run')
+        if payload.get('farm_instance') != self.borrowing_instance:
+            raise HTTPException(409, 'farm incarnation changed')
+        record = self.acquire_requests.get(acquire_id)
+        if record and record['owner'] != owner:
+            raise HTTPException(409, 'acquire belongs to another run')
+
+    @app.post('/cancel_acquire')
+    async def cancel_acquire(self, request: Request):
+        if not self.config.inference.require_lease:
+            raise HTTPException(409, 'leases are not enabled on this farm')
+        payload = await request.json()
+        self.validate_acquire_identity(payload)
+        acquire_id = payload['acquire_id']
+        async with self.condition:
+            record = self.acquire_requests.setdefault(acquire_id, dict(owner=payload['owner_run']))
+            # A queued coroutine holds this same record.
+            record['cancelled'] = True
+            self.condition.notify_all()
+            lease = self.lease
+            matched = lease and lease.get('acquire_id') == acquire_id
+            if matched:
+                lease['releasing'] = True
+        if matched:
+            # An acknowledged cancellation means both pending grants and any
+            # granted work have drained, including uploads and disconnected HTTP.
+            async with self.upload_lock:
+                async with self.condition:
                     await self.condition.wait_for(lambda: self.active == 0)
-                    self.lease = dict(lease_id=uuid.uuid4().hex, owner_run=owner,
-                                      adapter_name=None, adapter_sha256=None, releasing=False)
-                self.lease.update(deadline=time.monotonic() + ttl, expires_at=time.time() + ttl)
-            result = await self.lease_status()
-        return result
+                    if self.lease is lease:
+                        self.lease = None
+                    self.condition.notify_all()
+        return dict(cancelled=True, acquire_id=acquire_id, instance=self.borrowing_instance)
 
     @app.post("/release_lease")
     async def release_lease(self, request: Request):
@@ -416,6 +492,7 @@ class Ingress:
             result['scheduling'] = self.scheduler.snapshot()
         if self.config.inference.require_lease:
             result.update(await self.lease_status())
+            result['acquire_protocol'] = 1
         if self.config.inference.external_pool_attestation:
             result['capabilities'] = await self.capabilities()
         return result
@@ -724,7 +801,9 @@ class Ingress:
         async def local(index):
             try:
                 return await getattr(self.engines[index], method).remote(payload)
-            except Exception:
+            except Exception as exc:
+                if rejected := request_error(exc):
+                    raise HTTPException(rejected.status_code, rejected.detail) from exc
                 if method == 'generate' and self.config.inference.restart_limit == 0:
                     await self.catalog.fail.remote('local generation failed')
                 raise
@@ -745,7 +824,9 @@ class Ingress:
                         return result
                 try:
                     return await getattr(self.select_engine(payload["model"]), method).remote(payload)
-                except Exception:
+                except Exception as exc:
+                    if rejected := request_error(exc):
+                        raise HTTPException(rejected.status_code, rejected.detail) from exc
                     if method == "generate" and self.config.inference.restart_limit == 0:
                         await self.catalog.fail.remote('local generation failed')
                     raise

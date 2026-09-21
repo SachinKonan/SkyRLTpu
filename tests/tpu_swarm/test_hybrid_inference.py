@@ -237,6 +237,29 @@ def test_controller_waits_for_reservation_and_pins_ingress_identity(tmp_path, mo
     assert actions == ['acquire', 'acquire'] and owner.farm_instance == 'current-ingress'
 
 
+@pytest.mark.parametrize('unavailable', ['busy', 'transport'])
+def test_initial_reservation_wait_falls_back_locally_at_deadline(tmp_path, monkeypatch, unavailable):
+    from tpu.swarm.ray_train import controller
+    cfg = config(tmp_path)
+    cfg = replace(cfg, inference=replace(cfg.inference, external_pool_lease_scope='run',
+        external_pool_require_initial=True, external_pool_initial_wait_seconds=7))
+    owner = controller.Controller(cfg, ['127.0.0.1'])
+    events, now = [], [100.0]
+    owner.report = lambda event, **kw: events.append(event)
+    def transport(request):
+        if unavailable == 'transport':
+            raise httpx.ConnectError('offline', request=request)
+        return httpx.Response(200, json={'instance': 'current-ingress', 'reserved': False})
+    original_client = httpx.Client
+    monkeypatch.setattr(controller.httpx, 'Client', lambda **kw: original_client(
+        transport=httpx.MockTransport(transport), **kw))
+    monkeypatch.setattr(controller.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(owner.stopping, 'wait', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    owner.wait_farm_admission()
+    assert now[0] == 107 and owner.failure is None
+    assert events[-1] == 'farm_admission_local_fallback'
+
+
 @pytest.mark.parametrize('vllm_distribution', ['vllm', 'vllm_tpu'])
 def test_runtime_identity_detects_installed_patch_but_allows_hardware_flags(tmp_path, vllm_distribution):
     from tpu.swarm.ray_train.serving_identity import identity

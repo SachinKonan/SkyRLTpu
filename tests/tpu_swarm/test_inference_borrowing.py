@@ -64,6 +64,9 @@ class Farm:
             return httpx.Response(200, json={})
         if path == '/v1/models':
             return httpx.Response(200, json={'data': [{'id': 'Qwen/Qwen3.5-27B'}]})
+        if path == '/status' and 'X-Lease-ID' not in request.headers:
+            # Legacy farms have no cancellable-acquire protocol.
+            return httpx.Response(200, json={'instance': self.incarnation})
         if path == '/acquire_lease':
             body = json.loads(request.content)
             if body.get('lease_id'):
@@ -277,6 +280,7 @@ def test_cancelled_generation_cleans_up(tmp_path):
     {'external_pool_urls': {'Qwen/Qwen3.5-27B': ['http://user:pass@farm']}},
     {'external_pool_urls': {'Qwen/Qwen3.5-27B': ['http://farm/']}},
     {'external_pool_lease_seconds': 30}, {'external_pool_engines': 0},
+    {'external_pool_initial_wait_seconds': 0},
 ])
 def test_reject_invalid_configuration(tmp_path, change):
     raw = config(tmp_path).to_dict()

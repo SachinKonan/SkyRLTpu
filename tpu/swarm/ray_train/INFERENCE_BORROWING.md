@@ -95,9 +95,26 @@ server can still need time to drain old admitted operations before reuse.
   its abandoned result cannot enter the local training batch a second time.
 - Initial lease/hash mismatch or incomplete readiness: no remote sampling; the
   grace period only protects requests admitted after full identity verification.
-- An ambiguous **acquire** acknowledgement disables further borrowing for that
-  consumer process. A queued server acquire could execute late; waiting one TTL
-  is insufficient evidence that a second farm can safely be acquired.
+- An ambiguous **acquire** acknowledgement blocks further claims until the
+  original farm acknowledges cancellation. Farms advertising `acquire_protocol=1`
+  accept an `acquire_id` (UUID hex) and their `/status` `instance` as
+  `farm_instance`, alongside `owner_run` on `/acquire_lease`.
+  The borrower retries `POST /cancel_acquire` with those three identity fields
+  at the next phase/reservation attempt. The farm prevents future grants for that
+  ID and drains any already-granted work before acknowledging
+  `{cancelled: true, acquire_id: ..., instance: ...}`. Cancellation is idempotent
+  and can arrive before the delayed acquire. Tombstones remain for the ingress
+  lifetime. A queued server acquire could execute late; waiting one TTL alone
+  never permits a second claim. Lost cancellation replies are retried.
+  Legacy farms, unreachable farms, and changed ingress identities retain the
+  conservative block; they do not prevent local training.
+- Run-scoped initial admission waits at most
+  `external_pool_initial_wait_seconds` (default 300), then logs
+  `farm_admission_local_fallback` and proceeds with local engines. This also
+  bounds profiles with `external_pool_require_initial=true`: that setting now
+  means prefer an initial reservation within the admission window. Later phases
+  can reconcile the pending acquire and borrow again. The deadline is enforced
+  between bounded RPCs; it is not a real-time scheduling guarantee.
 - Unconfirmed release stops renewal and pauses subsequent acquisitions through
   a conservative expiry interval. Cleanup calls include phase identity, so a
   stale client cannot release a newer local phase.
@@ -210,9 +227,13 @@ The supervisor, borrower, ingress, package, command and serving checks passed
 
 Borrowed-farm failure is recoverable only while local inference remains healthy.
 With `inference.restart_limit=0`, the controller pins the local ingress instance
-once startup succeeds and probes `/status` during execution. An unreachable or
-replaced ingress, exhausted engine restart budget, or recorded local generation
-failure fails the run and enters owned-process cleanup. It does not borrow a farm
+once startup succeeds and probes `/status` during execution. Three consecutive
+transport/5xx probe failures fail the run; a valid probe resets the count.
+A replaced ingress, exhausted engine restart budget, malformed status, or recorded
+local engine failure fails the run immediately and enters owned-process cleanup.
+Generation responses 400/404/413/422/429 are propagated as request errors without
+poisoning the farm catalog; engine transport/5xx failures remain fatal under the
+strict policy. It does not borrow a farm
 to recover local inference. `/status` stays available during normal adapter
 updates; `/health` returning 503 during an update is not used as a fatal signal.
 Intentional bootstrap topology changes suspend this monitor until readiness.

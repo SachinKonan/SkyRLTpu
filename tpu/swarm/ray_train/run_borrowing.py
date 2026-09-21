@@ -62,6 +62,7 @@ class RunBorrower(Borrower):
             if self.lease:
                 await self._release(self.lease)
                 self.lease = None
+            await self._reconcile_acquire()
             if time.monotonic() < self.uncertain_until or not self.urls:
                 return self.snapshot()
             try:
