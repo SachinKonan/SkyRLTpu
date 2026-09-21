@@ -1,0 +1,15 @@
+{
+  "job": {
+    "job_id": 1255,
+    "run_id": "muse-multilora-farm-2-20260919",
+    "status": "RUNNING",
+    "cluster": "tpuswarm-v4-32-central2-smoke-177",
+    "pool": "tpuswarm-v4-32-central2-smoke",
+    "priority": 0
+  },
+  "probe": {
+    "ok": false,
+    "error": "URLError",
+    "http_status": null
+  }
+}

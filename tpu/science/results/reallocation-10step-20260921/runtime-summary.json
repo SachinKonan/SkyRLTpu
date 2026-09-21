@@ -1,0 +1,715 @@
+[
+  {
+    "job_id": 1338,
+    "sky_status": "RUNNING",
+    "runtime": {
+      "run_exists": true,
+      "time": 1789957082.0466907,
+      "events": [
+        {
+          "event": "waiting_nodes",
+          "time": 1789956545.9598436
+        },
+        {
+          "event": "topology_validated",
+          "time": 1789956594.504559
+        },
+        {
+          "event": "science_reference_started",
+          "time": 1789956594.5134406
+        }
+      ],
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "ingress": "URLError"
+    }
+  },
+  {
+    "job_id": 1336,
+    "sky_status": "RUNNING",
+    "runtime": {
+      "run_exists": true,
+      "time": 1789957081.2378752,
+      "events": [
+        {
+          "event": "waiting_nodes",
+          "time": 1789956403.162315
+        },
+        {
+          "event": "topology_validated",
+          "time": 1789956455.2525394
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789956908.124677
+        },
+        {
+          "event": "inference_membership_verified",
+          "time": 1789957027.382086
+        },
+        {
+          "event": "waiting_for_farm",
+          "time": 1789957027.385745
+        }
+      ],
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "event": "inference_status",
+        "exhausted": [],
+        "expected": [
+          "10.202.0.105",
+          "10.202.0.106",
+          "10.202.0.107",
+          "10.202.0.85"
+        ],
+        "fatal_error": null,
+        "host": "t1v-n-55c5c47f-w-0",
+        "pid": 172861,
+        "replicas": [
+          {
+            "instance": "37db041ae54c48d1be77568233041afe",
+            "ip": "10.202.0.85",
+            "registered": 1789957022.2486458
+          },
+          {
+            "instance": "f1e951d65f5545179f51cc8ebc8d6e18",
+            "ip": "10.202.0.106",
+            "registered": 1789957022.7139106
+          },
+          {
+            "instance": "c5b83cf55007435ba0d9f9deab107b3b",
+            "ip": "10.202.0.107",
+            "registered": 1789957023.3635988
+          },
+          {
+            "instance": "8659767933d941979914ca46d82dba32",
+            "ip": "10.202.0.105",
+            "registered": 1789957025.246387
+          }
+        ],
+        "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+        "starts": {
+          "10.202.0.105": 1,
+          "10.202.0.106": 1,
+          "10.202.0.107": 1,
+          "10.202.0.85": 1
+        },
+        "time": 1789957070.1565578,
+        "version": null,
+        "versions": []
+      },
+      "farm": {
+        "state": null,
+        "owner_run": null,
+        "active": 0,
+        "expected_engines": null,
+        "ready_engines": null,
+        "exhausted": [],
+        "capabilities": {
+          "compatibility_sha256": "b85b17feece06d34ab0496fa83374bd45f8b0de7ea1bfdf4f06807cab7d99a1d",
+          "contract": {
+            "model": "meta-models/Muse-Glimmer-30B",
+            "revision": "a4e59da52a7bc87ae7251dd5545c0dd437c44b68",
+            "files": {
+              "config.json": "5a9df2d8a385b3d361ab6ae68d73586f4e775033933bd0cd863fb7f3820e6a14",
+              "tokenizer.json": "c9dbee66967b58f31a7c27f723c3760da3526ccd0427578e8905b0abb0031c4d",
+              "tokenizer_config.json": "781e6c74f571642c71202167b67d9255b28cc439bdda1582ff31346182f5a9c5",
+              "generation_config.json": "1fa51889b1f8d3659802dedaa27e005b81e5c58483f13ecf13f2d97306bc6e35",
+              "model.safetensors.index.json": "7d817b4dccb1b123fc6c1939356c65cee3a0ad462a5b821ac88280990a27d1ba"
+            },
+            "code": {
+              "tpu/vllm_tpu_server.py": "9208569bc7b336825f53c6bfa86cc67ed884a12bf318f8e795b12f92de9195af",
+              "tpu/thinking_budget/server.py": "9049ba703321a4b5cfa9a336edda7c0b9348ef5e9e20a1f07766f7d59dc6013b"
+            },
+            "packages": {
+              "torch": {
+                "version": "2.10.0",
+                "commit": null,
+                "archive": null,
+                "python_sha256": "d1dbb565e57484184e096a6323c8d38e34415b1d45e09677aba61d7d7e4bd1a8"
+              },
+              "transformers": {
+                "version": "5.15.1",
+                "commit": null,
+                "archive": null,
+                "python_sha256": "bdb401c1ac0ae447ca712c5b4a5ff8f4d8f297f941c9f3a27a358f3838e26359"
+              },
+              "vllm-tpu": {
+                "version": "0.23.0",
+                "commit": null,
+                "archive": null,
+                "python_sha256": "05632ac8c27762507fe1322442480cd6d3306cf90a4ed604d2999a872927dedb"
+              },
+              "tpu-inference": {
+                "version": "0.0.0",
+                "commit": null,
+                "archive": null,
+                "python_sha256": "acdf5a5dde0b82f5618ad04c835bca8a2b3fd1651a2533dc80bf0baaf972c183"
+              },
+              "torchax": {
+                "version": "0.0.11",
+                "commit": null,
+                "archive": null,
+                "python_sha256": "68df323120591bd6a6c6c8c4cce0f7f5fd64afe386c70dde22968af673d9d135"
+              },
+              "jax": {
+                "version": "0.10.1",
+                "commit": null,
+                "archive": null,
+                "python_sha256": "3dcc6ba1999905ab247c3fe8ac145eb0ff1492e8c2451d38aa62286591ed0594"
+              },
+              "jaxlib": {
+                "version": "0.10.1",
+                "commit": null,
+                "archive": null,
+                "python_sha256": "27badb9d36a84cb1bb14197a236faec7baded100f1628c7c73fe5b77f45d5707"
+              }
+            },
+            "native_thinking": true,
+            "model_impl": "vllm",
+            "max_model_length": 22528,
+            "max_lora_rank": 32
+          },
+          "engines": 4,
+          "max_sequences": 16,
+          "prefix_caching": true,
+          "max_loras": 8
+        }
+      }
+    }
+  },
+  {
+    "job_id": 1335,
+    "sky_status": "RUNNING",
+    "runtime": {
+      "run_exists": true,
+      "time": 1789957081.235744,
+      "events": [
+        {
+          "event": "waiting_nodes",
+          "time": 1789956397.3605423
+        },
+        {
+          "event": "topology_validated",
+          "time": 1789956447.1856077
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789957023.9163136
+        }
+      ],
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "event": "inference_status",
+        "exhausted": [],
+        "expected": [
+          "10.202.0.17",
+          "10.202.0.26",
+          "10.202.0.37",
+          "10.202.0.38"
+        ],
+        "fatal_error": null,
+        "host": "t1v-n-f2b6a444-w-0",
+        "pid": 329842,
+        "replicas": [],
+        "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+        "starts": {
+          "10.202.0.17": 1,
+          "10.202.0.26": 1,
+          "10.202.0.37": 1,
+          "10.202.0.38": 1
+        },
+        "time": 1789957062.6250494,
+        "version": null,
+        "versions": []
+      },
+      "ingress": "TimeoutError"
+    }
+  },
+  {
+    "job_id": 1334,
+    "sky_status": "RUNNING",
+    "runtime": {
+      "run_exists": true,
+      "time": 1789957080.853801,
+      "events": [
+        {
+          "event": "waiting_nodes",
+          "time": 1789956374.4637983
+        },
+        {
+          "event": "topology_validated",
+          "time": 1789956427.7619529
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789956527.8820467
+        }
+      ],
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "event": "inference_status",
+        "exhausted": [],
+        "expected": [
+          "10.202.0.238",
+          "10.202.0.241",
+          "10.202.0.242",
+          "10.202.0.243"
+        ],
+        "fatal_error": null,
+        "host": "t1v-n-d78ac12f-w-0",
+        "pid": 336454,
+        "replicas": [],
+        "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+        "starts": {
+          "10.202.0.238": 1,
+          "10.202.0.241": 1,
+          "10.202.0.242": 1,
+          "10.202.0.243": 1
+        },
+        "time": 1789957069.7740335,
+        "version": null,
+        "versions": []
+      },
+      "ingress": "TimeoutError"
+    }
+  },
+  {
+    "job_id": 1333,
+    "sky_status": "STARTING",
+    "runtime": {
+      "run_exists": false,
+      "time": 1789957082.049848,
+      "ingress": "URLError"
+    }
+  },
+  {
+    "job_id": 1331,
+    "sky_status": "RUNNING",
+    "runtime": {
+      "run_exists": true,
+      "time": 1789957081.1666079,
+      "events": [
+        {
+          "event": "topology_validated",
+          "time": 1789956339.4571786
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789956892.9816053
+        }
+      ],
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "event": "inference_status",
+        "exhausted": [],
+        "expected": [
+          "10.130.1.52",
+          "10.130.1.53",
+          "10.130.1.54",
+          "10.130.1.55"
+        ],
+        "fatal_error": null,
+        "host": "t1v-n-b782c17f-w-0",
+        "pid": 1685432,
+        "replicas": [],
+        "run_id": "farm10-gemma-1-20260921",
+        "starts": {
+          "10.130.1.52": 1,
+          "10.130.1.53": 1,
+          "10.130.1.54": 1,
+          "10.130.1.55": 1
+        },
+        "time": 1789957061.1672075,
+        "version": null,
+        "versions": []
+      },
+      "ingress": "TimeoutError"
+    }
+  },
+  {
+    "job_id": 1330,
+    "sky_status": "RUNNING",
+    "runtime": {
+      "run_exists": true,
+      "time": 1789957081.967641,
+      "events": [
+        {
+          "event": "waiting_nodes",
+          "time": 1789956254.2427604
+        },
+        {
+          "event": "topology_validated",
+          "time": 1789956288.6242785
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789956516.8445992
+        }
+      ],
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "event": "inference_status",
+        "exhausted": [],
+        "expected": [
+          "10.130.0.170",
+          "10.130.0.171",
+          "10.130.0.173",
+          "10.130.0.174"
+        ],
+        "fatal_error": null,
+        "host": "t1v-n-b0c409af-w-0",
+        "pid": 1690538,
+        "replicas": [],
+        "run_id": "farm10-qwen-1-20260921",
+        "starts": {
+          "10.130.0.170": 1,
+          "10.130.0.171": 1,
+          "10.130.0.173": 1,
+          "10.130.0.174": 1
+        },
+        "time": 1789957069.6262896,
+        "version": null,
+        "versions": []
+      },
+      "ingress": "TimeoutError"
+    }
+  },
+  {
+    "job_id": "circuit-gemma-a4",
+    "runtime": {
+      "run_exists": true,
+      "time": 1789957090.7106292,
+      "events": [
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789956464.9104366
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789956464.9105158
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789956464.9105864
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789956464.9106839
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789956464.9114826
+        },
+        {
+          "event": "waiting_nodes",
+          "time": 1789957018.7223465
+        },
+        {
+          "event": "topology_validated",
+          "time": 1789957024.0500433
+        },
+        {
+          "event": "science_reference_started",
+          "time": 1789957024.2037582
+        }
+      ],
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "cache_setup",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "ingress": "URLError"
+    }
+  }
+]

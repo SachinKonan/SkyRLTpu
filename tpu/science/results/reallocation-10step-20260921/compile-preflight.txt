@@ -1,0 +1,5 @@
+{"elapsed_seconds": 8.642207831144333e-06, "event": "transfer_progress", "filesystem_free_bytes": 89343934464, "host": "t1v-n-addd4d77-w-0", "pid": 2757292, "time": 1789956933.7790086, "transfer": "compile-restore"}
+{"event": "transfer_complete", "host": "t1v-n-addd4d77-w-0", "pid": 2757292, "seconds": 7.501719614025205, "time": 1789956941.280671, "transfer": "compile-restore"}
+{"cold": false, "event": "compile_cache_ready", "host": "t1v-n-addd4d77-w-0", "pid": 2757292, "restored": 62, "reused": 177, "source": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-smoke9-v5p-gemma-tp4-fsdp1-r32-s18432-s22528-dq3-v1-bwd256", "time": 1789956941.297423}
+{"cold": false, "event": "compile_cache_ready", "host": "t1v-n-addd4d77-w-0", "pid": 2757292, "restored": 0, "reused": 177, "source": "gs://sk7524-tinker-tpu-us-central2/reallocation-10step-20260921/placement-v5p64-gemma-10step-20260921/trainer", "time": 1789956943.8522499}
+{"result": "validated", "seed": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-smoke9-v5p-gemma-tp4-fsdp1-r32-s18432-s22528-dq3-v1-bwd256", "files": 239}

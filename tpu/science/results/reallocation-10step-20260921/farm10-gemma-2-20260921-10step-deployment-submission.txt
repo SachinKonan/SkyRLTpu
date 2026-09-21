@@ -3,8 +3,8 @@ Submitting to pool 'tpuswarm-v4-32-central2-smoke' with 1 job.
 [33mLaunching managed job 'farm10-gemma-2-20260921'...[0m
 
 📋 Useful Commands
-Managed Job ID: 1332
-├── To cancel the job:		sky jobs cancel 1332
-├── To stream job logs:		sky jobs logs 1332
-├── To stream controller logs:	sky jobs logs --controller 1332
+Managed Job ID: 1341
+├── To cancel the job:		sky jobs cancel 1341
+├── To stream job logs:		sky jobs logs 1341
+├── To stream controller logs:	sky jobs logs --controller 1341
 └── To view all managed jobs:	sky jobs queue

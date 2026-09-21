@@ -1,7 +1,7 @@
 {
-  "unit": "skyrl-circuit10-gemma-a2",
+  "unit": "skyrl-circuit10-gemma-a4",
   "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
-  "attempt": 2,
+  "attempt": 4,
   "state": "launched",
   "internal_ips": [
     "10.128.1.94",
@@ -23,7 +23,7 @@
     "35.239.3.84",
     "34.134.8.42"
   ],
-  "started": 1789956002.6715794,
+  "started": 1789957000.5533297,
   "hosts": [
     {
       "rank": 0,

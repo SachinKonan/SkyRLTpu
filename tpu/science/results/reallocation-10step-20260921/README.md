@@ -8,7 +8,7 @@ steps. The existing ensemble loop uses `range(start_batch, cfg.num_epochs)`.
 |---|---|---|
 | v4-32 farm | Qwen | 1330 |
 | v4-32 farm | Gemma AC2 | 1331 |
-| v4-32 farm | Gemma RG-LRU | 1332 |
+| v4-32 farm | Gemma RG-LRU | 1341 (1332 withdrawn to prioritize Muse) |
 | v4-32 farm | Muse | 1333 |
 | v6e-32 | Qwen AC2, restore checkpoint 1 | 1334 |
 | v6e-32 | Gemma AC2, restore checkpoint 1 | 1335 |
@@ -25,6 +25,20 @@ v6e jobs were consequently placed in east. This does not install automatic
 cross-pool migration of a live experiment. Future reassignment must cancel and
 verify the former owner before submitting the same canonical run elsewhere.
 No duplicate central copies were submitted.
+
+## Latest checked runtime (2026-09-21 02:18 UTC)
+
+All three AC2 jobs have active application controllers. Muse has all four local
+inference engines registered and is waiting for its external farm. Qwen and
+Gemma are still preparing/compiling engines. The Qwen/Gemma v4-32 farms are in
+engine startup; Muse farm 1333 has been assigned worker 177 and is starting.
+The spare Gemma farm 1341 remains pending. Gemma RG-LRU 1337 is recovering.
+
+Qwen qubit 1338 has completed eight-host environment preparation and is setting
+up its science reference; Gemma and Muse qubit are pending capacity. Circuit
+Gemma attempt 4 has validated topology and reached cache preparation on all
+eight hosts. No new completed training update is verified in this snapshot.
+`runtime-summary.json` and `live-jobs.json` contain the observations and times.
 
 ## Recipe and state
 
@@ -53,7 +67,10 @@ The operator database inspection is at
 
 Cancelled old submissions: 1287-1294, 1301-1303, 1318, 1321-1324. The four idle
 farms 1250, 1252, 1253, 1254 were claimed with maintenance leases before targeted
-cancellation/replacement. Unrelated v5p-32 Erdos submissions were left alone.
+cancellation/replacement. Obsolete Muse farm 1255 subsequently recovered; it
+was verified idle, maintenance-leased and retired as well. With three ready
+farm workers, Qwen/Gemma AC2/Muse have priority 120; the spare Gemma RG farm
+has priority 110 and waits for capacity. Unrelated v5p-32 Erdos submissions were left alone.
 
 ## Standalone circuit queue
 
@@ -75,6 +92,14 @@ The first two Gemma attempts failed during environment preparation because the
 machine's uv 0.8.22 did not know the pinned Python 3.12.12 release. Repair uses
 isolated `uv==0.12.17` to install that exact interpreter, preserving the original
 uv executable and the training/serving package locks.
+
+Attempt 3 reached cache preparation but the compilation-cache download process
+exited without an explicit storage error. No kernel OOM was recorded for that
+interval; its exit cause remains undetermined. A separate replay of the same
+validated cache restore succeeded (177 reused + 62 restored = 239 seed objects).
+`compile-preflight.txt` records that check. One explicit operator retry (attempt
+4) was granted after this repair, retaining the exhausted automatic counter;
+another failure blocks again. `circuit-repair-retry.json` records the decision.
 
 Before launch the head had only 28 GiB free. Eleven local CP26 checkpoint
 archives were matched byte-for-byte to GCS using MD5 and size before removal.

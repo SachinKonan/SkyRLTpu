@@ -36,7 +36,7 @@ def main():
         d=read('qwen-multilora-farm-2-20260919' if model=='qwen' else f'{model}-multilora-farm-{number}-20260919')
         d['run_id']=f'farm10-{model}-{number}-20260921'
         d['inference'].update(external_pool_attestation=True,farm_drain_timeout=120)
-        add(d,'farm',model,'tpuswarm-v4-32-central2-smoke',120,old=[old])
+        add(d,'farm',model,'tpuswarm-v4-32-central2-smoke',110 if model=='gemma' and number==2 else 120,old=[old])
     ac2_sources={
         'qwen':('fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919',1),
         'gemma':('math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920',1),

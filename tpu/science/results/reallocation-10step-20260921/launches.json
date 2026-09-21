@@ -27,7 +27,7 @@
     "kind": "farm",
     "model": "gemma",
     "pool": "tpuswarm-v4-32-central2-smoke",
-    "state": "submitted",
+    "state": "withdrawn_for_ac2_priority",
     "time": 1789955869.4087677,
     "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
     "job_id": 1332
@@ -119,5 +119,16 @@
     "time": 1789956032.864648,
     "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-4a30c937d8b1ccee5acf333d088cfd6d6c2443a9530ac2e86237732051494e9a.tar.gz",
     "job_id": 1340
+  },
+  {
+    "label": "farm10-gemma-2-20260921-10step-deployment",
+    "run_id": "farm10-gemma-2-20260921",
+    "kind": "farm",
+    "model": "gemma",
+    "pool": "tpuswarm-v4-32-central2-smoke",
+    "state": "submitted",
+    "time": 1789956856.1129978,
+    "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
+    "job_id": 1341
   }
 ]

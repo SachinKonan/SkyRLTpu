@@ -53,7 +53,7 @@ def cancel_training():
    text=o.sky('jobs','cancel',str(j),'--yes');(o.HERE/f'cancel-{j}.txt').write_text(text);print('cancel requested',j,flush=True)
 def launch(row):
  path=o.HERE/'launches.json';receipts=json.loads(path.read_text()) if path.exists() else []
- existing=[r for r in receipts if r['label']==row['label']]
+ existing=[r for r in receipts if r['label']==row['label'] and r.get('state')!='withdrawn_for_ac2_priority']
  if existing:print('already recorded',row['label'],existing[-1].get('job_id'),flush=True);return
  rows=o.queue()
  assert not any(r['run_id']==row['run_id'] and r['status'] in ACTIVE for r in rows),('duplicate active run',row['run_id'])

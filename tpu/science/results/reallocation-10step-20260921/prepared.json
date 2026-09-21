@@ -46,7 +46,7 @@
       "run_id": "farm10-gemma-2-20260921",
       "profile": "tpu/swarm/ray_train/profiles/farm10-gemma-2-20260921-10step-deployment.json",
       "pool": "tpuswarm-v4-32-central2-smoke",
-      "priority": 120,
+      "priority": 110,
       "resume_min_checkpoint_step": 0,
       "supersedes": [
         1253
@@ -58,7 +58,7 @@
       "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86.tar.gz",
       "archive_sha256": "8c45ac6a23fccfd178c142bb273abba09ec5ae7998a32b3c0c4ec079c322ba86",
       "task": ".science/reallocation-10step/packages/farm10-gemma-2-20260921-10step-deployment/farm10-gemma-2-20260921.yaml",
-      "task_sha256": "d84ce1a7e55c758f6efc897f65851aeb0bce39ad0e345b8ad27483265a7b1ccc"
+      "task_sha256": "def1b8dd6bbf83e7f094e7b780c8577e0afbef630635598c75132860eba746e3"
     },
     {
       "kind": "farm",
@@ -288,5 +288,8 @@
   "defer_jobs": [
     1293
   ],
-  "total_step_cap": 10
+  "total_step_cap": 10,
+  "additional_retired_farms": [
+    1255
+  ]
 }
