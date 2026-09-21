@@ -14,7 +14,7 @@
   "inference": {
     "tp": 4,
     "max_sequences": 16,
-    "memory_utilization": 0.8,
+    "memory_utilization": 0.7,
     "routing": "ingress",
     "restart_limit": 0,
     "chunk_tokens": 1024,

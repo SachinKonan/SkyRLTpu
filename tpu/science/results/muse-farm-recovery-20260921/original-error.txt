@@ -1,0 +1,27 @@
+e/runner/tpu_runner.py", line 1329, in execute_model
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]     output = self._execute_model(scheduler_output,
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]   File "/home/gcpuser/.cache/farm10-muse-1-20260921/envs/serving/lib/python3.12/site-packages/tpu_inference/runner/tpu_runner.py", line 1540, in _execute_model
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]     ) = self._prepare_inputs(scheduler_output)
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]   File "/home/gcpuser/.cache/farm10-muse-1-20260921/envs/serving/lib/python3.12/site-packages/tpu_inference/runner/tpu_runner.py", line 2897, in _prepare_inputs
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]     input_ids = self._apply_async_token_substitution(
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]   File "/home/gcpuser/.cache/farm10-muse-1-20260921/envs/serving/lib/python3.12/site-packages/tpu_inference/runner/tpu_runner.py", line 2466, in _apply_async_token_substitution
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]     input = self._substitute_placeholder_token_fn(
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197]             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197] jax.errors.JaxRuntimeError: RESOURCE_EXHAUSTED: E0101: RuntimeProgramAllocationFailure:
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197] Error loading program 'jit__substitute_placeholder_token': Fatal error
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197] See https://openxla.org/xla/errors/error_0101 for more details.: while running replica 0 and partition 0 of a replicated computation (other replicas may have failed as well).
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197] --------------------
+(EngineCore pid=453335) ERROR 09-21 02:32:04 [core.py:1197] For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+ERROR 09-21 02:32:04 [async_llm.py:704] AsyncLLM output_handler failed.
+ERROR 09-21 02:32:04 [async_llm.py:704] Traceback (most recent call last):
+ERROR 09-21 02:32:04 [async_llm.py:704]   File "/home/gcpuser/.cache/farm10-muse-1-20260921/envs/serving/lib/python3.12/site-packages/vllm/v1/engine/async_llm.py", line 660, in output_handler
+ERROR 09-21 02:32:04 [async_llm.py:704]     outputs = await engine_core.get_output_async()
+ERROR 09-21 02:32:04 [async_llm.py:704]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ERROR 09-21 02:32:04 [async_llm.py:704]   File "/home/gcpuser/.cache/farm10-muse-1-20260921/envs/serving/lib/python3.12/site-packages/vllm/v1/engine/core_client.py", line 1046, in get_output_async
+ERROR 09-21 02:32:04 [async_llm.py:704]     raise self._format_exception(outputs) from None
+ERROR 09-21 02:32:04 [async_llm.py:704] vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered an issue. See stack trace (above) for the root cause.
+INFO:     127.0.0.1:33990 - "POST /v1/completions HTTP/1.1" 500 Internal Server Error
+
