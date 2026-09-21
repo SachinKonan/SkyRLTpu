@@ -1,0 +1,72 @@
+..............................................................        [100%]
+=============================== warnings summary ===============================
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:168: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    num_replicas: Optional[NonNegativeInt] = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:171: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    max_ongoing_requests: PositiveInt = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:175: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    max_queued_requests: int = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:182: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    backpressure_config: BackpressureConfig = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:186: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    user_config: Any = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:190: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    graceful_shutdown_timeout_s: NonNegativeFloat = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:194: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    graceful_shutdown_wait_loop_s: NonNegativeFloat = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:199: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    health_check_period_s: PositiveFloat = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:203: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    health_check_timeout_s: PositiveFloat = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:208: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    autoscaling_config: Optional[AutoscalingConfig] = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:212: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    request_router_config: RequestRouterConfig = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:225: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    version: Optional[str] = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:230: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    logging_config: Optional[dict] = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:235: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    max_constructor_retry_count: PositiveInt = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:239: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    gang_scheduling_config: Optional[GangSchedulingConfig] = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:244: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    deployment_actors: Optional[List[DeploymentActorConfig]] = Field(
+
+tests/tpu_swarm/test_inference_borrowing.py::test_actual_ingress_retries_hung_remote_locally_without_changing_payload
+  /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/lib/python3.12/site-packages/ray/serve/_private/config.py:249: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'update_type'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    rolling_update_percentage: float = Field(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+62 passed, 17 warnings, 3 subtests passed in 11.36s

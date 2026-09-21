@@ -1,0 +1,34 @@
+{
+  "time": 1789965426.9134061,
+  "ready": false,
+  "policy": "all-three-models-start-from-best-completed-solution",
+  "runs": [
+    {
+      "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "model": "qwen",
+      "job_id": 1334,
+      "status": "RUNNING",
+      "ready": false,
+      "checkpoint": 2,
+      "final_pool": null
+    },
+    {
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "model": "gemma",
+      "job_id": 1335,
+      "status": "RUNNING",
+      "ready": false,
+      "checkpoint": 2,
+      "final_pool": null
+    },
+    {
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "model": "muse",
+      "job_id": 1336,
+      "status": "RUNNING",
+      "ready": false,
+      "checkpoint": 3,
+      "final_pool": null
+    }
+  ]
+}
