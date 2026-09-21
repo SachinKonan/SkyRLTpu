@@ -78,3 +78,12 @@ priority is 120. This handoff is not yet built or submitted.
 Validation: six focused tests passed (Slurm 14217850), including unfinished
 round rejection, saved-score mismatch rejection, construction-only evaluation,
 fresh root history, recipient isolation, and preserving the source recipe.
+
+## Central capacity update
+
+A third central worker became READY while Muse successor 1361 was unassigned
+in east. That entry was cancelled before replacement job **1362** was submitted
+to central with the same seeds and training recipe, still capped at 10 steps.
+See `../campaign-muse-central-20260921/` for the exact profile difference, seed
+checksums, cancellation evidence, and new submission receipt. Jobs 1359 and
+1360 are now RUNNING and preparing caches/reference checks.

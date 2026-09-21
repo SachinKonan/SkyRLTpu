@@ -1,0 +1,31 @@
+{
+  "jobs": [
+    {
+      "run_id": "next-v6e-muse-qubit-central-10step-20260921",
+      "model": "muse",
+      "kind": "qubit",
+      "profile": "tpu/swarm/ray_train/profiles/next-v6e-muse-qubit-central-10step-20260921.json",
+      "pool": "tpuswarm-v6e32-central1b",
+      "priority": 100,
+      "bucket": "gs://sk7524-tinker-tpu-us-central1",
+      "epochs": 10,
+      "source_run": "capacity-v6e-muse-qubit-grpo-4e5-20260920",
+      "source_uri": "gs://sk7524-tinker-tpu-us-central1/ray-training/capacity-v6e-muse-qubit-grpo-4e5-20260920/client/tinker_log/capacity-v6e-muse-qubit-grpo-4e5-20260920/puct_sampler_step_000000.json",
+      "source_generation": 1789965172354545,
+      "seed_file": ".science/campaign-muse-central-20260921/next-v6e-muse-qubit-central-10step-20260921/seed-pool.json",
+      "seed_file_sha256": "bb8489682a6a7b764c113a92b1ade1d0ee95d947406baf8bbd2bf14f5e73f628",
+      "seed_pool_sha256": "7f4e97c13fc88d07a93836a99f052593df9e7f613560f7c4d5fafa0a2f71d98d",
+      "seed_count": 48,
+      "seed_destination": "gs://sk7524-tinker-tpu-us-central1/ray-training/next-v6e-muse-qubit-central-10step-20260921/client/tinker_log/next-v6e-muse-qubit-central-10step-20260921/puct_sampler_step_000000.json",
+      "optimizer": "fresh",
+      "adapter": "fresh",
+      "replaces_pending_job": 1361,
+      "reason": "Use newly idle central worker; original east successor has not started",
+      "archive": ".science/campaign-muse-central-20260921/next-v6e-muse-qubit-central-10step-20260921/science-training.tar.gz",
+      "archive_sha256": "86bd56975f90a3de9dbf8590c3b1e8a174433140a51c1734231290de3d983afe",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-86bd56975f90a3de9dbf8590c3b1e8a174433140a51c1734231290de3d983afe.tar.gz",
+      "task": ".science/campaign-muse-central-20260921/next-v6e-muse-qubit-central-10step-20260921/next-v6e-muse-qubit-central-10step-20260921.yaml",
+      "task_sha256": "d29a7e53c4a113dd0a622d4bf2d9a7642a3e798648f827806f15b565ec485d3a"
+    }
+  ]
+}

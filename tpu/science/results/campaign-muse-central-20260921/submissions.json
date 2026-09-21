@@ -1,0 +1,23 @@
+[
+  {
+    "run_id": "next-v6e-muse-qubit-central-10step-20260921",
+    "pool": "tpuswarm-v6e32-central1b",
+    "priority": 100,
+    "epochs": 10,
+    "state": "submitted",
+    "time": 1789966536.4936807,
+    "uploads": [
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-86bd56975f90a3de9dbf8590c3b1e8a174433140a51c1734231290de3d983afe.tar.gz",
+        "generation": 1789966535377093,
+        "sha256": "86bd56975f90a3de9dbf8590c3b1e8a174433140a51c1734231290de3d983afe"
+      },
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/ray-training/next-v6e-muse-qubit-central-10step-20260921/client/tinker_log/next-v6e-muse-qubit-central-10step-20260921/puct_sampler_step_000000.json",
+        "generation": 1789966536166973,
+        "sha256": "bb8489682a6a7b764c113a92b1ade1d0ee95d947406baf8bbd2bf14f5e73f628"
+      }
+    ],
+    "job_id": 1362
+  }
+]
