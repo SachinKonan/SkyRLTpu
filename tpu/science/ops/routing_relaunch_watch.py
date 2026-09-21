@@ -205,6 +205,13 @@ class Rollout:
             save(BASE/'gemma-first-cycle.json',proof);return True
         return False
 
+    def spare_slice(self):
+        """Count queued/recovering work too; never request a fourth occupied slice."""
+        rows=self.query('i.pool=?',(POOL,))
+        active=[row for row in rows if row['status'] not in ('SUCCEEDED','CANCELLED')
+                and not row['status'].startswith('FAILED')]
+        return len(active)<3
+
     def tick(self):
         phase=self.state['phase']
         if 'gemma-train' in self.state['jobs']:
@@ -223,9 +230,16 @@ class Rollout:
             if self.launch_training('gemma'):
                 self.regrade('qwen');self.persist(phase='qwen_regrade')
         elif phase=='qwen_regrade':
+            if 'muse-regrade' not in self.state['jobs'] and self.spare_slice():
+                self.regrade('muse')
             if not self.done(self.state['jobs']['qwen-regrade']):return
             self.prepare_training('qwen');self.regrade('muse');self.persist(phase='muse_regrade')
         elif phase=='muse_regrade':
+            # Qwen need not wait for Muse's slower candidates if Gemma has
+            # already passed the complete cycle and an original slice is free.
+            if ('qwen-train' not in self.state['jobs'] and self.spare_slice()
+                    and self.gemma_cycle()):
+                self.launch_training('qwen')
             if not self.done(self.state['jobs']['muse-regrade']):return
             self.prepare_training('muse');self.persist(phase='gemma_cycle')
         elif phase=='gemma_cycle':

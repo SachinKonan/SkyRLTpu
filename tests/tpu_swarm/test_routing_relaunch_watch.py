@@ -72,3 +72,30 @@ def test_incomplete_cycle_holds_admission(monkeypatch,tmp_path,missing):
 def test_checkpoint_is_not_optimizer_proof(monkeypatch,tmp_path,flag):
     with pytest.raises(RuntimeError,match='failed or skipped'):
         evidence(monkeypatch,tmp_path,**{flag:1}).gemma_cycle()
+
+
+@pytest.mark.parametrize('states,available',[
+    (['RUNNING','RUNNING','RECOVERING'],False),
+    (['RUNNING','STARTING','PENDING'],False),
+    (['RUNNING','RUNNING','SUCCEEDED','FAILED_SETUP'],True),
+])
+def test_spare_slice_includes_pending_and_recovering_work(states,available):
+    r=rollout();r.query=lambda *args:[dict(status=s) for s in states]
+    assert r.spare_slice()==available
+
+
+@pytest.mark.parametrize('spare',[True,False])
+def test_muse_regrade_can_use_a_free_third_slice_while_qwen_is_running(spare):
+    r=rollout();r.state['phase']='qwen_regrade';r.state['jobs']['qwen-regrade']=1501
+    r.done=lambda jid:False;r.spare_slice=lambda:spare
+    called=[];r.regrade=lambda model:called.append(model)
+    r.tick()
+    assert called==(['muse'] if spare else [])
+
+
+@pytest.mark.parametrize('spare,cycle,expected',[(True,True,['qwen']),(True,False,[]),(False,True,[])])
+def test_qwen_admission_during_muse_regrade_still_requires_cycle_and_capacity(spare,cycle,expected):
+    r=rollout();r.state['phase']='muse_regrade';r.state['jobs']['muse-regrade']=1502
+    r.done=lambda jid:False;r.spare_slice=lambda:spare;r.gemma_cycle=lambda:cycle
+    called=[];r.launch_training=lambda model:called.append(model)
+    r.tick();assert called==expected
