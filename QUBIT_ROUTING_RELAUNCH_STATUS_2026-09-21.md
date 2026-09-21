@@ -1,6 +1,6 @@
 # Qubit routing relaunch — implementation and live validation
 
-Updated 2026-09-21, 16:30 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
+Updated 2026-09-21, 16:40 EDT. Worktree: `SkyRLTpu-qubit-parallel-relaunch`, branch `agent/qubit-parallel-relaunch-20260921`, based on science/farm migration `b67b3eeb` with the deployed first-available admission changes carried in `bd196ef3`.
 
 ## Authorized deployment
 
@@ -71,3 +71,13 @@ A bounded live cgroup probe reproduced errno 16 when the old order enabled contr
 Three real production-worker full-suite canaries are live on ranks 0, 2, and 3 of existing worker 718, sharing the same host admission locks and ten-program ceiling with job 1444. Their process identities and immutable code SHA are in `cgroup-canary-receipts.json`; poll with `probe_cgroup_canaries.py`. These checks cover the archived winner and the two formerly valid programs rejected during setup. They have passed setup and begun verifying cases; complete results are still pending.
 
 Prepared replacement regrades for all three models are under `regrade-v3`, code SHA `961a0f90bcdfe2904166ed67e5dcc0da1e67e5690986ea7f3d16ff2edbe52acc`, evaluator SHA `cc7b510448d67a1f9a776fbcf83e187c72ec3b428b6a3fc1f9f00ca18e35fbe1`. They have not been submitted. After the canaries pass, preserve/supersede job 1444, run the corrected regrades under one common evaluator identity, and resume the three-model deployment sequence. Do not mix pre-fix verdicts into the new seeds. No old Gemma/Muse training job or inference farm has been cancelled.
+
+## Corrected regrade resumed (16:40 EDT)
+
+All three production-worker canaries passed all 72 cases, with no surviving child PIDs. Winner reward 0.5329396104918068 and every case count matched the accepted original benchmark (433.799 seconds under concurrent grading load). The two formerly valid programs rejected during cgroup setup now return their original rewards, 0.2464875615016014 and 0.5197193687096632. Complete proof and immutable GCS copies are recorded by `cgroup-fix-accepted.json`.
+
+Only superseded CPU regrade **1444** was cancelled; its durable outcomes are preserved separately and excluded from training. The pre-cancellation snapshot contained 184 outcomes, 107 valid, two infrastructure errors, and 85,766.654 aggregate CPU seconds. These are diagnostic attempt costs, not part of the corrected starting pool. Full records are under `regrade-v2/gemma/verdicts` and the original GCS prefix.
+
+Corrected Gemma regrade **1450** is assigned to existing worker 718, using the `regrade-v3` artifact recorded above. The automatic rollout service is active again and reads `regrade_revision=regrade-v3`; Qwen and Muse will use the same evaluator hash. Existing Gemma 1339 and Muse 1340 have not been cancelled. All three training package preflights succeeded locally.
+
+At the latest farm preflight, discovery reported healthy four-engine Muse 1373, Gemma 1371, and Qwen 1330 farms, with no active requests and leases unleased/expired. Both advertised serving-source hashes match the deployment source exactly. This confirms available compatible source snapshots, not that the new training jobs have leased or generated yet. Snapshot: `farm-preflight.json`. First-cycle gating still requires actual remote generation, an optimizer update, checkpoint publication, adapter reload, and subsequent generation.
