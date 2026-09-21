@@ -37,6 +37,19 @@ or replacement after a farm becomes unavailable. No running model is moved just
 because v5p capacity appears. Private network connectivity between consumer and
 farm is required and checked by the borrower.
 
+The deployed `skyrl-hybrid-farm-discovery.service` includes these training pools
+(updated 2026-09-21):
+
+- `tpuswarm-v6e32-east5b-qwen35`
+- `tpuswarm-v6e32-central1b`
+- `tpuswarm-v4-64-central2-qwen35-erdos`
+
+Preserve all three `--trainer-pool` arguments when regenerating the service.
+Farm discovery still uses `--farm-name-contains inference-farm` plus the legacy
+`--farm-pool tpuswarm-v4-32-central2-smoke` selector. Adding a training pool
+allows updates only for opted-in, run-scoped borrowers; it does not launch or
+restart training jobs.
+
 ## Cache isolation
 
 Each profile writes under its own `gs://sk7524-tinker-tpu-us-east5/` run and
