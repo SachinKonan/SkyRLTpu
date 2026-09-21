@@ -174,3 +174,20 @@ Gemma's first batch has produced a verified program with reward **0.5395005455**
 Source SHA256: `ddf314d5eccc3922e8dd4486abeed4cf763f80285b347ed5345c4418cab9a37c`. Grader occurrence: `460e23275eff41bf9727af88b7a1261f`. Candidate, complete verdict, and run/bundle provenance are preserved locally under `.science/routing-relaunch-20260921/new-best/gemma/<source>/<occurrence>/` and immutably at `gs://sk7524-tinker-tpu-us-central2/routing-relaunch-20260921/live-best/gemma/ddf314d5eccc3922e8dd4486abeed4cf763f80285b347ed5345c4418cab9a37c/460e23275eff41bf9727af88b7a1261f/`. Receipt: `gemma-new-best-latest.json`.
 
 The latest live monitor at this snapshot reports 128 returned rollouts, 106 grades completed, 19 valid, and 22 active evaluations, with zero infrastructure failures. All four returned groups are local; completed farm groups, the remaining batch, and the first optimizer/checkpoint/reload cycle are still pending. Qwen and Muse remain prepared behind the explicit first-cycle gate.
+
+
+## All three qubit training jobs admitted (19:19 EDT)
+
+The user explicitly requested launching the remaining qubit runs immediately, superseding the earlier Gemma-first-cycle admission gate. The existing watcher was stopped and its state updated under `rollout.lock`; the original state and exact instruction were preserved in `.science/routing-relaunch-20260921/rollout-state-before-parallel-admission.json` and `rollout-state.json`. The phase is now `submitted_all`. This records submission, not completion of first-step validation. Farm management remains with the other agent.
+
+| Model | Job | Existing v4-64 worker | Verified launch state |
+|---|---:|---:|---|
+| Gemma | 1453 | 718 | Existing running workload continues |
+| Qwen | 1466 | 681 | RUNNING; grading dependencies compiling on all eight hosts |
+| Muse | 1467 | 724 | RUNNING; grading dependencies compiling on all eight hosts |
+
+All three use the previously reviewed immutable bundles, corrected bootstrap seed pools, 16 parents × 32 rollouts per step, and a ten-step limit. Farm discovery, run-scoped leases, adapter attestation, and local fallback remain enabled. No new model runtime or evaluator code was packaged for this admission change. No farms or unrelated jobs were changed or cancelled; no extra TPU capacity was requested.
+
+Read-only preflight found only Gemma occupying the target pool and verified free disk on all hosts of workers 681 and 724 (minimum 31.06 GiB). Both new jobs were selected onto those retained workers. Their existing `sky.exec` requests were pending in the shared API queue; they were dispatched using SkyPilot's normal request-locking wrapper, and both requests finished SUCCEEDED. Job RUNNING here means the payload has started: host logs show active Rust dependency builds. It does not establish loaded models, farm leases, completed generations, or optimizer steps for Qwen/Muse.
+
+Evidence under `.science/routing-relaunch-20260921/`: `remaining-worker-capacity.json`, `parallel-launch-requests.json`, `launch-dispatch-1466.json`, `launch-dispatch-1467.json`, and `parallel-startup-logs.json`. The earlier `parallel-runtime-startup.json` probe guessed systemd unit names from bundle hashes and is not valid runtime evidence; actual runtime units use per-attempt identifiers and system scope. The host workload logs establish startup instead.
