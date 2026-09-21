@@ -609,10 +609,11 @@ class Config:
             if self.client_env.get("TTD_ANSWER_MODEL_FAMILY") not in ("qwen", "gemma", "muse"):
                 raise ValueError("answer-only extraction requires an explicit model family")
         if self.has_adaptive_pwc_overlay and not (self.has_problem_prompt_overlay or self.is_recurrent_gemma
-                or (self.science_task == 'routing' and routing_suite == 'q20')
+                or (self.science_task == 'routing' and (routing_suite == 'q20'
+                    or routing_suite == 'full' and self.science_routing_evaluator == 'parallel-v2'))
                 or (self.science_task == 'placement' and self.science_placement_backend == 'cpu'
                     and self.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1')):
-            raise ValueError("adaptive PWC is enabled only for AC2, circle packing, RG-LRU and Q20 science qubit or helper-enabled CPU circuit")
+            raise ValueError("adaptive PWC is enabled only for AC2, circle packing, RG-LRU, Q20 or parallel-v2 full-suite qubit, or helper-enabled CPU circuit")
         if self.training_smoke and (self.inference_only or self.adapter_count != 1 or self.client_env.get('NUM_EPOCHS') != '1'):
             raise ValueError('training smoke requires one adapter and exactly one training step')
         if self.arena_grader_rank is not None:
