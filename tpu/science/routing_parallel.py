@@ -80,17 +80,20 @@ def split_suite(original, destination):
     return paths
 
 
+def verified_case(name, result):
+    if result.get('correctness') != 1 or len(result.get('metrics',{}).get('cases',[])) != 1:
+        raise ValueError('invalid case result')
+    row=result['metrics']['cases'][0]
+    if row['case'] != name:raise ValueError('case result ID mismatch')
+    return row
+
+
 def aggregate(expected, results):
     if len(results) != len(expected) or set(results) != set(expected):
         raise ValueError('incomplete verified case set')
     cases = []
     for name in expected:
-        result = results[name]
-        if result.get('correctness') != 1 or len(result['metrics']['cases']) != 1:
-            raise ValueError('invalid case result')
-        row = result['metrics']['cases'][0]
-        if row['case'] != name: raise ValueError('case result ID mismatch')
-        cases.append(row)
+        cases.append(verified_case(name, results[name]))
     reward, metrics = qubit([r['baseline_added_cnots'] for r in cases],
                             [r['added_cnots'] for r in cases], [r['weight'] for r in cases])
     metrics.update(cases=cases, case_count=len(cases))
@@ -149,11 +152,11 @@ def case(request):
     fd=os.open(out/'results.json',os.O_RDONLY|os.O_NOFOLLOW)
     with os.fdopen(fd) as f: output=json.load(f)
     remaining(deadline)
-    checked=time.monotonic(); reward,metrics=verify(root,suite,output)
+    checked=time.monotonic(); _,metrics=verify(root,suite,output,score=False)
     remaining(deadline)
     metrics.update(solve_seconds=route_seconds,verify_seconds=time.monotonic()-checked,
                    total_seconds=time.monotonic()-started,process_cpu_seconds=cpu_seconds())
-    result=valid(reward,metrics)
+    result=dict(correctness=1,metrics=metrics)
     (work/'result.json').write_text(json.dumps(result))
     # Verified compact counts persist; release large QASM output promptly.
     (out/'results.json').unlink()
@@ -226,7 +229,7 @@ def _evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cac
                 with progress.open('a') as f:f.write(json.dumps(dict(case=name,result=row,elapsed=time.monotonic()-started))+'\n')
                 del active[slot]
                 # Reject immediately; never aggregate a verified subset.
-                aggregate([name],{name:row})
+                verified_case(name,row)
             if active:time.sleep(min(.05,remaining(deadline)))
         result=aggregate(expected,results);remaining(deadline)
         result['metrics'].update(routing_suite='full',resource_contract=contract(),case_workers=case_workers,

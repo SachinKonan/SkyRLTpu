@@ -60,6 +60,11 @@ def freeze(model, destination):
     summary=json.loads((destination/'complete.json').read_text())
     if summary.get('drafted',summary.get('total'))!=1024 or summary.get('optimizer_steps')!=0:
         raise ValueError('unexpected original generation budget')
+    from .bootstrap import identity
+    source_contract=json.loads((destination/'contract.json').read_text())
+    if (identity(source_contract['contract'])!=source_contract['sha256'] or
+            source_contract['sha256']!=summary['contract_sha256']):
+        raise ValueError('original bootstrap contract checksum mismatch')
     programs={};ids=set();occurrences=[]
     for row in sorted(records,key=lambda r:r['relative']):
         old=row['record'];code=old.get('code','')
@@ -116,10 +121,24 @@ def import_pool(manifest, verdicts, destination, *, target_run, evaluator_sha256
     pool=dict(step=0,states=states,initial_states=states,puct_n={},puct_m={},puct_T=0)
     valid_hashes={sha for sha,_ in good};old=manifest['occurrences']
     def timeout(message):return any(v in message.lower() for v in ['timeout','timed out','exhausted budget','deadline'])
+    old_valid={v['source_sha256'] for v in old if v['old_correctness']==1}
+    topology_minima={}
+    for sha,verdict in good:
+        from .feedback import routing_cases
+        for name,row in routing_cases(verdict['metrics'])['topologies'].items():
+            candidate=dict(source_sha256=sha,swaps=row['swaps'])
+            if name not in topology_minima or (candidate['swaps'],sha)<(topology_minima[name]['swaps'],topology_minima[name]['source_sha256']):
+                topology_minima[name]=candidate
     summary=dict(source_manifest_sha256=expected,evaluator_sha256=evaluator_sha256,resource_contract=contract(),
         target_run=target_run,model=manifest['model'],drafts=1024,unique_programs=len(programs),
         raw_valid_before=manifest['old_valid'],raw_valid_after=sum(v['source_sha256'] in valid_hashes for v in old),
         unique_valid_after=len(good),retained=len(states),pool_sha256=identity(pool),optimizer_steps=0,
+        unique_valid_before=len(old_valid),newly_valid_unique=len(valid_hashes-old_valid),
+        unique_timeouts_before=len({v['source_sha256'] for v in old if timeout(v['old_message'])}),
+        unique_timeouts_after=sum(timeout(v.get('msg','')) for v in verdicts.values()),
+        regrade_program_wall_seconds=sum(v['metrics'].get('worker_seconds',0) for v in verdicts.values()),
+        regrade_cpu_seconds=sum(v['metrics'].get('process_cpu_seconds',0) for v in verdicts.values()),
+        topology_minima=topology_minima,topology_minima_note='May be different policies; not one combined score vector',
         raw_timeouts_before=sum(timeout(v['old_message']) for v in old),
         raw_timeouts_after=sum(timeout(verdicts[v['source_sha256']].get('msg','')) for v in old),
         newly_valid_drafts=sum(v['old_correctness']==0 and v['source_sha256'] in valid_hashes for v in old),

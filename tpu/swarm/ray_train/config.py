@@ -537,6 +537,8 @@ class Config:
                 raise ValueError('parallel routing requires full suite and systemd runtime')
             if type(slots) is not int or not 1 <= slots <= 10:
                 raise ValueError('parallel routing supports at most ten programs per host')
+            if self.cache.reserve_gib < slots * 20 + 64:
+                raise ValueError('parallel routing cache reserve must cover grading plus 64 GiB for services')
             if int(self.client_env.get('EVAL_TIMEOUT', '0')) < 4200:
                 raise ValueError('parallel routing needs queue allowance plus 2100-second outer runtime')
             if self.client_env.get('SCIENCE_ROUTING_EVALUATOR', 'parallel-v2') != 'parallel-v2':

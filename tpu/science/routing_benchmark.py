@@ -44,11 +44,11 @@ def child(request):
     save(request['result'],verdict)
 
 
-def evaluate_one(root,output,source,mode,seconds,label):
+def evaluate_one(root,output,source,mode,seconds,label,slots=1):
     from .routing_resources import acquire
     from .worker import process_identity
     folder=output/label;folder.mkdir(parents=True,exist_ok=False)
-    queued=time.monotonic();slot,cpus,lease=acquire(slots=1,deadline_seconds=60)
+    queued=time.monotonic();slot,cpus,lease=acquire(slots=slots,deadline_seconds=2400)
     with lease:
         waited=time.monotonic()-queued;unit='routing-benchmark-'+uuid.uuid4().hex
         request=dict(root=str(root),work=str(folder/'evaluation'),result=str(folder/'result.json'),
@@ -64,6 +64,14 @@ def evaluate_one(root,output,source,mode,seconds,label):
             '--property=OOMPolicy=stop','--working-directory='+str(root),
             '--setenv=PYTHONPATH='+str(root),'--setenv=OPENBLAS_NUM_THREADS=1','--setenv=OMP_NUM_THREADS=1',
             str(root/'.science/venv/bin/python'),'-m','tpu.science.routing_benchmark','--child',str(folder/'request.json')]
+        if mode=='production':
+            from .routing_resources import contract
+            (folder/'source.py').write_text(source)
+            save(folder/'request.json',dict(task='routing',root=str(root),work=request['work'],
+                source=str(folder/'source.py'),routing_suite='full',resource_contract=contract()))
+            cmd=cmd[:-4]+['-m','tpu.science.worker','--request',str(folder/'request.json'),
+                '--result',request['result'],'--owner-pid',str(request['owner_pid']),
+                '--owner-start',request['owner_start']]
         started=time.monotonic()
         try:
             with (folder/'unit.log').open('wb') as log:

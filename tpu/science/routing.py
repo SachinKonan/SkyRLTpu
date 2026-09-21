@@ -37,7 +37,7 @@ def scaffold(root, body):
     return prefix+START+'\n'+body+'\n'+END+suffix
 
 
-def verify(root, suite_path, output, progress=None):
+def verify(root, suite_path, output, progress=None, *, score=True):
     verifier=load_verifier(root)
     specs=verifier._load_suite_metadata(Path(suite_path))
     rows=output.get('cases')
@@ -63,7 +63,10 @@ def verify(root, suite_path, output, progress=None):
         diagnostics.append(dict(case=name,swaps=swaps,added_cnots=3*swaps,
                                 baseline_added_cnots=spec.original_cnot_added,weight=spec.weight))
         if progress is not None:progress(diagnostics[-1],len(diagnostics))
-    reward,metrics=qubit(baseline,candidate,weights)
+    # Individual cases can have zero baseline SWAPs. They are verified without
+    # forming an undefined 0/0 reward; only the complete suite is scored.
+    if score:reward,metrics=qubit(baseline,candidate,weights)
+    else:reward,metrics=None,{}
     metrics.update(cases=diagnostics,case_count=len(rows))
     return reward,metrics
 

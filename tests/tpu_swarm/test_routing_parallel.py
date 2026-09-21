@@ -94,7 +94,7 @@ def test_feedback_targets_only_complete_topologies():
 def test_profile_resource_contract_is_opt_in():
     old=Config.load('tpu/swarm/ray_train/profiles/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920-10step-deployment.json')
     assert old.science_routing_evaluator=='serial-v1'
-    new=replace(old,science_routing_evaluator='parallel-v2',science_routing_slots_per_host=10)
+    new=replace(old,science_routing_evaluator='parallel-v2',science_routing_slots_per_host=10,cache=replace(old.cache,reserve_gib=264))
     new.validate();assert new.ray_cpus_per_host==108
     for config in [replace(new,science_routing_slots_per_host=11),replace(new,systemd_runtime=False),
                    replace(new,client_env={**new.client_env,'EVAL_TIMEOUT':'1900'})]:
@@ -137,3 +137,40 @@ def test_timeout_feedback_preserves_50_verified_cases_and_all_72_statuses(tmp_pa
     assert all(row[2] is None and row[4] is None for row in rows[50:])
     for topology in feedback['metrics']['topologies'].values():
         if not topology['complete']:assert topology['gap_to_gemini'] is None
+
+
+def test_regrade_import_rejects_partial_rewards_and_resets_history(tmp_path):
+    import hashlib
+    from tpu.science.routing_regrade import digest,import_pool
+    from tpu.science.rewards import valid,qubit,invalid
+    from tpu.science.seed_pool import verify_pool
+    programs=[];verdicts={};occurrences=[]
+    for index,swaps in enumerate([2,1,None]):
+        code=f'RUST_CODE = "fixture {index}"';sha=hashlib.sha256(code.encode()).hexdigest()
+        programs.append(dict(source_sha256=sha,code=code))
+        if swaps is None:r=invalid('compilation error')
+        else:
+            rows=[dict(case=s['id'],swaps=swaps,added_cnots=swaps*3,
+                       baseline_added_cnots=s['original_cnot_added'],weight=s['weight']) for s in manifest()['cases']]
+            reward,m=qubit([r['baseline_added_cnots'] for r in rows],[r['added_cnots'] for r in rows],[r['weight'] for r in rows])
+            r=valid(reward,dict(m,cases=rows))
+        r['metrics'].update(source_sha256=sha,resource_contract=resources.contract(),regrade_evaluator_sha256='pinned')
+        verdicts[sha]=r;occurrences.append(dict(source_sha256=sha,old_correctness=0,old_message='timeout'))
+    source=dict(programs=programs,unique_programs=3,model='gemma',occurrences=occurrences,old_valid=0,prompt_provenance='Historical fixture')
+    source['sha256']=digest(source)
+    summary=import_pool(source,verdicts,tmp_path/'import',target_run='fresh',evaluator_sha256='pinned')
+    pool=verify_pool(tmp_path/'import/puct_sampler_step_000000.json',summary['pool_sha256'])
+    assert summary['retained']==2 and summary['newly_valid_unique']==2
+    assert pool['puct_n']=={} and pool['puct_T']==0 and pool['step']==0
+    assert pool['states'][0]['code']==programs[1]['code']
+    verdicts[programs[0]['source_sha256']]['metrics']['cases'].pop()
+    with pytest.raises(ValueError,match='72'):
+        import_pool(source,verdicts,tmp_path/'bad',target_run='fresh',evaluator_sha256='pinned')
+
+
+def test_zero_baseline_case_is_verified_without_individual_reward():
+    from tpu.science.routing_parallel import verified_case
+    zero=case('zero',0);zero['metrics']['cases'][0]['baseline_added_cnots']=0
+    assert verified_case('zero',zero)['swaps']==0
+    r=aggregate(['zero','nonzero'],dict(zero=zero,nonzero=case('nonzero',1)))
+    assert r['reward']==pytest.approx(12/(12+3))
