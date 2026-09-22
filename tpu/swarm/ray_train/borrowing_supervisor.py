@@ -55,12 +55,14 @@ except Exception as exc:
 
 
 def target_identity_matches(job_run_id, target_run_id):
-    """Accept the explicit optional-farm job suffix used by duplicated runs."""
+    """Accept only explicit, append-only relaunch labels for the same run."""
     if not job_run_id or not target_run_id:
         return False
     if job_run_id == target_run_id:
         return True
-    return bool(re.fullmatch(re.escape(target_run_id) + r'-optional-farm-r[0-9]+', job_run_id))
+    suffix = job_run_id[len(target_run_id):] if job_run_id.startswith(target_run_id) else ''
+    return bool(re.fullmatch(
+        r'(?:-optional-farm-r[0-9]+(?:-after-pwc)?|-requeue-[0-9]{8})', suffix))
 
 
 def rpc(ssh_dir, cluster, action, port, body=None):
