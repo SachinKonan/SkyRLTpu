@@ -245,3 +245,48 @@ Under the exact pool's scheduling file lock, all eight hosts were checked: no ac
 After repeating the idle check, the standard SkyPilot state API cleared only 1467's stale `current_cluster_name`; no job, VM, or farm was cancelled or restarted. The normal controllers immediately selected worker 681 for **Muse PWC 1482**. Its existing `sky.exec` request was dispatched with the normal request lock and finished SUCCEEDED. Fresh worker logs show its new payload installing grading dependencies. Thus one workload has restarted setup, while the other five jobs remain queued. No completed generation or optimizer update is established for 1482 yet. Although task priorities were set on submission, the observed controller scheduling selected PWC ahead of pending baselines; do not claim enforced baseline-first dispatch.
 
 This was a targeted operational repair, not a permanent fix to SkyPilot's failed-recovery reservation lifecycle. A future failed attempt could require the same evidence-driven reconciliation. Evidence: `idle-fleet-diagnosis.json`, `surviving-worker-idle.json`, `idle-scheduler-reservations.json`, `worker681-before-recovery.json`, `disk-681-rank0-qwen-r2-cleanup.json`, `worker681-reservation-repair.json`, `worker681-pwc-dispatch.json`, and `worker681-restarted-workload.json`, all under `.science/routing-relaunch-20260921/`. The first device probe used nonexistent `/dev/vfio/0` and was not accepted as idle evidence; the successful repair checked dynamically discovered `/dev/accel*` on all eight hosts.
+
+
+## Qwen PWC disk-admission repair (21:20 EDT)
+
+Qwen PWC 1483 failed local job 12 on worker 681 because the root filesystem had 29.45 GiB free, below the unchanged 30-GiB startup gate. This gate runs before RAM-cache admission. The actual boot block device is 100 GiB (`/dev/sda`), with an approximately 97-GiB root filesystem, despite SkyPilot displaying disk=300. No disk or filesystem resizing was attempted.
+
+Under the pool scheduling lock, all eight hosts had no active executor runtime units or TPU-device owners, and only pending/recovering 1483 reserved worker 681. Jobs 1236, 1237, and 1466 were confirmed CANCELLED. Only their reproducible environment/source directories and the cancelled 1466 code bundle's CPU environment, Rust toolchain/cache, and compiled router target were removed. The old CPU readiness marker was invalidated first. All run directories, checkpoints, grading outputs, and logs were preserved. Disk free space rose from 29.40 to 35.18 GiB.
+
+After rechecking ownership and idleness, 1483's stale cluster reservation was cleared using the standard SkyPilot state API. The scheduler selected Gemma PWC 1481 for 681; Qwen PWC 1483 remains queued without a worker. The existing Gemma launch request 929bc149-7736-421d-a822-25930af65022 was dispatched through the normal request lock and succeeded. Its payload advanced to CPU dependency setup; head disk then had 33.46 GiB free. This establishes recovery past the original disk gate, not Qwen training success. No jobs or TPU VMs were cancelled, and worker 727's Muse run and farms were untouched.
+
+Qwen PWC's immutable profile already configures tmpfs model/compilation caches: 96 GiB trainer cap, 128 GiB inference cap, and 240 GiB runtime reserve. HF assets, Orbax base weights, and JAX/vLLM compilation files are restored beneath `<root>/ram`; the code validates tmpfs and rejects swap. Environments, source bundles, logs, grading workspaces, and checkpoint staging still consume disk, so RAM-backed model caches do not eliminate the disk-space gate.
+
+Evidence: `.science/routing-relaunch-20260921/qwen1483-{disk-inspection,cache-inventory,block-device-inventory,cleanup-preflight,cleanup-result,reservation-repair,disk-repair-next-dispatch,disk-fix-verification}.json`. The targeted operational helper is `fix_qwen1483_disk.py` in the same evidence directory.
+
+
+## Cache replacements submitted and Muse farm failure identified (22:20 EDT)
+
+Gemma PWC 1481 passed the disk gate but failed trainer tmpfs admission with the original 128-GiB cap and 240-GiB runtime reserve. Its failed setup reduced head free disk to 29.66 GiB again, and its pending reservation kept worker 681 idle. A second, broader read-only inventory identified 28 GiB of reproducible installation/source/build directories. Under the pool scheduling lock, all eight hosts were verified idle and only failed 1481 owned the worker. The inventoried head-host installations were removed after checking for process references; CPU readiness markers were invalidated first. All run directories, model/checkpoint caches, logs, and grading results were preserved. Actual free disk rose to 52.63 GiB. Worker 727 and its active Muse job were untouched.
+
+The three non-running old jobs were cancelled and replaced after verifying immutable code objects, task hashes, canonical seed-pool hashes, and absence of optimizer checkpoint archives. The first submission preflight incorrectly compared the raw JSON file hash against the canonical pool identity; it stopped before cancellation. The corrected check uses the same canonical identity as runtime seed validation.
+
+| Old job | New job | Model / method | New configuration |
+|---|---|---|---|
+| 1453 | 1491 | Gemma mean baseline | trainer tmpfs 96 GiB, runtime reserve 240 GiB |
+| 1467 | 1492 | Muse mean baseline | trainer tmpfs 96 GiB, runtime reserve 240 GiB |
+| 1481 | 1493 | Gemma adaptive PWC rho=0.5 | trainer tmpfs 96 GiB, runtime reserve 240 GiB |
+
+All three old jobs are confirmed CANCELLED. Qwen 1473/1483 already have the reduced cap and were retained; Muse PWC 1482 is live on 727 and was retained. Model/seed pools, learning settings, evaluator, farm borrowing, and ten-step limits match the previous runs; only trainer cache budget and fresh run/root identifiers change. Profiles are committed at be0f1806. Prior Gemma sampling results remain archived, including reward 0.5395005455. The local rollout registry aliases and replacement history now reference 1491/1492/1493.
+
+The scheduler selected Gemma 1491 for worker 681. Its existing pending sky.exec request 0da364bc-ef6b-44d4-a8d6-686a6100007a was executed through the normal request lock and succeeded. Worker-local logs show fresh payload setup. Queued: Muse baseline 1492, Gemma PWC 1493, Qwen baseline 1473, Qwen PWC 1483. RUNNING does not yet prove a trainer update.
+
+Read-only farm logs resolve Muse 1482's original HTTP error: at 01:06:57 UTC on September 22, old Muse farm job 1474's engine hit `RESOURCE_EXHAUSTED: E0101 RuntimeProgramAllocationFailure` while loading `jit__substitute_placeholder_token` in TPU inference's asynchronous token-substitution path. Its vLLM engine died and `/v1/completions` returned HTTP 500. The borrower marks the lease lost on this failure; concurrent requests then raise BorrowingProtocolError and fall back locally. The borrower log intentionally records only exception class, so the engine traceback was necessary to establish the failure. This is a TPU program-allocation failure, not evidence of a host disk problem or missing farm discovery.
+
+The farm owner has separately replaced 1474 with Muse farm 1490 on worker 182; this thread only inspected it. In the latest Muse 1482 snapshot, all 512 step-zero rollouts have completed locally; no remote completion is recorded, and the old lease is still not reserved/ready. RunBorrower prepares/reacquires at the next sampling phase. Updating discovery URLs or replacing the farm does not revive an already lost lease during the existing phase. This does not establish successful generation on replacement farm 1490.
+
+Evidence under `.science/routing-relaunch-20260921/`: `worker681-install-cleanup-{preflight,result}.json`, `cache96-repair-submit-{preflight,final}.json`, `gemma1491-dispatch.json`, `muse-farm-error-evidence.json`, and `muse1482-farm-status-after-replacement.json`.
+
+
+## PWC-first dispatch corrected (22:23 EDT)
+
+The user reiterated that PWC is the priority. Gemma baseline 1491 had been selected by the scheduler; letting it take the free worker was incorrect. Baselines 1491 (Gemma), 1492 (Muse), and 1473 (Qwen) were cancelled after confirming no optimizer checkpoint archives. Their artifacts and seed pools remain preserved in `baseline_deferred_for_pwc` in the rollout registry for a later explicitly scheduled baseline phase. They are not queued and should not be described as queued or automatically resuming.
+
+Only three active managed jobs remain in the v4-64 queue: Muse PWC 1482 on worker 727, Gemma PWC replacement 1493 assigned to worker 681, and Qwen PWC 1483 waiting for capacity. All use adaptive PWC rho=0.5 with importance_sampling loss and a ten-step cap. Muse's live job is untouched. Gemma and Qwen use the reduced 96-GiB trainer-cache cap. The normal request-locking wrapper dispatches Gemma 1493's existing sky.exec request 6c6bc9e4-295c-489b-9f03-56dcebfd0a04.
+
+SkyPilot task resource priority did not enforce method ordering in the earlier observed dispatch races. Removing baseline jobs from the active queue is the concrete way this workflow now enforces PWC-first. Evidence: `pwc-priority-baseline-cancel-intent.json`, `pwc-priority-dispatch-current.json`, and `gemma1493-dispatch.json`.
