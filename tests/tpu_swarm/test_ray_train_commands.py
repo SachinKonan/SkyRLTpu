@@ -206,7 +206,7 @@ def test_v5p_profiles_inherit_the_legacy_cell_defaults(profile):
     assert cfg.model_preset == "qwen3.5-27b"
     assert cfg.inference.routing == "direct"
     assert cfg.inference.prefix_caching and not cfg.inference.chunked_prefill
-    assert cfg.inference.chunk_tokens == 8192 and cfg.inference.max_loras == 8
+    assert cfg.inference.chunk_tokens == 8192 and cfg.inference.max_loras == 1
     assert not (cfg.inference.skip_precompile or cfg.inference.batched_rpa_kernel or cfg.inference.ragged_conv1d)
     assert cfg.inference.max_sequences == 128
     assert cfg.trainer.seq_buckets == "4096,8192,12288,16384,20480" and cfg.trainer.minimal_fb_output
@@ -225,14 +225,14 @@ def test_v5p_profiles_inherit_the_legacy_cell_defaults(profile):
 
 
 def test_qwen_preset_reproduces_the_legacy_vllm_command_line():
-    """tpu/start_vllm_tpu.sh + cell_worker.sh qwen case: prefix caching on, 8 LoRA
+    """tpu/start_vllm_tpu.sh + cell_worker.sh qwen case: prefix caching on, one LoRA
     slots, 128 sequences, 22528 context, 8192 batched tokens at 0.90, no chunked
     prefill flag, the text-only multimodal limit."""
     cfg = v5p_config()
     cmd = inference_command(cfg, ROOT, ROOT / "source", ROOT / "model", ROOT / "run")
     assert "--enable-prefix-caching" in cmd and "--enable-chunked-prefill" not in cmd
     for key, value in (("--tensor-parallel-size", "4"), ("--max-model-len", "22528"),
-                       ("--max-num-seqs", "128"), ("--max-loras", "8"), ("--max-lora-rank", "32"),
+                       ("--max-num-seqs", "128"), ("--max-loras", "1"), ("--max-lora-rank", "32"),
                        ("--max-num-batched-tokens", "8192"), ("--gpu-memory-utilization", "0.9"),
                        ("--limit-mm-per-prompt", '{"image":0,"video":0}'),
                        ("--download-dir", str(ROOT / "ram/hf/hub"))):

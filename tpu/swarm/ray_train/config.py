@@ -147,7 +147,9 @@ class Inference:
     # EXTERNAL_INFERENCE_TIMEOUT_SEC=7200; 21600 was the v4-64 launcher's).
     request_timeout: int = 7200
     restart_limit: int = 3
-    max_loras: int = 8
+    # Discovery serves one published adapter at a time. Multi-adapter
+    # experiments opt in explicitly with a larger value.
+    max_loras: int = 1
     max_adapter_upload_bytes: int = 2 * 1024**3
     # Shared inference farms require an exclusive, expiring ingress lease.
     require_lease: bool = False
