@@ -215,3 +215,22 @@ Evidence under `.science/routing-relaunch-20260921/`: `qwen-memory-audit.json`, 
 The user explicitly directed: "keep this pool focused on qubit routing." The v4-64 pool `tpuswarm-v4-64-central2-qwen35-erdos` is reserved in this workflow for the Gemma, Muse, and Qwen qubit-routing runs and their replacements. Do not place AC2, circuit optimization, or standalone inference farms in this pool. Continue borrowing external inference-farm capacity; farm management belongs to another agent. This is the operational allocation instruction, not a newly installed scheduler admission filter.
 
 A fresh inventory found exactly three nonterminal jobs in the pool: Gemma 1453, Muse 1467, and Qwen replacement 1473; all are qubit-routing jobs. No unrelated jobs required cancellation. GCP showed worker 681's v4-64 node READY/HEALTHY and one replacement v4-64 node CREATING. The prior 718/724 nodes were absent. Qubit recovery/submission remains queued against that changing capacity. Evidence: `.science/routing-relaunch-20260921/qubit-pool-workload-inventory.json` and `v464-loss-latest.json`.
+
+
+## Adaptive PWC comparisons submitted (20:00 EDT)
+
+The user approved additional Gemma, Muse, and Qwen qubit runs with adaptive PWC at rho=0.5. Existing mean-baseline runs remain submitted and were not cancelled or replaced by these comparisons. All new jobs target `tpuswarm-v4-64-central2-qwen35-erdos`; no pool or farm management settings were changed. Task priority is 100 versus 110 on the existing baselines, so these additional comparisons do not intentionally outrank baseline recoveries.
+
+| Model | PWC job | Controller status | Assigned worker |
+|---|---:|---|---|
+| Gemma | 1481 | PENDING | Unassigned |
+| Muse | 1482 | STARTING | Unassigned |
+| Qwen | 1483 | PENDING | Unassigned |
+
+Each comparison uses its model's exact corrected seed pool (Gemma 111, Muse 82, Qwen 46 valid unique seeds), fresh adapter/optimizer/PUCT state, seed 1, ten optimizer steps, 16 parent groups × 32 generations, the same full-suite parallel-v2 grader/timeouts/feedback, native thinking/token limits, learning rate, and importance_sampling loss. Only the advantage estimator changes to `piecewise_valid_entropic_centered_adaptive`, with `TTD_ADV_PIECEWISE_RHO=0.5` and `TTD_ADV_PIECEWISE_INVALID_REWARD=0`. Run IDs, roots, and sick-marker paths are fresh. Farm discovery, run-scoped leases, attestation, and local fallback match the controls. Qwen uses the repaired 96-GiB trainer cache cap and 240-GiB runtime reserve from its r2 control. Compile-cache sources are retained.
+
+The configuration gate formerly admitted only Q20 routing for adaptive PWC. It now also admits full routing with the corrected `parallel-v2` evaluator; the unsupported legacy full-suite path and unrelated science paths remain rejected. `tpu/science/*.py`, the grader, and the estimator arithmetic are unchanged. The packaged training source overlay manifests and every overlay file were compared against each baseline's immutable bundle and matched byte-for-byte.
+
+Validation on Slurm CPU job 14247458: **49 passed**, covering advantage arithmetic/margins/centering/edge cases, supported configuration gates, unchanged settings in the matched profiles, and identical overlay manifests. Source/profile commit: `13f9208d`. Each new bundle and step-zero seed pool was uploaded immutably before its managed-job submission. Artifacts and hashes: `.science/routing-relaunch-20260921/training/pwc-{gemma,muse,qwen}/artifact.json`; submission receipts and final snapshot: `pwc-submission-summary.json` and `pwc-final-status.json`.
+
+Submission and STARTING status alone do not establish model readiness, a live farm lease, completed rollouts, or training steps. Those checks remain pending while capacity is assigned.
