@@ -290,3 +290,10 @@ The user reiterated that PWC is the priority. Gemma baseline 1491 had been selec
 Only three active managed jobs remain in the v4-64 queue: Muse PWC 1482 on worker 727, Gemma PWC replacement 1493 assigned to worker 681, and Qwen PWC 1483 waiting for capacity. All use adaptive PWC rho=0.5 with importance_sampling loss and a ten-step cap. Muse's live job is untouched. Gemma and Qwen use the reduced 96-GiB trainer-cache cap. The normal request-locking wrapper dispatches Gemma 1493's existing sky.exec request 6c6bc9e4-295c-489b-9f03-56dcebfd0a04.
 
 SkyPilot task resource priority did not enforce method ordering in the earlier observed dispatch races. Removing baseline jobs from the active queue is the concrete way this workflow now enforces PWC-first. Evidence: `pwc-priority-baseline-cancel-intent.json`, `pwc-priority-dispatch-current.json`, and `gemma1493-dispatch.json`.
+
+
+## PWC retry after cancellation teardown (22:28 EDT)
+
+Gemma PWC 1493's first local attempt (job 15) was rejected by the clean-host gate while a private Ray process from the cancelled baseline was still exiting. It had stopped by the subsequent inventory; no process was killed manually. After verifying no active runtime units, TPU owners, or private executor Ray processes on all eight hosts, reproducible old installation caches were also reclaimed from ranks 1-7, preserving recent r2 installations and all results/checkpoints. Free disk is now at least 46.31 GiB on every host (head 49.63 GiB). This addresses the rank-1 near-threshold disk budget as well as the earlier head-host issue.
+
+Under the pool scheduling lock, only 1493's stale reservation was cleared. The scheduler selected 1493 again for 681; existing request 072d0c57-6a00-43b3-a2d9-667d946c9899 was dispatched through the normal request lock. Muse PWC 1482 remains live on 727; Qwen PWC 1483 is the only other queued job. Baselines remain cancelled/deferred. Evidence: `worker681-all-host-install-inventory.json`, `worker681-all-host-cleanup-result.json`, `gemma1493-stale-reservation-cleared.json`, `pwc-second-worker-dispatch.json`.
