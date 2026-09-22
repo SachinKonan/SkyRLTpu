@@ -316,3 +316,14 @@ Before submission, all eight hosts on worker 721 were idle, with at least 83.43 
 PWC jobs are preserved: Muse 1482 on 727, Qwen 1483 on 722, Gemma 1493 on 681, all controller RUNNING. No farm, TPU VM, or pool configuration was changed. Other cancelled baseline jobs remain deferred.
 
 Evidence under `.science/routing-relaunch-20260921/`: `grpo-resume-candidate-inventory.json`, `grpo-resume-gemma-preflight/`, `grpo-resume-spare-worker-preflight.json`, `training/gemma-grpo-resume-s4/artifact.json`, `grpo1496-launch-requests.json`, `grpo1496-dispatch.json`, and `grpo1496-live-startup.json`.
+
+
+## GRPO 1496 discovery identity repaired (September 22, 00:55 EDT)
+
+The unique managed-job submission name introduced for continuation 1496 did not match the retained checkpoint run ID. The live discovery supervisor reported `target_identity_mismatch`, so the job never received a candidate list despite having borrowing enabled. This was a launch-metadata mistake, not missing Gemma support or a farm outage.
+
+After checking the live target run ID/model/instance, current worker 721 assignment, RUNNING status, and absence of another active job with the retained name, a compare-and-set update changed only `job_info.name` for job 1496 to `science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920`. The ID, task payload, run storage, controller, and runtime were unchanged. The original submission alias is retained in the rollout registry and receipt. No discovery service or farm was restarted or reconfigured.
+
+The existing supervisor's next tick at 00:54:48 EDT accepted 1496 and delivered `http://10.130.0.26:24800`; a worker-local GET confirmed the new list. Farm 1371 had become expired/reclaimable at that tick; Gemma PWC's farm 1485 remained leased to 1493. Job 1496 still had no reservation at the verification snapshot because its current sampling phase had already begun locally. The normal borrower can acquire and publish its adapter when the next phase begins; receiving an address alone is not evidence of a lease or completed remote generation. No manual mid-phase lease/adapter change was made.
+
+Evidence: `.science/routing-relaunch-20260921/grpo1496-discovery-name-fix-{intent,result}.json` and `grpo1496-discovery-repaired-live.json`.
