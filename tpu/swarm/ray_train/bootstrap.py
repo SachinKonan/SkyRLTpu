@@ -18,6 +18,14 @@ from .config import Config
 
 
 def workload_resources(config, rank):
+    families = config.grading_families
+    if config.inference_only and families:
+        # Farm hosts: one token per declared grading slot so Ray never packs
+        # more candidates onto a host than its partition can isolate.
+        tokens = {f"grading_{name}": spec["slots_per_host"] for name, spec in families.items()}
+        if "placement" in families:
+            tokens["placement_cpu_host"] = families["placement"]["slots_per_host"]
+        return {"TPU": 4, **tokens}
     if config.science_task == "placement":
         if config.science_placement_backend == 'cpu':
             return {"TPU": 4, "placement_cpu_host": config.science_placement_slots_per_host}
@@ -32,6 +40,9 @@ def workload_resources(config, rank):
     if config.inference_only_ranks is not None and rank not in config.inference_only_ranks:
         # An omitted TPU key enables Ray's automatic hardware detection.
         return {"TPU": 0}
+    if "ac2" in families:
+        # Trainer hosts bound local AC2 grading by the same slot token.
+        return {"TPU": 4, "grading_ac2": families["ac2"]["slots_per_host"]}
     return {"TPU": 4}
 
 

@@ -104,6 +104,13 @@
     "JAX_LOG_COMPILES": "1",
     "JAX_EXPLAIN_CACHE_MISSES": "1"
   },
+  "grading": {
+    "families": {
+      "ac2": {"slots_per_host": 16, "cpus": 2, "memory_gib": 4}
+    },
+    "farm_transport": true,
+    "local_systemd": true
+  },
   "client_learning_rate": "1.5e-4",
   "zone": "us-central2-b",
   "bootstrap_layers": 0,

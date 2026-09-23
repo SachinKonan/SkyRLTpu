@@ -59,6 +59,34 @@ class Cache:
     sync_seconds: int = 60
 
 
+GRADING_FAMILIES = ('ac2', 'routing', 'placement')
+
+
+@dataclass(frozen=True)
+class Grading:
+    """CPU grading capacity on this profile's hosts (trainer or farm).
+
+    ``families`` maps 'ac2' | 'routing' | 'placement' to
+    ``{slots_per_host, cpus, memory_gib}``; unspecified keys take the family
+    defaults (see ``Config.grading_families``). On an inference-only farm the
+    families are served through the lease-fenced grading endpoints; on a
+    trainer they bound the local Ray pool. ``farm_transport`` lets the
+    trainer's client dispatch candidates to its leased farms as well.
+    """
+    families: dict = field(default_factory=dict)
+    farm_transport: bool = False
+    # Local AC2 grading also runs in a systemd-limited unit (parity with farms).
+    local_systemd: bool = True
+    max_infra_retries: int = 3
+    queue_factor: int = 2
+    max_requests: int = 4096
+    result_retention_seconds: int = 900
+    poll_seconds: float = 2.0
+    long_poll_seconds: int = 20
+    farm_refresh_seconds: int = 10
+    stdout_limit_bytes: int = 16384
+
+
 @dataclass(frozen=True)
 class Trainer:
     # Legacy v5p-32 cell shape: one trainer host (4 chips, fsdp 4) and three
@@ -390,6 +418,7 @@ class Config:
     # Extra environment for the trainer (Tinker API server) process only,
     # e.g. TUNIX_LORA_MIX_GAMMA. Applied after the launcher's own settings.
     trainer_env: dict[str, str] = field(default_factory=dict)
+    grading: Grading = field(default_factory=Grading)
     retired_task_ids: list[str] = field(default_factory=list)
     retired_processes: dict = field(default_factory=dict)
 
@@ -404,12 +433,76 @@ class Config:
     @property
     def grading_farm_transport(self):
         """Whether the client-side grading transport may use leased farms."""
-        grading = getattr(self, 'grading', None)
-        return bool(grading is not None and getattr(grading, 'farm_transport', False))
+        return bool(self.grading.farm_transport)
+
+    @property
+    def grading_families(self):
+        """Normalized {family: {slots_per_host, cpus, memory_gib}} with defaults."""
+        parallel = self.science_routing_evaluator == 'parallel-v2'
+        modern = self.science_placement_runtime == 'cpu300-4g-v1'
+        defaults = {
+            'ac2': dict(slots_per_host=16, cpus=2, memory_gib=4),
+            'routing': dict(slots_per_host=self.science_routing_slots_per_host,
+                            cpus=10 if parallel else 4, memory_gib=20 if parallel else 8),
+            'placement': dict(slots_per_host=self.science_placement_slots_per_host,
+                              cpus=4, memory_gib=4 if modern else 8),
+        }
+        result = {}
+        for name, raw in (self.grading.families or {}).items():
+            result[name] = dict(defaults.get(name, {}), **(raw or {}))
+        return result
+
+    @property
+    def grading_science_task(self):
+        """Science family this profile grades: from families (farm) or TTD_ENV (trainer)."""
+        families = self.grading_families
+        if 'routing' in families:
+            return 'routing'
+        if 'placement' in families:
+            return 'placement'
+        return self.science_task
+
+    def _validate_grading(self):
+        g = self.grading
+        families = self.grading_families
+        if not isinstance(g.families, dict) or not set(g.families) <= set(GRADING_FAMILIES):
+            raise ValueError(f'grading.families keys must be a subset of {GRADING_FAMILIES}')
+        for name, spec in families.items():
+            if set(spec) != {'slots_per_host', 'cpus', 'memory_gib'}:
+                raise ValueError(f'grading family {name} accepts slots_per_host, cpus, memory_gib only')
+            if any(type(spec[k]) is not int or spec[k] < 1 for k in ('slots_per_host', 'cpus', 'memory_gib')):
+                raise ValueError(f'grading family {name} limits must be positive integers')
+        if 'ac2' in families and not (families['ac2']['slots_per_host'] <= 64 and families['ac2']['cpus'] <= 8
+                                      and families['ac2']['memory_gib'] <= 64):
+            raise ValueError('ac2 grading: at most 64 slots, 8 CPUs and 64 GiB per host')
+        if 'routing' in families and 'placement' in families:
+            raise ValueError('routing and placement grading cannot share one host partition')
+        for key in ('max_infra_retries', 'queue_factor', 'max_requests', 'result_retention_seconds',
+                    'long_poll_seconds', 'farm_refresh_seconds', 'stdout_limit_bytes'):
+            if type(getattr(g, key)) is not int or getattr(g, key) < 1:
+                raise ValueError(f'grading.{key} must be a positive integer')
+        if type(g.poll_seconds) not in (int, float) or g.poll_seconds <= 0:
+            raise ValueError('grading.poll_seconds must be positive')
+        if type(g.farm_transport) is not bool or type(g.local_systemd) is not bool:
+            raise ValueError('grading flags must be boolean')
+        if g.farm_transport and (not self.borrows_inference or self.inference_only):
+            raise ValueError('grading.farm_transport requires a borrowing trainer')
+        if families and g.local_systemd and not self.systemd_runtime:
+            raise ValueError('systemd-limited grading requires systemd_runtime')
+        if families and self.inference_only:
+            v = self.inference
+            if not v.require_lease or not self.systemd_runtime or v.routing != 'ingress':
+                raise ValueError('farm grading requires a lease-fenced systemd farm through ingress')
+            needed = 64 + sum(f['slots_per_host'] * f['memory_gib'] for f in families.values())
+            if self.cache.reserve_gib < needed:
+                raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for slot memory plus services')
 
     @property
     def ray_cpus_per_host(self):
         # Leave scheduler capacity for controller/Serve actors as well as graders.
+        if self.inference_only and self.grading_families:
+            # Engine (8) + ingress (1) + overhead (8) + the declared grading slots.
+            return 17 + sum(f['slots_per_host'] * f['cpus'] for f in self.grading_families.values())
         if self.science_routing_evaluator == 'parallel-v2':
             return 10 * self.science_routing_slots_per_host + 8
         if self.science_task == 'placement' and self.science_placement_backend == 'cpu':
@@ -463,7 +556,7 @@ class Config:
         inference.update(data.get("inference") or {})
         data["inference"] = inference
         for key, kind in (("ports", Ports), ("cache", Cache), ("trainer", Trainer),
-                          ("inference", Inference)):
+                          ("inference", Inference), ("grading", Grading)):
             data[key] = kind(**(data.get(key) or {}))
         config = cls(**data)
         config.validate()
@@ -557,6 +650,7 @@ class Config:
             raise ValueError('remote_only must be boolean')
         if self.inference.remote_only:
             self._validate_remote_only()
+        self._validate_grading()
         if (self.inference.external_pool_lease_seconds <=
                 3 * max(self.inference.external_pool_heartbeat_seconds, self.inference.external_pool_rpc_timeout)):
             raise ValueError('external lease must allow at least three heartbeat/RPC intervals')

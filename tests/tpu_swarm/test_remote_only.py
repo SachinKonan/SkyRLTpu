@@ -602,7 +602,8 @@ def test_zero_engine_ingress_serves_control_plane_and_routes_groups_to_farms(tmp
                 services = (await http.get('/skyrl/v1/borrowing/services')).json()
                 assert services['remote_only'] and services['target_leases'] == 2 and services['candidate_limit'] == 16
                 assert (await http.post('/tokenize', json={'model': cfg.model, 'prompt': 'x'})).status_code == 503
-                assert (await http.get('/skyrl/v1/grading/farms')).status_code == 409
+                farms = await http.get('/skyrl/v1/grading/farms')
+                assert farms.status_code == 200 and farms.json()['farms'] == []
                 # Groups queue while no farm is held; the alert fires; nothing fails.
                 payload = dict(model=cfg.model, prompt=[1, 2], n=2, max_tokens=4)
                 pending = asyncio.create_task(http.post('/v1/completions', json=payload))
@@ -614,6 +615,9 @@ def test_zero_engine_ingress_serves_control_plane_and_routes_groups_to_farms(tmp
                 assert reservation.status_code == 200 and sorted(reservation.json()['held']) == ['http://farm1', 'http://farm2']
                 assert reservation.json()['accepted_compatibility'] == ['c' * 64]
                 assert (await http.get('/status')).json()['capabilities']['compatibility_sha256'] == 'c' * 64
+                farms = (await http.get('/skyrl/v1/grading/farms')).json()['farms']
+                assert sorted(f['url'] for f in farms) == ['http://farm1', 'http://farm2']
+                assert all(f['token'].startswith('lease-') and f['capacity'] == 4 for f in farms)
                 begin = await http.post('/skyrl/v1/borrowing/begin',
                     json={'phase_id': 'phase1', 'bootstrap': True, 'expected_n': 2})
                 assert begin.status_code == 200 and begin.json()['remote_only']
