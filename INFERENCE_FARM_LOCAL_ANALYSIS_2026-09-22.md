@@ -1,5 +1,7 @@
 # Inference farm versus local inference — September 22, 2026
 
+**Correction from the subsequent engine audit:** Muse's local engines use default RPA (`USE_BATCHED_RPA_KERNEL=0`), while all four farm engines use experimental batched RPA (`1`), with KV block sizes 16 versus 256. The original configuration comparison below omitted this material difference. Timings remain valid, but batch size alone must not be treated as the explanation. The full corrected comparison, including Gemma, is in [MUSE_GEMMA_LOCAL_FARM_DIFFERENCES_2026-09-22.md](MUSE_GEMMA_LOCAL_FARM_DIFFERENCES_2026-09-22.md).
+
 The three models behave differently. Qwen's v4 farm is broadly comparable to its local v4 engines and contributes useful parallel capacity. Muse's v4 farm is approximately 3.5 times slower on completed groups and is now being excluded by the scheduler while its lease is retained. Gemma's previous v5p farm was approximately 3.5 times faster than local v4 on completed groups; its replacement v4 farm is instead constrained by KV-cache capacity and is currently slower than local v4.
 
 This is a read-only operational analysis of qubit-routing PWC jobs 1482 (Muse), 1483 (Qwen), and 1493 (Gemma). No jobs, farm configurations, scheduler settings, leases, or TPU resources were changed. The cancelled Gemma GRPO job 1496 is excluded. Measurements were collected around 10:58–11:08 a.m. EDT; the current-Gemma engine comparison ends at 11:01 a.m. EDT. Times in the JSON evidence are UTC.

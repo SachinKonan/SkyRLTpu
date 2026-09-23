@@ -1,0 +1,9 @@
+{
+  "url": "https://arxiv.org/html/2604.19341v2",
+  "tables": [
+    {
+      "id": "T5",
+      "text": "Supplementary Table 5 : Topology-level results for the discovered\nsuperconducting routing policy using Gemini. SABRE, LightSABRE, and SimpleTES with Gemini costs are reported\nas added SWAPs.\nThe reduction columns report the percentage decrease in Gemini added SWAPs\nrelative to the named baseline. The last row reports the unweighted mean over\nthe three topologies; its win/tie/loss entries are average counts per 24-case\ntopology. Added SWAPs vs. SABRE vs. LightSABRE Topology SABRE LightSABRE SimpleTES Reduction win/tie/loss Reduction win/tie/loss Q20 22,714 20,063 13,470 40.7% 15/6/3 32.9% 11/5/8 Willow 38,352 36,802 31,481 17.9% 22/2/0 14.5% 15/5/4 Heron 50,186 45,827 42,396 15.5% 21/2/1 7.5% 13/4/7 Topology mean 37,084.0 34,230.7 29,115.7 24.7% 19.3/3.3/1.3 18.3% 13.0/4.7/6.3"
+    }
+  ]
+}
