@@ -340,3 +340,234 @@ def test_contract_hooks_accept_a_set_and_claim_the_farm_hash(tmp_path):
             assert borrower.lease is None and 'borrow_incompatible_runtime' in events
             await borrower.end()
     asyncio.run(run())
+
+
+# --- MultiRunBorrower --------------------------------------------------------
+from tpu.swarm.ray_train.multi_borrowing import MultiRunBorrower
+
+
+class MultiFarm(Farm):
+    """Per-host programmable capabilities and completion status."""
+
+    def __init__(self):
+        super().__init__()
+        self.capabilities = {}
+        self.generate_status = {}
+        self.acquires = {}
+
+    async def __call__(self, request):
+        host, path = request.url.host, request.url.path
+        if path == '/acquire_lease' and host not in self.down and not json.loads(request.content).get('lease_id'):
+            self.acquires[host] = self.acquires.get(host, 0) + 1
+        if path == '/v1/completions' and host in self.generate_status and host not in self.down:
+            self.requests.append((host, path))
+            return httpx.Response(self.generate_status[host], json={'detail': 'rejected'})
+        if path == '/status' and 'X-Lease-ID' not in request.headers and host in self.capabilities:
+            self.requests.append((host, path))
+            return httpx.Response(200, json={'instance': self.incarnation,
+                                             'capabilities': {'compatibility_sha256': self.capabilities[host]}})
+        return await super().__call__(request)
+
+
+async def until(predicate, timeout=8):
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not predicate():
+        if asyncio.get_running_loop().time() > deadline:
+            raise AssertionError('condition not reached in time')
+        await asyncio.sleep(.02)
+
+
+def multi_case(tmp_path, operation, urls=('http://farm1', 'http://farm2'), **inference):
+    async def run():
+        raw = borrowing_config(tmp_path).to_dict()
+        raw['inference'].update(
+            external_pool_urls={raw['model']: list(urls)}, external_pool_updates=True,
+            external_pool_lease_scope='run', external_pool_require_initial=True,
+            external_pool_target_leases=2, external_pool_candidate_limit=8,
+            external_pool_heartbeat_seconds=1, external_pool_rpc_timeout=1,
+            external_pool_health_grace_seconds=1, external_pool_lease_seconds=30,
+            external_pool_prepare_timeout=20)
+        raw['inference'].update(inference)
+        cfg = Config.from_dict(raw)
+        archive = tmp_path / 'adapter.tar'
+        archive.write_bytes(b'adapter bytes v1')
+        farm = MultiFarm()
+        events = []
+        async with httpx.AsyncClient(transport=httpx.MockTransport(farm)) as client:
+            borrower = MultiRunBorrower(cfg, client, lambda event, **fields: events.append((event, fields)))
+            try:
+                await operation(borrower, farm, archive, events)
+            finally:
+                await borrower.close()
+            assert 'secret-' not in json.dumps(events)
+            assert not any('token' in json.dumps(f) for e, f in events)
+    asyncio.run(run())
+
+
+def held(borrower):
+    return sorted(m.url for m in borrower.held())
+
+
+def eligible(borrower):
+    return sorted(m.url for m in borrower.eligible_members())
+
+
+def test_multi_borrower_holds_two_leases_and_shares_generation(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        snapshot = await borrower.reserve()
+        assert snapshot['reserved'] and held(borrower) == ['http://farm1', 'http://farm2']
+        assert snapshot['held'] == ['http://farm1', 'http://farm2'] and snapshot['target'] == 2
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: len(eligible(borrower)) == 2)
+        assert borrower.eligible_pools() == [('http://farm1', 4), ('http://farm2', 4)]
+        for farm_key in ('http://farm1', 'http://farm2', None, None):
+            result = await borrower.generate(PAYLOAD, farm=farm_key)
+            assert result and len(result['choices']) == 2
+        hosts = {h for h, p in farm.requests if p == '/v1/completions'}
+        assert hosts == {'farm1', 'farm2'}
+        assert borrower.snapshot()['ready'] and borrower.lease is not None
+        assert borrower._eligible(borrower.lease)
+        await borrower.end('phase-1')
+        assert borrower.phase is None and held(borrower) == ['http://farm1', 'http://farm2']
+    multi_case(tmp_path, operation)
+
+
+def test_multi_borrower_farm_loss_keeps_the_other_farm_serving(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        await borrower.reserve()
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: len(eligible(borrower)) == 2)
+        farm.down.add('farm1')
+        assert await borrower.generate(PAYLOAD, farm='http://farm1') is None
+        await until(lambda: held(borrower) == ['http://farm2'])
+        assert eligible(borrower) == ['http://farm2']
+        result = await borrower.generate(PAYLOAD)
+        assert result and farm.requests[-1] == ('farm2', '/v1/completions')
+        assert any(e == 'borrow_heartbeat_failed' and f['service'] == 'http://farm1' for e, f in events)
+        # A recovered farm must republish the phase adapter before it serves again.
+        farm.owners.pop('farm1', None)
+        borrower.members['http://farm1'].uncertain_until = 0
+        farm.down.discard('farm1')
+        await until(lambda: eligible(borrower) == ['http://farm1', 'http://farm2'])
+        lease = borrower.members['http://farm1'].lease
+        assert lease.digest == farm.owners['farm1']['adapter_sha256'] and lease.adapter == farm.owners['farm1']['adapter_name']
+    multi_case(tmp_path, operation)
+
+
+def test_multi_borrower_all_farms_lost_then_replacement_serves_after_attestation(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        await borrower.reserve()
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: len(eligible(borrower)) == 2)
+        farm.down.update({'farm1', 'farm2'})
+        await until(lambda: held(borrower) == [])
+        assert borrower.eligible_pools() == [] and await borrower.generate(PAYLOAD) is None
+        assert not borrower.snapshot()['ready'] and borrower.snapshot()['reserved'] is False
+        await until(lambda: all(m.uncertain_until > 0 for m in borrower.members.values()))
+        # Unacknowledged releases fence each farm for one lease TTL; simulate
+        # the farm-side expiry (owners cleared) and the TTL elapsing.
+        farm.owners.clear()
+        for member in borrower.members.values():
+            member.uncertain_until = 0
+        farm.down.discard('farm2')
+        await until(lambda: held(borrower) == ['http://farm2'])
+        await until(lambda: eligible(borrower) == ['http://farm2'])
+        ready = [f for e, f in events if e == 'borrow_ready' and f['service'] == 'http://farm2'
+                 and f['phase'] == 'phase-1']
+        assert len(ready) == 2 and farm.owners['farm2']['adapter_sha256'] == ready[-1]['sha256']
+        member = borrower.members['http://farm2']
+        assert member.lease.digest == ready[-1]['sha256'] and member.lease.adapter.startswith('borrow-')
+        result = await borrower.generate(PAYLOAD)
+        assert result and len(result['choices']) == 2
+        assert farm.requests[-1] == ('farm2', '/v1/completions')
+    multi_case(tmp_path, operation)
+
+
+def test_multi_borrower_never_exceeds_target_and_never_double_acquires(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        await borrower.reserve()
+        assert held(borrower) == ['http://farm1', 'http://farm2']
+        assert farm.acquires == {'farm1': 1, 'farm2': 1}
+        await borrower.reserve()
+        await asyncio.sleep(1.5)  # A few reconcile ticks.
+        assert farm.acquires == {'farm1': 1, 'farm2': 1}
+        farm.down.add('farm1')
+        await until(lambda: held(borrower) == ['http://farm2', 'http://farm3'])
+        assert farm.acquires['farm3'] == 1 and farm.acquires['farm2'] == 1
+    multi_case(tmp_path, operation, urls=('http://farm1', 'http://farm2', 'http://farm3'))
+
+
+def test_multi_borrower_update_urls_keeps_live_leases_and_adds_candidates(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        await borrower.reserve()
+        assert held(borrower) == ['http://farm1']
+        borrower.update_urls('Qwen/Qwen3.5-27B', ['http://farm2', 'http://farm3'])
+        assert borrower.urls == ['http://farm2', 'http://farm3']
+        await until(lambda: held(borrower) == ['http://farm1', 'http://farm2'])
+        assert 'http://farm1' in borrower.members  # Live lease survives its removal from the list.
+        with pytest.raises(Exception):
+            borrower.update_urls('Qwen/Qwen3.5-27B', ['http://farm%d' % i for i in range(9)])
+    multi_case(tmp_path, operation, urls=('http://farm1',))
+
+
+def test_multi_borrower_learns_the_first_contract_and_rejects_others(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        farm.capabilities.update(farm1='c' * 64, farm2='d' * 64)
+        await borrower.reserve()
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: borrower.accepted == {'c' * 64})
+        await until(lambda: held(borrower) == ['http://farm1'])
+        await asyncio.sleep(1.5)
+        assert held(borrower) == ['http://farm1'] and borrower.required_contract == 'c' * 64
+        assert any(e == 'borrow_incompatible_runtime' and f['service'] == 'http://farm2' for e, f in events)
+        assert borrower.snapshot()['accepted_compatibility'] == ['c' * 64]
+    multi_case(tmp_path, operation, external_pool_attestation=True)
+
+
+def test_multi_borrower_configured_contract_list_accepts_both_hashes(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        farm.capabilities.update(farm1='c' * 64, farm2='d' * 64)
+        await borrower.reserve()
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: len(eligible(borrower)) == 2)
+        assert borrower.required_contract is None and borrower.accepts('c' * 64) and not borrower.accepts('e' * 64)
+    multi_case(tmp_path, operation, external_pool_attestation=True,
+               external_pool_required_compatibility=['c' * 64, 'd' * 64])
+
+
+def test_multi_borrower_request_failure_does_not_drop_a_lease(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        await borrower.reserve()
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: len(eligible(borrower)) == 2)
+        farm.generate_status['farm1'] = 503
+        assert await borrower.generate(PAYLOAD, farm='http://farm1') is None
+        assert held(borrower) == ['http://farm1', 'http://farm2']
+        del farm.generate_status['farm1']
+        await until(lambda: len(eligible(borrower)) == 2)
+        farm.generate_status['farm1'] = 422
+        with pytest.raises(RemoteRequestRejected):
+            await borrower.generate(PAYLOAD, farm='http://farm1')
+        assert eligible(borrower) == ['http://farm1', 'http://farm2']
+    multi_case(tmp_path, operation)
+
+
+def test_multi_borrower_close_releases_every_lease(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        await borrower.reserve()
+        assert set(farm.owners) == {'farm1', 'farm2'}
+        await borrower.close()
+        assert farm.owners == {} and borrower.closed
+        assert any(e == 'borrow_closed' for e, _ in events)
+        assert borrower.snapshot()['reserved'] is False
+    multi_case(tmp_path, operation)
+
+
+def test_multi_borrower_run_deadline_closes_everything(tmp_path):
+    async def operation(borrower, farm, archive, events):
+        await borrower.reserve()
+        borrower.run_deadline = 0
+        for member in borrower.members.values():
+            member.run_deadline = 0
+        await until(lambda: borrower.closed and farm.owners == {})
+    multi_case(tmp_path, operation)
