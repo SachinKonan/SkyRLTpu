@@ -517,6 +517,7 @@ class Config:
     @property
     def requires_source_overlay(self):
         return (not self.inference_only or self.adapter_count > 1 or self.inference.require_lease or self.is_recurrent_gemma or self.training_smoke
+                or bool(self.grading.families) or self.grading.farm_transport
                 or self.has_problem_prompt_overlay or self.has_adaptive_pwc_overlay
                 or self.has_answer_only_overlay or self.trainer.backward_warmup
                 or self.inference.hosts_per_engine > 1

@@ -15,9 +15,14 @@ import yaml
 from .config import ACCELERATOR_RUNTIME, Config
 
 
+GRADING_BUNDLE_FILES = ("__init__.py", "ac2_grade.py", "ac2_runner.py", "farm_resources.py", "cgroup_limits.py",
+                        "cpu_slots.py", "worker.py", "grading_dedup.py", "grading_transport.py",
+                        "routing_resources.py", "placement_resources.py", "rewards.py")
+
+
 def build(profile, output, *, _executor_only=False):
     config = Config.load(profile)
-    if config.science_task and not _executor_only:
+    if (config.science_task or config.grading_science_task) and not _executor_only:
         # A science launch also needs its grader code, inputs, environment and
         # host preparation. Never return an executable generic-only science job.
         from tpu.science.package_training import package
@@ -43,9 +48,16 @@ def build(profile, output, *, _executor_only=False):
                 or path.parent == package / "client_env" and path.name in ("pyproject.toml", "uv.lock")
             ):
                 bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
-        for name in ("select_v4_64_topology.py", "select_v6e_32_topology.py"):
+        for name in ("select_v4_32_topology.py", "select_v4_64_topology.py", "select_v6e_32_topology.py"):
             selector = repo / "tpu/swarm" / name
             bundle.add(selector, arcname=str(selector.relative_to(repo)))
+        if config.grading_families:
+            # Ray graders on farms and trainer hosts import these by reference
+            # from $code; farms have no science preamble for AC2-only grading.
+            for name in GRADING_BUNDLE_FILES:
+                path = repo / "tpu/science" / name
+                if path.is_file():
+                    bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
         if config.placement_ranks:
             # Bootstrap/configuration must know chip resources before the
             # placement payload prepares candidate and grader dependencies.
@@ -78,6 +90,8 @@ def build(profile, output, *, _executor_only=False):
         raise ValueError("profile must be in this package's profiles directory")
     is_v4 = config.accelerator.startswith("tpu-v4-")
     zone = config.effective_zone
+    # Graders resolve their job directories and runner module from $code.
+    worker_root = 'export SCIENCE_WORKER_ROOT="$code"\n' if config.grading_families else ''
     runtime = ACCELERATOR_RUNTIME[config.accelerator]
     # Each archive is immutable and has no shared-tree credentials or unrelated
     # agent edits. Existing training code comes from the SHA-pinned base bundle.
@@ -97,7 +111,7 @@ if [ ! -f "$code/.complete" ]; then
   touch "$code/.complete"
 fi
 export PYTHONPATH="$code:$code/tpu${{PYTHONPATH:+:$PYTHONPATH}}"
-exec python3 -m tpu.swarm.ray_train.bootstrap "$code/{source}"
+{worker_root}exec python3 -m tpu.swarm.ray_train.bootstrap "$code/{source}"
 ''')
     path = output / (config.run_id + ".yaml")
     path.write_text(yaml.safe_dump(task, sort_keys=False))

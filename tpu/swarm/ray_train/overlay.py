@@ -77,6 +77,16 @@ ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
 BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
                    'tpu/swarm/ray_train/borrowing_phase.py'}
+# Client-side grading transport (local Ray pool + leased farms) and the AC2
+# executor it dispatches; shipped whenever a profile declares grading families.
+GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.py',
+                 'tpu/science/__init__.py', 'tpu/science/grading_transport.py', 'tpu/science/grading_dedup.py',
+                 'tpu/science/ac2_grade.py', 'tpu/science/ac2_runner.py', 'tpu/science/farm_resources.py',
+                 'tpu/science/cgroup_limits.py', 'tpu/science/cpu_slots.py', 'tpu/science/worker.py',
+                 'tpu/science/routing_resources.py', 'tpu/science/placement_resources.py',
+                 'third_party/discover/ttt_discover/environments/sandbox_reward_evaluator.py',
+                 'third_party/discover/ttt_discover/tinker_utils/dataset_builder.py',
+                 'third_party/discover/examples/ac_inequalities/env.py'}
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 CHECKPOINT_FILES = {"skyrl/utils/checkpoint_mirror.py"}
 REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py"}
@@ -114,8 +124,10 @@ def manifest(repo, config=None):
         names.update(SMOKE_FILES)  # Propagate fatal grader errors through the training loop.
     if config is not None and config.training_smoke:
         names.update(SMOKE_FILES)
-    if config is not None and config.science_task:
+    if config is not None and (config.science_task or config.grading_science_task):
         names.update(SCIENCE_FILES | set(SMOKE_FILES))
+    if config is not None and (config.grading_families or config.grading_farm_transport):
+        names.update(name for name in GRADING_FILES if (Path(repo) / name).is_file())
     native_kv_heads = {'qwen3.5-27b': 4, 'muse-glimmer-30b': 2}
     if (config is not None and not config.inference_only
             and (config.attention_replay
@@ -167,6 +179,8 @@ def install(directory, destination):
     allowed.extend([base | WARMUP_FILES for base in [set(), *allowed]])
     allowed.extend([base | {"tpu/vllm_tpu_server.py"} for base in [set(), *allowed]])
     allowed.extend([base | BORROWING_FILES for base in [set(), *allowed]])
+    grading = {name for name in GRADING_FILES if (directory / name).is_file()} or GRADING_FILES
+    allowed.extend([base | grading for base in [set(), *allowed]])
     if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")
     for name, expected in records.items():

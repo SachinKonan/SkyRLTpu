@@ -13,8 +13,11 @@ from tpu.swarm.ray_train.config import Config
 
 def package(profile, output):
     config = Config.load(profile)
-    if not config.science_task or (config.inference_only and not config.bootstrap_only):
-        raise ValueError('expected a science training profile')
+    # Inference farms that grade a science family need the same grader
+    # environment as a science trainer; AC2-only farms use the generic bundle.
+    task_name = config.grading_science_task
+    if not task_name or (config.inference_only and not (config.bootstrap_only or config.grading_families)):
+        raise ValueError('expected a science training profile or a farm with a science grading family')
     root = Path(__file__).resolve().parents[2]
     out = Path(output).resolve()
     native, _, task = build(profile, out, _executor_only=True)
@@ -27,7 +30,7 @@ def package(profile, output):
     if config.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1':
         for name in ('__init__.py', 'build.py', 'congestion.c', 'LICENSE-AbuPlace', 'README.md'):
             files['tpu/science/fast_proxy/' + name] = root / 'tpu/science/fast_proxy' / name
-    if config.science_task == 'placement':
+    if task_name == 'placement':
         from .challenge_contract import CASES
         from .placement_warm_start import verified_inputs, DESTINATION
         folder = root / DESTINATION
@@ -67,7 +70,7 @@ def package(profile, output):
     prep = '''cd "$code"
 export SCIENCE_WORKER_ROOT="$code"
 '''
-    if config.science_task == 'routing':
+    if task_name == 'routing':
         doc['envs'].update(
             SCIENCE_CPU_BUNDLE='gs://sk7524-tinker-tpu-us-central2/code-bundles/science-cpu-2445286f0b92ee4977d839f69359baf7b8d483523e4b3e172bb493c6163f9c50.tar.gz',
             SCIENCE_CPU_SHA256='2445286f0b92ee4977d839f69359baf7b8d483523e4b3e172bb493c6163f9c50')
@@ -96,7 +99,7 @@ PLACEMENT_TPU_CHIPS=0,1,2,3 python3 -m tpu.science.prepare_placement_host
                   doc['run'].replace('exec python3 -m tpu.swarm.ray_train.bootstrap',
                       prep + executor))
     task.write_text(yaml.safe_dump(doc, sort_keys=False))
-    manifest = dict(run_id=config.run_id, task=config.science_task,
+    manifest = dict(run_id=config.run_id, task=task_name,
                     main_commit=subprocess.check_output(['git','-C',str(root),'rev-parse','HEAD'],text=True).strip(),
                     discover_commit=subprocess.check_output(['git','-C',str(root),'rev-parse','HEAD:third_party/discover'],text=True).strip(),
                     sha256=digest, code_uri=doc['envs']['RAY_TRAIN_CODE'], submitted=False,
