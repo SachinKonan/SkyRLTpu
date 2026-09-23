@@ -24,7 +24,18 @@ def validate_reuse(config, document, summary):
     # runtime migration controls and final training step cap may differ. Sampling,
     # grading, model, seed, optimizer settings, run identity and bootstrap limits
     # remain subject to exact comparison.
+    # Placement concurrency changes admission only, never per-case budgets or scoring.
+    if old['science_placement_runtime'] == new['science_placement_runtime'] == 'cpu300-4g-v1':
+        old.pop('science_placement_slots_per_host')
+        new.pop('science_placement_slots_per_host')
+        old['cache'].pop('reserve_gib')
+        new['cache'].pop('reserve_gib')
+        # Cache capacity is operational; model revisions and grading remain pinned.
+        for key in ('trainer_gib', 'inference_gib'):
+            old['cache'].pop(key)
+            new['cache'].pop(key)
     for settings in (old, new):
+        settings.pop('resume_min_checkpoint_step', None)
         for key in ('bootstrap_reuse_contract_sha256', 'bootstrap_reuse_pool_sha256'):
             settings.pop(key)
         for key in ('trainer_compile', 'inference_compile'):

@@ -21,6 +21,8 @@ def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s
     if resource_contract is not None:
         from .placement_resources import validate, acquire
         validate(resource_contract)
+        if resource_contract['slots'] != slots_per_host:
+            raise ValueError('placement admission differs from resource contract')
         slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s)
         with lock:
             return _grade_case(source, case, root, 'cpu-jax', None, None,

@@ -102,3 +102,21 @@ def test_reuse_configuration_requires_complete_pins_and_resume(saved, changes):
     host, *_ = saved
     with pytest.raises(ValueError, match='bootstrap reuse'):
         replace(host.config, **changes).validate()
+
+
+def test_placement_concurrency_reuse_preserves_scientific_settings():
+    from tpu.swarm.ray_train.bootstrap_reuse import validate_reuse
+    old = Config.load('tpu/swarm/ray_train/profiles/circuit300-v464-qwen-pwc05-three-starts-10step-20260922.json')
+    contract = {'config': old.to_dict()}
+    digest = identity(contract)
+    summary = dict(contract_sha256=digest, pool_sha256='a'*64, optimizer_steps=0)
+    new = replace(old, science_placement_slots_per_host=48,
+                  cache=replace(old.cache, reserve_gib=256, trainer_gib=64, inference_gib=64), resume_min_checkpoint_step=1,
+                  bootstrap_reuse_contract_sha256=digest, bootstrap_reuse_pool_sha256='a'*64)
+    new.validate()
+    document = dict(contract=contract, sha256=digest)
+    validate_reuse(new, document, summary)
+    for change in [dict(science_placement_runtime='legacy'),
+                   dict(client_env={**new.client_env, 'TTD_ADV_PIECEWISE_RHO': '0.7'}),
+                   dict(inference=replace(new.inference, max_model_length=10240))]:
+        with pytest.raises(RuntimeError):validate_reuse(replace(new, **change), document, summary)

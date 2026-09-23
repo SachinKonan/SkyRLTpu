@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1586,
+    "name": "circuit300-v464-muse-pwc05-three-starts-10step-20260922-r4",
+    "status": "STARTING",
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-749",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos"
+  },
+  {
+    "id": 1585,
+    "name": "circuit300-v464-qwen-pwc05-three-starts-10step-20260922",
+    "status": "STARTING",
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-748",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos"
+  },
+  {
+    "id": 1584,
+    "name": "circuit300-v464-gemma-pwc05-three-starts-10step-20260922",
+    "status": "STARTING",
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-744",
+    "pool": "tpuswarm-v4-64-central2-qwen35-erdos"
+  }
+]

@@ -1,4 +1,4 @@
-"""Opt-in five-minute CPU placement with 32 host-wide case slots."""
+"""Opt-in five-minute CPU placement with configurable host-wide case slots."""
 from contextlib import ExitStack
 import fcntl
 import os
@@ -9,21 +9,25 @@ import time
 
 VERSION='cpu300-4g-v1'
 
-def contract():
-    return dict(version=VERSION,cpus=4,memory_gib=4,slots=32,search_seconds=300,
+def contract(slots=32):
+    if type(slots) is not int or not 1 <= slots <= 48:
+        raise ValueError("placement slots must be in [1,48]")
+    return dict(version=VERSION,cpus=4,memory_gib=4,slots=slots,search_seconds=300,
                 candidate_seconds=310,grading_seconds=180,envelope_seconds=510,seed=42)
 
 def validate(value):
-    if value!=contract():raise ValueError('placement runtime contract mismatch')
+    if value!=contract(value.get("slots", 32)):raise ValueError('placement runtime contract mismatch')
 
-def partition():
+def partition(slots=32):
+    contract(slots)
     cpus=sorted(os.sched_getaffinity(0))
-    if len(cpus)<160:raise RuntimeError('32 placement slots require 128 grading CPUs plus 32 service CPUs')
-    return cpus[-128:],cpus[:-128]
+    count = 4 * slots
+    if len(cpus)<count+32:raise RuntimeError('placement slots require four CPUs each plus 32 service CPUs')
+    return cpus[-count:],cpus[:-count]
 
 def acquire(slots,deadline_seconds=2400,root=None):
-    if type(slots) is not int or not 1<=slots<=32:raise ValueError('invalid placement slots')
-    cpus,_=partition();root=Path(root or f'/tmp/science-cpu-locks-{os.getuid()}')
+    if type(slots) is not int or not 1<=slots<=48:raise ValueError('invalid placement slots')
+    cpus,_=partition(slots);root=Path(root or f'/tmp/science-cpu-locks-{os.getuid()}')
     root.mkdir(mode=0o700,exist_ok=True);info=root.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:
         raise RuntimeError('grading locks must be private and owned by this user')
@@ -44,11 +48,11 @@ def acquire(slots,deadline_seconds=2400,root=None):
             with lock(VERSION+'-map.lock',fcntl.LOCK_EX):
                 probes=[]
                 try:
-                    for i in range(32):
+                    for i in range(48):
                         try:probes.append(lock(f'{VERSION}-{i}.lock',fcntl.LOCK_EX))
                         except BlockingIOError:break
                     path=root/(VERSION+'-map.json')
-                    if len(probes)==32:path.write_text(json.dumps(cpus))
+                    if len(probes)==48:path.write_text(json.dumps(cpus))
                     elif json.loads(path.read_text())!=cpus:raise RuntimeError('active placement CPU map differs')
                 finally:
                     for f in probes:f.close()

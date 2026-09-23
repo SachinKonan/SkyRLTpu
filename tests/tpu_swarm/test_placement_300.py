@@ -30,7 +30,7 @@ def test_profiles_and_prompt():
         c=Config.load(f'tpu/swarm/ray_train/profiles/circuit300-v5p32-{model}-10step-20260921.json')
         c.validate();assert c.ray_cpus_per_host==136 and c.hosts==4
         assert c.borrows_inference and c.client_env['NUM_EPOCHS']=='10'
-        with pytest.raises(ValueError):replace(c,science_placement_slots_per_host=33).validate()
+        with pytest.raises(ValueError):replace(c,science_placement_slots_per_host=49).validate()
         with pytest.raises(ValueError):replace(c,cache=replace(c.cache,reserve_gib=128)).validate()
         env={**c.client_env,'SCIENCE_PLACEMENT_RUNTIME':c.science_placement_runtime,'SCIENCE_PLACEMENT_BACKEND':'cpu'}
         for starter in (True,False):
@@ -54,3 +54,24 @@ def test_dispatch_17_cases_with_four_gib_and_explicit_contract():
         assert opts.call_count==17
         assert all(c.kwargs['memory']==4*1024**3 for c in opts.call_args_list)
         assert all(c.kwargs['resource_contract']==r.contract() for c in opts.return_value.remote.call_args_list)
+
+
+def test_48_slots_partition_and_memory(tmp_path):
+    with patch.object(r.os, 'sched_getaffinity', return_value=set(range(240))):
+        grading, services = r.partition(48)
+        assert grading == list(range(48, 240)) and services == list(range(48))
+        with ExitStack() as held:
+            assignments = []
+            for _ in range(48):
+                slot, cpus, lock = r.acquire(48, root=tmp_path, deadline_seconds=.2)
+                held.enter_context(lock); assignments.extend(cpus)
+            assert len(assignments) == len(set(assignments)) == 192
+            with pytest.raises(TimeoutError):r.acquire(48, root=tmp_path, deadline_seconds=.01)
+            with pytest.raises(RuntimeError, match='CPU map differs'):
+                r.acquire(32, root=tmp_path, deadline_seconds=.01)
+    with patch.object(r.os, 'sched_getaffinity', return_value=set(range(208))):
+        with pytest.raises(RuntimeError):r.partition(48)
+    c=Config.load('tpu/swarm/ray_train/profiles/circuit300-v464-qwen-pwc05-three-starts-10step-20260922.json')
+    with pytest.raises(ValueError):replace(c, science_placement_slots_per_host=48).validate()
+    c=replace(c, science_placement_slots_per_host=48,cache=replace(c.cache,reserve_gib=256))
+    c.validate();assert c.ray_cpus_per_host == 200

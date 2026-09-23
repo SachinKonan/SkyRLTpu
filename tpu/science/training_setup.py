@@ -26,7 +26,7 @@ def prepare(config, ips, nodes, grading_rank):
         from .placement_ray import grade_cpu_case
         from .placement_task import CASES
         from .placement_resources import contract
-        resources=contract() if config.science_placement_runtime=='cpu300-4g-v1' else None
+        resources=contract(config.science_placement_slots_per_host) if config.science_placement_runtime=='cpu300-4g-v1' else None
         for ip in ips:
             helper = config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none')
             for name in ('challenge_seed.py', 'challenge_seed_fast_proxy.py' if helper == 'fast_proxy_v1' else 'challenge_seed_jax.py'):

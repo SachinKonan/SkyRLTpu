@@ -16,9 +16,9 @@ if cpu:
     modern = os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1'
     if modern:
         from .placement_resources import partition
-        grading_cpus, _ = partition()
         slots = int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32'))
-        if not 1 <= slots <= 32:
+        grading_cpus, _ = partition(slots)
+        if not 1 <= slots <= 48:
             raise ValueError('invalid placement slots')
     else:
         from .cpu_slots import validate_slots, slot_cpus

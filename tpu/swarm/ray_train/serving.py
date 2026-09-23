@@ -135,7 +135,7 @@ class Engine:
                               extra_keys=self.config.inference.engine_env)
         if self.config.science_placement_runtime == 'cpu300-4g-v1':
             from tpu.science.placement_resources import partition
-            _, service_cpus = partition()
+            _, service_cpus = partition(self.config.science_placement_slots_per_host)
             command = ['taskset', '--cpu-list', ','.join(map(str, service_cpus)), *command]
         self.process = Process(command, self.run / f"engine-{self.instance}.log", environment, self.source)
         deadline = time.monotonic() + self.config.ready_timeout

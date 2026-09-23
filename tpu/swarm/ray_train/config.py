@@ -516,11 +516,11 @@ class Config:
         modern = self.science_placement_runtime == 'cpu300-4g-v1'
         if modern and (self.science_task != 'placement' or self.science_placement_backend != 'cpu' or not self.systemd_runtime):
             raise ValueError('five-minute placement requires CPU placement and systemd')
-        if modern and self.cache.reserve_gib < 192:
-            raise ValueError('expanded grading requires 128 GiB grading plus 64 GiB runtime reserve')
+        if modern and self.cache.reserve_gib < 4 * placement_slots + 64:
+            raise ValueError('expanded grading requires 4 GiB per slot plus 64 GiB runtime reserve')
         if self.client_env.get('SCIENCE_PLACEMENT_RUNTIME', self.science_placement_runtime) != self.science_placement_runtime:
             raise ValueError('conflicting placement runtime override')
-        if type(placement_slots) is not int or not 1 <= placement_slots <= (32 if modern else 16):
+        if type(placement_slots) is not int or not 1 <= placement_slots <= (48 if modern else 16):
             raise ValueError('placement CPU slot count exceeds runtime contract')
         if self.science_placement_backend == 'cpu':
             if self.science_task != 'placement':

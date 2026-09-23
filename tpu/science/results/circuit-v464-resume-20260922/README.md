@@ -61,3 +61,21 @@ The new bootstrap prefix contains the generation-pinned, CRC-verified journal, w
 Evidence: `.science/launch/v4-muse-r2/` (worker audit, migration manifest and object receipts, build job 14270234, submission receipt). Submission helper: `.science/launch/submit_v4_muse_r2.py`. Gemma 1548 and Qwen 1550 are untouched.
 
 Replacement submission verified: **job 1551**, **STARTING on worker 749**. Previous job 1549 was confirmed CANCELLED before launch. Successful generation under the revised settings remains to be observed.
+
+## Muse default-RPA relaunch
+
+Following comparison with the working Muse qubit local engines, user authorized a replacement on available v4-64 capacity. Revision `circuit300-v464-muse-pwc05-three-starts-10step-20260922-r3` changes Muse inference to memory utilization **0.8** and **batched RPA false**. Prefix caching remains false and max sequences remains 16. Adaptive PWC rho 0.5 and 10 training steps remain unchanged. Gemma already uses 0.8/default RPA; no change or restart was made to its job. Farm infrastructure is managed by another agent and was not modified.
+
+Job 1551 was confirmed FAILED before preparing r3. Both idle candidate workers 748 and 749 passed the per-host storage/process gate on all eight hosts. The generation-pinned r2 journal was copied into a new r3 run prefix, preserving 656 grades and 41 groups, with source contract and migration provenance retained. Reviewed config differences are the two requested inference changes, new run identity/sick-marker path, and fresh compilation-cache namespaces. Model/tokenizer/prompt/root/request/bootstrap-code identities remain unchanged.
+
+Artifacts: `.science/launch/v4-muse-r3/`; bundle build Slurm 14274529; submission helper `.science/launch/submit_v4_muse_r3.py`. The generated environment was checked for `USE_BATCHED_RPA_KERNEL=0`, and the command for `--gpu-memory-utilization 0.8 --max-num-seqs 16 --no-enable-prefix-caching`.
+
+Submission verified: **job 1563**, **STARTING on v4-64 worker 748**. Run ID ends `20260922-r3`. This confirms controller allocation; successful inference and training under the revised settings remain to be observed.
+
+## Muse prefix-caching correction (r4)
+
+User requested prefix caching enabled to follow the successful Muse qubit local configuration. Cancelled r3 job 1563 while it was STARTING and prepared `circuit300-v464-muse-pwc05-three-starts-10step-20260922-r4`. Effective command/environment checks confirm prefix caching **on**, memory utilization **0.8**, batched RPA **off**, and **16 sequences**. The r3 journal was copied with generation/CRC validation into the r4 prefix; prior contracts and migration manifests remain archived. No farm services were modified. Artifacts: `.science/launch/v4-muse-r4/`; build Slurm 14274602.
+
+At approximately 12:56 p.m. EDT, Qwen 1550 had completed global step 1 and written checkpoint 000001; logged step wall time 6,814.91 seconds and training time 500.86 seconds. Best pool reward remained 0.5100820106576686, unchanged from bootstrap. Gemma 1548 had 59 completed FORWARD_BACKWARD requests but no optimizer request/completed-step record; best bootstrap pool reward remained 0.5091478939902785. Both bootstrap pools were complete (Gemma: 1,024 graded / 357 valid / 108 retained; Qwen: 1,024 / 370 / 206). Muse retained its unfinished 656-grade bootstrap. These are snapshots, not continuously updated status records.
+
+Prefix-caching replacement verified: **job 1564 STARTING on worker 748**. Previous 1563 confirmed CANCELLED. Successful generation under r4 remains to be observed.

@@ -97,7 +97,7 @@ class Host:
                 raise RuntimeError(f"owned process already active: {name}")
             if self.config.science_placement_runtime == 'cpu300-4g-v1':
                 from tpu.science.placement_resources import partition
-                _, service_cpus = partition()
+                _, service_cpus = partition(self.config.science_placement_slots_per_host)
                 command = ['taskset', '--cpu-list', ','.join(map(str, service_cpus)), *command]
             process = Process(command, self.run / f"{name}.log", env=env, cwd=cwd or self.root)
             self.processes[name] = process

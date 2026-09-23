@@ -136,7 +136,7 @@ async def evaluate(task, source, timeout):
             from .placement_ray import grade_cpu_case
             from .placement_task import CASES
             from .placement_resources import contract
-            resources = contract() if os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1' else None
+            resources = contract(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32'))) if os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1' else None
             for case in CASES:
                 refs.append(grade_cpu_case.options(scheduling_strategy='SPREAD', **(dict(memory=4*1024**3) if resources else {})).remote(
                     source, case, root, admission_timeout_s=timeout,
