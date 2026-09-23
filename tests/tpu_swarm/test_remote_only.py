@@ -88,11 +88,121 @@ def test_existing_profiles_keep_single_lease_defaults(tmp_path):
         Config.from_dict(raw)
 
 
-# --- Borrower request-failure policy ---------------------------------------
+# --- Scheduler: per-farm pools without local engines -----------------------
 import asyncio
 import json
 
 import httpx
+
+from tpu.swarm.ray_train.hybrid_scheduler import HybridScheduler
+
+
+def group(n=32):
+    return {'choices': [{'token_ids': [1, 2]} for _ in range(n)]}
+
+
+def test_scheduler_shares_whole_groups_across_two_farms():
+    async def run():
+        farms = {'a': 2, 'b': 2}
+        calls = []
+        gate = asyncio.Event()
+        router = HybridScheduler(0, 0, lambda: True, farms=lambda: list(farms.items()))
+
+        async def remote(key):
+            calls.append(key)
+            await gate.wait()
+            return group()
+
+        async def local(_):
+            raise AssertionError('no local engines')
+        payload = {'prompt': [1], 'max_tokens': 10, 'n': 32}
+        tasks = [asyncio.create_task(router.run(payload, local, remote)) for _ in range(6)]
+        for _ in range(10):
+            await asyncio.sleep(0)
+        assert sorted(calls) == ['a', 'a', 'b', 'b'] and router.snapshot()['queued'] == 2
+        assert router.snapshot()['farms'] == {'a': 2, 'b': 2}
+        gate.set()
+        results = await asyncio.gather(*tasks)
+        assert all(len(r['choices']) == 32 for r in results)
+        assert router.snapshot()['remote_active'] == 0 and router.snapshot()['queued'] == 0
+        assert router.completed['a'] + router.completed['b'] == 6
+        assert router.completed['a'] >= 2 and router.completed['b'] >= 2
+    asyncio.run(run())
+
+
+def test_scheduler_requeues_failed_remote_group_on_another_farm_without_local():
+    async def run():
+        farms = {'a': 1, 'b': 1}
+        failed = []
+        calls = []
+        router = HybridScheduler(0, 0, lambda: True, farms=lambda: list(farms.items()),
+                                 on_remote_failure=failed.append)
+
+        async def remote(key):
+            calls.append(key)
+            if key == 'a':
+                farms.pop('a')  # The farm is ineligible until it re-attests.
+                return None
+            return group(4)
+        router.rates.update(a=100, b=1)  # Prefer 'a' first.
+        result = await router.run({'prompt': [1], 'max_tokens': 1, 'n': 4},
+                                  lambda _: None, remote)
+        assert calls == ['a', 'b'] and failed == ['a'] and router.retries == 1
+        assert len(result['choices']) == 4
+        assert 'a' not in router.pools and not any(router.pools['b'])
+    asyncio.run(run())
+
+
+def test_scheduler_waits_indefinitely_and_alerts_while_no_farm_is_eligible():
+    async def run():
+        farms = {}
+        events = []
+        router = HybridScheduler(0, 0, lambda: True, lambda event, **f: events.append((event, f)),
+                                 farms=lambda: list(farms.items()), alert_seconds=0)
+
+        async def remote(key):
+            return group(1)
+        task = asyncio.create_task(router.run({'prompt': [1], 'n': 1}, lambda _: None, remote))
+        await asyncio.sleep(.01)
+        assert not task.done() and router.snapshot()['queued'] == 1
+        assert any(e == 'remote_queue_waiting' and f['farms'] == [] for e, f in events)
+        farms['late'] = 1
+        async with router.condition:
+            router.condition.notify_all()
+        result = await asyncio.wait_for(task, 5)
+        assert len(result['choices']) == 1 and router.completed['late'] == 1
+    asyncio.run(run())
+
+
+def test_scheduler_releases_slot_by_identity_after_pool_compaction():
+    async def run():
+        farms = {'a': 2}
+        gates = {0: asyncio.Event(), 1: asyncio.Event()}
+        calls = []
+        router = HybridScheduler(0, 0, lambda: True, farms=lambda: list(farms.items()))
+
+        async def remote(key):
+            index = len(calls)
+            calls.append(key)
+            await gates[index].wait()
+            return group(1)
+        payload = {'prompt': [1], 'n': 1}
+        first = asyncio.create_task(router.run(payload, lambda _: None, remote))
+        second = asyncio.create_task(router.run(payload, lambda _: None, remote))
+        for _ in range(10):
+            await asyncio.sleep(0)
+        gates[0].set()
+        await first
+        farms['a'] = 1  # Compaction moves the second job to slot 0.
+        router._remote_pools()
+        assert router.pools['a'][0] is not None and len(router.pools['a']) == 1
+        gates[1].set()
+        await second
+        assert router.pools['a'] == [None]
+    asyncio.run(run())
+
+
+# --- Borrower request-failure policy ---------------------------------------
 
 from tpu.swarm.ray_train.borrowing import Borrower, RemoteRequestRejected
 from tests.tpu_swarm.test_inference_borrowing import Farm, config as borrowing_config
