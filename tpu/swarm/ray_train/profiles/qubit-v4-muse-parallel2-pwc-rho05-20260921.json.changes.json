@@ -1,0 +1,36 @@
+{
+  "source_profile": "qubit-v4-muse-parallel2-20260921.json",
+  "seed_pool_sha256": "19560c6f6f9784a6bc96c4fc5c01dffe36bb57e308fff53400849e28d7546c1a",
+  "differences": [
+    {
+      "field": "client_env.TTD_ADV_ESTIMATOR",
+      "old": "mean_baseline",
+      "new": "piecewise_valid_entropic_centered_adaptive"
+    },
+    {
+      "field": "client_env.TTD_ADV_PIECEWISE_INVALID_REWARD",
+      "old": null,
+      "new": "0"
+    },
+    {
+      "field": "client_env.TTD_ADV_PIECEWISE_RHO",
+      "old": null,
+      "new": "0.5"
+    },
+    {
+      "field": "client_env.TTD_SICK_MARKER",
+      "old": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-20260921/runs/qubit-v4-muse-parallel2-20260921/ENGINE-SICK",
+      "new": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/runs/qubit-v4-muse-parallel2-pwc-rho05-20260921/ENGINE-SICK"
+    },
+    {
+      "field": "root",
+      "old": "~/.cache/qubit-v4-muse-parallel2-20260921",
+      "new": "~/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921"
+    },
+    {
+      "field": "run_id",
+      "old": "qubit-v4-muse-parallel2-20260921",
+      "new": "qubit-v4-muse-parallel2-pwc-rho05-20260921"
+    }
+  ]
+}

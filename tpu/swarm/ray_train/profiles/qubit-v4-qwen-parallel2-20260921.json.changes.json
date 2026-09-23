@@ -1,0 +1,129 @@
+{
+  "source_profile": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920-10step-deployment.json",
+  "target_run": "qubit-v4-qwen-parallel2-20260921",
+  "source_manifest_sha256": "65a6f7b7f4e6c42aa1273fdcbe2ab9b7fc2e82aebf9f45bbcf256bdf51c7c66d",
+  "evaluator_sha256": "cc7b510448d67a1f9a776fbcf83e187c72ec3b428b6a3fc1f9f00ca18e35fbe1",
+  "seed_pool_sha256": "b7d12ba1ed47a8fab47d5bc8839fb9c32f5e1e4cbe7c7f22d4efdc71a0a95e29",
+  "differences": [
+    {
+      "field": "bucket",
+      "old": "gs://sk7524-tinker-tpu-us-east5",
+      "new": "gs://sk7524-tinker-tpu-us-central2"
+    },
+    {
+      "field": "cache.reserve_gib",
+      "old": 128,
+      "new": 240
+    },
+    {
+      "field": "client_env.SCIENCE_ROUTING_EVALUATOR",
+      "old": null,
+      "new": "parallel-v2"
+    },
+    {
+      "field": "client_env.TTD_SICK_MARKER",
+      "old": "/home/gcpuser/.cache/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/runs/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920/ENGINE-SICK",
+      "new": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-20260921/runs/qubit-v4-qwen-parallel2-20260921/ENGINE-SICK"
+    },
+    {
+      "field": "inference.external_pool_attestation",
+      "old": null,
+      "new": true
+    },
+    {
+      "field": "inference.external_pool_engines",
+      "old": null,
+      "new": 4
+    },
+    {
+      "field": "inference.external_pool_health_grace_seconds",
+      "old": null,
+      "new": 90
+    },
+    {
+      "field": "inference.external_pool_heartbeat_seconds",
+      "old": null,
+      "new": 30
+    },
+    {
+      "field": "inference.external_pool_initial_wait_seconds",
+      "old": null,
+      "new": 300
+    },
+    {
+      "field": "inference.external_pool_lease_scope",
+      "old": null,
+      "new": "run"
+    },
+    {
+      "field": "inference.external_pool_lease_seconds",
+      "old": null,
+      "new": 300
+    },
+    {
+      "field": "inference.external_pool_max_concurrent_requests",
+      "old": null,
+      "new": 4
+    },
+    {
+      "field": "inference.external_pool_max_n",
+      "old": null,
+      "new": 32
+    },
+    {
+      "field": "inference.external_pool_prepare_timeout",
+      "old": null,
+      "new": 1800
+    },
+    {
+      "field": "inference.external_pool_require_initial",
+      "old": null,
+      "new": false
+    },
+    {
+      "field": "inference.external_pool_rpc_timeout",
+      "old": null,
+      "new": 10
+    },
+    {
+      "field": "inference.external_pool_scheduler",
+      "old": null,
+      "new": true
+    },
+    {
+      "field": "inference.external_pool_updates",
+      "old": null,
+      "new": true
+    },
+    {
+      "field": "resume_min_checkpoint_step",
+      "old": 2,
+      "new": 0
+    },
+    {
+      "field": "root",
+      "old": "~/.cache/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "new": "~/.cache/qubit-v4-qwen-parallel2-20260921"
+    },
+    {
+      "field": "run_id",
+      "old": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "new": "qubit-v4-qwen-parallel2-20260921"
+    },
+    {
+      "field": "science_routing_evaluator",
+      "old": null,
+      "new": "parallel-v2"
+    },
+    {
+      "field": "science_routing_slots_per_host",
+      "old": 16,
+      "new": 8
+    },
+    {
+      "field": "seed_pool_sha256",
+      "old": "",
+      "new": "b7d12ba1ed47a8fab47d5bc8839fb9c32f5e1e4cbe7c7f22d4efdc71a0a95e29"
+    }
+  ]
+}

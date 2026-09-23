@@ -37,11 +37,26 @@ def routing_cases(metrics):
             totals['baseline_swaps'] = None
         elif totals['baseline_swaps'] is not None:
             totals['baseline_swaps'] += baseline
-    for totals in topologies.values():
+    from .routing_resources import GEMINI_TARGETS
+    for topology, totals in topologies.items():
+        expected = {name for name, spec in specs.items() if Path(spec.get('topology_path', 'unknown')).stem == topology}
+        observed = [row[0] for row in cases if row[0] in expected]
+        totals['complete'] = len(observed) == len(expected) == 24 and len(set(observed)) == 24
+        if topology in GEMINI_TARGETS:
+            totals['gemini_target_swaps'] = GEMINI_TARGETS[topology]
+            totals['gap_to_gemini'] = totals['swaps'] - GEMINI_TARGETS[topology] if totals['complete'] else None
         baseline = totals['baseline_swaps']
         totals['delta_swaps'] = totals['swaps'] - baseline if baseline is not None else None
-    return dict(case_columns=['case', 'swaps', 'baseline_swaps', 'delta_swaps'],
-                cases=cases, topologies=topologies)
+    columns=['case', 'swaps', 'baseline_swaps', 'delta_swaps']
+    if 'case_statuses' in metrics:
+        measured={row[0]:row for row in cases}
+        statuses={row['case']:row['status'] for row in metrics['case_statuses']}
+        cases=[]
+        for name,spec in specs.items():
+            values=measured.get(name,[name,None,spec['original_cnot_added']/3,None])
+            cases.append([name,statuses.get(name,'not_started'),*values[1:]])
+        columns.insert(1,'status')
+    return dict(case_columns=columns, cases=cases, topologies=topologies)
 
 
 def case_error(row):
@@ -65,10 +80,17 @@ def observation(task, result):
     feedback = {k: v for k, v in metrics.items() if k in (
         'mean_proxy_cost', 'weighted_candidate_cnots', 'weighted_baseline_cnots',
         'swaps', 'added_cnots', 'improvement', 'case_count', 'total_seconds', 'routing_suite',
-        'benchmark_suite', 'required_case_count', 'leaderboard_verified')}
+        'benchmark_suite', 'required_case_count', 'leaderboard_verified',
+        'completed_cases', 'suite_complete')}
     message = result['msg'][:1600]
     if task == 'routing' and 'cases' in metrics:
         feedback.update(routing_cases(metrics))
+        if 'case_statuses' in metrics:
+            feedback['status_counts']={}
+            for row in metrics['case_statuses']:
+                status=row['status']
+                feedback['status_counts'][status]=feedback['status_counts'].get(status,0)+1
+            feedback['case_errors']={name:detail[-240:] for name,detail in metrics.get('case_errors',{}).items()}
     if task == 'placement' and 'cases' in metrics:
         from .challenge_contract import CASES, CANDIDATE_LIMIT_SECONDS
         by_case = {row['metrics'].get('case'): row for row in metrics['cases']}

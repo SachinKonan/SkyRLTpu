@@ -1,0 +1,950 @@
+{
+  "captured_at_utc": "2026-09-22T15:00:12.527095+00:00",
+  "scope": "Three ongoing qubit-routing PWC runs; surviving worker-attempt logs, plus identified previous Gemma v5p farm. Observational, not matched-prompt benchmark.",
+  "models": {
+    "Muse": {
+      "trainer_job": 1482,
+      "comparison_farm_job": 1490,
+      "farm_hardware": "v4-32",
+      "matched_versions": [
+        "model_bd1b930e_000002"
+      ],
+      "window_utc": [
+        "2026-09-22T05:59:50.886969+00:00",
+        "2026-09-22T06:48:06.938572+00:00"
+      ],
+      "window_epoch": [
+        1790056790.8869693,
+        1790059686.9385724
+      ],
+      "routes": {
+        "local": {
+          "groups": 12,
+          "rollouts": 384,
+          "median_minutes": 13.368439033841636,
+          "p10_minutes": 12.922558018498288,
+          "p90_minutes": 13.885976209238338,
+          "median_output_tokens_per_rollout": 10134.046875,
+          "output_tokens_per_request_second": 398.75185761469845,
+          "total_output_tokens": 3861025
+        },
+        "remote": {
+          "groups": 4,
+          "rollouts": 128,
+          "median_minutes": 47.83231401271663,
+          "p10_minutes": 47.190286918099986,
+          "p90_minutes": 48.16315784453499,
+          "median_output_tokens_per_rollout": 10248.3125,
+          "output_tokens_per_request_second": 115.07469701927691,
+          "total_output_tokens": 1317960
+        }
+      },
+      "phases": [
+        {
+          "version": "model_bd1b930e_000002",
+          "local_groups": 12,
+          "farm_groups": 4,
+          "observed_generation_span_minutes": 48.2675267179807
+        }
+      ],
+      "farm_over_local_output_rate": 0.2885872374555055,
+      "local_engines": [
+        {
+          "rank": 3,
+          "active_samples": 240,
+          "median_active_decode_tps": 457.55,
+          "median_running_sequences": 16.0,
+          "full_samples": 176,
+          "median_full_decode_tps": 463.9,
+          "max_kv_percent": 47.3,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/runs/qubit-v4-muse-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.75"
+          }
+        },
+        {
+          "rank": 4,
+          "active_samples": 238,
+          "median_active_decode_tps": 457.5,
+          "median_running_sequences": 16.0,
+          "full_samples": 183,
+          "median_full_decode_tps": 462.3,
+          "max_kv_percent": 50.3,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/runs/qubit-v4-muse-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.75"
+          }
+        },
+        {
+          "rank": 6,
+          "active_samples": 235,
+          "median_active_decode_tps": 457.6,
+          "median_running_sequences": 16,
+          "full_samples": 185,
+          "median_full_decode_tps": 462.4,
+          "max_kv_percent": 48.0,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/runs/qubit-v4-muse-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.75"
+          }
+        },
+        {
+          "rank": 7,
+          "active_samples": 238,
+          "median_active_decode_tps": 457.6,
+          "median_running_sequences": 16.0,
+          "full_samples": 186,
+          "median_full_decode_tps": 462.4,
+          "max_kv_percent": 50.6,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/runs/qubit-v4-muse-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.75"
+          }
+        }
+      ],
+      "farm_engines": [
+        {
+          "rank": 0,
+          "active_samples": 273,
+          "median_active_decode_tps": 124.0,
+          "median_running_sequences": 8,
+          "full_samples": 248,
+          "median_full_decode_tps": 124.8,
+          "max_kv_percent": 26.8,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/runs/farm10-muse-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "8",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.7"
+          }
+        },
+        {
+          "rank": 1,
+          "active_samples": 273,
+          "median_active_decode_tps": 120.7,
+          "median_running_sequences": 8,
+          "full_samples": 236,
+          "median_full_decode_tps": 122.80000000000001,
+          "max_kv_percent": 22.9,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/runs/farm10-muse-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "8",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.7"
+          }
+        },
+        {
+          "rank": 2,
+          "active_samples": 278,
+          "median_active_decode_tps": 128.0,
+          "median_running_sequences": 8.0,
+          "full_samples": 248,
+          "median_full_decode_tps": 128.8,
+          "max_kv_percent": 28.4,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/runs/farm10-muse-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "8",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.7"
+          }
+        },
+        {
+          "rank": 3,
+          "active_samples": 282,
+          "median_active_decode_tps": 129.6,
+          "median_running_sequences": 8.0,
+          "full_samples": 225,
+          "median_full_decode_tps": 131.2,
+          "max_kv_percent": 25.3,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "meta-models/Muse-Glimmer-30B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/runs/farm10-muse-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "8",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-muse-1-20260921/ram/hf/hub",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.7"
+          }
+        }
+      ]
+    },
+    "Qwen": {
+      "trainer_job": 1483,
+      "comparison_farm_job": 1484,
+      "farm_hardware": "v4-32",
+      "matched_versions": [
+        "model_885e53f2_ss0_seq2",
+        "model_885e53f2_000005",
+        "model_885e53f2_000006"
+      ],
+      "window_utc": [
+        "2026-09-22T10:14:54.268332+00:00",
+        "2026-09-22T13:49:20.653456+00:00"
+      ],
+      "window_epoch": [
+        1790072094.2683318,
+        1790084960.653456
+      ],
+      "routes": {
+        "local": {
+          "groups": 24,
+          "rollouts": 768,
+          "median_minutes": 17.5529573425,
+          "p10_minutes": 12.46377238627,
+          "p90_minutes": 18.870157930069997,
+          "median_output_tokens_per_rollout": 6994.828125,
+          "output_tokens_per_request_second": 207.20446543162745,
+          "total_output_tokens": 5049529
+        },
+        "remote": {
+          "groups": 24,
+          "rollouts": 768,
+          "median_minutes": 19.87051511402501,
+          "p10_minutes": 18.959964138266674,
+          "p90_minutes": 20.936172615424983,
+          "median_output_tokens_per_rollout": 10023.546875,
+          "output_tokens_per_request_second": 269.4004555583216,
+          "total_output_tokens": 7717990
+        }
+      },
+      "phases": [
+        {
+          "version": "model_885e53f2_ss0_seq2",
+          "local_groups": 8,
+          "farm_groups": 8,
+          "observed_generation_span_minutes": 40.961636344591774
+        },
+        {
+          "version": "model_885e53f2_000005",
+          "local_groups": 8,
+          "farm_groups": 8,
+          "observed_generation_span_minutes": 40.87117346525192
+        },
+        {
+          "version": "model_885e53f2_000006",
+          "local_groups": 8,
+          "farm_groups": 8,
+          "observed_generation_span_minutes": 40.51081849733988
+        }
+      ],
+      "farm_over_local_output_rate": 1.3001672285253782,
+      "local_engines": [
+        {
+          "rank": 2,
+          "active_samples": 636,
+          "median_active_decode_tps": 205.7,
+          "median_running_sequences": 13.0,
+          "full_samples": 292,
+          "median_full_decode_tps": 339.2,
+          "max_kv_percent": 27.2,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/runs/qubit-v4-qwen-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        },
+        {
+          "rank": 4,
+          "active_samples": 590,
+          "median_active_decode_tps": 194.05,
+          "median_running_sequences": 13.0,
+          "full_samples": 275,
+          "median_full_decode_tps": 340.8,
+          "max_kv_percent": 20.8,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/runs/qubit-v4-qwen-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        },
+        {
+          "rank": 5,
+          "active_samples": 527,
+          "median_active_decode_tps": 161.0,
+          "median_running_sequences": 9,
+          "full_samples": 181,
+          "median_full_decode_tps": 340.7,
+          "max_kv_percent": 19.4,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/runs/qubit-v4-qwen-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        },
+        {
+          "rank": 6,
+          "active_samples": 662,
+          "median_active_decode_tps": 186.8,
+          "median_running_sequences": 11.0,
+          "full_samples": 290,
+          "median_full_decode_tps": 339.1,
+          "max_kv_percent": 21.1,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/runs/qubit-v4-qwen-parallel2-pwc-rho05-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-qwen-parallel2-pwc-rho05-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        }
+      ],
+      "farm_engines": [
+        {
+          "rank": 0,
+          "active_samples": 715,
+          "median_active_decode_tps": 345.6,
+          "median_running_sequences": 16,
+          "full_samples": 521,
+          "median_full_decode_tps": 353.5,
+          "max_kv_percent": 46.2,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/runs/farm10-qwen-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--no-enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        },
+        {
+          "rank": 1,
+          "active_samples": 697,
+          "median_active_decode_tps": 345.6,
+          "median_running_sequences": 16,
+          "full_samples": 526,
+          "median_full_decode_tps": 352.0,
+          "max_kv_percent": 46.0,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/runs/farm10-qwen-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--no-enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        },
+        {
+          "rank": 2,
+          "active_samples": 702,
+          "median_active_decode_tps": 347.15,
+          "median_running_sequences": 16.0,
+          "full_samples": 519,
+          "median_full_decode_tps": 353.6,
+          "max_kv_percent": 45.8,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/runs/farm10-qwen-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--no-enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        },
+        {
+          "rank": 3,
+          "active_samples": 703,
+          "median_active_decode_tps": 345.6,
+          "median_running_sequences": 16,
+          "full_samples": 532,
+          "median_full_decode_tps": 352.0,
+          "max_kv_percent": 46.6,
+          "fraction_samples_kv_ge90": 0.0,
+          "settings": {
+            "--served-model-name": "Qwen/Qwen3.5-27B",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/runs/farm10-qwen-1-20260921/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--no-enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "1",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/farm10-qwen-1-20260921/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8"
+          }
+        }
+      ]
+    },
+    "Gemma": {
+      "trainer_job": 1493,
+      "comparison_farm_job": 1507,
+      "farm_hardware": "v5p-32",
+      "matched_versions": [
+        "model_401e7237_ss0_seq2"
+      ],
+      "window_utc": [
+        "2026-09-22T10:09:08.944802+00:00",
+        "2026-09-22T10:43:00.842146+00:00"
+      ],
+      "window_epoch": [
+        1790071748.9448023,
+        1790073780.8421464
+      ],
+      "routes": {
+        "local": {
+          "groups": 4,
+          "rollouts": 128,
+          "median_minutes": 32.081993326308336,
+          "p10_minutes": 25.986034851011667,
+          "p90_minutes": 33.45337863368666,
+          "median_output_tokens_per_rollout": 6333.15625,
+          "output_tokens_per_request_second": 108.29127686841987,
+          "total_output_tokens": 789954
+        },
+        "remote": {
+          "groups": 12,
+          "rollouts": 384,
+          "median_minutes": 9.2738075435,
+          "p10_minutes": 8.678578399708332,
+          "p90_minutes": 9.555604966175,
+          "median_output_tokens_per_rollout": 6519.984375,
+          "output_tokens_per_request_second": 381.3376962281756,
+          "total_output_tokens": 2514482
+        }
+      },
+      "phases": [
+        {
+          "version": "model_401e7237_ss0_seq2",
+          "local_groups": 4,
+          "farm_groups": 12,
+          "observed_generation_span_minutes": 33.86495573520661
+        }
+      ],
+      "farm_over_local_output_rate": 3.5214073308187404,
+      "local_engines": [
+        {
+          "rank": 1,
+          "active_samples": 188,
+          "median_active_decode_tps": 85.15,
+          "median_running_sequences": 5.0,
+          "full_samples": 10,
+          "median_full_decode_tps": 347.2,
+          "max_kv_percent": 100.0,
+          "fraction_samples_kv_ge90": 0.7872340425531915,
+          "settings": {
+            "--served-model-name": "google/gemma-4-31B-it",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8",
+            "--disable-chunked-mm-input": true
+          }
+        },
+        {
+          "rank": 2,
+          "active_samples": 140,
+          "median_active_decode_tps": 97.8,
+          "median_running_sequences": 5.5,
+          "full_samples": 10,
+          "median_full_decode_tps": 350.29999999999995,
+          "max_kv_percent": 99.9,
+          "fraction_samples_kv_ge90": 0.7285714285714285,
+          "settings": {
+            "--served-model-name": "google/gemma-4-31B-it",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8",
+            "--disable-chunked-mm-input": true
+          }
+        },
+        {
+          "rank": 3,
+          "active_samples": 202,
+          "median_active_decode_tps": 79.2,
+          "median_running_sequences": 4.0,
+          "full_samples": 10,
+          "median_full_decode_tps": 344.75,
+          "max_kv_percent": 100.0,
+          "fraction_samples_kv_ge90": 0.806930693069307,
+          "settings": {
+            "--served-model-name": "google/gemma-4-31B-it",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8",
+            "--disable-chunked-mm-input": true
+          }
+        },
+        {
+          "rank": 5,
+          "active_samples": 193,
+          "median_active_decode_tps": 93.0,
+          "median_running_sequences": 5,
+          "full_samples": 8,
+          "median_full_decode_tps": 347.95,
+          "max_kv_percent": 100.0,
+          "fraction_samples_kv_ge90": 0.7409326424870466,
+          "settings": {
+            "--served-model-name": "google/gemma-4-31B-it",
+            "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+            "--host": "0.0.0.0",
+            "--port": "24801",
+            "--tensor-parallel-size": "4",
+            "--max-model-len": "22528",
+            "--max-num-seqs": "16",
+            "--enable-prefix-caching": true,
+            "--enable-lora": true,
+            "--max-loras": "8",
+            "--max-lora-rank": "32",
+            "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+            "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+            "--max-num-batched-tokens": "1024",
+            "--gpu-memory-utilization": "0.8",
+            "--disable-chunked-mm-input": true
+          }
+        }
+      ],
+      "farm_engines": null
+    }
+  },
+  "gemma_current_v4_farm": {
+    "job": 1485,
+    "window_utc": [
+      "2026-09-22T14:27:41+00:00",
+      "2026-09-22T15:01:23+00:00"
+    ],
+    "window_epoch": [
+      1790087261.0,
+      1790089283.0
+    ],
+    "local_engines": [
+      {
+        "rank": 1,
+        "active_samples": 203,
+        "median_active_decode_tps": 108.2,
+        "median_running_sequences": 6,
+        "full_samples": 19,
+        "median_full_decode_tps": 352.0,
+        "max_kv_percent": 100.0,
+        "fraction_samples_kv_ge90": 0.8029556650246306,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "8",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      },
+      {
+        "rank": 2,
+        "active_samples": 203,
+        "median_active_decode_tps": 95.5,
+        "median_running_sequences": 5,
+        "full_samples": 13,
+        "median_full_decode_tps": 347.2,
+        "max_kv_percent": 100.0,
+        "fraction_samples_kv_ge90": 0.8226600985221675,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "8",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      },
+      {
+        "rank": 3,
+        "active_samples": 203,
+        "median_active_decode_tps": 96.1,
+        "median_running_sequences": 5,
+        "full_samples": 15,
+        "median_full_decode_tps": 350.4,
+        "max_kv_percent": 99.9,
+        "fraction_samples_kv_ge90": 0.7783251231527094,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "8",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      },
+      {
+        "rank": 5,
+        "active_samples": 203,
+        "median_active_decode_tps": 99.2,
+        "median_running_sequences": 6,
+        "full_samples": 15,
+        "median_full_decode_tps": 353.6,
+        "max_kv_percent": 100.0,
+        "fraction_samples_kv_ge90": 0.7142857142857143,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "8",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      }
+    ],
+    "farm_engines": [
+      {
+        "rank": 0,
+        "active_samples": 203,
+        "median_active_decode_tps": 56.7,
+        "median_running_sequences": 3,
+        "full_samples": 0,
+        "median_full_decode_tps": null,
+        "max_kv_percent": 99.1,
+        "fraction_samples_kv_ge90": 0.4975369458128079,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/runs/farm10-gemma-2-20260921/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--no-enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "1",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      },
+      {
+        "rank": 1,
+        "active_samples": 203,
+        "median_active_decode_tps": 41.6,
+        "median_running_sequences": 2,
+        "full_samples": 0,
+        "median_full_decode_tps": null,
+        "max_kv_percent": 99.9,
+        "fraction_samples_kv_ge90": 0.33497536945812806,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/runs/farm10-gemma-2-20260921/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--no-enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "1",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      },
+      {
+        "rank": 2,
+        "active_samples": 203,
+        "median_active_decode_tps": 60.6,
+        "median_running_sequences": 3,
+        "full_samples": 0,
+        "median_full_decode_tps": null,
+        "max_kv_percent": 99.8,
+        "fraction_samples_kv_ge90": 0.4187192118226601,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/runs/farm10-gemma-2-20260921/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--no-enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "1",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      },
+      {
+        "rank": 3,
+        "active_samples": 203,
+        "median_active_decode_tps": 59.1,
+        "median_running_sequences": 3,
+        "full_samples": 0,
+        "median_full_decode_tps": null,
+        "max_kv_percent": 100.0,
+        "fraction_samples_kv_ge90": 0.4088669950738916,
+        "settings": {
+          "--served-model-name": "google/gemma-4-31B-it",
+          "--skyrl-lora-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/runs/farm10-gemma-2-20260921/engine-slot-0/loras",
+          "--host": "0.0.0.0",
+          "--port": "24801",
+          "--tensor-parallel-size": "4",
+          "--max-model-len": "22528",
+          "--max-num-seqs": "16",
+          "--no-enable-prefix-caching": true,
+          "--enable-lora": true,
+          "--max-loras": "1",
+          "--max-lora-rank": "32",
+          "--download-dir": "/home/gcpuser/.cache/farm10-gemma-2-20260921/ram/hf/hub",
+          "--limit-mm-per-prompt": "{\"audio\": 0, \"image\": 0, \"video\": 0}",
+          "--max-num-batched-tokens": "1024",
+          "--gpu-memory-utilization": "0.8",
+          "--disable-chunked-mm-input": true
+        }
+      }
+    ],
+    "completed_groups_at_head_capture": 0,
+    "caveat": "Current v4 replacement is a different farm from the completed v5p requests."
+  },
+  "evidence_dir": ".science/routing-relaunch-20260921/farm-local-analysis-20260922"
+}

@@ -37,6 +37,29 @@ def test_other_science_modes_are_not_implicitly_enabled(task):
         Config.from_dict(candidate)
 
 
+@pytest.mark.parametrize('model', ['qwen', 'gemma', 'muse'])
+def test_full_routing_parallel_pwc_matches_regraded_control(model):
+    control_name = f'qubit-v4-{model}-parallel2-20260921' + ('-r2' if model == 'qwen' else '')
+    candidate_name = f'qubit-v4-{model}-parallel2-pwc-rho05-20260921'
+    control = json.loads((PROFILES / f'{control_name}.json').read_text())
+    candidate = json.loads((PROFILES / f'{candidate_name}.json').read_text())
+    a, b = Config.from_dict(control), Config.from_dict(candidate)
+    assert b.science_routing_evaluator == 'parallel-v2'
+    assert b.client_env['SCIENCE_ROUTING_SUITE'] == 'full'
+    assert b.client_env['NUM_EPOCHS'] == '10'
+    assert b.client_env['GROUPS_PER_BATCH'] == '16'
+    assert b.client_env['GROUP_SIZE'] == '32'
+    assert b.seed_pool_sha256 == a.seed_pool_sha256
+    assert manifest(ROOT, a) == manifest(ROOT, b)
+    candidate['run_id'] = control['run_id']
+    candidate['root'] = control['root']
+    candidate['client_env']['TTD_SICK_MARKER'] = control['client_env']['TTD_SICK_MARKER']
+    candidate['client_env']['TTD_ADV_ESTIMATOR'] = control['client_env']['TTD_ADV_ESTIMATOR']
+    assert candidate['client_env'].pop('TTD_ADV_PIECEWISE_RHO') == '0.5'
+    assert candidate['client_env'].pop('TTD_ADV_PIECEWISE_INVALID_REWARD') == '0'
+    assert candidate == control
+
+
 @pytest.mark.parametrize('model', ['qwen','gemma','muse'])
 @pytest.mark.parametrize('task', ['q20','circuit'])
 def test_approved_pair_changes_only_estimator_and_destinations(model, task):

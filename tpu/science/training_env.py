@@ -70,6 +70,28 @@ def task_prompt(task, *, include_starter=True, environment=None):
             raise ValueError(f'{task} prompt is missing its starter boundary')
         prompt = instructions.rstrip()
     if task == 'routing':
+        if environment.get('SCIENCE_ROUTING_EVALUATOR') == 'parallel-v2':
+            from .routing_resources import GEMINI_TARGETS, CANDIDATE_SECONDS
+            old_resources = ('Resources: four CPU cores, 8 GiB RAM, 1800 seconds total: up to 900 seconds for changed-policy compilation and routing all cases with 20 layout/20 routing trials, then up to 900 seconds for independent verification. No accelerator. Installed dependencies are prewarmed outside timing.')
+            if old_resources not in prompt:
+                raise ValueError('routing prompt resource description changed; review parallel contract')
+            prompt = prompt.replace(old_resources,
+                'Resources: four concurrent case workers, each with 2 vCPU and 4 GiB RAM; '
+                'a 10-vCPU/20-GiB program allocation includes compilation and coordinator overhead. '
+                'One shared 1,900-second deadline includes workspace preparation, compilation, '
+                'all routing and independent verification, excluding queue wait. Each case uses '
+                '20 layout variants and 20 routing trials. No accelerator. Fixed dependencies are prewarmed.')
+            prompt = (f'Produce one general policy evaluated on 72 cases, 24 each for Q20, Willow and Heron. '
+                f'Each case uses the minimum added SWAPs among successful routing attempts. '
+                f'Aim to beat the published SimpleTES Gemini topology totals: Q20 {GEMINI_TARGETS["q20"]:,}; '
+                f'Willow {GEMINI_TARGETS["willow"]:,}; Heron {GEMINI_TARGETS["heron_fez"]:,}. '
+                f'These are published references, not local Gemini reruns. Lower is better. Seek improvements '
+                f'on all three; use circuit structure and graph properties without hardcoding identities. '
+                f'Every case must route and verify within one shared {CANDIDATE_SECONDS:,}-second budget '
+                f'including preparation and compilation, or the entire candidate receives zero reward. '
+                f'The scalar reward remains the SABRE-normalized weighted aggregate. '
+                f'gemini_target_swaps is the published topology total; gap_to_gemini = swaps minus target. '
+                f'Negative means better; zero means tied. These targets are guidance, not a new reward.\n\n') + prompt
         prompt = ('Grader feedback includes a compact per-case SWAP table with columns named '
                   'in case_columns, plus per-topology totals. baseline_swaps is the fixed SABRE '
                   'reference; delta_swaps = candidate minus baseline, so negative is better. '
@@ -103,10 +125,15 @@ async def evaluate(task, source, timeout):
     try:
         if task == 'routing':
             from .ray_cpu import grade
-            refs.append(grade.options(scheduling_strategy='SPREAD').remote(
-                'routing', source, root, admission_timeout_s=timeout,
+            from .routing_resources import contract
+            resources = contract() if os.environ.get('SCIENCE_ROUTING_EVALUATOR') == 'parallel-v2' else None
+            options = dict(scheduling_strategy='SPREAD')
+            if resources: options.update(num_cpus=resources['program_cpus'], memory=resources['program_memory_gib']*1024**3)
+            refs.append(grade.options(**options).remote(
+                'routing', source, root, admission_timeout_s=(timeout-resources['outer_seconds']-30 if resources else timeout),
                 slots_per_host=int(os.environ.get('SCIENCE_ROUTING_SLOTS_PER_HOST', '2')),
-                routing_suite=os.environ.get('SCIENCE_ROUTING_SUITE','full')))
+                routing_suite=os.environ.get('SCIENCE_ROUTING_SUITE','full'),
+                **({'resource_contract':resources} if resources else {})))
         elif task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu':
             from .placement_ray import grade_cpu_case
             from .placement_task import CASES

@@ -1,0 +1,25 @@
+{
+  "source_profile": "qubit-v4-muse-parallel2-20260921.json",
+  "differences": [
+    {
+      "field": "cache.trainer_gib",
+      "old": 128,
+      "new": 96
+    },
+    {
+      "field": "client_env.TTD_SICK_MARKER",
+      "old": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-20260921/runs/qubit-v4-muse-parallel2-20260921/ENGINE-SICK",
+      "new": "/home/gcpuser/.cache/qubit-v4-muse-parallel2-20260921-r2/runs/qubit-v4-muse-parallel2-20260921-r2/ENGINE-SICK"
+    },
+    {
+      "field": "root",
+      "old": "~/.cache/qubit-v4-muse-parallel2-20260921",
+      "new": "~/.cache/qubit-v4-muse-parallel2-20260921-r2"
+    },
+    {
+      "field": "run_id",
+      "old": "qubit-v4-muse-parallel2-20260921",
+      "new": "qubit-v4-muse-parallel2-20260921-r2"
+    }
+  ]
+}

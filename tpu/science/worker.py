@@ -32,7 +32,12 @@ def main():
     from .rewards import invalid
     from .cgroup_limits import envelope,metrics
     request=json.loads(Path(args.request).read_text())
-    root=Path(request['root']);memory_group,_=envelope(8)
+    root=Path(request['root']); resource_contract=request.get('resource_contract')
+    if resource_contract is not None:
+        from .routing_resources import validate_request
+        validate_request(resource_contract)
+        if request['task'] != 'routing': raise ValueError('parallel resources require routing')
+    memory_group,_=envelope(resource_contract['program_memory_gib'] if resource_contract else 8)
     grader_digest=hashlib.sha256(b''.join(p.name.encode()+b'\0'+p.read_bytes()
         for p in sorted((root/'tpu/science').glob('*.py')))).hexdigest()
     lock_digest=hashlib.sha256((root/'tpu/science/requirements-cpu.lock').read_bytes()).hexdigest()
@@ -46,13 +51,30 @@ def main():
             from .portfolio_v2_grader import evaluate
             result=evaluate(source,data=root/'.science/data/portfolio-v2-runtime',work=request['work'])
         elif request['task']=='routing':
-            from .routing import evaluate
+            if resource_contract:
+                from .routing_parallel import evaluate
+            else:
+                from .routing import evaluate
             result=evaluate(source,root=root/'.science/routing-task',work=request['work'],
                 python=sys.executable,cargo_home=root/'.science/cargo',rustup_home=root/'.science/rustup',
                 target_cache=root/'.science/router-target',routing_suite=request.get('routing_suite','full'))
         else:raise ValueError('unknown science task')
     except Exception as exc:
         result=invalid(f'{type(exc).__name__}: {exc}')
+        if resource_contract:
+            from .routing_resources import RoutingInfrastructureError
+            if isinstance(exc, RoutingInfrastructureError):
+                result['failure_class']='infrastructure'
+            import traceback
+            result['exception_traceback']=traceback.format_exc()
+    if resource_contract:
+        from .routing_parallel import cpu_seconds, partial_metrics
+        if result['correctness'] != 1:
+            result['metrics'].update(partial_metrics(request['work'],
+                deadline_exceeded='shared routing evaluation deadline' in result['msg']))
+        result['metrics'].update(resource_contract=resource_contract,
+            source_sha256=hashlib.sha256(Path(request['source']).read_bytes()).hexdigest(),
+            process_cpu_seconds=cpu_seconds())
     result['metrics'].update(allocation_memory=metrics(memory_group),worker_seconds=time.monotonic()-started,
         cpu_affinity=sorted(os.sched_getaffinity(0)),
         grader_sha256=grader_digest,library_lock_sha256=lock_digest)

@@ -369,6 +369,7 @@ class Config:
     client_env: dict[str, str] = field(default_factory=dict)
     # Opt-in throughput setting; candidate CPU/RAM/time budgets are unchanged.
     science_routing_slots_per_host: int = 2
+    science_routing_evaluator: str = 'serial-v1'
     # Opt-in CPU placement keeps historical TPU profiles reproducible.
     science_placement_backend: str = "tpu"
     science_placement_slots_per_host: int = 2
@@ -389,6 +390,8 @@ class Config:
     @property
     def ray_cpus_per_host(self):
         # Leave scheduler capacity for controller/Serve actors as well as graders.
+        if self.science_routing_evaluator == 'parallel-v2':
+            return 10 * self.science_routing_slots_per_host + 8
         if self.science_task == 'placement' and self.science_placement_backend == 'cpu':
             return max(32, 4 * self.science_placement_slots_per_host + 8)
         return max(32, 4 * self.science_routing_slots_per_host + 8) if self.science_task == 'routing' else 32
@@ -529,6 +532,19 @@ class Config:
         if routing_suite not in ('full', 'q20') or (routing_suite != 'full' and self.science_task != 'routing'):
             raise ValueError('SCIENCE_ROUTING_SUITE must be full or q20 for science routing')
         slots = self.science_routing_slots_per_host
+        if self.science_routing_evaluator not in ('serial-v1', 'parallel-v2'):
+            raise ValueError('unknown routing evaluator')
+        if self.science_routing_evaluator == 'parallel-v2':
+            if self.science_task != 'routing' or routing_suite != 'full' or not self.systemd_runtime:
+                raise ValueError('parallel routing requires full suite and systemd runtime')
+            if type(slots) is not int or not 1 <= slots <= 10:
+                raise ValueError('parallel routing supports at most ten programs per host')
+            if self.cache.reserve_gib < slots * 20 + 64:
+                raise ValueError('parallel routing cache reserve must cover grading plus 64 GiB for services')
+            if int(self.client_env.get('EVAL_TIMEOUT', '0')) < 4200:
+                raise ValueError('parallel routing needs queue allowance plus 2100-second outer runtime')
+            if self.client_env.get('SCIENCE_ROUTING_EVALUATOR', 'parallel-v2') != 'parallel-v2':
+                raise ValueError('routing evaluator override conflicts with profile')
         if type(slots) is not int or not 1 <= slots <= 16:
             raise ValueError('routing grading slots must be an integer in [1,16] (128 GiB maximum)')
         if slots != 2 and self.science_task != 'routing':
@@ -595,10 +611,11 @@ class Config:
             if self.client_env.get("TTD_ANSWER_MODEL_FAMILY") not in ("qwen", "gemma", "muse"):
                 raise ValueError("answer-only extraction requires an explicit model family")
         if self.has_adaptive_pwc_overlay and not (self.has_problem_prompt_overlay or self.is_recurrent_gemma
-                or (self.science_task == 'routing' and routing_suite == 'q20')
+                or (self.science_task == 'routing' and (routing_suite == 'q20'
+                    or routing_suite == 'full' and self.science_routing_evaluator == 'parallel-v2'))
                 or (self.science_task == 'placement' and self.science_placement_backend == 'cpu'
                     and self.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1')):
-            raise ValueError("adaptive PWC is enabled only for AC2, circle packing, RG-LRU and Q20 science qubit or helper-enabled CPU circuit")
+            raise ValueError("adaptive PWC is enabled only for AC2, circle packing, RG-LRU, Q20 or parallel-v2 full-suite qubit, or helper-enabled CPU circuit")
         if self.training_smoke and (self.inference_only or self.adapter_count != 1 or self.client_env.get('NUM_EPOCHS') != '1'):
             raise ValueError('training smoke requires one adapter and exactly one training step')
         if self.arena_grader_rank is not None:

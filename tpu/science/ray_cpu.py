@@ -35,7 +35,20 @@ def cleanup_builds(folder):
 
 
 @ray.remote(num_cpus=4,memory=8*1024**3,max_retries=0)
-def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, routing_suite='full'):
+def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, routing_suite='full', resource_contract=None):
+    if resource_contract is not None:
+        from .routing_resources import validate_request, acquire
+        validate_request(resource_contract)
+        if task != 'routing' or routing_suite != 'full': raise ValueError('parallel resources require full routing')
+        root = Path(root).resolve(); jobs = root / '.science/ray-jobs'; jobs.mkdir(exist_ok=True)
+        if not (root/'.science/ready.json').is_file(): raise RuntimeError('CPU worker not prepared')
+        queued=time.monotonic()
+        slot, cpus, lease = acquire(slots=slots_per_host, deadline_seconds=admission_timeout_s)
+        waited=time.monotonic()-queued
+        with lease:
+            result=_grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite, resource_contract, cpus)
+            result['metrics']['admission_wait_seconds']=waited
+            return result
     if task not in ('portfolio','portfolio_v2','routing'):raise ValueError('unsupported science task')
     from .routing_suite import validate_suite
     validate_suite(routing_suite)
@@ -51,7 +64,7 @@ def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, rou
         return _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite)
 
 
-def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite='full'):
+def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite='full', resource_contract=None, reserved_cpus=None):
     from .cgroup_limits import runtime_owner_properties
     from .worker import process_identity
     from .rewards import invalid
@@ -59,17 +72,19 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suit
     folder=jobs/job_id;folder.mkdir()
     (folder/'candidate.py').write_text(source)
     (folder/'request.json').write_text(json.dumps(dict(task=task,source=str(folder/'candidate.py'),
-        work=str(folder/'evaluation'),root=str(root),routing_suite=routing_suite)))
-    seconds=1800 if task=='routing' else 300
+        work=str(folder/'evaluation'),root=str(root),routing_suite=routing_suite,resource_contract=resource_contract)))
+    seconds=resource_contract['outer_seconds'] if resource_contract else (1800 if task=='routing' else 300)
+    memory_gib=resource_contract['program_memory_gib'] if resource_contract else 8
     # Sixteen disjoint four-CPU sets, leaving CPUs 0-15 and 80+ for the host.
-    cpus=slot_cpus(slot)
+    cpus=reserved_cpus if resource_contract else slot_cpus(slot)
     if not set(cpus)<=os.sched_getaffinity(0):raise RuntimeError('configured grading CPU set unavailable')
     user=pwd.getpwuid(os.getuid()).pw_name
     command=['sudo','-n','systemd-run','--unit='+unit,'--uid='+user,'--gid='+str(os.getgid()),
         '--wait','--collect','--pipe','--quiet',*runtime_owner_properties(),
-        '--property=MemoryMax=8G','--property=MemorySwapMax=0',
-        '--property=CPUQuota=400%','--property=AllowedCPUs='+','.join(map(str,cpus)),
-        '--property=TasksMax=128','--property=RuntimeMaxSec='+str(seconds),
+        '--property=MemoryMax='+str(memory_gib)+'G','--property=MemorySwapMax=0',
+        *(['--property=Delegate=cpu cpuset memory pids'] if resource_contract else []),
+        '--property=CPUQuota='+str(100*len(cpus))+'%','--property=AllowedCPUs='+','.join(map(str,cpus)),
+        '--property=TasksMax='+str(640 if resource_contract else 128),'--property=RuntimeMaxSec='+str(seconds),
         '--property=KillMode=control-group','--property=TimeoutStopSec=2','--property=OOMPolicy=stop',
         '--working-directory='+str(root),str(root/'.science/venv/bin/python'),'-m','tpu.science.worker',
         '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
@@ -102,8 +117,13 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suit
                         result['metrics']['build_cleanup_error'] = str(exc)
     result['metrics'].update(ray_node_id=ray.get_runtime_context().get_node_id(),
         host=__import__('socket').gethostname(),job_id=job_id,task=task,ray_executor=True,
-        task_envelope_seconds=time.monotonic()-started,hard_memory_gib=8,hard_cpus=cpus,
+        task_envelope_seconds=time.monotonic()-started,hard_memory_gib=memory_gib,hard_cpus=cpus,
         artifact_directory=str(folder),grading_slots_per_host=slots_per_host,
-        grading_memory_cap_gib=8*slots_per_host)
+        grading_memory_cap_gib=memory_gib*slots_per_host,resource_contract=resource_contract)
+    if resource_contract and result['correctness'] != 1 and 'case_statuses' not in result['metrics']:
+        from .routing_parallel import partial_metrics
+        result['metrics'].update(partial_metrics(folder/'evaluation'))
     (folder/'verdict.json').write_text(json.dumps(result,allow_nan=False,indent=2)+'\n')
+    if result.get('failure_class')=='infrastructure':
+        raise RuntimeError('Routing grader infrastructure failed: '+result['msg'])
     return result
