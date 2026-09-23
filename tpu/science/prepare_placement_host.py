@@ -13,16 +13,25 @@ cpu = os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu'
 chips = [] if cpu else chips_from_env(os.environ)
 accelerator = os.environ.get('SCIENCE_ACCELERATOR','tpu-v4-64')
 if cpu:
-    from .cpu_slots import validate_slots, slot_cpus
-    slots = validate_slots(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16')))
-    if not set(slot_cpus(slots - 1)) <= os.sched_getaffinity(0):
-        raise RuntimeError('placement CPU sets are unavailable')
+    modern = os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1'
+    if modern:
+        from .placement_resources import partition
+        slots = int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32'))
+        grading_cpus, _ = partition(slots)
+        if not 1 <= slots <= 48:
+            raise ValueError('invalid placement slots')
+    else:
+        from .cpu_slots import validate_slots, slot_cpus
+        slots = validate_slots(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16')))
+        if not set(slot_cpus(slots - 1)) <= os.sched_getaffinity(0):
+            raise RuntimeError('placement CPU sets are unavailable')
 for chip in chips:
     if not set(chip_cpus(chip)) <= os.sched_getaffinity(0):
         raise RuntimeError('placement CPU sets are unavailable')
     device_paths(chip, accelerator)
 mem = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())
-if int(mem['MemAvailable'].split()[0]) < ((8*slots if cpu else 16*len(chips))+8)*1024**2:
+required_gib = ((4 if modern else 8)*slots + (64 if modern else 8)) if cpu else 16*len(chips)+8
+if int(mem['MemAvailable'].split()[0]) < required_gib*1024**2:
     raise RuntimeError('insufficient available host RAM for grading slots plus 8 GiB headroom')
 uv=str(Path.home()/'.local/bin/uv')
 for name,version,lock,extras in [

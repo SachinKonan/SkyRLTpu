@@ -65,7 +65,9 @@ elif helper != 'none':
     raise ValueError('unknown placement helper')
 device_info['helper'] = helper
 exec(compile(tree, '/candidate.py', 'exec'), namespace)
-remaining = float(sys.argv[1]) - (time.monotonic()-started)
+remaining = (float(os.environ['SCIENCE_PLACEMENT_SEARCH_SECONDS'])
+             if 'SCIENCE_PLACEMENT_SEARCH_SECONDS' in os.environ else
+             float(sys.argv[1]) - (time.monotonic()-started))
 result = namespace['place'](problem, 42, time_budget_s=max(0, remaining))
 if not isinstance(result, dict) or set(result) != {'positions'}:
     raise ValueError('expected exactly {positions: numeric array}')

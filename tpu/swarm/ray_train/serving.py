@@ -133,9 +133,14 @@ class Engine:
         from .launch_contract import write_launch_contract
         write_launch_contract(self.run / f"launch-inference-{slot}.json", command, environment,
                               extra_keys=self.config.inference.engine_env)
+        service_cpus = None
         if self.config.science_routing_evaluator == 'parallel-v2':
             from tpu.science.routing_resources import host_partition
             _, service_cpus = host_partition()
+        elif self.config.science_placement_runtime == 'cpu300-4g-v1':
+            from tpu.science.placement_resources import partition
+            _, service_cpus = partition(self.config.science_placement_slots_per_host)
+        if service_cpus is not None:
             command = ['taskset', '--cpu-list', ','.join(map(str, service_cpus)), *command]
         self.process = Process(command, self.run / f"engine-{self.instance}.log", environment, self.source)
         deadline = time.monotonic() + self.config.ready_timeout

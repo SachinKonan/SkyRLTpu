@@ -17,15 +17,29 @@ def digest(path):
 def verified_inputs(root, *, folder=None):
     folder = Path(root)/DESTINATION if folder is None else Path(folder)
     manifest = json.loads((folder/'manifest.json').read_text())
-    if (manifest['schema'] != SCHEMA or manifest.get('benchmark_suite') != SUITE
+    if (manifest['schema'] not in (SCHEMA, 'abuplace-xplace-three-starts-v1') or manifest.get('benchmark_suite') != SUITE
             or set(manifest['cases']) != set(CASES)):
         raise ValueError('Incomplete Xplace starting-layout manifest')
     paths = {}
+    portfolio = manifest['schema'] == 'abuplace-xplace-three-starts-v1'
+    if portfolio and manifest.get('variants') != ['off', 'rudy', 'rudy_hv']:
+        raise ValueError('Incomplete AbuPlace starting-layout variants')
     for case in CASES:
         row = manifest['cases'][case]
         path = folder/f'{case}-problem.npz'
         if digest(path) != row['problem_sha256'] or row['valid'] is not True:
             raise ValueError(f'Invalid Xplace starting layout: {case}')
+        if portfolio:
+            import numpy as np
+            with np.load(path, allow_pickle=False) as data:
+                layouts, scores = data['starting_layouts'], data['starting_scores']
+                if (layouts.shape != (3, *data['initial_positions'].shape)
+                        or scores.shape != (3, 4) or not np.isfinite(layouts).all()
+                        or not np.isfinite(scores).all()
+                        or data['starting_names'].tolist() != manifest['variants']
+                        or data['starting_score_columns'].tolist() != [
+                            'proxy_cost', 'wirelength_cost', 'density_cost', 'congestion_cost']):
+                    raise ValueError(f'Invalid AbuPlace starting-layout arrays: {case}')
         native = Path(root)/'.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04'/case
         if set(row['native_sha256']) != {'netlist.pb.txt', 'initial.plc'}:
             raise ValueError(f'Incomplete native input hashes: {case}')

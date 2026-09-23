@@ -86,7 +86,7 @@ SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/r
     'tpu/science/' + name for name in (
         '__init__.py', 'bootstrap.py', 'seed_pool.py', 'training_env.py', 'feedback.py', 'training_setup.py', 'ray_cpu.py', 'worker.py',
         'routing.py', 'routing_suite.py', 'routing_parallel.py', 'routing_resources.py', 'manifests/routing-v1.json', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',
-        'placement_ray.py', 'placement_slots.py', 'placement_task.py', 'fast_proxy_deployment.py', 'challenge_seed_fast_proxy.py', 'challenge_contract.py',
+        'placement_ray.py', 'placement_resources.py', 'grading_dedup.py', 'placement_slots.py', 'placement_task.py', 'fast_proxy_deployment.py', 'challenge_seed_fast_proxy.py', 'challenge_contract.py',
         'seed_routing.py', 'challenge_seed.py', 'challenge_seed_jax.py', 'requirements-cpu.lock',
         'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt',
         'prompts/placement-jax-cpu.txt', 'prompts/placement-fast-proxy-cpu-v1.txt',

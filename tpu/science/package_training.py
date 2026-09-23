@@ -30,8 +30,14 @@ def package(profile, output):
     if config.science_task == 'placement':
         from .challenge_contract import CASES
         from .placement_warm_start import verified_inputs, DESTINATION
-        starts = verified_inputs(root)
-        files['.science/placement-inputs/manifest.json'] = root / DESTINATION / 'manifest.json'
+        folder = root / DESTINATION
+        if config.client_env.get('SCIENCE_PLACEMENT_STARTS') == 'abuplace-xplace-three-starts-v1':
+            from .placement_start_portfolio import DESTINATION as PORTFOLIO
+            folder = root / PORTFOLIO
+        elif config.client_env.get('SCIENCE_PLACEMENT_STARTS'):
+            raise ValueError('unknown placement starting layouts')
+        starts = verified_inputs(root, folder=folder)
+        files['.science/placement-inputs/manifest.json'] = folder / 'manifest.json'
         for path in (root / '.science/challenge-probe').rglob('*'):
             if path.is_file() and '__pycache__' not in path.parts and (
                     path.suffix == '.py' or path.name == 'sources.json' or set(CASES) & set(path.parts)):
@@ -54,6 +60,7 @@ def package(profile, output):
     doc['envs'].update(RAY_TRAIN_CODE=config.bucket + '/code-bundles/science-training-' + digest + '.tar.gz',
                        RAY_TRAIN_CODE_SHA256=digest, SCIENCE_ACCELERATOR=config.accelerator,
                        SCIENCE_PLACEMENT_BACKEND=config.science_placement_backend,
+                       SCIENCE_PLACEMENT_RUNTIME=config.science_placement_runtime,
                        SCIENCE_PLACEMENT_HELPER=config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none'),
                        SCIENCE_PLACEMENT_SLOTS_PER_HOST=str(config.science_placement_slots_per_host),
                        PLACEMENT_TPU_RANKS=','.join(map(str, range(config.hosts))))

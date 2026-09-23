@@ -1,0 +1,265 @@
+{
+  "schema": "abuplace-xplace-starts-v1",
+  "source_root": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement",
+  "legacy": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/tpu/science/results/placement/abuplace-xplace-starts-20260921/no-legacy",
+  "build_xplace": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/xplace-a100-intersection-20260919",
+  "candidate_python": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv-cuda-ray4/bin/python",
+  "candidate_seconds": 1800,
+  "jobs": [
+    {
+      "method": "xplace-off",
+      "case": "ibm01",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm01",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm01",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm02",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm02",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm02",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm03",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm03",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm03",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm04",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm04",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm04",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm06",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm06",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm06",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm07",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm07",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm07",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm08",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm08",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm08",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm09",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm09",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm09",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm10",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm10",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm10",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm11",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm11",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm11",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm12",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm12",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm12",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm13",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm13",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm13",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm14",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm14",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm14",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm15",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm15",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm15",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm16",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm16",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm16",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm17",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm17",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm17",
+      "variant": "rudy_hv"
+    },
+    {
+      "method": "xplace-off",
+      "case": "ibm18",
+      "variant": "off"
+    },
+    {
+      "method": "xplace-rudy",
+      "case": "ibm18",
+      "variant": "rudy"
+    },
+    {
+      "method": "xplace-rudy_hv",
+      "case": "ibm18",
+      "variant": "rudy_hv"
+    }
+  ]
+}

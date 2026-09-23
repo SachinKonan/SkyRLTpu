@@ -373,6 +373,7 @@ class Config:
     # Opt-in CPU placement keeps historical TPU profiles reproducible.
     science_placement_backend: str = "tpu"
     science_placement_slots_per_host: int = 2
+    science_placement_runtime: str = "legacy"
     # Extra environment for the trainer (Tinker API server) process only,
     # e.g. TUNIX_LORA_MIX_GAMMA. Applied after the launcher's own settings.
     trainer_env: dict[str, str] = field(default_factory=dict)
@@ -515,8 +516,17 @@ class Config:
         if self.science_placement_backend not in ('cpu', 'tpu'):
             raise ValueError('placement backend must be cpu or tpu')
         placement_slots = self.science_placement_slots_per_host
-        if type(placement_slots) is not int or not 1 <= placement_slots <= 16:
-            raise ValueError('placement CPU slots must be an integer in [1,16]')
+        if self.science_placement_runtime not in ('legacy', 'cpu300-4g-v1'):
+            raise ValueError('unknown placement runtime')
+        modern = self.science_placement_runtime == 'cpu300-4g-v1'
+        if modern and (self.science_task != 'placement' or self.science_placement_backend != 'cpu' or not self.systemd_runtime):
+            raise ValueError('five-minute placement requires CPU placement and systemd')
+        if modern and self.cache.reserve_gib < 4 * placement_slots + 64:
+            raise ValueError('expanded grading requires 4 GiB per slot plus 64 GiB runtime reserve')
+        if self.client_env.get('SCIENCE_PLACEMENT_RUNTIME', self.science_placement_runtime) != self.science_placement_runtime:
+            raise ValueError('conflicting placement runtime override')
+        if type(placement_slots) is not int or not 1 <= placement_slots <= (48 if modern else 16):
+            raise ValueError('placement CPU slot count exceeds runtime contract')
         if self.science_placement_backend == 'cpu':
             if self.science_task != 'placement':
                 raise ValueError('CPU placement backend requires science placement')

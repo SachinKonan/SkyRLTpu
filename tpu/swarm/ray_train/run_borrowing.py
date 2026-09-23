@@ -16,6 +16,24 @@ class RunBorrower(Borrower):
         self.preparing = None
         self.run_watchdog = None
         self.closed = False
+        self.phase_archive = None
+        self.phase_expected_n = 1
+
+    def retry_preparation(self):
+        """Retry discovery/loss during a phase without delaying local requests."""
+        if (self.closed or not self.phase or not self.urls or self.preparing is not None
+                or self.phase_expected_n > self.settings.external_pool_max_n):
+            return
+        lease = self.lease
+        if (lease and not lease.lost.is_set() and lease.attested
+                and time.monotonic() < self._deadline(lease)):
+            return
+        self.preparing = asyncio.create_task(
+            self._prepare(self.phase, self.model, self.phase_archive))
+
+    def update_urls(self, model, urls):
+        super().update_urls(model, urls)
+        self.retry_preparation()
 
     def touch_run(self):
         if self.closed:
@@ -47,6 +65,7 @@ class RunBorrower(Borrower):
                 if remaining <= 0:
                     await self.close()
                     return
+                self.retry_preparation()
                 await asyncio.sleep(min(remaining, self.settings.external_pool_heartbeat_seconds))
         finally:
             self.run_watchdog = None
@@ -86,6 +105,7 @@ class RunBorrower(Borrower):
                     raise BorrowingProtocolError('another sampling phase is active')
                 return self.snapshot()
             self.phase, self.model = phase, model
+            self.phase_archive, self.phase_expected_n = archive, expected_n
             self.touch(phase)
             if expected_n <= self.settings.external_pool_max_n:
                 # Local requests need not wait for cross-region upload/compile.
@@ -164,6 +184,7 @@ class RunBorrower(Borrower):
             if phase is not None and phase != self.phase:
                 return False
             self.phase = self.model = None  # Closes new remote admission first.
+            self.phase_archive = None
             lease = self.lease
             if lease:
                 async with self.changed:

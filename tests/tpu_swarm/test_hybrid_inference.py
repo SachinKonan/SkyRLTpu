@@ -401,3 +401,55 @@ def test_hybrid_ingress_preserves_native_response_and_local_only_header(tmp_path
         finally:
             await gateway.http.aclose()
     asyncio.run(run())
+
+
+def test_late_discovery_prepares_active_bootstrap_without_restart(tmp_path):
+    async def run():
+        farm = Farm()
+        cfg = config(tmp_path)
+        cfg = replace(cfg, inference=replace(cfg.inference,
+            external_pool_lease_scope='run', external_pool_updates=True,
+            external_pool_urls={}))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(farm)) as http:
+            borrower = RunBorrower(cfg, http)
+            try:
+                await borrower.begin('bootstrap', cfg.model, expected_n=16)
+                await borrower.preparing
+                assert not borrower.snapshot()['reserved']
+                borrower.update_urls(cfg.model, ['http://farm1'])
+                task = borrower.preparing
+                borrower.update_urls(cfg.model, ['http://farm1'])
+                assert borrower.preparing is task
+                await task
+                assert borrower.snapshot()['ready']
+                result = await borrower.generate({'model': cfg.model, 'n':16}, 4, 4)
+                assert len(result['choices']) == 16
+                await borrower.end('bootstrap')
+                borrower.update_urls(cfg.model, ['http://farm1'])
+                assert borrower.preparing is None
+            finally:
+                await borrower.close()
+    asyncio.run(run())
+
+
+def test_active_phase_retries_busy_farm_without_another_url_update(tmp_path):
+    async def run():
+        farm = Farm()
+        farm.busy.update(('farm1', 'farm2'))
+        cfg = config(tmp_path)
+        cfg = replace(cfg, inference=replace(cfg.inference,
+            external_pool_lease_scope='run', external_pool_heartbeat_seconds=1))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(farm)) as http:
+            borrower = RunBorrower(cfg, http)
+            try:
+                await borrower.begin('bootstrap', cfg.model, expected_n=16)
+                await borrower.preparing
+                assert not borrower.snapshot()['ready']
+                farm.busy.clear()
+                async with asyncio.timeout(4):
+                    while not borrower.snapshot()['ready']:
+                        await asyncio.sleep(.02)
+                assert borrower.snapshot()['engines'] == 4
+            finally:
+                await borrower.close()
+    asyncio.run(run())
