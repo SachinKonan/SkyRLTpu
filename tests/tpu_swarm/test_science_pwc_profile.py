@@ -41,7 +41,9 @@ def test_ac_inequalities_problems_allow_adaptive_pwc(problem):
 
 
 @pytest.mark.parametrize('name', ['ac1-v5p-qwen-on-gemma-carry-pwc05-20260923',
-                                  'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923'])
+                                  'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923',
+                                  'ac1-v5p-qwen-on-gemma-carry-pwc05-20260923-r2',
+                                  'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923-r2'])
 def test_ac1_takeover_profiles_validate(name):
     config = Config.from_dict(json.loads((PROFILES / f'{name}.json').read_text()))
     env = config.client_env
