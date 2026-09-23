@@ -17,6 +17,15 @@ class BorrowingProtocolError(RuntimeError):
     pass
 
 
+class RemoteRequestRejected(Exception):
+    """The farm refused one request (4xx) while the lease itself stays valid."""
+
+    def __init__(self, status_code, detail):
+        super().__init__(f'{status_code}: {detail}')
+        self.status_code = status_code
+        self.detail = detail
+
+
 @dataclass
 class Lease:
     url: str
@@ -36,6 +45,8 @@ class Lease:
     heartbeat: asyncio.Task | None = field(default=None, repr=False)
     lost: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
     deadline_changed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    # Set after a failed request so the heartbeat re-attests immediately.
+    probe: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
 
     @property
     def headers(self):
@@ -52,6 +63,11 @@ def archive_digest(path):
 
 
 class Borrower:
+    # 'fence': any failed request loses the lease (local engines take over).
+    # 'probe': a failed request pauses the lease until the next attested
+    # renewal; only lease rejection, loss or expiry sets lost (remote-only).
+    request_failure_policy = 'fence'
+
     def __init__(self, config, http, report=lambda *a, **kw: None):
         self.config = config
         self.settings = config.inference
@@ -168,6 +184,29 @@ class Borrower:
         lease.lost.set()
         self._event('heartbeat_failed', service=lease.url, reason=reason)
 
+    def _contract_accepted(self, sha):
+        return bool(self.required_contract) and sha == self.required_contract
+
+    def _contract_claim(self, sha):
+        return self.required_contract
+
+    def _request_failed(self, lease, exc):
+        """Probe policy: classify one failed request without fencing the lease."""
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        if lease.lost.is_set() or time.monotonic() >= self._deadline(lease):
+            self._lose(lease, 'lost during request')
+        elif status in (409, 410):
+            self._lose(lease, 'lease rejected')
+        elif status in (400, 404, 413, 422):
+            detail = exc.response.text[:512]
+            self._event('generation_rejected', service=lease.url, http_status=status)
+            raise RemoteRequestRejected(status, detail) from None
+        else:
+            self._pause(lease, 'generation_failed', error=type(exc).__name__,
+                        **({'http_status': status} if status else {}))
+            lease.probe.set()
+        self._event('generation_failed', service=lease.url, reason=type(exc).__name__)
+
     def touch(self, phase):
         if phase != self.phase:
             return False
@@ -253,12 +292,13 @@ class Borrower:
                 response = await self.http.get(url + '/status', timeout=self.settings.external_pool_rpc_timeout)
                 response.raise_for_status()
                 descriptor = response.json()
+                offered = None
                 if self.settings.external_pool_attestation:
-                    if (not self.required_contract or
-                            response.json().get('capabilities', {}).get('compatibility_sha256') != self.required_contract):
+                    offered = (descriptor.get('capabilities') or {}).get('compatibility_sha256')
+                    if not offered or not self._contract_accepted(offered):
                         self._event('incompatible_runtime', service=url)
                         continue
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
                 continue
             # Once an acquire is sent, ambiguous failure must not claim a second
             # machine. A timed-out acquire could still be queued server-side,
@@ -271,7 +311,7 @@ class Borrower:
                 self.pending_acquire = (url, identity)
             response = await self.http.post(url + '/acquire_lease', json=dict(
                 owner_run=self.owner, ttl_seconds=self.settings.external_pool_lease_seconds,
-                compatibility_sha256=self.required_contract if self.settings.external_pool_attestation else None,
+                compatibility_sha256=self._contract_claim(offered) if self.settings.external_pool_attestation else None,
                 **{k: v for k, v in identity.items() if k != 'owner_run'}),
                 timeout=self.settings.external_pool_rpc_timeout)
             if response.status_code in (409, 423, 404, 410):
@@ -332,8 +372,15 @@ class Borrower:
     async def _heartbeat(self, lease):
         try:
             while True:
-                await asyncio.sleep(max(0, min(self.settings.external_pool_heartbeat_seconds,
-                                               self._deadline(lease) - time.monotonic())))
+                interval = max(0, min(self.settings.external_pool_heartbeat_seconds,
+                                      self._deadline(lease) - time.monotonic()))
+                try:
+                    # A failed request wakes the renewal early; a renewal is the
+                    # farm health probe (identity, adapter and engine readiness).
+                    await asyncio.wait_for(lease.probe.wait(), timeout=interval)
+                except (TimeoutError, asyncio.TimeoutError):
+                    pass
+                lease.probe.clear()
                 if lease.lost.is_set():
                     return
                 if time.monotonic() >= self._deadline(lease):
@@ -425,13 +472,17 @@ class Borrower:
             self._event('generated', service=lease.url, phase=self.phase, request_id=request_id)
             return result
         except asyncio.CancelledError:
-            lease.ready = False
-            lease.lost.set()
+            if self.request_failure_policy == 'fence':
+                lease.ready = False
+                lease.lost.set()
             raise
         except Exception as exc:
-            lease.ready = False
-            lease.lost.set()
-            self._event('generation_failed', service=lease.url, reason=type(exc).__name__)
+            if self.request_failure_policy == 'fence':
+                lease.ready = False
+                lease.lost.set()
+                self._event('generation_failed', service=lease.url, reason=type(exc).__name__)
+                return None
+            self._request_failed(lease, exc)
             return None
         finally:
             for pending in (request, watcher):
