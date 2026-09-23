@@ -25,6 +25,35 @@ def test_both_estimators_use_identical_overlay(name, helper):
     assert ADAPTIVE_PWC_FILE in manifest(ROOT, a)
     assert manifest(ROOT, a) == manifest(ROOT, b)
 
+@pytest.mark.parametrize('problem', ['ac1', 'ac2'])
+def test_ac_inequalities_problems_allow_adaptive_pwc(problem):
+    """Both autocorrelation problems share one env file; the ac1 takeover cells (2026-09-23)
+    use the same adaptive estimator the ac2 cells were approved with."""
+    candidate = json.loads((PROFILES / 'capacity-v5p-qwen-ac2-grpo-15e4-20260920.json').read_text())
+    candidate['client_env'].update(TTD_PROBLEM_TYPE=problem,
+        TTD_ADV_ESTIMATOR='piecewise_valid_entropic_centered_adaptive',
+        TTD_ADV_PIECEWISE_RHO='0.5', TTD_ADV_PIECEWISE_INVALID_REWARD='0')
+    config = Config.from_dict(candidate)
+    assert config.has_problem_prompt_overlay and config.has_adaptive_pwc_overlay
+    names = manifest(ROOT, config)
+    assert ADAPTIVE_PWC_FILE in names
+    assert 'third_party/discover/examples/ac_inequalities/env.py' in names
+
+
+@pytest.mark.parametrize('name', ['ac1-v5p-qwen-on-gemma-carry-pwc05-20260923',
+                                  'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923'])
+def test_ac1_takeover_profiles_validate(name):
+    config = Config.from_dict(json.loads((PROFILES / f'{name}.json').read_text()))
+    env = config.client_env
+    assert (env['TTD_ENV'], env['TTD_PROBLEM_TYPE']) == ('ac_inequalities', 'ac1')
+    assert env['TTD_ADV_ESTIMATOR'] == 'piecewise_valid_entropic_centered_adaptive'
+    assert (env['TTD_ADV_PIECEWISE_RHO'], env['TTD_ADV_PIECEWISE_INVALID_REWARD']) == ('0.5', '0')
+    assert config.accelerator == 'tpu-v5p-32' and config.hosts == 4 and config.trainer.hosts == 1
+    assert not config.seed_pool_sha256  # ac1 pool values are negative; staged tree is not science-verified
+    carried = 'TTD_INIT_STATE_PATH_QWEN' in env
+    assert carried == ('carry' in name)
+
+
 @pytest.mark.parametrize('task', ['routing', 'placement'])
 def test_other_science_modes_are_not_implicitly_enabled(task):
     name = ('science-qubit-q20-v6e-qwen-seeded-001' if task == 'routing'

@@ -422,7 +422,7 @@ class Config:
     def has_problem_prompt_overlay(self):
         env = self.client_env.get("TTD_ENV")
         return (env == "circle_packing" or
-                env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") == "ac2")
+                env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") in ("ac1", "ac2"))
 
     @classmethod
     def from_dict(cls, raw):
