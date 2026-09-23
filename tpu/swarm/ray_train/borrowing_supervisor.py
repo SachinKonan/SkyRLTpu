@@ -29,7 +29,7 @@ try:
         call('/health')
         status = call('/status')
         count = status.get('expected_engines')
-        if (type(count) is not int or count != 4 or status.get('exhausted')
+        if (type(count) is not int or count < 1 or status.get('exhausted')
                 or status.get('updating') or len(status.get('replicas', [])) != count
                 or status.get('state') not in ('unleased', 'ready', 'awaiting_adapter', 'expired')):
             raise ValueError('not a healthy lease-capable farm')
@@ -40,7 +40,13 @@ try:
             headers={'Metadata-Flavor': 'Google'})
         with urllib.request.urlopen(request, timeout=5) as response:
             ip = str(ipaddress.ip_address(response.read().decode().strip()))
-        if ip not in status.get('expected', []):
+        expected_hosts = set()
+        for endpoint in status.get('expected', []):
+            try:
+                expected_hosts.add(str(ipaddress.ip_address(endpoint)))
+            except ValueError:
+                expected_hosts.add(str(ipaddress.ip_address(endpoint.rsplit(':', 1)[0])))
+        if ip not in expected_hosts:
             raise ValueError('farm head is not in the expected engine set')
         result = dict(models=names, url='http://'+ip+':'+str(PARAMS['port']),
                       owner_run=status.get('owner_run'), state=status.get('state'),
@@ -114,7 +120,9 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
     unavailable = []
     for row, result in probes:
         if result.get('ok'):
-            farms.append(dict(job_id=row['job_id'], **result['result']))
+            farms.append(dict(job_id=row['job_id'], source_pool=row.get('pool'),
+                              source_cluster=row.get('cluster'),
+                              source_name=row.get('run_id'), **result['result']))
         else:
             unavailable.append(dict(job_id=row['job_id'], **result))
 

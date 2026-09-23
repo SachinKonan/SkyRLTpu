@@ -1,6 +1,6 @@
 import copy
 
-from tpu.swarm.ray_train.borrowing_supervisor import target_identity_matches, tick
+from tpu.swarm.ray_train.borrowing_supervisor import REMOTE, target_identity_matches, tick
 
 
 def test_relaunch_identity_suffixes_are_explicitly_scoped():
@@ -14,6 +14,12 @@ def test_relaunch_identity_suffixes_are_explicitly_scoped():
     assert not target_identity_matches('run-requeue-2026092', 'run')
     assert not target_identity_matches('run-requeue-20260922-extra', 'run')
     assert not target_identity_matches('other-optional-farm-r1', 'run')
+
+
+def test_remote_probe_accepts_declared_engine_count_and_port_qualified_hosts():
+    assert "count != 4" not in REMOTE
+    assert "count < 1" in REMOTE
+    assert "endpoint.rsplit(':', 1)[0]" in REMOTE
 
 
 def fixture():
