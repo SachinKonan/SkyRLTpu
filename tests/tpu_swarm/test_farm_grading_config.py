@@ -132,7 +132,7 @@ def test_grading_farm_profiles_are_valid_relaunch_targets():
         assert config.run_id == name and config.root.endswith(name)
     v6e = Config.load('tpu/swarm/ray_train/profiles/farm-v6e32-qwen-grading-ac2-20260923.json')
     assert v6e.hosts == 8 and v6e.inference_only_ranks == list(range(8)) and v6e.inference_hosts == 8
-    assert v6e.inference.prefix_caching and v6e.inference.tp == 4 and v6e.zone == 'us-east5-b'
+    assert v6e.inference.prefix_caching and v6e.inference.tp == 4 and v6e.zone == 'us-central1-b'
     assert workload_resources(v6e, 7) == {'TPU': 4, 'grading_ac2': 16}
     routing = Config.load(ROUTING_FARM)
     assert routing.grading_science_task == 'routing' and routing.inference_only

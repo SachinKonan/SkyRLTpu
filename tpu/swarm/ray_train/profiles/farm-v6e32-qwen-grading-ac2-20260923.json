@@ -2,7 +2,7 @@
   "run_id": "farm-v6e32-qwen-grading-ac2-20260923",
   "accelerator": "tpu-v6e-32",
   "hosts": 8,
-  "bucket": "gs://sk7524-tinker-tpu-us-east5",
+  "bucket": "gs://sk7524-tinker-tpu-us-central1",
   "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
   "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
   "root": "~/.cache/farm-v6e32-qwen-grading-ac2-20260923",
@@ -31,16 +31,16 @@
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
-    "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts",
-    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/farm-v6e32-qwen-grading-ac2-20260923/trainer_compile",
-    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/farm-v6e32-qwen-grading-ac2-20260923/inference_compile",
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central1/farm-v6e32-qwen-grading-ac2-20260923/trainer_compile",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central1/farm-v6e32-qwen-grading-ac2-20260923/inference_compile",
     "trainer_gib": 128,
     "inference_gib": 128,
     "reserve_gib": 192,
     "sync_seconds": 60,
     "process_count": 4,
     "thread_count": 8,
-    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-east5/hybrid-v6e-qwen-ac2-canary-east5b-20260920-inference-compile-v1"
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central1/capacity-v6e-qwen-qubit-grpo-15e4-20260920-inference-compile-v1"
   },
   "checkpoint_cleanup_timeout": 0,
   "ready_timeout": 7200,
@@ -54,7 +54,7 @@
     "SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC": "25200",
     "SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC": "28800"
   },
-  "zone": "us-east5-b",
+  "zone": "us-central1-b",
   "bootstrap_layers": 0,
   "bootstrap_all_hosts": false,
   "seed_pool_sha256": "",
