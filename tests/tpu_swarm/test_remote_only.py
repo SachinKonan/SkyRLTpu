@@ -677,6 +677,202 @@ def test_expired_lease_cancels_inflight_work_and_frees_the_farm(tmp_path, monkey
     asyncio.run(run())
 
 
+# --- Controller ------------------------------------------------------------
+from tpu.swarm.select_v4_32_topology import verify_full_slice_order
+
+
+def slice_records(rank_to_z):
+    return [dict(process_id=rank, coords=[[x, y, z] for x in range(2) for y in range(2)])
+            for rank, z in enumerate(rank_to_z)]
+
+
+def test_v4_32_full_slice_order_guard():
+    assert verify_full_slice_order(slice_records([0, 1, 2, 3])) == [0, 1, 2, 3]
+    with pytest.raises(ValueError, match='not in physical z order'):
+        verify_full_slice_order(slice_records([0, 2, 1, 3]))
+    with pytest.raises(ValueError, match='complete v4-32'):
+        verify_full_slice_order(slice_records([0, 1, 2, 2]))
+    with pytest.raises(ValueError, match='expected Sky ranks'):
+        verify_full_slice_order(slice_records([0, 1, 2]))
+
+
+def controller_for(tmp_path):
+    from tpu.swarm.ray_train import controller
+    raw = Config.load(PROFILE).to_dict()
+    raw['root'] = str(tmp_path)
+    cfg = Config.from_dict(raw)
+    owner = controller.Controller(cfg, ['10.0.0.1', '10.0.0.2', '10.0.0.3', '10.0.0.4'])
+    events = []
+    owner.report = lambda event, **kw: events.append((event, kw))
+    return controller, owner, events
+
+
+def test_controller_waits_indefinitely_for_a_farm_in_remote_only(tmp_path, monkeypatch):
+    controller, owner, events = controller_for(tmp_path)
+    now, acquires = [1000.0], []
+
+    def transport(request):
+        if request.method == 'GET':
+            return httpx.Response(200, json={'instance': 'control-plane'})
+        body = json.loads(request.content)
+        assert body['action'] == 'acquire' and body['instance'] == 'control-plane'
+        acquires.append(now[0])
+        # Roughly 25 minutes without any farm, then one appears.
+        return httpx.Response(200, json={'reserved': now[0] - 1000 > 1500, 'held': ['http://farm-a'],
+                                         'candidates': ['http://farm-a'], 'target': 2})
+    original_client = httpx.Client
+    monkeypatch.setattr(controller.httpx, 'Client', lambda **kw: original_client(
+        transport=httpx.MockTransport(transport), **kw))
+    monkeypatch.setattr(controller.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(owner.stopping, 'wait', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    owner.wait_farm_admission()
+    names = [e for e, _ in events]
+    assert names[0] == 'waiting_for_farm' and events[0][1]['unbounded']
+    assert 'farm_admission_local_fallback' not in names
+    assert names[-1] == 'farm_admitted' and events[-1][1]['held'] == ['http://farm-a']
+    waits = [kw for e, kw in events if e == 'farm_admission_waiting']
+    assert len(waits) >= 20 and all(kw['candidates'] == ['http://farm-a'] for kw in waits)
+    assert len(acquires) > 300 and now[0] - 1000 > 1500  # Far beyond the legacy 300 s deadline.
+
+
+def test_controller_reports_remote_lease_changes_without_failing(tmp_path, monkeypatch):
+    controller, owner, events = controller_for(tmp_path)
+    owner.local_inference_instance = 'control-plane'
+    held = [[]]
+    now = [5000.0]
+
+    def transport(request):
+        assert request.url.path == '/status'
+        return httpx.Response(200, json={'instance': 'control-plane', 'fatal_error': None, 'exhausted': [],
+                                         'borrowing': {'held': held[0], 'target': 2, 'candidates': ['u']},
+                                         'scheduling': {'queued': 3}})
+    original_client = httpx.Client
+    monkeypatch.setattr(controller.httpx, 'Client', lambda **kw: original_client(
+        transport=httpx.MockTransport(transport), **kw))
+    monkeypatch.setattr(controller.time, 'monotonic', lambda: now[0])
+    owner.check_local_inference()
+    assert owner.failure is None
+    assert [e for e, _ in events] == ['remote_leases', 'remote_leases_zero']
+    assert events[0][1] == dict(held=[], target=2, candidates=['u'], queued=3)
+    now[0] += 10
+    owner.check_local_inference()
+    assert [e for e, _ in events] == ['remote_leases', 'remote_leases_zero']  # Alert cadence respected.
+    now[0] += 60
+    held[0] = ['http://farm-b', 'http://farm-a']
+    owner.check_local_inference()
+    assert events[-1] == ('remote_leases', dict(held=['http://farm-a', 'http://farm-b'], target=2,
+                                                candidates=['u'], queued=3))
+    assert owner.failure is None
+
+
+# --- Supervisor admission ---------------------------------------------------
+from tpu.swarm.ray_train.farm_admission import assignments, candidate_limit
+
+
+def farm_row(job_id, url, owner=None, state='unleased', sha='c' * 64, name='inference-farm-v4-32'):
+    return dict(job_id=job_id, url=url, models=['qwen'], owner_run=owner, state=state,
+                active=0, source_name=name, capabilities={'compatibility_sha256': sha})
+
+
+def test_multi_lease_target_gets_owned_plus_free_candidates_up_to_limit():
+    farms = [farm_row(1, 'http://a', owner='pilot:x', state='ready'),
+             farm_row(2, 'http://b', owner='pilot:x', state='ready'),
+             farm_row(3, 'http://c'), farm_row(4, 'http://d'), farm_row(5, 'http://e', sha='d' * 64),
+             farm_row(6, 'http://other-owner', owner='someone:y', state='ready')]
+    target = dict(model='qwen', run_id='pilot', lease_scope='run', target_leases=2, candidate_limit=4,
+                  accepted_compatibility=['c' * 64])
+    legacy = dict(model='qwen', run_id='legacy', lease_scope='run')
+    result = assignments([], farms, {10: target, 11: legacy})
+    assert candidate_limit(target) == 4 and candidate_limit(legacy) == 2
+    assert result[10][:2] == ['http://a', 'http://b']
+    assert len(result[10]) == 4 and set(result[10][2:]) <= {'http://c', 'http://d'}
+    assert 'http://e' not in result[10] and 'http://other-owner' not in result[10]
+    # Legacy targets keep two alternatives, with an unchanged single owned entry.
+    assert len(result[11]) == 2 and set(result[11]) <= {'http://c', 'http://d', 'http://e'}
+    owned_legacy = assignments([], [farm_row(1, 'http://a', owner='legacy:z', state='ready'),
+                                    farm_row(2, 'http://b', owner='legacy:z', state='ready')],
+                               {11: legacy})
+    assert owned_legacy[11] == ['http://a']
+
+
+def test_multi_lease_target_without_contract_accepts_any_farm_and_learns():
+    farms = [farm_row(1, 'http://a', sha='c' * 64), farm_row(2, 'http://b', sha='d' * 64)]
+    target = dict(model='qwen', run_id='pilot', lease_scope='run', target_leases=2, candidate_limit=16,
+                  accepted_compatibility=[], compatibility_sha256=None)
+    assert sorted(assignments([], farms, {7: target})[7]) == ['http://a', 'http://b']
+    target['accepted_compatibility'] = ['d' * 64]
+    assert assignments([], farms, {7: target})[7] == ['http://b']
+
+
+def test_supervisor_pushes_up_to_candidate_limit_for_multi_lease_targets():
+    from tests.tpu_swarm.test_borrowing_supervisor import fixture
+    from tpu.swarm.ray_train.borrowing_supervisor import tick
+    rows, farms, targets, calls, call = fixture()
+    for i in (5, 6, 7):
+        rows.append(dict(job_id=20 + i, status='RUNNING', cluster=f'farm-{i}', run_id=f'qwen-farm-{i}'))
+        farms[f'farm-{i}'] = dict(models=['qwen'], url=f'http://10.0.0.{i}:24800')
+    targets['train-10'].update(lease_scope='run', target_leases=2, candidate_limit=3)
+    result = tick(rows, 'farm', [10, 11], call)
+    pushed = [t for t in result['targets'] if t['job_id'] == 10][0]
+    assert pushed['state'] == 'updated' and len(pushed['urls']) == 3
+    assert set(pushed['urls']) <= {'http://10.0.0.1:24800', 'http://10.0.0.5:24800',
+                                   'http://10.0.0.6:24800', 'http://10.0.0.7:24800'}
+    gemma = [t for t in result['targets'] if t['job_id'] == 11][0]
+    assert gemma['urls'] == ['http://10.0.0.2:24800']
+
+
+# --- Timeouts ----------------------------------------------------------------
+def test_remote_only_launcher_disables_every_request_deadline(tmp_path):
+    from pathlib import Path
+    from tpu.swarm.ray_train.commands import client_environment, trainer_environment
+    config = remote_only_config(tmp_path)
+    ips = ['10.0.0.1', '10.0.0.2', '10.0.0.3', '10.0.0.4']
+    env = trainer_environment(config, Path(tmp_path), Path(tmp_path) / 'run', ips, 0)
+    assert env['SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC'] == '0'
+    assert env['SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC'] == '0'
+    assert env['SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH'] == '0'
+    assert env['TPU_PROCESS_BOUNDS'] == '1,1,4' and env['TPU_PROCESS_ADDRESSES'].count(',') == 3
+    client = client_environment(config, Path(tmp_path), ips[0])
+    assert client['TTD_SAMPLING_PROGRESS_TIMEOUT'] == '-1'
+    assert client['SKYRL_BORROWING_URL'] == 'http://10.0.0.1:%d' % config.ports.inference
+    assert client['TTD_SAFE_GRADE_MAX_WORKERS'] == '256'
+    # Legacy profiles are untouched.
+    legacy = Config.load('tpu/swarm/ray_train/profiles/science-q20-v4-qwen-grpo-clean-20260918.json')
+    legacy_env = trainer_environment(legacy, Path(tmp_path), Path(tmp_path) / 'run', ips, 0)
+    assert 'SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH' not in legacy_env
+    assert client_environment(legacy, Path(tmp_path), ips[0])['TTD_SAMPLING_PROGRESS_TIMEOUT'] != '-1'
+
+
+def test_sampling_retry_config_negative_disables_stuck_detection(monkeypatch):
+    import ast
+    from pathlib import Path
+    from types import SimpleNamespace
+    source = Path('third_party/discover/ttt_discover/rl/train.py').read_text()
+    module = ast.parse(source)
+    node = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == '_sampling_retry_config')
+    namespace = {'os': __import__('os')}
+    import sys
+    fake = SimpleNamespace(RetryConfig=lambda **kw: SimpleNamespace(**kw))
+    monkeypatch.setitem(sys.modules, 'tinker', SimpleNamespace(lib=SimpleNamespace(retry_handler=fake)))
+    monkeypatch.setitem(sys.modules, 'tinker.lib', SimpleNamespace(retry_handler=fake))
+    monkeypatch.setitem(sys.modules, 'tinker.lib.retry_handler', fake)
+    exec(compile(ast.Module(body=[node], type_ignores=[]), 'train.py', 'exec'), namespace)
+    fn = namespace['_sampling_retry_config']
+    monkeypatch.setenv('TTD_SAMPLING_PROGRESS_TIMEOUT', '-1')
+    assert vars(fn()) == {'enable_stuck_detection': False}
+    monkeypatch.setenv('TTD_SAMPLING_PROGRESS_TIMEOUT', '0')
+    assert vars(fn()) == {}
+    monkeypatch.setenv('TTD_SAMPLING_PROGRESS_TIMEOUT', '900')
+    assert vars(fn()) == {'progress_timeout': 900.0}
+
+
+def test_watchdog_zero_max_redispatch_is_unlimited():
+    from pathlib import Path
+    source = Path('skyrl/tinker/dispatch.py').read_text()
+    assert 'if self.max_redispatch > 0 and attempts >= self.max_redispatch:' in source
+    assert '"unlimited"' in source
+
+
 def test_multi_borrower_run_deadline_closes_everything(tmp_path):
     async def operation(borrower, farm, archive, events):
         await borrower.reserve()

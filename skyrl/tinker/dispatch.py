@@ -424,11 +424,11 @@ class ExternalDispatcher:
         if self._watchdog is not None and not self._watchdog.done():
             return self._watchdog
         logger.info(
-            "External-request watchdog: poll=%.0fs stale_after=%.0fs inflight_ceiling=%s max_redispatch=%d",
+            "External-request watchdog: poll=%.0fs stale_after=%.0fs inflight_ceiling=%s max_redispatch=%s",
             self.poll_interval_sec,
             self.stale_after_sec,
             f"{self.inflight_timeout_sec:.0f}s" if self.inflight_timeout_sec > 0 else "disabled",
-            self.max_redispatch,
+            self.max_redispatch if self.max_redispatch > 0 else "unlimited",
         )
         self._watchdog = asyncio.ensure_future(self._watchdog_loop())
         return self._watchdog
@@ -550,7 +550,9 @@ class ExternalDispatcher:
             return False
 
         attempts = self._attempts.get(request_id, 0)
-        if attempts >= self.max_redispatch:
+        # max_redispatch <= 0 means unlimited: remote-only trainers queue
+        # requests until a farm appears and must never fail them by count.
+        if self.max_redispatch > 0 and attempts >= self.max_redispatch:
             logger.error(
                 "WATCHDOG: external request %s still unserved after %d re-dispatches "
                 "(age %.0fs) — failing it so the client can retry",

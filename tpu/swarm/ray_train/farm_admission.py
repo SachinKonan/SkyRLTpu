@@ -24,13 +24,33 @@ def _ordered_candidates(job, farms):
     return ordered
 
 
+def candidate_limit(target):
+    """Legacy targets get two alternatives; multi-lease targets ask for more."""
+    if target.get('lease_scope') == 'run' and (target.get('target_leases') or 1) > 1:
+        return max(1, int(target.get('candidate_limit') or 2))
+    return 2
+
+
+def multi_lease(target):
+    return candidate_limit(target) > 2 or (target.get('target_leases') or 1) > 1
+
+
+def accepted_contracts(target):
+    accepted = target.get('accepted_compatibility') or []
+    required = target.get('compatibility_sha256')
+    return set(accepted) | ({required} if required else set())
+
+
 def assignments(rows, farms, targets):
     """Offer free farms to all compatible runs, preserving existing leases.
 
     Candidate lists may overlap: the first successful atomic acquire wins.
-    A borrower still holds only one lease. Two URLs are alternatives, bounded
-    by the existing service-list validation, not two simultaneous reservations.
-    No discovery update revokes an existing lease, including an unlisted owner's.
+    A legacy borrower holds one lease; its two URLs are alternatives. A
+    remote-only target (``target_leases > 1``) receives every farm it already
+    owns plus free compatible farms up to its ``candidate_limit`` and holds
+    several of them at once. No discovery update revokes an existing lease,
+    including an unlisted owner's; no fairness rule ranks runs against each
+    other, the farm's atomic acquire decides.
     """
     result = {job: [] for job in targets}
     available = []
@@ -39,23 +59,25 @@ def assignments(rows, farms, targets):
         occupied = farm.get('state') not in (None, 'unleased', 'expired') or farm.get('active', 0) > 0
         if occupied:
             for job, target in targets.items():
-                if owner == target['run_id'] and target['model'] in farm['models'] and not result[job]:
-                    result[job] = [farm['url']]
+                if owner == target['run_id'] and target['model'] in farm['models'] and (
+                        not result[job] or (multi_lease(target) and len(result[job]) < candidate_limit(target))):
+                    result[job].append(farm['url'])
                     break
         else:
             available.append(farm)
     for job, target in targets.items():
-        if result[job]:
+        limit = candidate_limit(target)
+        if result[job] and (not multi_lease(target) or len(result[job]) >= limit):
             continue
         compatible = []
-        required = target.get('compatibility_sha256')
+        accepted = accepted_contracts(target)
         for farm in available:
             offered = (farm.get('capabilities') or {}).get('compatibility_sha256')
-            if target['model'] in farm['models'] and (not required or required == offered):
+            if target['model'] in farm['models'] and (not accepted or offered in accepted):
                 compatible.append(farm)
         if compatible:
             # Spread first choices within equal hardware. Hardware tiers retain
             # their measured ordering, so v5p always precedes v4-32.
-            result[job] = [farm['url'] for farm in
-                           _ordered_candidates(job, compatible)[:2]]
+            room = limit - len(result[job])
+            result[job] += [farm['url'] for farm in _ordered_candidates(job, compatible)[:room]]
     return result

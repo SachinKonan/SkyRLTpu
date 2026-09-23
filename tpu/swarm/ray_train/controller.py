@@ -13,6 +13,7 @@ import ray
 from ray import serve
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
+from tpu.swarm.select_v4_32_topology import verify_full_slice_order
 from tpu.swarm.select_v4_64_topology import select_split
 from tpu.swarm.select_v6e_32_topology import select_split as select_v6e_32_split
 from .config import Config
@@ -75,6 +76,8 @@ class Controller:
         self.local_inference_instance = None
         self.local_inference_probe_failures = 0
         self.farm_instance = None
+        self.remote_held = None
+        self.last_lease_alert = 0
 
     def reservation_rpc(self, action, timeout=10):
         with httpx.Client(timeout=timeout) as client:
@@ -86,8 +89,14 @@ class Controller:
     def wait_farm_admission(self):
         if self.config.inference.external_pool_lease_scope != 'run':
             return
-        self.report('waiting_for_farm', model=self.config.model)
-        deadline = time.monotonic() + self.config.inference.external_pool_initial_wait_seconds
+        remote_only = self.config.inference.remote_only
+        self.report('waiting_for_farm', model=self.config.model, unbounded=remote_only)
+        started = time.monotonic()
+        # Remote-only trainers have no local fallback: wait for a farm without
+        # a deadline, reporting at the configured alert cadence.
+        deadline = float('inf') if remote_only else started + self.config.inference.external_pool_initial_wait_seconds
+        alert_seconds = self.config.inference.external_pool_queue_alert_seconds
+        last_alert = started
         while not self.stopping.is_set():
             if self.failure:
                 raise RuntimeError(self.failure)
@@ -107,6 +116,10 @@ class Controller:
                 if status.get('reserved') or not self.config.inference.external_pool_require_initial:
                     self.report('farm_admitted', **status)
                     return
+                if remote_only and time.monotonic() - last_alert >= alert_seconds:
+                    last_alert = time.monotonic()
+                    self.report('farm_admission_waiting', waited_seconds=round(last_alert - started, 1),
+                                candidates=status.get('candidates', []), target=status.get('target'))
             except (httpx.HTTPError, ValueError, KeyError) as exc:
                 self.report('farm_admission_pending', reason=type(exc).__name__)
             self.stopping.wait(max(0, min(5, deadline - time.monotonic())))
@@ -143,6 +156,8 @@ class Controller:
             if state.get('fatal_error') or state.get('exhausted'):
                 raise RuntimeError('local inference failed')
             self.local_inference_probe_failures = 0
+            if self.config.inference.remote_only:
+                self.report_remote_leases(state)
         except Exception as exc:
             transient = (isinstance(exc, httpx.TransportError) or
                          isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500)
@@ -154,6 +169,20 @@ class Controller:
                     return
             self.failure = f'local inference fatal: {type(exc).__name__}: {exc}'
             self.report('local_inference_failed', detail=self.failure)
+
+    def report_remote_leases(self, state):
+        """Zero leases is a wait, never a failure; say so at the alert cadence."""
+        borrowing = state.get('borrowing') or {}
+        held = sorted(borrowing.get('held') or [])
+        if held != self.remote_held:
+            self.remote_held = held
+            self.report('remote_leases', held=held, target=borrowing.get('target'),
+                        candidates=borrowing.get('candidates', []),
+                        queued=(state.get('scheduling') or {}).get('queued', 0))
+        if not held and time.monotonic() - self.last_lease_alert >= self.config.inference.external_pool_queue_alert_seconds:
+            self.last_lease_alert = time.monotonic()
+            self.report('remote_leases_zero', candidates=borrowing.get('candidates', []),
+                        queued=(state.get('scheduling') or {}).get('queued', 0))
 
     def report(self, event, **fields):
         return emit(self.log, event, run_id=self.config.run_id, **fields)
@@ -322,6 +351,14 @@ class Controller:
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
                                if r != self.config.arena_grader_rank and r not in self.config.placement_ranks]
+            if self.config.inference.remote_only:
+                # Every host trains as a 1,1,4 process grid; verify the Sky
+                # rank order matches the physical z rows before libtpu does.
+                assert not inference_ranks
+                full = self.checked_get([host.probe.remote(list(range(self.config.hosts)), self.config.ports.topology_jax)
+                                         for host in self.hosts], 300)
+                order = verify_full_slice_order(full)
+                self.report('remote_only_topology_verified', rank_to_z=order, train_ranks=train_ranks)
         science_grading_rank = None
         if self.config.science_task and not self.config.bootstrap_only:
             from tpu.science.training_setup import split_roles
@@ -520,7 +557,13 @@ class Controller:
                     endpoint = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/status').json()
                 except (httpx.HTTPError, ValueError):
                     healthy = False
-                if (healthy and set(state['expected']) == expected
+                if healthy and not expected and self.config.inference.remote_only:
+                    # Control-only ingress: no replicas to verify, only identity.
+                    if endpoint.get('remote_only') and isinstance(endpoint.get('instance'), str):
+                        self.report('remote_only_control_plane', instance=endpoint['instance'])
+                        self.arm_local_inference(client)
+                        return
+                elif (healthy and set(state['expected']) == expected
                         and {r['ip'] for r in state['replicas']} == expected
                         and set(endpoint['expected']) == expected and not endpoint['active']):
                     self.report('inference_membership_verified', hosts=sorted(expected))

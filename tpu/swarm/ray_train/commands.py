@@ -59,6 +59,12 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         # abandon 7200 s); the 0/28800/30/4 set belonged to the v4-64 launcher.
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
     env.update(config.trainer_env)
+    if config.inference.remote_only:
+        # Requests queue inside the ingress until a farm is leased; the API
+        # server must never cancel, re-dispatch or abandon them (config.py
+        # rejects trainer_env overrides of these keys).
+        env.update(SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC="0", SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC="0",
+                   SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH="0")
     env.update(TUNIX_BACKWARD_WARMUP=_flag(t.backward_warmup),
                TUNIX_WARMUP_MAX_LENGTH=str(t.sequence_length),
                TUNIX_WARMUP_LOSS_FN=config.client_env.get("TTD_LOSS_FN", "importance_sampling"))
@@ -246,6 +252,10 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults.update(TTD_PROBLEM_TYPE="rg_lru", EVAL_TIMEOUT="3600",
                         GROUPS_PER_BATCH="1", GROUP_SIZE="8", TTD_EVAL_BACKEND="local")
     defaults.update(config.client_env)
+    if config.inference.remote_only:
+        # -1 disables the SDK's stuck detection entirely (0 restores its
+        # 7200 s default), so a batch can wait for farms indefinitely.
+        defaults["TTD_SAMPLING_PROGRESS_TIMEOUT"] = "-1"
     if t.backward_warmup:
         defaults["TTD_WARMUP_FB"] = "0"
     if config.science_task:

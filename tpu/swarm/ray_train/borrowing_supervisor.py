@@ -154,8 +154,9 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
             return dict(job_id=job_id, state='not_opted_in')
         if run_scoped_only and target.get('lease_scope') != 'run':
             return dict(job_id=job_id, state='legacy_scope_unchanged')
+        from .farm_admission import candidate_limit
         urls = (assigned[job_id] if job_id in assigned else
-                sorted({f['url'] for f in farms if target['model'] in f['models']})[:2])
+                sorted({f['url'] for f in farms if target['model'] in f['models']})[:candidate_limit(target)])
         if target.get('urls') == urls:
             return dict(job_id=job_id, state='unchanged', model=target['model'], urls=urls)
         body = {k: target[k] for k in ('model', 'run_id', 'instance')}
