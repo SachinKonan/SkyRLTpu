@@ -1,5 +1,11 @@
 # Farm-assisted v6e training
 
+For trainers with no local engines and one to two simultaneous farm leases,
+and for grading on farm CPUs, see `REMOTE_ONLY_TRAINER.md`. Since that change
+an expired lease cancels in-flight farm work after `farm_cancel_grace_seconds`
+before the `farm_drain_timeout` quarantine described below, and the supervisor
+no longer ranks AC2 ahead of other workloads (first atomic acquire wins).
+
 This opt-in path keeps a v6e run's four local TP4 inference engines and adds one
 exclusive v4-32 farm with four TP4 engines. It serves one policy, with identical
 adapter archives on both sides. It does not implement multi-policy training.

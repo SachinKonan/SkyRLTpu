@@ -1,5 +1,10 @@
 # Multi-LoRA inference farm
 
+Farms relaunched with `grading.families` also serve lease-fenced candidate
+grading (`/skyrl/v1/grading/*`) and cancel in-flight work when a lease expires
+(`farm_cancel_grace_seconds`) instead of waiting for quarantine; see
+`REMOTE_ONLY_TRAINER.md`.
+
 `profiles/qwen35-v432-native-multi-lora-inference-20260919.json` runs the existing
 Ray v2 executor in inference-only mode. Ranks 0, 1, 2 and 3 each run one TP4
 engine; no TPU is reserved for training. Ray Serve ingress listens on port

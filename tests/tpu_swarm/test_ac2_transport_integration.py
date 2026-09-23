@@ -1,7 +1,5 @@
 """AC2 through the grading transport: verifier injection, re-verification, error classes, dedup."""
 import asyncio
-from dataclasses import replace
-from types import SimpleNamespace
 
 import pytest
 

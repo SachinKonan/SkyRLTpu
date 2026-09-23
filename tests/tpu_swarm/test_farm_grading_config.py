@@ -1,5 +1,4 @@
 """Grading capacity declared on farms and trainers: config, Ray tokens, CPU partition."""
-from dataclasses import replace
 import json
 import os
 from pathlib import Path

@@ -5,6 +5,11 @@ training through the Ray Serve ingress. The default URL map is empty: existing
 profiles keep their local inference path. No remote Ray connection is required.
 This does not change GRPO/PWC, trajectory grouping, grading, or optimizer steps.
 
+Remote-only trainers (zero local engines, several leases at once, farm-side
+grading, `external_pool_candidate_limit` above two) are described in
+`REMOTE_ONLY_TRAINER.md`; the statements below about a single lease and two
+candidate URLs apply to the default borrower.
+
 ## Configuration
 
 Merge these fields into a profile's `inference` object. Keys are **exact** base

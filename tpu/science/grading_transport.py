@@ -100,7 +100,6 @@ class LocalRayPool(Pool):
         self.refs = {}
 
     def dispatch(self, request):
-        import ray
         if request.task == 'ac2':
             from tpu.science.ac2_grade import grade_ac2
             family = self.families['ac2']
