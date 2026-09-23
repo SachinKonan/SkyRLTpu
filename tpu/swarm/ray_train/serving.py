@@ -289,20 +289,33 @@ class Ingress:
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
         self.borrower = None
         self.borrowing_instance = uuid.uuid4().hex
+        self.remote_only = self.config.inference.remote_only
+        report = lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields)
         if self.config.borrows_inference:
             from .borrowing import Borrower
             from .run_borrowing import RunBorrower
-            borrower_type = RunBorrower if self.config.inference.external_pool_lease_scope == 'run' else Borrower
-            self.borrower = borrower_type(self.config, self.http,
-                lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields))
+            if self.remote_only:
+                from .multi_borrowing import MultiRunBorrower
+                borrower_type = MultiRunBorrower
+            else:
+                borrower_type = RunBorrower if self.config.inference.external_pool_lease_scope == 'run' else Borrower
+            self.borrower = borrower_type(self.config, self.http, report)
         self.lease_watchdog = (asyncio.create_task(self.watch_orphaned_lease())
                                if self.config.inference.require_lease else None)
         self.scheduler = None
         if self.config.inference.external_pool_scheduler:
             from .hybrid_scheduler import HybridScheduler
-            self.scheduler = HybridScheduler(len(self.engines), self.config.inference.external_pool_max_concurrent_requests,
-                lambda: bool(self.borrower and self.borrower.lease and self.borrower._eligible(self.borrower.lease)),
-                lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields))
+            if self.remote_only:
+                # Zero local engines: one pool per eligible farm, groups wait
+                # indefinitely and are re-queued (never retried locally).
+                self.scheduler = HybridScheduler(len(self.engines), 0, lambda: True, report,
+                    farms=self.borrower.eligible_pools,
+                    alert_seconds=self.config.inference.external_pool_queue_alert_seconds,
+                    on_remote_failure=lambda key: report('remote_farm_failed', service=key))
+            else:
+                self.scheduler = HybridScheduler(len(self.engines), self.config.inference.external_pool_max_concurrent_requests,
+                    lambda: bool(self.borrower and self.borrower.lease and self.borrower._eligible(self.borrower.lease)),
+                    report)
 
     def require_lease(self, lease_id, *, allow_expired=False):
         if self.quarantined:
@@ -504,9 +517,37 @@ class Ingress:
             result['acquire_protocol'] = 1
         if self.config.inference.external_pool_attestation:
             result['capabilities'] = await self.capabilities()
+        if self.remote_only:
+            result['remote_only'] = True
+            result['leases'] = result['borrowing'].get('leases', [])
         return result
 
+    @app.get('/skyrl/v1/grading/farms')
+    async def grading_farms(self):
+        """Leases the client-side grading transport may use (tokens included).
+
+        Reachable only on the slice network; lease tokens coordinate trusted
+        clients and are not an authentication boundary (LORA_FARM.md).
+        """
+        if not self.config.grading_farm_transport:
+            raise HTTPException(409, 'farm grading transport is disabled')
+        leases = self.borrower.farm_leases() if self.borrower and hasattr(self.borrower, 'farm_leases') else []
+        if not leases and self.borrower and getattr(self.borrower, 'lease', None):
+            lease = self.borrower.lease
+            leases = [dict(farm_id=lease.url, url=lease.url, token=lease.token,
+                           eligible=self.borrower._eligible(lease), capacity=lease.max_requests)]
+        return dict(instance=self.borrowing_instance, farms=leases)
+
     async def capabilities(self):
+        if self.remote_only and not self.engines:
+            # No local serving runtime to attest: the accepted farm contracts
+            # are configured or learned from the first attested farm.
+            accepted = sorted(self.borrower.accepted) if self.borrower else []
+            return dict(compatibility_sha256=accepted[0] if len(accepted) == 1 else None,
+                        accepted_compatibility=accepted, contract=None, engines=0,
+                        max_sequences=self.config.inference.max_sequences,
+                        prefix_caching=self.config.inference.prefix_caching,
+                        max_loras=self.config.inference.max_loras)
         if self.compatibility is None:
             identities = await asyncio.gather(*(e.identity.remote() for e in self.engines))
             if not identities or any(not item or item != identities[0] for item in identities):
@@ -568,11 +609,17 @@ class Ingress:
     async def borrowing_services(self):
         if self.config.inference.external_pool_attestation:
             await self.capabilities()
+        accepted = sorted(self.borrower.accepted) if self.remote_only and self.borrower else []
         return dict(enabled=self.config.inference.external_pool_updates,
                     model=self.config.model, run_id=self.config.run_id,
                     instance=self.borrowing_instance,
                     lease_scope=self.config.inference.external_pool_lease_scope,
-                    compatibility_sha256=self.compatibility['sha256'] if self.compatibility else None,
+                    compatibility_sha256=(self.compatibility['sha256'] if self.compatibility
+                                          else accepted[0] if len(accepted) == 1 else None),
+                    remote_only=self.remote_only,
+                    target_leases=self.config.inference.external_pool_target_leases,
+                    candidate_limit=self.config.inference.external_pool_candidate_limit,
+                    accepted_compatibility=accepted,
                     workload=('ac2' if self.config.client_env.get('TTD_PROBLEM_TYPE') == 'ac2'
                               else 'rglru' if self.config.is_recurrent_gemma
                               else 'qubit' if self.config.science_task == 'routing' else 'other'),
@@ -618,6 +665,11 @@ class Ingress:
     async def health(self):
         if self.quarantined:
             raise HTTPException(503, 'farm quarantined')
+        if self.remote_only and not self.engines:
+            # Control plane only: farm readiness is reported by /status.
+            if self.updating:
+                raise HTTPException(503, 'adapter update in progress')
+            return {"status": "ok", "remote_only": True}
         state = await self.catalog.snapshot.remote()
         if len(state["replicas"]) != len(self.engine_urls) or state["exhausted"]:
             raise HTTPException(503, "inference replicas not ready")
@@ -750,6 +802,8 @@ class Ingress:
             return {"lora_name": version, "loaded": loaded, "sha256": identity}
 
     def select_engine(self, model):
+        if not self.engines:
+            raise HTTPException(503, 'no local inference engines: remote-only ingress')
         if self.engine_models:
             if model not in self.engine_models:
                 raise HTTPException(400, "unknown base model")
@@ -817,14 +871,20 @@ class Ingress:
                     await self.catalog.fail.remote('local generation failed')
                 raise
 
-        async def remote():
-            return await self.borrower.generate(payload, local_active=0,
-                                               local_engines=len(self.engines), prefer_remote=True)
+        async def remote(key=None):
+            from .borrowing import RemoteRequestRejected
+            try:
+                kwargs = {'farm': key} if self.remote_only else {}
+                return await self.borrower.generate(payload, local_active=0,
+                                                   local_engines=len(self.engines), prefer_remote=True, **kwargs)
+            except RemoteRequestRejected as exc:
+                raise HTTPException(exc.status_code, exc.detail) from None
 
         async def run():
             try:
                 if method == 'generate' and self.scheduler:
-                    return await self.scheduler.run(payload, local, remote, local_only=local_only)
+                    return await self.scheduler.run(payload, local, remote,
+                                                    local_only=local_only and not self.remote_only)
                 if method == "generate" and self.borrower and not local_only:
                     external_active = self.borrower.lease.active if self.borrower.lease else 0
                     result = await self.borrower.generate(payload,

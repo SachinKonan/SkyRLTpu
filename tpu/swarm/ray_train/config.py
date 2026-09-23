@@ -402,6 +402,12 @@ class Config:
         return self.inference.external_pool_updates or bool(self.inference.external_pool_urls.get(self.model))
 
     @property
+    def grading_farm_transport(self):
+        """Whether the client-side grading transport may use leased farms."""
+        grading = getattr(self, 'grading', None)
+        return bool(grading is not None and getattr(grading, 'farm_transport', False))
+
+    @property
     def ray_cpus_per_host(self):
         # Leave scheduler capacity for controller/Serve actors as well as graders.
         if self.science_routing_evaluator == 'parallel-v2':

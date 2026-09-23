@@ -563,6 +563,86 @@ def test_multi_borrower_close_releases_every_lease(tmp_path):
     multi_case(tmp_path, operation)
 
 
+def test_zero_engine_ingress_serves_control_plane_and_routes_groups_to_farms(tmp_path, monkeypatch):
+    import inspect
+    from types import SimpleNamespace
+    from tpu.swarm.ray_train import serving
+    from tests.tpu_swarm.test_farm_leases import Remote
+
+    async def run():
+        raw = Config.load(PROFILE).to_dict()
+        raw['root'] = str(tmp_path)
+        raw['inference'].update(external_pool_urls={raw['model']: ['http://farm1', 'http://farm2']},
+                                external_pool_heartbeat_seconds=1, external_pool_rpc_timeout=1,
+                                external_pool_health_grace_seconds=1, external_pool_lease_seconds=30,
+                                external_pool_prepare_timeout=20, external_pool_queue_alert_seconds=1)
+        cfg = Config.from_dict(raw)
+        snapshot = dict(fatal_error=None, version=None, versions=[], expected=[], replicas=[], starts={}, exhausted=[])
+        catalog = SimpleNamespace(snapshot=Remote(lambda: snapshot), commit=Remote(lambda *a: None))
+        gateway = serving.Ingress.func_or_class.__mro__[1](cfg.to_dict(), [], catalog, [])
+        assert gateway.remote_only and gateway.engines == [] and gateway.scheduler.local == []
+        farm = MultiFarm()
+        farm.capabilities.update(farm1='c' * 64, farm2='c' * 64)
+        events = []
+        client = httpx.AsyncClient(transport=httpx.MockTransport(farm))
+        await gateway.http.aclose()
+        gateway.http = client
+        gateway.borrower = MultiRunBorrower(cfg, client, lambda event, **fields: events.append((event, fields)))
+        gateway.scheduler.farms = gateway.borrower.eligible_pools
+        gateway.scheduler.report = lambda event, **fields: events.append((event, fields))
+        monkeypatch.setattr(serving.serve, 'get_replica_context', lambda: SimpleNamespace(servable_object=gateway))
+        app = inspect.getclosurevars(serving.Ingress.func_or_class.__init__).nonlocals['frozen_app_or_func']
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://local') as http:
+                health = await http.get('/health')
+                assert health.status_code == 200 and health.json()['remote_only']
+                status = (await http.get('/status')).json()
+                assert status['remote_only'] and status['leases'] == [] and status['capabilities']['engines'] == 0
+                assert status['capabilities']['accepted_compatibility'] == []
+                services = (await http.get('/skyrl/v1/borrowing/services')).json()
+                assert services['remote_only'] and services['target_leases'] == 2 and services['candidate_limit'] == 16
+                assert (await http.post('/tokenize', json={'model': cfg.model, 'prompt': 'x'})).status_code == 503
+                assert (await http.get('/skyrl/v1/grading/farms')).status_code == 409
+                # Groups queue while no farm is held; the alert fires; nothing fails.
+                payload = dict(model=cfg.model, prompt=[1, 2], n=2, max_tokens=4)
+                pending = asyncio.create_task(http.post('/v1/completions', json=payload))
+                await asyncio.sleep(.05)
+                assert not pending.done() and gateway.scheduler.snapshot()['queued'] == 1
+                await until(lambda: any(e == 'remote_queue_waiting' for e, _ in events), 5)
+                reservation = await http.post('/skyrl/v1/borrowing/reservation',
+                    json=dict(run_id=cfg.run_id, instance=gateway.borrowing_instance, action='acquire'))
+                assert reservation.status_code == 200 and sorted(reservation.json()['held']) == ['http://farm1', 'http://farm2']
+                assert reservation.json()['accepted_compatibility'] == ['c' * 64]
+                assert (await http.get('/status')).json()['capabilities']['compatibility_sha256'] == 'c' * 64
+                begin = await http.post('/skyrl/v1/borrowing/begin',
+                    json={'phase_id': 'phase1', 'bootstrap': True, 'expected_n': 2})
+                assert begin.status_code == 200 and begin.json()['remote_only']
+                response = await asyncio.wait_for(pending, 10)
+                assert response.status_code == 200 and len(response.json()['choices']) == 2
+                responses = await asyncio.gather(*(http.post('/v1/completions', json=payload) for _ in range(6)))
+                assert all(r.status_code == 200 for r in responses)
+                hosts = {h for h, p in farm.requests if p == '/v1/completions'}
+                assert hosts == {'farm1', 'farm2'} and gateway.active == 0
+                status = (await http.get('/status')).json()
+                assert sorted(l['url'] for l in status['leases']) == ['http://farm1', 'http://farm2']
+                assert status['scheduling']['farms'] == {'http://farm1': 0, 'http://farm2': 0}
+                # A farm-side 4xx surfaces as the same status to the API server.
+                farm.generate_status['farm1'] = 422
+                farm.generate_status['farm2'] = 422
+                rejected = await http.post('/v1/completions', json=payload)
+                assert rejected.status_code == 422
+                farm.generate_status.clear()
+                ended = await http.post('/skyrl/v1/borrowing/end', json={'phase_id': 'phase1'})
+                assert ended.status_code == 200
+                closed = await http.post('/skyrl/v1/borrowing/reservation',
+                    json=dict(run_id=cfg.run_id, instance=gateway.borrowing_instance, action='close'))
+                assert closed.status_code == 200 and farm.owners == {}
+        finally:
+            await gateway.borrower.close()
+            await client.aclose()
+    asyncio.run(run())
+
+
 def test_multi_borrower_run_deadline_closes_everything(tmp_path):
     async def operation(borrower, farm, archive, events):
         await borrower.reserve()
