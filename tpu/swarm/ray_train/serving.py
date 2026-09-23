@@ -194,13 +194,28 @@ class Engine:
                 archive.unlink()
             self.version = version
 
+    async def cancel_inflight(self):
+        """Disconnect every in-flight completion so vLLM aborts the work."""
+        pending = [task for task in getattr(self, 'pending', ()) if not task.done()]
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        return dict(key=self.key, cancelled=len(pending))
+
     async def generate(self, payload):
         if self.retiring:
             raise RuntimeError('engine is retired')
         await self.ensure_adapter(payload["model"])
+        if not hasattr(self, 'pending'):
+            self.pending = set()
+        request = asyncio.create_task(self.http.post(self.url + "/v1/completions", json=payload))
+        self.pending.add(request)
         try:
-            response = await self.http.post(self.url + "/v1/completions", json=payload)
+            response = await request
             response.raise_for_status()
+        except asyncio.CancelledError:
+            request.cancel()
+            raise
         except httpx.HTTPError as exc:
             if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (400, 404, 413, 422, 429):
                 raise GenerationRequestError(exc.response.status_code,
@@ -225,6 +240,8 @@ class Engine:
             except OSError:
                 print(message, flush=True)
             raise RuntimeError(message) from exc
+        finally:
+            self.pending.discard(request)
         return response.json()
 
     async def tokenize(self, payload):
@@ -284,6 +301,7 @@ class Ingress:
         # them could allow an arbitrarily delayed acquire to grant afterward.
         self.acquire_requests = {}
         self.inflight = set()
+        self.inflight_leases = {}
         self.quarantined = False
         self.compatibility = None
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
@@ -328,18 +346,50 @@ class Ingress:
         if not allow_expired and (lease["releasing"] or time.monotonic() >= lease["deadline"]):
             raise HTTPException(409, "lease is expired or draining")
 
+    async def cancel_lease_work(self, lease, reason):
+        """Cancel in-flight generation admitted under ``lease`` (uploads finish).
+
+        A lost trainer must not quarantine the farm: cancelling the tracked
+        tasks disconnects the engines' HTTP requests so vLLM aborts the work,
+        and the admission counters drain through the request's own ``finally``.
+        """
+        tasks = [task for task, lease_id in list(self.inflight_leases.items())
+                 if lease_id == lease['lease_id'] and not task.done()]
+        for task in tasks:
+            task.cancel()
+        engines = 0
+        for engine in self.engines:
+            cancel = getattr(engine, 'cancel_inflight', None)
+            if cancel is None:
+                continue
+            try:
+                await cancel.remote()
+                engines += 1
+            except Exception as exc:
+                emit(self.run / 'inference-events.jsonl', 'engine_cancel_failed', reason=type(exc).__name__)
+        emit(self.run / 'inference-events.jsonl', 'lease_inflight_cancelled', lease_id=lease['lease_id'],
+             owner_run=lease['owner_run'], requests=len(tasks), engines=engines, reason=reason)
+        return len(tasks)
+
     async def watch_orphaned_lease(self):
-        orphan, started = None, None
+        orphan, started, cancelled = None, None, False
         while True:
             await asyncio.sleep(.5)
             lease = self.lease
             expired = lease and (lease['releasing'] or time.monotonic() >= lease['deadline'])
             if not expired or not (self.active or self.inflight or self.upload_lock.locked()):
-                orphan, started = None, None
+                orphan, started, cancelled = None, None, False
                 continue
             if lease is not orphan:
-                orphan, started = lease, time.monotonic()
-            if time.monotonic() - started >= self.config.inference.farm_drain_timeout:
+                orphan, started, cancelled = lease, time.monotonic(), False
+            elapsed = time.monotonic() - started
+            if not cancelled and elapsed >= self.config.inference.farm_cancel_grace_seconds:
+                cancelled = True
+                try:
+                    await self.cancel_lease_work(lease, 'lease expired with in-flight work')
+                except Exception as exc:
+                    emit(self.run / 'inference-events.jsonl', 'lease_cancel_failed', reason=type(exc).__name__)
+            if elapsed >= self.config.inference.farm_drain_timeout:
                 # Do not grant another owner while an engine might still execute
                 # abandoned work. The controller tears down its owned runtime;
                 # the managed farm job's retry starts a fresh lease namespace.
@@ -858,9 +908,9 @@ class Ingress:
             if self.updating:
                 raise HTTPException(409, 'engine transition or adapter update in progress')
             self.active += 1
-        return await self.finish_admitted("tokenize", payload)
+        return await self.finish_admitted("tokenize", payload, lease_id=request.headers.get("x-lease-id"))
 
-    async def finish_admitted(self, method, payload, *, local_only=False):
+    async def finish_admitted(self, method, payload, *, local_only=False, lease_id=None):
         async def local(index):
             try:
                 return await getattr(self.engines[index], method).remote(payload)
@@ -906,19 +956,28 @@ class Ingress:
 
         # An HTTP disconnect must not make a still-running engine request
         # disappear from the drain count and allow a lease handoff underneath it.
-        return await self.track_operation(run())
+        return await self.track_operation(run(), lease_id=lease_id)
 
-    async def track_operation(self, operation):
+    async def track_operation(self, operation, lease_id=None):
         task = asyncio.create_task(operation)
         self.inflight.add(task)
+        if lease_id is not None:
+            self.inflight_leases[task] = lease_id
 
         def done(completed):
             self.inflight.discard(completed)
+            self.inflight_leases.pop(completed, None)
             if not completed.cancelled():
                 completed.exception()  # Retrieve errors even if the caller disconnected.
 
         task.add_done_callback(done)
-        return await asyncio.shield(task)
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.cancelled() and not asyncio.current_task().cancelling():
+                # The lease watchdog cancelled the work, not the caller.
+                raise HTTPException(409, 'lease expired; request cancelled') from None
+            raise
 
     @app.post("/v1/completions")
     async def generate(self, request: Request):
@@ -938,7 +997,8 @@ class Ingress:
                 raise HTTPException(400, "model is required")
             self.active += 1
         return await self.finish_admitted("generate", payload,
-            local_only=request.headers.get('x-skyrl-local-only') == '1')
+            local_only=request.headers.get('x-skyrl-local-only') == '1',
+            lease_id=request.headers.get("x-lease-id"))
 
 
 def engine_version(raw_config, prepared, head, slot=0):

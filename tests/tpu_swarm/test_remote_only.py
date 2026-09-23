@@ -643,6 +643,40 @@ def test_zero_engine_ingress_serves_control_plane_and_routes_groups_to_farms(tmp
     asyncio.run(run())
 
 
+def test_expired_lease_cancels_inflight_work_and_frees_the_farm(tmp_path, monkeypatch):
+    """Farm side: an abruptly lost trainer must not quarantine the farm."""
+    from dataclasses import replace
+    from tests.tpu_swarm.test_farm_leases import farm as deployed_farm, Remote
+
+    async def run():
+        async with deployed_farm(tmp_path, monkeypatch) as (client, gateway, _, __, entered, finish):
+            gateway.config = replace(gateway.config, inference=replace(
+                gateway.config.inference, farm_cancel_grace_seconds=0, farm_drain_timeout=5))
+            quarantined = asyncio.Event()
+            gateway.catalog.quarantine = Remote(lambda reason: quarantined.set())
+            engine_cancels = []
+            gateway.engines[0].cancel_inflight = Remote(lambda: engine_cancels.append(1) or {'cancelled': 1})
+            lease = (await client.post('/acquire_lease', json={'owner_run': 'lost-trainer'})).json()
+            request = asyncio.create_task(client.post('/v1/completions',
+                json={'model': gateway.config.model, 'block': True}, headers={'X-Lease-ID': lease['lease_id']}))
+            await entered.wait()
+            assert gateway.active == 1 and len(gateway.inflight_leases) == 1
+            gateway.lease['deadline'] = 0
+            response = await asyncio.wait_for(request, 5)
+            assert response.status_code == 409 and 'cancelled' in response.text
+            await until(lambda: gateway.active == 0 and not gateway.inflight, 3)
+            assert engine_cancels == [1] and not quarantined.is_set()
+            events = [json.loads(line) for line in (gateway.run / 'inference-events.jsonl').read_text().splitlines()]
+            cancelled = [e for e in events if e['event'] == 'lease_inflight_cancelled']
+            assert cancelled and cancelled[0]['requests'] == 1 and cancelled[0]['owner_run'] == 'lost-trainer'
+            # The farm is immediately leasable by a new owner; no relaunch needed.
+            granted = await client.post('/acquire_lease', json={'owner_run': 'next-trainer'})
+            assert granted.status_code == 200 and (await client.get('/health')).status_code == 200
+            assert gateway.lease['owner_run'] == 'next-trainer'
+            finish.set()
+    asyncio.run(run())
+
+
 def test_multi_borrower_run_deadline_closes_everything(tmp_path):
     async def operation(borrower, farm, archive, events):
         await borrower.reserve()
