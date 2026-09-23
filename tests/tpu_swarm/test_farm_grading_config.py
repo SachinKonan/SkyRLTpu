@@ -123,12 +123,17 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def test_grading_farm_profiles_are_valid_relaunch_targets():
-    for name in ('farm-v432-qwen-grading-ac2-20260922', 'farm-v5p32-qwen-grading-ac2-20260922'):
+    for name in ('farm-v432-qwen-grading-ac2-20260922', 'farm-v5p32-qwen-grading-ac2-20260922',
+                 'farm-v6e32-qwen-grading-ac2-20260923'):
         config = Config.load(f'tpu/swarm/ray_train/profiles/{name}.json')
         assert config.inference_only and config.inference.require_lease and config.systemd_runtime
         assert config.grading_families == AC2 and config.inference.farm_drain_timeout == 600
         assert config.inference.farm_cancel_grace_seconds == 5 and config.ray_cpus_per_host == 49
         assert config.run_id == name and config.root.endswith(name)
+    v6e = Config.load('tpu/swarm/ray_train/profiles/farm-v6e32-qwen-grading-ac2-20260923.json')
+    assert v6e.hosts == 8 and v6e.inference_only_ranks == list(range(8)) and v6e.inference_hosts == 8
+    assert v6e.inference.prefix_caching and v6e.inference.tp == 4 and v6e.zone == 'us-east5-b'
+    assert workload_resources(v6e, 7) == {'TPU': 4, 'grading_ac2': 16}
     routing = Config.load(ROUTING_FARM)
     assert routing.grading_science_task == 'routing' and routing.inference_only
 

@@ -132,10 +132,28 @@ class Borrower:
         if body.get('lease_id') != lease.lease_id or body.get('owner_run') != self.owner:
             raise BorrowingProtocolError('lease identity mismatch')
 
+    def _accept_engines(self, body):
+        """Engine count this lease must attest on every later status.
+
+        The legacy borrower serves one farm of the configured size. Multi-farm
+        members ('probe' policy) may mix v6e-32 (8 engines) with v4-32/v5p-32
+        (4) farms, so they pin the size the farm advertised at acquire time.
+        """
+        if self.request_failure_policy != 'probe':
+            return self.settings.external_pool_engines
+        count = body.get('expected_engines')
+        if type(count) is not int or not 1 <= count <= 64:
+            raise BorrowingProtocolError('farm did not advertise its engine count')
+        return count
+
+    def _farm_engines(self, lease):
+        return lease.engines or self.settings.external_pool_engines
+
     def _attestation(self, lease, body):
         """Identity must hold even while an engine's health probe is uncertain."""
         self._identity(lease, body)
-        if body.get('expected_engines') != self.settings.external_pool_engines:
+        engines = self._farm_engines(lease)
+        if body.get('expected_engines') != engines:
             raise BorrowingProtocolError('unexpected farm size')
         if lease.digest is not None:
             if (body.get('adapter_sha256') != lease.digest
@@ -144,9 +162,9 @@ class Borrower:
             if body.get('state') not in ('ready', 'degraded'):
                 raise BorrowingProtocolError('adapter no longer serving under this lease')
             count = body.get('ready_engines')
-            if type(count) is not int or not 0 <= count <= self.settings.external_pool_engines:
+            if type(count) is not int or not 0 <= count <= engines:
                 raise BorrowingProtocolError('invalid engine readiness count')
-            return body['state'] == 'ready' and count == self.settings.external_pool_engines
+            return body['state'] == 'ready' and count == engines
         elif body.get('state') != 'awaiting_adapter':
             raise BorrowingProtocolError('base bootstrap lease is not available')
         return True
@@ -157,7 +175,7 @@ class Borrower:
         # The current farm API does not advertise validated sampling limits.
         # These are explicit client-side acceptance settings, not inferred from
         # max_num_sequences or from having a single resident adapter.
-        lease.engines = self.settings.external_pool_engines
+        lease.engines = self._farm_engines(lease)
         lease.max_requests = self.settings.external_pool_max_concurrent_requests
         lease.max_n = self.settings.external_pool_max_n
 
@@ -330,6 +348,7 @@ class Borrower:
             lease = Lease(url, lease_id, token, digest=digest)
             self.lease = lease
             self._identity(lease, body)
+            lease.engines = self._accept_engines(body)
             lease.valid_until = self._expiry(body, sent)
             self.uncertain_until = 0
             self.pending_acquire = None
@@ -346,7 +365,7 @@ class Borrower:
                 response.raise_for_status()
                 receipt = response.json()
                 if (receipt.get('sha256') != digest or receipt.get('lora_name') != lease.adapter
-                        or len(set(receipt.get('loaded', []))) != self.settings.external_pool_engines):
+                        or len(set(receipt.get('loaded', []))) != self._farm_engines(lease)):
                     raise BorrowingProtocolError('incomplete or mismatched upload acknowledgement')
             # Status must attest every engine's actual loaded content, not merely
             # repeat an adapter name supplied in our acquire request.

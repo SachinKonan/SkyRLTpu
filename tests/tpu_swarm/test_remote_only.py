@@ -354,11 +354,25 @@ class MultiFarm(Farm):
         self.capabilities = {}
         self.generate_status = {}
         self.acquires = {}
+        self.engines = {}  # host -> engine count (default 4)
+        self.current_host = None
+
+    def status(self, lease):
+        result = super().status(lease)
+        engines = self.engines.get(self.current_host, 4)
+        result.update(expected_engines=engines, ready_engines=engines if result['adapter_sha256'] else 0)
+        return result
 
     async def __call__(self, request):
         host, path = request.url.host, request.url.path
+        self.current_host = host
         if path == '/acquire_lease' and host not in self.down and not json.loads(request.content).get('lease_id'):
             self.acquires[host] = self.acquires.get(host, 0) + 1
+        if path.endswith('/upload_lora_adapter') and host in self.engines and host not in self.down:
+            response = await super().__call__(request)
+            body = response.json()
+            body['loaded'] = [str(i) for i in range(self.engines[host])]
+            return httpx.Response(200, json=body)
         if path == '/v1/completions' and host in self.generate_status and host not in self.down:
             self.requests.append((host, path))
             return httpx.Response(self.generate_status[host], json={'detail': 'rejected'})
@@ -550,6 +564,47 @@ def test_multi_borrower_request_failure_does_not_drop_a_lease(tmp_path):
             await borrower.generate(PAYLOAD, farm='http://farm1')
         assert eligible(borrower) == ['http://farm1', 'http://farm2']
     multi_case(tmp_path, operation)
+
+
+def test_multi_borrower_mixes_farm_sizes_learned_at_acquire(tmp_path):
+    """A v6e-32 farm (8 engines) and a v4-32 farm (4) serve one trainer."""
+    async def operation(borrower, farm, archive, events):
+        farm.engines['farm1'] = 8
+        await borrower.reserve()
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: len(eligible(borrower)) == 2)
+        assert borrower.members['http://farm1'].lease.engines == 8
+        assert borrower.members['http://farm2'].lease.engines == 4
+        assert borrower.snapshot()['engines'] == 12
+        ready = {f['service']: f['engines'] for e, f in events if e == 'borrow_ready' and f['phase'] == 'phase-1'}
+        assert ready == {'http://farm1': 8, 'http://farm2': 4}
+        # A farm that changes size under a live lease loses attestation; the
+        # reconcile loop then re-acquires it at the new size and republishes.
+        farm.engines['farm2'] = 6
+        await until(lambda: borrower.members['http://farm2'].lease.engines == 6
+                    and 'http://farm2' in eligible(borrower))
+        assert any(e == 'borrow_heartbeat_failed' and f['service'] == 'http://farm2'
+                   and f['reason'] == 'unexpected farm size' for e, f in events)
+        republished = [f for e, f in events if e == 'borrow_ready' and f['service'] == 'http://farm2'
+                       and f['phase'] == 'phase-1']
+        assert [f['engines'] for f in republished] == [4, 6]
+    multi_case(tmp_path, operation)
+
+
+def test_legacy_borrower_still_requires_the_configured_farm_size(tmp_path):
+    async def run():
+        raw = borrowing_config(tmp_path).to_dict()
+        cfg = Config.from_dict(raw)
+        farm = MultiFarm()
+        farm.engines['farm1'] = 8
+        farm.engines['farm2'] = 8
+        events = []
+        async with httpx.AsyncClient(transport=httpx.MockTransport(farm)) as client:
+            borrower = Borrower(cfg, client, lambda event, **fields: events.append(event))
+            await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', None)
+            assert borrower.lease is None and 'borrow_unavailable' in events
+            await borrower.end()
+    asyncio.run(run())
 
 
 def test_multi_borrower_close_releases_every_lease(tmp_path):

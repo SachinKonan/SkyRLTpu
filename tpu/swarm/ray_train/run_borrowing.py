@@ -144,7 +144,7 @@ class RunBorrower(Borrower):
                     response.raise_for_status()
                     receipt = response.json()
                     if (receipt.get('sha256') != digest or receipt.get('lora_name') != lease.adapter
-                            or len(set(receipt.get('loaded', []))) != self.settings.external_pool_engines):
+                            or len(set(receipt.get('loaded', []))) != self._farm_engines(lease)):
                         raise BorrowingProtocolError('incomplete adapter upload acknowledgement')
                 elif lease.digest is not None:
                     # Never treat an already-adapted reservation as a fresh base
