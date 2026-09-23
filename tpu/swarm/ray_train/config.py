@@ -202,6 +202,19 @@ class Inference:
     external_pool_scheduler: bool = False
     external_pool_attestation: bool = False
     farm_drain_timeout: int = 120
+    # Remote-only trainers run zero local engines and lease 1..N farms at once
+    # (tpu/swarm/ray_train/multi_borrowing.py). Existing profiles keep the
+    # single-lease borrower and the two-URL candidate cap.
+    remote_only: bool = False
+    external_pool_target_leases: int = 1
+    external_pool_candidate_limit: int = 2
+    # Accepted farm serving-identity hashes. Empty means the first attested
+    # farm's hash is learned and required from every later farm.
+    external_pool_required_compatibility: list[str] = field(default_factory=list)
+    external_pool_queue_alert_seconds: int = 60
+    # Farm side: cancel in-flight work this long after a lease expires so an
+    # abruptly lost trainer does not quarantine the farm.
+    farm_cancel_grace_seconds: int = 5
 
 
 @dataclass(frozen=True)
@@ -457,6 +470,39 @@ class Config:
     def to_dict(self):
         return asdict(self)
 
+    def _validate_remote_only(self):
+        """All hosts train; every completion comes from leased farms.
+
+        The controller waits without a deadline for a farm, so every layer that
+        could abandon a queued request must be disabled by the launcher rather
+        than by profile overrides (commands.py sets the watchdog/progress knobs).
+        """
+        v = self.inference
+        if self.inference_only:
+            raise ValueError('remote_only is a trainer setting, not an inference-only farm setting')
+        if not v.external_pool_updates or v.external_pool_lease_scope != 'run' or not v.external_pool_require_initial:
+            raise ValueError('remote_only requires run-scoped, supervisor-updated borrowing with a required initial reservation')
+        if not v.external_pool_scheduler or not v.external_pool_attestation:
+            raise ValueError('remote_only requires the hybrid scheduler and farm attestation')
+        if self.trainer.hosts != self.hosts:
+            raise ValueError('remote_only trains on every host of the slice')
+        if (self.accelerator, self.hosts) != ('tpu-v4-32', 4):
+            raise ValueError('remote_only is validated for the four-host v4-32 slice only')
+        if self.trainer.tp * self.trainer.fsdp != 16:
+            raise ValueError('remote_only v4-32 requires TP x FSDP over all sixteen chips')
+        if self.bootstrap_layers or self.bootstrap_max_drafts or self.bootstrap_only:
+            raise ValueError('remote_only cannot bootstrap: bootstrap deploys and retires local engines')
+        if self.arena_grader_rank is not None or self.placement_ranks or self.frozen_benchmark or self.arena_samples:
+            raise ValueError('remote_only excludes arena, placement and frozen-benchmark roles')
+        if v.request_timeout < 86400:
+            raise ValueError('remote_only requests queue for farms; inference.request_timeout must be at least 86400')
+        for key in ('SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC', 'SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC',
+                    'SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH'):
+            if self.trainer_env.get(key, '0') != '0':
+                raise ValueError(f'remote_only disables the external watchdog; do not set {key} in trainer_env')
+        if 'TTD_SAMPLING_PROGRESS_TIMEOUT' in self.client_env:
+            raise ValueError('remote_only disables the sampling progress timeout; do not set TTD_SAMPLING_PROGRESS_TIMEOUT')
+
     def validate(self):
         from urllib.parse import urlsplit
         if type(self.inference.external_pool_updates) is not bool:
@@ -464,13 +510,16 @@ class Config:
         pool = self.inference.external_pool_urls
         if not isinstance(pool, dict):
             raise ValueError('external_pool_urls must map exact model IDs to URL lists')
+        candidate_limit = self.inference.external_pool_candidate_limit
+        if type(candidate_limit) is not int or not 1 <= candidate_limit <= 64:
+            raise ValueError('external_pool_candidate_limit must be an integer in [1,64]')
         for model, urls in pool.items():
             if not isinstance(model, str) or not model or not isinstance(urls, list):
                 raise ValueError('external_pool_urls must map exact model IDs to URL lists')
             if any(not isinstance(value, str) for value in urls):
                 raise ValueError('external service URL must be a string')
-            if len(urls) > 2 or len(set(urls)) != len(urls):
-                raise ValueError('at most two distinct external service URLs per model')
+            if len(urls) > candidate_limit or len(set(urls)) != len(urls):
+                raise ValueError(f'at most {candidate_limit} distinct external service URLs per model')
             for value in urls:
                 if not isinstance(value, str):
                     raise ValueError('external service URL must be a string')
@@ -484,10 +533,24 @@ class Config:
                 except ValueError as exc:
                     raise ValueError('invalid external service port') from exc
         for name in ('engines', 'max_n', 'max_concurrent_requests', 'rpc_timeout', 'prepare_timeout', 'release_timeout',
-                     'lease_seconds', 'heartbeat_seconds', 'health_grace_seconds', 'initial_wait_seconds'):
+                     'lease_seconds', 'heartbeat_seconds', 'health_grace_seconds', 'initial_wait_seconds',
+                     'target_leases', 'queue_alert_seconds'):
             value = getattr(self.inference, 'external_pool_' + name)
             if type(value) is not int or value <= 0:
                 raise ValueError('external pool limits must be positive integers')
+        if self.inference.external_pool_target_leases > candidate_limit:
+            raise ValueError('external_pool_target_leases cannot exceed external_pool_candidate_limit')
+        accepted = self.inference.external_pool_required_compatibility
+        if (not isinstance(accepted, list) or len(set(accepted)) != len(accepted)
+                or any(not isinstance(v, str) or not re.fullmatch(r'[0-9a-f]{64}', v) for v in accepted)):
+            raise ValueError('external_pool_required_compatibility must list distinct sha256 hex digests')
+        if (type(self.inference.farm_cancel_grace_seconds) is not int or self.inference.farm_cancel_grace_seconds <= 0
+                or self.inference.farm_cancel_grace_seconds >= self.inference.farm_drain_timeout):
+            raise ValueError('farm_cancel_grace_seconds must be a positive integer below farm_drain_timeout')
+        if type(self.inference.remote_only) is not bool:
+            raise ValueError('remote_only must be boolean')
+        if self.inference.remote_only:
+            self._validate_remote_only()
         if (self.inference.external_pool_lease_seconds <=
                 3 * max(self.inference.external_pool_heartbeat_seconds, self.inference.external_pool_rpc_timeout)):
             raise ValueError('external lease must allow at least three heartbeat/RPC intervals')
@@ -765,7 +828,8 @@ class Config:
             raise ValueError(f"zone {self.zone!r} is not a known zone for {self.accelerator}")
         if self.inference_only and self.trainer.hosts != 0:
             raise ValueError("inference-only profiles must declare zero trainer hosts")
-        if not self.inference_only and not 0 < self.trainer.hosts < self.hosts:
+        full_slice_trainer = self.inference.remote_only and self.trainer.hosts == self.hosts
+        if not self.inference_only and not 0 < self.trainer.hosts < self.hosts and not full_slice_trainer:
             raise ValueError("require disjoint nonempty trainer and inference roles")
         if not self.inference_only and self.accelerator == "tpu-v4-64" and self.trainer.hosts != 4:
             raise ValueError("v4-64 currently requires the validated four-host row")
@@ -773,7 +837,8 @@ class Config:
                 self.inference_only or self.trainer.hosts != 1
                 or self.inference.hosts_per_engine != 1 or self.inference.tp != 4):
             raise ValueError("v5p-64 requires one trainer host and seven TP4 inference hosts")
-        if not self.inference_only and self.accelerator in ("tpu-v5p-32", "tpu-v4-32") and self.trainer.hosts not in (1, 2):
+        if (not self.inference_only and self.accelerator in ("tpu-v5p-32", "tpu-v4-32")
+                and self.trainer.hosts not in (1, 2) and not full_slice_trainer):
             raise ValueError("32-core profiles support one or two trainer hosts")
         if not self.inference_only and self.accelerator == "tpu-v6e-32" and (
                 self.trainer.hosts != 4 or self.trainer.process_bounds != "2,2,1"):
