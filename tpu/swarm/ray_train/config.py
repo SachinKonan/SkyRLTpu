@@ -342,6 +342,11 @@ class Config:
     arena_thinking_tokens: int | None = None
     ports: Ports = field(default_factory=Ports)
     systemd_runtime: bool = False
+    # Explicit Ray CPU count per host for sandbox-graded (non-science) runs. The
+    # default of 32 caps concurrent grading tasks at 32/NUM_CPUS_PER_TASK per host,
+    # which for 1000 s program budgets makes grading the step-time bottleneck.
+    # 0 keeps the default sizing.
+    ray_cpus_per_host_override: int = 0
     systemd_port: int = 24900
     systemd_peer_timeout: int = 30
     systemd_shutdown_grace: int = 90
@@ -391,6 +396,11 @@ class Config:
     @property
     def ray_cpus_per_host(self):
         # Leave scheduler capacity for controller/Serve actors as well as graders.
+        if self.ray_cpus_per_host_override:
+            if self.science_task or not isinstance(self.ray_cpus_per_host_override, int) \
+                    or not 1 <= self.ray_cpus_per_host_override <= 512:
+                raise ValueError('ray_cpus_per_host_override applies to sandbox-graded runs only and must be in [1, 512]')
+            return self.ray_cpus_per_host_override
         if self.science_routing_evaluator == 'parallel-v2':
             return 10 * self.science_routing_slots_per_host + 8
         if self.science_task == 'placement' and self.science_placement_backend == 'cpu':

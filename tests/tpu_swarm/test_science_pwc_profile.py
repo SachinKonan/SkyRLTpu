@@ -43,10 +43,16 @@ def test_ac_inequalities_problems_allow_adaptive_pwc(problem):
 @pytest.mark.parametrize('name', ['ac1-v5p-qwen-on-gemma-carry-pwc05-20260923',
                                   'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923',
                                   'ac1-v5p-qwen-on-gemma-carry-pwc05-20260923-r2',
-                                  'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923-r2'])
+                                  'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923-r2',
+                                  'ac1-v5p-qwen-on-gemma-carry-pwc05-20260923-r3',
+                                  'ac1-v5p-muse-on-gemma-fresh-pwc05-20260923-r3'])
 def test_ac1_takeover_profiles_validate(name):
     config = Config.from_dict(json.loads((PROFILES / f'{name}.json').read_text()))
     env = config.client_env
+    if name.endswith('-r3'):
+        assert config.borrows_inference and config.inference.external_pool_updates
+        assert config.inference.external_pool_urls.get(config.model)
+        assert config.ray_cpus_per_host == 104 and env['NUM_CPUS_PER_TASK'] == '1'
     assert (env['TTD_ENV'], env['TTD_PROBLEM_TYPE']) == ('ac_inequalities', 'ac1')
     assert env['TTD_ADV_ESTIMATOR'] == 'piecewise_valid_entropic_centered_adaptive'
     assert (env['TTD_ADV_PIECEWISE_RHO'], env['TTD_ADV_PIECEWISE_INVALID_REWARD']) == ('0.5', '0')
@@ -54,6 +60,20 @@ def test_ac1_takeover_profiles_validate(name):
     assert not config.seed_pool_sha256  # ac1 pool values are negative; staged tree is not science-verified
     carried = 'TTD_INIT_STATE_PATH_QWEN' in env
     assert carried == ('carry' in name)
+
+
+def test_ray_cpus_per_host_override_only_for_sandbox_runs():
+    base = json.loads((PROFILES / 'capacity-v5p-qwen-ac2-grpo-15e4-20260920.json').read_text())
+    assert Config.from_dict(base).ray_cpus_per_host == 32
+    raised = copy.deepcopy(base); raised['ray_cpus_per_host_override'] = 104
+    assert Config.from_dict(raised).ray_cpus_per_host == 104
+    science = json.loads((PROFILES / 'science-circuit-v4-qwen-cpu-seeded-train-001.json').read_text())
+    science['ray_cpus_per_host_override'] = 104
+    with pytest.raises(ValueError, match='sandbox-graded'):
+        Config.from_dict(science).ray_cpus_per_host
+    bad = copy.deepcopy(base); bad['ray_cpus_per_host_override'] = 4096
+    with pytest.raises(ValueError, match='sandbox-graded'):
+        Config.from_dict(bad).ray_cpus_per_host
 
 
 @pytest.mark.parametrize('task', ['routing', 'placement'])
