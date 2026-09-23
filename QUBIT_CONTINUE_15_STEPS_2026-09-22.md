@@ -4,7 +4,7 @@ The user authorized five additional steps for all three models on September 22. 
 
 | Model | Original job | Continuation | Placement |
 |---|---:|---|---|
-| Muse | 1482, succeeded at 10 | 1589 failed; paused, not resubmitted | Initially 727, last failed attempt on 744 |
+| Muse | 1482, succeeded at 10 | 1589 failed; retry 1600 submitted with 96-GiB trainer cache | Retry assigned to worker 758 |
 | Qwen | 1483, succeeded at 10 | 1590 | v4-64 worker 734 |
 | Gemma | 1493, still running | Prepared; submit automatically after 1493 succeeds at step 10 | Existing v4-64 pool |
 
@@ -60,3 +60,17 @@ At the cleanup snapshot, v4-64 workers 727 and 748 were READY and unassigned. Al
 Post-cleanup checks found no executor RAM mounts or leftover workload processes on those 16 hosts. Head disk free space was 30.65 GiB on 727 and 60.85 GiB on 748; 727 remained close to the 30-GiB admission threshold. Checkpoints, logs, installed environments, TPU capacity, and active workloads were preserved. These worker assignments are historical and must be refreshed before any further cleanup.
 
 Private audit receipts: `.science/routing-relaunch-20260921/spare-cleanup-result.json`, `spare-cleanup/`, and `spare-cleanup-after/`.
+
+## Muse resumed while Qwen finishes
+
+The user subsequently requested continuing Muse during Qwen's remaining steps, before a separate Qwen-to-Muse search-state transfer. Muse retry **1600** was submitted to the existing v4-64 pool and assigned worker **758**. It resumes Muse's own step-10 checkpoint/search state and targets step 15. Qwen's programs are not imported by this retry; that is a later stage.
+
+The new profile is `qubit-v4-muse-parallel2-pwc-rho05-20260921-continue15-cache96.json`. Relative to failed attempt 1589, it changes only the trainer RAM-cache budget from 128 to 96 GiB and uses a fresh local root ending in `-continue15-cache96`, with its sick-marker path updated accordingly. The runtime reserve remains 240 GiB, inference cache remains 128 GiB, and training, grading, and farm-borrowing settings remain unchanged.
+
+Deployment bundle SHA256: `00eec56b59cee9c9aa025d62dc84d112cf306bccdf2e0deb75cec3996163e6aa`. It preserves every non-profile file from the previous immutable continuation bundle. Profile validation and archive comparison passed on Slurm CPU job 14291125.
+
+Before submission, both available workers (758 and 760) passed the actual launch clean-host gate on all eight hosts each: no TPU owners, stray workload processes, active grading units, inaccessible TPU lock, or executor tmpfs caches. Minimum free disk was 83.43 GiB and minimum available host memory was 379.66 GiB. No cleanup or cancellation was needed. The launch retains its per-host gate to recheck ownership immediately before starting.
+
+Private evidence: `.science/routing-relaunch-20260921/extend15-muse-cache96/`, including the preflight report, immutable manifest, durable checkpoint checks, launch intent, and submission receipt. Submission alone does not establish step-11 completion; verify the new runtime before reporting resumed training progress.
+
+Startup was observed on worker 758 as local Sky job 2. All eight launch-time clean-host gates passed and the CPU runtime archive checksum passed on every host. Managed job 1600 became RUNNING while installing its runtime; no new optimizer update was claimed. Its existing pending Sky execution request `554bb78d-b06f-46d5-bba4-64cd3b742e64` was dispatched using SkyPilot's normal locked request wrapper and completed successfully, without submitting a duplicate job or restarting the API server.
