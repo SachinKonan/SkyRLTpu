@@ -323,6 +323,10 @@ class Ingress:
             self.borrower = borrower_type(self.config, self.http, report)
         self.lease_watchdog = (asyncio.create_task(self.watch_orphaned_lease())
                                if self.config.inference.require_lease else None)
+        self.grading = None
+        if self.config.inference_only and self.config.grading_families:
+            from .grading_service import GradingService
+            self.grading = GradingService(self.config, inference_ips, report)
         self.scheduler = None
         if self.config.inference.external_pool_scheduler:
             from .hybrid_scheduler import HybridScheduler
@@ -360,6 +364,8 @@ class Ingress:
                  if lease_id == lease['lease_id'] and not task.done()]
         for task in tasks:
             task.cancel()
+        if self.grading:
+            await self.grading.cancel_all(reason)
         engines = 0
         for engine in self.engines:
             cancel = getattr(engine, 'cancel_inflight', None)
@@ -380,7 +386,9 @@ class Ingress:
             await asyncio.sleep(.5)
             lease = self.lease
             expired = lease and (lease['releasing'] or time.monotonic() >= lease['deadline'])
-            if not expired or not (self.active or self.inflight or self.upload_lock.locked()):
+            busy = (self.active or self.inflight or self.upload_lock.locked()
+                    or (self.grading is not None and self.grading.running()))
+            if not expired or not busy:
                 orphan, started, cancelled = None, None, False
                 continue
             if lease is not orphan:
@@ -492,6 +500,8 @@ class Ingress:
                         raise HTTPException(409, 'farm is already leased; provide the lease ID to renew')
                     if self.lease:
                         self.lease['releasing'] = True
+                        if self.grading:
+                            await self.grading.cancel_all('lease taken over after expiry')
                     await self.condition.wait_for(lambda: self.active == 0 or record and record['cancelled'])
                     check_cancelled()
                     self.lease = dict(lease_id=uuid.uuid4().hex, owner_run=owner, acquire_id=acquire_id,
@@ -531,6 +541,8 @@ class Ingress:
             matched = lease and lease.get('acquire_id') == acquire_id
             if matched:
                 lease['releasing'] = True
+        if matched and self.grading:
+            await self.grading.cancel_all('acquire cancelled')
         if matched:
             # An acknowledged cancellation means both pending grants and any
             # granted work have drained, including uploads and disconnected HTTP.
@@ -551,9 +563,13 @@ class Ingress:
             async with self.condition:
                 self.require_lease(payload.get("lease_id"), allow_expired=True)
                 self.lease["releasing"] = True
+                if self.grading:
+                    await self.grading.cancel_all('lease released')
                 await self.condition.wait_for(lambda: self.active == 0)
                 self.lease = None
                 self.condition.notify_all()
+        if self.grading:
+            await self.grading.drain(15)
         return {"state": "unleased", "released": True}
 
     @app.get("/status")
@@ -573,7 +589,42 @@ class Ingress:
         if self.remote_only:
             result['remote_only'] = True
             result['leases'] = result['borrowing'].get('leases', [])
+        if self.grading:
+            result['grading'] = self.grading.snapshot()
         return result
+
+    def grading_lease(self, request, *, allow_expired=False):
+        if self.grading is None:
+            raise HTTPException(409, 'this farm serves no grading families')
+        self.require_lease(request.headers.get('x-lease-id'), allow_expired=allow_expired)
+        return self.lease
+
+    @app.post('/skyrl/v1/grading/submit')
+    async def grading_submit(self, request: Request):
+        lease = self.grading_lease(request)
+        status, payload = await self.grading.submit(lease, await request.json())
+        return JSONResponse(payload, status_code=status)
+
+    @app.get('/skyrl/v1/grading/result/{request_id}')
+    async def grading_result(self, request: Request, request_id: str, wait: int = 0):
+        lease = self.grading_lease(request, allow_expired=True)
+        view = await self.grading.result(lease, request_id, wait=max(0, int(wait)))
+        if view is None:
+            raise HTTPException(404, 'unknown or expired grading request')
+        return view
+
+    @app.post('/skyrl/v1/grading/cancel/{request_id}')
+    async def grading_cancel(self, request: Request, request_id: str):
+        lease = self.grading_lease(request, allow_expired=True)
+        entry = self.grading.entries.get(request_id)
+        if entry is None or entry.lease_id != lease['lease_id']:
+            raise HTTPException(404, 'unknown or expired grading request')
+        return await self.grading.cancel(request_id, 'cancelled by owner')
+
+    @app.get('/skyrl/v1/grading/capacity')
+    async def grading_capacity(self, request: Request):
+        lease = self.grading_lease(request, allow_expired=True)
+        return dict(instance=self.borrowing_instance, **self.grading.capacity(lease))
 
     @app.get('/skyrl/v1/grading/farms')
     async def grading_farms(self):
