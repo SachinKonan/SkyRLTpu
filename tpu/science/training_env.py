@@ -143,7 +143,60 @@ def candidate_prompt(task, code='', feedback='', *, repair=False):
     return prompt
 
 
+def transport_requests(task, source, timeout):
+    """One GradingRequest per Ray task ``evaluate`` would create directly."""
+    from .grading_transport import GradingRequest
+    requests = []
+    if task == 'routing':
+        from .routing_resources import contract
+        resources = contract() if os.environ.get('SCIENCE_ROUTING_EVALUATOR') == 'parallel-v2' else None
+        requests.append(GradingRequest(task='routing', spec=dict(
+            source=source, routing_suite=os.environ.get('SCIENCE_ROUTING_SUITE', 'full'),
+            resource_contract=resources, slots_per_host=int(os.environ.get('SCIENCE_ROUTING_SLOTS_PER_HOST', '2'))),
+            admission_timeout_s=int(timeout - resources['outer_seconds'] - 30 if resources else timeout)))
+    elif task == 'placement':
+        from .placement_task import CASES
+        from .placement_resources import contract
+        slots = int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16'))
+        resources = (contract(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32')))
+                     if os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1' else None)
+        for case in CASES:
+            requests.append(GradingRequest(task='placement', spec=dict(
+                source=source, case=case, resource_contract=resources, slots_per_host=slots,
+                helper=os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')), admission_timeout_s=int(timeout)))
+    else:
+        raise ValueError('unsupported science task')
+    return requests
+
+
+async def evaluate_via_transport(task, source, timeout):
+    """Grade through the local+farm transport; same result and error contract."""
+    from .grading_transport import GradingTransport
+    transport = GradingTransport.instance()
+    futures = [transport.submit(request) for request in transport_requests(task, source, timeout)]
+    try:
+        results = await asyncio.wait_for(asyncio.gather(*(asyncio.wrap_future(f) for f in futures)), timeout=timeout)
+        if task == 'routing':
+            result = results[0]
+        else:
+            from .challenge_contract import aggregate
+            result = aggregate(results)
+        if result['reward'] != result['raw_score']:
+            raise ValueError('science state ranking must match reward direction')
+        return result
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise ScienceInfrastructureError(f'{task} transport grading failed: {type(exc).__name__}: {exc}') from exc
+    finally:
+        for future in futures:
+            future.cancel()
+
+
 async def evaluate(task, source, timeout):
+    if os.environ.get('SKYRL_GRADING_URL') and (task == 'routing' or (
+            task == 'placement' and os.environ.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu')):
+        return await evaluate_via_transport(task, source, timeout)
     connect()
     root = os.environ['SCIENCE_WORKER_ROOT']
     refs = []

@@ -320,6 +320,51 @@ class ScienceRewardsTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError): await task
             cancel.assert_called_once_with(ref, force=True)
 
+    async def test_transport_path_preserves_infrastructure_contract_and_requests(self):
+        from tpu.science import training_env as env
+        from tpu.science import grading_transport as gt
+        from tpu.science.rewards import valid
+        submitted = []
+
+        class FakeTransport:
+            def __init__(self, outcome):
+                self.outcome = outcome
+
+            def submit(self, request):
+                submitted.append(request)
+                future = Future()
+                if isinstance(self.outcome, Exception):
+                    future.set_exception(self.outcome)
+                else:
+                    future.set_result(self.outcome)
+                return future
+        ok = valid(.53, dict(host='farm-a'))
+        with patch.dict('os.environ', SKYRL_GRADING_URL='http://head:24800', SCIENCE_WORKER_ROOT='/payload',
+                        SCIENCE_ROUTING_SLOTS_PER_HOST='4', SCIENCE_ROUTING_SUITE='full'), \
+                patch.object(gt.GradingTransport, 'instance', staticmethod(lambda: FakeTransport(ok))), \
+                patch.object(env, 'connect') as connect:
+            result = await env.evaluate('routing', 'code', 1800)
+            self.assertEqual(result['reward'], .53)
+            connect.assert_not_called()  # No direct Ray dispatch on the transport path.
+            request = submitted[0]
+            self.assertEqual(request.task, 'routing')
+            self.assertEqual(request.spec, dict(source='code', routing_suite='full', resource_contract=None, slots_per_host=4))
+            self.assertEqual(request.admission_timeout_s, 1800)
+        with patch.dict('os.environ', SKYRL_GRADING_URL='http://head:24800', SCIENCE_WORKER_ROOT='/payload'), \
+                patch.object(gt.GradingTransport, 'instance',
+                             staticmethod(lambda: FakeTransport(gt.GradingInfrastructureError('every pool failed')))):
+            with self.assertRaises(env.ScienceInfrastructureError) as error:
+                await env.evaluate('routing', 'code', 60)
+            self.assertTrue(error.exception.abort_training_step)
+            self.assertIn('every pool failed', str(error.exception))
+        # Placement builds one request per case; TPU placement keeps the direct path.
+        with patch.dict('os.environ', SKYRL_GRADING_URL='http://head:24800', SCIENCE_PLACEMENT_BACKEND='cpu',
+                        SCIENCE_PLACEMENT_SLOTS_PER_HOST='8'):
+            from tpu.science.placement_task import CASES
+            requests = env.transport_requests('placement', 'src', 510)
+            self.assertEqual([r.spec['case'] for r in requests], list(CASES))
+            self.assertTrue(all(r.task == 'placement' and r.spec['slots_per_host'] == 8 for r in requests))
+
 
 if __name__ == '__main__':
     unittest.main()
