@@ -176,13 +176,25 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
         env.update(TPU_MULTIHOST_BACKEND="ray", VLLM_USE_RAY_EXECUTOR="1",
                    RAY_ADDRESS=f"{head}:{config.ports.ray}",
                    SKYRL_RAY_PLACEMENT_HOSTS=",".join(group))
-    if v.tp == 2:
+    if v.tp == 8:
+        if slot != 0 or pair or config.accelerator != "tpu-v6e-8":
+            raise ValueError("invalid TP8 v6e-8 engine slot")
+        env.update(TPU_VISIBLE_CHIPS="0,1,2,3,4,5,6,7",
+                   TPU_CHIPS_PER_PROCESS_BOUNDS="2,4,1")
+    elif v.tp == 2:
         if slot not in (0, 1) or pair:
             raise ValueError("invalid TP2 engine slot")
         port = config.ports.inference_tpu + slot
         env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(slot * 2, slot * 2 + 2)),
                    TPU_CHIPS_PER_PROCESS_BOUNDS="1,2,1", TPU_PROCESS_PORT=str(port),
                    TPU_PROCESS_ADDRESSES=f"localhost:{port}")
+    elif config.engines_per_host > 1:
+        if slot not in range(config.engines_per_host) or pair:
+            raise ValueError("invalid single-host TP4 engine slot")
+        first = slot * v.tp
+        port = config.ports.inference_tpu + slot
+        env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(first, first + v.tp)),
+                   TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}")
     if v.native_thinking_budget:
         env["SKYRL_THINKING_FORMAT"] = config.model_preset
     else:
