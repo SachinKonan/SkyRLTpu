@@ -503,8 +503,11 @@ class Config:
     def ray_cpus_per_host(self):
         # Leave scheduler capacity for controller/Serve actors as well as graders.
         if self.inference_only and self.grading_families:
-            # Engine (8) + ingress (1) + overhead (8) + the declared grading slots.
-            return 17 + sum(f['slots_per_host'] * f['cpus'] for f in self.grading_families.values())
+            # Every engine on the host takes 8, plus ingress (1) and host/service
+            # overhead (8), then the declared grading slots. A v6e-8 farm runs two
+            # engines, so budgeting for one would starve its grading slots of CPU.
+            return 8 * self.engines_per_host + 9 + sum(
+                f['slots_per_host'] * f['cpus'] for f in self.grading_families.values())
         if self.science_routing_evaluator == 'parallel-v2':
             return 10 * self.science_routing_slots_per_host + 8
         if self.science_task == 'placement' and self.science_placement_backend == 'cpu':
