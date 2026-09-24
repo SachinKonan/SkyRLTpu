@@ -13,7 +13,7 @@ import ray
 from ray import serve
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
-from tpu.swarm.select_v4_32_topology import verify_full_slice_order
+from tpu.swarm.select_v4_32_topology import full_slice_rank_order, slice_rows, verify_full_slice_order
 from tpu.swarm.select_v4_64_topology import select_split
 from tpu.swarm.select_v6e_32_topology import select_split as select_v6e_32_split
 from .config import Config
@@ -352,13 +352,20 @@ class Controller:
             inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
                                if r != self.config.arena_grader_rank and r not in self.config.placement_ranks]
             if self.config.inference.remote_only:
-                # Every host trains as a 1,1,4 process grid; verify the Sky
-                # rank order matches the physical z rows before libtpu does.
+                # Every host trains as a 1,1,4 process grid, where process i
+                # must own z row i. Sky ranks need not follow the rows, so
+                # order the trainer ranks physically (process id is the
+                # position in train_ranks), then re-probe under the real
+                # process bounds and require process i to land on row i.
                 assert not inference_ranks
                 full = self.checked_get([host.probe.remote(list(range(self.config.hosts)), self.config.ports.topology_jax)
                                          for host in self.hosts], 300)
-                order = verify_full_slice_order(full)
-                self.report('remote_only_topology_verified', rank_to_z=order, train_ranks=train_ranks)
+                rank_to_z = slice_rows(full)
+                train_ranks = full_slice_rank_order(full)
+                subset = self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                                           for r in train_ranks], 300)
+                verify_full_slice_order(subset)
+                self.report('remote_only_topology_verified', rank_to_z=rank_to_z, train_ranks=train_ranks)
         science_grading_rank = None
         if self.config.science_task and not self.config.bootstrap_only:
             from tpu.science.training_setup import split_roles

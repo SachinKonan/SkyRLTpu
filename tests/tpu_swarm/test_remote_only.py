@@ -737,7 +737,7 @@ def test_expired_lease_cancels_inflight_work_and_frees_the_farm(tmp_path, monkey
 
 
 # --- Controller ------------------------------------------------------------
-from tpu.swarm.select_v4_32_topology import verify_full_slice_order
+from tpu.swarm.select_v4_32_topology import full_slice_rank_order, slice_rows, verify_full_slice_order
 
 
 def slice_records(rank_to_z):
@@ -753,6 +753,30 @@ def test_v4_32_full_slice_order_guard():
         verify_full_slice_order(slice_records([0, 1, 2, 2]))
     with pytest.raises(ValueError, match='expected Sky ranks'):
         verify_full_slice_order(slice_records([0, 1, 2]))
+
+
+@pytest.mark.parametrize('rank_to_z', [[0, 1, 2, 3], [1, 2, 3, 0], [3, 2, 1, 0], [2, 0, 3, 1]])
+def test_v4_32_trainer_ranks_follow_physical_rows(rank_to_z):
+    # [1, 2, 3, 0] is what a pool worker actually reported on 2026-09-24.
+    records = slice_records(rank_to_z)
+    assert slice_rows(records) == rank_to_z
+    train_ranks = full_slice_rank_order(records)
+    # Process i (position in train_ranks) is the host on physical row i.
+    assert [rank_to_z[rank] for rank in train_ranks] == [0, 1, 2, 3]
+    # The subset re-probe reports process ids in train_ranks order; once
+    # reordered, process i owns row i and the verification passes.
+    subset = [dict(process_id=process, coords=records[rank]['coords']) for process, rank in enumerate(train_ranks)]
+    assert verify_full_slice_order(subset) == [0, 1, 2, 3]
+
+
+def test_v4_32_reorder_still_rejects_broken_slices():
+    with pytest.raises(ValueError, match='complete v4-32'):
+        full_slice_rank_order(slice_records([0, 1, 1, 3]))
+    straddle = slice_records([0, 1, 2, 3])
+    straddle[0]['coords'][0] = [0, 0, 1]
+    straddle[1]['coords'][0] = [0, 0, 0]
+    with pytest.raises(ValueError, match='spans several z rows'):
+        full_slice_rank_order(straddle)
 
 
 def controller_for(tmp_path):
