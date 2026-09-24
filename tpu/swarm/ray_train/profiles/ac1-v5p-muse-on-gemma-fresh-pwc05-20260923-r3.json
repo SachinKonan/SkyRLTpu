@@ -86,7 +86,7 @@
     "TTD_LOSS_FN": "importance_sampling",
     "TTD_WARMUP_FB": "0",
     "NUM_CPUS_PER_TASK": "1",
-    "TTD_SAFE_GRADE_MAX_WORKERS": "416",
+    "TTD_SAFE_GRADE_MAX_WORKERS": "512",
     "SAVE_EVERY": "1",
     "TTD_REJECT_TRUNCATED": "1",
     "TTD_SICK_MARKER": "/home/gcpuser/.cache/ac1-v5p-muse-on-gemma-fresh-pwc05-20260923-r3/runs/ac1-v5p-muse-on-gemma-fresh-pwc05-20260923-r3/ENGINE-SICK",
@@ -117,5 +117,5 @@
   "bootstrap_group_size": 16,
   "bootstrap_max_groups": 32,
   "resume_min_checkpoint_step": 0,
-  "ray_cpus_per_host_override": 104
+  "ray_cpus_per_host_override": 128
 }
