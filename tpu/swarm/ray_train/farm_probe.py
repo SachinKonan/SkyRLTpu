@@ -46,7 +46,11 @@ if a == 'status':
     out['status'] = (s, st)
     out['models'] = call('GET', '/v1/models')
     try:
-        out['ray_status'] = subprocess.run([P['ray'], 'status'], capture_output=True, text=True, timeout=30).stdout[-1500:]
+        import glob, os
+        # Without an explicit --ray, find the run's controller venv on the host.
+        ray = os.path.expanduser(P['ray']) if P.get('ray') else next(
+            iter(sorted(glob.glob(os.path.expanduser('~/.cache/*/envs/controller/bin/ray')))), 'ray')
+        out['ray_status'] = subprocess.run([ray, 'status'], capture_output=True, text=True, timeout=30).stdout[-1500:]
     except Exception as e:
         out['ray_status'] = repr(e)
     out['units'] = subprocess.run(['systemctl', 'list-units', '--no-legend', 'ac2-grade-*'], capture_output=True, text=True).stdout
@@ -114,7 +118,7 @@ def main():
     parser.add_argument('--cluster', required=True)
     parser.add_argument('--ssh-dir', required=True)
     parser.add_argument('--state', default='/tmp/farm-probe-state.json')
-    parser.add_argument('--ray', default='~/.cache/farm-v6e32-qwen-grading-ac2-20260923/envs/controller/bin/ray')
+    parser.add_argument('--ray', default='', help="the run's controller ray binary; found on the host when omitted")
     parser.add_argument('--timeout', type=int, default=120)
     parser.add_argument('--sha')
     parser.add_argument('--count', type=int, default=4)
