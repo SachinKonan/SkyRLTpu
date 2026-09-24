@@ -12,8 +12,8 @@
     "hosts": 0
   },
   "inference": {
-    "tp": 4,
-    "max_sequences": 16,
+    "tp": 8,
+    "max_sequences": 128,
     "memory_utilization": 0.8,
     "routing": "ingress",
     "restart_limit": 0,

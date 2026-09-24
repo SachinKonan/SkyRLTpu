@@ -45,7 +45,7 @@
     "external_pool_require_initial": true,
     "external_pool_scheduler": true,
     "external_pool_attestation": true,
-    "external_pool_engines": 2,
+    "external_pool_engines": 1,
     "external_pool_max_n": 32,
     "external_pool_max_concurrent_requests": 4,
     "external_pool_rpc_timeout": 10,

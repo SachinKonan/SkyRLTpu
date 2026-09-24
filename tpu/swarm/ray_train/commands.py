@@ -182,7 +182,15 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
         env.update(TPU_MULTIHOST_BACKEND="ray", VLLM_USE_RAY_EXECUTOR="1",
                    RAY_ADDRESS=f"{head}:{config.ports.ray}",
                    SKYRL_RAY_PLACEMENT_HOSTS=",".join(group))
-    if v.tp == 2:
+    if v.tp == 8:
+        # One engine owns all eight chips of a v6e-8 host. Two TP4 engines on
+        # the same host cannot coexist: libtpu takes a host-wide lock, so the
+        # second engine aborts with "TPU is already in use".
+        if slot != 0 or pair or config.accelerator != "tpu-v6e-8":
+            raise ValueError("invalid TP8 v6e-8 engine slot")
+        env.update(TPU_VISIBLE_CHIPS="0,1,2,3,4,5,6,7",
+                   TPU_CHIPS_PER_PROCESS_BOUNDS="2,4,1")
+    elif v.tp == 2:
         if slot not in (0, 1) or pair:
             raise ValueError("invalid TP2 engine slot")
         port = config.ports.inference_tpu + slot
