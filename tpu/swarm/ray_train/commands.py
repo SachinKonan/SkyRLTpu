@@ -189,6 +189,15 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
         env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(slot * 2, slot * 2 + 2)),
                    TPU_CHIPS_PER_PROCESS_BOUNDS="1,2,1", TPU_PROCESS_PORT=str(port),
                    TPU_PROCESS_ADDRESSES=f"localhost:{port}")
+    elif config.engines_per_host > 1:
+        # A host with more chips than one engine uses (v6e-8 at TP4) runs
+        # several engines, each pinned to its own disjoint block of chips.
+        if slot not in range(config.engines_per_host) or pair:
+            raise ValueError("invalid single-host TP4 engine slot")
+        first = slot * v.tp
+        port = config.ports.inference_tpu + slot
+        env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(first, first + v.tp)),
+                   TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}")
     if v.native_thinking_budget:
         env["SKYRL_THINKING_FORMAT"] = config.model_preset
     else:
