@@ -53,6 +53,9 @@ def test_ac1_takeover_profiles_validate(name):
         assert config.borrows_inference and config.inference.external_pool_updates
         assert config.inference.external_pool_urls.get(config.model)
         assert config.ray_cpus_per_host == 104 and env['NUM_CPUS_PER_TASK'] == '1'
+        # the client's grading thread pool (dataset_builder SAFE_GRADE_EXECUTOR, default 64) must
+        # match the Ray slots, or 512 programs at a 1000 s budget grade in eight rounds
+        assert int(env['TTD_SAFE_GRADE_MAX_WORKERS']) == 4 * config.ray_cpus_per_host
     assert (env['TTD_ENV'], env['TTD_PROBLEM_TYPE']) == ('ac_inequalities', 'ac1')
     assert env['TTD_ADV_ESTIMATOR'] == 'piecewise_valid_entropic_centered_adaptive'
     assert (env['TTD_ADV_PIECEWISE_RHO'], env['TTD_ADV_PIECEWISE_INVALID_REWARD']) == ('0.5', '0')
