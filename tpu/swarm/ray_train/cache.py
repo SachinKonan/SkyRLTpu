@@ -183,14 +183,22 @@ class GCS:
             raise FileNotFoundError("gcloud is unavailable on this Ray worker")
         self.running = None
 
-    def metadata(self, *args, allow_empty=False):
-        result = subprocess.run([self.gcloud, "storage", *args], env=self.env,
-                                capture_output=True, text=True, timeout=300)
-        if result.returncode:
+    def metadata(self, *args, allow_empty=False, attempts=3):
+        # gcloud storage occasionally exits 241 with empty stderr on an otherwise healthy host
+        # (seen on the dedicated v5p-64, 2026-09-24: base-bundle copy and the orbax tree listing).
+        # Transfers are retried by transfer(); a listing must be too, or host preparation is fatal.
+        for attempt in range(1, attempts + 1):
+            result = subprocess.run([self.gcloud, "storage", *args], env=self.env,
+                                    capture_output=True, text=True, timeout=300)
+            if not result.returncode:
+                return result.stdout
             if allow_empty and "matched no objects" in result.stderr.lower():
                 return "[]"
-            raise RuntimeError(f"GCS metadata request failed: {result.stderr[-1500:]}")
-        return result.stdout
+            if attempt < attempts:
+                emit(self.events, "metadata_retry", args=list(args), returncode=result.returncode,
+                     attempt=attempt, stderr=result.stderr[-300:])
+                time.sleep(5 * attempt)
+        raise RuntimeError(f"GCS metadata request failed: {result.stderr[-1500:]}")
 
     def list(self, prefix, allow_empty=False):
         raw = self.metadata("ls", "--json", prefix.rstrip("/") + "/**", allow_empty=allow_empty)

@@ -39,6 +39,29 @@ def test_gcs_resolves_snap_sdk_when_ray_worker_path_omits_it(tmp_path, monkeypat
     assert searched[0] == '/usr/bin:/bin'
 
 
+def test_gcs_metadata_retries_transient_gcloud_exit(tmp_path, monkeypatch):
+    """gcloud storage occasionally exits 241 with empty stderr on a healthy host (v5p-64, 2026-09-24);
+    a listing must retry like transfers do, and a real 'matched no objects' still short-circuits."""
+    from types import SimpleNamespace
+    from tpu.swarm.ray_train import cache
+    monkeypatch.setattr(cache.shutil, 'which', lambda name, *, path: '/snap/bin/gcloud')
+    monkeypatch.setattr(cache.time, 'sleep', lambda s: None)
+    results = [SimpleNamespace(returncode=241, stdout='', stderr=''),
+               SimpleNamespace(returncode=0, stdout='[{"url": "gs://test/orbax/x"}]', stderr='')]
+    calls = []
+    monkeypatch.setattr(cache.subprocess, 'run', lambda command, **kw: (calls.append(command), results.pop(0))[1])
+    gcs = cache.GCS(tmp_path, Config.from_dict(config_dict()).cache)
+    assert gcs.metadata('ls', '--json', 'gs://test/orbax/**') == '[{"url": "gs://test/orbax/x"}]'
+    assert len(calls) == 2
+    events = [json.loads(l) for l in gcs.events.read_text().splitlines()]
+    assert events[-1]['event'] == 'metadata_retry' and events[-1]['returncode'] == 241
+    results[:] = [SimpleNamespace(returncode=1, stdout='', stderr='One or more URLs matched no objects.')]
+    assert gcs.metadata('ls', '--json', 'gs://test/none/**', allow_empty=True) == '[]'
+    results[:] = [SimpleNamespace(returncode=241, stdout='', stderr='')] * 3
+    with pytest.raises(RuntimeError, match='GCS metadata request failed'):
+        gcs.metadata('ls', '--json', 'gs://test/orbax/**')
+
+
 def test_gcs_fails_early_without_sdk(tmp_path, monkeypatch):
     from tpu.swarm.ray_train import cache
     monkeypatch.setattr(cache.shutil, 'which', lambda *args, **kwargs: None)
