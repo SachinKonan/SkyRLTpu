@@ -269,6 +269,7 @@ ACCELERATOR_ZONES = {
     "tpu-v5p-32": ("us-east5-a",),
     "tpu-v5p-64": ("us-central1-a", "us-east5-a"),
     "tpu-v6e-32": ("asia-northeast1-b", "us-east5-b", "us-central1-b", "europe-west4-a"),
+    "tpu-v6e-8": ("us-central1-b", "us-east5-b", "asia-northeast1-b", "europe-west4-a"),
 }
 ACCELERATOR_RUNTIME = {
     "tpu-v4-64": "tpu-ubuntu2204-base",
@@ -276,6 +277,7 @@ ACCELERATOR_RUNTIME = {
     "tpu-v5p-32": "v2-alpha-tpuv5",
     "tpu-v5p-64": "v2-alpha-tpuv5",
     "tpu-v6e-32": "v2-alpha-tpuv6e",
+    "tpu-v6e-8": "v2-alpha-tpuv6e",
 }
 
 # Values transcribed from tpu/jobman/cell_worker.sh (model cases + pick_tiles)
@@ -922,7 +924,8 @@ class Config:
             raise ValueError("checkpoint_cleanup_timeout must be a nonnegative integer (0 disables)")
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}", self.run_id):
             raise ValueError("run_id must be a safe unique name")
-        expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4, "tpu-v5p-64": 8, "tpu-v6e-32": 8}
+        expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4, "tpu-v5p-64": 8, "tpu-v6e-32": 8,
+                    "tpu-v6e-8": 1}
         if expected.get(self.accelerator) != self.hosts:
             raise ValueError("accelerator/host count mismatch")
         if self.zone and self.zone not in ACCELERATOR_ZONES.get(self.accelerator, ()):
@@ -1200,8 +1203,14 @@ class Config:
         return 'tpu.swarm.ray_train.seed_bootstrap' if self.bootstrap_max_drafts else 'tpu.science.bootstrap'
 
     @property
+    def chips_per_host(self):
+        # v6e-8 is the sole single-VM eight-chip TPU shape supported by this
+        # executor. The multihost slices expose four chips on every VM.
+        return 8 if self.accelerator == "tpu-v6e-8" else 4
+
+    @property
     def engines_per_host(self):
-        return 4 // self.inference.tp
+        return self.chips_per_host // self.inference.tp
 
     def engine_slots(self, inference_ips):
         return [dict(ip=ip, slot=slot, port=self.ports.engine + slot,

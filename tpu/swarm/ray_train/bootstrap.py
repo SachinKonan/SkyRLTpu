@@ -25,7 +25,7 @@ def workload_resources(config, rank):
         tokens = {f"grading_{name}": spec["slots_per_host"] for name, spec in families.items()}
         if "placement" in families:
             tokens["placement_cpu_host"] = families["placement"]["slots_per_host"]
-        return {"TPU": 4, **tokens}
+        return {"TPU": config.chips_per_host, **tokens}
     if config.science_task == "placement":
         if config.science_placement_backend == 'cpu':
             return {"TPU": 4, "placement_cpu_host": config.science_placement_slots_per_host}
@@ -42,8 +42,8 @@ def workload_resources(config, rank):
         return {"TPU": 0}
     if "ac2" in families:
         # Trainer hosts bound local AC2 grading by the same slot token.
-        return {"TPU": 4, "grading_ac2": families["ac2"]["slots_per_host"]}
-    return {"TPU": 4}
+        return {"TPU": config.chips_per_host, "grading_ac2": families["ac2"]["slots_per_host"]}
+    return {"TPU": config.chips_per_host}
 
 
 def check_ports_available(ports, timeout=60):
@@ -257,7 +257,8 @@ def main():
         from .runtime_service import wait_preflight
         wait_preflight(config, lambda: stopped)
         os.environ.update(RAY_ADDRESS=f"{ips[0]}:{p.ray}", RAY_NAMESPACE=config.run_id,
-            RAY_TMPDIR=str(ray_tmp), JAX_PLATFORMS="cpu", TPU_VISIBLE_CHIPS="0,1,2,3",
+            RAY_TMPDIR=str(ray_tmp), JAX_PLATFORMS="cpu",
+            TPU_VISIBLE_CHIPS=",".join(map(str, range(config.chips_per_host))),
             OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", RAY_USAGE_STATS_ENABLED="0")
         if rank in config.placement_ranks:
             from tpu.science.placement_slots import chips_from_env
