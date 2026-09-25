@@ -57,7 +57,8 @@
     "external_pool_target_leases": 2,
     "external_pool_candidate_limit": 16,
     "external_pool_required_compatibility": [],
-    "external_pool_queue_alert_seconds": 60
+    "external_pool_queue_alert_seconds": 60,
+    "external_pool_discovery_group": "remote-only-pilot"
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1",

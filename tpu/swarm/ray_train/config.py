@@ -240,6 +240,11 @@ class Inference:
     # farm's hash is learned and required from every later farm.
     external_pool_required_compatibility: list[str] = field(default_factory=list)
     external_pool_queue_alert_seconds: int = 60
+    # Non-empty: only a supervisor presenting this group sees the trainer as
+    # opted in or may replace its farm list. Every other supervisor watching
+    # the same pool reads enabled=false and leaves the trainer alone, so it
+    # cannot hand the trainer farms from another run or another region.
+    external_pool_discovery_group: str = ""
     # Farm side: cancel in-flight work this long after a lease expires so an
     # abruptly lost trainer does not quarantine the farm.
     farm_cancel_grace_seconds: int = 5
@@ -1113,6 +1118,9 @@ class Config:
                 raise ValueError(f"expected a GCS URI: {path}")
         if type(self.single_bucket) is not bool:
             raise ValueError("single_bucket must be boolean")
+        group = self.inference.external_pool_discovery_group
+        if not isinstance(group, str) or (group and not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", group)):
+            raise ValueError("inference.external_pool_discovery_group must be empty or a short lowercase slug")
         if self.single_bucket:
             self._validate_single_bucket()
         if not re.fullmatch(r"[0-9a-f]{64}", self.base_bundle_sha256):

@@ -52,7 +52,7 @@ try:
                       owner_run=status.get('owner_run'), state=status.get('state'),
                       active=status.get('active', 0), capabilities=status.get('capabilities'))
     else:
-        result = call('/skyrl/v1/borrowing/services', PARAMS.get('body'))
+        result = call('/skyrl/v1/borrowing/services' + PARAMS.get('query', ''), PARAMS.get('body'))
     print(json.dumps(dict(ok=True, result=result)))
 except Exception as exc:
     print(json.dumps(dict(ok=False, error=type(exc).__name__,
@@ -71,7 +71,7 @@ def target_identity_matches(job_run_id, target_run_id):
         r'(?:-optional-farm-r[0-9]+(?:-after-pwc)?|-requeue-[0-9]{8})', suffix))
 
 
-def rpc(ssh_dir, cluster, action, port, body=None):
+def rpc(ssh_dir, cluster, action, port, body=None, group=''):
     if not isinstance(cluster, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]+', cluster):
         return {'ok': False, 'error': 'invalid_cluster'}
     config = Path(ssh_dir) / cluster
@@ -80,6 +80,12 @@ def rpc(ssh_dir, cluster, action, port, body=None):
     params = dict(action=action, port=port)
     if body is not None:
         params['body'] = body
+    if group and action == 'target':
+        # Trainers with a discovery group answer only a supervisor that
+        # presents it: on the read (query) and on the push (body).
+        params['query'] = '?group=' + group
+        if body is not None:
+            params['body'] = dict(body, group=group)
     try:
         proc = subprocess.run(['ssh', '-F', str(config), '-o', 'BatchMode=yes',
                                '-o', 'ConnectTimeout=8', cluster, 'python3 -'],
@@ -187,6 +193,8 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--lock-file', type=Path)
     parser.add_argument('--run-scoped-only', action='store_true')
+    parser.add_argument('--discovery-group', default='',
+                        help='Present this group to trainers that require one (inference.external_pool_discovery_group)')
     args = parser.parse_args()
     if args.farm_pool_max_job_id is not None and (not args.farm_pool or args.farm_pool_max_job_id < 1):
         parser.error('--farm-pool-max-job-id requires --farm-pool and a positive job ID')
@@ -206,7 +214,7 @@ def main():
     except BlockingIOError:
         parser.error('another borrowing supervisor is already running under this login')
     def call(cluster, action, body=None):
-        return rpc(args.ssh_config_dir, cluster, action, args.port, body)
+        return rpc(args.ssh_config_dir, cluster, action, args.port, body, group=args.discovery_group)
     while True:
         try:
             result = tick(inventory(), args.farm_pool, args.trainer_job_id, call,

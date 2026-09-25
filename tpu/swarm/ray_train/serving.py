@@ -709,12 +709,20 @@ class Ingress:
             except BorrowingProtocolError as exc:
                 raise HTTPException(409, str(exc))
 
+    def discovery_admitted(self, group):
+        """A trainer with a discovery group answers only its own supervisor."""
+        required = self.config.inference.external_pool_discovery_group
+        return not required or group == required
+
     @app.get('/skyrl/v1/borrowing/services')
-    async def borrowing_services(self):
+    async def borrowing_services(self, group: str | None = None):
         if self.config.inference.external_pool_attestation:
             await self.capabilities()
         accepted = sorted(self.borrower.accepted) if self.remote_only and self.borrower else []
-        return dict(enabled=self.config.inference.external_pool_updates,
+        # Another supervisor watching the same pool sees this trainer as not
+        # opted in and never offers it farms.
+        return dict(enabled=self.config.inference.external_pool_updates and self.discovery_admitted(group),
+                    discovery_group_required=bool(self.config.inference.external_pool_discovery_group),
                     model=self.config.model, run_id=self.config.run_id,
                     instance=self.borrowing_instance,
                     lease_scope=self.config.inference.external_pool_lease_scope,
@@ -735,15 +743,18 @@ class Ingress:
         if not self.borrower or not self.config.inference.external_pool_updates:
             raise HTTPException(409, 'service list updates are disabled')
         body = await request.json()
-        if (not isinstance(body, dict) or body.get('run_id') != self.config.run_id
-                or body.get('instance') != self.borrowing_instance):
+        if not isinstance(body, dict):
+            raise HTTPException(409, 'stale or incorrect target service')
+        if not self.discovery_admitted(body.get('group')):
+            raise HTTPException(403, 'supervisor is not in this trainer discovery group')
+        if body.get('run_id') != self.config.run_id or body.get('instance') != self.borrowing_instance:
             raise HTTPException(409, 'stale or incorrect target service')
         from .borrowing import BorrowingProtocolError
         try:
             self.borrower.update_urls(body.get('model'), body.get('urls'))
         except (ValueError, BorrowingProtocolError) as exc:
             raise HTTPException(400, str(exc))
-        return await self.borrowing_services()
+        return await self.borrowing_services(body.get('group'))
 
     @app.post('/skyrl/v1/borrowing/heartbeat')
     async def heartbeat_borrowing(self, request: Request):

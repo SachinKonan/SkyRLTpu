@@ -674,6 +674,75 @@ def test_multi_borrower_close_releases_every_lease(tmp_path):
     multi_case(tmp_path, operation)
 
 
+def test_discovery_group_hides_trainer_from_other_supervisors(tmp_path, monkeypatch):
+    """A second supervisor watching the pool must not be able to feed the trainer farms.
+
+    2026-09-24: another run's supervisor pushed its farms (one in us-central2)
+    to the v5p pilot trainer because the trainer answered every supervisor.
+    """
+    import inspect
+    from types import SimpleNamespace
+    from tpu.swarm.ray_train import serving
+    from tests.tpu_swarm.test_farm_leases import Remote
+
+    async def run():
+        raw = Config.load(PROFILE).to_dict()
+        raw['root'] = str(tmp_path)
+        raw['inference'].update(external_pool_discovery_group='remote-only-pilot')
+        cfg = Config.from_dict(raw)
+        snapshot = dict(fatal_error=None, version=None, versions=[], expected=[], replicas=[], starts={}, exhausted=[])
+        catalog = SimpleNamespace(snapshot=Remote(lambda: snapshot), commit=Remote(lambda *a: None))
+        gateway = serving.Ingress.func_or_class.__mro__[1](cfg.to_dict(), [], catalog, [])
+        client = httpx.AsyncClient(transport=httpx.MockTransport(MultiFarm()))
+        await gateway.http.aclose()
+        gateway.http = client
+        gateway.borrower = MultiRunBorrower(cfg, client, lambda event, **fields: None)
+        monkeypatch.setattr(serving.serve, 'get_replica_context', lambda: SimpleNamespace(servable_object=gateway))
+        app = inspect.getclosurevars(serving.Ingress.func_or_class.__init__).nonlocals['frozen_app_or_func']
+        push = dict(model=cfg.model, run_id=cfg.run_id, instance=gateway.borrowing_instance,
+                    urls=['http://other-run-farm'])
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://local') as http:
+                path = '/skyrl/v1/borrowing/services'
+                anonymous = (await http.get(path)).json()
+                assert anonymous['enabled'] is False and anonymous['discovery_group_required'] is True
+                assert (await http.get(path, params={'group': 'hybrid'})).json()['enabled'] is False
+                assert (await http.get(path, params={'group': 'remote-only-pilot'})).json()['enabled'] is True
+                # The instance is still readable: the controller's admission loop needs it.
+                assert anonymous['instance'] == gateway.borrowing_instance
+                assert (await http.post(path, json=push)).status_code == 403
+                assert (await http.post(path, json=dict(push, group='hybrid'))).status_code == 403
+                assert gateway.borrower.urls == []
+                own = await http.post(path, json=dict(push, group='remote-only-pilot', urls=['http://own-farm']))
+                assert own.status_code == 200 and own.json()['enabled'] is True
+                assert list(gateway.borrower.urls) == ['http://own-farm']
+        finally:
+            await gateway.borrower.close()
+            await client.aclose()
+    asyncio.run(run())
+
+
+def test_supervisor_presents_its_discovery_group(tmp_path, monkeypatch):
+    from tpu.swarm.ray_train import borrowing_supervisor as supervisor
+    (tmp_path / 'trainer-1').write_text('Host trainer-1\n')
+    sent = []
+
+    def fake_run(argv, input, **kwargs):
+        sent.append(input.split('\n', 1)[0])
+        return SimpleNamespace(returncode=0, stdout='{"ok": true, "result": {}}\n', stderr='')
+    from types import SimpleNamespace
+    monkeypatch.setattr(supervisor.subprocess, 'run', fake_run)
+    supervisor.rpc(tmp_path, 'trainer-1', 'target', 24800, group='remote-only-pilot')
+    supervisor.rpc(tmp_path, 'trainer-1', 'target', 24800, {'urls': []}, group='remote-only-pilot')
+    supervisor.rpc(tmp_path, 'trainer-1', 'farm', 24800, group='remote-only-pilot')
+    supervisor.rpc(tmp_path, 'trainer-1', 'target', 24800)
+    read, push, farm, legacy = [eval(line.removeprefix('PARAMS = ')) for line in sent]
+    assert read['query'] == '?group=remote-only-pilot' and 'body' not in read
+    assert push['body'] == {'urls': [], 'group': 'remote-only-pilot'}
+    assert 'query' not in farm
+    assert 'query' not in legacy and 'body' not in legacy
+
+
 def test_zero_engine_ingress_serves_control_plane_and_routes_groups_to_farms(tmp_path, monkeypatch):
     import inspect
     from types import SimpleNamespace
