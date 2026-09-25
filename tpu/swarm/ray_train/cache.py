@@ -204,7 +204,20 @@ class GCS:
         raw = self.metadata("ls", "--json", prefix.rstrip("/") + "/**", allow_empty=allow_empty)
         return objects_from_listing(json.loads(raw), prefix)
 
-    def transfer(self, args, label, destination=None, timeout=3600):
+    def transfer(self, args, label, destination=None, timeout=3600, attempts=3):
+        # gcloud storage sporadically exits 241 with no message on the dedicated v5p-64 (2026-09-24/25:
+        # base-bundle copies at host preparation). Storage copies are idempotent, so retry a failed
+        # attempt before failing the whole run; timeouts are not retried.
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._transfer_once(args, label, destination, timeout)
+            except TransferError:
+                if attempt == attempts:
+                    raise
+                emit(self.events, "transfer_retry", transfer=label, attempt=attempt)
+                time.sleep(5 * attempt)
+
+    def _transfer_once(self, args, label, destination=None, timeout=3600):
         log = self.logs / f"{label}.log"
         self.running = Process([self.gcloud, "storage", *args], log, env=self.env)
         start = time.monotonic()

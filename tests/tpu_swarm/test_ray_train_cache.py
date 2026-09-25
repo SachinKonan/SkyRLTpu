@@ -353,10 +353,29 @@ def test_gcs_transfer_records_failure_exit_code(tmp_path, monkeypatch):
     monkeypatch.setattr(module.shutil, 'which', lambda *args, **kw: '/usr/bin/gcloud')
     gcs = module.GCS(tmp_path, Config.from_dict(config_dict()).cache)
     with pytest.raises(module.TransferError, match='exit code 17') as error:
-        gcs.transfer(['cp', 'gs://test/object', str(tmp_path)], 'test-copy')
+        gcs.transfer(['cp', 'gs://test/object', str(tmp_path)], 'test-copy', attempts=1)
     assert error.value.returncode == 17 and stopped == [True] and gcs.running is None
     event = json.loads(gcs.events.read_text())
     assert event['event'] == 'transfer_failed' and event['returncode'] == 17
+
+
+def test_gcs_transfer_retries_a_transient_failure(tmp_path, monkeypatch):
+    """gcloud storage sporadically exits 241 with no message (v5p-64, 2026-09-25); a copy is retried."""
+    from tpu.swarm.ray_train import cache as module
+    codes = [241, 0]
+    class Process:
+        def __init__(self, *args, **kw): self.code = codes.pop(0)
+        def poll(self): return self.code
+        def stop(self): pass
+    monkeypatch.setattr(module, 'Process', Process)
+    monkeypatch.setattr(module.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(module.shutil, 'which', lambda *args, **kw: '/usr/bin/gcloud')
+    gcs = module.GCS(tmp_path, Config.from_dict(config_dict()).cache)
+    gcs.transfer(['cp', 'gs://test/object', str(tmp_path)], 'test-copy')
+    events = [json.loads(l)['event'] for l in gcs.events.read_text().splitlines()]
+    assert events == ['transfer_failed', 'transfer_retry', 'transfer_progress', 'transfer_complete'] or \
+        events[:2] == ['transfer_failed', 'transfer_retry'] and events[-1] == 'transfer_complete'
+    assert not codes
 
 
 def test_upload_snapshot_is_independent_of_live_cache(tmp_path):
