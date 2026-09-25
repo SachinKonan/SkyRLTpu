@@ -76,6 +76,62 @@ def test_reject_invalid_remote_only_topology(tmp_path, change):
         Config.from_dict(raw)
 
 
+V5P_PROFILE = 'tpu/swarm/ray_train/profiles/remote-only-v5p32-qwen-ac2-pilot-20260924.json'
+
+
+def test_v5p32_is_a_valid_remote_only_slice(tmp_path):
+    # v5p-32 has the same four-host 2x2x4 layout as v4-32.
+    config = Config.load(V5P_PROFILE)
+    assert config.accelerator == 'tpu-v5p-32' and config.hosts == 4
+    assert config.inference.remote_only and config.trainer.hosts == 4
+    assert (config.trainer.tp, config.trainer.fsdp, config.trainer.process_bounds) == (8, 2, '1,1,4')
+    assert config.grading_farm_transport
+
+
+def test_v5p32_pilot_never_reads_another_region():
+    from pathlib import Path
+    import re
+    raw = json.loads(Path(V5P_PROFILE).read_text())
+    assert raw['zone'] == 'us-east5-a'
+    paths = [raw['bucket'], raw['base_bundle']] + [
+        v for v in raw['cache'].values() if isinstance(v, str) and v.startswith('gs://')]
+    assert {re.match(r'gs://sk7524-tinker-tpu-(us-[a-z0-9]+)', p).group(1) for p in paths} == {'us-east5'}
+
+
+@pytest.mark.parametrize('profile', [V5P_PROFILE, 'tpu/swarm/ray_train/profiles/farm-v5p32-qwen-grading-ac2-20260922.json'])
+def test_v5p_pilot_profiles_are_locked_to_one_bucket(profile):
+    config = Config.load(profile)
+    assert config.single_bucket and config.bucket == 'gs://sk7524-tinker-tpu-us-east5'
+
+
+@pytest.mark.parametrize('field,value,match', [
+    ('cache.hf', 'gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1', 'outside'),
+    ('cache.inference_compile_seed', 'gs://sk7524-tinker-tpu-us-east5-other/seed', 'outside'),
+    ('base_bundle', 'gs://other-bucket/code.tar.gz', 'outside'),
+    ('bucket', 'gs://sk7524-tinker-tpu-us-central2', 'does not match zone'),
+    ('bucket', 'gs://my-bucket', 'cannot prove the region'),
+])
+def test_single_bucket_guard_rejects_any_other_storage(tmp_path, field, value, match):
+    raw = Config.load(V5P_PROFILE).to_dict()
+    raw['root'] = str(tmp_path)
+    if field.startswith('cache.'):
+        raw['cache'] = dict(raw['cache'], **{field.split('.', 1)[1]: value})
+    else:
+        raw[field] = value
+    with pytest.raises(ValueError, match=match):
+        Config.from_dict(raw)
+
+
+@pytest.mark.parametrize('accelerator,hosts,zone,ranks', [
+    ('tpu-v4-64', 8, 'us-central2-b', 8), ('tpu-v6e-32', 8, 'us-east5-b', 8)])
+def test_remote_only_rejects_other_slices(tmp_path, accelerator, hosts, zone, ranks):
+    raw = Config.load(PROFILE).to_dict()
+    raw.update(root=str(tmp_path), accelerator=accelerator, hosts=hosts, zone=zone)
+    raw['trainer'] = dict(raw['trainer'], hosts=ranks)
+    with pytest.raises(ValueError):
+        Config.from_dict(raw)
+
+
 def test_existing_profiles_keep_single_lease_defaults(tmp_path):
     raw = Config.load('tpu/swarm/ray_train/profiles/science-q20-v4-qwen-grpo-clean-20260918.json').to_dict()
     raw['root'] = str(tmp_path)

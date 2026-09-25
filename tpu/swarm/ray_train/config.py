@@ -390,6 +390,9 @@ class Config:
     systemd_shutdown_grace: int = 90
     max_restarts_on_errors: int = 0
     checkpoint_resume: bool = False
+    # When true, every storage path must live inside `bucket`, and that bucket
+    # must be in the job's own region: no cross-region reads or writes.
+    single_bucket: bool = False
     resume_min_checkpoint_step: int = 0
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
@@ -575,6 +578,30 @@ class Config:
     def to_dict(self):
         return asdict(self)
 
+    def _validate_single_bucket(self):
+        """Every storage path stays in `bucket`, and `bucket` is in the job's region.
+
+        Cross-region reads are billed as egress and multiply with every spot
+        recovery, which re-downloads the caches on a fresh VM. The bucket's
+        region is read from the sk7524-tinker-tpu-<region> naming convention;
+        a bucket whose region cannot be proven is rejected.
+        """
+        bucket = self.bucket.rstrip("/")
+        match = re.fullmatch(r"gs://sk7524-tinker-tpu-([a-z]+-[a-z]+[0-9]+)", bucket)
+        if not match:
+            raise ValueError(f"single_bucket: cannot prove the region of {self.bucket}")
+        region, zone = match.group(1), self.effective_zone
+        if not zone.startswith(region + "-"):
+            raise ValueError(f"single_bucket: bucket region {region} does not match zone {zone}")
+        c = self.cache
+        paths = {"base_bundle": self.base_bundle, "cache.hf": c.hf, "cache.orbax": c.orbax,
+                 "cache.trainer_compile": c.trainer_compile, "cache.inference_compile": c.inference_compile,
+                 "cache.trainer_compile_seed": c.trainer_compile_seed,
+                 "cache.inference_compile_seed": c.inference_compile_seed}
+        for name, path in paths.items():
+            if path and path != bucket and not path.startswith(bucket + "/"):
+                raise ValueError(f"single_bucket: {name} {path} is outside {bucket}")
+
     def _validate_remote_only(self):
         """All hosts train; every completion comes from leased farms.
 
@@ -591,10 +618,12 @@ class Config:
             raise ValueError('remote_only requires the hybrid scheduler and farm attestation')
         if self.trainer.hosts != self.hosts:
             raise ValueError('remote_only trains on every host of the slice')
-        if (self.accelerator, self.hosts) != ('tpu-v4-32', 4):
-            raise ValueError('remote_only is validated for the four-host v4-32 slice only')
+        # v4-32 and v5p-32 are both four hosts of 2x2 chips stacked along z
+        # (2x2x4), so the same 1,1,4 process grid and z-row ordering apply.
+        if (self.accelerator, self.hosts) not in (('tpu-v4-32', 4), ('tpu-v5p-32', 4)):
+            raise ValueError('remote_only is validated for the four-host 2x2x4 slices (v4-32, v5p-32) only')
         if self.trainer.tp * self.trainer.fsdp != 16:
-            raise ValueError('remote_only v4-32 requires TP x FSDP over all sixteen chips')
+            raise ValueError('remote_only requires TP x FSDP over all sixteen chips')
         if self.bootstrap_layers or self.bootstrap_max_drafts or self.bootstrap_only:
             raise ValueError('remote_only cannot bootstrap: bootstrap deploys and retires local engines')
         if self.arena_grader_rank is not None or self.placement_ranks or self.frozen_benchmark or self.arena_samples:
@@ -1082,6 +1111,10 @@ class Config:
                      self.cache.trainer_compile, self.cache.inference_compile):
             if not path.startswith("gs://") or len(path.split("/")) < 3:
                 raise ValueError(f"expected a GCS URI: {path}")
+        if type(self.single_bucket) is not bool:
+            raise ValueError("single_bucket must be boolean")
+        if self.single_bucket:
+            self._validate_single_bucket()
         if not re.fullmatch(r"[0-9a-f]{64}", self.base_bundle_sha256):
             raise ValueError("pin the frozen base bundle by SHA256")
         values = asdict(self.ports)

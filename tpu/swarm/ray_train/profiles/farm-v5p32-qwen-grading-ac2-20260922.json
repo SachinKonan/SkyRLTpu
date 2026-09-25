@@ -79,5 +79,6 @@
         "memory_gib": 4
       }
     }
-  }
+  },
+  "single_bucket": true
 }
