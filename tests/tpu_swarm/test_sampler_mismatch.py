@@ -180,3 +180,10 @@ def test_parity_never_requests_prompt_logprobs():
     # vLLM TPU's EngineCore dies on prompt_logprobs; the probe must not send it.
     assert 'prompt_logprobs' not in logprob_parity.REMOTE
     assert "'temperature': 0.0" in logprob_parity.REMOTE
+
+
+def test_native_completer_contract_accepts_the_served_by_passthrough():
+    # The deployed trainer fails closed on unreviewed completer methods; the
+    # served_by passthrough in _native_group must be in the reviewed set.
+    from tpu.swarm.ray_train.thinking_budget.contract import check
+    assert check(REPO, 'qwen3.5-27b')

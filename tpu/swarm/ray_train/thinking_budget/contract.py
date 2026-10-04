@@ -19,6 +19,8 @@ MARKERS = {"qwen3.5-27b": ("<think>", "</think>"),
 # Discover afc649a: native stops at cap-boundary EOS; the legacy
 # algorithm and insufficient-headroom fallback remain unchanged.
 # Includes client-side validation of loss masks and behavior logprobs.
+# Discover 6b7e594: _native_group also passes the ingress served_by stamp
+# through to TokensWithLogprobs (metadata only; algorithm unchanged).
 # Whitespace/line-number changes do not change these hashes. Update the Discover
 # commit, these fingerprints, and the parent gitlink together after reviewing
 # changes to these methods. To print replacement hashes from the repo root:
@@ -28,7 +30,7 @@ METHODS = {
     '__call__': '8b5173e56b4fd5e31a5fc291136141d16ff0f4a18e12e0ef5e844bc94e28593c',
     '_two_phase': '5fa022a0fa936abde872d87320136c0b024336465979bbb987ebb43ddc275f9c',
     'sample_group': 'f3975e8e7cad291b77615b6091ac52e454342f0f476b43c3f2a5553626188d34',
-    '_native_group': '2bae44c6fdf728d536a7b728ebdbd57f34f151902e82be48aaa1a3fd290e293c',
+    '_native_group': '1dffc1ca6a9350034c9ec36c51dbd3a896a95bafeb07cd09ce566d2c83100b00',
 }
 CONSTANTS = {"THINK_CLOSE", "THINK_CLOSE_MARKER", "ANSWER_CUE"}
 
