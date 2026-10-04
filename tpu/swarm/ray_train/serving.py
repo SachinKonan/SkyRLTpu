@@ -245,7 +245,19 @@ class Engine:
             raise RuntimeError(message) from exc
         finally:
             self.pending.discard(request)
-        return response.json()
+        result = response.json()
+        # Which run, hardware and engine produced these tokens. A borrower
+        # returns a farm's response verbatim, so the trainer can attribute
+        # sampler/trainer logprob gaps to the farm that sampled them. The
+        # stamp is diagnostic and never fails a generation.
+        config = getattr(self, 'config', None)
+        if config is not None and isinstance(result, dict):
+            served_by = dict(run_id=config.run_id, accelerator=config.accelerator,
+                             tp=config.inference.tp, engine=getattr(self, 'key', None))
+            for choice in result.get('choices') or []:
+                if isinstance(choice, dict):
+                    choice['served_by'] = served_by
+        return result
 
     async def tokenize(self, payload):
         if payload.get("model") != self.config.model:

@@ -264,6 +264,8 @@ class SampleInput(BaseModel):
 class GeneratedSequence(BaseModel):
     loss_mask: list[float] | None = None
     thinking_budget: dict | None = None
+    # Run, accelerator, TP and engine that sampled the tokens (ray_train ingress).
+    served_by: dict | None = None
     stop_reason: Literal["length", "stop"]
     tokens: list[int]
     logprobs: list[float]

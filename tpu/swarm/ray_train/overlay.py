@@ -60,6 +60,7 @@ SMOKE_FILES = (
     'tpu/run_ttd_ensemble.py',
     'third_party/discover/ttt_discover/rl/ensemble.py',
     'third_party/discover/ttt_discover/tinker_utils/completers.py',
+    'third_party/discover/ttt_discover/rl/sampler_mismatch.py',
 )
 
 PROBLEM_PROMPT_FILES = {
@@ -71,7 +72,8 @@ NATIVE_FILES = {"skyrl/tinker/dispatch.py", "skyrl/tinker/extra/external_inferen
                 "skyrl/tinker/extra/skyrl_train_inference_forwarding.py", "skyrl/tinker/types.py", "skyrl/tinker/api.py", "skyrl/backends/vllm_sampling.py",
                 "skyrl/backends/native_completion.py", "third_party/discover/ttt_discover/rl/train.py",
                 "third_party/discover/ttt_discover/rl/resume.py",
-                "third_party/discover/ttt_discover/tinker_utils/completers.py"}
+                "third_party/discover/ttt_discover/tinker_utils/completers.py",
+                "third_party/discover/ttt_discover/rl/sampler_mismatch.py"}
 
 ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
@@ -89,7 +91,9 @@ GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.
                  'third_party/discover/examples/ac_inequalities/env.py'}
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 CHECKPOINT_FILES = {"skyrl/utils/checkpoint_mirror.py"}
-REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py"}
+# The updated backend also returns per-datum trainer/sampler logprob summaries.
+REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py",
+                     "skyrl/backends/sampler_mismatch.py"}
 WARMUP_FILES = REPEATED_KV_FILES | {"skyrl/backends/backward_warmup.py", "tpu/swarm/ray_train/warmup_contract.py"}
 
 SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/rl/resume.py'} | {

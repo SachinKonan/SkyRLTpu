@@ -1979,6 +1979,14 @@ class TunixBackend(AbstractBackend):
         if cohort:
             output_slices = [(name, name, index * n_examples, (index + 1) * n_examples)
                              for index, name in enumerate(cohort)]
+        # Trainer vs sampler logprob summary per datum (a few floats, so it
+        # survives minimal output); the client aggregates it per farm.
+        from skyrl.backends.sampler_mismatch import summarize as _mismatch_summary
+
+        def _mismatch(i):
+            data = _mismatch_summary(logprobs_out[i], prepared_batch.all_sampling_logprobs[i % n_examples])
+            return {"data": data, "dtype": "float32", "shape": [len(data)]}
+
         for request_id, _, start_idx, end_idx in output_slices:
             loss_fn_outputs = []
             for i in range(start_idx, end_idx):
@@ -1987,6 +1995,7 @@ class TunixBackend(AbstractBackend):
                         {
                             "elementwise_loss": {"data": [], "dtype": "float32", "shape": [0]},
                             "logprobs": {"data": [], "dtype": "float32", "shape": [0]},
+                            "sampler_mismatch": _mismatch(i),
                         }
                     )
                     continue
@@ -2006,6 +2015,7 @@ class TunixBackend(AbstractBackend):
                             "dtype": "float32",
                             "shape": [token_logprobs.shape[0]],
                         },
+                        "sampler_mismatch": _mismatch(i),
                     }
                 )
             results[request_id] = types.ForwardBackwardOutput(

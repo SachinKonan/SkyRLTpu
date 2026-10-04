@@ -135,6 +135,46 @@ Events in `inference-events.jsonl`: `grading_dispatched`, `grading_retry`,
 `grading_submitted`, `grading_finished`, `grading_cancelled`,
 `grading_cancel_all`, `grading_readiness` (farm).
 
+## Numerics across farms
+
+The compatibility hash pins model files, serving code and package sources,
+but not the TPU generation, TP degree, libtpu or engine environment: a v6e-8
+TP8 farm and a v5p-32 TP4 farm attest the same hash. Their logprobs differ
+slightly, and the importance-sampling loss weights every token by
+exp(train_lp - sampler_lp), so each farm's numerics enter the gradient. Two
+tools measure the gap.
+
+**Online, every step (`sampler_mismatch/*`).** Each engine stamps
+`served_by = {run_id, accelerator, tp, engine}` on every completion; the
+borrower returns farm responses verbatim, the API server keeps the stamp on
+`GeneratedSequence`, and the pinned SDK extension (`native_sdk.py`) carries
+it to the client's `TokensWithLogprobs` (native thinking path only; other
+paths report `unknown`). The tunix backend returns a fixed-size per-datum
+summary of `train_lp - sampler_lp` with every forward-backward, including
+minimal outputs (`skyrl/backends/sampler_mismatch.py`). The client matches
+each datum to its transition by exact token sequence and logs, for `all`,
+`farm/<run_id>` and `hw/<accelerator>-tp<tp>`: `tokens, mean_diff, mean_abs,
+rms, max_abs, kl_k3, ratio_min, ratio_max, frac_abs_ge_0.1,
+p50/p90/p99_abs_le` (ensemble members prefix their tag). Positions count
+where the sampler logprob is nonzero, which excludes prompt and injected
+tokens. Only the first substep of a multi-substep step is measured; the
+pooled multi-LoRA path is not instrumented.
+
+**Offline, between farms (`logprob_parity.py`).** vLLM TPU cannot score a
+given sequence (`prompt_logprobs` kills the EngineCore), so the tool compares
+greedy base-model completions over their common prefix, which is an exact
+teacher-forced comparison: `repeat` (same farm twice, the nondeterminism
+floor), `batch` (alone vs sharing a batch) and `cross` (farm vs farm). It
+takes a short probe lease, so it runs only on unleased farms:
+
+```
+python -m tpu.swarm.ray_train.logprob_parity --ssh-dir <sky ssh dir> \
+    --farm <farm-a cluster> --farm <farm-b cluster> --out parity.json
+```
+
+Read `cross` against `repeat`/`batch`: a cross-farm gap at the level of the
+batch effect is noise the trainer already lives with.
+
 ## Relaunching farms
 
 Farm-side grading needs the new ingress code and slot tokens, so the Qwen farms
@@ -165,3 +205,6 @@ The supervisor still never provisions, cancels or replaces farm jobs.
    `kill -9` of a farm Ray worker removes its unit within a second and the
    trainer retries elsewhere; a candidate timeout stays reward zero.
 7. One completed GRPO step, durable checkpoint, clean release on both farms.
+8. Numerics: run `logprob_parity.py` on both farms before the supervisor
+   leases them; after the step, `sampler_mismatch/farm/*` has one entry per
+   farm and no `datums_without_summary`.

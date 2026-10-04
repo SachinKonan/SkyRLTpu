@@ -219,6 +219,7 @@ async def test_engine_failure_is_retried_on_another_engine(db_engine, monkeypatc
             return httpx.Response(503, json={"error": "engine restarting"})
         annotation = {} if native_budget is None else dict(
             loss_mask=[1.0], forced_token_positions=[],
+            served_by=dict(run_id="farm-b", accelerator="tpu-v5p-32", tp=4, engine="10.0.0.2:19801"),
             thinking_budget=dict(enforced=True, forced=False,
                                  budget_basis="phase1_generated_tokens", counted_phase1_tokens=1))
         return httpx.Response(
@@ -280,6 +281,9 @@ async def test_engine_failure_is_retried_on_another_engine(db_engine, monkeypatc
             seq = future.result_data["sequences"][0]
             assert seq["loss_mask"] == [1.0]
             assert seq["thinking_budget"]["enforced"] is True
+            assert seq["served_by"]["run_id"] == "farm-b"
+        else:
+            assert future.result_data["sequences"][0]["served_by"] is None
         assert [request.url.host for request in requests] == ["engine-a", "engine-b"]
         assert requests[0].content == requests[1].content
         assert (await dispatcher.sweep_once()).redispatched == []

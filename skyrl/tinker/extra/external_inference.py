@@ -253,6 +253,7 @@ class ExternalInferenceClient:
                     stop_reason=choice["finish_reason"],
                     loss_mask=choice.get("loss_mask"),
                     thinking_budget=choice.get("thinking_budget"),
+                    served_by=choice.get("served_by"),
                 )
             )
 
