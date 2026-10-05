@@ -1,0 +1,47 @@
+{
+  "run_id": "qwen-ray-v4-64-seq8-001",
+  "accelerator": "tpu-v4-64",
+  "hosts": 8,
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-v4-concurrency-diag-20260907-01.tar.gz",
+  "base_bundle_sha256": "6c953d89b93d9fa4fcf8f1065077b65f8042b998b1fe5112d8d0641988bd168a",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-v4-qwen35-tp8-fsdp2-r32-s22528-b45056-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq8-mem80-chunk4096-ray-v1",
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-v4-qwen35-tp4-s22528-seq16-mem80-chunk4096-ray-v1",
+    "trainer_gib": 128,
+    "inference_gib": 96,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "trainer": {
+    "hosts": 4,
+    "tp": 8,
+    "fsdp": 2,
+    "process_bounds": "1,1,4",
+    "sequence_length": 22528,
+    "token_budget": 45056,
+    "lora_rank": 32,
+    "remat": "full"
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "max_sequences": 8,
+    "max_model_length": 22528,
+    "chunk_tokens": 4096,
+    "memory_utilization": 0.8,
+    "max_loras": 1,
+    "max_lora_rank": 32,
+    "restart_limit": 3
+  },
+  "client_context_window": 18432,
+  "client_phase1_max_tokens": 13824,
+  "retired_task_ids": [
+    "sky-managed-2026-09-07-14-04-01-220617_qwen-ray-v4-64-budget-004_401-0"
+  ]
+}

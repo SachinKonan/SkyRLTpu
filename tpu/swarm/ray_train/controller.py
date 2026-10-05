@@ -155,13 +155,15 @@ class Controller:
                     self.config.to_dict(), rank, self.ips))
         self.monitor = threading.Thread(target=self._monitor, daemon=True)
         self.monitor.start()
-        self.checked_get([host.preflight.remote() for host in self.hosts], 120)
+        self.checked_get([host.preflight.remote() for host in self.hosts],
+                         self.config.checkpoint_cleanup_timeout + 420)
         if self.config.inference_only:
-            self.checked_get([host.source_ready.remote() for host in self.hosts], self.config.setup_timeout)
+            inference_ranks = self.config.inference_only_ranks or list(range(self.config.hosts))
+            self.checked_get([self.hosts[r].source_ready.remote() for r in inference_ranks], self.config.setup_timeout)
         else:
             self.checked_get([host.topology_ready.remote() for host in self.hosts], self.config.setup_timeout)
         if self.config.inference_only:
-            train_ranks, inference_ranks = [], list(range(self.config.hosts))
+            train_ranks = []
         elif self.config.accelerator == "tpu-v4-64":
             full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
                                      for host in self.hosts], 300)
@@ -171,9 +173,10 @@ class Controller:
         else:
             train_ranks, inference_ranks = [0], list(range(1, self.config.hosts))
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks)
-        prepared = self.checked_get([host.prepare.remote("trainer" if rank in train_ranks else "inference")
-                                    for rank, host in enumerate(self.hosts)], self.config.setup_timeout)
-        self.prepared = {ip: info for ip, info in zip(self.ips, prepared)}
+        prepared_ranks = sorted(train_ranks + inference_ranks)
+        prepared = self.checked_get([self.hosts[rank].prepare.remote("trainer" if rank in train_ranks else "inference")
+                                    for rank in prepared_ranks], self.config.setup_timeout)
+        self.prepared = {self.ips[rank]: info for rank, info in zip(prepared_ranks, prepared)}
         self.report("cache_barrier_complete", hosts=len(prepared))
         if not self.config.inference_only:
             self.checked_get([self.hosts[0].restore_run.remote()], 600)

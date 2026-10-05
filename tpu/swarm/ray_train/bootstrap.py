@@ -16,6 +16,13 @@ import time
 from .config import Config
 
 
+def workload_resources(config, rank):
+    if config.inference_only_ranks is not None and rank not in config.inference_only_ranks:
+        # An omitted TPU key enables Ray's automatic hardware detection.
+        return {"TPU": 0}
+    return {"TPU": 4}
+
+
 def check_ports_available(ports, timeout=60):
     deadline = time.monotonic() + timeout
     while True:
@@ -130,6 +137,8 @@ def main():
     signal.signal(signal.SIGINT, signal_stop)
     driver = None
     code = 1
+    from .checkpoint_retention import acquire_run_lease
+    run_lease = acquire_run_lease(config, root)
     try:
         stop_ray(ray_tmp)
         retire_before_port_check(config, ips[rank], log)
@@ -137,7 +146,7 @@ def main():
             RAY_TMPDIR=str(ray_tmp), JAX_PLATFORMS="cpu", TPU_VISIBLE_CHIPS="0,1,2,3",
             OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", RAY_USAGE_STATS_ENABLED="0")
         command = [str(runtime / "bin/ray"), "start", f"--node-ip-address={ips[rank]}",
-            "--num-cpus=32", '--resources={"TPU":4}', "--object-store-memory=1073741824",
+            "--num-cpus=32", "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
             f"--object-manager-port={p.object_manager}", f"--node-manager-port={p.node_manager}",
             f"--dashboard-agent-listen-port={p.dashboard_agent}", f"--dashboard-agent-grpc-port={p.dashboard_agent_grpc}",
             f"--runtime-env-agent-port={p.runtime_env}", f"--metrics-export-port={p.metrics}",
@@ -195,6 +204,7 @@ def main():
             ray.shutdown()
         stop_ray(ray_tmp)
         emit(log, "bootstrap_stopped", rank=rank, exit_code=code)
+        os.close(run_lease)
         os.close(lock_fd)
     return code
 

@@ -30,6 +30,7 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC="0", SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC="28800",
         SKYRL_EXTERNAL_WATCHDOG_STALE_SEC="30", SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH="4",
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+    env.update(config.trainer_env)
     return env
 
 
@@ -45,7 +46,7 @@ def trainer_backend_config(config, root, head, train_ips):
     backend = dict(
         model_source="maxtext", maxtext_model_name=t.maxtext_model,
         maxtext_max_target_length=t.sequence_length, train_token_budget=t.token_budget,
-        flce_tile_size=t.flce_tile, max_lora_rank=t.lora_rank,
+        flce_tile_size=t.flce_tile, max_lora_rank=t.effective_max_lora_rank,
         train_micro_batch_size=1, sample_max_num_sequences=256,
         param_dtype="bfloat16", free_base_state_after_template=True,
         maxtext_ckpt_cache_dir=str(root / "ram/orbax"), maxtext_kwargs=kwargs,
@@ -108,10 +109,11 @@ def inference_command(config, root, source, snapshot, run):
             "--max-num-seqs", str(v.max_sequences), "--max-num-batched-tokens", str(v.chunk_tokens),
             "--enable-chunked-prefill", "--gpu-memory-utilization", str(v.memory_utilization),
             "--limit-mm-per-prompt", '{"image":0,"video":0}',
-            "--enable-lora", "--max-loras", "1", "--max-lora-rank", str(v.max_lora_rank)]
+            "--enable-lora", "--max-loras", str(v.max_loras), "--max-lora-rank", str(v.max_lora_rank)]
 
 
 def client_environment(config, root, head):
+    config.validate()
     env = dict(os.environ)
     t = config.trainer
     defaults = dict(
@@ -128,10 +130,9 @@ def client_environment(config, root, head):
         RAY_ADDRESS=f"{head}:{config.ports.ray}", RAY_NAMESPACE=config.run_id,
         NUM_CPUS_PER_TASK="1", GROUPS_PER_BATCH="16", GROUP_SIZE="32", NUM_EPOCHS="15",
         LEARNING_RATE="1.5e-4", LORA_RANK=str(t.lora_rank), KL_PENALTY_COEF="0", TEMPERATURE="1.0",
-        CONTEXT_WINDOW=str(t.sequence_length), TTD_M0_CONTEXT_WINDOW=str(t.sequence_length),
-        TTD_M0_TRAIN_MAX_SEQ=str(t.sequence_length), TTD_M0_PHASE1_MAX_TOKENS="20480",
         EVAL_TIMEOUT="1100", SAVE_EVERY="1", WANDB_MODE="offline", WANDB_PROJECT="tpu-tinker-exps",
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+    defaults.update(config.client_sampling_environment())
     defaults.update(config.client_env)
     env.update(defaults)
     return env
