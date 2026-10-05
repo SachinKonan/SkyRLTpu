@@ -208,7 +208,7 @@ def main():
         fmt = lambda v: f'{v:9.2e}' if isinstance(v, float) else f'{"-":>9}'
         prefix = s['median_prefix_fraction']
         print(f'{name:<60} {s["pairs"]:>5} {s["identical"]:>5} {s["tokens"]:>7} {fmt(s["mean_abs"])} '
-              f'{fmt(s["p99_abs"])} {fmt(s["max_abs"])} {prefix if prefix is None else round(prefix, 3):>7}')
+              f'{fmt(s["p99_abs"])} {fmt(s["max_abs"])} {'-' if prefix is None else str(round(prefix, 3)):>7}')
     print(f'raw records and report: {args.out}')
 
 
