@@ -183,9 +183,8 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
                    RAY_ADDRESS=f"{head}:{config.ports.ray}",
                    SKYRL_RAY_PLACEMENT_HOSTS=",".join(group))
     if v.tp == 8:
-        # One engine owns all eight chips of a v6e-8 host. Two TP4 engines on
-        # the same host cannot coexist: libtpu takes a host-wide lock, so the
-        # second engine aborts with "TPU is already in use".
+        # One engine owns all eight chips of a v6e-8 host. (Qwen3.5 rejects
+        # this shape in config validation: its TP8 engines halt in SparseCore.)
         if slot != 0 or pair or config.accelerator != "tpu-v6e-8":
             raise ValueError("invalid TP8 v6e-8 engine slot")
         env.update(TPU_VISIBLE_CHIPS="0,1,2,3,4,5,6,7",
@@ -204,8 +203,11 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
             raise ValueError("invalid single-host TP4 engine slot")
         first = slot * v.tp
         port = config.ports.inference_tpu + slot
+        # libtpu takes a host-wide lockfile, so without this override the
+        # second engine aborts with "TPU is already in use" even on disjoint chips.
         env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(first, first + v.tp)),
-                   TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}")
+                   TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}",
+                   ALLOW_MULTIPLE_LIBTPU_LOAD="1")
     if v.native_thinking_budget:
         env["SKYRL_THINKING_FORMAT"] = config.model_preset
     else:

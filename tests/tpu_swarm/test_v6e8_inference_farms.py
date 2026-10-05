@@ -28,7 +28,7 @@ def v6e8_config(**inference):
         trainer={"hosts": 0},
         inference_only=True,
         inference_only_ranks=[0],
-        inference=dict(dict(tp=8, max_sequences=128, max_model_length=22528,
+        inference=dict(dict(tp=4, max_sequences=32, max_model_length=22528,
                             native_thinking_budget=True, routing="ingress",
                             max_loras=1, require_lease=True,
                             external_pool_attestation=True), **inference),
@@ -37,46 +37,51 @@ def v6e8_config(**inference):
     ))
 
 
-def test_v6e8_is_one_eight_chip_host_with_one_tp8_engine():
+def test_v6e8_is_one_eight_chip_host_with_two_tp4_engines():
     config = v6e8_config()
     assert config.chips_per_host == 8
-    assert config.engines_per_host == 1
+    assert config.engines_per_host == 2
     assert config.inference_hosts == 1
     assert workload_resources(config, 0) == {"TPU": 8}
     slots = config.engine_slots(["10.0.0.1"])
-    assert [slot["key"] for slot in slots] == ["10.0.0.1"]
+    assert len(slots) == 2 and len({slot["key"] for slot in slots}) == 2
 
 
-def test_v6e8_tp8_uses_all_chips_in_one_libtpu_process():
-    config = v6e8_config()
-    environment = inference_environment(config, Path("/cache"), Path("/run"), slot=0)
-    assert environment["TPU_VISIBLE_CHIPS"] == "0,1,2,3,4,5,6,7"
-    assert environment["TPU_CHIPS_PER_PROCESS_BOUNDS"] == "2,4,1"
+def test_qwen_tp8_is_rejected_on_v6e8():
+    # Its single TP8 engine halts in SparseCore under mixed prefill+decode load.
+    with pytest.raises(ValueError, match="two TP4 engines"):
+        v6e8_config(tp=8, max_sequences=128)
 
 
 def test_tp8_is_rejected_outside_single_host_v6e8_farms():
     with pytest.raises(ValueError, match="TP8 inference requires"):
         Config.from_dict(dict(v6e8_config().to_dict(), accelerator="tpu-v4-32", hosts=4,
-                              zone="us-central2-b", inference_only_ranks=[0, 1, 2, 3]))
+                              zone="us-central2-b", inference_only_ranks=[0, 1, 2, 3],
+                              inference=dict(v6e8_config().to_dict()["inference"], tp=8)))
 
 
-def test_multi_engine_hosts_pin_each_engine_to_its_own_chips():
-    # Kept for completeness: a TP4 v6e-8 host describes two disjoint engines,
-    # even though libtpu's host lock means production farms use TP8 instead.
-    config = v6e8_config(tp=4, max_sequences=16)
-    assert config.engines_per_host == 2
-    chips = [inference_environment(config, Path("/cache"), Path("/run"), slot=slot)["TPU_VISIBLE_CHIPS"]
-             for slot in range(2)]
-    assert chips == ["0,1,2,3", "4,5,6,7"]
+def test_multi_engine_hosts_pin_each_engine_to_its_own_chips_and_bypass_the_libtpu_lock():
+    config = v6e8_config()
+    environments = [inference_environment(config, Path("/cache"), Path("/run"), slot=slot) for slot in range(2)]
+    assert [env["TPU_VISIBLE_CHIPS"] for env in environments] == ["0,1,2,3", "4,5,6,7"]
+    assert len({env["TPU_PROCESS_PORT"] for env in environments}) == 2
+    # Without the override the second engine aborts: "TPU is already in use".
+    assert all(env["ALLOW_MULTIPLE_LIBTPU_LOAD"] == "1" for env in environments)
+
+
+def test_single_engine_hosts_keep_the_libtpu_lock():
+    config = Config.load(PROFILES / "farm-v5p32-qwen-grading-ac2-20260922.json")
+    assert config.engines_per_host == 1
+    assert "ALLOW_MULTIPLE_LIBTPU_LOAD" not in inference_environment(config, Path("/cache"), Path("/run"), slot=0)
 
 
 def test_grading_farm_cpu_budget_covers_every_engine_and_slot():
-    tp8 = v6e8_config()
-    tp8 = Config.from_dict(dict(tp8.to_dict(), grading={
+    farm = v6e8_config()
+    farm = Config.from_dict(dict(farm.to_dict(), grading={
         "families": {"ac2": {"slots_per_host": 16, "cpus": 2, "memory_gib": 4}}},
-        systemd_runtime=True, cache=dict(tp8.to_dict()["cache"], reserve_gib=192)))
-    # One TP8 engine (8) + ingress (1) + overhead (8) + 16 slots x 2 CPUs.
-    assert tp8.ray_cpus_per_host == 8 + 9 + 32
+        systemd_runtime=True, cache=dict(farm.to_dict()["cache"], reserve_gib=192)))
+    # Two TP4 engines (2 x 8) + ingress (1) + overhead (8) + 16 slots x 2 CPUs.
+    assert farm.ray_cpus_per_host == 16 + 9 + 32
 
 
 @pytest.mark.parametrize("run", GRADING_FARMS)
@@ -84,8 +89,8 @@ def test_v6e8_grading_farm_profiles(run):
     config = Config.load(PROFILES / f"{run}.json")
     assert config.run_id == run
     assert config.inference_only and config.inference_only_ranks == [0]
-    assert config.inference.tp == 8 and config.engines_per_host == 1
-    assert config.inference.max_sequences == 128
+    assert config.inference.tp == 4 and config.engines_per_host == 2
+    assert config.inference.max_sequences == 32
     assert config.inference.require_lease and config.inference.external_pool_attestation
     assert set(config.grading_families) == {"ac2"}
     assert run in config.cache.inference_compile

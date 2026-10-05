@@ -1008,6 +1008,11 @@ class Config:
         if self.inference.tp == 8 and (self.accelerator != "tpu-v6e-8"
                 or self.inference.hosts_per_engine != 1 or not self.inference_only):
             raise ValueError("TP8 inference requires a single-host inference-only v6e-8 profile")
+        if self.inference.tp == 8 and self.model_preset == "qwen3.5-27b":
+            # Reproduced 2026-10-05: mixed prefill+decode batches halt the TP8
+            # engine in a SparseCore program (RuntimeUnexpectedCoreHalt in
+            # jit_step_fun_impl), independent of conv1d and collective offload.
+            raise ValueError("Qwen3.5 v6e-8 farms must run two TP4 engines; TP8 halts in SparseCore under load")
         if self.inference.backend != "ray_serve":
             raise ValueError("native vLLM DP is not validated; no silent backend substitution")
         if self.inference.routing not in ("direct", "ingress"):
