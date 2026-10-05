@@ -1,5 +1,5 @@
-# One mixed v6e-32 slice. Region-specific launches must override the infra,
-# zone, bundle, checkpoint, HF, JAX, and XLA values together on the CLI.
+# One capacity-only v6e-32 slice; submitted jobs own model and engine setup.
+# Regional launches must override infra, zone, bundle and cache paths together.
 pool:
   workers: 1
   min_workers: 1
@@ -20,7 +20,7 @@ resources:
   disk_size: 150
 
 envs:
-  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-qwen35-v6e32-v1.tar.gz
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-v6e-capacity-20260908-v1.tar.gz
   CELL: grpo-n
   ZONE: asia-northeast1-b
 
@@ -106,24 +106,16 @@ setup: |
   export SKYRL_REPO_DIR="$root"
   export TPUSWARM_BUNDLE_GENERATION="$generation"
 
-  # Capacity requests can run concurrently with the one-time Neuronic cache
-  # seed, but no TPU VM may fall through to Hugging Face independently.  Pool
-  # setup blocks here until the uploader writes its marker last.
-  hf_ready=0
-  for _attempt in $(seq 1 240); do
-    if gcloud storage objects describe \
-      "$HF_CACHE_GCS/HF_CACHE_COMPLETE" --format='value(name)' \
-      >/dev/null 2>&1; then
-      hf_ready=1
-      break
-    fi
-    sleep 30
-  done
-  if [ "$hf_ready" != "1" ]; then
-    echo "regional Qwen HF cache did not become ready within two hours" >&2
-    exit 1
+  # Pool readiness means capacity and code are available, not that a model
+  # has loaded. Submitted jobs own role caches, trainer and inference setup.
+  node_count=$(printf '%s\n' "$SKYPILOT_SETUP_NODE_IPS" | awk 'NF' | wc -l)
+  if [ "$node_count" -ne 8 ]; then
+    echo "v6e-32 requires eight TPU VMs; SkyPilot supplied $node_count" >&2
+    exit 2
   fi
-  bash "$root/tpu/swarm/prepare_qwen35_v6e32.sh"
+  mkdir -p "$HOME/.ssh" "$HOME/skyrl-logs" "$HOME/skyrl-runs"
+  chmod 700 "$HOME/.ssh"
+  echo "v6e-32 pool rank $SKYPILOT_SETUP_NODE_RANK ready with bundle generation $generation"
   TPUSWARM_POOL_SETUP
 
   setup_attempt=0

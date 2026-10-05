@@ -1,9 +1,9 @@
-# Ten independent v4-64 Spot slices for mixed-model training and inference.
+# Up to 29 v4-64 Spot slices; shared quota and queue slots limit allocation.
 # Each pool worker is one eight-VM, 32-chip TPU slice in us-central2-b.
 pool:
-  workers: 10
-  min_workers: 10
-  max_workers: 10
+  workers: 29
+  min_workers: 29
+  max_workers: 29
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200

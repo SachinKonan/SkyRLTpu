@@ -1,9 +1,9 @@
-# Four independent v4-32 Spot slices for trainer and inference smoke tests.
+# Five existing v4-32 Spot slices/requests retained during fleet reconciliation.
 # Each pool worker is one four-VM, 16-chip TPU slice in us-central2-b.
 pool:
-  workers: 4
-  min_workers: 4
-  max_workers: 4
+  workers: 5
+  min_workers: 5
+  max_workers: 5
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200

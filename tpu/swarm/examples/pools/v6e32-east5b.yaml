@@ -1,0 +1,57 @@
+# Pool tpuswarm-v6e32-east5b-qwen35. Live target 10 workers (2026-10-05). Resize with
+# `sky jobs pool apply -p tpuswarm-v6e32-east5b-qwen35 --workers N` and update this file to match;
+# re-applying a stale file resets the pool to the count written here.
+# east5b v6e-32 pool, target 15 -> 10 (2026-09-23) to make room for v6e-8 slices.
+# granted more than ~15 slices and over-requesting churned 1430 dead replica
+# records. Generated from the LIVE service spec (version 7) so only the worker
+# count changes; buckets, infra and run script are untouched.
+resources:
+  infra: gcp/us-east5/us-east5-b
+  accelerators:
+    tpu-v6e-32: 1
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv6e
+  use_spot: true
+  disk_size: 150
+service:
+  pool:
+    workers: 10
+    min_workers: 10
+    max_workers: 10
+    queue_length_threshold: 1
+    upscale_delay_seconds: 60
+    downscale_delay_seconds: 1200
+num_nodes: 1
+setup: "set -uo pipefail\nsetup_script=\"/tmp/tpuswarm-pool-setup.$$.sh\"\ncat >\"$setup_script\" <<'TPUSWARM_POOL_SETUP'\nset -euo pipefail\nwait_for_apt() {\n  local waited=0\n  while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do\n    if [ \"$waited\" -ge 600 ]; then return 1; fi\n    sleep 5\n    waited=$((waited + 5))\n  done\n}\nif ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then\n  wait_for_apt\n  sudo apt-get update -y\n  wait_for_apt\n  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \\\n    git curl tmux python3 python3-venv python3-pip build-essential\nfi\ncommand -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh\nexport PATH=\"$HOME/.local/bin:$PATH\"\n\nroot=\"$HOME/SkyRLTpu-tpuswarm\"\ngeneration=$(gcloud storage objects describe \"$TPUSWARM_SKYRL_BUNDLE_URL\" \\\n  --format='value(generation)')\ntest -n \"$generation\"\nbundles=\"$HOME/.cache/tpuswarm/bundles\"\ndestination=\"$bundles/$generation\"\nmkdir -p \"$bundles\"\nif [ ! -d \"$destination\" ]; then\n  archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)\n  staging=$(mktemp -d \"$bundles/.extract.XXXXXX\")\n  trap 'rm -f -- \"$archive\"; rm -rf -- \"$staging\"' EXIT\n  gcloud storage cp \"$TPUSWARM_SKYRL_BUNDLE_URL\" \"$archive\"\n  tar -xzf \"$archive\" -C \"$staging\"\n  test -r \"$staging/tpu/swarm/run_qwen35_v6e32_grpo.sh\"\n  test -r \"$staging/tpu/swarm/prepare_qwen35_v6e32.sh\"\n  test -r \"$staging/tpu/jobman/cell_worker.sh\"\n  test -f \"$staging/third_party/TPUSwarm/pyproject.toml\"\n  test -f \"$staging/.tpuswarm-bundle-manifest\"\n  mv \"$staging\" \"$destination\"\n  rm -f -- \"$archive\"\n  trap - EXIT\nfi\nif [ -e \"$root\" ] && [ ! -L \"$root\" ]; then\n  echo \"$root exists and is not a TPUSwarm-managed symlink\" >&2\n  exit 1\nfi\nln -sfn \"$destination\" \"$root\"\nexport SKYRL_REPO_DIR=\"$root\"\nexport TPUSWARM_BUNDLE_GENERATION=\"$generation\"\n\n# Pool readiness means capacity and code are available, not that a model\n# has loaded. Submitted jobs own role caches, trainer and inference setup.\nnode_count=$(printf '%s\\n' \"$SKYPILOT_SETUP_NODE_IPS\" | awk 'NF' | wc -l)\nif [ \"$node_count\" -ne 8 ]; then\n  echo \"v6e-32 requires eight TPU VMs; SkyPilot supplied $node_count\" >&2\n  exit 2\nfi\nmkdir -p \"$HOME/.ssh\" \"$HOME/skyrl-logs\" \"$HOME/skyrl-runs\"\nchmod 700 \"$HOME/.ssh\"\necho \"v6e-32 pool rank $SKYPILOT_SETUP_NODE_RANK ready with bundle generation $generation\"\nTPUSWARM_POOL_SETUP\n\nsetup_attempt=0\nsetup_retry_seconds=\"${TPUSWARM_SETUP_RETRY_SECONDS:-60}\"\nwhile true; do\n  setup_attempt=$((setup_attempt + 1))\n  echo \"[tpuswarm setup] rank $SKYPILOT_SETUP_NODE_RANK attempt $setup_attempt\"\n  if bash \"$setup_script\"; then\n    break\n  else\n    setup_rc=$?\n    echo \"[tpuswarm setup] rank $SKYPILOT_SETUP_NODE_RANK attempt $setup_attempt failed with rc=$setup_rc; retaining the TPU and retrying in ${setup_retry_seconds}s\" >&2\n  fi\n  sleep \"$setup_retry_seconds\"\ndone\n"
+run: echo "setup done"
+envs:
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v6e-capacity-20260908-v1.tar.gz
+  CELL: grpo-n
+  ZONE: us-east5-b
+  TRAIN_WORKERS: 0,1,2,3
+  VLLM_WORKERS: 4,5,6,7
+  TRAIN_TP_SIZE: '8'
+  TRAIN_FSDP_SIZE: '2'
+  TUNIX_ROW_SHARD: '2'
+  TRAIN_TPU_PROCESS_BOUNDS: 2,2,1
+  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
+  VLLM_TP_SIZE: '4'
+  VLLM_ENGINES_PER_HOST: '1'
+  VLLM_MAX_MODEL_LEN: '22528'
+  CELL_START_VLLM: '1'
+  CELL_SYNC_SKYRL: '0'
+  VLLM_RAY_EXECUTOR: '0'
+  VLLM_CLIENT_SIDE_ROUND_ROBIN: '1'
+  LORA_RANK: '32'
+  TUNIX_MAX_TARGET_LENGTH: '22528'
+  TUNIX_UNIFORM_SEQ_LEN: '22528'
+  TUNIX_TRAIN_TOKEN_BUDGET: '45056'
+  TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts
+  TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-qwen35-tp8-fsdp2-r32-s22528-b45056-v1
+  VLLM_XLA_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v6e-qwen35-tp4-s22528-v1
+  HF_CACHE_GCS: gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1
+  PROJECT: vision-mix
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+file_mounts: {}
+volumes: {}
