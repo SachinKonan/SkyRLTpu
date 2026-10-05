@@ -21,7 +21,7 @@
     "max_model_length": 22528,
     "request_timeout": 21600,
     "native_thinking_budget": true,
-    "ragged_conv1d": true,
+    "ragged_conv1d": false,
     "prefix_caching": false,
     "max_loras": 1,
     "require_lease": true,
