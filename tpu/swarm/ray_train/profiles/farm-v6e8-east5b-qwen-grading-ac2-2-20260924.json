@@ -27,7 +27,10 @@
     "require_lease": true,
     "external_pool_attestation": true,
     "farm_drain_timeout": 600,
-    "farm_cancel_grace_seconds": 5
+    "farm_cancel_grace_seconds": 5,
+    "engine_env": {
+      "SC_ALLREDUCE_ALLGATHER_OFFLOAD_MIN_BYTES": "1099511627776"
+    }
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1",
