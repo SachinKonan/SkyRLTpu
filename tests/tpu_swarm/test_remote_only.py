@@ -1089,3 +1089,27 @@ def test_multi_borrower_run_deadline_closes_everything(tmp_path):
             member.run_deadline = 0
         await until(lambda: borrower.closed and farm.owners == {})
     multi_case(tmp_path, operation)
+
+
+V6E8_PILOT = 'tpu/swarm/ray_train/profiles/remote-only-v6e8-east5b-qwen-ac2-pilot-20261005.json'
+
+
+def test_v6e8_remote_only_trainer_owns_all_eight_chips(tmp_path):
+    from pathlib import Path
+    from tpu.swarm.ray_train.commands import trainer_environment
+    config = Config.load(V6E8_PILOT)
+    config.validate()
+    assert (config.accelerator, config.hosts, config.trainer.hosts) == ('tpu-v6e-8', 1, 1)
+    assert config.trainer.tp * config.trainer.fsdp == 8 and config.single_bucket
+    env = trainer_environment(config, Path(tmp_path), Path(tmp_path) / 'run', ['10.0.0.1'], 0)
+    assert env['TPU_VISIBLE_CHIPS'] == '0,1,2,3,4,5,6,7'
+    assert (env['TPU_PROCESS_BOUNDS'], env['TPU_CHIPS_PER_PROCESS_BOUNDS']) == ('1,1,1', '2,4,1')
+
+
+@pytest.mark.parametrize('change', [dict(chip_bounds='2,2,1'), dict(tp=4, fsdp=1)])
+def test_v6e8_remote_only_trainer_rejects_partial_chip_layouts(change):
+    from dataclasses import replace
+    config = Config.load(V6E8_PILOT)
+    config = replace(config, trainer=replace(config.trainer, **change))
+    with pytest.raises(ValueError):
+        config.validate()

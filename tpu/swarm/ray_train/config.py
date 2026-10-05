@@ -625,10 +625,13 @@ class Config:
             raise ValueError('remote_only trains on every host of the slice')
         # v4-32 and v5p-32 are both four hosts of 2x2 chips stacked along z
         # (2x2x4), so the same 1,1,4 process grid and z-row ordering apply.
-        if (self.accelerator, self.hosts) not in (('tpu-v4-32', 4), ('tpu-v5p-32', 4)):
-            raise ValueError('remote_only is validated for the four-host 2x2x4 slices (v4-32, v5p-32) only')
-        if self.trainer.tp * self.trainer.fsdp != 16:
-            raise ValueError('remote_only requires TP x FSDP over all sixteen chips')
+        # v6e-8 is one host of 2x4 chips: a single 1,1,1 process owns all eight.
+        if (self.accelerator, self.hosts) not in (('tpu-v4-32', 4), ('tpu-v5p-32', 4), ('tpu-v6e-8', 1)):
+            raise ValueError('remote_only is validated for v4-32, v5p-32 (2x2x4) and single-host v6e-8 only')
+        if self.trainer.tp * self.trainer.fsdp != self.hosts * self.chips_per_host:
+            raise ValueError('remote_only requires TP x FSDP over every chip of the slice')
+        if self.accelerator == 'tpu-v6e-8' and (self.trainer.process_bounds, self.trainer.chip_bounds) != ('1,1,1', '2,4,1'):
+            raise ValueError('a v6e-8 trainer is one process over the 2x4 chips (process_bounds 1,1,1, chip_bounds 2,4,1)')
         if self.bootstrap_layers or self.bootstrap_max_drafts or self.bootstrap_only:
             raise ValueError('remote_only cannot bootstrap: bootstrap deploys and retires local engines')
         if self.arena_grader_rank is not None or self.placement_ranks or self.frozen_benchmark or self.arena_samples:
@@ -987,7 +990,7 @@ class Config:
             # run_qwen35_v6e32_grpo.sh) trains on hosts 0-3 as a 2,2,1 process
             # grid and serves on 4-7; that is the only split validated on v6e.
             raise ValueError("v6e-32 profiles use the validated four-host 2,2,1 trainer block")
-        if not self.inference_only and self.trainer.tp * self.trainer.fsdp != self.trainer.hosts * 4:
+        if not self.inference_only and self.trainer.tp * self.trainer.fsdp != self.trainer.hosts * self.chips_per_host:
             raise ValueError("trainer TP x FSDP must cover exactly the trainer chips")
         if type(self.inference.hosts_per_engine) is not int or self.inference.hosts_per_engine not in (1, 2):
             raise ValueError("inference.hosts_per_engine must be 1 or 2")

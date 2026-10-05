@@ -351,7 +351,7 @@ class Controller:
             train_ranks = list(range(self.config.trainer.hosts))
             inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
                                if r != self.config.arena_grader_rank and r not in self.config.placement_ranks]
-            if self.config.inference.remote_only:
+            if self.config.inference.remote_only and self.config.hosts > 1:
                 # Every host trains as a 1,1,4 process grid, where process i
                 # must own z row i. Sky ranks need not follow the rows, so
                 # order the trainer ranks physically (process id is the

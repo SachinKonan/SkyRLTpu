@@ -50,7 +50,7 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         TPU_PROCESS_BOUNDS=t.process_bounds, TPU_CHIPS_PER_PROCESS_BOUNDS=t.chip_bounds,
         TPU_PROCESS_ADDRESSES=",".join(f"{ip}:{p.trainer_tpu}" for ip in train_ips),
         TPU_PROCESS_PORT=str(p.trainer_tpu), CLOUD_TPU_TASK_ID=str(process_id),
-        TPU_VISIBLE_CHIPS="0,1,2,3", TINKER_API_KEY="tml-local-skyrl-no-auth",
+        TPU_VISIBLE_CHIPS=",".join(map(str, range(config.chips_per_host))), TINKER_API_KEY="tml-local-skyrl-no-auth",
         SKYRL_DATABASE_URL="sqlite:///" + str(run / "tinker.db"),
         SKYRL_FUTURE_BLOB_DIR=str(run / "future-blobs"),
         TPUSWARM_BUNDLE_ID=config.base_bundle_sha256,
