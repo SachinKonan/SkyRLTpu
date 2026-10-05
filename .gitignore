@@ -132,3 +132,8 @@ tx/tinker/alembic/__pycache__/
 # .claude/worktrees holds git worktrees created by Claude Code.
 /.science/
 /.claude/worktrees/
+
+# Local result dumps (2026-10-05); kept on disk, not in git.
+/results/ac1-records/
+/tpu/results/storage-region-audit-20260924/
+/tpu/results/v4-inference-diagnosis-20260907/
