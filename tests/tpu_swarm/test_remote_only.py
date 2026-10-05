@@ -271,12 +271,19 @@ class StatusFarm(Farm):
         super().__init__()
         self.generate_status = None
         self.capabilities = None
+        self.abort_choices = False
 
     async def __call__(self, request):
         path = request.url.path
         if path == '/v1/completions' and self.generate_status is not None:
             self.requests.append((request.url.host, path))
             return httpx.Response(self.generate_status, json={'detail': 'rejected'})
+        if path == '/v1/completions' and self.abort_choices:
+            self.requests.append((request.url.host, path))
+            n = json.loads(request.content).get('n', 1)
+            return httpx.Response(200, json={'choices': [
+                {'index': i, 'token_ids': [3], 'logprobs': {'token_logprobs': [-.1]},
+                 'finish_reason': 'abort' if i == 0 else 'stop'} for i in range(n)]})
         if path == '/status' and 'X-Lease-ID' not in request.headers and self.capabilities:
             self.requests.append((request.url.host, path))
             return httpx.Response(200, json={'instance': self.incarnation,
@@ -346,6 +353,22 @@ def test_probe_policy_409_loses_only_this_lease(tmp_path):
         assert await borrower.generate(PAYLOAD, 0, 0, prefer_remote=True) is None
         assert lease.lost.is_set()
         assert any(f.get('reason') == 'lease rejected' for e, f in events if e == 'borrow_heartbeat_failed')
+    probe_case(tmp_path, operation)
+
+
+def test_probe_policy_aborted_completion_is_retried_not_returned(tmp_path):
+    # A preempted farm's vLLM answered 200 with finish_reason 'abort'; the
+    # trainer API rejected those sequences and the client dropped the groups.
+    async def operation(borrower, farm, archive, events):
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        lease = borrower.lease
+        farm.abort_choices = True
+        farm.heartbeat_gate = asyncio.Event()  # Hold the probe renewal to observe the pause.
+        assert await borrower.generate(PAYLOAD, 0, 0, prefer_remote=True) is None
+        assert not lease.lost.is_set() and not borrower._eligible(lease)
+        assert [e for e, _ in events if e == 'borrow_health_paused']
+        assert not [e for e, _ in events if e == 'borrow_generated']
+        farm.heartbeat_gate.set()
     probe_case(tmp_path, operation)
 
 

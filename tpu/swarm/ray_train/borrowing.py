@@ -488,6 +488,11 @@ class Borrower:
             if (not isinstance(result, dict) or not isinstance(result.get('choices'), list)
                     or len(result['choices']) != payload.get('n', 1)):
                 raise BorrowingProtocolError('completion shape mismatch')
+            # vLLM answers 200 with finish_reason 'abort' when its engine shuts
+            # down (a spot preemption did this mid-step): retry the group, never
+            # hand partial sequences to the batch.
+            if any(isinstance(c, dict) and c.get('finish_reason') == 'abort' for c in result['choices']):
+                raise BorrowingProtocolError('aborted completion')
             self._event('generated', service=lease.url, phase=self.phase, request_id=request_id)
             return result
         except asyncio.CancelledError:
