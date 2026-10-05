@@ -12,8 +12,8 @@
     "hosts": 0
   },
   "inference": {
-    "tp": 8,
-    "max_sequences": 128,
+    "tp": 4,
+    "max_sequences": 32,
     "memory_utilization": 0.8,
     "routing": "ingress",
     "restart_limit": 0,
@@ -29,7 +29,7 @@
     "farm_drain_timeout": 600,
     "farm_cancel_grace_seconds": 5,
     "engine_env": {
-      "SC_ALLREDUCE_ALLGATHER_OFFLOAD_MIN_BYTES": "1099511627776"
+      "ALLOW_MULTIPLE_LIBTPU_LOAD": "1"
     }
   },
   "cache": {
