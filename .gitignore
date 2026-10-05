@@ -127,3 +127,8 @@ tx/tinker/alembic/__pycache__/
 
 # claude settings
 .claude/settings.json
+
+# Local agent state and scratch (2026-10-05): .science holds ~24 GB of run data;
+# .claude/worktrees holds git worktrees created by Claude Code.
+/.science/
+/.claude/worktrees/
