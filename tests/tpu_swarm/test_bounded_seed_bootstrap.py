@@ -150,12 +150,13 @@ def test_full_bootstrap_publication_resume_and_no_training(tmp_path,valid,fixed)
         async def __aenter__(self):return self
         async def __aexit__(self,*args):pass
         async def post(self,url,json):
+            assert json.get('seed') is None, 'TPU ingress rejects per-request seeds'
             calls.append(json);choices=[]
             for i in range(json['n']):
                 ids=list(map(ord,f'</think>\n```python\nx = {len(calls)*16+i}\n```'))
                 choices.append(dict(token_ids=ids,loss_mask=[1]*len(ids),finish_reason='stop',
                     thinking_budget=dict(enforced=True,budget_basis='phase1_generated_tokens',counted_phase1_tokens=0)))
-            return SimpleNamespace(raise_for_status=lambda:None,json=lambda:dict(choices=choices))
+            return httpx.Response(200,json=dict(choices=choices),request=httpx.Request('POST',url))
     async def grade(self,code,step):
         return VerifyResult(.6 if valid else 0,'OK',int(valid),3.2 if valid else 0,[1.,2.],'feedback',{})
     cls=b.environment_type(c)

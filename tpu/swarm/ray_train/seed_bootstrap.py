@@ -211,6 +211,9 @@ async def run(config, snapshot, head):
             # TPU serving rejects per-request seeds (ingress and tpu-inference);
             # bootstrap_seed fixes the root state, sampling stays unseeded.
             response = await http.post(f'http://{head}:{config.ports.inference}/v1/completions', json=request)
+            if response.is_error:
+                raise RuntimeError(f'bootstrap generation group {index}: HTTP '
+                                   f'{response.status_code}: {response.text[:4000]}')
             response.raise_for_status()
             choices = response.json()['choices']
             for choice in choices: check_choice(choice, request)

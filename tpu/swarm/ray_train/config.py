@@ -397,6 +397,7 @@ class Config:
     bootstrap_max_drafts: int = 0
     bootstrap_fixed_budget: bool = False
     bootstrap_require_full_pool: bool = False
+    # Initial problem-state seed; TPU inference does not accept request seeds.
     bootstrap_seed: int | None = None
     bootstrap_target_valid: int = 512
     bootstrap_group_size: int = 16
