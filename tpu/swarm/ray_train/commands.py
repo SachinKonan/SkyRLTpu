@@ -287,6 +287,8 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults["SCIENCE_PLACEMENT_BACKEND"] = config.science_placement_backend
         defaults["SCIENCE_PLACEMENT_RUNTIME"] = config.science_placement_runtime
         defaults["SCIENCE_PLACEMENT_SLOTS_PER_HOST"] = str(config.science_placement_slots_per_host)
+        defaults["SCIENCE_PLACEMENT_CPUS_PER_CASE"] = str(config.science_placement_cpus_per_case)
+        defaults["SCIENCE_PLACEMENT_MEMORY_GIB"] = str(config.science_placement_memory_gib)
         if config.science_task == 'placement':
             defaults['SCIENCE_PLACEMENT_SUITE'] = 'ibm17-proxy-v1'
     if config.arena_grader_rank is not None:

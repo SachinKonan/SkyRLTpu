@@ -424,6 +424,8 @@ class Config:
     # Opt-in CPU placement keeps historical TPU profiles reproducible.
     science_placement_backend: str = "tpu"
     science_placement_slots_per_host: int = 2
+    science_placement_cpus_per_case: int = 4
+    science_placement_memory_gib: int = 4
     science_placement_runtime: str = "legacy"
     # Extra environment for the trainer (Tinker API server) process only,
     # e.g. TUNIX_LORA_MIX_GAMMA. Applied after the launcher's own settings.
@@ -519,7 +521,7 @@ class Config:
         if self.science_routing_evaluator == 'parallel-v2':
             return 10 * self.science_routing_slots_per_host + 8
         if self.science_task == 'placement' and self.science_placement_backend == 'cpu':
-            return max(32, 4 * self.science_placement_slots_per_host + 8)
+            return max(32, self.science_placement_cpus_per_case * self.science_placement_slots_per_host + 8)
         return max(32, 4 * self.science_routing_slots_per_host + 8) if self.science_task == 'routing' else 32
 
     @property
@@ -727,11 +729,16 @@ class Config:
         modern = self.science_placement_runtime == 'cpu300-4g-v1'
         if modern and (self.science_task != 'placement' or self.science_placement_backend != 'cpu' or not self.systemd_runtime):
             raise ValueError('five-minute placement requires CPU placement and systemd')
-        if modern and self.cache.reserve_gib < 4 * placement_slots + 64:
-            raise ValueError('expanded grading requires 4 GiB per slot plus 64 GiB runtime reserve')
+        if modern:
+            from tpu.science.placement_resources import contract
+            contract(placement_slots, cpus=self.science_placement_cpus_per_case, memory_gib=self.science_placement_memory_gib)
+        elif (self.science_placement_cpus_per_case, self.science_placement_memory_gib) != (4, 4):
+            raise ValueError('custom placement resources require modern CPU runtime')
+        if modern and self.cache.reserve_gib < self.science_placement_memory_gib * placement_slots + 64:
+            raise ValueError('expanded grading requires per-case memory per slot plus 64 GiB runtime reserve')
         if self.client_env.get('SCIENCE_PLACEMENT_RUNTIME', self.science_placement_runtime) != self.science_placement_runtime:
             raise ValueError('conflicting placement runtime override')
-        if type(placement_slots) is not int or not 1 <= placement_slots <= (48 if modern else 16):
+        if type(placement_slots) is not int or not 1 <= placement_slots <= (192 // self.science_placement_cpus_per_case if modern else 16):
             raise ValueError('placement CPU slot count exceeds runtime contract')
         if self.science_placement_backend == 'cpu':
             if self.science_task != 'placement':

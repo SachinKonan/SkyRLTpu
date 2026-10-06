@@ -120,3 +120,24 @@ def test_placement_concurrency_reuse_preserves_scientific_settings():
                    dict(client_env={**new.client_env, 'TTD_ADV_PIECEWISE_RHO': '0.7'}),
                    dict(inference=replace(new.inference, max_model_length=10240))]:
         with pytest.raises(RuntimeError):validate_reuse(replace(new, **change), document, summary)
+
+
+def test_placement_v4_to_v6e_reuse_preserves_recipe():
+    from tpu.swarm.ray_train.bootstrap_reuse import validate_reuse
+    old = Config.load('tpu/swarm/ray_train/profiles/circuit300-v464-muse-pwc05-three-starts-10step-20260922-r4-grade48-cache64.json')
+    contract = {'config': old.to_dict()}
+    digest = identity(contract)
+    doc = dict(contract=contract, sha256=digest)
+    summary = dict(contract_sha256=digest, pool_sha256='a'*64, optimizer_steps=0)
+    new = replace(old, accelerator='tpu-v6e-32', zone='us-central1-b',
+                  bucket='gs://sk7524-tinker-tpu-us-central1',
+                  trainer=replace(old.trainer, process_bounds='2,2,1'),
+                  bootstrap_reuse_contract_sha256=digest, bootstrap_reuse_pool_sha256='a'*64,
+                  resume_min_checkpoint_step=6, client_env={**old.client_env, 'NUM_EPOCHS': '15'})
+    new.validate()
+    validate_reuse(new, doc, summary)
+    for change in [dict(run_id='different-run'), dict(bucket='gs://other'),
+                   dict(trainer=replace(new.trainer, tp=4)),
+                   dict(client_env={**new.client_env, 'TTD_ADV_PIECEWISE_RHO': '0.7'})]:
+        with pytest.raises(RuntimeError, match='outside the allowed'):
+            validate_reuse(replace(new, **change), doc, summary)

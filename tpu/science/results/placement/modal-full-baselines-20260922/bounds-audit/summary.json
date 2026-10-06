@@ -1,0 +1,487 @@
+[
+  {
+    "case": "ibm01",
+    "valid": true,
+    "errors": [],
+    "canvas": [
+      22.950000762939453,
+      23.040000915527344
+    ],
+    "bad_count": 0,
+    "max_excess": 0.0,
+    "max_excess_canvas_ulps": 0.0,
+    "fixed_unchanged": true,
+    "bad_indices": [],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.7594674825668335,
+      "wirelength_cost": 0.07544849812984467,
+      "density_cost": 0.5001153349876404,
+      "congestion_cost": 0.8679226687045617,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm02",
+    "valid": false,
+    "errors": [
+      "Macros outside vertical canvas bounds"
+    ],
+    "canvas": [
+      32.560001373291016,
+      32.47999954223633
+    ],
+    "bad_count": 1,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      76
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.9648239016532898,
+      "wirelength_cost": 0.08568285405635834,
+      "density_cost": 0.5309402346611023,
+      "congestion_cost": 1.227341845623009,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm03",
+    "valid": false,
+    "errors": [
+      "Macros outside horizontal canvas bounds"
+    ],
+    "canvas": [
+      35.119998931884766,
+      35.040000915527344
+    ],
+    "bad_count": 3,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      156,
+      536,
+      771
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.8770945072174072,
+      "wirelength_cost": 0.09386298060417175,
+      "density_cost": 0.5036414861679077,
+      "congestion_cost": 1.0628215109952608,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm04",
+    "valid": true,
+    "errors": [],
+    "canvas": [
+      34.09000015258789,
+      34.08000183105469
+    ],
+    "bad_count": 0,
+    "max_excess": 0.0,
+    "max_excess_canvas_ulps": 0.0,
+    "fixed_unchanged": true,
+    "bad_indices": [],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.8848363161087036,
+      "wirelength_cost": 0.0835598036646843,
+      "density_cost": 0.518271267414093,
+      "congestion_cost": 1.084281683612605,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm06",
+    "valid": false,
+    "errors": [
+      "Macros outside vertical canvas bounds"
+    ],
+    "canvas": [
+      32.650001525878906,
+      32.63999938964844
+    ],
+    "bad_count": 1,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      63
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.0323154926300049,
+      "wirelength_cost": 0.08332960307598114,
+      "density_cost": 0.5259730219841003,
+      "congestion_cost": 1.3719987076787266,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm07",
+    "valid": false,
+    "errors": [
+      "Macros outside horizontal canvas bounds"
+    ],
+    "canvas": [
+      38.5099983215332,
+      38.400001525878906
+    ],
+    "bad_count": 4,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      123,
+      133,
+      267,
+      958
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.9505122900009155,
+      "wirelength_cost": 0.08447504043579102,
+      "density_cost": 0.5140835642814636,
+      "congestion_cost": 1.2179910464705548,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm08",
+    "valid": false,
+    "errors": [
+      "Macros outside horizontal canvas bounds"
+    ],
+    "canvas": [
+      41.04999923706055,
+      40.959999084472656
+    ],
+    "bad_count": 1,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      229
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.0050184726715088,
+      "wirelength_cost": 0.08515963703393936,
+      "density_cost": 0.5235620737075806,
+      "congestion_cost": 1.3161554983401242,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm09",
+    "valid": true,
+    "errors": [],
+    "canvas": [
+      46.7400016784668,
+      46.880001068115234
+    ],
+    "bad_count": 0,
+    "max_excess": 0.0,
+    "max_excess_canvas_ulps": 0.0,
+    "fixed_unchanged": true,
+    "bad_indices": [],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.7409529089927673,
+      "wirelength_cost": 0.06558555364608765,
+      "density_cost": 0.5031343102455139,
+      "congestion_cost": 0.8476003771850823,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm10",
+    "valid": true,
+    "errors": [],
+    "canvas": [
+      77.05000305175781,
+      77.12000274658203
+    ],
+    "bad_count": 0,
+    "max_excess": 0.0,
+    "max_excess_canvas_ulps": 0.0,
+    "fixed_unchanged": true,
+    "bad_indices": [],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.9130575656890869,
+      "wirelength_cost": 0.0646011084318161,
+      "density_cost": 0.5088849663734436,
+      "congestion_cost": 1.1880279624878152,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm11",
+    "valid": false,
+    "errors": [
+      "Macros outside horizontal canvas bounds"
+    ],
+    "canvas": [
+      51.529998779296875,
+      51.52000045776367
+    ],
+    "bad_count": 3,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      143,
+      207,
+      369
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.7749179601669312,
+      "wirelength_cost": 0.0658937469124794,
+      "density_cost": 0.5031464695930481,
+      "congestion_cost": 0.9149020523392429,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm12",
+    "valid": true,
+    "errors": [],
+    "canvas": [
+      67.97000122070312,
+      68.0
+    ],
+    "bad_count": 0,
+    "max_excess": 0.0,
+    "max_excess_canvas_ulps": 0.0,
+    "fixed_unchanged": true,
+    "bad_indices": [],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.0509142875671387,
+      "wirelength_cost": 0.07698594033718109,
+      "density_cost": 0.5336992144584656,
+      "congestion_cost": 1.4141575648322338,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm13",
+    "valid": false,
+    "errors": [
+      "Macros outside horizontal canvas bounds"
+    ],
+    "canvas": [
+      55.939998626708984,
+      56.0
+    ],
+    "bad_count": 7,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      95,
+      234,
+      360,
+      610,
+      705,
+      717,
+      909
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 0.8247637152671814,
+      "wirelength_cost": 0.06323236227035522,
+      "density_cost": 0.5103205442428589,
+      "congestion_cost": 1.0127421256262752,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm14",
+    "valid": false,
+    "errors": [
+      "Macros outside horizontal canvas bounds"
+    ],
+    "canvas": [
+      59.849998474121094,
+      60.0
+    ],
+    "bad_count": 1,
+    "max_excess": 3.814697265625e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      149
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.1435773372650146,
+      "wirelength_cost": 0.0667383149266243,
+      "density_cost": 0.5697476267814636,
+      "congestion_cost": 1.5839303918982457,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm15",
+    "valid": false,
+    "errors": [
+      "Macros outside vertical canvas bounds"
+    ],
+    "canvas": [
+      67.63999938964844,
+      67.5199966430664
+    ],
+    "bad_count": 2,
+    "max_excess": 7.62939453125e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      664,
+      741
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.0589226484298706,
+      "wirelength_cost": 0.07763531059026718,
+      "density_cost": 0.547075629234314,
+      "congestion_cost": 1.4154990620116426,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm16",
+    "valid": false,
+    "errors": [
+      "Macros outside horizontal canvas bounds"
+    ],
+    "canvas": [
+      81.02999877929688,
+      81.12000274658203
+    ],
+    "bad_count": 2,
+    "max_excess": 7.62939453125e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      54,
+      430
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.0007731914520264,
+      "wirelength_cost": 0.06432739645242691,
+      "density_cost": 0.5207480788230896,
+      "congestion_cost": 1.3521433863533492,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm17",
+    "valid": false,
+    "errors": [
+      "Macros outside vertical canvas bounds"
+    ],
+    "canvas": [
+      72.5999984741211,
+      72.63999938964844
+    ],
+    "bad_count": 2,
+    "max_excess": 7.62939453125e-06,
+    "max_excess_canvas_ulps": 1.0,
+    "fixed_unchanged": true,
+    "bad_indices": [
+      695,
+      2396
+    ],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.170818567276001,
+      "wirelength_cost": 0.07362783700227737,
+      "density_cost": 0.5044244527816772,
+      "congestion_cost": 1.6899569735202935,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  },
+  {
+    "case": "ibm18",
+    "valid": true,
+    "errors": [],
+    "canvas": [
+      64.81999969482422,
+      64.95999908447266
+    ],
+    "bad_count": 0,
+    "max_excess": 0.0,
+    "max_excess_canvas_ulps": 0.0,
+    "fixed_unchanged": true,
+    "bad_indices": [],
+    "diagnostic_metrics": {
+      "proxy_cost": 1.1860496997833252,
+      "wirelength_cost": 0.07625751197338104,
+      "density_cost": 0.5741137862205505,
+      "congestion_cost": 1.6454705322367313,
+      "overlap_count": 0.0,
+      "total_overlap_area": 0.0,
+      "max_overlap_area": 0.0,
+      "num_macros_with_overlaps": 0.0,
+      "overlap_ratio": 0.0
+    }
+  }
+]
