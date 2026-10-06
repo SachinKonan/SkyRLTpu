@@ -1,4 +1,4 @@
-# Pool tpuswarm-v6e8-east5b. Live target 16 workers (2026-10-05). Resize with
+# Pool tpuswarm-v6e8-east5b. Live target 18 workers (2026-10-05). Resize with
 # `sky jobs pool apply -p tpuswarm-v6e8-east5b --workers N` and update this file to match;
 # re-applying a stale file resets the pool to the count written here.
 # Ten single-host v6e-8 slices in us-east5-b (created 2026-09-23). Sized by the zone
@@ -6,9 +6,9 @@
 # pool (10), so 10 is the most that fits. Caches are the us-east5 originals.
 # Set all three worker-count fields together.
 pool:
-  workers: 16
-  min_workers: 16
-  max_workers: 16
+  workers: 18
+  min_workers: 18
+  max_workers: 18
   queue_length_threshold: 1
   upscale_delay_seconds: 60
   downscale_delay_seconds: 1200
