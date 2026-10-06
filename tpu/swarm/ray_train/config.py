@@ -702,8 +702,12 @@ class Config:
             raise ValueError('remote_only requires TP x FSDP over every chip of the slice')
         if self.accelerator == 'tpu-v6e-8' and (self.trainer.process_bounds, self.trainer.chip_bounds) != ('1,1,1', '2,4,1'):
             raise ValueError('a v6e-8 trainer is one process over the 2x4 chips (process_bounds 1,1,1, chip_bounds 2,4,1)')
-        if self.bootstrap_layers or self.bootstrap_max_drafts or self.bootstrap_only:
-            raise ValueError('remote_only cannot bootstrap: bootstrap deploys and retires local engines')
+        if ((self.bootstrap_layers or self.bootstrap_max_drafts or self.bootstrap_only)
+                and (self.bootstrap_layers != 1 or self.bootstrap_all_hosts or self.bootstrap_only
+                     or not self.bootstrap_max_drafts)):
+            # No local engines exist to deploy and retire: only a bounded
+            # single-layer bootstrap sampled through the leased farms.
+            raise ValueError('remote_only bootstraps only a bounded single layer through its farms')
         if self.arena_grader_rank is not None or self.placement_ranks or self.frozen_benchmark or self.arena_samples:
             raise ValueError('remote_only excludes arena, placement and frozen-benchmark roles')
         if v.request_timeout < 86400:
@@ -887,13 +891,15 @@ class Config:
                                or (self.accelerator == 'tpu-v6e-32' and self.hosts == 8 and self.trainer.hosts == 4)
                                or (self.accelerator == 'tpu-v5p-32' and self.hosts == 4 and self.trainer.hosts == 1)
                                or (self.accelerator == 'tpu-v5p-64' and self.hosts == 8 and self.trainer.hosts == 1
-                                   and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
+                                   and self.science_task == 'placement' and self.science_placement_backend == 'cpu')
+                               or (self.inference.remote_only and self.trainer.hosts == self.hosts))
+            remote = self.inference.remote_only
             if (not bootstrap_shape
-                    or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
+                    or self.bootstrap_layers != 1 or self.bootstrap_all_hosts == remote or self.bootstrap_only
                     or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
                     or not (self.science_task or self.has_math_environment or self.is_recurrent_gemma)
                     or (self.is_recurrent_gemma != (self.arena_grader_rank is not None))
-                    or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
+                    or (not remote and (self.inference.hosts_per_engine != 1 or self.inference.tp != 4))
                     or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
                     or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
                 raise ValueError('bounded bootstrap requires native v4-64/v5p-32/v6e-32 math, CPU science, or dedicated-grader RG training')

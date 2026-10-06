@@ -123,3 +123,20 @@ def test_v6e8_farm_defaults(tmp_path):
     assert config.grading_service_cpus == 48
     grading, service, _ = core_pool.layout(config.grading_service_cpus, set(range(180)))
     assert len(grading) == 132
+
+
+def test_remote_only_trainer_may_bootstrap_one_bounded_layer_through_farms(tmp_path):
+    from pathlib import Path
+    from tpu.swarm.ray_train.config import Config
+    profile = Path(__file__).parents[2] / 'tpu/swarm/ray_train/profiles/remote-only-v6e8-east5b-qwen-ac2-pilot-20261005.json'
+    raw = Config.load(profile).to_dict()
+    raw.update(root=str(tmp_path), client_env=dict(raw['client_env'], TTD_ENV='erdos_min_overlap', TTD_PROBLEM_TYPE=''),
+               bootstrap_layers=1, bootstrap_max_drafts=1024, bootstrap_target_valid=512, bootstrap_group_size=16,
+               bootstrap_max_groups=32, bootstrap_fixed_budget=True, bootstrap_require_full_pool=True, bootstrap_seed=0)
+    config = Config.from_dict(raw)
+    assert config.bootstrap_module == 'tpu.swarm.ray_train.seed_bootstrap'
+    for change in (dict(bootstrap_all_hosts=True), dict(bootstrap_max_drafts=0, bootstrap_fixed_budget=False,
+                                                        bootstrap_require_full_pool=False, bootstrap_seed=None),
+                   dict(bootstrap_layers=2)):
+        with pytest.raises(ValueError):
+            Config.from_dict(dict(raw, **change))
