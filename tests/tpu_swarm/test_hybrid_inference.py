@@ -159,7 +159,7 @@ def test_workload_and_queue_priority_do_not_change_farm_candidates():
     assert assignments(rows, farms, targets) == result
 
 
-def test_v5p_farms_precede_v4_32_and_rotation_stays_within_hardware_tier():
+def test_v6e32_then_v6e8_then_v5p_then_v4_32_and_rotation_stays_within_hardware_tier():
     rows = [dict(job_id=10, run_id='qwen-qubit', status='RUNNING', priority=0),
             dict(job_id=11, run_id='qwen-circuit', status='RUNNING', priority=0)]
     targets = {r['job_id']: dict(run_id=r['run_id'], model='qwen') for r in rows}
@@ -170,16 +170,34 @@ def test_v5p_farms_precede_v4_32_and_rotation_stays_within_hardware_tier():
              source_pool='tpuswarm-v5p32-east5a-erdos'),
         dict(job_id=3, models=['qwen'], url='v5p-b', state='unleased',
              source_pool='tpuswarm-v5p32-east5a-erdos'),
+        dict(job_id=4, models=['qwen'], url='v6e-a', state='unleased',
+             source_pool='tpuswarm-v6e8-east5b'),
+        dict(job_id=5, models=['qwen'], url='v6e-b', state='unleased',
+             source_pool='tpuswarm-v6e8-east5b'),
+        dict(job_id=6, models=['qwen'], url='v6e32-a', state='unleased',
+             source_pool='tpuswarm-v6e32-east5b-qwen35'),
     ]
     result = assignments(rows, farms, targets)
-    assert set(result[10]) == {'v5p-a', 'v5p-b'}
-    assert set(result[11]) == {'v5p-a', 'v5p-b'}
+    assert result[10][0] == result[11][0] == 'v6e32-a'
+    assert result[10][1] in {'v6e-a', 'v6e-b'}
+    assert result[11][1] in {'v6e-a', 'v6e-b'}
+
+    farms.pop()
+    result = assignments(rows, farms, targets)
+    assert set(result[10]) == {'v6e-a', 'v6e-b'}
+    assert set(result[11]) == {'v6e-a', 'v6e-b'}
     assert result[10] != result[11]
 
     farms.pop()
     result = assignments(rows, farms, targets)
-    assert result[10][0] == result[11][0] == 'v5p-a'
-    assert result[10][1] == result[11][1] == 'v4-a'
+    assert result[10][0] == result[11][0] == 'v6e-a'
+    assert result[10][1] in {'v5p-a', 'v5p-b'}
+    assert result[11][1] in {'v5p-a', 'v5p-b'}
+
+    farms.pop()
+    result = assignments(rows, farms, targets)
+    assert set(result[10]) == {'v5p-a', 'v5p-b'}
+    assert set(result[11]) == {'v5p-a', 'v5p-b'}
 
 
 def test_runtime_mismatch_is_rejected_before_acquiring(tmp_path):

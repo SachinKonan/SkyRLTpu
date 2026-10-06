@@ -5,11 +5,15 @@ def hardware_priority(farm):
     """Prefer the measured faster farm hardware without disturbing leases."""
     identity = ' '.join(str(farm.get(key, '')) for key in
                         ('source_pool', 'source_cluster', 'source_name')).casefold()
-    if 'v5p' in identity:
+    if 'v6e-32' in identity or 'v6e32' in identity:
         return 0
-    if 'v4-32' in identity or 'v4_32' in identity or 'v432' in identity:
+    if 'v6e-8' in identity or 'v6e8' in identity:
         return 1
-    return 2
+    if 'v5p' in identity:
+        return 2
+    if 'v4-32' in identity or 'v4_32' in identity or 'v432' in identity:
+        return 3
+    return 4
 
 
 def _ordered_candidates(job, farms):
@@ -77,7 +81,7 @@ def assignments(rows, farms, targets):
                 compatible.append(farm)
         if compatible:
             # Spread first choices within equal hardware. Hardware tiers retain
-            # their measured ordering, so v5p always precedes v4-32.
+            # their measured ordering: v6e-32, v6e-8, v5p, then v4-32.
             room = limit - len(result[job])
             result[job] += [farm['url'] for farm in _ordered_candidates(job, compatible)[:room]]
     return result

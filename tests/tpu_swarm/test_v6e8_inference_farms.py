@@ -113,3 +113,26 @@ def test_v6e8_grading_farm_build_targets_east5b_v6e_runtime(tmp_path):
     assert resources["accelerators"] == "tpu-v6e-8"
     assert resources["zone"] == "us-east5-b"
     assert resources["accelerator_args"]["runtime_version"] == "v2-alpha-tpuv6e"
+
+
+@pytest.mark.parametrize("model", ["gemma", "muse"])
+@pytest.mark.parametrize("replica", [1, 2])
+def test_v6e8_tp8_farm_profiles_are_isolated(model, replica):
+    run = f"inference-farm-v6e8-east5b-{model}-{replica}-tp8-20260924"
+    config = Config.load(PROFILES / f"{run}.json")
+    assert config.run_id == run
+    assert config.inference_only and config.inference_only_ranks == [0]
+    assert config.inference.tp == 8 and config.engines_per_host == 1
+    assert config.inference.max_loras == 1 and config.inference.require_lease
+    assert config.inference.external_pool_attestation
+    assert config.cache.inference_compile_seed == ""
+    assert run in config.cache.inference_compile
+
+
+@pytest.mark.parametrize("replica", [1, 2])
+def test_hybrid_qwen_v6e8_farms_run_two_tp4_engines(replica):
+    # Originally TP8; Qwen TP8 engines halt in SparseCore under load.
+    run = f"inference-farm-v6e8-east5b-qwen-{replica}-tp8-20260924"
+    config = Config.load(PROFILES / f"{run}.json")
+    assert config.inference.tp == 4 and config.engines_per_host == 2
+    assert config.inference.max_sequences == 32
