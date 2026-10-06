@@ -43,11 +43,19 @@ def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, rou
         root = Path(root).resolve(); jobs = root / '.science/ray-jobs'; jobs.mkdir(exist_ok=True)
         if not (root/'.science/ready.json').is_file(): raise RuntimeError('CPU worker not prepared')
         queued=time.monotonic()
-        slot, cpus, lease = acquire(slots=slots_per_host, deadline_seconds=admission_timeout_s)
+        from . import core_pool
+        from .routing_resources import PROGRAM_CPUS, PROGRAM_GIB
+        try:
+            # Same per-program contract (10 pinned cores, 20 GiB) from the shared pool.
+            cpus, lease = core_pool.acquire(PROGRAM_CPUS, PROGRAM_GIB, deadline_seconds=admission_timeout_s)
+            slot, admission = None, core_pool.VERSION
+        except core_pool.PoolUnavailable:
+            slot, cpus, lease = acquire(slots=slots_per_host, deadline_seconds=admission_timeout_s)
+            admission = 'parallel-v2'
         waited=time.monotonic()-queued
         with lease:
             result=_grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite, resource_contract, cpus)
-            result['metrics']['admission_wait_seconds']=waited
+            result['metrics'].update(admission_wait_seconds=waited, admission=admission)
             return result
     if task not in ('portfolio','portfolio_v2','routing'):raise ValueError('unsupported science task')
     from .routing_suite import validate_suite

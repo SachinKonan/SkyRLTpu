@@ -43,8 +43,12 @@ def test_farm_science_families_use_their_contracts(tmp_path):
     placement = farm_config(tmp_path, families={'placement': {'slots_per_host': 8, 'memory_gib': 4}}, reserve_gib=128)
     assert placement.grading_science_task == 'placement'
     assert workload_resources(placement, 2) == {'TPU': 4, 'grading_placement': 8, 'placement_cpu_host': 8}
-    with pytest.raises(ValueError, match='cannot share'):
-        farm_config(tmp_path, families={'routing': {}, 'placement': {}}, reserve_gib=512)
+    # One core pool serves every family, so a farm may grade all of them.
+    both = farm_config(tmp_path, families={'routing': {'slots_per_host': 4}, 'placement': {'slots_per_host': 8},
+                                           'ac2': {}}, reserve_gib=128)
+    assert set(both.grading_families) == {'ac2', 'routing', 'placement'} and both.grading_pool
+    assert workload_resources(both, 2) == {'TPU': 4, 'grading_routing': 4, 'grading_placement': 8,
+                                           'placement_cpu_host': 8, 'grading_ac2': 16}
 
 
 @pytest.mark.parametrize('change', [
@@ -63,7 +67,7 @@ def test_reject_invalid_grading_settings(tmp_path, change):
 
 def test_farm_grading_requires_lease_systemd_and_reserve(tmp_path):
     with pytest.raises(ValueError, match='reserve_gib'):
-        farm_config(tmp_path, reserve_gib=100)
+        farm_config(tmp_path, families={'placement': {'slots_per_host': 4, 'memory_gib': 100}}, reserve_gib=128)
     raw = Config.load(FARM).to_dict()
     raw['root'] = str(tmp_path)
     raw['cache']['reserve_gib'] = 192
@@ -202,7 +206,12 @@ def test_client_environment_exposes_grading_transport_settings(tmp_path):
     assert env['SKYRL_GRADING_EVENTS'].endswith('inference-events.jsonl')
     legacy = Config.load('tpu/swarm/ray_train/profiles/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919.json')
     legacy_env = client_environment(legacy, Path(tmp_path), '10.0.0.1')
-    assert 'SKYRL_GRADING_URL' not in legacy_env and legacy_env['TTD_EVAL_BACKEND'] == 'ray'
+    # Sandbox trainers now grade through the pooled transport by default (no farms).
+    assert 'SKYRL_GRADING_URL' not in legacy_env and legacy_env['TTD_EVAL_BACKEND'] == 'hybrid'
+    assert legacy_env['SKYRL_GRADING_LOCAL_SLOTS'] == str(64 * legacy.hosts)
+    opted_out = Config.from_dict(dict(legacy.to_dict(), client_env=dict(legacy.client_env, TTD_EVAL_BACKEND='ray')))
+    opted_env = client_environment(opted_out, Path(tmp_path), '10.0.0.1')
+    assert opted_env['TTD_EVAL_BACKEND'] == 'ray' and 'SKYRL_GRADING_FAMILIES' not in opted_env
 
 
 def test_ac2_admission_is_bounded_by_slots_and_pins_the_cpu_map(tmp_path):

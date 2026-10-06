@@ -23,7 +23,14 @@ def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s
         validate(resource_contract)
         if resource_contract['slots'] != slots_per_host:
             raise ValueError('placement admission differs from resource contract')
-        slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s, cpus_per_case=resource_contract["cpus"])
+        from . import core_pool
+        try:
+            # Same per-case contract (pinned cores, GiB) from the shared pool.
+            cpus, lock = core_pool.acquire(resource_contract['cpus'], resource_contract['memory_gib'],
+                                           deadline_seconds=admission_timeout_s)
+            slot = None
+        except core_pool.PoolUnavailable:
+            slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s, cpus_per_case=resource_contract["cpus"])
         with lock:
             return _grade_case(source, case, root, 'cpu-jax', None, None,
                 cpu_slot=slot, slots_per_host=slots_per_host, helper=helper,

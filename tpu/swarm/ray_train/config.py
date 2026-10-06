@@ -60,6 +60,8 @@ class Cache:
 
 
 GRADING_FAMILIES = ('ac2', 'routing', 'placement')
+# Sandbox tasks whose programs run through the AC2 executor (flat numeric results).
+SANDBOX_ENVS = ('ac_inequalities', 'erdos_min_overlap')
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,9 @@ class Grading:
     long_poll_seconds: int = 20
     farm_refresh_seconds: int = 10
     stdout_limit_bytes: int = 16384
+    # Host CPUs kept for engines/trainer/ingress/Ray; every other core forms
+    # the shared grading pool (tpu.science.core_pool). 0 selects the default.
+    service_cpus: int = 0
 
 
 @dataclass(frozen=True)
@@ -473,10 +478,22 @@ class Config:
             'placement': dict(slots_per_host=self.science_placement_slots_per_host,
                               cpus=4, memory_gib=4 if modern else 8),
         }
+        declared = self.grading.families or {}
+        if not declared and self.default_sandbox_grading:
+            # Trainers grade sandbox programs through the shared core pool by
+            # default; Ray admission (not this cap) bounds concurrency.
+            declared = {'ac2': dict(slots_per_host=64)}
         result = {}
-        for name, raw in (self.grading.families or {}).items():
+        for name, raw in declared.items():
             result[name] = dict(defaults.get(name, {}), **(raw or {}))
         return result
+
+    @property
+    def default_sandbox_grading(self):
+        """Erdős/AC trainers use the pooled sandbox grader unless a profile opts out."""
+        return (not self.inference_only and self.systemd_runtime and not self.science_task
+                and not self.is_recurrent_gemma and 'TTD_EVAL_BACKEND' not in self.client_env
+                and self.client_env.get('TTD_ENV') in SANDBOX_ENVS)
 
     @property
     def grading_science_task(self):
@@ -501,8 +518,6 @@ class Config:
         if 'ac2' in families and not (families['ac2']['slots_per_host'] <= 64 and families['ac2']['cpus'] <= 8
                                       and families['ac2']['memory_gib'] <= 64):
             raise ValueError('ac2 grading: at most 64 slots, 8 CPUs and 64 GiB per host')
-        if 'routing' in families and 'placement' in families:
-            raise ValueError('routing and placement grading cannot share one host partition')
         for key in ('max_infra_retries', 'queue_factor', 'max_requests', 'result_retention_seconds',
                     'long_poll_seconds', 'farm_refresh_seconds', 'stdout_limit_bytes'):
             if type(getattr(g, key)) is not int or getattr(g, key) < 1:
@@ -519,9 +534,36 @@ class Config:
             v = self.inference
             if not v.require_lease or not self.systemd_runtime or v.routing != 'ingress':
                 raise ValueError('farm grading requires a lease-fenced systemd farm through ingress')
-            needed = 64 + sum(f['slots_per_host'] * f['memory_gib'] for f in families.values())
+            # The pool admits by GiB, so the reserve must hold the largest program.
+            needed = 64 + max(f['memory_gib'] for f in families.values())
             if self.cache.reserve_gib < needed:
-                raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for slot memory plus services')
+                raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for one program plus services')
+        if type(g.service_cpus) is not int or g.service_cpus < 0 or 0 < g.service_cpus < 24:
+            raise ValueError('grading.service_cpus must be 0 (default) or at least 24')
+
+    @property
+    def grading_pool(self):
+        """Every grading family on this profile's hosts draws from one core pool."""
+        return bool(self.grading_families or self.science_routing_evaluator == 'parallel-v2'
+                    or self.science_placement_runtime == 'cpu300-4g-v1')
+
+    @property
+    def grading_service_cpus(self):
+        if self.grading.service_cpus:
+            return self.grading.service_cpus
+        # A farm needs CPUs for its engines and ingress; a trainer host also
+        # runs the trainer and client (the v4-64 placement layout left 48).
+        return 24 + 12 * self.engines_per_host if self.inference_only else 48
+
+    @property
+    def grading_memory_gib(self):
+        """GiB of the cache reserve available to grades (64 stay for services)."""
+        return self.cache.reserve_gib - 64
+
+    @property
+    def ray_service_cpus(self):
+        """Ray CPUs for non-grading actors: engines, trainer rank, ingress/Serve."""
+        return 8 * self.engines_per_host + 8 + 9
 
     @property
     def ray_cpus_per_host(self):
@@ -548,7 +590,7 @@ class Config:
     @property
     def requires_source_overlay(self):
         return (not self.inference_only or self.adapter_count > 1 or self.inference.require_lease or self.is_recurrent_gemma or self.training_smoke
-                or bool(self.grading.families) or self.grading.farm_transport
+                or bool(self.grading_families) or self.grading.farm_transport
                 or self.has_problem_prompt_overlay or self.has_adaptive_pwc_overlay
                 or self.has_answer_only_overlay or self.trainer.backward_warmup
                 or self.inference.hosts_per_engine > 1

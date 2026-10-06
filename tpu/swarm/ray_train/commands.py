@@ -302,7 +302,8 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
                     'SKYRL_GRADING_FARM_REFRESH_SECONDS', 'SKYRL_GRADING_LONG_POLL_SECONDS')
     families = config.grading_families
     if families:
-        local_slots = families.get('ac2', {}).get('slots_per_host', 0) * config.trainer.hosts
+        # Every host of the slice (trainer and inference ranks) grades from its pool.
+        local_slots = families.get('ac2', {}).get('slots_per_host', 0) * config.hosts
         defaults.update(SKYRL_GRADING_FAMILIES=json.dumps(families, sort_keys=True),
                         SKYRL_GRADING_LOCAL_SLOTS=str(local_slots),
                         SKYRL_GRADING_MAX_INFRA_RETRIES=str(config.grading.max_infra_retries),
@@ -310,13 +311,15 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
                         SKYRL_GRADING_EVENTS=str(root / "runs" / config.run_id / "inference-events.jsonl"),
                         SKYRL_GRADING_FARM_REFRESH_SECONDS=str(config.grading.farm_refresh_seconds),
                         SKYRL_GRADING_LONG_POLL_SECONDS=str(config.grading.long_poll_seconds))
-        if 'ac2' in families and config.client_env.get('TTD_PROBLEM_TYPE') in ('ac2', None):
-            # The transport replaces the cpu_scheduler actor path for AC2.
+        from .config import SANDBOX_ENVS
+        if 'ac2' in families and config.client_env.get('TTD_ENV') in SANDBOX_ENVS:
+            # The transport replaces the cpu_scheduler actor path for every sandbox task.
             defaults['TTD_EVAL_BACKEND'] = 'hybrid'
         if config.grading_farm_transport:
             defaults['SKYRL_GRADING_URL'] = f'http://{head}:{config.ports.inference}'
-            # 64 grading threads would leave farm capacity idle.
-            defaults.setdefault('TTD_SAFE_GRADE_MAX_WORKERS', str(max(64, local_slots + 128)))
+        # The 64-thread default would leave pool (and farm) capacity idle.
+        defaults.setdefault('TTD_SAFE_GRADE_MAX_WORKERS',
+                            str(max(64, local_slots + (128 if config.grading_farm_transport else 0))))
     else:
         for key in grading_keys:
             defaults.pop(key, None)

@@ -96,7 +96,11 @@ class Host:
             if name in self.processes and self.processes[name].poll() is None:
                 raise RuntimeError(f"owned process already active: {name}")
             service_cpus = None
-            if self.config.science_routing_evaluator == 'parallel-v2':
+            if self.config.grading_pool:
+                # Services stay off the shared grading core pool.
+                from tpu.science.core_pool import layout
+                _, service_cpus, _ = layout(self.config.grading_service_cpus)
+            elif self.config.science_routing_evaluator == 'parallel-v2':
                 from tpu.science.routing_resources import host_partition
                 _, service_cpus = host_partition()
             elif self.config.science_placement_runtime == 'cpu300-4g-v1':

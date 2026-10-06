@@ -263,8 +263,18 @@ def main():
         if rank in config.placement_ranks:
             from tpu.science.placement_slots import chips_from_env
             os.environ['TPU_VISIBLE_CHIPS'] = ','.join(map(str, chips_from_env(config.client_env)))
+        ray_cpus, ray_memory = config.ray_cpus_per_host, []
+        if config.grading_pool and not config.ray_cpu_capacity:
+            # Publish this host's grading core pool, then give Ray exactly that
+            # many CPUs and GiB for grades on top of its service actors.
+            from tpu.science import core_pool
+            pool = core_pool.install(config.grading_service_cpus, config.grading_memory_gib)
+            ray_cpus = len(pool['grading']) + config.ray_service_cpus
+            ray_memory = [f"--memory={pool['memory_gib'] * 1024 ** 3}"]
+            emit(log, "grading_pool_installed", rank=rank, grading_cpus=len(pool['grading']),
+                 service_cpus=pool['service'], memory_gib=pool['memory_gib'], ray_cpus=ray_cpus)
         command = [str(runtime / "bin/ray"), "start", f"--node-ip-address={ips[rank]}",
-            f"--num-cpus={config.ray_cpus_per_host}", "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
+            f"--num-cpus={ray_cpus}", *ray_memory, "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
             f"--object-manager-port={p.object_manager}", f"--node-manager-port={p.node_manager}",
             f"--dashboard-agent-listen-port={p.dashboard_agent}", f"--dashboard-agent-grpc-port={p.dashboard_agent_grpc}",
             f"--runtime-env-agent-port={p.runtime_env}", f"--metrics-export-port={p.metrics}",

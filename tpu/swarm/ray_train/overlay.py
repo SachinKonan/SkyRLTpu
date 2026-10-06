@@ -84,7 +84,7 @@ BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
 # executor it dispatches; shipped whenever a profile declares grading families.
 GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.py',
                  'tpu/science/__init__.py', 'tpu/science/grading_transport.py', 'tpu/science/grading_dedup.py',
-                 'tpu/science/ac2_grade.py', 'tpu/science/ac2_runner.py', 'tpu/science/farm_resources.py',
+                 'tpu/science/ac2_grade.py', 'tpu/science/ac2_runner.py', 'tpu/science/farm_resources.py', 'tpu/science/core_pool.py',
                  'tpu/science/cgroup_limits.py', 'tpu/science/cpu_slots.py', 'tpu/science/worker.py',
                  'tpu/science/routing_resources.py', 'tpu/science/placement_resources.py',
                  'third_party/discover/ttt_discover/environments/sandbox_reward_evaluator.py',
@@ -100,7 +100,7 @@ WARMUP_FILES = REPEATED_KV_FILES | {"skyrl/backends/backward_warmup.py", "tpu/sw
 SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/rl/resume.py'} | {
     'tpu/science/' + name for name in (
         '__init__.py', 'bootstrap.py', 'seed_pool.py', 'training_env.py', 'feedback.py', 'training_setup.py', 'ray_cpu.py', 'worker.py',
-        'routing.py', 'routing_suite.py', 'routing_parallel.py', 'routing_resources.py', 'manifests/routing-v1.json', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',
+        'routing.py', 'routing_suite.py', 'routing_parallel.py', 'routing_resources.py', 'core_pool.py', 'manifests/routing-v1.json', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',
         'placement_ray.py', 'placement_resources.py', 'grading_dedup.py', 'placement_slots.py', 'placement_task.py', 'fast_proxy_deployment.py', 'challenge_seed_fast_proxy.py', 'challenge_contract.py',
         'seed_routing.py', 'challenge_seed.py', 'challenge_seed_jax.py', 'requirements-cpu.lock',
         'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt',

@@ -25,6 +25,7 @@ import uuid
 import ray
 
 from .farm_resources import acquire_ac2
+from . import core_pool
 
 STARTED_MARKER = 'started.json'
 
@@ -51,6 +52,17 @@ def unit_command(unit, root, request_path, result_path, cpus, memory_gib, second
             '--result', str(result_path), '--owner-pid', str(owner_pid), '--owner-start', owner_start]
 
 
+def admit(families, deadline_seconds):
+    """(slot, cpus, lease, kind): the host core pool when installed, else the AC2 partition."""
+    family = families['ac2']
+    try:
+        cpus, lease = core_pool.acquire(family['cpus'], family['memory_gib'], deadline_seconds=deadline_seconds)
+        return None, cpus, lease, core_pool.VERSION
+    except core_pool.PoolUnavailable:
+        slot, cpus, lease = acquire_ac2(families, deadline_seconds=deadline_seconds)
+        return slot, cpus, lease, 'farm-ac2-v1'
+
+
 def grade_ac2_admitted(spec, families, root=None):
     """Run one prepared AC2 candidate under the host partition's limits."""
     from .worker import process_identity
@@ -61,7 +73,7 @@ def grade_ac2_admitted(spec, families, root=None):
     eval_timeout = int(spec['eval_timeout_seconds'])
     queued = time.monotonic()
     try:
-        slot, cpus, lease = acquire_ac2(families, deadline_seconds=int(spec.get('admission_timeout_s') or eval_timeout))
+        slot, cpus, lease, admission = admit(families, int(spec.get('admission_timeout_s') or eval_timeout))
     except TimeoutError as exc:
         raise GradingInfrastructureFailure(f'admission timed out: {exc}') from exc
     waited = time.monotonic() - queued
@@ -112,7 +124,7 @@ def grade_ac2_admitted(spec, families, root=None):
         metrics = result.setdefault('metrics', {})
         metrics.update(admission_wait_seconds=waited, task_envelope_seconds=time.monotonic() - started,
                        hard_cpus=cpus, hard_memory_gib=family['memory_gib'], slot=slot, job_id=job_id,
-                       unit=unit if systemd else None, host=__import__('socket').gethostname(),
+                       unit=unit if systemd else None, host=__import__('socket').gethostname(), admission=admission,
                        grading_slots_per_host=family['slots_per_host'], ray_executor=True)
         if ray.is_initialized():  # get_runtime_context() would start a local Ray otherwise.
             try:
