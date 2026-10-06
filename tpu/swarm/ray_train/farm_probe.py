@@ -77,10 +77,12 @@ elif a == 'units':
 elif a == 'release':
     out['release'] = call('POST', '/release_lease', {'lease_id': P['lease_id']}, headers=H)
 elif a == 'generate':
-    s, r = call('POST', '/v1/completions', {'model': P['model'], 'prompt': 'Name three prime numbers.',
-                                            'max_tokens': 64, 'temperature': 0}, headers=H, timeout=900)
+    s, r = call('POST', '/v1/completions', {'model': P['model'], 'prompt': P.get('prompt', 'Name three prime numbers.'),
+                                            'max_tokens': P.get('max_tokens', 64), 'temperature': 0,
+                                            **({'logprobs': 1} if P.get('logprobs') else {})}, headers=H, timeout=900)
     choice = (r.get('choices') or [{}])[0] if isinstance(r, dict) else {}
     out['generate'] = (s, dict(text=str(choice.get('text', ''))[:200], finish=choice.get('finish_reason'),
+                               logprobs=(choice.get('logprobs') or {}).get('token_logprobs', [])[:8] if P.get('logprobs') else None,
                                usage=r.get('usage') if isinstance(r, dict) else None, detail=r if s != 200 else None))
 elif a == 'events':
     import glob, os

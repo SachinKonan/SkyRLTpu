@@ -196,7 +196,10 @@ def main():
                         raise SystemExit(f'submit refused {code}: {view}')
 
             # Serving still answers while every family grades.
-            generation = head(args, dict(action='generate', lease_id=lease, model=args.model))
+            # Gemma degenerates without <bos> and its chat template; trainers always send both.
+            prompt = ('<bos><start_of_turn>user\nName three prime numbers.<end_of_turn>\n<start_of_turn>model\n'
+                      if 'gemma' in args.model.lower() else 'Name three prime numbers.')
+            generation = head(args, dict(action='generate', lease_id=lease, model=args.model, prompt=prompt))
             report['generation'] = generation
             audits, deadline, views = [], time.monotonic() + args.deadline, {}
             ids = [e[2]['request_id'] for e in entries]
