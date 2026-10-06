@@ -47,6 +47,33 @@ def test_run_reservation_survives_phases_and_replaces_adapter(tmp_path):
     asyncio.run(run())
 
 
+def test_late_reservation_cannot_serve_base_weights_for_adapted_phase(tmp_path):
+    async def run():
+        farm = Farm()
+        farm.down.update(('farm1', 'farm2'))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(farm)) as http:
+            borrower = RunBorrower(config(tmp_path), http)
+            path = tmp_path / 'adapter.tar'
+            path.write_bytes(b'trained-weights')
+            try:
+                await borrower.begin('phase', 'local-adapter', path, expected_n=32)
+                await borrower.preparing
+                farm.down.clear()
+                assert (await borrower.reserve())['reserved']
+                assert not borrower.snapshot()['ready']
+                assert await borrower.generate({'model': 'local-adapter', 'n': 32}, 4, 4) is None
+                assert not any(p == '/v1/completions' for _, p in farm.requests)
+                await borrower.end('phase')
+                await borrower.begin('next-phase', 'local-adapter', path, expected_n=32)
+                await borrower.preparing
+                assert borrower.snapshot()['ready']
+                result = await borrower.generate({'model': 'local-adapter', 'n': 32}, 4, 4)
+                assert len(result['choices']) == 32
+            finally:
+                await borrower.close()
+    asyncio.run(run())
+
+
 def test_failed_publication_fences_remote_but_retains_local_path(tmp_path):
     async def run():
         farm = Farm()

@@ -144,7 +144,10 @@ def mount_cache(root, cap_gib, reserve_gib):
     if stat.f_blocks * stat.f_frsize < cap_gib * GIB:
         # A mount left by an earlier run keeps that run's capacity; tmpfs
         # resizes in place, so grow it to this profile's budget (data is kept).
-        if mem["MemAvailable"] < (cap_gib + reserve_gib) * GIB - stat.f_bfree * stat.f_frsize:
+        # MemAvailable already excludes occupied tmpfs pages. Budget only
+        # the additional pages needed to fill the resized cache, plus reserve.
+        used = (stat.f_blocks - stat.f_bfree) * stat.f_frsize
+        if mem["MemAvailable"] < (cap_gib + reserve_gib) * GIB - used:
             raise RuntimeError("not enough available memory to grow the RAM cache")
         subprocess.run(["sudo", "-n", "mount", "-o", f"remount,size={cap_gib}G", str(root)],
                        check=True, timeout=30)

@@ -30,6 +30,9 @@ class RunBorrower(Borrower):
 
     def _eligible(self, lease):
         return (self.phase is not None and self.preparing is None
+                # A reservation acquired during an adapted phase still serves
+                # base weights until _prepare publishes and attests the adapter.
+                and (self.model == self.config.model or lease.digest is not None)
                 and super()._eligible(lease))
 
     def snapshot(self):

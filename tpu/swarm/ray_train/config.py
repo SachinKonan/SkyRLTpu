@@ -346,6 +346,8 @@ class Config:
     max_restarts_on_errors: int = 0
     checkpoint_resume: bool = False
     resume_min_checkpoint_step: int = 0
+    # Explicit host scheduler capacity; zero preserves workload-specific defaults.
+    ray_cpu_capacity: int = 0
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
     inference: Inference = field(default_factory=Inference)
@@ -387,6 +389,8 @@ class Config:
 
     @property
     def ray_cpus_per_host(self):
+        if self.ray_cpu_capacity:
+            return self.ray_cpu_capacity
         # Leave scheduler capacity for controller/Serve actors as well as graders.
         if self.science_routing_evaluator == 'parallel-v2':
             return 10 * self.science_routing_slots_per_host + 8
@@ -456,6 +460,8 @@ class Config:
 
     def validate(self):
         from urllib.parse import urlsplit
+        if type(self.ray_cpu_capacity) is not int or self.ray_cpu_capacity < 0:
+            raise ValueError('ray_cpu_capacity must be a nonnegative integer')
         if type(self.inference.external_pool_updates) is not bool:
             raise ValueError('external_pool_updates must be boolean')
         pool = self.inference.external_pool_urls

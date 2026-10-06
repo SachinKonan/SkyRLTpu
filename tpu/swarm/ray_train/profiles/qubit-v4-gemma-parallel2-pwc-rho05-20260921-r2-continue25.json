@@ -5,7 +5,7 @@
   "bucket": "gs://sk7524-tinker-tpu-us-central2",
   "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
   "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
-  "root": "~/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2",
+  "root": "~/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2-continue25",
   "model_preset": "gemma4-31b",
   "training_smoke": false,
   "trainer": {
@@ -80,14 +80,14 @@
     "TTD_PROBLEM_TYPE": "routing",
     "GROUPS_PER_BATCH": "16",
     "GROUP_SIZE": "32",
-    "NUM_EPOCHS": "10",
+    "NUM_EPOCHS": "25",
     "TTD_ADV_ESTIMATOR": "piecewise_valid_entropic_centered_adaptive",
     "TTD_LOSS_FN": "importance_sampling",
     "TTD_WARMUP_FB": "0",
     "NUM_CPUS_PER_TASK": "4",
     "SAVE_EVERY": "1",
     "TTD_REJECT_TRUNCATED": "1",
-    "TTD_SICK_MARKER": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ENGINE-SICK",
+    "TTD_SICK_MARKER": "/home/gcpuser/.cache/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2-continue25/runs/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/ENGINE-SICK",
     "TTD_FLATLINE_STOP": "0",
     "TTD_MIN_THINK_TOKENS": "0",
     "TTD_M0_LORA_SEED": "1",
@@ -128,6 +128,6 @@
   "bootstrap_target_valid": 0,
   "bootstrap_group_size": 16,
   "bootstrap_max_groups": 32,
-  "resume_min_checkpoint_step": 0,
+  "resume_min_checkpoint_step": 10,
   "science_routing_evaluator": "parallel-v2"
 }

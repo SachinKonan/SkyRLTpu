@@ -1,5 +1,7 @@
 # Qubit PWC continuation to 15 total steps
 
+The target was subsequently extended to **25 total steps** for all three models. See [the September 23 continuation handoff](QUBIT_CONTINUE_25_STEPS_2026-09-23.md). The old deferred Gemma 15-step launcher has been superseded; the historical evidence below is retained.
+
 The user authorized five additional steps for all three models on September 22. Qwen and Muse had finished ten steps; Gemma was still completing its original ten-step run. Each continuation targets 15 total optimizer steps and requires a saved checkpoint/search snapshot at step 10 or later.
 
 | Model | Original job | Continuation | Placement |

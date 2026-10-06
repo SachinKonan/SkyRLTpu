@@ -1,0 +1,73 @@
+case,topology,SABRE,LightSABRE,Hyra_accounted_swaps,Hyra_evidence
+4gt13_92_q20,Q20,0,0,0,cached SABRE fallback; circuit not exported
+4gt13_92_willow,Willow,15,12,10,independently verified exported circuit
+4gt13_92_heron_fez,Heron,15,15,13,independently verified exported circuit
+4mod5-v1_22_q20,Q20,0,0,0,cached SABRE fallback; circuit not exported
+4mod5-v1_22_willow,Willow,5,4,3,independently verified exported circuit
+4mod5-v1_22_heron_fez,Heron,4,4,3,independently verified exported circuit
+9symml_195_q20,Q20,5756,5283,3110,independently verified exported circuit
+9symml_195_willow,Willow,8907,8686,7459,independently verified exported circuit
+9symml_195_heron_fez,Heron,11762,10993,9709,independently verified exported circuit
+adr4_197_q20,Q20,538,334,263,independently verified exported circuit
+adr4_197_willow,Willow,901,836,729,independently verified exported circuit
+adr4_197_heron_fez,Heron,1239,1050,961,independently verified exported circuit
+alu-v0_27_q20,Q20,1,1,1,cached SABRE fallback; circuit not exported
+alu-v0_27_willow,Willow,7,6,5,independently verified exported circuit
+alu-v0_27_heron_fez,Heron,12,8,7,independently verified exported circuit
+co14_215_q20,Q20,2994,2548,1798,independently verified exported circuit
+co14_215_willow,Willow,4713,4521,4110,independently verified exported circuit
+co14_215_heron_fez,Heron,5971,5268,5026,independently verified exported circuit
+cycle10_2_110_q20,Q20,874,747,448,independently verified exported circuit
+cycle10_2_110_willow,Willow,1564,1457,1278,independently verified exported circuit
+cycle10_2_110_heron_fez,Heron,1780,1703,1673,independently verified exported circuit
+decod24-v2_43_q20,Q20,0,0,0,cached SABRE fallback; circuit not exported
+decod24-v2_43_willow,Willow,12,11,9,independently verified exported circuit
+decod24-v2_43_heron_fez,Heron,12,11,9,independently verified exported circuit
+ising_model_10_q20,Q20,0,0,0,cached SABRE fallback; circuit not exported
+ising_model_10_willow,Willow,0,0,0,cached SABRE fallback; circuit not exported
+ising_model_10_heron_fez,Heron,0,0,0,cached SABRE fallback; circuit not exported
+ising_model_13_q20,Q20,0,0,0,cached SABRE fallback; circuit not exported
+ising_model_13_willow,Willow,9,0,0,independently verified exported circuit
+ising_model_13_heron_fez,Heron,9,0,0,independently verified exported circuit
+ising_model_16_q20,Q20,0,0,0,cached SABRE fallback; circuit not exported
+ising_model_16_willow,Willow,5,0,0,independently verified exported circuit
+ising_model_16_heron_fez,Heron,0,0,0,cached SABRE fallback; circuit not exported
+misex1_241_q20,Q20,507,352,183,independently verified exported circuit
+misex1_241_willow,Willow,1273,1129,966,independently verified exported circuit
+misex1_241_heron_fez,Heron,1515,1346,1285,independently verified exported circuit
+mod5mils_65_q20,Q20,0,1,0,cached SABRE fallback; circuit not exported
+mod5mils_65_willow,Willow,7,6,6,independently verified exported circuit
+mod5mils_65_heron_fez,Heron,9,7,6,independently verified exported circuit
+qft_10_q20,Q20,18,12,9,independently verified exported circuit
+qft_10_willow,Willow,31,19,15,independently verified exported circuit
+qft_10_heron_fez,Heron,46,32,29,independently verified exported circuit
+qft_16_q20,Q20,62,44,36,independently verified exported circuit
+qft_16_willow,Willow,87,65,57,independently verified exported circuit
+qft_16_heron_fez,Heron,185,98,91,independently verified exported circuit
+radd_250_q20,Q20,425,344,252,independently verified exported circuit
+radd_250_willow,Willow,851,783,673,independently verified exported circuit
+radd_250_heron_fez,Heron,1069,934,867,independently verified exported circuit
+rd73_252_q20,Q20,711,660,437,independently verified exported circuit
+rd73_252_willow,Willow,1327,1282,1096,independently verified exported circuit
+rd73_252_heron_fez,Heron,1785,1580,1448,independently verified exported circuit
+rd84_142_q20,Q20,35,34,19,independently verified exported circuit
+rd84_142_willow,Willow,93,70,63,independently verified exported circuit
+rd84_142_heron_fez,Heron,103,93,76,independently verified exported circuit
+rd84_253_q20,Q20,2049,1833,1353,independently verified exported circuit
+rd84_253_willow,Willow,3517,3381,2926,independently verified exported circuit
+rd84_253_heron_fez,Heron,4733,4326,4003,independently verified exported circuit
+sqn_258_q20,Q20,1448,1215,832,independently verified exported circuit
+sqn_258_willow,Willow,2512,2441,2105,independently verified exported circuit
+sqn_258_heron_fez,Heron,3458,3124,2738,independently verified exported circuit
+square_root_7_q20,Q20,866,695,338,independently verified exported circuit
+square_root_7_willow,Willow,1882,1779,1565,independently verified exported circuit
+square_root_7_heron_fez,Heron,2632,2322,2112,independently verified exported circuit
+sym6_145_q20,Q20,424,351,226,independently verified exported circuit
+sym6_145_willow,Willow,938,896,781,independently verified exported circuit
+sym6_145_heron_fez,Heron,1057,1024,935,independently verified exported circuit
+sym9_193_q20,Q20,5551,5283,3110,independently verified exported circuit
+sym9_193_willow,Willow,8907,8686,7480,independently verified exported circuit
+sym9_193_heron_fez,Heron,11762,10993,9714,independently verified exported circuit
+z4_268_q20,Q20,455,326,208,independently verified exported circuit
+z4_268_willow,Willow,789,732,630,independently verified exported circuit
+z4_268_heron_fez,Heron,1028,896,829,independently verified exported circuit
