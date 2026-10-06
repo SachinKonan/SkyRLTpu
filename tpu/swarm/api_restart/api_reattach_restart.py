@@ -90,72 +90,70 @@ def stop():
     for g in ctl_pgids:
         members = [p for p in base.mine() if base._pgid(p) == g]
         paused += [{'pid': p.pid, 'created_at': p.create_time(), 'pgid': g} for p in members]
-    _signal_groups(ctl_pgids, signal.SIGSTOP)
-    log(f'paused {len(ctl_pgids)} controller groups (5 pool + {len(jcs)} jobs; {len(paused)} procs)')
-    api_procs = [{'pid': p.pid, 'created_at': p.create_time(), 'ppid': p.ppid()}
-                 for p in tree if p.is_running()]
-    save_state(paused=paused, api_processes=api_procs)
+    try:
+        _signal_groups(ctl_pgids, signal.SIGSTOP)
+        log(f'paused {len(ctl_pgids)} controller groups (5 pool + {len(jcs)} jobs; {len(paused)} procs)')
+        api_procs = [{'pid': p.pid, 'created_at': p.create_time(), 'ppid': p.ppid()}
+                     for p in tree if p.is_running()]
+        save_state(paused=paused, api_processes=api_procs)
 
-    def thaw(reason):
         for p in tree:
             try:
-                p.send_signal(signal.SIGCONT)
+                p.send_signal(signal.SIGSTOP)
             except psutil.NoSuchProcess:
                 pass
-        _signal_groups(ctl_pgids, signal.SIGCONT)
-        raise SystemExit(f'ABORTED, everything thawed, nothing changed: {reason}')
-
-    for p in tree:
+        time.sleep(1)
+        log(f'froze API tree ({len(tree)} procs)')
+        holder = None
+        for p in tree:
+            db, wal = _deleted_fds(p.pid)
+            if db and wal:
+                holder = (p.pid, db, wal)
+                break
+        if holder is None:
+            raise base.Abort('no API process holds the deleted requests.db + wal')
+        rec = audit() / 'recovered'
+        rec.mkdir()
+        pid, db, wal = holder
+        shutil.copyfile(f'/proc/{pid}/fd/{db}', rec / 'requests.db')
+        shutil.copyfile(f'/proc/{pid}/fd/{wal}', rec / 'requests.db-wal')
+        log(f'copied deleted db+wal from pid {pid} '
+            f'({(rec/"requests.db").stat().st_size/1e9:.2f} GB + '
+            f'{(rec/"requests.db-wal").stat().st_size/1e6:.1f} MB wal)')
+        # Validate on a scratch copy so the recovered pair stays byte-exact.
+        chk = audit() / 'recovered-check'
+        shutil.copytree(rec, chk)
         try:
-            p.send_signal(signal.SIGSTOP)
-        except psutil.NoSuchProcess:
-            pass
-    time.sleep(1)
-    log(f'froze API tree ({len(tree)} procs)')
-    holder = None
-    for p in tree:
-        db, wal = _deleted_fds(p.pid)
-        if db and wal:
-            holder = (p.pid, db, wal)
-            break
-    if holder is None:
-        thaw('no API process holds the deleted requests.db + wal')
-    rec = audit() / 'recovered'
-    rec.mkdir()
-    pid, db, wal = holder
-    shutil.copyfile(f'/proc/{pid}/fd/{db}', rec / 'requests.db')
-    shutil.copyfile(f'/proc/{pid}/fd/{wal}', rec / 'requests.db-wal')
-    log(f'copied deleted db+wal from pid {pid} '
-        f'({(rec/"requests.db").stat().st_size/1e9:.2f} GB + '
-        f'{(rec/"requests.db-wal").stat().st_size/1e6:.1f} MB wal)')
-    # Validate on a scratch copy so the recovered pair stays byte-exact.
-    chk = audit() / 'recovered-check'
-    shutil.copytree(rec, chk)
-    try:
-        c = sqlite3.connect(str(chk / 'requests.db'), timeout=30)
-        integ = c.execute('pragma integrity_check').fetchone()[0]
-        rows = c.execute('select count(*) from requests').fetchone()[0]
-        newest = c.execute('select max(created_at) from requests').fetchone()[0]
-        exec_running = c.execute("select count(*) from requests where name='sky.exec' "
-                                 "and status in ('RUNNING','WAITING')").fetchone()[0]
-        bad = [r for r in c.execute(
-            "select name from requests where status in ('PENDING','RUNNING','WAITING') "
-            "and user_id != 'skypilot-system' and name not in ('sky.launch','sky.exec')")
-               if r[0] not in OK_STALE]
-        c.close()
-    except Exception as e:  # pylint: disable=broad-except
-        thaw(f'recovered copy unreadable: {e}')
-    log(f'recovered copy: integrity={integ} rows={rows} newest {time.time()-newest:.0f}s old, '
-        f'running exec={exec_running}')
-    if integ != 'ok':
-        thaw('integrity check failed')
-    if time.time() - newest > 600:
-        thaw('recovered copy is stale (newest row > 10 min old)')
-    if exec_running:
-        thaw(f'{exec_running} sky.exec RUNNING/WAITING; replaying could double-dispatch')
-    if bad:
-        thaw(f'unexpected active request types {sorted(set(r[0] for r in bad))}')
-    shutil.rmtree(chk)
+            c = sqlite3.connect(str(chk / 'requests.db'), timeout=30)
+            integ = c.execute('pragma integrity_check').fetchone()[0]
+            rows = c.execute('select count(*) from requests').fetchone()[0]
+            newest = c.execute('select max(created_at) from requests').fetchone()[0]
+            exec_running = c.execute("select count(*) from requests where name='sky.exec' "
+                                     "and status in ('RUNNING','WAITING')").fetchone()[0]
+            bad = [r for r in c.execute(
+                "select name from requests where status in ('PENDING','RUNNING','WAITING') "
+                "and user_id != 'skypilot-system' and name not in ('sky.launch','sky.exec')")
+                   if r[0] not in OK_STALE]
+            c.close()
+        except sqlite3.Error as e:
+            raise base.Abort(f'recovered copy unreadable: {e}')
+        log(f'recovered copy: integrity={integ} rows={rows} newest {time.time()-newest:.0f}s old, '
+            f'running exec={exec_running}')
+        if integ != 'ok':
+            raise base.Abort('integrity check failed')
+        if time.time() - newest > 600:
+            raise base.Abort('recovered copy is stale (newest row > 10 min old)')
+        if exec_running:
+            raise base.Abort(f'{exec_running} sky.exec RUNNING/WAITING; replaying could double-dispatch')
+        if bad:
+            raise base.Abort(f'unexpected active request types {sorted(set(r[0] for r in bad))}')
+        shutil.rmtree(chk)
+    except BaseException as e:
+        # Any failure while the API and controllers are suspended (a failed
+        # check, full disk, interrupted copy, existing recovery dir, ^C)
+        # resumes everything before exiting; nothing has been killed yet.
+        base.thaw_all(tree, ctl_pgids)
+        raise SystemExit(f'ABORTED, everything thawed, nothing changed: {e!r}') from e
     for rec_ in api_procs:
         try:
             psutil.Process(rec_['pid']).kill()
