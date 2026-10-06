@@ -56,8 +56,14 @@ print(json.dumps(dict(host=socket.gethostname(), pool=json.loads(pool.read_text(
 def ssh(args, host, script, params=None, timeout=None):
     config = Path(args.ssh_dir) / args.cluster
     text = ('PARAMS = ' + repr(params) + '\n' if params is not None else '') + script
-    proc = subprocess.run(['ssh', '-F', str(config), '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', host, 'python3 -'],
-                          input=text, text=True, capture_output=True, timeout=timeout or args.timeout)
+    for attempt in range(6):
+        # Connection-level failures (255: banner timeouts, resets) are retried;
+        # the remote calls are idempotent (submit/result/renew by id or lease).
+        proc = subprocess.run(['ssh', '-F', str(config), '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', host, 'python3 -'],
+                              input=text, text=True, capture_output=True, timeout=timeout or args.timeout)
+        if proc.returncode != 255:
+            break
+        time.sleep(10 * (attempt + 1))
     if proc.returncode:
         raise RuntimeError(f'ssh {host} failed ({proc.returncode}): {proc.stderr[-800:]}')
     return json.loads(proc.stdout)
