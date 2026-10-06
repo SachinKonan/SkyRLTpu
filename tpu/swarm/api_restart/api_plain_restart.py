@@ -50,29 +50,28 @@ def stop():
     assert os.getpgid(root.pid) not in groups
     paused = [{'pid': p.pid, 'created_at': p.create_time(), 'pgid': g}
               for g in groups for p in base.mine() if base._pgid(p) == g]
-    ra._signal_groups(groups, signal.SIGSTOP)
-    log(f'paused {len(groups)} controller groups ({len(paused)} procs)')
-    api_procs = [{'pid': p.pid, 'created_at': p.create_time(), 'ppid': p.ppid()}
-                 for p in tree if p.is_running()]
-    save_state(paused=paused, api_processes=api_procs)
-    for p in tree:
-        try:
-            p.send_signal(signal.SIGSTOP)
-        except psutil.NoSuchProcess:
-            pass
-    time.sleep(1)
-    c = sqlite3.connect(f'file:{base.REQ_DB}?mode=ro', uri=True, timeout=30)
-    execs = c.execute("select count(*) from requests where name='sky.exec' and "
-                      "status in ('RUNNING','WAITING')").fetchone()[0]
-    c.close()
-    if execs:
+    try:
+        ra._signal_groups(groups, signal.SIGSTOP)
+        log(f'paused {len(groups)} controller groups ({len(paused)} procs)')
+        api_procs = [{'pid': p.pid, 'created_at': p.create_time(), 'ppid': p.ppid()}
+                     for p in tree if p.is_running()]
+        save_state(paused=paused, api_processes=api_procs)
         for p in tree:
             try:
-                p.send_signal(signal.SIGCONT)
+                p.send_signal(signal.SIGSTOP)
             except psutil.NoSuchProcess:
                 pass
-        ra._signal_groups(groups, signal.SIGCONT)
-        raise SystemExit(f'ABORTED, thawed: {execs} sky.exec in flight')
+        time.sleep(1)
+        c = sqlite3.connect(f'file:{base.REQ_DB}?mode=ro', uri=True, timeout=30)
+        execs = c.execute("select count(*) from requests where name='sky.exec' and "
+                          "status in ('RUNNING','WAITING')").fetchone()[0]
+        c.close()
+        if execs:
+            raise base.Abort(f'{execs} sky.exec in flight')
+    except BaseException as e:
+        # Resume everything if anything fails before the API is killed.
+        base.thaw_all(tree, groups)
+        raise SystemExit(f'ABORTED, thawed, nothing changed: {e!r}') from e
     for r in api_procs:
         try:
             psutil.Process(r['pid']).kill()

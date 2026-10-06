@@ -28,6 +28,17 @@ def pending_launches(home):
             "THEN 1 ELSE 0 END, created_at").fetchall()
 
 
+def is_skypilot_api_cmdline(cmdline):
+    """True for the API as started by tpu/swarm/start_skypilot_bounded.sh.
+
+    That launcher runs either `-m sky.server.server` or, for a preserving
+    restart, tpu/swarm/skypilot_preserving_restart.py, which runpy-executes
+    sky.server.server without changing argv.
+    """
+    return any(arg == 'sky.server.server' or
+               arg.endswith('skypilot_preserving_restart.py') for arg in cmdline)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true')
@@ -43,7 +54,7 @@ def main():
 
     api = psutil.Process(args.api_pid)
     assert api.uids().real == os.getuid(), 'API belongs to another user'
-    assert 'sky.server.server' in api.cmdline(), 'Not a SkyPilot API process'
+    assert is_skypilot_api_cmdline(api.cmdline()), 'Not a SkyPilot API process'
     assert '--deploy' in api.cmdline(), 'Requires a shared multiprocessing queue'
     assert '--port=46580' in api.cmdline(), 'Unexpected API port'
     assert os.environ['HOME'] == api.environ()['HOME'], 'Durable HOME mismatch'

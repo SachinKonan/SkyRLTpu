@@ -102,6 +102,24 @@ def jobs_controllers():
             '-m sky.jobs.controller' in cmdline(p).replace('-msky', '-m sky')]
 
 
+class Abort(Exception):
+    """A pre-kill check failed; nothing has been killed yet."""
+
+
+def thaw_all(procs, pgids):
+    """Best-effort SIGCONT of paused processes and groups; never raises."""
+    for proc in procs:
+        try:
+            proc.send_signal(signal.SIGCONT)
+        except psutil.Error:
+            pass
+    for pgid in pgids:
+        try:
+            os.killpg(pgid, signal.SIGCONT)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def health():
     r = subprocess.run(['curl', '-s', '-o', '/dev/null', '-w', '%{http_code}',
                         '--max-time', '5', 'http://127.0.0.1:46580/api/health'],
@@ -205,36 +223,46 @@ def stop():
     pgids = sorted({os.getpgid(p.pid) for p in pcs})
     assert os.getpgid(root.pid) not in pgids
     paused = []
-    for g in pgids:
-        members = [p for p in mine() if _pgid(p) == g]
-        os.killpg(g, signal.SIGSTOP)
-        paused += [{'pid': p.pid, 'created_at': p.create_time(), 'pgid': g} for p in members]
-    log(f'paused {len(pgids)} pool controller groups ({len(paused)} procs)')
-    save_state(paused=paused, api_processes=api_procs)
-    killed_jc = []
-    for p in jcs:
-        g = os.getpgid(p.pid)
-        assert g != os.getpgid(root.pid) and g not in pgids
-        kids = p.children(recursive=True)
-        for q in [p] + kids:
+    try:
+        for g in pgids:
+            members = [p for p in mine() if _pgid(p) == g]
+            os.killpg(g, signal.SIGSTOP)
+            paused += [{'pid': p.pid, 'created_at': p.create_time(), 'pgid': g} for p in members]
+        log(f'paused {len(pgids)} pool controller groups ({len(paused)} procs)')
+        save_state(paused=paused, api_processes=api_procs)
+        killed_jc = []
+        for p in jcs:
+            g = os.getpgid(p.pid)
+            assert g != os.getpgid(root.pid) and g not in pgids
+            kids = p.children(recursive=True)
+            for q in [p] + kids:
+                try:
+                    q.kill()
+                    killed_jc.append(q.pid)
+                except psutil.NoSuchProcess:
+                    pass
+        log(f'killed {len(jcs)} idle jobs controllers ({len(killed_jc)} procs)')
+        for rec in api_procs:
             try:
-                q.kill()
-                killed_jc.append(q.pid)
+                psutil.Process(rec['pid']).kill()
             except psutil.NoSuchProcess:
                 pass
-    log(f'killed {len(jcs)} idle jobs controllers ({len(killed_jc)} procs)')
-    for rec in api_procs:
-        try:
-            psutil.Process(rec['pid']).kill()
-        except psutil.NoSuchProcess:
-            pass
-    for _ in range(30):
+        for _ in range(30):
+            alive = [r['pid'] for r in api_procs if _alive(r)]
+            if not alive and health() != '200':
+                break
+            time.sleep(1)
         alive = [r['pid'] for r in api_procs if _alive(r)]
-        if not alive and health() != '200':
-            break
-        time.sleep(1)
-    alive = [r['pid'] for r in api_procs if _alive(r)]
-    assert not alive, f'API processes still alive: {alive}'
+        assert not alive, f'API processes still alive: {alive}'
+    except BaseException as e:
+        # If the API is still up, nothing is lost by aborting: resume the pool
+        # controllers. (Killed jobs controllers were idle; the API respawns
+        # them.) If the API is already dead, keep them paused so the restart
+        # can continue with `db` and `start`.
+        if any(_alive(r) for r in api_procs) or health() == '200':
+            thaw_all([], pgids)
+            raise SystemExit(f'ABORTED, controllers thawed: {e!r}') from e
+        raise
     log(f'API tree killed ({len(api_procs)} procs); health now={health() or "down"}')
     save_state(stopped_at=time.time(), killed_jobs_controllers=killed_jc)
 
