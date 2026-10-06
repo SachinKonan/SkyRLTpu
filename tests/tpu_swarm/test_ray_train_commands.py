@@ -421,7 +421,7 @@ def test_preset_values_stay_overridable_and_validated():
     with pytest.raises(ValueError, match="client_member_spec"):
         v5p_config(client_member_spec="Other/Model:qwen3:qwen")
     assert inference_urls(v5p_config(inference=dict(routing="ingress")), IPS[0], ENGINE_IPS) == "http://10.0.0.1:24800"
-    assert set(PRESETS) == {"qwen3.5-27b", "gemma4-31b", "muse-glimmer-30b", "gpt-oss-120b"}
+    assert set(PRESETS) == {"qwen3.5-27b", "qwen3.8-27b", "gemma4-31b", "muse-glimmer-30b", "gpt-oss-120b"}
 
 
 def test_trainer_env_reaches_only_the_trainer_process():

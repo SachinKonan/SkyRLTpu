@@ -64,6 +64,7 @@ SMOKE_FILES = (
 )
 
 PROBLEM_PROMPT_FILES = {
+    "erdos_min_overlap": "third_party/discover/examples/erdos_min_overlap/env.py",
     "ac_inequalities": "third_party/discover/examples/ac_inequalities/env.py",
     "circle_packing": "third_party/discover/examples/circle_packing/env.py",
 }
@@ -132,7 +133,7 @@ def manifest(repo, config=None):
         names.update(SCIENCE_FILES | set(SMOKE_FILES))
     if config is not None and (config.grading_families or config.grading_farm_transport):
         names.update(name for name in GRADING_FILES if (Path(repo) / name).is_file())
-    native_kv_heads = {'qwen3.5-27b': 4, 'muse-glimmer-30b': 2}
+    native_kv_heads = {'qwen3.5-27b': 4, 'qwen3.8-27b': 4, 'muse-glimmer-30b': 2}
     if (config is not None and not config.inference_only
             and (config.attention_replay
                  or config.science_task and config.model_preset == "gemma4-31b"
@@ -141,7 +142,8 @@ def manifest(repo, config=None):
         # Gemma science runs need the same distributed-input backend as their
         # validated replay, even though they do not repeat native KV heads.
         names.update(REPEATED_KV_FILES)
-    if config is not None and config.has_problem_prompt_overlay:
+    if config is not None and (config.has_problem_prompt_overlay or
+            config.bootstrap_max_drafts and config.has_math_environment):
         names.add(PROBLEM_PROMPT_FILES[config.client_env["TTD_ENV"]])
     if config is not None and config.has_adaptive_pwc_overlay:
         names.add(ADAPTIVE_PWC_FILE)

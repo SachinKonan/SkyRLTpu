@@ -16,6 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 TASKS = {
+    'erdos_min_overlap': ('examples.erdos_min_overlap.env', 'ErdosMinOverlapEnv'),
     'ac_inequalities': ('examples.ac_inequalities.env', 'AutoCorrInequalityEnv'),
     'circle_packing': ('examples.circle_packing.env', 'CirclePackingEnv'),
     'science_routing': ('tpu.science.training_env', 'RoutingTrainingEnv'),
@@ -80,6 +81,8 @@ def selected_states(rows, limit):
 
 
 def outstanding_limit(config, valid_count):
+    if getattr(config, 'bootstrap_fixed_budget', False):
+        return config.bootstrap_max_groups
     remaining = max(0, config.bootstrap_target_valid - valid_count)
     return min(config.bootstrap_max_groups, math.ceil(remaining / config.bootstrap_group_size))
 
@@ -153,7 +156,8 @@ async def collect(config, folder, generate, grade):
             for task in done:
                 index, batch = await task
                 rows.extend(batch); completed.add(index); del pending[index]
-            # Existing groups are allowed to finish; no fresh groups after target.
+            # Target mode drains in-flight groups. Fixed-budget mode grades the
+            # full budget before ranking, even if early groups fill the pool.
         return list({r['id']: r for r in rows}.values()), len(launched) * config.bootstrap_group_size
     finally:
         for task in pending.values(): task.cancel()
@@ -180,7 +184,8 @@ async def run(config, snapshot, head):
     root_path = folder / 'root.json'
     if root_path.exists(): root = cls.state_type.from_dict(read(root_path))
     else:
-        root = cls.create_initial_state(config.client_env['TTD_PROBLEM_TYPE'])
+        root = cls.create_initial_state(config.client_env['TTD_PROBLEM_TYPE'],
+            **({'seed': config.bootstrap_seed} if config.client_env['TTD_ENV'] == 'erdos_min_overlap' else {}))
         save(root_path, root.to_dict())
     env = make_environment(config, root, renderer, folder)
     question = env.get_question()
@@ -203,7 +208,11 @@ async def run(config, snapshot, head):
     family = config.client_env['TTD_ANSWER_MODEL_FAMILY']
     async with httpx.AsyncClient(timeout=config.inference.request_timeout) as http:
         async def generate(index):
-            response = await http.post(f'http://{head}:{config.ports.inference}/v1/completions', json=request)
+            group_request = dict(request)
+            if config.bootstrap_seed is not None:
+                # Independent, stable seeds across groups and journal retries.
+                group_request['seed'] = (config.bootstrap_seed + index * 1000003) % (2**31)
+            response = await http.post(f'http://{head}:{config.ports.inference}/v1/completions', json=group_request)
             response.raise_for_status()
             choices = response.json()['choices']
             for choice in choices: check_choice(choice, request)
@@ -229,7 +238,13 @@ async def run(config, snapshot, head):
     selected = selected_states(rows, config.bootstrap_target_valid)
     summary = dict(contract_sha256=fingerprint, total=len(rows), drafted=drafted,
         valid=sum(r['correctness'] == 1 for r in rows), retained=len(selected), layers=1,
-        optimizer_steps=0, stop_reason='valid_target' if len(selected) >= config.bootstrap_target_valid else 'draft_cap')
+        optimizer_steps=0, stop_reason='fixed_budget' if config.bootstrap_fixed_budget else
+        ('valid_target' if len(selected) >= config.bootstrap_target_valid else 'draft_cap'))
+    if config.bootstrap_fixed_budget and (drafted != config.bootstrap_max_drafts or len(rows) != drafted):
+        raise RuntimeError('fixed bootstrap budget was not fully generated and graded')
+    if config.bootstrap_require_full_pool and len(selected) < config.bootstrap_target_valid:
+        save(folder / 'insufficient-valid-seeds.json', summary)
+        raise RuntimeError(f'bootstrap retained {len(selected)}/{config.bootstrap_target_valid} unique valid seeds; refusing optimizer startup')
     if not selected:
         save(folder / 'no-valid-seeds.json', summary)
         raise RuntimeError('bootstrap produced no valid seeds; refusing optimizer startup')
@@ -257,7 +272,8 @@ def main():
     config.validate()
     if args.check_only:
         cls = environment_type(config)
-        root = cls.create_initial_state(config.client_env['TTD_PROBLEM_TYPE'])
+        root = cls.create_initial_state(config.client_env['TTD_PROBLEM_TYPE'],
+            **({'seed': config.bootstrap_seed} if config.client_env['TTD_ENV'] == 'erdos_min_overlap' else {}))
         e = make_environment(config, root, None, Path('/tmp/bootstrap-import-check'))
         if not e.get_question().strip(): raise RuntimeError('empty bootstrap prompt')
         print(json.dumps(dict(event='bootstrap_import_check_passed', layers=config.bootstrap_layers)))
