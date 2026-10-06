@@ -164,7 +164,10 @@ def main():
     report = dict(cluster=args.cluster, started=time.time(), checks={})
 
     owner = f'grading-matrix-{int(time.time())}'
-    ack = head(args, dict(action='lease', owner=owner, ttl=600))['acquire']
+    # Farms admit only a lessee that names their serving runtime's attestation.
+    sha = (head(args, dict(action='status'))['status'][1].get('capabilities') or {}).get('compatibility_sha256')
+    report['compatibility_sha256'] = sha
+    ack = head(args, dict(action='lease', owner=owner, ttl=600, sha=sha))['acquire']
     if ack[0] != 200:
         raise SystemExit(f'lease refused: {ack}')
     lease = ack[1]['lease_id']
@@ -193,7 +196,7 @@ def main():
             ids = [e[2]['request_id'] for e in entries]
             next_audit = time.monotonic() + 45
             while time.monotonic() < deadline:
-                head(args, dict(action='renew', owner=owner, lease_id=lease, ttl=600))
+                head(args, dict(action='renew', owner=owner, lease_id=lease, ttl=600, sha=sha))
                 for start in range(0, len(ids), 32):
                     for code, view in head(args, dict(action='result', lease_id=lease, ids=ids[start:start + 32]))['result']:
                         if code == 200:

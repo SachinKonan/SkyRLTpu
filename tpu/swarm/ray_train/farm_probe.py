@@ -59,7 +59,7 @@ elif a == 'lease':
                                                     'compatibility_sha256': P.get('sha')})
 elif a == 'renew':
     out['renew'] = call('POST', '/acquire_lease', {'owner_run': P['owner'], 'ttl_seconds': P.get('ttl', 300),
-                                                  'lease_id': P['lease_id']})
+                                                  'lease_id': P['lease_id'], 'compatibility_sha256': P.get('sha')})
 elif a == 'capacity':
     out['capacity'] = call('GET', '/skyrl/v1/grading/capacity', headers=H)
 elif a == 'submit':

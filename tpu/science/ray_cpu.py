@@ -56,6 +56,9 @@ def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, rou
         with lease:
             result=_grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite, resource_contract, cpus)
             result['metrics'].update(admission_wait_seconds=waited, admission=admission)
+            verdict = Path(result['metrics'].get('artifact_directory', '')) / 'verdict.json'
+            if verdict.is_file():  # keep the on-disk verdict in step with the returned one
+                verdict.write_text(json.dumps(result, allow_nan=False, indent=2) + '\n')
             return result
     if task not in ('portfolio','portfolio_v2','routing'):raise ValueError('unsupported science task')
     from .routing_suite import validate_suite
