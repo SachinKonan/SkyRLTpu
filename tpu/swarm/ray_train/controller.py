@@ -1,0 +1,718 @@
+"""Cache barrier -> concurrent train/serve startup -> GRPO client -> owned cleanup."""
+from __future__ import annotations
+
+import argparse
+import os
+from pathlib import Path
+import signal
+import threading
+import time
+
+import httpx
+import ray
+from ray import serve
+from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
+
+from tpu.swarm.select_v4_32_topology import full_slice_rank_order, slice_rows, verify_full_slice_order
+from tpu.swarm.select_v4_64_topology import select_split
+from tpu.swarm.select_v6e_32_topology import select_split as select_v6e_32_split
+from .config import Config
+from .events import emit
+from .host import Host
+from .serving import Catalog, deploy
+
+
+@ray.remote(num_cpus=0)
+class RuntimeStatus:
+    def __init__(self):
+        self.result = {"terminal": False, "exit_code": None}
+        self.acknowledged = set()
+        self.stop_requested = False
+
+    def request_stop(self):
+        self.stop_requested = True
+
+    def finish(self, code):
+        self.result = {"terminal": True, "exit_code": code}
+
+    def read(self, rank=None):
+        if self.result["terminal"] and rank is not None:
+            self.acknowledged.add(rank)
+        return dict(self.result, acknowledged=sorted(self.acknowledged), stop_requested=self.stop_requested)
+
+
+@ray.remote(num_cpus=8, resources={"TPU": 4}, max_restarts=0)
+class TrainerRank:
+    """Reserve a trainer host's devices for the entire collective lifetime."""
+    def __init__(self, host, rank):
+        self.host, self.rank = host, rank
+
+    def reserved(self):
+        return self.rank
+
+    def start(self, ranks, inference_ips=None):
+        return ray.get(self.host.start_trainer.remote(ranks, inference_ips))
+
+
+class Controller:
+    def __init__(self, config, ips):
+        self.config, self.ips = config, ips
+        self.root = Path(config.root).expanduser()
+        self.log = self.root / "runs" / config.run_id / "controller.jsonl"
+        self.hosts, self.trainers = [], []
+        self.stopping = threading.Event()
+        self.failure = None
+        self.monitor = None
+        self.sync_refs = {}
+        self.last_sync = {}
+        self.prepared = {}
+        self.catalog = None
+        self.runtime_status = None
+        self.trainer_leader = 0
+        self.science_group = None
+        self.science_refs = []
+        self.transitioning = False
+        self.shutdown_errors = []
+        self.local_inference_instance = None
+        self.local_inference_probe_failures = 0
+        self.farm_instance = None
+        self.remote_held = None
+        self.last_lease_alert = 0
+
+    def reservation_rpc(self, action, timeout=10):
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(f'http://{self.ips[0]}:{self.config.ports.inference}/skyrl/v1/borrowing/reservation',
+                json=dict(run_id=self.config.run_id, instance=self.farm_instance, action=action))
+            response.raise_for_status()
+            return response.json()
+
+    def wait_farm_admission(self):
+        if self.config.inference.external_pool_lease_scope != 'run':
+            return
+        remote_only = self.config.inference.remote_only
+        self.report('waiting_for_farm', model=self.config.model, unbounded=remote_only)
+        started = time.monotonic()
+        # Remote-only trainers have no local fallback: wait for a farm without
+        # a deadline, reporting at the configured alert cadence.
+        deadline = float('inf') if remote_only else started + self.config.inference.external_pool_initial_wait_seconds
+        alert_seconds = self.config.inference.external_pool_queue_alert_seconds
+        last_alert = started
+        while not self.stopping.is_set():
+            if self.failure:
+                raise RuntimeError(self.failure)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self.report('farm_admission_local_fallback', reason='initial reservation deadline exceeded')
+                return
+            try:
+                with httpx.Client(timeout=min(10, remaining)) as client:
+                    response = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/skyrl/v1/borrowing/services')
+                    response.raise_for_status()
+                    self.farm_instance = response.json()['instance']
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    continue
+                status = self.reservation_rpc('acquire', min(remaining, self.config.inference.external_pool_prepare_timeout + 5))
+                if status.get('reserved') or not self.config.inference.external_pool_require_initial:
+                    self.report('farm_admitted', **status)
+                    return
+                if remote_only and time.monotonic() - last_alert >= alert_seconds:
+                    last_alert = time.monotonic()
+                    self.report('farm_admission_waiting', waited_seconds=round(last_alert - started, 1),
+                                candidates=status.get('candidates', []), target=status.get('target'))
+            except (httpx.HTTPError, ValueError, KeyError) as exc:
+                self.report('farm_admission_pending', reason=type(exc).__name__)
+            self.stopping.wait(max(0, min(5, deadline - time.monotonic())))
+        raise RuntimeError('farm admission interrupted')
+
+    def arm_local_inference(self, client):
+        if (self.config.inference.restart_limit != 0
+                and self.config.inference.external_pool_lease_scope != 'run'):
+            return
+        response = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/status")
+        response.raise_for_status()
+        instance = response.json()['instance']
+        if not isinstance(instance, str) or not instance:
+            raise RuntimeError('local inference instance identity missing')
+        if self.config.inference.restart_limit == 0:
+            self.local_inference_instance = instance
+        self.local_inference_probe_failures = 0
+        if self.config.inference.external_pool_lease_scope == 'run':
+            self.farm_instance = instance
+
+    def check_local_inference(self):
+        # /health intentionally returns 503 during adapter updates. /status
+        # remains available and identifies replacement of the owning ingress.
+        if self.local_inference_instance is None or self.transitioning:
+            self.local_inference_probe_failures = 0
+            return
+        try:
+            with httpx.Client(timeout=10) as client:
+                response = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/status")
+                response.raise_for_status()
+                state = response.json()
+            if state.get('instance') != self.local_inference_instance:
+                raise RuntimeError('local ingress was replaced')
+            if state.get('fatal_error') or state.get('exhausted'):
+                raise RuntimeError('local inference failed')
+            self.local_inference_probe_failures = 0
+            if self.config.inference.remote_only:
+                self.report_remote_leases(state)
+        except Exception as exc:
+            transient = (isinstance(exc, httpx.TransportError) or
+                         isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500)
+            if transient:
+                self.local_inference_probe_failures += 1
+                if self.local_inference_probe_failures < 3:
+                    self.report('local_inference_probe_pending', reason=type(exc).__name__,
+                                consecutive_failures=self.local_inference_probe_failures)
+                    return
+            self.failure = f'local inference fatal: {type(exc).__name__}: {exc}'
+            self.report('local_inference_failed', detail=self.failure)
+
+    def report_remote_leases(self, state):
+        """Zero leases is a wait, never a failure; say so at the alert cadence."""
+        borrowing = state.get('borrowing') or {}
+        held = sorted(borrowing.get('held') or [])
+        if held != self.remote_held:
+            self.remote_held = held
+            self.report('remote_leases', held=held, target=borrowing.get('target'),
+                        candidates=borrowing.get('candidates', []),
+                        queued=(state.get('scheduling') or {}).get('queued', 0))
+        if not held and time.monotonic() - self.last_lease_alert >= self.config.inference.external_pool_queue_alert_seconds:
+            self.last_lease_alert = time.monotonic()
+            self.report('remote_leases_zero', candidates=borrowing.get('candidates', []),
+                        queued=(state.get('scheduling') or {}).get('queued', 0))
+
+    def report(self, event, **fields):
+        return emit(self.log, event, run_id=self.config.run_id, **fields)
+
+    def checked_get(self, refs, timeout):
+        deadline = time.monotonic() + timeout
+        waiting = list(refs)
+        results = {}
+        while waiting:
+            if self.failure or self.stopping.is_set():
+                raise RuntimeError(self.failure or "controller interrupted")
+            if time.monotonic() > deadline:
+                raise TimeoutError("distributed phase exceeded deadline")
+            ready, _ = ray.wait(waiting, num_returns=1, timeout=1)
+            for ref in ready:
+                results[ref] = ray.get(ref)
+                waiting.remove(ref)
+        return [results[ref] for ref in refs]
+
+    def checked_serve(self, response, timeout):
+        """Serve handles return DeploymentResponse, not a Ray ObjectRef."""
+        deadline = time.monotonic() + timeout
+        while True:
+            if self.failure or self.stopping.is_set():
+                raise RuntimeError(self.failure or "controller interrupted")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Serve phase exceeded deadline")
+            try:
+                return response.result(timeout_s=min(1, remaining))
+            except (TimeoutError, ray.exceptions.GetTimeoutError):
+                continue
+
+    def writeback_tick(self):
+        """One in-flight call per host/kind; a stalled host cannot block peers."""
+        if self.sync_refs:
+            ready, _ = ray.wait(list(self.sync_refs), num_returns=len(self.sync_refs), timeout=0)
+            for ref in ready:
+                rank, kind = self.sync_refs.pop(ref)
+                try:
+                    result = ray.get(ref)
+                    self.report("writeback_complete", rank=rank, kind=kind, result=result)
+                except Exception as exc:
+                    self.report("writeback_retry_pending", rank=rank, kind=kind, detail=str(exc))
+        if self.stopping.is_set() or not self.prepared or self.transitioning:
+            return
+        active = set(self.sync_refs.values())
+        now = time.monotonic()
+        for rank, host in enumerate(self.hosts):
+            for kind in ("compile", "run"):
+                key = (rank, kind)
+                if key in active or now - self.last_sync.get(key, float("-inf")) < self.config.cache.sync_seconds:
+                    continue
+                method = host.sync_compile if kind == "compile" else host.sync_run
+                self.sync_refs[method.remote()] = key
+                self.last_sync[key] = now
+
+    def _monitor(self):
+        while not self.stopping.is_set():
+            try:
+                if self.runtime_status and ray.get(self.runtime_status.read.remote(), timeout=5)["stop_requested"]:
+                    self.stopping.set()
+                live = {node["NodeManagerAddress"] for node in ray.nodes() if node["Alive"]}
+                if missing := set(self.ips) - live:
+                    self.failure = f"workload Ray nodes lost: {sorted(missing)}"
+                statuses = ray.get([host.heartbeat.remote() for host in self.hosts], timeout=15)
+                self.report("hosts", statuses=statuses)
+                for status in statuses:
+                    if status["stopped"]:
+                        self.failure = f"host {status['rank']} stopped"
+                    if status["processes"].get("trainer") is not None:
+                        self.failure = f"trainer rank {status['rank']} exited"
+                if self.config.arena_grader_rank is not None:
+                    available = ray.available_resources()
+                    self.report('grader_status', transport='ray_tasks',
+                                active_cases=4 - available.get('arena_grader', 0),
+                                free_chips=available.get('arena_grader', 0),
+                                active_pregates=2 - available.get('arena_pregate', 0))
+                if self.catalog:
+                    state = ray.get(self.catalog.snapshot.remote(), timeout=10)
+                    self.report("inference_status", **state)
+                    if state["exhausted"]:
+                        self.failure = f"inference recovery budget exhausted: {state['exhausted']}"
+            except Exception as exc:
+                self.report("monitor_error", detail=str(exc))
+                # A transient polling timeout does not cancel a healthy workload.
+            self.check_local_inference()
+            if self.farm_instance and not self.transitioning and not self.failure:
+                try:
+                    self.reservation_rpc('heartbeat')
+                except (httpx.HTTPError, ValueError) as exc:
+                    self.report('farm_controller_heartbeat_failed', reason=type(exc).__name__)
+            try:
+                self.writeback_tick()
+            except Exception as exc:
+                self.report("writeback_schedule_error", detail=str(exc))
+            self.stopping.wait(self.config.log_seconds)
+
+    def setup(self):
+        deadline = time.monotonic() + self.config.setup_timeout
+        while True:
+            nodes = {node["NodeManagerAddress"]: node for node in ray.nodes() if node["Alive"]}
+            if set(nodes) == set(self.ips):
+                break
+            if time.monotonic() > deadline or self.stopping.is_set():
+                raise TimeoutError("workload Ray cluster did not acquire all expected hosts")
+            self.report("waiting_nodes", joined=sorted(nodes), expected=self.ips)
+            time.sleep(5)
+        actor = ray.remote(num_cpus=0, max_concurrency=8, max_restarts=0)(Host)
+        for rank, ip in enumerate(self.ips):
+            self.hosts.append(actor.options(name=f"host-{rank}",
+                scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[ip]["NodeID"], soft=False)).remote(
+                    self.config.to_dict(), rank, self.ips))
+        self.monitor = threading.Thread(target=self._monitor, daemon=True)
+        self.monitor.start()
+        self.checked_get([host.preflight.remote() for host in self.hosts],
+                         self.config.checkpoint_cleanup_timeout + 420)
+        if self.config.arena_service_only:
+            self.checked_get([self.hosts[0].prepare_arena.remote()], self.config.setup_timeout)
+            self.report('arena_service_ready', endpoint=f'http://{self.ips[0]}:8791')
+            while not self.stopping.wait(5):
+                if self.failure:
+                    raise RuntimeError(self.failure)
+                state = ray.get(self.hosts[0].heartbeat.remote(), timeout=15)
+                if any(state['processes'].get(n) is not None for n in ('arena-queue', 'arena-pool')):
+                    raise RuntimeError('arena service process exited')
+            return 143
+        if self.config.inference_only:
+            inference_ranks = self.config.inference_only_ranks or list(range(self.config.hosts))
+            self.checked_get([self.hosts[r].source_ready.remote() for r in inference_ranks], self.config.setup_timeout)
+        else:
+            self.checked_get([host.topology_ready.remote() for host in self.hosts], self.config.setup_timeout)
+        if self.config.inference_only:
+            train_ranks = []
+        elif self.config.accelerator == "tpu-v4-64":
+            full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
+                                     for host in self.hosts], 300)
+            if self.config.arena_grader_rank is None:
+                train_ranks, inference_ranks = select_split(full)
+            else:
+                train_ranks, inference_ranks = select_split(full, excluded_rank=self.config.arena_grader_rank)
+                inference_ranks.remove(self.config.arena_grader_rank)
+            self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                              for r in train_ranks], 300)
+        elif self.config.accelerator == "tpu-v6e-32":
+            # Ranks follow SkyPilot's node list, not the physical worker order:
+            # probe every host's chip coordinates and take the 2x2 host block
+            # that contains rank 0 (asia replica 72 aborted the slice when
+            # ranks 0-3 were physically scattered, 2026-09-09).
+            full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
+                                     for host in self.hosts], 300)
+            if self.config.arena_grader_rank is None:
+                train_ranks, inference_ranks = select_v6e_32_split(full)
+            else:
+                train_ranks, inference_ranks = select_v6e_32_split(full, excluded_rank=self.config.arena_grader_rank)
+                inference_ranks.remove(self.config.arena_grader_rank)
+            self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                              for r in train_ranks], 300)
+        else:
+            # 32-core slices: the first trainer.hosts ranks train (rank 0 also
+            # hosts the API server and client), the rest serve. The v5p-32
+            # topology is 2x2x4 with one 2x2 host per row, so a two-host
+            # trainer is a contiguous 1,1,2 process grid; no probe needed.
+            # v6e-32 (8 hosts x 4 chips): hosts 0-3 form the 2,2,1 block the
+            # legacy cell trains on (validated), 4-7 serve.
+            train_ranks = list(range(self.config.trainer.hosts))
+            inference_ranks = [r for r in range(self.config.trainer.hosts, self.config.hosts)
+                               if r != self.config.arena_grader_rank and r not in self.config.placement_ranks]
+            if self.config.inference.remote_only and self.config.hosts > 1:
+                # Every host trains as a 1,1,4 process grid, where process i
+                # must own z row i. Sky ranks need not follow the rows, so
+                # order the trainer ranks physically (process id is the
+                # position in train_ranks), then re-probe under the real
+                # process bounds and require process i to land on row i.
+                assert not inference_ranks
+                full = self.checked_get([host.probe.remote(list(range(self.config.hosts)), self.config.ports.topology_jax)
+                                         for host in self.hosts], 300)
+                rank_to_z = slice_rows(full)
+                train_ranks = full_slice_rank_order(full)
+                subset = self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                                           for r in train_ranks], 300)
+                verify_full_slice_order(subset)
+                self.report('remote_only_topology_verified', rank_to_z=rank_to_z, train_ranks=train_ranks)
+        science_grading_rank = None
+        if self.config.science_task and not self.config.bootstrap_only:
+            from tpu.science.training_setup import split_roles
+            train_ranks, inference_ranks, science_grading_rank = split_roles(
+                self.config.science_task, train_ranks, inference_ranks,
+                placement_backend=self.config.science_placement_backend, accelerator=self.config.accelerator)
+        self.trainer_leader = train_ranks[0] if train_ranks else 0
+        self.checked_get([host.set_trainer_leader.remote(self.trainer_leader) for host in self.hosts], 30)
+        bootstrap_pending = False
+        if self.config.bootstrap_layers:
+            self.checked_get([self.hosts[r].restore_run.remote() for r in sorted({0, self.trainer_leader})], 600)
+            bootstrap_pending = ray.get(self.hosts[0].bootstrap_status.remote(), timeout=30) is None
+            if self.config.bootstrap_only and not bootstrap_pending:
+                return self
+        bootstrap_expanded = bootstrap_pending and self.config.bootstrap_all_hosts
+        self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
+                    trainer_leader=self.trainer_leader,
+                    grader_rank=science_grading_rank if self.config.science_task else self.config.arena_grader_rank)
+        prepared_ranks = sorted(train_ranks + inference_ranks)
+        shared_frozen_head = bool(self.config.frozen_benchmark and 0 in inference_ranks)
+        arena_start = (self.hosts[self.config.arena_grader_rank].prepare_arena.remote()
+                       if self.config.arena_grader_rank is not None else
+                       None if shared_frozen_head else
+                       self.hosts[0].prepare_frozen.remote() if self.config.frozen_benchmark else
+                       self.hosts[0].prepare_arena.remote() if self.config.arena_samples else None)
+        preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks and not bootstrap_expanded else "inference")
+                            for rank in prepared_ranks]
+        # Observe judge failure while cache/model preparation is still running,
+        # and require its readiness before starting any serving deployment.
+        if arena_start is not None:
+            preparation_refs.append(arena_start)
+        if self.config.science_task:
+            from tpu.science.training_setup import prepare, check_references
+            if science_grading_rank is not None:
+                self.checked_get([self.hosts[science_grading_rank].reclaim_grader_caches.remote()], 300)
+            self.science_group, self.science_refs = prepare(self.config, self.ips, nodes, science_grading_rank)
+            self.report('science_reference_started', task=self.config.science_task, grader_rank=science_grading_rank)
+        preparation_results = self.checked_get(preparation_refs + self.science_refs, self.config.setup_timeout)
+        prepared = preparation_results[:len(prepared_ranks)]
+        if self.config.science_task:
+            references = preparation_results[len(preparation_refs):]
+            for index, verdict in enumerate(references):
+                self.report('science_reference_result', task=self.config.science_task,
+                            index=index, verdict=verdict)
+            result = check_references(self.config.science_task, references, expected_hosts=self.config.hosts,
+                                      placement_backend=self.config.science_placement_backend,
+                                      routing_suite=self.config.client_env.get("SCIENCE_ROUTING_SUITE", "full"),
+                                      placement_helper=self.config.client_env.get("SCIENCE_PLACEMENT_HELPER", "none"))
+            self.report('science_reference_passed', **result)
+            self.science_refs = []
+        if self.config.arena_grader_rank is not None:
+            from .grader_tasks import self_test
+            rank = self.config.arena_grader_rank
+            resources = nodes[self.ips[rank]]["Resources"]
+            if resources.get('arena_grader') != 4 or resources.get('arena_pregate') != 2:
+                raise RuntimeError('Dedicated grader Ray task resources are missing')
+            self.report("arena_service_ready", transport="ray_tasks", grader_rank=rank)
+            self.report("grader_self_test_started", grader_rank=rank)
+            probe = self_test.remote(str(self.root), self.config.run_id)
+            try:
+                result = self.checked_get([probe], 7200)[0]
+            finally:
+                # Also cancel its pending case tasks if setup is interrupted.
+                ray.cancel(probe, force=False, recursive=True)
+            self.report("grader_self_test_passed", grader_rank=rank, result=result)
+            self.checked_get([self.hosts[0].check_grader_client.remote()], 240)
+            self.report("grader_client_check_passed", grader_rank=rank)
+        if shared_frozen_head:
+            # One v4-32 host also runs the CPU client. Finish its model/cache
+            # preparation first; concurrent preparation would share GCS state.
+            self.checked_get([self.hosts[0].prepare_frozen.remote()], self.config.setup_timeout)
+        self.prepared = {self.ips[rank]: info for rank, info in zip(prepared_ranks, prepared)}
+        serving_ranks = prepared_ranks if bootstrap_expanded else inference_ranks
+        groups = self.config.engine_groups([self.ips[r] for r in serving_ranks])
+        for group in groups:
+            for ip in group:
+                self.prepared[ip] = dict(self.prepared[ip], group=list(group))
+        engine_ips = [group[0] for group in groups]
+        self.report("cache_barrier_complete", hosts=len(prepared), engines=groups)
+        if not self.config.inference_only:
+            self.checked_get([self.hosts[r].restore_run.remote() for r in sorted({0, self.trainer_leader})], 600)
+        if bootstrap_pending:
+            # No TrainerRank, trainer process, weights, or optimizer exists yet.
+            self.checked_get([self.hosts[0].check_bootstrap.remote()], 150)
+            self.report('bootstrap_import_check_passed')
+            self.catalog = Catalog.options(name="inference-catalog").remote(
+                [s['key'] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
+            ingress = deploy(self.config, self.prepared, self.catalog, self.ips[0])
+            self.wait_inference(engine_ips)
+            self.wait_farm_admission()
+            self.checked_get([self.hosts[0].start_bootstrap.remote()], 30)
+            self.report('bootstrap_started', layers=self.config.bootstrap_layers,
+                        inference_hosts=engine_ips, optimizer_steps=0)
+            while not self.stopping.wait(5):
+                if self.failure:
+                    raise RuntimeError(self.failure)
+                state = ray.get(self.hosts[0].heartbeat.remote(), timeout=15)
+                code = state['processes'].get('bootstrap')
+                if code is None:
+                    continue
+                if code != 0:
+                    raise RuntimeError(f'bootstrap exited {code}; see bootstrap.log')
+                summary = ray.get(self.hosts[0].bootstrap_status.remote(), timeout=30)
+                if not summary or summary['retained'] < 1:
+                    raise RuntimeError('bootstrap produced no valid retained seeds')
+                self.report('bootstrap_completed', **summary)
+                break
+            if self.stopping.is_set():
+                raise RuntimeError('bootstrap interrupted')
+            # Persist seeds before releasing engines. This is independent of
+            # optimizer checkpoints and never increments the training counter.
+            self.checked_get([self.hosts[0].sync_run.remote()], 360)
+            if self.config.bootstrap_only:
+                return self
+            if bootstrap_expanded:
+                self.transitioning = True
+                remaining = sorted(self.ips[r] for r in inference_ranks)
+                retired = self.checked_serve(ingress.restrict_engines.remote(remaining), 300)
+                self.report('bootstrap_engines_retired', retired=retired, remaining=remaining)
+                # A reduced Serve graph releases actor TPU reservations; stable
+                # per-host names keep surviving engines and their KV caches.
+                reduced = {ip: info for ip, info in self.prepared.items() if ip in remaining}
+                deploy(self.config, reduced, self.catalog, self.ips[0])
+                self.wait_inference(remaining)
+                self.checked_get([self.hosts[r].verify_tpu_released.remote() for r in train_ranks], 120)
+                if self.sync_refs:
+                    self.checked_get(list(self.sync_refs), 360)
+                    self.sync_refs.clear()
+                self.checked_get([self.hosts[r].sync_compile.remote() for r in train_ranks], 360)
+                new_prepared = self.checked_get([self.hosts[r].prepare.remote('trainer') for r in train_ranks],
+                                                self.config.setup_timeout)
+                for rank, info in zip(train_ranks, new_prepared):
+                    self.prepared[self.ips[rank]] = info
+                engine_ips = remaining
+                self.transitioning = False
+                self.report('bootstrap_roles_transitioned', train_ranks=train_ranks, inference_hosts=remaining)
+                self.wait_farm_admission()
+        # Prefer a farm before starting trainers, with bounded local fallback.
+        predeployed = False
+        if not bootstrap_pending and self.config.inference.external_pool_lease_scope == 'run':
+            if self.catalog is None:
+                self.catalog = Catalog.options(name="inference-catalog").remote(
+                    [s['key'] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
+            deploy(self.config, self.prepared, self.catalog, self.ips[0])
+            self.wait_inference(engine_ips)
+            self.wait_farm_admission()
+            predeployed = True
+        for rank in train_ranks:
+            self.trainers.append(TrainerRank.options(
+                scheduling_strategy=NodeAffinitySchedulingStrategy(nodes[self.ips[rank]]["NodeID"], soft=False))
+                .remote(self.hosts[rank], rank))
+        self.checked_get([trainer.reserved.remote() for trainer in self.trainers], 120)
+        if self.catalog is None:
+            self.catalog = Catalog.options(name="inference-catalog").remote([s["key"] for s in self.config.engine_slots(engine_ips)], self.config.inference.restart_limit)
+        inference_ips = engine_ips
+        trainer_starts = [trainer.start.remote(train_ranks, inference_ips) for trainer in self.trainers]
+        # Both services start concurrently; our readiness loop owns the deadline.
+        if not bootstrap_pending and not predeployed:
+            deploy(self.config, self.prepared, self.catalog, self.ips[0])
+        self.checked_get(trainer_starts, self.config.ready_timeout)
+        deadline = time.monotonic() + self.config.ready_timeout
+        with httpx.Client(timeout=5) as client:
+            while time.monotonic() < deadline:
+                if self.failure or self.stopping.is_set():
+                    raise RuntimeError(self.failure or "controller interrupted")
+                trainer_ready = self.config.inference_only or ray.get(self.hosts[self.trainer_leader].trainer_ready.remote(), timeout=10)
+                state = ray.get(self.catalog.snapshot.remote(), timeout=10)
+                try:
+                    api_ready = self.config.inference_only
+                    if not self.config.inference_only:
+                        response = client.get(f"http://{self.ips[self.trainer_leader]}:{self.config.ports.trainer}/api/v1/get_server_capabilities")
+                        api_ready = response.status_code == 200
+                    inference_ready = client.get(f"http://{self.ips[0]}:{self.config.ports.inference}/health").status_code == 200
+                except httpx.HTTPError:
+                    api_ready = inference_ready = False
+                if trainer_ready and api_ready and inference_ready and len(state["replicas"]) == len(self.config.engine_slots(engine_ips)):
+                    expected = {s['key'] for s in self.config.engine_slots(engine_ips)}
+                    if set(state['expected']) != expected or {r['ip'] for r in state['replicas']} != expected:
+                        raise RuntimeError('endpoint still contains a retired or unexpected engine')
+                    self.report("services_ready", trainer=not self.config.inference_only, inference_replicas=len(state["replicas"]))
+                    self.arm_local_inference(client)
+                    return self
+                time.sleep(5)
+        raise TimeoutError("trainer/inference readiness deadline exceeded")
+
+    def wait_inference(self, ips):
+        expected = {s['key'] for s in self.config.engine_slots(ips)}
+        deadline = time.monotonic() + self.config.ready_timeout
+        with httpx.Client(timeout=10) as client:
+            while time.monotonic() < deadline:
+                if self.failure or self.stopping.is_set():
+                    raise RuntimeError(self.failure or 'controller interrupted')
+                state = ray.get(self.catalog.snapshot.remote(), timeout=15)
+                try:
+                    healthy = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/health').status_code == 200
+                    endpoint = client.get(f'http://{self.ips[0]}:{self.config.ports.inference}/status').json()
+                except (httpx.HTTPError, ValueError):
+                    healthy = False
+                if healthy and not expected and self.config.inference.remote_only:
+                    # Control-only ingress: no replicas to verify, only identity.
+                    if endpoint.get('remote_only') and isinstance(endpoint.get('instance'), str):
+                        self.report('remote_only_control_plane', instance=endpoint['instance'])
+                        self.arm_local_inference(client)
+                        return
+                elif (healthy and set(state['expected']) == expected
+                        and {r['ip'] for r in state['replicas']} == expected
+                        and set(endpoint['expected']) == expected and not endpoint['active']):
+                    self.report('inference_membership_verified', hosts=sorted(expected))
+                    self.arm_local_inference(client)
+                    return
+                time.sleep(5)
+        raise TimeoutError('inference membership/health deadline exceeded')
+
+    def run(self):
+        self.setup()
+        if self.config.bootstrap_only:
+            summary = ray.get(self.hosts[0].bootstrap_status.remote(), timeout=30)
+            if not summary or summary['retained'] < 1:
+                raise RuntimeError('seed-only job has no verified seed pool')
+            self.report('bootstrap_only_finished', **summary)
+            return 0
+        if self.config.frozen_benchmark:
+            self.checked_get([self.hosts[0].start_frozen.remote()], 30)
+        elif self.config.arena_samples:
+            self.checked_get([self.hosts[0].start_arena_sampling.remote()], 30)
+            self.report("arena_sampling_started", samples=self.config.arena_samples)
+        elif self.config.inference_only:
+            self.report("inference_only_waiting", endpoint=f"http://{self.ips[0]}:{self.config.ports.inference}")
+            while not self.stopping.wait(5):
+                if self.failure:
+                    raise RuntimeError(self.failure)
+            return 143
+        else:
+            self.checked_get([self.hosts[0].start_client.remote()], 30)
+        self.report("client_started")
+        while not self.stopping.wait(5):
+            if self.failure:
+                raise RuntimeError(self.failure)
+            state = ray.get(self.hosts[0].heartbeat.remote(), timeout=15)
+            if self.config.arena_samples:
+                for name in ("arena-queue", "arena-pool"):
+                    if state["processes"].get(name) is not None:
+                        raise RuntimeError(f"{name} exited during sampling")
+            code = state["processes"].get("client")
+            if code is not None:
+                self.report("client_finished", exit_code=code)
+                return code
+        return 143
+
+    def close(self):
+        self.stopping.set()
+        if self.monitor:
+            self.monitor.join(timeout=40)
+        # Stop new client requests first, stop services, then flush caches
+        # before bootstrap shuts down the private Ray runtime.
+        if self.hosts:
+            self.drain_phase({self.hosts[0].stop_client.remote(): 0}, "client_stop", timeout=40)
+        if self.farm_instance:
+            try:
+                self.reservation_rpc('close', self.config.inference.external_pool_release_timeout + 5)
+            except (httpx.HTTPError, ValueError) as exc:
+                self.report('farm_release_pending', reason=type(exc).__name__)
+        for ref in self.science_refs:
+            ray.cancel(ref, force=True)
+        if self.science_group is not None:
+            from ray.util.placement_group import remove_placement_group
+            remove_placement_group(self.science_group)
+        self.close_serve()
+        if self.hosts:
+            self.drain_phase({host.stop.remote(): rank for rank, host in enumerate(self.hosts)},
+                             "host_stop", timeout=90)
+            # A failed stop or upload on one host must not skip the remaining
+            # hosts. Host-local locks serialize final and periodic writeback.
+            self.drain_phase({host.sync_compile.remote(): rank for rank, host in enumerate(self.hosts)},
+                             "final_compile_writeback", timeout=360)
+            self.drain_phase({host.sync_run.remote(): rank for rank, host in enumerate(self.hosts)},
+                             "final_run_writeback", timeout=360)
+
+    def close_serve(self, timeout=60):
+        # A failed replica must not leave the job RUNNING forever while Serve
+        # drains requests. Host/process shutdown and durable writeback follow.
+        def shutdown():
+            try:
+                serve.shutdown()
+            except Exception as exc:
+                self.report("serve_cleanup_error", detail=str(exc))
+                self.shutdown_errors.append({"phase": "serve_cleanup", "error": str(exc)})
+        thread = threading.Thread(target=shutdown, daemon=True)
+        thread.start()
+        thread.join(timeout)
+        if thread.is_alive():
+            self.report("serve_cleanup_timeout", timeout=timeout)
+            self.shutdown_errors.append({"phase": "serve_cleanup", "error": "timeout"})
+
+    def drain_phase(self, refs, phase, timeout):
+        deadline = time.monotonic() + timeout
+        pending = dict(refs)
+        while pending and time.monotonic() < deadline:
+            ready, _ = ray.wait(list(pending), num_returns=1,
+                               timeout=min(1, max(0, deadline - time.monotonic())))
+            for ref in ready:
+                rank = pending.pop(ref)
+                try:
+                    result = ray.get(ref)
+                    self.report(phase + "_complete", rank=rank, result=result)
+                except Exception as exc:
+                    self.report(phase + "_error", rank=rank, detail=str(exc))
+                    if phase != "final_compile_writeback":
+                        self.shutdown_errors.append({"phase": phase, "rank": rank, "error": str(exc)})
+        for rank in pending.values():
+            self.report(phase + "_timeout", rank=rank)
+            if phase != "final_compile_writeback":
+                self.shutdown_errors.append({"phase": phase, "rank": rank, "error": "timeout"})
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config")
+    args = parser.parse_args()
+    config = Config.load(args.config)
+    ips = os.environ["SKYPILOT_NODE_IPS"].split()
+    if len(ips) != config.hosts:
+        raise SystemExit("SkyPilot host count does not match profile")
+    ray.init(address=f"{ips[0]}:{config.ports.ray}", namespace=config.run_id)
+    # Worker bootstraps stop their Ray nodes after acknowledging completion.
+    # Keep the terminal record on the head, which waits for all acknowledgments.
+    status = RuntimeStatus.options(name="runtime-status", lifetime="detached",
+                                   resources={f"node:{ips[0]}": 0.01}).remote()
+    controller = Controller(config, ips)
+    controller.runtime_status = status
+    signal.signal(signal.SIGTERM, lambda *_: controller.stopping.set())
+    signal.signal(signal.SIGINT, lambda *_: controller.stopping.set())
+    code = 1
+    try:
+        code = controller.run()
+    except Exception as exc:
+        controller.report("controller_failed", detail=str(exc))
+        raise
+    finally:
+        controller.close()
+        if code == 0 and controller.shutdown_errors:
+            code = 1
+            controller.report("completion_not_durable", failures=controller.shutdown_errors)
+        ray.get(status.finish.remote(code), timeout=10)
+        ray.shutdown()
+    raise SystemExit(code)
+
+
+if __name__ == "__main__":
+    main()

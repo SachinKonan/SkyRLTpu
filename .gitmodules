@@ -11,3 +11,6 @@
 [submodule "third_party/discover"]
 	path = third_party/discover
 	url = https://github.com/SachinKonan/discover-ttd.git
+[submodule "third_party/TPUSwarm"]
+	path = third_party/TPUSwarm
+	url = https://github.com/SachinKonan/TPUSwarm.git

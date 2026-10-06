@@ -1,0 +1,56 @@
+{
+  "observed_at": 1789525068.0449104,
+  "graded": 311,
+  "valid": 16,
+  "run": "science-routing-v4-qwen-bootstrap-l2-001",
+  "reward": 0.519567993217712,
+  "id": "bootstrap-0-e9e5100d-3121-4250-9cce-92850dfa44b5-0-group-009",
+  "metrics": {
+    "weighted_baseline_cnots": 119874.00000000001,
+    "weighted_candidate_cnots": 110844.6,
+    "added_cnots": 304461.0,
+    "swaps": 101487.0,
+    "improvement": 0.07532409029480958,
+    "case_count": 72,
+    "build_seconds": 5.027090486000816,
+    "solve_seconds": 396.6604007730002,
+    "verify_seconds": 758.9978849630006,
+    "total_seconds": 1160.746557077,
+    "seed": 42,
+    "layout_trials": 20,
+    "routing_trials": 20,
+    "hardware": "cpu",
+    "cpus": 4,
+    "memory_gib": 8,
+    "source_sha256": "9794d9c0b50552ad0045b138a26bec892f2d3197291e7076816f7cf6898f702e",
+    "allocation_memory": {
+      "memory_current_mib": 649.19140625,
+      "memory_peak_mib": 830.70703125
+    },
+    "worker_seconds": 1161.2750507889996,
+    "cpu_affinity": [
+      16,
+      17,
+      18,
+      19
+    ],
+    "grader_sha256": "b3daf4cb0af2894a263433212e67849765f61bc6162c2afd49fc52c0a6691a3b",
+    "library_lock_sha256": "89d1d6f60d77d636a83133ad281551976eef3c21fc5b4861399b453394789c82",
+    "ray_node_id": "3e302a0f9037dd9e8b5835da5d7191f408e05ef3dca2204ced2bd048",
+    "host": "t1v-n-ac1ec0cc-w-6",
+    "job_id": "3276451656b74b588dfd287556f109cd",
+    "task": "routing",
+    "ray_executor": true,
+    "task_envelope_seconds": 1161.7081905979994,
+    "hard_memory_gib": 8,
+    "hard_cpus": [
+      16,
+      17,
+      18,
+      19
+    ],
+    "artifact_directory": "/home/gcpuser/.cache/skyrl-ray-code/fab5032554e5dfdad9564e35cbff2c0cf631925cf660dfe7ddf054382e46dd58/.science/ray-jobs/3276451656b74b588dfd287556f109cd"
+  },
+  "partial_bootstrap": true,
+  "optimizer_steps": 0
+}

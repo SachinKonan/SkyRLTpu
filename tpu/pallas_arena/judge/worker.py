@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import secrets
 import tempfile
@@ -122,14 +123,24 @@ def build_signatures(problem, scored_cases, holdout_cases, adv_cases):
     for adv in adv_cases:
         abstract = jax.eval_shape(adv.make_inputs, jax.ShapeDtypeStruct((2,), "uint32"))
         adv_sig[adv.name] = sig_of(abstract, "fwd", f"adv:{adv.name}")
-    grad_sig = None
-    if problem.has_bwd and scored_cases:
-        grad_sig = sig_of(
-            problem.abstract_inputs(scored_cases[0]),
-            "grad",
-            "grad",
-            optional=not problem.bwd_gates,
-        )
+    # The backward is SWEPT like the forward (tokamax convention: every
+    # attention arg_spec registers both a forward and a forward_and_vjp
+    # benchmark, and test_vjp defaults on) -- one grad signature per case,
+    # features bound identically to the forward sig. TP-declared cases are
+    # skipped: their forward exports at per-shard shapes, and a full-shape
+    # grad artifact would be a different program than the case declares.
+    grad_sig = {}
+    if problem.has_bwd:
+        for case in list(scored_cases) + list(holdout_cases):
+            if problem.tp_declared_width(case):
+                continue
+            grad_sig[case.name] = sig_of(
+                problem.abstract_inputs(case),
+                "grad",
+                f"grad:{case.name}",
+                optional=not problem.bwd_gates,
+                features=case.feature_kwargs,
+            )
     return sigs, case_sig, adv_sig, grad_sig
 
 
@@ -240,15 +251,36 @@ class PersistentWorker:
     def boot(self) -> dict:
         jax = self.jax
         t0 = self.perf()
+        # Pre-election warm of the production baseline. For GENERAL-mode
+        # problems a per-case failure here is NOT fatal: electing around an
+        # unavailable production kernel is precisely what the election below
+        # is for, and the v5p validation run (job 3719578) proved the hard
+        # version wrong twice in one boot -- megablox and RPA's production
+        # kernels OOM VMEM on v5p with their v6e-tuned configs, which should
+        # have demoted them per shape (XLA was available and, per the v6e-8
+        # elections, often faster anyway) instead of failing the whole task.
+        # Non-general problems keep the hard warm: they have no election to
+        # fall through to.
+        baseline_warm_errors: dict[str, str] = {}
         try:
             self._baseline_fn = jax.jit(self.problem.baseline)
             for case in self.scored_cases + self.holdout_cases:
                 w = self.problem.make_inputs(jax.random.PRNGKey(0), case)
                 self.block(w)
-                self.block(self._baseline_fn(*w))
+                try:
+                    self.block(self._baseline_fn(*w))
+                except Exception as e:  # noqa: BLE001
+                    if not getattr(self.problem, "general_mode", False):
+                        raise
+                    baseline_warm_errors[case.name] = f"{type(e).__name__}: {str(e)[:200]}"
+                    print(f"[boot] production baseline unavailable at {case.name}: "
+                          f"{type(e).__name__} (election will decide)", flush=True)
+                del w
         except Exception as e:
             self.boot_report = {"ok": False, "error": f"baseline: {type(e).__name__}: {e}"}
             return self.boot_report
+        if baseline_warm_errors:
+            self.boot_report["baseline_warm_errors"] = baseline_warm_errors
 
         # GENERAL mode: pick the denominator per shape by MEASUREMENT. Every
         # named candidate is timed here, at boot, off the candidate clock, and
@@ -264,6 +296,61 @@ class PersistentWorker:
         print(f"[boot] device timing (xprof DIU): "
               f"{'AVAILABLE' if self.device_timing else 'unavailable -> wallclock'}", flush=True)
 
+        # IS THE ORACLE ACTUALLY FP32? Four of six task references computed
+        # their documented "fp32" closed form at Precision.DEFAULT, which on
+        # TPU multiplies f32 inputs through bf16 -- so exact kernels were
+        # scored as wrong and the arena rewarded reproducing XLA's rounding
+        # (measured v6e 2026-08-27; see causal_segment_attention).
+        #
+        # This check CANNOT live in the CPU test battery: on CPU DEFAULT is
+        # exact, so a precision-dependent oracle agrees with itself there.
+        # megablox's reference even carries a numpy-loop cross-check that
+        # passed for exactly that reason while its TPU path diverged. So the
+        # judge tests itself, on the accelerator it grades on.
+        #
+        # An explicit precision= argument overrides the context manager, so a
+        # correctly-pinned oracle returns identical values under both and a
+        # defaulting one does not.
+        self.oracle_precision_ok = None
+        try:
+            # Cheapest fixture available: the adversarial vectors are tiny,
+            # and this runs at every task boot under per-test dispatch.
+            _adv = self.adversarial_cases()
+            if _adv:
+                _i = _adv[0].make_inputs(jax.random.PRNGKey(11))
+            else:
+                _c = min(self.scored_cases + self.holdout_cases,
+                         key=lambda c: math.prod(
+                             int(v) for v in c.dims.values() if isinstance(v, int)) or 1)
+                _i = self.problem.make_inputs(jax.random.PRNGKey(11), _c)
+            self.block(_i)
+            with jax.default_matmul_precision("bfloat16"):
+                _lo = self.problem.reference(*_i)
+                self.block(_lo)
+            with jax.default_matmul_precision("float32"):
+                _hi = self.problem.reference(*_i)
+                self.block(_hi)
+            from pallas_arena.judge.problems.base import error_stats
+
+            _d = error_stats(_lo, _hi).get("max")
+            self.oracle_precision_ok = bool(_d is not None and _d <= 1e-6)
+            self.boot_report["oracle_precision_delta"] = _d
+            # Printed unconditionally: a self-check that only speaks up on
+            # failure is indistinguishable from one that silently threw, and
+            # this one guards a defect that already shipped to four tasks.
+            print(f"[boot] oracle fp32 self-check: delta={_d:.2e} "
+                  f"({'OK' if self.oracle_precision_ok else 'FAILED'})", flush=True)
+            if not self.oracle_precision_ok:
+                print(f"[boot] *** ORACLE NOT FP32: {self.problem_name} reference changes by "
+                      f"{_d:.3e} between bf16 and f32 default matmul precision. Its "
+                      f"correctness bar is XLA's rounding, not the true value. Pin "
+                      f"precision= on the reference's matmuls. ***", flush=True)
+            del _i, _lo, _hi
+        except Exception as e:  # noqa: BLE001 -- a self-check must never fail a grade
+            self.boot_report["oracle_precision_error"] = f"{type(e).__name__}: {str(e)[:120]}"
+            print(f"[boot] oracle fp32 self-check DID NOT RUN: "
+                  f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+
         self._general_baselines = {}
         if getattr(self.problem, "general_mode", False):
             t_bl = self.perf()
@@ -273,7 +360,7 @@ class PersistentWorker:
                 # soft-cap), so hoisting it out of the loop would elect a
                 # baseline computing a different function than the case asks
                 # for. Featureless cases return the same objects as before.
-                cands = self.problem.for_case(case).baseline_candidates()
+                cands = self.problem.for_case(case).elected_candidates()
                 w = self.problem.make_inputs(jax.random.PRNGKey(1), case)
                 self.block(w)
                 timings = {}
@@ -364,15 +451,33 @@ class PersistentWorker:
         floors, ref_scores = {}, {}
         k_floor = jax.random.PRNGKey(secrets.randbits(31))
         for case in self.scored_cases:
+            # The floor is measured with the ELECTED baseline for this case,
+            # not the raw production one: the reward denominator IS the
+            # elected fn, so its self-vs-self jitter is the floor that
+            # matters -- and on v5p the production megablox/RPA kernels OOM
+            # outright (job 3721687 died exactly here after the warm was
+            # made non-fatal: the floor loop re-invoked the kernel the
+            # election had just demoted).
+            gb = self._general_baselines.get(case.name)
+            floor_fn = (gb or {}).get("fn") or self._baseline_fn
             pairs = []
-            for i in range(self.timing_warmup + self.timing_pairs):
-                inputs = self.problem.make_inputs(jax.random.fold_in(k_floor, i), case)
-                self.block(inputs)
-                pair, _, _ = timing_mod.counterbalanced_pair(
-                    i, lambda: self._baseline_fn(*inputs), lambda: self._baseline_fn(*inputs), self.perf, self.block
-                )
-                if i >= self.timing_warmup:
-                    pairs.append(pair)
+            try:
+                for i in range(self.timing_warmup + self.timing_pairs):
+                    inputs = self.problem.make_inputs(jax.random.fold_in(k_floor, i), case)
+                    self.block(inputs)
+                    pair, _, _ = timing_mod.counterbalanced_pair(
+                        i, lambda: floor_fn(*inputs), lambda: floor_fn(*inputs), self.perf, self.block
+                    )
+                    if i >= self.timing_warmup:
+                        pairs.append(pair)
+            except Exception as e:  # noqa: BLE001
+                if not getattr(self.problem, "general_mode", False):
+                    raise
+                # No measurable floor at this case: record loudly. Grading
+                # will still gate on the WORST measured floor across cases.
+                print(f"[boot] noise floor unavailable at {case.name}: "
+                      f"{type(e).__name__}: {str(e)[:120]}", flush=True)
+                continue
             floors[case.name] = timing_mod.noise_floor_from_ref_pairs(pairs)
             ref_scores[case.name] = timing_mod.interleaved_score(pairs)
         self.noise_floors = floors
@@ -599,8 +704,14 @@ class PersistentWorker:
                     warmed.add(sig_name)
         except Exception as e:
             return fail("fixtures", f"{type(e).__name__}: {e}", judge_fault=True)
-        if grad_sig is not None and fixtures:
-            warm_units.append(("grad", lambda: block(fns[grad_sig](*fixtures[0].inputs))))
+        if grad_sig and fixtures:
+            fix_by_case = {f.case.name: f for f in fixtures if f.case is not None}
+            for _cname, _gsig in grad_sig.items():
+                if _gsig in fns and _cname in fix_by_case:
+                    warm_units.append((
+                        f"grad:{_cname}",
+                        lambda g=_gsig, i=fix_by_case[_cname].inputs: block(fns[g](*i)),
+                    ))
 
         t_warmc = self.perf()
         try:
@@ -655,80 +766,106 @@ class PersistentWorker:
             # A non-differentiable candidate exports no grad artifact when the
             # backward is scored rather than gated. That is a recorded outcome
             # (grad_reward stays absent), not a judge fault.
-            if grad_sig is not None and grad_sig not in fns:
-                result["grad_ok"] = False
-                result["grad_error"] = (
-                    child.get(f"{grad_sig}_export_error") or "backward not exported"
-                )
-                grad_sig = None
-            if grad_sig is not None:
+            grad_live = bool(grad_sig)
+            swept = [c for c in self.scored_cases + self.holdout_cases if c.name in (grad_sig or {})]
+            if grad_live:
                 from pallas_arena.judge.problems.base import check_grad_tolerance as check_grad_tol
                 from pallas_arena.judge.problems.base import grad_leaf_tolerances as tolerance_from_reference_leaves
 
-                g_case = self.scored_cases[0]
-                pg = problem.for_case(g_case)
-                g_inputs = problem.make_inputs(fold_in(k_corr, 999), g_case)
-                block(g_inputs)
-                ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
-                cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
-                g_tol = tolerance_from_reference_leaves(ref_g, cal_g)
                 gates = problem.bwd_gates
-                try:
-                    cand_g = fns[grad_sig](*g_inputs)
-                    block(cand_g)
-                except Exception as e:
-                    why = f"grad failed: {type(e).__name__}: {e}"
+                # Strict completeness: the backward must export AND be correct
+                # at EVERY swept shape before any of it is timed. "Correct
+                # backward" is one claim about one function; a shape-dependent
+                # vjp that works at 2048 and lies at 2049 is a wrong backward,
+                # not a partially-scoring one.
+                _missing = [c.name for c in swept if grad_sig[c.name] not in fns]
+                if _missing:
+                    why = (
+                        child.get(f"{grad_sig[_missing[0]]}_export_error")
+                        or f"backward not exported at {_missing[0]}"
+                    )
                     if gates:
                         return fail("gradient", why)
-                    result["grad_ok"], result["grad_error"] = False, why[:400]
-                    grad_sig = None
-                if grad_sig is not None:
+                    result["grad_ok"], result["grad_error"] = False, str(why)[:400]
+                    grad_live = False
+            if grad_live:
+                for _gi, g_case in enumerate(swept):
+                    if over_budget():
+                        return budget_fail(f"gradient ({g_case.name})")
+                    pg = problem.for_case(g_case)
+                    g_inputs = problem.make_inputs(fold_in(k_corr, 999 + _gi), g_case)
+                    block(g_inputs)
+                    ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
+                    cal_grads = [pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)]
+                    for _variant in pg.grad_calibration_variants():
+                        try:
+                            cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
+                        except Exception:  # noqa: BLE001
+                            continue
+                    g_tol = tolerance_from_reference_leaves(ref_g, *cal_grads)
+                    try:
+                        cand_g = fns[grad_sig[g_case.name]](*g_inputs)
+                        block(cand_g)
+                    except Exception as e:
+                        why = f"grad failed at {g_case.name}: {type(e).__name__}: {e}"
+                        if gates:
+                            return fail("gradient", why)
+                        result["grad_ok"], result["grad_error"] = False, why[:400]
+                        grad_live = False
+                        break
                     okay, why = check_grad_tol(cand_g, ref_g, g_tol)
-                    if not okay and gates:
-                        return fail("gradient", why)
-                    result["grad_ok"] = bool(okay)
                     if not okay:
-                        result["grad_error"] = why[:400]
+                        if gates:
+                            return fail("gradient", f"{g_case.name}: {why}")
+                        result["grad_ok"] = False
+                        result["grad_error"] = f"{g_case.name}: {why}"[:400]
                         # Wrong gradients must not be TIMED into a reward --
                         # a fast wrong backward is worth nothing.
-                        grad_sig = None
+                        grad_live = False
+                        break
+                else:
+                    result["grad_ok"] = True
 
-                # ---- 5b. TIME the backward as its own benchmark.
-                # tokamax treats forward and forward+vjp as two separate
-                # benchmarks with separately tuned configs
-                # (dot_product_attention vs dot_product_attention_vjp are
-                # distinct autotuning cache entries), and for training the
-                # backward is often the more expensive half. Until now our
-                # backward was only a pass/fail gate and the reward timed the
-                # forward alone -- so a kernel with a correct but catastrophic
-                # backward scored exactly like one with a fast backward.
-                # Reported separately, never folded into the forward reward:
-                # they are different numbers about different things.
-                #
-                # Only timed when the backward exists AND is correct: a missing
-                # or wrong gradient has already cleared grad_sig, and timing a
-                # wrong backward would pay reward for the wrong thing.
-                if grad_sig is not None:
+            # ---- 5b. TIME the backward at EVERY swept shape.
+            # tokamax treats forward and forward+vjp as two separate
+            # benchmarks with separately tuned configs, registered per
+            # arg_spec -- the backward gets the same shape sweep as the
+            # forward, because for training it is the more expensive half of
+            # the step. Each swept shape becomes one grad factor in the
+            # reward fold (timing.fold_grad_reward), giving fwd:bwd equal
+            # aggregate log-weight instead of the old 1-of-(n+1) afterthought.
+            #
+            # Only timed when the backward exists AND is correct at every
+            # shape (grad_live): timing a wrong backward would pay reward for
+            # the wrong thing. A per-shape timing failure is a judge-side
+            # fault: that factor is EXCLUDED from the fold (never floored --
+            # the floor is the price of candidate absence, not judge trouble).
+            if grad_live:
+                grad_scores, grad_lat, grad_impls, grad_terr = {}, {}, {}, {}
+                for g_case in swept:
+                    if over_budget():
+                        return budget_fail(f"grad timing ({g_case.name})")
                     try:
-                        _gb = self._general_baselines.get(self.scored_cases[0].name, {})
+                        _gb = self._general_baselines.get(g_case.name, {})
                         base_grad_raw = _gb.get("raw") or problem.baseline
-                        # WHICH backward the grad_reward was measured against.
-                        # The forward already records `baseline_impl` for exactly
-                        # this reason -- a ratio against a fallback must never be
-                        # read as a ratio against the production kernel. The
-                        # backward had no such record, so a grad_reward could not
-                        # be interpreted at all: differentiating recurrentgemma's
-                        # Pallas scan and differentiating lax.associative_scan
-                        # are different bars, and only one of them is the claim
-                        # anyone cares about.
-                        result["grad_baseline_impl"] = _gb.get("impl") or getattr(
+                        # WHICH backward each ratio was measured against: a
+                        # ratio vs a fallback must never read as a ratio vs
+                        # the production kernel (same reason the forward
+                        # records baseline_impl per case).
+                        grad_impls[g_case.name] = _gb.get("impl") or getattr(
                             problem, "baseline_impl", "?"
                         )
-                        gb_fn = self.jax.jit(lambda *i: problem.grad_outputs(base_grad_raw, *i))
-                        gc_fn = self.jax.jit(lambda *i: fns[grad_sig](*i))
+                        gb_fn = self.jax.jit(
+                            lambda *i, _b=base_grad_raw: problem.grad_outputs(_b, *i)
+                        )
+                        gc_fn = self.jax.jit(
+                            lambda *i, _g=grad_sig[g_case.name]: fns[_g](*i)
+                        )
                         gpairs = []
                         for i in range(self.timing_warmup + self.timing_pairs):
-                            gi = problem.make_inputs(fold_in(fold_in(k_time, 7000 + i), 31), self.scored_cases[0])
+                            gi = problem.make_inputs(
+                                fold_in(fold_in(k_time, 7000 + i), 31 + swept.index(g_case)), g_case
+                            )
                             block(gi)
                             gp, _, _ = timing_mod.counterbalanced_pair(
                                 i, lambda: gb_fn(*gi), lambda: gc_fn(*gi), perf, block
@@ -736,18 +873,30 @@ class PersistentWorker:
                             if i >= self.timing_warmup:
                                 gpairs.append(gp)
                         if gpairs:
-                            gt = timing_mod.CaseTiming(case=f"grad:{self.scored_cases[0].name}", pairs=gpairs)
-                            result["grad_score"] = gt.score
-                            result["grad_reward"] = timing_mod.gate_reward(gt.score, self.noise_floor or 0.0)
-                            result["grad_latencies"] = {
+                            gt = timing_mod.CaseTiming(case=f"grad:{g_case.name}", pairs=gpairs)
+                            grad_scores[g_case.name] = gt.score
+                            grad_lat[g_case.name] = {
                                 "ref_median_s": gt.ref_median_s, "cand_median_s": gt.cand_median_s
                             }
                     except Exception as e:  # noqa: BLE001 -- a backward TIMING failure must not fail a correct kernel
-                        result["grad_timing_error"] = f"{type(e).__name__}: {str(e)[:160]}"
+                        grad_terr[g_case.name] = f"{type(e).__name__}: {str(e)[:160]}"
+                if grad_scores:
+                    result["grad_scores"] = grad_scores
+                    # Scalar view for existing consumers (regrade_winners,
+                    # artifact tables): the geomean of the swept ratios.
+                    result["grad_score"] = timing_mod.geomean(list(grad_scores.values()))
+                    result["grad_reward"] = timing_mod.gate_reward(
+                        result["grad_score"], self.noise_floor or 0.0
+                    )
+                    result["grad_latencies"] = grad_lat
+                    result["grad_baseline_impl"] = grad_impls
+                if grad_terr:
+                    result["grad_timing_error"] = grad_terr
 
             # ---- 6. counterbalanced interleaved timing, fresh inputs per
             # ---- iteration, correctness verified on TIMED outputs
             case_timings, sol_fracs, baseline_impls, timer_used = [], {}, {}, {}
+            mxu_fracs = {}
             skipped_tp, tp_widths = {}, {}
             for case in self.scored_cases + self.holdout_cases:
                 if over_budget():
@@ -783,10 +932,76 @@ class PersistentWorker:
                         continue
                     tp_in, tp_out = specs
                     tp_mesh = timing_mod.make_mesh(tp_w)
-                    raw_base = gb["raw"] if gb and gb.get("raw") else problem.for_case(case).baseline
+                    # PER-SHARD ELECTION (task #12, the megablox-39.8x class):
+                    # a baseline elected at the FULL shape can be catastrophic
+                    # at per-shard geometry (megablox's tuned tiling measured
+                    # 16x off at unelected shapes) -- a mistuned denominator
+                    # makes any candidate look absurdly fast. Re-elect among
+                    # the same candidates AT the shard shape, through the same
+                    # shard_map the timing uses.
+                    _pc_tp = problem.for_case(case)
+                    try:
+                        _bl_cands = _pc_tp.baseline_candidates()
+                    except Exception:
+                        _bl_cands = {"baseline": _pc_tp.baseline}
+                    if gb and gb.get("raw") and "elected-full" not in _bl_cands:
+                        _bl_cands = {**_bl_cands, "elected-full": gb["raw"]}
+                    _el_in = problem.make_inputs(fold_in(k_time, 77_000 + hash_stable(case.name) % 1000), case)
+                    block(_el_in)
+                    _el_sh = timing_mod.shard_inputs(_el_in, tp_mesh, tp_in)
+                    _tp_timings = {}
+                    for _nm, _fn in _bl_cands.items():
+                        try:
+                            _sf = self.jax.jit(timing_mod.shard_mapped(_fn, tp_mesh, tp_in, tp_out))
+                            for _ in range(2):
+                                block(_sf(*_el_sh))
+                            _ts = []
+                            for _ in range(5):
+                                _t0 = perf()
+                                block(_sf(*_el_sh))
+                                _ts.append(perf() - _t0)
+                            _ts.sort()
+                            _tp_timings[_nm] = (_ts[len(_ts) // 2], _sf, _fn)
+                        except Exception as _e:  # unavailable at shard shape
+                            print(f"[tp-elect] {case.name}: {_nm} unavailable: "
+                                  f"{type(_e).__name__}: {str(_e)[:100]}", flush=True)
+                    if not _tp_timings:
+                        skipped_tp[case.name] = "no baseline usable at shard shape"
+                        continue
+                    _best = min(_tp_timings, key=lambda k: _tp_timings[k][0])
+                    raw_base = _tp_timings[_best][2]
+                    base_fn = _tp_timings[_best][1]
+                    result.setdefault("tp_baseline_impls", {})[case.name] = {
+                        "impl": _best,
+                        "all_ms": {k: round(v[0] * 1e3, 3) for k, v in _tp_timings.items()},
+                    }
                     cand_fn = self.jax.jit(timing_mod.shard_mapped(cand_fn, tp_mesh, tp_in, tp_out))
-                    base_fn = self.jax.jit(timing_mod.shard_mapped(raw_base, tp_mesh, tp_in, tp_out))
                     tp_widths[case.name] = tp_w
+
+                    # TP REF-VS-REF CONTROL: the instrument must pass its own
+                    # sanity check under shard_map before any TP number is
+                    # believed. Baseline against itself through the SAME
+                    # protocol must grade ~1.0; if it does not, the timing
+                    # path (not the candidate) is broken -- skip and say so
+                    # instead of publishing an impossible score.
+                    _ctl_pairs = []
+                    for _i in range(6):
+                        _cin = problem.make_inputs(fold_in(k_time, 88_000 + _i), case)
+                        block(_cin)
+                        _cin = timing_mod.shard_inputs(_cin, tp_mesh, tp_in)
+                        _cp, _, _ = timing_mod.counterbalanced_pair(
+                            _i, lambda: base_fn(*_cin), lambda: base_fn(*_cin), perf, block
+                        )
+                        if _i >= 2:
+                            _ctl_pairs.append(_cp)
+                    _ctl = timing_mod.interleaved_score(_ctl_pairs)
+                    result.setdefault("tp_control", {})[case.name] = round(_ctl, 4)
+                    _ctl_tol = max(3 * (self.noise_floor or 0.05), 0.15)
+                    if abs(_ctl - 1.0) > _ctl_tol:
+                        skipped_tp[case.name] = (
+                            f"tp control failed: baseline-vs-baseline graded {_ctl:.3f} "
+                            f"(tolerance +/-{_ctl_tol:.2f}) -- timing distrusted")
+                        continue
 
                     # SHARDED == UNSHARDED, checked before anything is timed
                     # (tokamax's api_sharding invariant; theirs is atol=0.0).
@@ -817,6 +1032,7 @@ class PersistentWorker:
                         del chk_in, un_out, sh_out
                         continue
                     del chk_in, un_out, sh_out
+                tp_wall_pairs, tp_dev_pairs = [], []
                 for i in range(self.timing_warmup + self.timing_pairs):
                     inputs = problem.make_inputs(fold_in(fold_in(k_time, i), hash_stable(case.name)), case)
                     block(inputs)
@@ -830,11 +1046,14 @@ class PersistentWorker:
                     # outputs the correctness checks need, and the device pair
                     # replaces only the two latencies -- so a ratio is not
                     # squashed toward 1.0 by dispatch overhead common to both.
+                    wall_pair = pair
+                    dev_pair = None
                     if self.device_timing:
                         dp = timing_mod.counterbalanced_pair_device(
                             i, base_fn, cand_fn, inputs, timing_mod.device_timer
                         )
                         if dp is not None:
+                            dev_pair = dp
                             pair = dp
                             timer_used["device"] = timer_used.get("device", 0) + 1
                         else:
@@ -843,6 +1062,10 @@ class PersistentWorker:
                         timer_used["wallclock"] = timer_used.get("wallclock", 0) + 1
                     if i >= self.timing_warmup:
                         it = i - self.timing_warmup
+                        if tp_mesh is not None:
+                            tp_wall_pairs.append(wall_pair)
+                            if dev_pair is not None:
+                                tp_dev_pairs.append(dev_pair)
                         pairs.append(pair)
                         if it in check_iters:
                             checks[it] = (inputs, c_out)
@@ -853,28 +1076,100 @@ class PersistentWorker:
                     okay, why = check_tolerance(error_stats(c_out, ref32), tol)
                     if not okay:
                         return fail("timed_output_correctness", f"{case.name} timed iter {it}: {why}")
+                if tp_mesh is not None and tp_wall_pairs and tp_dev_pairs:
+                    # TIMER CROSS-CHECK (task #12): under shard_map the two
+                    # instruments must agree. The device timer's op-interval
+                    # union has never been validated over multiple device
+                    # timelines -- if it diverges from wallclock beyond the
+                    # floor, neither number is publishable for this case.
+                    _mw = timing_mod.interleaved_score(tp_wall_pairs)
+                    _md = timing_mod.interleaved_score(tp_dev_pairs)
+                    result.setdefault("tp_timer_ratios", {})[case.name] = {
+                        "wall": round(_mw, 4), "device": round(_md, 4)}
+                    # WALLCLOCK IS GROUND TRUTH UNDER TP. The two instruments
+                    # disagree systematically here -- measured on v6e-8
+                    # 2026-08-27, wall 0.359/0.389/0.495 against device
+                    # 0.212/0.211/0.265 on the same four tp4 cases -- and the
+                    # reason is structural, not noise: the device timer is a
+                    # union of OP intervals, so it undercounts the cross-chip
+                    # collectives shard_map inserts, while wallclock measures
+                    # the elapsed time a user actually pays. So TP cases score
+                    # on wall and keep device as a diagnostic.
+                    #
+                    # The cross-check still gates, but on what it can actually
+                    # establish: both timers agreeing which side of parity the
+                    # candidate lands on. A case where one instrument says
+                    # faster and the other says slower is unpublishable; a case
+                    # where they agree on the verdict and differ on magnitude
+                    # is publishable at the conservative instrument. Excluding
+                    # on magnitude alone dropped EVERY tp4 case -- all four
+                    # here -- and left the arena with no TP signal at all.
+                    if (_md - 1.0) * (_mw - 1.0) < 0:
+                        skipped_tp[case.name] = (
+                            f"timer verdict disagreement: wall {_mw:.3f} vs device "
+                            f"{_md:.3f} straddle parity -- TP timing unpublishable")
+                        continue
+                    pairs = tp_wall_pairs
                 ct = timing_mod.CaseTiming(
                     case=case.name, pairs=pairs, holdout=case.holdout,
                     blind=getattr(case, "blind", False),
                 )
                 case_timings.append(ct)
                 bm = problem.bytes_moved(case)
-                chip = (
-                    "v6e"
-                    if "v6e" in result["device_kind"].lower()
-                    else "v5p" if "v5p" in result["device_kind"].lower() else self.platform
+                chip = timing_mod.chip_from_device_kind(
+                    result["device_kind"], self.platform
                 )
                 if problem.memory_bound and bm:
                     frac = timing_mod.speed_of_light_fraction(bm, ct.cand_median_s, chip)
                     if frac is not None:
                         sol_fracs[case.name] = frac
+                fl = problem.flops(case)
+                if fl:
+                    # Roofline, both sides: bandwidth fraction (above) and MXU
+                    # fraction (here). Reported for CANDIDATE and REFERENCE so
+                    # the gap is attributable to a resource, not just a ratio.
+                    mu = timing_mod.mxu_utilization(fl, ct.cand_median_s, chip)
+                    mu_ref = timing_mod.mxu_utilization(fl, ct.ref_median_s, chip)
+                    if mu is not None:
+                        mxu_fracs[case.name] = (mu, mu_ref)
         except Exception as e:
             return fail("worker", f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=6)}")
 
         result["warm_chip_s"] = self.perf() - t_chip
-        reward_frame = timing_mod.final_reward(
-            case_timings, self.noise_floor or 0.0, general=getattr(problem, "general_mode", False)
-        )
+        try:
+            reward_frame = timing_mod.final_reward(
+                case_timings, self.noise_floor or 0.0,
+                general=getattr(problem, "general_mode", False),
+            )
+        except ValueError as e:
+            # NOTHING WAS TIMEABLE. Under per-test dispatch this is a normal
+            # outcome for one task -- a TP case whose ref-vs-ref control or
+            # wall-vs-device cross-check refused the measurement leaves zero
+            # timings -- and it is the JUDGE's inability, not the candidate's
+            # fault. Raising killed the Ray task, which the collector could
+            # only read as an unexplained death; a judge_fault verdict makes
+            # the collector exclude the case and score the rest.
+            return fail("judge_fault",
+                        f"{e} (skipped_tp={result.get('skipped_tp') or {}})")
+        if problem.has_bwd:
+            # THE training scalar for RL on has_bwd tasks: the swept backward
+            # joins the geomean with one factor per shape -- fwd:bwd aggregate
+            # log-weight ~1:1, the train-step reality. Absence or wrongness
+            # floors EVERY grad factor; judge-side timing faults EXCLUDE their
+            # factor instead (empty list = pure forward passthrough). `reward`
+            # stays the forward-only number so nothing existing changes meaning.
+            if result.get("grad_ok") and result.get("grad_scores"):
+                gvals = list(result["grad_scores"].values())
+            elif result.get("grad_ok"):
+                gvals = []  # correct backward, judge could not time it
+            else:
+                gvals = [None] * max(1, len(grad_sig))
+            reward_frame["reward_with_bwd"] = timing_mod.fold_grad_reward(
+                reward_frame,
+                gvals,
+                self.noise_floor or 0.0,
+                reward_frame["n_scored_cases"],
+            )
         try:
             mem = self.device.memory_stats()
             result["peak_hbm_bytes"] = int(mem.get("peak_bytes_in_use", 0))
@@ -885,6 +1180,7 @@ class PersistentWorker:
             gate="all",
             **reward_frame,
             speed_of_light_fracs=sol_fracs,
+            mxu_fracs=mxu_fracs,
             baseline_impl_per_case=baseline_impls,
             timer=timer_used,
             tp_widths=tp_widths,
@@ -928,6 +1224,17 @@ class PersistentWorker:
              unbounded stall on ALL of them.
         """
         budget = self.compile_budget_s
+        # The budget is a TOTAL deadline across units, tuned when a candidate
+        # compiled ~a dozen artifacts. The swept backward roughly doubles the
+        # unit count on has_bwd tasks, so scale the deadline with the unit
+        # count past that historical size -- never TIGHTER than configured
+        # (small candidates keep exactly the old bound; only genuinely bigger
+        # warm sets get proportionally more room).
+        if budget:
+            budget = max(budget, budget * len(units) / 12.0)
+        # The EFFECTIVE budget, for the two timeout messages (they live in
+        # other methods where the local is out of scope).
+        self._effective_compile_budget_s = budget
         if not budget:
             for _label, run in units:
                 run()
@@ -958,14 +1265,14 @@ class PersistentWorker:
     def _check_compile_deadline(self, t0, deadline, label) -> None:
         if self.perf() >= deadline:
             raise CompileBudgetExceeded(
-                f"candidate compile exceeded the {self.compile_budget_s:.0f}s compile budget "
+                f"candidate compile exceeded the {self._effective_compile_budget_s:.0f}s compile budget "
                 f"({self.perf() - t0:.1f}s at unit {label!r})"
             )
 
     def _on_compile_timeout(self, code: str, tag, unit, elapsed: float) -> None:
         self.compile_timeouts += 1
         why = (
-            f"candidate compile exceeded the {self.compile_budget_s:.0f}s compile budget "
+            f"candidate compile exceeded the {self._effective_compile_budget_s:.0f}s compile budget "
             f"({elapsed:.1f}s inside a single un-cancellable XLA compile at unit {unit!r}); "
             f"judge restarting"
         )
@@ -1012,7 +1319,20 @@ class PersistentWorker:
         would replay the wrong verdict and make a contract change look like a
         no-op.
         """
-        return f"bwdgate={int(self.problem.bwd_gates)}" if self.problem.has_bwd else ""
+        # The CASE LIST is part of the contract identity: per-case dispatch
+        # grades the same code with cases=[one shape] per task, and without
+        # the list in the key, case A's verdict would cache-hit case B's.
+        names = ",".join(c.name for c in self.scored_cases + self.holdout_cases)
+        bwd = f"bwdgate={int(self.problem.bwd_gates)}" if self.problem.has_bwd else ""
+        # The REWARD DENOMINATOR is part of the contract: an xla-graded verdict
+        # and a production-graded one for the same code are NOT interchangeable
+        # (measured 2026-09-03: the rg_lru seed, graded vs production in the
+        # seedbar runs, cache-hit its 1.0 verdict under --baseline xla and the
+        # election never ran). Without this, a shared cache silently serves the
+        # wrong denominator.
+        import os as _os
+        base = _os.environ.get("ARENA_BASELINE", "all")
+        return f"{bwd}|cases={names}|baseline={base}"
 
     def _store(self, code: str, result: dict) -> None:
         if self.cache is None:

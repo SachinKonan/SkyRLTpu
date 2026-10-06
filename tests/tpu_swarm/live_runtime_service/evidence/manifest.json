@@ -1,0 +1,22 @@
+{
+  "date_utc": "2026-09-17",
+  "managed_job_id": 990,
+  "pool": "tpuswarm-v4-32-central2-smoke",
+  "worker": 130,
+  "ray": "2.58.0",
+  "systemd": 249,
+  "cgroup_version": 2,
+  "hosts": 4,
+  "checks": [
+    "normal",
+    "launcher-kill",
+    "supervisor-kill",
+    "preflight-failure",
+    "reuse",
+    "sky-cancel"
+  ],
+  "runtime_sha256": "1444b007d3ef5c172d9fbb4809defbe69c42cbe73ec0339ddeb7c951f53c3ce6",
+  "probe_sha256": "780721e536106f6bf005499efad5473dcff37a32fab797c9d3cfd876d9443427",
+  "all_hosts_clean": true,
+  "model_training_tested": false
+}

@@ -1,0 +1,105 @@
+{
+  "job": 982,
+  "name": "science-routing-v4-muse-seeded-train-002",
+  "root": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/global_step.json",
+      "source_generation": "1789743864520694",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/global_step.json",
+      "size": 18,
+      "crc32c": "z/BISQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/life_state.json",
+      "source_generation": "1789743864277441",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/life_state.json",
+      "size": 148,
+      "crc32c": "unFz/Q=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/member_muse/checkpoints.jsonl",
+      "source_generation": "1789743864312344",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/member_muse/checkpoints.jsonl",
+      "size": 1096,
+      "crc32c": "24c6MA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/metrics.jsonl",
+      "source_generation": "1789743864267837",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/metrics.jsonl",
+      "size": 61137,
+      "crc32c": "pQpmHA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000000.json",
+      "source_generation": "1789743864301233",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000000.json",
+      "size": 114737,
+      "crc32c": "rakBPw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000001.json",
+      "source_generation": "1789743864348839",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000001.json",
+      "size": 582520,
+      "crc32c": "7aF1zg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000002.json",
+      "source_generation": "1789743864386522",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000002.json",
+      "size": 937938,
+      "crc32c": "kkkA0g=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000003.json",
+      "source_generation": "1789743864276835",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000003.json",
+      "size": 1369421,
+      "crc32c": "DwCuTQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000004.json",
+      "source_generation": "1789743864529637",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000004.json",
+      "size": 1798108,
+      "crc32c": "zuXS3Q=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000005.json",
+      "source_generation": "1789743864289392",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000005.json",
+      "size": 2317784,
+      "crc32c": "LEDeRg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000006.json",
+      "source_generation": "1789743864345818",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000006.json",
+      "size": 2789862,
+      "crc32c": "pQyVzA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000007.json",
+      "source_generation": "1789743864411036",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000007.json",
+      "size": 3308345,
+      "crc32c": "owTxUQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000008.json",
+      "source_generation": "1789743864331149",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/client/tinker_log/science-routing-v4-muse-seeded-train-002/puct_sampler_step_000008.json",
+      "size": 3880326,
+      "crc32c": "ne8C4g=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-muse-seeded-train-002/checkpoints/model_c4d9bb44/000008.tar.gz",
+      "source_generation": "1789740849522444",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-muse-seeded-train-002/checkpoints/model_c4d9bb44/000008.tar.gz",
+      "size": 2331471244,
+      "crc32c": "v6ZrdQ=="
+    }
+  ]
+}

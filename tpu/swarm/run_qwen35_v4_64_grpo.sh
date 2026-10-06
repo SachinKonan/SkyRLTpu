@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Run one Qwen3.5-27B GRPO/Erdos cell on an eight-host v4-64 pool worker.
+set -euo pipefail
+
+: "${SKYPILOT_NODE_RANK:=0}"
+: "${SKYPILOT_NODE_IPS:?SkyPilot must provide all v4-64 TPU VM IPs}"
+: "${CELL:=grpo-n}"
+
+export JOBMAN_WORKER_ID="$SKYPILOT_NODE_RANK"
+export JOBMAN_TPU_INTERNAL_IPS
+JOBMAN_TPU_INTERNAL_IPS=$(printf '%s\n' "$SKYPILOT_NODE_IPS" | awk 'NF' | paste -sd, -)
+node_count=$(awk -F, '{print NF}' <<<"$JOBMAN_TPU_INTERNAL_IPS")
+if [ "$node_count" -ne 8 ]; then
+  echo "mixed v4-64 requires eight TPU VMs; SkyPilot supplied $node_count" >&2
+  exit 2
+fi
+
+export REMOTE_USER="${REMOTE_USER:-$(id -un)}"
+export SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/ray_bootstrap_key.pem}"
+mkdir -p "$HOME/.ssh"
+
+# SkyPilot invokes the run command on every TPU VM. The existing cell launcher
+# is head-driven and reaches the other seven ranks over their internal IPs.
+if [ "$JOBMAN_WORKER_ID" != "0" ]; then
+  echo "rank $JOBMAN_WORKER_ID ready; rank 0 owns the GRPO process"
+  exit 0
+fi
+if [ ! -f "$SSH_KEY_FILE" ]; then
+  echo "SkyPilot TPU pod key is missing: $SSH_KEY_FILE" >&2
+  exit 2
+fi
+ln -sfn "$SSH_KEY_FILE" "$HOME/.ssh/jobman_tpu_ed25519"
+
+REPO=$(readlink -f "${SKYRL_REPO_DIR:-$PWD}")
+export SKYRL_REPO_DIR="$REPO"
+export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-$(basename "$REPO")}" # Runtime generation identity.
+
+# SkyPilot starts the run command independently on all eight TPU VMs. A warm
+# head can reach this wrapper while a cold rank is still downloading/extracting
+# the bundle; cross-host cleanup then fails because its script is not present
+# yet. Require every rank to expose this exact generation before touching any
+# process or cache on the slice.
+bundle_generation=$(basename "$REPO")
+IFS=',' read -r -a bundle_ips <<< "$JOBMAN_TPU_INTERNAL_IPS"
+for ip in "${bundle_ips[@]}"; do
+  ready=0
+  for _attempt in $(seq 1 "${BUNDLE_READY_ATTEMPTS:-180}"); do
+    observed=$(timeout 30 ssh -F /dev/null -i "$SSH_KEY_FILE" \
+      -o IdentitiesOnly=yes -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 \
+      "$REMOTE_USER@$ip" \
+      "target=\$(readlink -f '$SKYRL_REPO_DIR' 2>/dev/null); \
+       test \"\$target\" = '$REPO' && \
+       test -r \"\$target/tpu/swarm/cleanup_v4_64_worker.sh\" && \
+       printf '%s' '$bundle_generation'" 2>/dev/null || true)
+    if [[ "$observed" == "$bundle_generation" ]]; then
+      ready=1
+      break
+    fi
+    sleep "${BUNDLE_READY_INTERVAL_SECONDS:-5}"
+  done
+  if [[ "$ready" != "1" ]]; then
+    echo "bundle generation $bundle_generation did not become ready on $ip; requesting recovery" >&2
+    exit "${SETUP_RETRY_EXIT_CODE:-33}"
+  fi
+done
+echo "bundle generation $bundle_generation ready on all eight hosts"
+
+# A SkyPilot recovery starts a new internal job on an existing pool worker.
+# Stop the previous attempt's client before any backend is reconciled; otherwise
+# it can continue sending requests while vLLM/trainer are being replaced.
+if [[ -n "${SKYPILOT_INTERNAL_JOB_ID:-}" ]]; then
+  session="${CELL_SESSION:-cell}"
+  if tmux has-session -t "=$session" 2>/dev/null; then
+    echo "fencing stale client before SkyPilot attempt $SKYPILOT_INTERNAL_JOB_ID"
+    tmux kill-session -t "=$session" 2>/dev/null || true
+  fi
+  rm -f "$HOME/ENGINE-SICK"
+fi
+if [[ "${V4_64_AUTO_TOPOLOGY:-1}" == "1" ]]; then
+  topology_cache="$HOME/.cache/tpuswarm/v4-64-topology.env"
+  topology_fingerprint=$(printf '%s' "$JOBMAN_TPU_INTERNAL_IPS" | sha256sum | awk '{print $1}')
+  topology_env=$(mktemp)
+  if [[ -f "$topology_cache" ]]; then
+    # shellcheck disable=SC1090
+    source "$topology_cache"
+  fi
+  if [[ "${V4_64_TOPOLOGY_FINGERPRINT:-}" == "$topology_fingerprint" &&
+        -n "${TRAIN_WORKERS:-}" && -n "${VLLM_WORKERS:-}" ]]; then
+    echo "reusing cached v4-64 topology TRAIN_WORKERS=$TRAIN_WORKERS VLLM_WORKERS=$VLLM_WORKERS"
+  else
+    unset TRAIN_WORKERS VLLM_WORKERS
+    OUTPUT_ENV_FILE="$topology_env" bash "$REPO/tpu/swarm/discover_v4_64_topology.sh"
+    printf 'V4_64_TOPOLOGY_FINGERPRINT=%q\n' "$topology_fingerprint" >> "$topology_env"
+    mkdir -p "$(dirname "$topology_cache")"
+    install -m 600 "$topology_env" "$topology_cache"
+  fi
+  # shellcheck disable=SC1090
+  source "$topology_cache"
+  rm -f -- "$topology_env"
+  export TRAIN_WORKERS VLLM_WORKERS
+fi
+
+# Exit 33 and 34 are explicitly configured as unlimited recovery signals in
+# the SkyPilot task. Normalize every setup failure to 33, and preserve the
+# monitor's runtime-recovery code 34. Before returning either signal, fence all
+# stale processes/downloads so the retained pool slice is reusable immediately.
+cleanup_on_failure() {
+  local rc=$?
+  trap - EXIT
+  if [[ "$rc" -ne 0 ]]; then
+    bash "$REPO/tpu/swarm/cleanup_v4_64_worker.sh" "$rc" \
+      || echo "v4-64 failure cleanup itself failed" >&2
+  fi
+  exit "$rc"
+}
+trap cleanup_on_failure EXIT
+
+setup_rc=0
+bash "$REPO/tpu/swarm/reconcile_v4_64_role_caches.sh" || setup_rc=$?
+if [[ "$setup_rc" -ne 0 ]]; then
+  echo "v4-64 cache/checkpoint setup failed (rc=$setup_rc); requesting SkyPilot recovery" >&2
+  exit "${SETUP_RETRY_EXIT_CODE:-33}"
+fi
+
+bash "$REPO/tpu/jobman/cell_worker.sh" || setup_rc=$?
+if [[ "$setup_rc" -ne 0 ]]; then
+  if [[ "$setup_rc" == "33" || "$setup_rc" == "34" ]]; then
+    exit "$setup_rc"
+  fi
+  echo "v4-64 engine setup failed (rc=$setup_rc); requesting SkyPilot recovery" >&2
+  exit "${SETUP_RETRY_EXIT_CODE:-33}"
+fi
+
+monitor_rc=0
+bash "$REPO/tpu/jobman/cell_monitor.sh" || monitor_rc=$?
+if [[ "$monitor_rc" -ne 0 && "$monitor_rc" != "33" && "$monitor_rc" != "34" ]]; then
+  echo "v4-64 runtime monitor failed (rc=$monitor_rc); requesting SkyPilot recovery" >&2
+  monitor_rc="${RUNTIME_RETRY_EXIT_CODE:-34}"
+fi
+exit "$monitor_rc"

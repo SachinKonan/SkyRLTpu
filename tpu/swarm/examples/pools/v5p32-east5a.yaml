@@ -1,0 +1,48 @@
+# Pool tpuswarm-v5p32-east5a-erdos. Live target 35 workers (2026-10-05). Resize with
+# `sky jobs pool apply -p tpuswarm-v5p32-east5a-erdos --workers N` and update this file to match;
+# re-applying a stale file resets the pool to the count written here.
+# v5p-32 east5a pool, target 48 -> 35 (2026-09-23) to cut launch pressure on the API executors.
+name: tpuswarm-v5p32-east5a-erdos
+resources:
+  infra: gcp/us-east5/us-east5-a
+  accelerators:
+    tpu-v5p-32: 1
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv5
+  use_spot: true
+  disk_size: 150
+service:
+  pool:
+    workers: 35
+    min_workers: 35
+    max_workers: 35
+    queue_length_threshold: 1
+    upscale_delay_seconds: 60
+    downscale_delay_seconds: 1200
+num_nodes: 1
+setup: "set -euo pipefail\nwait_for_apt() {\n  local waited=0\n  while sudo fuser\
+  \ /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null\
+  \ 2>&1; do\n    if [ \"$waited\" -ge 600 ]; then return 1; fi\n    sleep 5\n   \
+  \ waited=$((waited + 5))\n  done\n}\nif ! { command -v git && command -v tmux &&\
+  \ command -v g++; } >/dev/null 2>&1; then\n  wait_for_apt\n  sudo apt-get update\
+  \ -y\n  wait_for_apt\n  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \\\
+  \n    git curl tmux python3 python3-venv python3-pip build-essential\nfi\n\nroot=\"\
+  $HOME/SkyRLTpu-tpuswarm\"\ngeneration=$(gcloud storage objects describe \"$TPUSWARM_SKYRL_BUNDLE_URL\"\
+  \ \\\n  --format='value(generation)')\ntest -n \"$generation\"\nbundles=\"$HOME/.cache/tpuswarm/bundles\"\
+  \ndestination=\"$bundles/$generation\"\nmkdir -p \"$bundles\"\nif [ ! -d \"$destination\"\
+  \ ]; then\n  archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)\n  staging=$(mktemp\
+  \ -d \"$bundles/.extract.XXXXXX\")\n  trap 'rm -f -- \"$archive\"; rm -rf -- \"\
+  $staging\"' EXIT\n  gcloud storage cp \"$TPUSWARM_SKYRL_BUNDLE_URL\" \"$archive\"\
+  \n  tar -xzf \"$archive\" -C \"$staging\"\n  test -x \"$staging/tpu/swarm/run_erdos_min_overlap.sh\"\
+  \n  test -f \"$staging/third_party/TPUSwarm/pyproject.toml\"\n  test -f \"$staging/.tpuswarm-bundle-manifest\"\
+  \n  mv \"$staging\" \"$destination\"\n  rm -f -- \"$archive\"\n  trap - EXIT\nfi\n\
+  if [ -e \"$root\" ] && [ ! -L \"$root\" ]; then\n  echo \"$root exists and is not\
+  \ a TPUSwarm-managed symlink\" >&2\n  exit 1\nfi\nln -sfn \"$destination\" \"$root\"\
+  \n"
+run: echo "setup done"
+envs:
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-qwen35-v6e32-v1.tar.gz
+  ZONE: us-east5-a
+file_mounts: {}
+volumes: {}

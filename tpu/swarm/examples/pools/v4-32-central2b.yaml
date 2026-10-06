@@ -1,0 +1,36 @@
+# Pool tpuswarm-v4-32-central2-smoke. Live target 5 workers (2026-10-05). Resize with
+# `sky jobs pool apply -p tpuswarm-v4-32-central2-smoke --workers N` and update this file to match;
+# re-applying a stale file resets the pool to the count written here.
+# v4-32 target 6 -> 17 (2026-09-21), taking the 11 request slots freed by cutting
+# v4-64 to 18. Slot-neutral; cores are not the constraint (2048 quota, 648 used).
+name: tpuswarm-v4-32-central2-smoke
+resources:
+  infra: gcp/us-central2/us-central2-b
+  accelerators:
+    tpu-v4-32: 1
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+service:
+  pool:
+    workers: 5
+    min_workers: 5
+    max_workers: 5
+    queue_length_threshold: 1
+    upscale_delay_seconds: 60
+    downscale_delay_seconds: 1200
+num_nodes: 1
+setup: "set -euo pipefail\nwait_for_apt() {\n  local waited=0\n  while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do\n    if [ \"$waited\" -ge 600 ]; then return 1; fi\n    sleep 5\n    waited=$((waited + 5))\n  done\n}\nif ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then\n  wait_for_apt\n  sudo apt-get update -y\n  wait_for_apt\n  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \\\n    git curl tmux python3 python3-venv python3-pip build-essential\nfi\ncommand -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh\nexport PATH=\"$HOME/.local/bin:$PATH\"\n\nnode_count=$(printf '%s\\n' \"$SKYPILOT_SETUP_NODE_IPS\" | awk 'NF' | wc -l)\nif [ \"$node_count\" -ne 4 ]; then\n  echo \"v4-32 requires four TPU VMs; SkyPilot supplied $node_count\" >&2\n  exit 2\nfi\n\ngeneration=$(gcloud storage objects describe \"$TPUSWARM_SKYRL_BUNDLE_URL\" \\\n  --format='value(generation)')\ntest -n \"$generation\"\nbundles=\"$HOME/.cache/tpuswarm/bundles\"\ndestination=\"$bundles/$generation\"\nmkdir -p \"$bundles\"\nif [ ! -d \"$destination\" ]; then\n  archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)\n  staging=$(mktemp -d \"$bundles/.extract.XXXXXX\")\n  trap 'rm -f -- \"$archive\"; rm -rf -- \"$staging\"' EXIT\n  gcloud storage cp \"$TPUSWARM_SKYRL_BUNDLE_URL\" \"$archive\"\n  tar -xzf \"$archive\" -C \"$staging\"\n  test -x \"$staging/tpu/jobman/v6e_tunix_smoke_worker.sh\"\n  test -x \"$staging/tpu/start_colocated_vllm_tinker.sh\"\n  mv \"$staging\" \"$destination\"\n  rm -f -- \"$archive\"\n  trap - EXIT\nfi\nroot=\"$HOME/SkyRLTpu-tpuswarm\"\nif [ -e \"$root\" ] && [ ! -L \"$root\" ]; then\n  echo \"$root exists and is not a TPUSwarm-managed symlink\" >&2\n  exit 1\nfi\nln -sfn \"$destination\" \"$root\"\nmkdir -p \"$HOME/.ssh\" \"$HOME/skyrl-logs\" \"$HOME/skyrl-runs\"\nchmod 700 \"$HOME/.ssh\"\necho \"v4-32 pool rank $SKYPILOT_SETUP_NODE_RANK ready with bundle generation $generation\"\n"
+run: echo "setup done"
+envs:
+  PROJECT: vision-mix
+  ZONE: us-central2-b
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-smoke-v2.tar.gz
+  TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts
+file_mounts: {}
+volumes: {}
+_metadata:
+  git_commit: 7d4b4208235113a216e9db1b1e74e591254b7585

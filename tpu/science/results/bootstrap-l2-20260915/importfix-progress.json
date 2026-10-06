@@ -1,0 +1,241 @@
+{
+  "recorded": 1789521348.8284523,
+  "runs": [
+    {
+      "job": 938,
+      "run": "science-routing-v4-gemma-bootstrap-l2-001",
+      "driver_age_s": 0,
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared"
+      ],
+      "events": {},
+      "generations": 0,
+      "grades": 0,
+      "summaries": {},
+      "endpoint": "<urlopen error [Errno 111] Connection refused>"
+    },
+    {
+      "job": 939,
+      "run": "science-placement-v4-gemma-bootstrap-l2-001",
+      "driver_age_s": 8,
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "preflight_complete"
+      ],
+      "events": {},
+      "bootstrap-import.log": "{\"event\": \"bootstrap_import_check_passed\", \"bootstrap\": \"/home/gcpuser/.cache/skyrl-ray-code/e2235f972c990de8ad0a3ea45c8b713c31c1f02c2c8c4abdc2b8d401ac0d32ba/tpu/science/bootstrap.py\", \"config\": \"/home/gcpuser/.cache/skyrl-ray-code/e2235f972c990de8ad0a3ea45c8b713c31c1f02c2c8c4abdc2b8d401ac0d32ba/tpu/swarm/ray_train/config.py\", \"layers\": 2}",
+      "bootstrap.log": "\u001b[36m(pid=)\u001b[0m W0916 01:13:53.567028  140182 tpu_pjrt_client.cc:2307] PjRt execution dispatch was blocked for 15.989009ms because PjRt's max in-flight computation semaphore is full (limit: 32), which may negatively affect the performance\n\u001b[36m(pid=, ip=10.130.0.52)\u001b[0m W0916 01:13:53.613017   56644 tpu_pjrt_client.cc:2307] PjRt execution dispatch was blocked for 15.612709ms because PjRt's max in-flight computation semaphore is full (limit: 32), which may negatively affect the performance\n\u001b[36m(pid=, ip=10.130.0.52)\u001b[0m W0916 01:13:53.613017   56644 tpu_pjrt_client.cc:2307] PjRt execution dispatch was blocked for 15.612709ms because PjRt's max in-flight computation semaphore is full (limit: 32), which may negatively affect the performance\n\u001b[36m(pid=, ip=10.130.0.52)\u001b[0m W0916 01:13:53.613017   56644 tpu_pjrt_client.cc:2307] PjRt execution dispatch was blocked for 15.612709ms because PjRt's max in-flight computation semaphore is full (limit: 32), which may negatively affect the performance\n\u001b[36m(pid=, ip=10.130.0.52)\u001b[0m W0916 01:13:53.613017   56644 tpu_pjrt_client.cc:2307] PjRt execution dispatch was blocked for 15.612709ms because PjRt's max in-flight computation semaphore is full (limit: 32), which may negatively affect the performance",
+      "generations": 0,
+      "grades": 0,
+      "summaries": {},
+      "endpoint": {
+        "version": null,
+        "versions": [],
+        "expected": [
+          "10.130.0.30",
+          "10.130.0.51",
+          "10.130.0.52",
+          "10.130.0.55",
+          "10.130.0.56",
+          "10.130.0.59",
+          "10.130.0.60"
+        ],
+        "replicas": [
+          {
+            "ip": "10.130.0.51",
+            "instance": "174442c9f56945d099d8a3a422967173",
+            "registered": 1789521053.8136346
+          },
+          {
+            "ip": "10.130.0.30",
+            "instance": "2d487006f42e4e7c944b723671c5471b",
+            "registered": 1789521057.6990416
+          },
+          {
+            "ip": "10.130.0.60",
+            "instance": "6e7dfcb3e18a48c5bf2d0d5e1fbe82d2",
+            "registered": 1789521057.966627
+          },
+          {
+            "ip": "10.130.0.59",
+            "instance": "cdb472b0e0fc4c359d08a96081319674",
+            "registered": 1789521059.972983
+          },
+          {
+            "ip": "10.130.0.56",
+            "instance": "95da61298bfc426a9f048d8f8964f44d",
+            "registered": 1789521061.859225
+          },
+          {
+            "ip": "10.130.0.52",
+            "instance": "c9d6f318a22d45dbb890383167a23dba",
+            "registered": 1789521063.8751671
+          },
+          {
+            "ip": "10.130.0.55",
+            "instance": "6c17a17daec84ad39204ccc038a678d1",
+            "registered": 1789521065.9826145
+          }
+        ],
+        "starts": {
+          "10.130.0.30": 1,
+          "10.130.0.55": 1,
+          "10.130.0.56": 1,
+          "10.130.0.51": 1,
+          "10.130.0.52": 1,
+          "10.130.0.59": 1,
+          "10.130.0.60": 1
+        },
+        "exhausted": [],
+        "active": 16,
+        "updating": false,
+        "committed": null,
+        "committed_adapters": []
+      }
+    },
+    {
+      "job": 936,
+      "run": "science-routing-v4-muse-bootstrap-l2-001",
+      "driver_age_s": 20,
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared"
+      ],
+      "events": {},
+      "generations": 0,
+      "grades": 0,
+      "summaries": {},
+      "endpoint": "<urlopen error [Errno 111] Connection refused>"
+    },
+    {
+      "job": 935,
+      "run": "science-routing-v4-qwen-bootstrap-l2-001",
+      "driver_age_s": 26,
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared"
+      ],
+      "events": {},
+      "generations": 0,
+      "grades": 0,
+      "summaries": {},
+      "endpoint": "<urlopen error [Errno 111] Connection refused>"
+    },
+    {
+      "job": 937,
+      "run": "science-placement-v4-qwen-bootstrap-l2-001",
+      "driver_age_s": 8,
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "preflight_complete"
+      ],
+      "events": {},
+      "bootstrap-import.log": "{\"event\": \"bootstrap_import_check_passed\", \"bootstrap\": \"/home/gcpuser/.cache/skyrl-ray-code/3acfac0f876c23b49ad55964aeb6035013d5c1358fe4b01a029e6732b1d0c76b/tpu/science/bootstrap.py\", \"config\": \"/home/gcpuser/.cache/skyrl-ray-code/3acfac0f876c23b49ad55964aeb6035013d5c1358fe4b01a029e6732b1d0c76b/tpu/swarm/ray_train/config.py\", \"layers\": 2}",
+      "bootstrap.log": "\u001b[36m(pid=, ip=10.130.0.2)\u001b[0m I0916 01:09:51.792590  126450 tpu_plumb_vmem_info.cc:665] scavenging_mode: 0 for module: jit_convert_element_type\n\u001b[36m(pid=, ip=10.130.0.2)\u001b[0m I0916 01:09:51.792639  126450 deepsea_compiler_hlo_passes.cc:6101] HLO_PASSES stage duration: 11.2626535ms\n\u001b[36m(pid=, ip=10.130.0.2)\u001b[0m I0916 01:09:51.845626  129080 deepsea_compiler_base.cc:3470] BACKEND_PASSES stage duration: 51.96020675ms\n\u001b[36m(pid=, ip=10.130.0.2)\u001b[0m W0916 01:09:51.851439  129080 deepsea_compiler_backend.cc:1233] Unable to dump host DMA stats for targets that do not support IOVA transfers.\n\u001b[36m(pid=, ip=10.130.0.2)\u001b[0m W0916 01:09:51.851439  129080 deepsea_compiler_backend.cc:1233] Unable to dump host DMA stats for targets that do not support IOVA transfers.",
+      "generations": 0,
+      "grades": 0,
+      "summaries": {},
+      "endpoint": {
+        "version": null,
+        "versions": [],
+        "expected": [
+          "10.130.0.10",
+          "10.130.0.11",
+          "10.130.0.12",
+          "10.130.0.2",
+          "10.130.0.22",
+          "10.130.0.3",
+          "10.130.0.8"
+        ],
+        "replicas": [
+          {
+            "ip": "10.130.0.11",
+            "instance": "4b0b5244c93a441ca27fef5260ef1fc6",
+            "registered": 1789520942.238618
+          },
+          {
+            "ip": "10.130.0.10",
+            "instance": "6fe9999a7e544eb9b72edd1aceadc4a0",
+            "registered": 1789520948.2655196
+          },
+          {
+            "ip": "10.130.0.22",
+            "instance": "281963a041e04d0ea35bf3f166d82b54",
+            "registered": 1789520948.6040418
+          },
+          {
+            "ip": "10.130.0.8",
+            "instance": "5ca2fd1002514ba69d816ed4b61c5dbe",
+            "registered": 1789520952.503918
+          },
+          {
+            "ip": "10.130.0.3",
+            "instance": "bb859ccd929b4d7482be8b120b471e4e",
+            "registered": 1789520954.633618
+          },
+          {
+            "ip": "10.130.0.12",
+            "instance": "b2440faae85d425fbe55102b13bc8e9e",
+            "registered": 1789520960.3942132
+          },
+          {
+            "ip": "10.130.0.2",
+            "instance": "8061a46f3520484b8b3715af586375b4",
+            "registered": 1789520960.4365387
+          }
+        ],
+        "starts": {
+          "10.130.0.12": 1,
+          "10.130.0.10": 1,
+          "10.130.0.11": 1,
+          "10.130.0.2": 1,
+          "10.130.0.8": 1,
+          "10.130.0.22": 1,
+          "10.130.0.3": 1
+        },
+        "exhausted": [],
+        "active": 16,
+        "updating": false,
+        "committed": null,
+        "committed_adapters": []
+      }
+    }
+  ],
+  "head_engine_generated_tokens": {
+    "qwen_placement": 116480,
+    "gemma_placement": 51964
+  },
+  "end_to_end_verified": false,
+  "optimizer_steps_verified": 0
+}

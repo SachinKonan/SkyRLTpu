@@ -156,11 +156,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
     result["backend"] = jax.default_backend()
     device = jax.local_devices()[0]
     result["device_kind"] = getattr(device, "device_kind", "?")
-    chip = (
-        "v6e"
-        if "v6e" in result["device_kind"].lower()
-        else "v5p" if "v5p" in result["device_kind"].lower() else result["backend"]
-    )
+    chip = timing_mod.chip_from_device_kind(result["device_kind"], result["backend"])
     smoke = bool(cfg.get("smoke", False))
 
     def _mem_stats():
@@ -284,8 +280,16 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         _, g_inputs, _, _, g_feats = corr_fixtures[0]
         pg = problem.for_case(fixture_cases[0]) if fixture_cases else problem
         ref_g = pg.grad_outputs(lambda *i: pg.reference(*i), *g_inputs)
-        cal_g = pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)
-        grad_fixture = (g_inputs, ref_g, grad_leaf_tolerances(ref_g, cal_g), g_feats)
+        cal_grads = [pg.grad_outputs(lambda *i: pg.reference_bf16(*i), *g_inputs)]
+        # the honest variants' AUTODIFF backwards belong in the band (see
+        # grad_leaf_tolerances) -- a variant that cannot express this shape
+        # or cannot be differentiated simply does not constrain it
+        for _variant in pg.grad_calibration_variants():
+            try:
+                cal_grads.append(pg.grad_outputs(_variant, *g_inputs))
+            except Exception:  # noqa: BLE001
+                continue
+        grad_fixture = (g_inputs, ref_g, grad_leaf_tolerances(ref_g, *cal_grads), g_feats)
 
     # ---------------- 4. poison the reference modules; 5. exec candidate
     result["phase"] = "exec"
@@ -533,6 +537,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
 
     case_timings = []
     sol_fracs = {}
+    mxu_fracs = {}
     for case in scored_cases + holdout_cases:
         pairs = []
         check_iters = sorted({0, n_pairs // 2, n_pairs - 1})
@@ -570,6 +575,12 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
             frac = timing_mod.speed_of_light_fraction(bm, ct.cand_median_s, chip)
             if frac is not None:
                 sol_fracs[case.name] = frac
+        fl = problem.flops(case)
+        if fl:
+            mu = timing_mod.mxu_utilization(fl, ct.cand_median_s, chip)
+            mu_ref = timing_mod.mxu_utilization(fl, ct.ref_median_s, chip)
+            if mu is not None:
+                mxu_fracs[case.name] = (mu, mu_ref)
 
     reward_frame = timing_mod.final_reward(case_timings, noise_floor)
     result.update(
@@ -578,6 +589,7 @@ def _run(cfg: dict, seed: int, result: dict) -> int:
         passed=True,
         **reward_frame,
         speed_of_light_fracs=sol_fracs,
+        mxu_fracs=mxu_fracs,
         latencies={t.case: {"ref_median_s": t.ref_median_s, "cand_median_s": t.cand_median_s} for t in case_timings},
         peak_hbm_bytes=_mem_stats(),
         phase="done",

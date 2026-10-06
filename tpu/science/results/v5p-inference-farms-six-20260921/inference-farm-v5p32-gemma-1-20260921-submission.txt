@@ -1,0 +1,10 @@
+YAML to run: /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/v5p-inference-farms-six/inference-farm-v5p32-gemma-1-20260921/inference-farm-v5p32-gemma-1-20260921.yaml
+Submitting to pool 'tpuswarm-v5p32-east5a-erdos' with 1 job.
+[33mLaunching managed job 'inference-farm-v5p32-gemma-1-20260921'...[0m
+
+📋 Useful Commands
+Managed Job ID: 1355
+├── To cancel the job:		sky jobs cancel 1355
+├── To stream job logs:		sky jobs logs 1355
+├── To stream controller logs:	sky jobs logs --controller 1355
+└── To view all managed jobs:	sky jobs queue

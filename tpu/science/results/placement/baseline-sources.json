@@ -1,0 +1,27 @@
+{
+  "challenge_commit": "996193c83eaad151e5ae3fb166cedbd83372d060",
+  "evaluator_commit": "45a721d01dfe56fc4800b95da52e9b4193b76d04",
+  "sources": [
+    {
+      "method": "archgen",
+      "url": "https://github.com/archgen-ai/Macro-Placement-challenge-2026",
+      "commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+      "entrypoint": "submissions/final_placer.py"
+    },
+    {
+      "method": "abuplace",
+      "url": "https://github.com/rishivg/AbuPlace",
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "entrypoint": "abuplace/placer.py"
+    }
+  ],
+  "janert": {
+    "status": "public_source_not_found",
+    "checked": [
+      "challenge leaderboard and winner links",
+      "public repositories of UjaanRakshit and heyman7913",
+      "Ujaan Rakshit portfolio JaneRT project, which has no source link"
+    ],
+    "note": "Do not equate the unrelated GitHub account janert with this team. Team identity/source release needs confirmation."
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "time": "2026-09-20T16:50:47.177125+00:00",
+  "hosts": [
+    {
+      "rank": 0,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    },
+    {
+      "rank": 1,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    },
+    {
+      "rank": 2,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    },
+    {
+      "rank": 3,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    },
+    {
+      "rank": 4,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    },
+    {
+      "rank": 5,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    },
+    {
+      "rank": 6,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    },
+    {
+      "rank": 7,
+      "exit": 0,
+      "stdout": "{\"unit\": \"skyrl-shu-gemma-cp26-launch.service\", \"memlock\": \"infinity\", \"preserved_old_logs\": \"/tmp/tpu_logs.uid2014.before-skyrl-20260920\"}\n",
+      "stderr": ""
+    }
+  ]
+}

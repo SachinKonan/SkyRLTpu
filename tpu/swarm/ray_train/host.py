@@ -1,0 +1,657 @@
+"""Host-local lifecycle, invoked by pinned Ray actors instead of SSH/tmux."""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tarfile
+import threading
+import time
+
+from .cache import CacheStore, GCS
+from .cache_admission import admit_cache
+from .commands import client_environment, trainer_command, trainer_environment
+from .config import Config
+from .database_snapshot import create_snapshot, restore_snapshot
+from .events import emit
+from .process import Process
+
+CLIENT_ENV = Path(__file__).with_name("client_env")
+
+
+def orbax_marker_present(gcs, orbax):
+    """True when the orbax tree carries the top-level CHECKPOINT_COMPLETE marker.
+
+    GCS.list() enumerates a prefix (it appends "/**"), so probing the marker's
+    own path finds nothing: the marker is an object, not a directory. List the
+    checkpoint tree once and look for the marker among its objects instead.
+    """
+    objects = gcs.list(orbax, allow_empty=True)
+    return any(o.relative == "CHECKPOINT_COMPLETE" for o in objects)
+
+
+class Host:
+    def __init__(self, config, rank, ips):
+        self.config = Config.from_dict(config).for_inference_rank(rank)
+        self.rank, self.ips = rank, ips
+        self.root = Path(self.config.root).expanduser().resolve()
+        self.run = self.root / "runs" / self.config.run_id
+        self.run.mkdir(parents=True, exist_ok=True)
+        self.source_identity = self.config.base_bundle_sha256
+        self.runtime_baseline_identity = "".join(
+            hashlib.sha256((Path(__file__).parent / "runtime_baselines" / name).read_bytes()).hexdigest()
+            for _, name in sorted(self.config.runtime_baselines.items()))
+        if self.config.requires_source_overlay:
+            from .overlay import identity
+            self.source_identity += "-" + identity(Path(__file__).with_name("source_overlay"))
+        if self.config.inference.native_thinking_budget:
+            from .thinking_budget.install import identity as thinking_identity
+            self.source_identity += "-thinking-" + thinking_identity()
+            self.source_identity += "-sdk-" + hashlib.sha256(Path(__file__).with_name("native_sdk.py").read_bytes()).hexdigest()
+        # Multiple full digests can exceed NAME_MAX when concatenated. Keep
+        # the full identity in the marker but bound the directory component.
+        source_name = ("native-" + hashlib.sha256(self.source_identity.encode()).hexdigest()
+                       if self.config.inference.native_thinking_budget else self.source_identity)
+        self.source = self.root / "sources" / source_name
+        self.log = self.run / f"host-{rank}.jsonl"
+        self.role = None
+        self.trainer_leader = 0
+        self.phase = "created"
+        self.processes = {}
+        self.lock = threading.RLock()
+        self.compile_sync_lock = threading.Lock()
+        self.run_sync_lock = threading.Lock()
+        self.stopping = threading.Event()
+        self.last_heartbeat = time.monotonic()
+        self.gcs = GCS(self.run / "transfers", self.config.cache)
+        self.sync_gcs = GCS(self.run / "writeback", self.config.cache)
+        self.store = None
+        self.last_sync = None
+        self.sync_error = None
+        self.watchdog = threading.Thread(target=self._watch_lease, daemon=True)
+        self.watchdog.start()
+
+    def _watch_lease(self):
+        while not self.stopping.wait(5):
+            if time.monotonic() - self.last_heartbeat > 180:
+                emit(self.log, "controller_lease_expired", rank=self.rank)
+                self.stop()
+                return
+
+    def heartbeat(self):
+        self.last_heartbeat = time.monotonic()
+        with self.lock:
+            return dict(rank=self.rank, role=self.role, phase=self.phase,
+                        processes={k: p.poll() for k, p in self.processes.items()},
+                        last_cache_sync=self.last_sync, cache_sync_error=self.sync_error,
+                        stopped=self.stopping.is_set())
+
+    def start(self, name, command, env=None, cwd=None):
+        with self.lock:
+            if self.stopping.is_set():
+                raise RuntimeError("host is stopping")
+            if name in self.processes and self.processes[name].poll() is None:
+                raise RuntimeError(f"owned process already active: {name}")
+            service_cpus = None
+            if self.config.science_routing_evaluator == 'parallel-v2':
+                from tpu.science.routing_resources import host_partition
+                _, service_cpus = host_partition()
+            elif self.config.science_placement_runtime == 'cpu300-4g-v1':
+                from tpu.science.placement_resources import partition
+                _, service_cpus = partition(self.config.science_placement_slots_per_host)
+            elif self.config.grading_families:
+                from tpu.science.farm_resources import partition
+                _, service_cpus = partition(self.config.grading_families)
+            if service_cpus is not None:
+                command = ['taskset', '--cpu-list', ','.join(map(str, service_cpus)), *command]
+            process = Process(command, self.run / f"{name}.log", env=env, cwd=cwd or self.root)
+            self.processes[name] = process
+            emit(self.log, "process_started", rank=self.rank, process=name, pid_owned=process.process.pid)
+            return process
+
+    def checked(self, name, command, env=None, cwd=None, timeout=3600):
+        process = self.start(name, command, env, cwd)
+        deadline = time.monotonic() + timeout
+        try:
+            while process.poll() is None:
+                if self.stopping.is_set() or time.monotonic() > deadline:
+                    raise TimeoutError(f"{name} interrupted or exceeded timeout")
+                time.sleep(0.5)
+            if process.poll() != 0:
+                raise RuntimeError(f"{name} exited {process.poll()}; see {process.log}")
+            with process.log.open("rb") as stream:
+                stream.seek(process.log_offset)
+                return stream.read().decode(errors="replace")
+        finally:
+            process.stop()
+
+    def preflight(self):
+        if self.config.retired_task_ids or self.config.retired_processes:
+            from .retired import retire_workloads
+            stopped = retire_workloads(self.config.retired_task_ids,
+                                      self.config.retired_processes.get(self.ips[self.rank]))
+            emit(self.log, "retired_workloads_stopped", rank=self.rank, pids=stopped,
+                 task_ids=self.config.retired_task_ids)
+        import psutil
+        for process in psutil.process_iter(["pid", "cmdline"]):
+            args = process.info["cmdline"] or []
+            # Do not disturb detached workloads that the pool calls idle.
+            if any(token in args for token in ("skyrl.tinker.api", "skyrl.tinker.engine", "skyrl.backends.rpc")):
+                raise RuntimeError(f"host {self.rank} has an existing trainer PID {process.pid}")
+            if any(arg.endswith("/vllm_tpu_server.py") or arg.startswith("VLLM::") for arg in args):
+                raise RuntimeError(f"host {self.rank} has an existing inference PID {process.pid}")
+        self.clear_previous_adapter_exports()
+        from .checkpoint_retention import reclaim_checkpoints
+        reclaim_checkpoints(self.root, self.config.run_id, self.gcs, self.log,
+                            timeout=self.config.checkpoint_cleanup_timeout,
+                            stopping=self.stopping.is_set)
+        if shutil.disk_usage(self.root).free < 10 * 1024**3:
+            raise RuntimeError("need 10 GiB disk for isolated code/envs; refusing unrelated cache deletion")
+        self.phase = "preflight_complete"
+        return self.heartbeat()
+
+    def clear_previous_adapter_exports(self):
+        # No workload is active after preflight. These are derived serving
+        # artifacts, not the durable trainer checkpoints or client run state.
+        targets = [self.run / name for name in ("loras", "uploads")]
+        targets.extend(self.run.glob("*.reload.tar"))
+        if any(path.is_symlink() for path in targets):
+            raise RuntimeError("refusing adapter cleanup through a symlink")
+        for path in targets:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
+        emit(self.log, "previous_adapter_exports_cleared", rank=self.rank)
+
+    def source_ready(self):
+        marker = self.source / ".source-complete"
+        if marker.exists() and marker.read_text() == self.source_identity:
+            if self.config.inference.native_thinking_budget:
+                from .thinking_budget.contract import check
+                check(self.source, model=self.config.model_preset,
+                      require_client=not self.config.inference_only)
+            return str(self.source)
+        archive = self.root / "base-download.tar.gz"
+        self.gcs.transfer(["cp", self.config.base_bundle, str(archive)], "base-code", self.root)
+        with archive.open("rb") as stream:
+            actual = hashlib.file_digest(stream, "sha256").hexdigest()
+        if actual != self.config.base_bundle_sha256:
+            raise RuntimeError("frozen source bundle checksum mismatch")
+        staging = self.source.with_name(self.source.name + "-partial")
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True)
+        with tarfile.open(archive) as bundle:
+            bundle.extractall(staging, filter="data")
+        if self.config.requires_source_overlay:
+            from .overlay import install
+            install(Path(__file__).with_name("source_overlay"), staging)
+        if self.config.inference.native_thinking_budget:
+            from .thinking_budget.install import install as install_thinking
+            install_thinking(staging, model=self.config.model_preset,
+                             require_client=not self.config.inference_only)
+        for path in ("tpu/probe_topology.py", "skyrl/backends/tunix_backend.py",
+                     "skyrl/utils/checkpoint_mirror.py", "tpu/vllm_tpu_server.py"):
+            if not (staging / path).is_file():
+                raise RuntimeError(f"frozen worker source missing {path}")
+        if self.source.exists():
+            shutil.rmtree(self.source)
+        staging.rename(self.source)
+        marker.write_text(self.source_identity)
+        archive.unlink()
+        return str(self.source)
+
+    def topology_ready(self):
+        self.source_ready()
+        folder = self.root / "envs/topology"
+        if not (folder / ".complete").exists():
+            self.checked("topology-venv", ["uv", "venv", "--python", "3.12", str(folder)])
+            self.checked("topology-install", ["uv", "pip", "install", "--python", str(folder / "bin/python"),
+                "jax==0.11.1", "jaxlib==0.11.1", "libtpu==0.0.46", "requests==2.32.5"])
+            (folder / ".complete").touch()
+        return True
+
+    def probe(self, ranks, coordinator_port, subset=False):
+        process_id = ranks.index(self.rank)
+        env = dict(os.environ, JAX_PLATFORMS="tpu", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+        for key in ("TPU_PROCESS_BOUNDS", "TPU_CHIPS_PER_PROCESS_BOUNDS", "TPU_PROCESS_ADDRESSES",
+                    "TPU_PROCESS_PORT", "CLOUD_TPU_TASK_ID", "TPU_VISIBLE_CHIPS", "JAX_COORDINATOR_ADDRESS"):
+            env.pop(key, None)
+        if subset:
+            env.update(TPU_PROCESS_BOUNDS=self.config.trainer.process_bounds,
+                TPU_CHIPS_PER_PROCESS_BOUNDS=self.config.trainer.chip_bounds,
+                TPU_PROCESS_ADDRESSES=",".join(f"{self.ips[r]}:{self.config.ports.trainer_tpu}" for r in ranks),
+                TPU_PROCESS_PORT=str(self.config.ports.trainer_tpu), CLOUD_TPU_TASK_ID=str(process_id))
+        text = self.checked("topology-subset" if subset else "topology-full",
+            [str(self.root / "envs/topology/bin/python"), str(self.source / "tpu/probe_topology.py"),
+             str(process_id), f"{self.ips[ranks[0]]}:{coordinator_port}", str(len(ranks))], env=env, timeout=240)
+        lines = [line.removeprefix("PROBE_RESULT ") for line in text.splitlines() if line.startswith("PROBE_RESULT ")]
+        if len(lines) != 1:
+            raise RuntimeError("topology probe did not produce one result")
+        return json.loads(lines[0])
+
+    # Exact versions read off a live legacy v5p-32 qwen cell (job 340, 2026-09-08):
+    # trainer = tpu/tunix_runtime uv.lock + the MaxText fork + these extras;
+    # engine = what `vllm-tpu==0.23.0` resolved there. Pinned so the executor's
+    # environments are the legacy environments, not what resolves next week.
+    TRAINER_PINS = ["aqtp==0.9.0", "pathwaysutils==0.1.11", "tokamax==0.0.13", "tiktoken==0.14.0",
+                    "jax==0.11.1", "jaxlib==0.11.1", "libtpu==0.0.46", "transformers==5.8.0"]
+    SERVING_PINS = ["vllm-tpu==0.23.0", "jax==0.10.1", "jaxlib==0.10.1", "libtpu==0.0.41",
+                    "torch==2.10.0", "torchax==0.0.11", "tokenizers==0.22.2", "numpy==2.3.5",
+                    "ray[serve]==2.58.0", "httpx", "psutil"]
+
+    def serving_pins(self):
+        pins = list(self.SERVING_PINS)
+        version = self.config.inference.transformers_version
+        if version:
+            pins.append(f"transformers=={version}")
+        return pins
+
+    def install_role(self, role):
+        folder = self.root / "envs" / ("trainer" if role == "trainer" else "serving")
+        identity = self.source_identity + (
+            self.config.trainer.maxtext_spec + "|" + " ".join(self.TRAINER_PINS + self.config.trainer.extra_pins)
+            if role == "trainer"
+            else " ".join(self.serving_pins())) + "|runtime-inventory-v1|" + self.runtime_baseline_identity
+        marker = folder / ".complete"
+        if marker.exists() and marker.read_text() == identity:
+            if role == "trainer":
+                self.checked("trainer-flce-contract", [str(folder / "bin/python"), str(Path(__file__).with_name("patch_maxtext.py"))])
+            self.verify_runtime(role, folder)
+            return
+        if folder.exists():
+            shutil.rmtree(folder)
+        python = str(folder / "bin/python")
+        env = dict(os.environ, UV_PROJECT_ENVIRONMENT=str(folder), UV_NO_CONFIG="1")
+        if role == "trainer":
+            self.checked("trainer-sync", ["uv", "sync", "--project", str(self.source / "tpu/tunix_runtime"),
+                                          "--python", "3.12", "--frozen"], env=env)
+            self.checked("trainer-source", ["uv", "pip", "install", "--python", python,
+                                           "--no-deps", "--editable", str(self.source)])
+            self.checked("trainer-maxtext", ["uv", "pip", "install", "--python", python,
+                self.config.trainer.maxtext_spec, *self.TRAINER_PINS, *self.config.trainer.extra_pins], cwd=self.root)
+            # Import what the backend imports at model creation, so a MaxText
+            # fork with an unpinned transitive dependency (job 413: drjax) fails
+            # here instead of in the trainer process.
+            self.checked("trainer-import", [python, "-c",
+                "import jax,skyrl.backends.tunix_backend; from maxtext.utils import model_creation_utils; "
+                "assert jax.__version__ == '0.11.1'"],
+                         env=dict(os.environ, JAX_PLATFORMS="cpu"))
+            self.checked("trainer-flce-contract", [python, str(Path(__file__).with_name("patch_maxtext.py"))])
+        else:
+            self.checked("serving-venv", ["uv", "venv", "--python", "3.12", str(folder)])
+            self.checked("serving-install", ["uv", "pip", "install", "--python", python, *self.serving_pins()])
+            self.checked("serving-overlay", ["uv", "pip", "install", "--python", python, "--no-deps",
+                                             "--force-reinstall", str(self.source / "third_party/tpu-inference")])
+            self.checked("serving-import", [python, "-c",
+                "import jax, vllm; from tpu_inference.worker.tpu_worker import TPUWorker; "
+                "assert jax.__version__ == '0.10.1'; "
+                "missing = [n for n in ('add_lora','remove_lora','list_loras','pin_lora') if not hasattr(TPUWorker, n)]; "
+                "assert not missing, missing"], env=dict(os.environ, JAX_PLATFORMS="cpu"))
+        self.verify_runtime(role, folder, fresh=True)
+        marker.write_text(identity)
+
+    def verify_runtime(self, role, folder, fresh=False):
+        """Detect drift on reuse; preserve a per-host inventory with the run."""
+        # Host placement calls this role 'inference', while the installed venv
+        # and reviewed baseline are named 'serving'. Never bypass that baseline.
+        role = "serving" if role == "inference" else role
+        inventory = folder / ".runtime-inventory.json"
+        output = self.run / f"runtime-{role}-{self.rank}.json"
+        command = [str(folder / "bin/python"), str(Path(__file__).with_name("runtime_inventory.py")),
+                   "--source", str(self.source), "--output", str(output)]
+        if not fresh:
+            if not inventory.is_file():
+                raise RuntimeError(f"{role} runtime predates inventory verification; rebuild its owned environment")
+            command += ["--expect", str(inventory)]
+        self.checked(role + "-runtime-inventory", command)
+        if role in self.config.runtime_baselines:
+            from .runtime_inventory import differences
+            expected = Path(__file__).parent / "runtime_baselines" / self.config.runtime_baselines[role]
+            delta = differences(json.loads(expected.read_text()), json.loads(output.read_text()))
+            if delta:
+                raise RuntimeError(f"{role} differs from reviewed runtime baseline: {json.dumps(delta, sort_keys=True)}")
+        if fresh:
+            shutil.copyfile(output, inventory)
+
+    def install_client(self):
+        folder = self.root / "envs/client"
+        marker = folder / ".complete"
+        identity = hashlib.sha256(self.source_identity.encode()
+            + (CLIENT_ENV / "pyproject.toml").read_bytes()
+            + (CLIENT_ENV / "uv.lock").read_bytes()
+            + b"client-frozen-v2-inventory"
+            + self.runtime_baseline_identity.encode()).hexdigest()
+        python = str(folder / "bin/python")
+        verify = [python, str(Path(__file__).with_name("client_dependencies.py")),
+                  str(CLIENT_ENV / "uv.lock")]
+        if marker.exists() and marker.read_text() == identity:
+            self.checked("client-lock-check", verify)
+            if self.config.inference.native_thinking_budget:
+                self.checked("client-native-sdk", [python, str(Path(__file__).with_name("native_sdk.py"))])
+            self.verify_runtime("client", folder)
+            return
+        if folder.exists():
+            shutil.rmtree(folder)
+        env = dict(os.environ, UV_PROJECT_ENVIRONMENT=str(folder), UV_NO_CONFIG="1")
+        self.checked("client-sync", ["uv", "sync", "--project", str(CLIENT_ENV),
+                                    "--python", "3.12", "--frozen"], env=env)
+        # Build the frozen application source using locked build tools. Neither
+        # application dependencies nor isolated build dependencies may resolve.
+        self.checked("client-install", ["uv", "pip", "install", "--python", python,
+            "--no-deps", "--no-build-isolation", str(self.source / "third_party/discover")])
+        self.checked("client-deps-check", ["uv", "pip", "check", "--python", python])
+        self.checked("client-lock-check", verify)
+        if self.config.inference.native_thinking_budget:
+            self.checked("client-native-sdk", [python, str(Path(__file__).with_name("native_sdk.py"))])
+        self.checked("client-import", [python, "-c", "import ray,tinker,wandb,torch,ttt_discover; assert torch.version.cuda is None"])
+        self.verify_runtime("client", folder, fresh=True)
+        marker.write_text(identity)
+
+    def reclaim_grader_caches(self):
+        admit_cache(self.config, self.root, None, self.log)
+        return self.heartbeat()
+
+    def prepare(self, role):
+        if role not in ("trainer", "inference"):
+            raise ValueError("invalid host role")
+        self.role, self.phase = role, "cache_setup"
+        ram = admit_cache(self.config, self.root, role, self.log)
+        self.store = CacheStore(ram, self.gcs)
+        self.store.reconcile_role(role)
+        if role == "trainer":
+            orbax = self.config.cache.orbax.rstrip("/") + "/" + self.config.trainer.maxtext_model
+            if self.config.trainer.ckpt_require_marker and not orbax_marker_present(self.gcs, orbax):
+                # gpt-oss 120B conversion contract (tpu/swarm/prepare_gptoss120b_v6e32.sh):
+                # never restore a checkpoint whose upload did not finish.
+                raise RuntimeError(f"orbax checkpoint {orbax} has no CHECKPOINT_COMPLETE marker")
+            self.store.restore_tree(orbax, "orbax/" + self.config.trainer.maxtext_model)
+        self.snapshot = self.store.restore_hf(self.config.cache.hf, self.config.model,
+                                             weights=role == "inference", layout=self.config.cache.hf_layout)
+        self.store.scope_compile(self.compile_prefix())
+        seed = getattr(self.config.cache, role + "_compile_seed", "")
+        if seed:
+            self.store.restore_compile(seed)
+        self.store.restore_compile(self.compile_prefix())
+        self.phase = "environment_setup"
+        self.install_role(role)
+        if self.rank == 0 and (not self.config.inference_only or self.config.bootstrap_only):
+            self.install_client()
+            if self.config.science_task:
+                # Validate the installed package, including prompt data, before
+                # the controller starts trainer/inference services. Imports and
+                # grader reference checks alone do not exercise this path.
+                self.checked("science-prompt-check", [
+                    str(self.root / "envs/client/bin/python"), "-c",
+                    "import sys; from tpu.science.training_env import candidate_prompt; "
+                    "task = sys.argv[1]; "
+                    "assert candidate_prompt(task).strip(); "
+                    "assert candidate_prompt(task, 'pass', 'Valid').strip(); "
+                    "assert candidate_prompt(task, 'pass', 'Invalid', repair=True).strip()",
+                    self.config.science_task],
+                    env=client_environment(self.config, self.root, self.ips[0],
+                                           trainer_head=self.ips[self.trainer_leader]),
+                    cwd=self.source)
+        self.phase = "prepared"
+        emit(self.log, "host_prepared", rank=self.rank, role=role, snapshot=str(self.snapshot))
+        return dict(rank=self.rank, role=role, source=str(self.source), root=str(self.root),
+                    snapshot=str(self.snapshot), config=self.config.to_dict())
+
+    def compile_prefix(self):
+        return self.config.cache.trainer_compile if self.role == "trainer" else self.config.cache.inference_compile
+
+    def sync_compile(self):
+        if not self.store:
+            return None
+        if not self.compile_sync_lock.acquire(timeout=330):
+            raise TimeoutError("previous compilation-cache writeback is still running")
+        try:
+            result = CacheStore(self.root / "ram", self.sync_gcs).publish_compile(self.compile_prefix())
+            self.last_sync, self.sync_error = time.time(), None
+            return result
+        except Exception as exc:
+            self.sync_error = str(exc)
+            emit(self.log, "cache_writeback_error", rank=self.rank, detail=str(exc))
+            raise
+        finally:
+            self.compile_sync_lock.release()
+
+    def set_trainer_leader(self, rank):
+        if not 0 <= rank < len(self.ips):
+            raise ValueError("invalid trainer leader rank")
+        self.trainer_leader = rank
+        return rank
+
+    def start_trainer(self, train_ranks, inference_ips=None):
+        if self.phase != "prepared" or self.role != "trainer" or self.rank not in train_ranks:
+            raise RuntimeError("trainer host was not prepared for this role")
+        ips = [self.ips[r] for r in train_ranks]
+        process_id = train_ranks.index(self.rank)
+        command = trainer_command(self.config, self.root, self.source, self.ips[0], ips, process_id, inference_ips)
+        environment = trainer_environment(self.config, self.root, self.run, ips, process_id)
+        from .launch_contract import write_launch_contract
+        write_launch_contract(self.run / f"launch-trainer-{self.rank}.json", command, environment,
+                              extra_keys=self.config.trainer_env)
+        self.start("trainer", command, environment, self.source)
+        self.phase = "trainer_started"
+        return self.heartbeat()
+
+    def check_grader_client(self):
+        if self.rank != 0 or self.config.arena_grader_rank is None:
+            raise RuntimeError("grader client check requires a dedicated grader and the client host")
+        self.checked("grader-client-check", [str(self.root / "envs/client/bin/python"),
+            str(Path(__file__).with_name("grader_client_check.py")),
+            "--source", str(self.source), "--output", str(self.run / "grader-client-check")],
+            env=client_environment(self.config, self.root, self.ips[0],
+                                   trainer_head=self.ips[self.trainer_leader]), cwd=self.source)
+        return {"ok": True}
+
+    def start_client(self):
+        if self.rank != 0:
+            raise RuntimeError("client belongs on the head")
+        (self.run / "client").mkdir(exist_ok=True)
+        command = [str(self.root / "envs/client/bin/python"), str(self.source / "tpu/run_ttd_ensemble.py")]
+        if self.config.stacked_probe:
+            command = [command[0], str(Path(__file__).with_name("stacked_probe.py")),
+                       "--source", str(self.source), "--model", self.config.model]
+        if self.config.attention_replay:
+            command = [command[0], str(Path(__file__).with_name("attention_replay.py")),
+                       "--source", str(self.source), "--model", self.config.model,
+                       "--learning-rate", self.config.client_learning_rate,
+                       "--fixture", self.config.attention_replay_fixture]
+        environment = client_environment(self.config, self.root, self.ips[0],
+                                         trainer_head=self.ips[self.trainer_leader])
+        from .launch_contract import write_launch_contract
+        write_launch_contract(self.run / f"launch-client-{self.rank}.json", command, environment,
+                              extra_keys=self.config.client_env)
+        self.start("client", command, environment, self.source)
+        self.phase = "client_running"
+        return self.heartbeat()
+
+    def bootstrap_status(self):
+        path = self.run / 'client/bootstrap/complete.json'
+        if not path.exists():
+            if self.config.bootstrap_reuse_contract_sha256:
+                raise RuntimeError('pinned bootstrap reuse is missing its completion record; refusing regeneration')
+            # Never apply a newly enabled bootstrap to an old training history.
+            log = self.run / 'client/tinker_log' / self.config.run_id
+            if list(log.glob('member_*/checkpoints.jsonl')):
+                raise RuntimeError('bootstrap requested for existing training history')
+            return None
+        document = json.loads((path.parent/'contract.json').read_text())
+        contract = document['contract']
+        summary = json.loads(path.read_text())
+        reuse = bool(self.config.bootstrap_reuse_contract_sha256)
+        if reuse:
+            from .bootstrap_reuse import validate_reuse
+            validate_reuse(self.config, document, summary)
+        elif Config.from_dict(contract['config']).to_dict() != self.config.to_dict():
+            raise RuntimeError('bootstrap config changed; use a new run ID')
+        implementation = (Path(__file__).with_name('seed_bootstrap.py') if self.config.bootstrap_max_drafts
+                          else Path(__file__).resolve().parents[2] / 'science/bootstrap.py')
+        if not reuse and hashlib.sha256(implementation.read_bytes()).hexdigest() != contract['implementation_sha256']:
+            raise RuntimeError('bootstrap implementation changed; use a new run ID')
+        if summary.get('retained', 0) < 1:
+            raise RuntimeError('completed bootstrap has no valid seeds')
+        pool = self.run / 'client/tinker_log' / self.config.run_id / 'puct_sampler_step_000000.json'
+        if not pool.exists():
+            raise RuntimeError('completed bootstrap is missing its promoted PUCT snapshot')
+        # Step zero is immutable after promotion; later optimizer states use
+        # separate snapshots. Refuse a partially restored or mixed seed pool.
+        digest = hashlib.sha256(json.dumps(json.loads(pool.read_text()), sort_keys=True).encode()).hexdigest()
+        if digest != summary['pool_sha256']:
+            raise RuntimeError('completed bootstrap PUCT snapshot checksum mismatch')
+        if reuse:
+            emit(self.log, 'bootstrap_reuse_verified', contract_sha256=self.config.bootstrap_reuse_contract_sha256,
+                 pool_sha256=digest, retained=summary['retained'], optimizer_steps=0)
+        return summary
+
+    def bootstrap_launch(self):
+        if self.rank != 0 or not self.config.bootstrap_layers:
+            raise RuntimeError('bootstrap must run on the configured client host')
+        env = client_environment(self.config, self.root, self.ips[0],
+                                 trainer_head=self.ips[self.trainer_leader])
+        package = Path(__file__).resolve().parents[3]
+        env['PYTHONPATH'] = f'{package}:{self.source}:{self.source / "tpu"}:{self.source / "third_party/discover"}'
+        command = [str(self.root/'envs/client/bin/python'), '-m',
+            self.config.bootstrap_module, '--config-json', json.dumps(self.config.to_dict()),
+            '--snapshot', str(self.snapshot), '--head', self.ips[0]]
+        # Python -m puts cwd before PYTHONPATH. The frozen source contains an
+        # older regular ray_train package, so launching there silently mixes
+        # the new bootstrap with its obsolete Config and helper modules.
+        return command, env, package
+
+    def check_bootstrap(self):
+        command, env, cwd = self.bootstrap_launch()
+        return self.checked('bootstrap-import', command + ['--check-only'], env, cwd, timeout=120)
+
+    def start_bootstrap(self):
+        command, env, cwd = self.bootstrap_launch()
+        self.start('bootstrap', command, env, cwd)
+        return self.heartbeat()
+
+    def verify_tpu_released(self):
+        devices = sorted(Path('/dev').glob('accel*')) + sorted(Path('/dev/vfio').glob('[0-9]*'))
+        if not devices:
+            raise RuntimeError('cannot verify TPU release: no device nodes')
+        result = subprocess.run(['sudo', '-n', 'fuser', *map(str, devices)],
+                                capture_output=True, text=True, timeout=15)
+        if result.returncode != 1 or result.stdout.strip() or result.stderr.strip():
+            raise RuntimeError('TPU device still owned or device ownership check failed')
+        return dict(rank=self.rank, devices=list(map(str, devices)), released=True)
+
+    def prepare_frozen(self):
+        from .frozen_benchmark import prepare_host
+        return prepare_host(self)
+
+    def start_frozen(self):
+        from .frozen_benchmark import start_host
+        return start_host(self)
+
+    def prepare_arena(self):
+        from .arena_sampling import prepare_host
+        return prepare_host(self)
+
+    def start_arena_sampling(self):
+        from .arena_sampling import start_sampling
+        return start_sampling(self)
+
+    def trainer_ready(self):
+        import re
+        if self.rank != self.trainer_leader:
+            return self.processes.get("trainer") is not None and self.processes["trainer"].poll() is None
+        log = self.run / "trainer.log"
+        process = self.processes.get("trainer")
+        if not process or process.poll() is not None or not log.exists():
+            return False
+        with log.open("rb") as stream:
+            stream.seek(process.log_offset)
+            return re.search(rb"Initialized\s+TinkerEngine\s+with\s+backend=", stream.read()) is not None
+
+    def restore_run(self):
+        if self.rank not in (0, self.trainer_leader):
+            return
+        local = self.run / "client"
+        if self.rank == 0 and not local.exists() and self.gcs.list(self.config.run_gcs + "/client", allow_empty=True):
+            if getattr(self.config, 'checkpoint_resume', False):
+                staging = self.run / 'client-restore'
+                staging.mkdir(exist_ok=True)
+                self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(staging)], "restore-run", self.run)
+                (staging / 'client').rename(local)
+                staging.rmdir()
+            else:
+                self.gcs.transfer(["cp", "--recursive", self.config.run_gcs + "/client", str(self.run)], "restore-run", self.run)
+        if self.rank == 0 and self.config.seed_pool_sha256:
+            from tpu.science.seed_pool import verify_pool
+            verify_pool(local / 'tinker_log' / self.config.run_id / 'puct_sampler_step_000000.json',
+                        self.config.seed_pool_sha256)
+        if self.rank == 0 and self.config.science_task == 'placement':
+            from tpu.science.placement_suite_guard import validate_restored_pools
+            validate_restored_pools(local / 'tinker_log' / self.config.run_id)
+        if self.rank == 0 and getattr(self.config, 'resume_min_checkpoint_step', 0):
+            from .database_snapshot import require_checkpoint_client
+            require_checkpoint_client(local, self.config.run_id,
+                                      self.config.client_member_spec.rsplit(':', 1)[-1],
+                                      self.config.resume_min_checkpoint_step)
+        db = self.run / "tinker.db"
+        if self.rank == self.trainer_leader and not db.exists():
+            listing = self.gcs.metadata("ls", "--json", self.config.run_gcs + "/tinker-backup.db", allow_empty=True)
+            if json.loads(listing):
+                downloaded = self.run / "tinker-downloaded.db"
+                self.gcs.transfer(["cp", self.config.run_gcs + "/tinker-backup.db", str(downloaded)], "restore-database", self.run)
+                restore_snapshot(downloaded, db, self.run / "future-blobs")
+                downloaded.unlink()
+        if self.rank == self.trainer_leader and db.exists() and getattr(self.config, 'checkpoint_resume', False):
+            from .database_snapshot import abandon_pending_for_checkpoint_resume
+            count = abandon_pending_for_checkpoint_resume(db)
+            emit(self.log, 'checkpoint_resume_pending_retired', count=count, rank=self.rank)
+
+    def sync_run(self):
+        if not self.run_sync_lock.acquire(timeout=330):
+            raise TimeoutError("previous run-state writeback is still running")
+        try:
+            return self._sync_run()
+        finally:
+            self.run_sync_lock.release()
+
+    def _sync_run(self):
+        gcs = GCS(self.run / "run-writeback", self.config.cache)
+        client = self.run / "client"
+        if self.rank == 0 and client.exists() and any(client.iterdir()):
+            gcs.transfer(["cp", "--recursive", str(client), self.config.run_gcs + "/"], "client-writeback", timeout=300)
+        db = self.run / "tinker.db"
+        if self.rank == self.trainer_leader and db.exists():
+            backup = self.run / "tinker-backup.db"
+            create_snapshot(db, backup)
+            gcs.transfer(["cp", str(backup), self.config.run_gcs + "/tinker-backup.db"], "database-writeback", timeout=120)
+        logs = [str(path) for pattern in ("*.jsonl", "*.log", "runtime-*.json", "launch-*.json") for path in self.run.glob(pattern)]
+        if logs:
+            destination = self.config.run_gcs + "/logs/"
+            if self.rank != 0:
+                destination += f"host-{self.rank}/"
+            gcs.transfer(["cp", *logs, destination], "logs-writeback", timeout=300)
+
+    def stop(self):
+        self.stopping.set()
+        with self.lock:
+            processes = list(self.processes.values())
+        for process in reversed(processes):
+            process.stop()
+        if self.config.arena_samples and self.rank == 0:
+            from .arena_sampling import judge_ray_tmp
+            from .bootstrap import stop_ray
+            stop_ray(judge_ray_tmp(self.root))
+        self.gcs.stop()
+        self.phase = "stopped"
+        return self.heartbeat()
+
+    def stop_client(self):
+        with self.lock:
+            processes = [self.processes.get(name) for name in ('client', 'bootstrap')]
+        for process in processes:
+            if process:
+                process.stop()

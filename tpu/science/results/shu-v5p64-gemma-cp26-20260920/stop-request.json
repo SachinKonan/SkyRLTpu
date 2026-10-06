@@ -1,0 +1,54 @@
+{
+  "time": "2026-09-20T22:55:41.828588+00:00",
+  "reason": "User requested switching the dedicated machine away from circle packing",
+  "hosts": [
+    {
+      "rank": 0,
+      "exit": 0,
+      "stdout": "MainPID=2308935\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    },
+    {
+      "rank": 1,
+      "exit": 0,
+      "stdout": "MainPID=555080\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[Sun 2026-09-20 16:51:06 UTC] ; stop_time=[n/a] ; pid=555080 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    },
+    {
+      "rank": 2,
+      "exit": 0,
+      "stdout": "MainPID=1787053\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[Sun 2026-09-20 16:51:06 UTC] ; stop_time=[n/a] ; pid=1787053 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    },
+    {
+      "rank": 3,
+      "exit": 0,
+      "stdout": "MainPID=1570932\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[Sun 2026-09-20 16:51:05 UTC] ; stop_time=[n/a] ; pid=1570932 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    },
+    {
+      "rank": 4,
+      "exit": 0,
+      "stdout": "MainPID=4180694\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[Sun 2026-09-20 16:51:06 UTC] ; stop_time=[n/a] ; pid=4180694 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    },
+    {
+      "rank": 5,
+      "exit": 0,
+      "stdout": "MainPID=41287\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    },
+    {
+      "rank": 6,
+      "exit": 0,
+      "stdout": "MainPID=145220\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[Sun 2026-09-20 16:51:06 UTC] ; stop_time=[n/a] ; pid=145220 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    },
+    {
+      "rank": 7,
+      "exit": 0,
+      "stdout": "MainPID=3549777\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/gcpuser/.cache/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/launch.sh ; ignore_errors=no ; start_time=[Sun 2026-09-20 16:51:06 UTC] ; stop_time=[n/a] ; pid=3549777 ; code=(null) ; status=0/0 }\nActiveState=active\n\n",
+      "stderr": ""
+    }
+  ]
+}

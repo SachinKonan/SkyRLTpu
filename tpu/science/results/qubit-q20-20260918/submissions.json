@@ -1,0 +1,35 @@
+[
+  {
+    "run_id": "science-qubit-q20-v6e-gemma-seeded-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-0dd4c883c8e348d58728e7f8a1e5d2fdf5fb4133c08d4c56686f304760e97c00.tar.gz",
+    "submitted_at": "2026-09-18T03:45:40.223760+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 999,
+    "model": "gemma",
+    "verified_state": "Submitted; waiting for an available worker; no optimizer steps"
+  },
+  {
+    "run_id": "science-qubit-q20-v6e-qwen-seeded-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-0f7390c565867fef9b85a3b6b9ae22e611623be0c23cf415958b3909d1541c7d.tar.gz",
+    "submitted_at": "2026-09-18T03:45:53.545811+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1000,
+    "model": "qwen",
+    "verified_state": "Submitted; waiting for an available worker; no optimizer steps"
+  },
+  {
+    "run_id": "science-qubit-q20-v6e-muse-seeded-001",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-89c91cbd422804c6c56994771d941e03495bb4a9211737ae8e3808c4df17f434.tar.gz",
+    "submitted_at": "2026-09-18T03:46:05.154464+00:00",
+    "state": "submitted",
+    "exit_code": 0,
+    "job_id": 1001,
+    "model": "muse",
+    "verified_state": "Submitted; waiting for an available worker; no optimizer steps"
+  }
+]

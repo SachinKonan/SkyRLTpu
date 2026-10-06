@@ -1,0 +1,306 @@
+{
+  "id": "bootstrap-0-83416f5c-c6ad-4656-b007-71df2c98c269-3-group-007",
+  "root_id": "83416f5c-c6ad-4656-b007-71df2c98c269",
+  "repair_parent_id": null,
+  "origin": "muse",
+  "layer": 0,
+  "format": true,
+  "code": "\"\"\"JAX-assisted macro placement with hard-macro legalization.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\n\n\ndef _legalize_hard(problem, seed, deadline):\n    p = problem\n    pos = np.array(p['initial_positions'], dtype=np.float64, copy=True)\n    sizes = np.asarray(p['sizes'], dtype=np.float64)\n    fixed = np.asarray(p['fixed'], dtype=bool)\n    canvas = np.asarray(p['canvas'], dtype=np.float64)\n    hard = int(p['num_hard'])\n    gap = max(1e-4, float(canvas.max()) * 1e-5)\n    lo = sizes / 2 + gap\n    hi = canvas - sizes / 2 - gap\n    if (lo > hi).any():\n        raise ValueError('macro cannot fit')\n    pos[~fixed] = np.clip(pos[~fixed], lo[~fixed], hi[~fixed])\n\n    occupied = list(np.flatnonzero(fixed[:hard]))\n    order = [i for i in np.flatnonzero(~fixed[:hard])]\n    # area descending\n    order.sort(key=lambda i: -float(np.prod(sizes[i])))\n    for i in order:\n        if time.monotonic() > deadline:\n            raise TimeoutError('legalizer timeout')\n        xs = [float(lo[i, 0]), float(hi[i, 0]), float(pos[i, 0])]\n        ys = [float(lo[i, 1]), float(hi[i, 1]), float(pos[i, 1])]\n        for j in occupied:\n            d = (sizes[i] + sizes[j]) / 2 + gap\n            xs.extend([float(pos[j, 0] - d[0]), float(pos[j, 0] + d[0])])\n            ys.extend([float(pos[j, 1] - d[1]), float(pos[j, 1] + d[1])])\n        xs = np.unique(np.clip(xs, lo[i, 0], hi[i, 0]))\n        ys = np.unique(np.clip(ys, lo[i, 1], hi[i, 1]))\n        xx, yy = np.meshgrid(xs, ys)\n        cand = np.column_stack([xx.ravel(), yy.ravel()])\n        ranking = np.argsort(np.sum((cand - pos[i]) ** 2, axis=1))\n        chosen = None\n        for s in range(0, len(ranking), 256):\n            if time.monotonic() > deadline:\n                raise TimeoutError('legalizer timeout')\n            batch = cand[ranking[s:s + 256]]\n            if occupied:\n                delta = np.abs(batch[:, None, :] - pos[occupied][None, :, :])\n                overlap = (delta < (sizes[i] + sizes[occupied])[None, :, :] / 2 + gap / 2).all(axis=2)\n                legal = ~overlap.any(axis=1)\n            else:\n                legal = np.ones(len(batch), dtype=bool)\n            if legal.any():\n                chosen = batch[np.flatnonzero(legal)[0]]\n                break\n        if chosen is None:\n            raise ValueError('could not place hard macro')\n        pos[i] = chosen\n        occupied.append(i)\n    pos[fixed] = p['initial_positions'][fixed]\n    return pos\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    started = time.monotonic()\n    reserve = 5.0\n    budget = max(1e-3, time_budget_s - reserve)\n    p = problem\n    M = int(p['initial_positions'].shape[0])\n    H = int(p['num_hard'])\n    canvas = np.asarray(p['canvas'], dtype=np.float64)\n    sizes = np.asarray(p['sizes'], dtype=np.float64)\n    fixed = np.asarray(p['fixed'], dtype=bool)\n    init_pos = np.asarray(p['initial_positions'], dtype=np.float64, copy=True)\n\n    # hard legalization on CPU\n    legal_deadline = started + max(1.0, budget * 0.3)\n    try:\n        pos = _legalize_hard(p, seed, legal_deadline)\n    except Exception:\n        pos = init_pos.copy()\n        pos[~fixed] = np.clip(pos[~fixed], sizes[~fixed] / 2 + 1e-4,\n                              canvas - sizes[~fixed] / 2 - 1e-4)\n\n    movable_soft = (~fixed) & (np.arange(M) >= H)\n    if not np.any(movable_soft):\n        # nothing to optimise\n        return {\"positions\": pos.astype(np.float32)}\n\n    # normalised quantities for stable optimisation\n    canvas_j = jnp.asarray(canvas, dtype=jnp.float32)\n    sizes_n = jnp.asarray(sizes / canvas, dtype=jnp.float32)\n    x_n = jnp.asarray(pos / canvas, dtype=jnp.float32)\n    ports_n = jnp.asarray(p['port_positions'] / canvas, dtype=jnp.float32)\n    offsets_n = jnp.asarray(p['pin_offset'] / canvas, dtype=jnp.float32)\n    owners = jnp.asarray(p['pin_owner'], dtype=jnp.int32)\n    weights = jnp.asarray(p['net_weights'], dtype=jnp.float32)\n    net_off = np.asarray(p['net_offsets'], dtype=np.int64)\n    k = int(len(weights))\n    net_ids_np = np.concatenate([np.full(int(net_off[i + 1] - net_off[i]), i, dtype=np.int32)\n                                for i in range(k)])\n    net_ids = jnp.asarray(net_ids_np, dtype=jnp.int32)\n    wire_norm = float(p['wirelength_normalizer'])\n    wire_norm_j = jnp.asarray(wire_norm, dtype=jnp.float32)\n\n    movable_mask = jnp.asarray(movable_soft, dtype=bool)\n    x_fixed = x_n\n\n    # coarse density grid\n    n = 20\n    xl = jnp.linspace(0.05, 0.95, n)\n    yl = jnp.linspace(0.05, 0.95, n)\n    gx, gy = jnp.meshgrid(xl, yl, indexing='ij')\n    centers = jnp.stack([gx.ravel(), gy.ravel()], axis=1)\n    sigma = jnp.asarray(0.055, dtype=jnp.float32)\n    area = jnp.prod(sizes_n, axis=1)\n\n    def objective(x):\n        combined = jnp.concatenate([x, ports_n], axis=0)\n        pins = combined[owners] + offsets_n\n        xmax = jax.ops.segment_max(pins, net_ids, k)\n        xmin = jax.ops.segment_min(pins, net_ids, k)\n        wire = jnp.sum(weights * jnp.sum((xmax - xmin) * canvas_j, axis=1))\n        wire_normed = wire / wire_norm_j\n        delta = (x[:, None, :] - centers[None, :, :]) / sigma\n        exp_term = jnp.exp(-0.5 * jnp.sum(delta * delta, axis=2))\n        occ = jnp.sum(exp_term * area[:, None], axis=0)\n        dens = jnp.mean((occ / (jnp.mean(occ) + 1e-8)) ** 2)\n        return wire_normed + 0.5 * dens\n\n    optimizer = optax.adam(5e-4)\n    opt_state = optimizer.init(x_n)\n\n    @jax.jit\n    def step(x, state):\n        val, grad = jax.value_and_grad(objective)(x)\n        grad = jnp.where(movable_mask[:, None], grad, 0.0)\n        upd, state = optimizer.update(grad, state, x)\n        x_new = optax.apply_updates(x, upd)\n        lo = sizes_n / 2 + 1e-5\n        hi = 1.0 - sizes_n / 2 - 1e-5\n        x_new = jnp.clip(x_new, lo, hi)\n        x_new = jnp.where(movable_mask[:, None], x_new, x_fixed)\n        return x_new, state, val\n\n    x_cur = x_n\n    best_x = x_n\n    best_val = float('inf')\n    max_iters = 800\n    for _ in range(max_iters):\n        if time.monotonic() - started > budget:\n            break\n        x_cur, opt_state, val = step(x_cur, opt_state)\n        v = float(val)\n        if v < best_val:\n            best_val = v\n            best_x = x_cur\n\n    pos_final_n = np.array(best_x, dtype=np.float64)\n    pos_final = pos_final_n * canvas\n\n    # final legal checks and margins\n    gap = max(1e-4, float(canvas.max()) * 1e-5)\n    lo = sizes / 2 + gap\n    hi = canvas - sizes / 2 - gap\n    soft_idx = (~fixed) & (np.arange(M) >= H)\n    pos_final[soft_idx] = np.clip(pos_final[soft_idx], lo[soft_idx], hi[soft_idx])\n    pos_final[fixed] = init_pos[fixed]\n\n    # hard-hard overlap check\n    hard_idx = np.arange(H)\n    overlap = False\n    for i in range(len(hard_idx)):\n        for j in range(i + 1, len(hard_idx)):\n            ii = int(hard_idx[i]); jj = int(hard_idx[j])\n            dx = abs(pos_final[ii, 0] - pos_final[jj, 0])\n            dy = abs(pos_final[ii, 1] - pos_final[jj, 1])\n            if dx < (sizes[ii, 0] + sizes[jj, 0]) / 2 - 1e-9 and dy < (sizes[ii, 1] + sizes[jj, 1]) / 2 - 1e-9:\n                overlap = True\n                break\n        if overlap:\n            break\n    if overlap or not np.all(np.isfinite(pos_final)):\n        # fallback to legalised placement\n        pos_final = pos\n\n    # ensure inside canvas\n    pos_final = np.clip(pos_final, lo, hi)\n    return {\"positions\": pos_final.astype(np.float32)}\n",
+  "reward": 0.4137462607765432,
+  "correctness": 1.0,
+  "message": "Valid",
+  "feedback": "{\"reward\":0.4137462607765432,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.4169402718544006,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"proxy_cost\":1.06944,\"wirelength_cost\":0.0666545,\"density_cost\":0.847082,\"congestion_cost\":1.15848,\"candidate_wall_seconds\":14.0414,\"grading_seconds\":5.69931},{\"case\":\"ibm04\",\"valid\":true,\"proxy_cost\":1.35926,\"wirelength_cost\":0.0711107,\"density_cost\":0.837118,\"congestion_cost\":1.73919,\"candidate_wall_seconds\":12.8859,\"grading_seconds\":9.86984},{\"case\":\"ibm08\",\"valid\":true,\"proxy_cost\":1.46427,\"wirelength_cost\":0.0684561,\"density_cost\":0.817303,\"congestion_cost\":1.97432,\"candidate_wall_seconds\":13.7381,\"grading_seconds\":18.6976},{\"case\":\"ibm18\",\"valid\":true,\"proxy_cost\":1.77479,\"wirelength_cost\":0.0531887,\"density_cost\":1.03959,\"congestion_cost\":2.40362,\"candidate_wall_seconds\":14.6,\"grading_seconds\":45.975}]}}",
+  "metrics": {
+    "mean_proxy_cost": 1.4169402718544006,
+    "cases": [
+      {
+        "reward": 0.4832232085170155,
+        "correctness": 1.0,
+        "raw_score": 0.4832232085170155,
+        "msg": "Valid",
+        "result_construction": null,
+        "stdout": "",
+        "metrics": {
+          "proxy_cost": 1.069437026977539,
+          "wirelength_cost": 0.0666545107960701,
+          "density_cost": 0.8470820784568787,
+          "congestion_cost": 1.1584828618469263,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 5.699309454001195,
+          "candidate_wall_seconds": 14.041403158000321,
+          "candidate_started_unix": 1789549996.144693,
+          "candidate_finished_unix": 1789550010.186095,
+          "case": "ibm01",
+          "backend": "tpu",
+          "candidate_device": {
+            "candidate_seconds": 13.146406545998616,
+            "sandbox_tpu_visible_chips": "0",
+            "sandbox_device_paths": [
+              "/dev/accel1"
+            ],
+            "jax_version": "0.10.1",
+            "devices": [
+              "TPU_0(process=0,(0,0,0,0))"
+            ],
+            "device_kind": "TPU v4",
+            "device_count": 1,
+            "initialization_seconds": 2.865591650999704
+          },
+          "allocation_memory": {
+            "memory_current_mib": 15.921875,
+            "memory_peak_mib": 1400.14453125
+          },
+          "worker_seconds": 20.333066709998093,
+          "cpu_affinity": [
+            20,
+            21,
+            22,
+            23
+          ],
+          "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel1\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel1\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.865591650999704}\n",
+          "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm01/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 45, Row: 41\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+          "child.json": "{\"candidate_seconds\": 13.146406545998616, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel1\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.865591650999704}",
+          "ray_node_id": "fee4a0209aee3c9463a1c8b20fbd36c2f3ec9f74b4abf83f23436772",
+          "host": "t1v-n-ff03dfe1-w-4",
+          "artifact_directory": "/home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/placement-jobs/b3213d0bf2cf4277a7cd969944b336f1",
+          "task_envelope_seconds": 20.575690958998166,
+          "hard_memory_gib": 16,
+          "hard_cpus": [
+            20,
+            21,
+            22,
+            23
+          ],
+          "physical_chip_id": 1,
+          "ray_tpu_ids": [
+            "1"
+          ],
+          "ray_tpu_visible_chips": "1",
+          "accelerator": "tpu-v4-64",
+          "physical_tpu_chips": 1,
+          "ray_executor": true
+        }
+      },
+      {
+        "reward": 0.42386084789874645,
+        "correctness": 1.0,
+        "raw_score": 0.42386084789874645,
+        "msg": "Valid",
+        "result_construction": null,
+        "stdout": "",
+        "metrics": {
+          "proxy_cost": 1.359264850616455,
+          "wirelength_cost": 0.07111071050167084,
+          "density_cost": 0.8371183276176453,
+          "congestion_cost": 1.7391899399581001,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 9.8698445609989,
+          "candidate_wall_seconds": 12.885939649000647,
+          "candidate_started_unix": 1789549998.2080653,
+          "candidate_finished_unix": 1789550011.0940046,
+          "case": "ibm04",
+          "backend": "tpu",
+          "candidate_device": {
+            "candidate_seconds": 11.998915184998623,
+            "sandbox_tpu_visible_chips": "0",
+            "sandbox_device_paths": [
+              "/dev/accel0"
+            ],
+            "jax_version": "0.10.1",
+            "devices": [
+              "TPU_0(process=0,(0,0,0,0))"
+            ],
+            "device_kind": "TPU v4",
+            "device_count": 1,
+            "initialization_seconds": 2.8399565419967985
+          },
+          "allocation_memory": {
+            "memory_current_mib": 15.9765625,
+            "memory_peak_mib": 1427.375
+          },
+          "worker_seconds": 23.334665608999785,
+          "cpu_affinity": [
+            16,
+            17,
+            18,
+            19
+          ],
+          "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel0\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel0\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.8399565419967985}\n",
+          "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm04/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 31, Row: 30\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+          "child.json": "{\"candidate_seconds\": 11.998915184998623, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel0\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.8399565419967985}",
+          "ray_node_id": "fee4a0209aee3c9463a1c8b20fbd36c2f3ec9f74b4abf83f23436772",
+          "host": "t1v-n-ff03dfe1-w-4",
+          "artifact_directory": "/home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/placement-jobs/f4d23401e249465eae3640364f51c7b7",
+          "task_envelope_seconds": 23.53644509100195,
+          "hard_memory_gib": 16,
+          "hard_cpus": [
+            16,
+            17,
+            18,
+            19
+          ],
+          "physical_chip_id": 0,
+          "ray_tpu_ids": [
+            "0"
+          ],
+          "ray_tpu_visible_chips": "0",
+          "accelerator": "tpu-v4-64",
+          "physical_tpu_chips": 1,
+          "ray_executor": true
+        }
+      },
+      {
+        "reward": 0.40579967023668384,
+        "correctness": 1.0,
+        "raw_score": 0.40579967023668384,
+        "msg": "Valid",
+        "result_construction": null,
+        "stdout": "",
+        "metrics": {
+          "proxy_cost": 1.4642701148986816,
+          "wirelength_cost": 0.06845613569021225,
+          "density_cost": 0.8173028826713562,
+          "congestion_cost": 1.9743249429761824,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 18.69759429199985,
+          "candidate_wall_seconds": 13.738147164000111,
+          "candidate_started_unix": 1789550015.0402534,
+          "candidate_finished_unix": 1789550028.7784004,
+          "case": "ibm08",
+          "backend": "tpu",
+          "candidate_device": {
+            "candidate_seconds": 12.842951932998403,
+            "sandbox_tpu_visible_chips": "0",
+            "sandbox_device_paths": [
+              "/dev/accel3"
+            ],
+            "jax_version": "0.10.1",
+            "devices": [
+              "TPU_0(process=0,(0,0,0,0))"
+            ],
+            "device_kind": "TPU v4",
+            "device_count": 1,
+            "initialization_seconds": 2.8495021620001353
+          },
+          "allocation_memory": {
+            "memory_current_mib": 16.109375,
+            "memory_peak_mib": 1470.02734375
+          },
+          "worker_seconds": 33.09726604900061,
+          "cpu_affinity": [
+            28,
+            29,
+            30,
+            31
+          ],
+          "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel3\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel3\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.8495021620001353}\n",
+          "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm08/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 38, Row: 34\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+          "child.json": "{\"candidate_seconds\": 12.842951932998403, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel3\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.8495021620001353}",
+          "ray_node_id": "fee4a0209aee3c9463a1c8b20fbd36c2f3ec9f74b4abf83f23436772",
+          "host": "t1v-n-ff03dfe1-w-4",
+          "artifact_directory": "/home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/placement-jobs/07db9731b1a24aeb9ded015ade0111aa",
+          "task_envelope_seconds": 33.293421161997685,
+          "hard_memory_gib": 16,
+          "hard_cpus": [
+            28,
+            29,
+            30,
+            31
+          ],
+          "physical_chip_id": 3,
+          "ray_tpu_ids": [
+            "3"
+          ],
+          "ray_tpu_visible_chips": "3",
+          "accelerator": "tpu-v4-64",
+          "physical_tpu_chips": 1,
+          "ray_executor": true
+        }
+      },
+      {
+        "reward": 0.36038775048849453,
+        "correctness": 1.0,
+        "raw_score": 0.36038775048849453,
+        "msg": "Valid",
+        "result_construction": null,
+        "stdout": "",
+        "metrics": {
+          "proxy_cost": 1.7747890949249268,
+          "wirelength_cost": 0.0531887449324131,
+          "density_cost": 1.0395854711532593,
+          "congestion_cost": 2.4036153487932412,
+          "overlap_count": 0.0,
+          "total_overlap_area": 0.0,
+          "max_overlap_area": 0.0,
+          "num_macros_with_overlaps": 0.0,
+          "overlap_ratio": 0.0,
+          "grading_seconds": 45.975008849000005,
+          "candidate_wall_seconds": 14.600044490001892,
+          "candidate_started_unix": 1789550016.7259228,
+          "candidate_finished_unix": 1789550031.3259673,
+          "case": "ibm18",
+          "backend": "tpu",
+          "candidate_device": {
+            "candidate_seconds": 13.68784721799966,
+            "sandbox_tpu_visible_chips": "0",
+            "sandbox_device_paths": [
+              "/dev/accel1"
+            ],
+            "jax_version": "0.10.1",
+            "devices": [
+              "TPU_0(process=0,(0,0,0,0))"
+            ],
+            "device_kind": "TPU v4",
+            "device_count": 1,
+            "initialization_seconds": 2.8146793150008307
+          },
+          "allocation_memory": {
+            "memory_current_mib": 15.96484375,
+            "memory_peak_mib": 1593.6640625
+          },
+          "worker_seconds": 61.24817606899887,
+          "cpu_affinity": [
+            20,
+            21,
+            22,
+            23
+          ],
+          "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel1\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel1\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.8146793150008307}\n",
+          "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm18/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 55, Row: 39\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+          "child.json": "{\"candidate_seconds\": 13.68784721799966, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel1\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.8146793150008307}",
+          "ray_node_id": "fee4a0209aee3c9463a1c8b20fbd36c2f3ec9f74b4abf83f23436772",
+          "host": "t1v-n-ff03dfe1-w-4",
+          "artifact_directory": "/home/gcpuser/.cache/skyrl-ray-code/5749eaef8262ffa4ecc9b91431fc826cca746c9a605b29bb97207ae244e0a70f/.science/placement-jobs/1ad6ef113fa64e959283057fe70214ec",
+          "task_envelope_seconds": 61.48202484799913,
+          "hard_memory_gib": 16,
+          "hard_cpus": [
+            20,
+            21,
+            22,
+            23
+          ],
+          "physical_chip_id": 1,
+          "ray_tpu_ids": [
+            "1"
+          ],
+          "ray_tpu_visible_chips": "1",
+          "accelerator": "tpu-v4-64",
+          "physical_tpu_chips": 1,
+          "ray_executor": true
+        }
+      }
+    ]
+  }
+}

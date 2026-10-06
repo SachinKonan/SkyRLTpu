@@ -1,0 +1,620 @@
+#!/usr/bin/env bash
+# jobman command.cmd for a Stage-A cell (runs on ALL workers, branches on
+# JOBMAN_WORKER_ID). w0 orchestrates: client venv, engines (tinker trainer on
+# itself + vLLM on w1-3, via the PROVEN start_colocated_vllm_tinker.sh invoked
+# from w0 over the slice's internal IPs with the jobman ssh key), and the Ray
+# grading cluster. Other workers no-op -- w0 reaches them over ssh exactly the
+# way the login-node bring-up did, so the engine recipe stays byte-identical.
+#
+# Idempotent: healthy engines are detected and left alone, so a jobman loop
+# iteration after a mere monitor-ssh hiccup does not restart a working slice.
+set -euo pipefail
+: "${JOBMAN_WORKER_ID:?}"; : "${JOBMAN_TPU_INTERNAL_IPS:?}"; : "${CELL:?}"
+[ "$JOBMAN_WORKER_ID" = "0" ] || { echo "worker $JOBMAN_WORKER_ID: engines are driven from w0"; exit 0; }
+SETUP_RETRY_EXIT_CODE="${SETUP_RETRY_EXIT_CODE:-33}"
+
+export PATH="$HOME/.local/bin:$PATH"
+REPO=$(readlink -f "${SKYRL_REPO_DIR:-$HOME/SkyRLTpu-league}")
+export SKYRL_REPO_DIR="$REPO"
+EXPECTED_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-}"
+KEY="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
+REMOTE_USER="${REMOTE_USER:-sk7524_princeton_edu}"
+SSHO="-F /dev/null -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+INT="$JOBMAN_TPU_INTERNAL_IPS"
+W0INT=$(echo "$INT" | cut -d, -f1)
+# Host count from the IP list itself: a stage cell passes 4 IPs (unchanged
+# behavior); a meta member passes its 4 + any spare hosts, which become extra
+# vLLM replicas + ray workers with no other change.
+NHOSTS=$(echo "$INT" | awk -F, '{print NF}')
+DEFAULT_VLLM_IDXS=$(seq -s, 1 $((NHOSTS-1)))
+TRAIN_IDXS="${TRAIN_WORKERS:-0}"
+VLLM_IDXS="${VLLM_WORKERS-$DEFAULT_VLLM_IDXS}"
+EXTERNAL_VLLM_URLS="${VLLM_BASE_URL_OVERRIDE:-}"
+START_LOCAL_VLLM="${CELL_START_VLLM:-1}"
+CELL_SYNC_SKYRL="${CELL_SYNC_SKYRL:-1}"
+TRAIN_TP_SIZE="${TRAIN_TP_SIZE:-4}"
+TRAIN_FSDP_SIZE="${TRAIN_FSDP_SIZE:-auto}"
+TRAIN_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS:-auto}"
+TRAIN_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS:-2,2,1}"
+TRAIN_ROW_SHARD="${TUNIX_ROW_SHARD:-0}"
+CELL_ZONE="${ZONE:-us-east5-a}"
+ln -sfn "$REPO" "$HOME/ttd-client"
+
+worker_ip() {
+  local worker="$1"
+  echo "$INT" | tr ',' '\n' | sed -n "$((worker + 1))p"
+}
+
+# --- client venv (idempotent) ------------------------------------------------
+if [ ! -x "$REPO/third_party/discover/.venv-ttd-discover/bin/python" ]; then
+  ( cd "$REPO/third_party/discover" && uv sync --extra math --python 3.11 > ~/venv-build.log 2>&1 \
+      && ln -sfn .venv .venv-ttd-discover )
+  "$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import tinker,numpy,wandb" \
+    || { echo "client venv build FAILED"; tail -5 ~/venv-build.log; exit "$SETUP_RETRY_EXIT_CODE"; }
+fi
+echo "client venv OK"
+
+# --- engines: skip when healthy ---------------------------------------------
+engines_healthy() {
+  tinker_healthy || return 1
+  vllm_healthy
+}
+tinker_healthy() {
+  curl -fsS -m6 http://127.0.0.1:8000/api/v1/get_server_capabilities >/dev/null 2>&1 || return 1
+  if [[ -n "$EXPECTED_BUNDLE_ID" ]]; then
+    local pid actual_bundle
+    pid=$(pgrep -u "$USER" -f '[p]ython.*-m skyrl\.tinker\.api.*--port 8000' | head -1)
+    [[ -n "$pid" ]] || return 1
+    actual_bundle=$(tr '\0' '\n' < "/proc/$pid/environ" | sed -n 's/^TPUSWARM_BUNDLE_ID=//p' | head -1)
+    if [[ "$actual_bundle" != "$EXPECTED_BUNDLE_ID" ]]; then
+      echo "trainer bundle mismatch: running=${actual_bundle:-unmarked} expected=$EXPECTED_BUNDLE_ID" >&2
+      return 1
+    fi
+  fi
+  local worker ip
+  for worker in $(echo "$TRAIN_IDXS" | tr ',' ' '); do
+    ip="$(worker_ip "$worker")"
+    timeout 30 ssh $SSHO "$REMOTE_USER"@"$ip" \
+      "test -x '$REPO/.venv/bin/python' && '$REPO/.venv/bin/python' -c 'import jax.scipy.linalg'" \
+      >/dev/null 2>&1 || {
+        echo "trainer runtime check failed on $ip for bundle ${EXPECTED_BUNDLE_ID:-unknown}" >&2
+        return 1
+      }
+  done
+}
+vllm_healthy() {
+  # EVERY engine, not just the first: with ENGINES_PER_HOST=2 each host serves
+  # 8001 AND 8002 (engine e listens on VLLM_PORT+e). Probing only 8001 would
+  # call a host healthy with a dead second engine -- bring-up would be skipped
+  # and the client, which round-robins across all 6 URLs, would sample against
+  # a dead endpoint every other request.
+  local worker ip e port
+  if [[ -z "$VLLM_IDXS" ]]; then
+    [[ -n "$EXTERNAL_VLLM_URLS" ]] || return 1
+    local url
+    for url in $(echo "$EXTERNAL_VLLM_URLS" | tr ',' ' '); do
+      curl -fsS -m6 "${url%/}/v1/models" >/dev/null 2>&1 || return 1
+    done
+    return 0
+  fi
+  for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+    ip="$(worker_ip "$worker")"
+    for (( e=0; e<${ENGINES_PER_HOST:-1}; e++ )); do
+      port=$(( 8001 + e ))
+      curl -fsS -m6 "http://$ip:$port/v1/models" >/dev/null 2>&1 || return 1
+    done
+    if [[ -n "$EXPECTED_BUNDLE_ID" ]]; then
+      timeout 30 ssh $SSHO "$REMOTE_USER"@"$ip" \
+        "pids=\$(pgrep -u \"\$USER\" -f '[p]ython.*vllm_tpu_server\\.py'); \
+         test \$(wc -w <<<\"\$pids\") -ge '${ENGINES_PER_HOST:-1}' || exit 1; \
+         for pid in \$pids; do \
+           actual=\$(tr '\\0' '\\n' < /proc/\$pid/environ | sed -n 's/^TPUSWARM_BUNDLE_ID=//p' | head -1); \
+           test \"\$actual\" = '$EXPECTED_BUNDLE_ID' || exit 1; \
+         done" >/dev/null 2>&1 || {
+          echo "vLLM bundle mismatch on $ip: expected=$EXPECTED_BUNDLE_ID" >&2
+          return 1
+        }
+    fi
+  done
+  return 0
+}
+# --- model dimension (cell prefix g- = gemma-4-31B, else qwen3.5-27B) --------
+# Gemma values are the league-validated uniform-10240 config (bringup_v5p64
+# step 4b): tile 1024 / nvt 32 / budget 40960 / vLLM 16k with its own caches.
+# Qwen cells keep the Stage-A per-suffix tile logic below, byte-identical.
+PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@skyrl/qwen35-dense"
+VLLM_IMPL=vllm
+TPUINF_REF=skyrl/v0.23.0-lora
+TF_VERSION=5.8.0
+TP_SIZE=4; ENGINES_PER_HOST=1
+MAX_NUM_SEQS=128
+SKIP_PRECOMPILE=0
+EXTRA_PIP=""
+ENGINE_EXTRA_ENV=""
+LORA_RETRIES=3; LORA_RETRY_SLEEP=2
+REQ_TIMEOUT=300
+TPU_BACKEND=torchax
+FREE_BASE_STATE=0
+ROUTE_PREFIX=0
+UNSET_PLUGINS=0
+BATCHED_RPA_KERNEL=0
+JAX_RAGGED_CONV1D=0
+VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.90"
+LIMIT_MM_PER_PROMPT=""
+HF_OFFLINE=0
+case "$CELL" in
+  g-*)
+    MODEL_NAME=google/gemma-4-31B-it; MAXTEXT_MODEL=gemma4-31b
+    MAXTGT=10240; BUDGET=40960; UNIFORM=10240
+    VLLM_LEN=16384
+    # Cells use Gemma for text only. Keep prefix caching enabled, use the
+    # default RPA kernel, and avoid allocating or chunking empty MM inputs.
+    VLLM_XARGS='--max-num-batched-tokens 8192 --disable-chunked-mm-input --gpu-memory-utilization 0.90'
+    LIMIT_MM_PER_PROMPT='{"image":0,"audio":0,"video":0}'
+    # gemma-4-31B at TP=4 reports a 303k-token KV cache ("Maximum concurrency
+    # for 16,384 tokens per request: 18.50x"): ~30 resident sequences at our
+    # ~8.6k-token generations. The 128 default admitted 128, pinned KV at 100%
+    # with 100+ waiting, and paid preemption recompute (gemma cells on v5p-32,
+    # 2026-09-05). 32 is what fits; the scheduler stops thrashing.
+    MAX_NUM_SEQS=32
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-gemma4-31b-16k"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-gemma4-10k"
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4"
+    ;;
+  m-*)
+    # Muse-Glimmer-30B. Serving = the TORCH implementation (tpu-inference vllm
+    # wrapper path), which is what makes RL possible at all: the JAX/flax_nnx
+    # path hardcodes lora_manager=None, so LoRA weight sync -- our whole
+    # train->sample loop -- cannot work there. Deployment shape is the validated
+    # 2xTP=2: muse has 2 KV heads, so TP=2 is the zero-padding point (TP=4 pads
+    # 2->4 and stores every KV twice), and each non-train host runs 2 engines =>
+    # 6 serving engines per v5p-32. See tpu/muse_glimmer/{VLLM-IMPL,README}.md.
+    # transformers: NOT pinned -- vllm-tpu 0.23.0 pulls 5.15.0, the first
+    # release carrying muse_glimmer's modeling code (no .py in the checkpoint,
+    # no trust_remote_code path). VLLM_EXTRA_PIP_SPECS overlays @main with the
+    # tokenizers co-pin, per run_muse_rl.sh.
+    MODEL_NAME=meta-models/Muse-Glimmer-30B; MAXTEXT_MODEL=muse-glimmer-30b
+    PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509"
+    # Sizing per run_muse_rl.sh (the validated RL spec), not the older
+    # MAXTEXT.md training-half doc: target 22528 = the serving ctx.
+    # BUDGET: the spec started at 45056 (2 x uniform) with the explicit note
+    # "raise only after watching the first fb step's HBM (unproven item 5)".
+    # The first real fb step (2026-08-21, attempt 8) answered it: the program
+    # asked to reserve 60.47G with 55.48G free -- over by 9%. One uniform seq
+    # per fb call halves the arena (~30G, fits with headroom); costs 2x fb
+    # calls per train step, changes nothing about what is trained.
+    # 18432 == qwen's exact train shape. The 22528 fb program asks 60.47G
+    # regardless of token budget (verified twice live: identical ask at
+    # budget 45056 and 22528) -- the arena belongs to the [1, 22528] pass
+    # itself, dominated by the 13 full-attention layers' S^2 backward.
+    # 18432 scales it to ~40G (fits, ~16G headroom) and, paired with
+    # CTX/PHASE1 18432/13824 in launch_cell.sh, nothing is dropped from
+    # training -- rollouts simply cap at qwen's budget, which also removes
+    # the longer-leash confound from the A/B.
+    # BUDGET = 4 x UNIFORM, i.e. qwen's packing. Measured on-slice at steady
+    # state (3 fb calls, first discarded as JIT): 1 datum 27.3s, 4 datums 27.4s
+    # -- FOUR DATUMS COST THE SAME AS ONE. The fb is not compute-bound; it is
+    # bound by a fixed per-microbatch cost, almost certainly the FSDP all-gather
+    # of 55.7GB of weights. So packing is ~4x free throughput: 27.3 -> 6.85 s
+    # per datum. At ~296 trained datums/step that is train 7983s -> ~2030s, and
+    # since 2030 < the 6972s sampling window it should finally disappear under
+    # the pipeline instead of serialising after it.
+    #
+    # remat_policy stays "full": measured 27.4s (none) vs 27.5s (full) at 4
+    # datums, i.e. free in time, and it saves a large amount of HBM. Dropping it
+    # would be a pure memory regression for no speed.
+    #
+    # Verified to FIT at 4 x 18432 with free_base_state, which is production's
+    # worst case since uniform mode pads every datum to 18432.
+    MAXTGT=18432; BUDGET=73728; UNIFORM=18432
+    VLLM_LEN=22528
+    VLLM_IMPL=vllm
+    # The exact SHA run_muse_rl.sh pins: carries the torch muse model AND the
+    # stock-qkv-geometry fix (first-request empty-v crash) + width assert.
+    # skyrl/v0.23.0-lora predates all of it -- that ref has no torch muse model.
+    TPUINF_REF=afe0cb9e9bf259a072242c6f3279d92b702f9f2a
+    TF_VERSION=""
+    # jax, NOT the torchax default (run_muse_rl.sh:134, the validated spec).
+    # Under torchax the plugin defers to vLLM's own model registry, which has
+    # no native muse -- it silently serves the generic transformers-backend
+    # fallback, which boots, lists models, even loads LoRA adapters, and then
+    # kills EngineCore on the FIRST generate (NonConcreteBooleanIndexError:
+    # modeling_muse_glimmer.py boolean-mask __setitem__ cannot trace). The
+    # fork's torch muse model (tpu_inference/models/vllm/muse_glimmer.py) is
+    # only reachable through the jax backend wrapper.
+    TPU_BACKEND=jax
+    # VLLM_PLUGINS is an allow-list; pinning it to the resolver excluded the
+    # fork's vllm.general_plugins registration (register_layers), so vLLM's
+    # registry never learned MuseGlimmerForCausalLM and silently served the
+    # transformers fallback -- EngineCore-fatal on the first generate. The
+    # validated smoke ran UNSET (all plugins load, resolver included).
+    UNSET_PLUGINS=1
+    # Reclaims 35.5 GiB. Measured on this cell: create_model took HBM in_use from
+    # 12.97 -> 49.79 GiB, rank-independent (rank 4 within 1.4 GiB of rank 32), i.e.
+    # duplicated base weights, not adapters -- qwix's wrap does not share the merged
+    # arrays and _init_lora_state builds a SECOND whole model to read 0.77 GiB of
+    # seeds. That is why the [1, 18432] fb asked 56.99G against 56.45G free and no
+    # budget/tiling/remat knob ever moved it. With the release: delta 1.33 GiB, and
+    # the same fb COMPLETES in 46.9s (loss -0.00215, peak 60.9 of 95.7 GiB).
+    FREE_BASE_STATE=1
+    # REVERTED, and left here as the record. The theory was that phase 2
+    # re-sends prompt + ALL phase-1 tokens (~13.8k) and index round-robin lands
+    # it on the engine holding that KV only 1 time in 6. Pinning by prompt
+    # prefix was measured and did NOT work: windowed prefix-cache hit rate was
+    # 36.1% (queries +666988, hits +240992 over a live 10-min sampling window)
+    # against a 49.6% lifetime baseline -- i.e. worse, not better -- while step
+    # 2's sampling ran 7060s vs step 1's 5949s on FEWER generated tokens
+    # (throughput -25%). Load balance was fine (six engines within 2%), so the
+    # allocator worked; the affinity itself did not take. Most likely the
+    # phase-2 request never reaches the patched router with its prompt_ids and
+    # silently falls back to index routing -- worth confirming offline before
+    # anyone tries this again. Re-enable with ROUTE_PREFIX=1 only with a
+    # windowed hit-rate measurement to prove it.
+    ROUTE_PREFIX=0
+    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.90"
+    TP_SIZE=2; ENGINES_PER_HOST=2
+    # 64/engine x 6 engines = 384 pooled scheduler slots, under the measured
+    # 222-sequence KV capacity per host pair and matched to the RL burst:
+    # GRPO 16x32 = 512 rollouts => ~85/engine offered, so the scheduler stays
+    # the limiter rather than the KV pool.
+    MAX_NUM_SEQS=64
+    # Both from run_muse_rl.sh, and the first is load-bearing: with precompile
+    # ON, capture_model() -> maybe_select_dummy_loras -> _set_active_loras leaks
+    # a JAX tracer through torchax and every engine dies with
+    # UnexpectedTracerError (observed live, both engines, deterministic). The
+    # validated path never runs that code. Cost: first requests compile lazily.
+    SKIP_PRECOMPILE=1
+    # Skipping precompile moves compilation into the first requests, so an
+    # engine can be mid-compile (minutes) when the client pushes its LoRA
+    # adapter. The default 3 retries x 2s = ~4s of tolerance, so the upload
+    # fails, the client raises, and jobman relaunches it -- observed as a new
+    # adapter every ~3 min, 35 restarts, never reaching the first sampling
+    # burst. qwen/gemma never hit this because they precompile at boot and are
+    # responsive by the time their client connects.
+    LORA_RETRIES=20; LORA_RETRY_SLEEP=30
+    # The first adapter LOAD on an engine compiles the LoRA graphs (minutes).
+    # At the default 300s socket timeout the client hangs up first, the engine
+    # finishes and logs 200 to nobody, and every retry hits the extracted-dir
+    # path -- observed live: /v1/models listed all three "failed" adapters.
+    # 1800s lets the honest first attempt win; the /v1/models fallback in
+    # push_adapter covers anything longer.
+    REQ_TIMEOUT=1800
+    EXTRA_PIP="'transformers @ git+https://github.com/huggingface/transformers@main' 'tokenizers>=0.23.1,<0.24.0'"
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-mg-22k-tp2"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-muse-22k"
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache"
+    HF_OFFLINE=0
+    ;;
+  o-*)
+    # gpt-oss-120b (MXFP4 experts). Trainer = the d388 MaxText fork with
+    # sparse expert LoRA (docs/gpt-oss-mxfp4-lora.md); sparse_matmul/megablox
+    # are mandatory there. Row length 10240 / 2 rows per fb tile is the first
+    # v6e-32 cell shape (16 trainer chips x 32 GiB: 14.6 GiB of weights per
+    # chip); raise after the first fb step's HBM is measured.
+    MODEL_NAME=openai/gpt-oss-120b; MAXTEXT_MODEL=gpt-oss-120b
+    PIP="maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
+    MAXTGT=10240; BUDGET=20480; UNIFORM=10240
+    VLLM_LEN=16384
+    VLLM_XARGS='--max-num-batched-tokens 8192 --disable-chunked-mm-input --gpu-memory-utilization 0.90'
+    LIMIT_MM_PER_PROMPT='{"image":0,"audio":0,"video":0}'
+    MAX_NUM_SEQS=32
+    # v5p/v6e have no FP8 MXU; fp8 storage halves the requantized expert
+    # footprint at load (MOE_REQUANTIZE_WEIGHT_DTYPE=bf16 is the fallback).
+    ENGINE_EXTRA_ENV="MOE_REQUANTIZE_WEIGHT_DTYPE=fp8 MOE_REQUANTIZE_BLOCK_SIZE=512 USE_MOE_EP_KERNEL=0"
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v6e-gptoss120b-tp4-s16384-seq32-v1"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v6e-gptoss120b-tp8-fsdp2-r32-s10240-v1"
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-gptoss120b"
+    ;;
+  *)
+    MODEL_NAME=Qwen/Qwen3.5-27B; MAXTEXT_MODEL=qwen3.5-27b
+    # These optimization cells serve text only. Qwen3.5 advertises a vision
+    # tower, so explicitly disabling both supported modalities prevents vLLM
+    # from compiling a second, unused backbone-with-embeddings shape ladder.
+    LIMIT_MM_PER_PROMPT='{"image":0,"video":0}'
+    MAXTGT=22528; BUDGET=73728; UNIFORM=18432
+    # Serve just above the client's context, not 4k above it. TTD_M0_CONTEXT_WINDOW
+    # is 18432 and the two-phase completer budgets every phase against that, so
+    # prompt+generated can never exceed it; 22528 was reserving 22% more KV
+    # envelope per sequence than any rollout can use. 1024 tokens of margin kept
+    # deliberately -- serving exactly at the client ceiling turns any off-by-one
+    # into a context-overflow 400, which is a known failure mode here.
+    # REVERTED to the proven 22528 shape (meta-wt16 gen-0, 2026-08-24): the
+    # staged 19456/16384 knobs hit their own predicted cold compile on the
+    # empty -19k prefix and blew the ready window -- the canary is not the
+    # place to measure them. The -22k cache is warm from the entire ctrl-rerun.
+    # 0.90 util kept (weights 13.5 GiB/chip at TP=4; fails loudly at boot if
+    # wrong). If boot logs show a cold compile at 0.90 (KV pool size can enter
+    # the compiled shape), drop to 0.85 -- the exact config the cache was
+    # built with.
+    VLLM_LEN=22528
+    VLLM_XARGS="--max-num-batched-tokens 8192 --gpu-memory-utilization 0.90"
+    XLA_GCS="gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-22k"
+    JAX_CACHE_GCS="gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-qwen35-18k"
+    # hf-cache/models--Qwen--Qwen3.5-27B holds ~4 GB (one shard + metadata);
+    # jobman engines fetched the rest from HuggingFace. Pool workers are
+    # offline, so point at the complete 55.6 GB snapshot (HF_CACHE_COMPLETE).
+    HF_GCS="gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1"
+    ;;
+esac
+
+# Deployment overrides.  The model cases above remain the proven v5p defaults;
+# a topology-specific launcher can select a different validated sequence shape,
+# serving layout, or same-region cache without forking this orchestration path.
+MAXTGT="${TUNIX_MAX_TARGET_LENGTH:-$MAXTGT}"
+BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-$BUDGET}"
+UNIFORM="${TUNIX_UNIFORM_SEQ_LEN:-$UNIFORM}"
+VLLM_LEN="${VLLM_MAX_MODEL_LEN:-$VLLM_LEN}"
+TP_SIZE="${VLLM_TP_SIZE:-$TP_SIZE}"
+ENGINES_PER_HOST="${VLLM_ENGINES_PER_HOST:-$ENGINES_PER_HOST}"
+MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-$MAX_NUM_SEQS}"
+BATCHED_RPA_KERNEL="${VLLM_USE_BATCHED_RPA_KERNEL:-$BATCHED_RPA_KERNEL}"
+JAX_RAGGED_CONV1D="${VLLM_USE_JAX_RAGGED_CONV1D:-$JAX_RAGGED_CONV1D}"
+SKIP_PRECOMPILE="${VLLM_SKIP_JAX_PRECOMPILE:-$SKIP_PRECOMPILE}"
+LORA_RETRIES="${VLLM_LORA_LOAD_RETRIES:-$LORA_RETRIES}"
+LORA_RETRY_SLEEP="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-$LORA_RETRY_SLEEP}"
+REQ_TIMEOUT="${VLLM_REQUEST_TIMEOUT_SEC:-$REQ_TIMEOUT}"
+HF_OFFLINE="${HF_HUB_OFFLINE:-$HF_OFFLINE}"
+FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-$FREE_BASE_STATE}"
+XLA_GCS="${VLLM_XLA_CACHE_GCS:-$XLA_GCS}"
+JAX_CACHE_GCS="${TUNIX_JAX_CACHE_GCS:-$JAX_CACHE_GCS}"
+HF_GCS="${HF_CACHE_GCS:-$HF_GCS}"
+PIP="${TUNIX_MAXTEXT_PIP_SPEC:-$PIP}"
+VLLM_XARGS="${VLLM_EXTRA_ARGS:-$VLLM_XARGS}"
+ENGINE_EXTRA_ENV="${VLLM_ENGINE_EXTRA_ENV:-$ENGINE_EXTRA_ENV}"
+LIMIT_MM_PER_PROMPT="${VLLM_LIMIT_MM_PER_PROMPT:-$LIMIT_MM_PER_PROMPT}"
+pick_tiles() {
+  case "$MAXTEXT_MODEL" in
+    gemma4-31b)
+      FLCE_TILE=1024; VOCAB_TILING=32
+      if [[ "$TRAIN_TP_SIZE" == "8" ]]; then
+        # Gemma-4 has four global KV heads.  The proven TP8 smoke pads only
+        # that global projection to eight logical heads; checkpoint alignment
+        # repeats the four physical heads without changing their grouping.
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"allow_split_physical_axes\": true, \"override_model_config\": true, \"global_num_kv_heads\": 8, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      else
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"allow_split_physical_axes\": true, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      fi ;;
+    gpt-oss-120b)
+      FLCE_TILE=512; VOCAB_TILING=64
+      MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"sparse_matmul\": true, \"megablox\": true, \"allow_split_physical_axes\": true, \"attention\": \"autoselected\"}" ;;
+    muse-glimmer-30b)
+      # nvt 32, not the RL spec's 8: the fb arena measured a ~41G
+      # seq-independent constant (60.47G @22528 vs 56.99G @18432 -- only the
+      # ~850KB/token slope moved), i.e. vocab-sized workspace dominates, and
+      # V/nvt is its divisor. 32 is the value muse's own MAXTEXT.md
+      # training-half config validated (gemma runs 32, qwen 64; 8 was the
+      # outlier). FLCE tile stays 2048 -- both validated configs agree, and
+      # smaller FLCE tiles grow the scorer (the known trap).
+      # FLCE tile 1024 (gemma's value, larger-vocab precedent): at 18432 the
+      # fb ask is 56.99G vs 56.45G free -- short by 0.54G. Measured knob
+      # response: budget none, uniform 850KB/token, nvt none; the FLCE
+      # working buffers are the next term with a validated smaller setting.
+      FLCE_TILE=1024; VOCAB_TILING=32
+      if [[ "$TRAIN_TP_SIZE" == "8" ]]; then
+        # Muse has two physical KV heads.  The proven TP8 smoke instantiates
+        # eight logical heads and repeats each physical head four times.
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"parameter_memory_host_offload\": true, \"allow_split_physical_axes\": true, \"override_model_config\": true, \"base_num_kv_heads\": 8, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      else
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"parameter_memory_host_offload\": true, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      fi ;;
+    *)
+      case "$CELL" in
+        *k-j) FLCE_TILE=512; VOCAB_TILING=64 ;;
+        *-j)  FLCE_TILE=2048; VOCAB_TILING=8 ;;
+        *)    FLCE_TILE=512; VOCAB_TILING=64 ;;
+      esac
+      # Qwen has four physical KV heads. TP8 needs eight logical heads so the
+      # KV axis partitions cleanly; the checkpoint aligner repeats each source
+      # head and preserves the original query-to-KV grouping.
+      if [[ "$TRAIN_TP_SIZE" == "8" ]]; then
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"allow_split_physical_axes\": true, \"override_model_config\": true, \"base_num_kv_heads\": 8, \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      else
+        MT_KWARGS="{\"num_vocab_tiling\": $VOCAB_TILING, \"remat_policy\": \"full\", \"attention\": \"autoselected\", \"use_tokamax_splash\": true}"
+      fi ;;
+  esac
+  # ONE compiled shape, always. The scorer is pinned to the same uniform length
+  # the fb path uses (TUNIX_UNIFORM_SEQ_LEN), so a run ever holds exactly two
+  # pinned programs -- fb + scorer -- instead of growing a new jit_fwd per
+  # 8192-bucket as sequences lengthen. Not cell-specific: any cell that scores
+  # (KL penalty OR the measure-only pass) must never build a bucket ladder.
+  SCORE_FIXED=$UNIFORM
+
+  # A multi-host job owns the mesh. Replace any single-host model default
+  # (Muse historically pins ici_fsdp_parallelism=4 on one v5p host) with the
+  # explicit trainer topology while preserving remat/offload/vocab knobs.
+  if [[ "$TRAIN_FSDP_SIZE" != "auto" ]]; then
+    MT_KWARGS="$(python3 - "$MT_KWARGS" "$TRAIN_TP_SIZE" "$TRAIN_FSDP_SIZE" <<'PY'
+import json
+import sys
+
+cfg = json.loads(sys.argv[1] or "{}")
+cfg["ici_tensor_parallelism"] = int(sys.argv[2])
+cfg["ici_fsdp_parallelism"] = int(sys.argv[3])
+print(json.dumps(cfg, separators=(",", ":")))
+PY
+)"
+  fi
+}
+
+# NO w0 HF weight staging. w0 runs the trainer (which loads MaxText/orbax, not
+# safetensors) plus the client (which needs only tokenizer/config). Rsyncing the
+# whole model dir here put 71G of gemma-4 safetensors on a 97G boot disk and left
+# no room for the tunix install -- `uv pip install ... aqtp` died with
+# "No space left on device", the trainer never started, and the cell looped.
+# Tokenizer/config resolve from the HF hub (all our models are public repos).
+
+# Trainer JAX compile cache: restore before bring-up, then publish on a cadence
+# so a preempted node still leaves its compiles behind (same reasoning as the
+# vLLM cache seed-back; keyed by HLO hash, so a miss just recompiles).
+# MaxText owns this path: base.yml sets `jax_cache_dir: "~/jax_cache"` and calls
+# JAX's cache init with it, which OVERRIDES the JAX_COMPILATION_CACHE_DIR we
+# export. We synced ~/jax-compile-cache for weeks while every compile landed in
+# ~/jax_cache -- all three per-model GCS caches sat at 0 MB while the trainer
+# host held 120 MB of real entries including jit_forward_backward_fn. Net effect:
+# every fresh VM recompiled the fb from scratch (~25 min for muse), on a zone
+# that preempts every few hours. Sync the directory MaxText actually writes.
+JAX_CACHE_LOCAL="${TUNIX_JAX_CACHE_LOCAL:-$HOME/jax_cache}"
+mkdir -p "$JAX_CACHE_LOCAL"
+if [ -n "${JAX_CACHE_GCS:-}" ]; then
+  "$REPO/tpu/gcs_rsync.sh" -r "$JAX_CACHE_GCS" "$JAX_CACHE_LOCAL" >/dev/null 2>&1 \
+    && echo "trainer JAX cache restored from $JAX_CACHE_GCS" \
+    || echo "trainer JAX cache empty/miss (will compile)"
+  # Publish cadence: a preemption between "compile finished" and "next tick"
+  # loses the whole compile (bit muse live: ~25min fb compile, 10min tick,
+  # slice died in the gap -- cache stayed at 0 after the attempt). Short spot
+  # windows need a tight cadence; the rsync is checksum-additive so an
+  # empty-delta tick is nearly free. 180s x 480 spans the same 24h.
+  ( for _i in $(seq 1 480); do
+      sleep "${JAX_CACHE_PUBLISH_SECS:-180}"
+      "$REPO/tpu/gcs_rsync.sh" -r "$JAX_CACHE_LOCAL" "$JAX_CACHE_GCS" >/dev/null 2>&1
+    done ) >/dev/null 2>&1 &
+fi
+export JAX_COMPILATION_CACHE_DIR="$JAX_CACHE_LOCAL"
+
+if engines_healthy; then
+  echo "engines already healthy -- skipping bring-up"
+elif ! tinker_healthy && vllm_healthy; then
+  # Surgical recovery for a wedged/dead TRAINER with healthy samplers (the
+  # ENGINE-SICK case): restart only the tinker server -- a process restart is
+  # the only defragmentation the TPU runtime has, and bouncing three healthy
+  # vLLM workers would waste ~20 min of cache reloads for nothing. The client
+  # re-registers against the fresh registry at its next launch.
+  echo "trainer down, vLLM healthy -- surgical tinker-only restart"
+  tmux kill-session -t =skyrl-tinker 2>/dev/null || true; sleep 3
+  pick_tiles
+  bringup_rc=0
+  env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
+    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$KEY" \
+    TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    VLLM_BASE_URL_OVERRIDE="$EXTERNAL_VLLM_URLS" \
+    TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
+    TRAIN_TPU_PROCESS_BOUNDS="$TRAIN_PROCESS_BOUNDS" TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS="$TRAIN_CHIPS_PER_PROCESS_BOUNDS" \
+    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
+    VLLM_USE_BATCHED_RPA_KERNEL="$BATCHED_RPA_KERNEL" VLLM_USE_JAX_RAGGED_CONV1D="$JAX_RAGGED_CONV1D" \
+    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
+    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
+    VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
+    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" VLLM_UNSET_PLUGINS="$UNSET_PLUGINS" \
+    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" VLLM_ROUTE_BY_PROMPT_PREFIX="$ROUTE_PREFIX" \
+    MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
+    TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
+    TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
+    TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    TUNIX_JAX_CACHE_LOCAL="$JAX_CACHE_LOCAL" TUNIX_JAX_CACHE_GCS="$JAX_CACHE_GCS" \
+    SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
+    REMOTE_SKYRL_DIR="$REPO" \
+    READY_ATTEMPTS=900 SYNC_SKYRL=0 START_VLLM=0 START_TINKER=1 \
+    bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/tinker-restart.log 2>&1 || true
+  if ! tinker_healthy; then
+    # ESCALATE, do not just exit: the next attempt would see vLLM still healthy,
+    # take this same surgical branch, and fail identically -- an infinite loop
+    # (observed live: 96 retries on g-ttd-n-j, ~15h and six slices burned, zero
+    # rows). Tear down vLLM so the next attempt is forced through a FULL
+    # bring-up, which is the only path that rebuilds trainer state from scratch.
+    echo "tinker-only restart FAILED -- tearing down vLLM to force a full rebuild next attempt"
+    tail -6 ~/tinker-restart.log 2>/dev/null || true
+    for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+      ip="$(worker_ip "$worker")"
+      timeout 60 ssh $SSHO "$REMOTE_USER"@"$ip" \
+        "tmux kill-session -t =vllm-tpu 2>/dev/null; \
+         for session in \$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^vllm-tpu-e' || true); do \
+           tmux kill-session -t =\"\$session\" 2>/dev/null || true; \
+         done; \
+         pkill -f '[v]llm serve|[v]llm_tpu_server.py|[V]LLM::EngineCore' 2>/dev/null; true" 2>/dev/null || true
+    done
+    exit "$SETUP_RETRY_EXIT_CODE"
+  fi
+  echo "trainer restarted (vLLM untouched)"
+else
+  echo "engine bring-up ($MAXTEXT_MODEL uniform=$UNIFORM budget=$BUDGET)..."
+  # Engines left behind by a previous job on this worker (its failure cleanup
+  # never ran, or could not reach these hosts) still answer /v1/models, so the
+  # launcher reports success while engines_healthy then fails on the bundle
+  # identity -- exit 33 with nothing wrong on our side (job 287, 2026-09-06).
+  # Evict any engine whose TPUSWARM_BUNDLE_ID is not ours before launching.
+  if [[ -n "$EXPECTED_BUNDLE_ID" && -n "$VLLM_IDXS" ]]; then
+    for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+      ip="$(worker_ip "$worker")"
+      timeout 60 ssh $SSHO "$REMOTE_USER"@"$ip" \
+        "for pid in \$(pgrep -u \"\$USER\" -f '[p]ython.*vllm_tpu_server\\.py'); do \
+           actual=\$(tr '\\0' '\\n' < /proc/\$pid/environ | sed -n 's/^TPUSWARM_BUNDLE_ID=//p' | head -1); \
+           if [ \"\$actual\" != '$EXPECTED_BUNDLE_ID' ]; then \
+             echo \"evicting stale vLLM engines (bundle \${actual:-unmarked}, expected $EXPECTED_BUNDLE_ID)\"; \
+             for s in \$(tmux ls 2>/dev/null | cut -d: -f1); do case \"\$s\" in vllm-tpu|vllm-tpu-e*) tmux kill-session -t \"=\$s\";; esac; done; \
+             pkill -u \"\$USER\" -f '[v]llm_tpu_server\\.py|[V]LLM::EngineCore' 2>/dev/null; \
+             break; \
+           fi; \
+         done" 2>/dev/null | sed "s/^/  [$ip] /" || true
+    done
+  fi
+  # Erdos cells (long sequences, 18432-class fb buckets) OOM'd at compile with
+  # the league tiles on these builds: HLO temporaries 111G vs 95.7G/chip, every
+  # train step, silently caught by the ensemble guard -- the cells sampled
+  # without training. Heavier tiling (the values the gemma engine has always
+  # used) shrinks the fb program. JSSP sequences land in small buckets and
+  # trained fine, so -j cells keep the faster original tiles.
+  # K arms get small tiles even on JSSP: the penalty pass pins its own ~16G
+  # scoring arena beside the fb arena, and grpo-k-j proved 2048/8 + penalty
+  # does not fit (1/9 steps trained). Non-K JSSP keeps the faster tiles.
+  pick_tiles
+  bringup_rc=0
+  env TPU_SSH_MODE=direct TPU_EXTERNAL_IPS="$INT" TPU_INTERNAL_IPS="$INT" TPU_NAME="stagea-$CELL" \
+    PROJECT=vision-mix ZONE="$CELL_ZONE" REMOTE_USER="$REMOTE_USER" SSH_KEY_FILE="$KEY" \
+    TINKER_BACKEND=tunix TRAIN_WORKERS="$TRAIN_IDXS" VLLM_WORKERS="$VLLM_IDXS" VLLM_RAY_EXECUTOR=0 VLLM_CLIENT_SIDE_ROUND_ROBIN=1 \
+    VLLM_BASE_URL_OVERRIDE="$EXTERNAL_VLLM_URLS" \
+    TP_SIZE="$TRAIN_TP_SIZE" FSDP_SIZE="$TRAIN_FSDP_SIZE" TUNIX_ROW_SHARD="$TRAIN_ROW_SHARD" \
+    TRAIN_TPU_PROCESS_BOUNDS="$TRAIN_PROCESS_BOUNDS" TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS="$TRAIN_CHIPS_PER_PROCESS_BOUNDS" \
+    VLLM_MODEL_IMPL_TYPE="$VLLM_IMPL" TPU_INFERENCE_FORK_REF="$TPUINF_REF" HF_HUB_OFFLINE="$HF_OFFLINE" \
+    VLLM_USE_BATCHED_RPA_KERNEL="$BATCHED_RPA_KERNEL" VLLM_USE_JAX_RAGGED_CONV1D="$JAX_RAGGED_CONV1D" \
+    VLLM_TRANSFORMERS_VERSION="$TF_VERSION" VLLM_TP_SIZE="$TP_SIZE" VLLM_ENGINES_PER_HOST="$ENGINES_PER_HOST"  \
+    VLLM_SKIP_JAX_PRECOMPILE="$SKIP_PRECOMPILE" VLLM_EXTRA_PIP_SPECS="$EXTRA_PIP"  \
+    VLLM_LORA_LOAD_RETRIES="$LORA_RETRIES" VLLM_LORA_LOAD_RETRY_SLEEP_SEC="$LORA_RETRY_SLEEP" \
+    VLLM_REQUEST_TIMEOUT_SEC="$REQ_TIMEOUT" VLLM_TPU_BACKEND_TYPE="$TPU_BACKEND" VLLM_UNSET_PLUGINS="$UNSET_PLUGINS" \
+    TUNIX_FREE_BASE_STATE="$FREE_BASE_STATE" VLLM_ROUTE_BY_PROMPT_PREFIX="$ROUTE_PREFIX" \
+    MODEL_NAME="$MODEL_NAME" TUNIX_MAXTEXT_MODEL_NAME="$MAXTEXT_MODEL" TUNIX_MAXTEXT_PIP_SPEC="$PIP" \
+    TUNIX_MAXTEXT_KWARGS="$MT_KWARGS" \
+    TUNIX_MAX_TARGET_LENGTH=$MAXTGT TUNIX_TRAIN_TOKEN_BUDGET=$BUDGET TUNIX_FLCE_TILE_SIZE=$FLCE_TILE TRAIN_MICRO_BATCH_SIZE=1 \
+    TUNIX_UNIFORM_SEQ_LEN=$UNIFORM TUNIX_SEQ_BUCKETS="4096,8192,12288,16384,20480" TUNIX_MINIMAL_FB_OUTPUT=1 \
+    TUNIX_JAX_CACHE_LOCAL="$JAX_CACHE_LOCAL" TUNIX_JAX_CACHE_GCS="$JAX_CACHE_GCS" \
+    SKYRL_SCORE_FIXED_LEN=$SCORE_FIXED \
+    VLLM_MAX_MODEL_LEN=$VLLM_LEN VLLM_MAX_NUM_SEQS=$MAX_NUM_SEQS VLLM_XLA_CACHE_PATH="$HOME/vllm-xla-cache-local" \
+    VLLM_XLA_CACHE_GCS="$XLA_GCS" \
+    HF_CACHE_GCS="$HF_GCS" \
+    VLLM_EXTRA_ARGS="$VLLM_XARGS" \
+    VLLM_LIMIT_MM_PER_PROMPT="$LIMIT_MM_PER_PROMPT" \
+    VLLM_ENGINE_EXTRA_ENV="$ENGINE_EXTRA_ENV" \
+    REMOTE_SKYRL_DIR="$REPO" \
+    READY_ATTEMPTS=900 SYNC_SKYRL="$CELL_SYNC_SKYRL" START_VLLM="$START_LOCAL_VLLM" START_TINKER=1 \
+    bash "$REPO/tpu/start_colocated_vllm_tinker.sh" > ~/engine-bringup.log 2>&1 || bringup_rc=$?
+  if (( bringup_rc != 0 )) || ! engines_healthy; then
+    echo "engine bring-up FAILED (launcher_rc=$bringup_rc)"
+    tail -12 ~/engine-bringup.log
+    exit "$SETUP_RETRY_EXIT_CODE"
+  fi
+  echo "engines UP"
+fi
+
+# --- ray grading cluster (idempotent) ---------------------------------------
+RAYBIN="$REPO/third_party/discover/.venv-ttd-discover/bin/ray"
+GRADER_RAY_ADDRESS="$W0INT:${GRADER_RAY_PORT:-6379}"
+RAY_BIN="$RAYBIN" GRADER_RAY_ADDRESS="$GRADER_RAY_ADDRESS" \
+  GRADER_RAY_NODE_IP="$W0INT" GRADER_RAY_NUM_CPUS=0 \
+  GRADER_RAY_LOG=/tmp/ray-tpuswarm-grader-head.log \
+  bash "$REPO/tpu/jobman/grader_ray.sh" head
+RAYV=$("$REPO/third_party/discover/.venv-ttd-discover/bin/python" -c "import ray; print(ray.__version__)")
+for worker in $(echo "$VLLM_IDXS" | tr ',' ' '); do
+  ip="$(worker_ip "$worker")"
+  timeout 900 ssh $SSHO "$REMOTE_USER"@"$ip" "
+    export PATH=\$HOME/.local/bin:\$PATH
+    [ -x ~/.venvs/grader/bin/ray ] || {
+      uv venv ~/.venvs/grader --python 3.11 >/dev/null 2>&1
+      uv pip install --python ~/.venvs/grader/bin/python 'ray==$RAYV' numpy scipy shapely numba scikit-learn psutil >/dev/null 2>&1
+    }
+    RAY_BIN=~/.venvs/grader/bin/ray \
+      GRADER_RAY_ADDRESS=$GRADER_RAY_ADDRESS \
+      GRADER_RAY_NODE_IP=$ip GRADER_RAY_NUM_CPUS=150 \
+      GRADER_RAY_LOG=/tmp/ray-tpuswarm-grader-worker.log \
+      bash '$REPO/tpu/jobman/grader_ray.sh' worker
+  " 2>/dev/null || echo "ray worker $ip FAILED (grading degrades, not fatal)"
+done
+echo "cell worker 0 ready ($CELL)"

@@ -228,7 +228,7 @@ deadline_check
 
 # ------------------------------------------------------- 2. provision -------
 log "provisioning host"
-timeout 60 scp $SSHO "$REPO/tpu/provision_tpu_worker.sh" ${USER_R}@"$HOST":~/ >/dev/null 2>&1
+timeout 60 scp $SSHO "$REPO/tpu/provision_tpu_worker.sh" "$REPO/tpu/gcs_rsync.sh" ${USER_R}@"$HOST":~/ >/dev/null 2>&1
 rsh 'for i in $(seq 1 60); do sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1||break; sleep 5; done; bash ~/provision_tpu_worker.sh' 900 | tail -3 | tee -a "$PROG"
 rsh 'df -BG --output=source,size,avail,target / /dev/shm 2>/dev/null' 60 | tee -a "$PROG"
 deadline_check
@@ -236,7 +236,7 @@ deadline_check
 log "restoring weights from GCS to local SSD"
 rsh "export PATH=\$HOME/google-cloud-sdk/bin:/usr/lib/google-cloud-sdk/bin:\$PATH
 mkdir -p ${REMOTE_MODEL}
-time gcloud storage rsync -r ${GCS_MODEL} ${REMOTE_MODEL} 2>&1 | tail -3
+time bash ~/gcs_rsync.sh -r ${GCS_MODEL} ${REMOTE_MODEL} 2>&1 | tail -3
 du -sh ${REMOTE_MODEL}" 2400 | tail -8 | tee -a "$PROG"
 rsh "test -s ${REMOTE_MODEL}/model-00001-of-00002.safetensors && test -s ${REMOTE_MODEL}/model-00002-of-00002.safetensors && echo WEIGHTS-OK || echo WEIGHTS-MISSING" 60 | tee -a "$PROG"
 grep -q WEIGHTS-OK "$PROG" || { log "weights not staged on host"; exit 6; }
@@ -653,7 +653,7 @@ if have_time 3000; then
   rsh "export PATH=\$HOME/google-cloud-sdk/bin:/usr/lib/google-cloud-sdk/bin:\$PATH
 mkdir -p ${REMOTE_ORBAX}
 if gcloud storage ls ${GCS_ORBAX}/0/items >/dev/null 2>&1; then
-  time gcloud storage rsync -r ${GCS_ORBAX}/0/items ${REMOTE_ORBAX}/0/items 2>&1 | tail -3
+  time bash ~/gcs_rsync.sh -r ${GCS_ORBAX}/0/items ${REMOTE_ORBAX}/0/items 2>&1 | tail -3
   echo ORBAX-FROM-GCS
 else
   echo ORBAX-NOT-IN-GCS

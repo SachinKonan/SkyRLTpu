@@ -1,0 +1,20 @@
+[
+  {
+    "spot_job_id": 1068,
+    "name": "science-q20-v6e-gemma-grpo-seedonly-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4455"
+  },
+  {
+    "spot_job_id": 1070,
+    "name": "science-q20-v6e-muse-grpo-seedonly-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4471"
+  },
+  {
+    "spot_job_id": 1072,
+    "name": "science-q20-v6e-qwen-grpo-seedonly-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4494"
+  }
+]

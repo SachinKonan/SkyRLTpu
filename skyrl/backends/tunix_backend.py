@@ -21,6 +21,8 @@ Design notes:
     adapter updates (``inference_backend="vllm"``, reusing VllmSamplingClient).
 """
 
+import gc
+import hashlib
 import json
 import os
 import time
@@ -35,16 +37,29 @@ import numpy as np
 import optax
 from cloudpathlib import AnyPath
 from flax import nnx
+from jax.experimental import multihost_utils
 from pydantic import BaseModel, Field
 from transformers import AutoConfig, AutoTokenizer
 
+from skyrl.backends import lora_mix
 from skyrl.backends.backend import AbstractBackend
 from skyrl.backends.renderer import render_model_input
+from skyrl.backends.rpc import (
+    RpcPayload,
+    broadcast_command,
+    call_with_rpc_ack,
+    serialize_call_kwargs,
+    serialize_config,
+)
 from skyrl.backends.utils import pad_batch, pad_to_fsdp
 from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
 from skyrl.tinker.loss_fns import LOSS_FUNCTIONS, LossFnConfig
 from skyrl.tinker.types import LOSS_TYPES
+from skyrl.utils.checkpoint_mirror import (
+    mirror_checkpoint_to_gcs,
+    restore_checkpoint_from_gcs,
+)
 from skyrl.utils.log import logger
 from skyrl.utils.storage import download_and_unpack, pack_and_upload
 
@@ -58,8 +73,15 @@ _NATIVE_ATTN_REGEX = r".*q_proj|.*k_proj|.*v_proj|.*o_proj"
 _NATIVE_MLP_REGEX = r".*gate_proj|.*up_proj|.*down_proj"
 
 _SELF_CHECKPOINT_FILE = "tunix_lora_checkpoint.msgpack.npz"
+_LORA_MIX_GAMMA_FILE = "lora_mix_gamma.npz"
 _CHECKPOINT_META_FILE = "tunix_checkpoint_meta.json"
 _EPHEMERAL_MARKER_FILE = "tunix_ephemeral_marker.json"
+
+
+@jax.jit
+def _jitted_global_norm(updates):
+    """Compute one global-norm program instead of one eager launch per leaf."""
+    return optax.global_norm(updates)
 
 
 class TunixBackendConfig(BaseModel, extra="forbid"):
@@ -97,6 +119,15 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
         "'vllm' forwards sampling to a vLLM server with inflight LoRA updates.",
     )
     max_lora_rank: int = Field(default=32, description="Maximum LoRA rank accepted from clients")
+    independent_lora_init: bool = Field(
+        default=False, description="Seed adapters directly from template shapes without copying base weights"
+    )
+    stacked_lora_training: bool = Field(
+        default=False, description="Vectorize pooled MaxText forward/backward over independent adapters"
+    )
+    stacked_lora_verify: bool = Field(
+        default=False, description="Compare stacked gradients/logprobs against sequential replay on the same TPU batch"
+    )
     lora_attn_regex: str | None = Field(
         default=None,
         description="Override for the qwix module_path regex used for attention projections.",
@@ -162,7 +193,60 @@ class TunixBackendConfig(BaseModel, extra="forbid"):
     vllm_request_timeout_sec: float = Field(default=300.0)
     vllm_max_concurrent_requests: int = Field(default=64)
     vllm_client_side_round_robin: bool = Field(default=False)
+    vllm_route_by_prompt_prefix: bool = Field(
+        default=False,
+        description=(
+            "Route each request by a hash of its prompt prefix instead of its batch "
+            "index, so a two-phase rollout's phase-2 call returns to the engine that "
+            "already holds its phase-1 KV. Requires client-side round robin."
+        ),
+    )
     vllm_group_completions: bool = Field(default=True)
+    checkpoint_mirror_gcs: str | None = Field(
+        default=None,
+        description=(
+            "Optional gs:// prefix for synchronous training and sampler checkpoint "
+            "write-through. Multi-host process 0 owns the local archive, so mirroring "
+            "inside the backend avoids relying on a head-only sidecar."
+        ),
+    )
+    free_base_state_after_template: bool = Field(
+        default=False,
+        description=(
+            "Drop the pristine base parameter state once a LoRA template exists. "
+            "qwix.apply_lora_to_model does NOT share the base arrays -- measured on "
+            "muse-glimmer-30b: HBM in_use 12.97 GiB after load -> 48.37 GiB after "
+            "create_model, and that +35.4 GiB is rank-independent (rank 4 and rank 32 "
+            "differ by 1.4 GiB), i.e. it is a second copy of the weights, not adapters. "
+            "The original copy is then only needed to build ADDITIONAL templates, so a "
+            "run that uses one (rank, attn, mlp) combo -- every RL cell -- can release "
+            "it and get the whole 12.97 GiB back. Requesting a second template after "
+            "the release raises instead of silently retraining from nothing."
+        ),
+    )
+    qwix_init_mode: str = Field(
+        default="abstract",
+        description=(
+            "How qwix discovers where to insert LoRA (MaxText models only). qwix "
+            "runs one tracing forward pass; 'eager' executes it for real, and on "
+            "MaxText the layer scan is then its own TPU program that held three "
+            "whole-model copies and asked for a fourth (gpt-oss-120b on 8 v5p chips: "
+            "peak 89 GiB of 102.8, job 416); under jit XLA still wanted 104 GiB of "
+            "temporaries (job 417). 'abstract' runs the same trace under "
+            "nnx.eval_shape (no compute, no HBM), keeps the existing base arrays in "
+            "place, and initialises only the LoRA factors (he_uniform A, zero B) on "
+            "the sharding their logical axes resolve to. Base weights are never copied."
+        ),
+    )
+    coordinator_address: str | None = Field(
+        default=None,
+        description="JAX coordinator address (host:port) for multi-process Tunix training.",
+    )
+    num_processes: int | None = Field(
+        default=None,
+        ge=1,
+        description="Number of JAX processes participating in the Tunix trainer.",
+    )
 
 
 def round_up_seq_len(seq_len: int) -> int:
@@ -183,6 +267,104 @@ def _keystr_map(state) -> dict[str, Any]:
     return {jax.tree_util.keystr(p): v for p, v in jax.tree.flatten_with_path(state)[0]}
 
 
+def _repair_maxtext_scanned_lora_metadata(model: nnx.Module) -> int:
+    """Give dynamically-created Qwix factors scan-aware logical axes.
+
+    MaxText stores a scanned ``DenseGeneral`` kernel with the layer axis in
+    both its value and logical sharding metadata.  Qwix creates LoRA factors
+    while MaxText is executing one *sliced* layer, then MaxText stacks those
+    new variables after the scan.  With multi-axis output kernels (for example
+    GPT-OSS K/V projections), the new factor can retain the base kernel's full
+    logical spec: a rank-2 LoRA-A slice then carries three non-scan axis names.
+
+    Reconstruct the factor specs using the same rule as Qwix's
+    ``_create_lora_layer_shapes``: A inherits the first contracting kernel
+    axis, B inherits the first remaining kernel axis, and the LoRA rank is
+    replicated.  The layer axis is inserted at MaxText's configured parameter
+    scan position.  Expert-sidecar LoRA variables are not siblings of a base
+    ``kernel`` and are intentionally untouched.
+    """
+
+    repaired = 0
+    for _, module in nnx.iter_modules(model):
+        contract_axes = getattr(module, "axis", None)
+        if contract_axes is None:
+            continue
+        if isinstance(contract_axes, int):
+            contract_count = 1
+        else:
+            contract_count = len(tuple(contract_axes))
+
+        for suffix, factor_axes_for_base in (
+            ("_lora_a", lambda axes: (axes[0], None)),
+            ("_lora_b", lambda axes: (None, axes[contract_count])),
+        ):
+            for factor_name, factor in tuple(vars(module).items()):
+                if not factor_name.endswith(suffix) or not isinstance(factor, nnx.Variable):
+                    continue
+                base = getattr(module, factor_name[: -len(suffix)], None)
+                if not isinstance(base, nnx.Variable):
+                    continue
+
+                base_meta = base.get_metadata()
+                scan_name = base_meta.get(nnx.PARTITION_NAME)
+                scan_axis = base_meta.get("param_scan_axis")
+                if scan_name is None or scan_axis is None:
+                    continue
+
+                sharding_key = next(
+                    (
+                        key
+                        for key in ("out_sharding", "sharding_names", "sharding")
+                        if isinstance(base_meta.get(key), (tuple, list, jax.sharding.PartitionSpec))
+                    ),
+                    None,
+                )
+                if sharding_key is None:
+                    continue
+                base_axes = list(base_meta[sharding_key])
+                if scan_axis < len(base_axes) and base_axes[scan_axis] == scan_name:
+                    del base_axes[scan_axis]
+                elif scan_name in base_axes:
+                    base_axes.remove(scan_name)
+
+                if not base_axes or contract_count >= len(base_axes):
+                    raise ValueError(
+                        f"Cannot derive Qwix LoRA sharding for {factor_name}: "
+                        f"base axes={base_axes}, contracting axes={contract_count}"
+                    )
+                factor_axes = list(factor_axes_for_base(base_axes))
+                factor_value = factor.get_value()
+                if factor_value.ndim == len(factor_axes) + 1:
+                    factor_axes.insert(scan_axis, scan_name)
+                elif factor_value.ndim != len(factor_axes):
+                    raise ValueError(
+                        f"Unexpected Qwix LoRA factor rank for {factor_name}: "
+                        f"shape={factor_value.shape}, derived axes={factor_axes}, scan axis={scan_axis}"
+                    )
+
+                factor_meta = factor.get_metadata()
+                factor_sharding_keys = [
+                    key
+                    for key in ("out_sharding", "sharding_names", "sharding")
+                    if isinstance(factor_meta.get(key), (tuple, list, jax.sharding.PartitionSpec))
+                ]
+                if not factor_sharding_keys:
+                    factor_sharding_keys = [sharding_key]
+                for key in factor_sharding_keys:
+                    old_value = factor_meta.get(key, base_meta[sharding_key])
+                    new_value = (
+                        jax.sharding.PartitionSpec(*factor_axes)
+                        if isinstance(old_value, jax.sharding.PartitionSpec)
+                        else tuple(factor_axes)
+                    )
+                    factor.set_metadata(key, new_value)
+                factor.set_metadata(nnx.PARTITION_NAME, scan_name)
+                factor.set_metadata("param_scan_axis", scan_axis)
+                repaired += 1
+    return repaired
+
+
 class _MaxTextAdapterShim(nnx.Module):
     """Adapts tunix's MaxText wrapper to the native-tunix model interface.
 
@@ -194,8 +376,23 @@ class _MaxTextAdapterShim(nnx.Module):
     loss mask / generation bookkeeping instead.
     """
 
-    def __init__(self, adapter: nnx.Module):
+    def __init__(self, adapter: nnx.Module, logical_axis_rules=()):
         self.adapter = adapter
+        # MaxText resolves several shard_map specs dynamically while tracing a
+        # model call.  ``from_pretrained`` installs this context while building
+        # the module, but the context is gone by the time Qwix traces its LoRA
+        # template or SkyRL traces a train step.  Without restoring it here,
+        # those specs silently become replicated.  GPT-OSS exposes the bug
+        # immediately: the routed down projection is TP reduce-scattered to
+        # hidden/TP while its replicated output bias remains full hidden width.
+        # Keep the rules on the shim so every model trace, including Qwix's
+        # interception trace, sees the exact configuration used at load time.
+        self.logical_axis_rules = tuple(logical_axis_rules)
+
+    def _logical_axis_context(self):
+        from flax import linen as flax_linen
+
+        return flax_linen.logical_axis_rules(self.logical_axis_rules)
 
     def __call__(
         self,
@@ -207,7 +404,17 @@ class _MaxTextAdapterShim(nnx.Module):
         segment_ids=None,
         skip_lm_head: bool = False,
     ):
-        logits, new_cache = self.adapter(input_tokens, positions, cache, attention_mask)
+        with self._logical_axis_context():
+            adapter_kwargs = {}
+            if output_hidden_states or skip_lm_head:
+                adapter_kwargs["output_hidden_states"] = True
+            logits, new_cache = self.adapter(
+                input_tokens,
+                positions,
+                cache,
+                attention_mask,
+                **adapter_kwargs,
+            )
         return logits, new_cache
 
     def compute_final_logits(self, x):
@@ -220,7 +427,8 @@ class _MaxTextAdapterShim(nnx.Module):
         apply_output_head does). Used by the FLCE loss to project token tiles
         without ever forming the full [B, T, V]. Requires num_vocab_tiling>1 so
         __call__ returns hidden instead of logits."""
-        return self.adapter.base.logits_from_hidden_states_for_vocab_tiling(hidden_chunk, True, "train")
+        with self._logical_axis_context():
+            return self.adapter.base.logits_from_hidden_states_for_vocab_tiling(hidden_chunk, True, "train")
 
     def get_model_input(self):
         # Batch must be divisible by every mesh axis the decoder shards it
@@ -249,10 +457,10 @@ _MAXTEXT_SEQ_BLOCK = 512
 # (decoder/scanned_blocks/layers_{0..5}, stacked over scan steps) and any
 # unscanned decoder (decoder/layers_<i>) — with the standard
 # self_attention/mlp submodule names; the GptOss arm covers gpt-oss,
-# whose blocks are named GptOssAttention/{query,key,value,out} and GptOssMlp
-# (experts held as raw stacked params — scoping the whole module lets qwix
-# intercept the expert einsums; the router `gate` is deliberately included,
-# its delta merges into the gate kernel like any other). The layer_N arm
+# whose blocks are named GptOssAttention/{query,key,value,out} and
+# GptOssMlp/gate. GPT-OSS expert factors are installed explicitly by MaxText's
+# sparse expert-LoRA API because its raw expert params feed a GMM primitive
+# that Qwix cannot intercept. The layer_N arm
 # covers qwen3.5's inhomogeneous scan (decoder/layers/layer_{0..3}, stacked
 # over scan steps): full-attention layers nest as
 # layer_N/attention/attention/{query,key,value,out} (DecoderLayer.attention =
@@ -270,7 +478,7 @@ _MAXTEXT_MLP_REGEX = (
     r"(?:.*/)?(?:decoder/)?layers/(?:[0-9]+/)?mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
     r"|(?:.*/)?layers_[0-9]+/mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
     r"|(?:.*/)?layer_[0-9]+/mlp/(?:wi_0|wi_1|wo)(?:/.*)?"
-    r"|(?:.*/)?GptOssMlp(?:/.*)?"
+    r"|(?:.*/)?GptOssMlp/gate(?:/.*)?"
 )
 
 # MaxText projection name -> HF (block, module) for PEFT export.
@@ -354,8 +562,15 @@ class ModelSlot:
     optimizer: nnx.Optimizer
     accum_grads: Any = None  # pytree matching lora_state, or None
     accum_count: int = 0
+    training_failed: bool = False
     loaded_sampler_checkpoint_id: str | None = None
     sampler_lora_states: dict = field(default_factory=dict)  # checkpoint_id -> lora state
+    diagnostic_grad_index: int = 0
+    # Learnable carried/fresh LoRA mix (skyrl.backends.lora_mix). When set,
+    # lora_state holds BOTH halves at rank 2r and lora_config stays the
+    # client-facing rank r; template_key / exports use the rank-2r config.
+    mix: lora_mix.MixState | None = None
+    export_lora_config: types.LoraConfig | None = None
 
 
 @dataclass
@@ -382,9 +597,10 @@ class TunixBackend(AbstractBackend):
         self.base_model = base_model
         self.config = config
         self.metrics = types.EngineMetrics()
+        self._repeated_kv_heads = None
 
         self.vllm_client: VllmSamplingClient | None = None
-        if config.inference_backend == "vllm":
+        if config.inference_backend == "vllm" and jax.process_index() == 0:
             if not config.vllm_base_url:
                 raise ValueError("TunixBackendConfig.vllm_base_url is required when inference_backend='vllm'")
             self.vllm_client = VllmSamplingClient(
@@ -400,6 +616,7 @@ class TunixBackend(AbstractBackend):
                 request_timeout_sec=config.vllm_request_timeout_sec,
                 max_concurrent_requests=config.vllm_max_concurrent_requests,
                 client_side_round_robin=config.vllm_client_side_round_robin,
+                route_by_prompt_prefix=config.vllm_route_by_prompt_prefix,
             )
 
         # For maxtext, model_path is an orbax weights dir with no tokenizer
@@ -509,6 +726,15 @@ class TunixBackend(AbstractBackend):
             logger.info(f"Using cached MaxText orbax checkpoint at {items_dir}")
             return str(items_dir)
 
+        if jax.process_count() > 1:
+            raise RuntimeError(
+                f"Distributed Tunix requires a complete MaxText orbax checkpoint on every host; "
+                f"none was found at {items_dir}. Restore "
+                "TUNIX_MAXTEXT_CKPT_CACHE_GCS during the Jobman prepare hook before starting "
+                "the trainer. Per-host HF conversion is intentionally disabled because it "
+                "duplicates the conversion and can exhaust each VM's boot disk."
+            )
+
         logger.info(f"Converting {self.base_model} to MaxText orbax format at {cache_root} (one-time)")
         cache_root.mkdir(parents=True, exist_ok=True)
         cmd = [
@@ -576,18 +802,43 @@ class TunixBackend(AbstractBackend):
             "skip_jax_distributed_system": True,
         }
         if "gpt-oss" in mt_name:
-            # qwix cannot inject LoRA into the megablox Pallas gmm kernel;
-            # expert adapters require the dense einsum MoE path (costs
-            # E/top_k more MoE FLOPs — acceptable at current utilization).
-            overrides["sparse_matmul"] = False
-            overrides["megablox"] = False
+            # Keep MaxText's native routed-token GMM path. Our MaxText fork
+            # supplies explicit sparse expert-LoRA factors around these GMMs;
+            # falling back to dense MoE would cost roughly E/top_k more work.
+            overrides["sparse_matmul"] = True
+            overrides["megablox"] = True
         overrides.update(self.config.maxtext_kwargs)
+        if "gpt-oss" in mt_name and (
+            overrides.get("sparse_matmul") is not True or overrides.get("megablox") is not True
+        ):
+            raise ValueError(
+                "GPT-OSS expert LoRA requires sparse_matmul=true and megablox=true; "
+                "the dense fallback is intentionally unsupported"
+            )
         argv = ["", "base.yml"] + [
             f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in overrides.items()
         ]
 
         with _maxtext_config_cwd():
             maxtext_config = pyconfig.initialize(argv)
+            if mt_name.startswith(("qwen3.5", "muse-glimmer")):
+                from skyrl.backends.lora_init import RepeatedKVHeads
+                from transformers import PretrainedConfig
+
+                if mt_name.startswith("qwen3.5"):
+                    hf_config = AutoConfig.from_pretrained(self.base_model)
+                    hf_config = getattr(hf_config, "text_config", hf_config)
+                    hf = dict(num_key_value_heads=hf_config.num_key_value_heads, head_dim=hf_config.head_dim)
+                else:
+                    # Muse needs only checkpoint metadata, not an AutoConfig
+                    # registration or execution of custom checkpoint code.
+                    hf, _ = PretrainedConfig.get_config_dict(self.config.model_path or self.base_model)
+                    hf = hf.get("text_config", hf)
+                logical_heads = maxtext_config.num_kv_heads
+                if logical_heads != hf["num_key_value_heads"]:
+                    self._repeated_kv_heads = RepeatedKVHeads(
+                        hf["num_key_value_heads"], logical_heads, hf["head_dim"])
+                    logger.info("Tying repeated K/V LoRA heads: %s", self._repeated_kv_heads)
             model = model_creation_utils.from_pretrained(
                 maxtext_config, mesh=None, wrap_with_tunix_adapter=True
             )
@@ -601,7 +852,7 @@ class TunixBackend(AbstractBackend):
             logger.info(f"MaxText mesh: shape={getattr(mesh, 'shape', None)} axes={getattr(mesh, 'axis_names', None)}")
         logger.info(f"Loaded MaxText model {mt_name} for {self.base_model} (pure-NNX)")
         self._log_param_sharding(model)
-        return _MaxTextAdapterShim(model)
+        return _MaxTextAdapterShim(model, maxtext_config.logical_axis_rules)
 
     def _log_param_sharding(self, model) -> None:
         """One-shot diagnostic: are params actually sharded, and how much HBM is live?
@@ -633,7 +884,7 @@ class TunixBackend(AbstractBackend):
             )
             for x in sorted(leaves, key=lambda a: -int(_np.prod(a.shape)))[:3]:
                 logger.info(f"PARAM DIAG: shape={tuple(x.shape)} sharding={x.sharding}")
-            for d in jax.devices()[:2]:
+            for d in jax.local_devices()[:2]:
                 s = d.memory_stats() or {}
                 lim = s.get("bytes_limit") or s.get("bytes_reservable_limit") or 0
                 logger.info(
@@ -646,7 +897,10 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ templates
 
     def _template_key(self, lora_config: types.LoraConfig) -> tuple:
-        return (lora_config.rank, lora_config.train_attn, lora_config.train_mlp)
+        # Alpha is embedded as a static scale in both Qwix and sparse expert
+        # LoRA graphs; equal-rank adapters with different alpha cannot share a
+        # template safely.
+        return (lora_config.rank, lora_config.alpha, lora_config.train_attn, lora_config.train_mlp)
 
     def _module_path_regex(self, lora_config: types.LoraConfig) -> str:
         is_maxtext = self.config.model_source == "maxtext"
@@ -662,17 +916,173 @@ class TunixBackend(AbstractBackend):
         return "|".join(parts)
 
     def _wrap_with_lora(self, lora_config: types.LoraConfig, seed: int) -> nnx.Module:
-        """Apply qwix LoRA to a fresh merge of the base model (shares base arrays)."""
+        """Apply qwix LoRA to a fresh merge of the base model.
+
+        NOTE: despite the merge, qwix does not share the base arrays -- the wrapped
+        model carries its own copy (see free_base_state_after_template).
+        """
         import qwix
 
+        if self.base_state is None:
+            raise RuntimeError(
+                "base parameter state was released after the first LoRA template "
+                "(free_base_state_after_template=True); a second template cannot be "
+                "built. Disable that option to use more than one LoRA config."
+            )
         model = nnx.merge(self.base_graphdef, self.base_state)
+        if self.config.free_base_state_after_template:
+            # The merged module now holds the only reference this code needs to
+            # the base arrays. Dropping self.base_state here (instead of at the
+            # end of create_model) lets qwix's private copy replace the base
+            # arrays as soon as this function returns, and steers
+            # _init_lora_state onto its template-copy path, so no second whole
+            # model is ever wrapped. 120B on 8 v5p chips: each copy is 29 GiB
+            # per chip; four copies do not fit in 95 GiB (job 414).
+            self.base_state = None
+            gc.collect()
+        self._log_hbm("template/merged")
+        if (
+            self.config.model_source == "maxtext"
+            and "gpt-oss" in self._maxtext_model_name()
+            and lora_config.train_mlp
+        ):
+            try:
+                from maxtext.utils.lora_utils import install_sparse_expert_lora
+            except ImportError as e:  # pragma: no cover - catches an unpatched MaxText install
+                raise ImportError(
+                    "GPT-OSS sparse expert LoRA requires the SkyRL MaxText fork "
+                    "with install_sparse_expert_lora()"
+                ) from e
+            installed = install_sparse_expert_lora(
+                model,
+                rank=lora_config.rank,
+                alpha=lora_config.alpha,
+                rngs=nnx.Rngs(seed),
+            )
+            logger.info("Installed sparse expert LoRA on %d GPT-OSS MoE layer groups", installed)
+            self._log_hbm("template/sparse_expert_lora")
         provider = qwix.LoraProvider(
             module_path=self._module_path_regex(lora_config),
             rank=lora_config.rank,
             alpha=lora_config.alpha,
         )
         model_input = model.get_model_input()
-        return qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+        mode = self.config.qwix_init_mode if self.config.model_source == "maxtext" else "eager"
+        if mode not in ("eager", "abstract"):
+            raise ValueError(f"unknown qwix_init_mode {mode!r}")
+        self._log_hbm("template/before_qwix", full=True)
+        try:
+            if mode == "abstract":
+                model = self._apply_qwix_abstract(model, provider, seed, model_input)
+            else:
+                model = qwix.apply_lora_to_model(model, provider, rngs=nnx.Rngs(seed), **model_input)
+                if self.config.model_source == "maxtext":
+                    repaired = _repair_maxtext_scanned_lora_metadata(model)
+                    if repaired:
+                        logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
+                self._drop_sown_intermediates(model)
+        except Exception:
+            self._log_hbm("template/qwix_failed", full=True)
+            raise
+        self._log_hbm("template/qwix_applied")
+        return model
+
+    @staticmethod
+    def _drop_sown_intermediates(module) -> int:
+        """Pop the values MaxText sows during the LoRA-install forward.
+
+        With num_vocab_tiling>1 the decoder returns no logits in train mode and
+        sows its final hidden state into the ``intermediates`` collection
+        instead (maxtext/layers/decoders.py). qwix's tracing forward therefore
+        leaves a tuple-valued nnx.Intermediate on the wrapped module that the
+        input module never had; the abstract fill rejected it as an unexpected
+        new leaf (job 456: ('adapter', 'base', 'decoder', 'hidden_states')).
+        Sown values are per-call scratch, never parameters, so they are removed
+        from the module before its state is filled or the model is used.
+        """
+        sown = nnx.pop(module, nnx.Intermediate)
+        count = len(nnx.to_flat_state(sown))
+        if count:
+            logger.info("Dropped %d sown intermediate(s) left by the LoRA-install forward", count)
+        return count
+
+    def _apply_qwix_abstract(self, model, provider, seed: int, model_input: dict):
+        """qwix's tracing forward under nnx.eval_shape; base arrays are reused, not copied.
+
+        1. Trace qwix.apply_lora_to_model abstractly: yields the wrapped module's
+           graph and abstract state (ShapeDtypeStructs), including the stacked
+           per-layer LoRA factors MaxText's scan emits. No TPU program runs.
+        2. Repair the scan-aware logical axes of the new factors (same helper as
+           the eager path; it only reads shapes).
+        3. Fill the state: every leaf that already exists in the input module
+           (base kernels, sparse expert LoRA installed eagerly just before)
+           takes that real array; every new leaf is a qwix factor and is
+           initialised the way qwix would (he_uniform A, zeros B, dtype of the
+           base kernel) directly onto the NamedSharding its logical axes map to.
+        """
+        import qwix
+        from flax import linen as flax_linen
+        from jax.sharding import NamedSharding, PartitionSpec as P
+
+        def trace(module):
+            return qwix.apply_lora_to_model(module, provider, rngs=nnx.Rngs(seed), **model_input)
+
+        abstract = nnx.eval_shape(trace, model)
+        self._drop_sown_intermediates(abstract)
+        repaired = _repair_maxtext_scanned_lora_metadata(abstract)
+        if repaired:
+            logger.info("Repaired scan-aware sharding metadata on %d Qwix LoRA factors", repaired)
+
+        graphdef, abstract_state = nnx.split(abstract)
+        real = {tuple(path): leaf for path, leaf in nnx.to_flat_state(nnx.state(model))}
+        mesh = getattr(self, "_mesh", None)
+        rules = tuple(getattr(model, "logical_axis_rules", ()) or ())
+        flat = nnx.to_flat_state(abstract_state)
+        filled, created, reused = [], 0, 0
+        key = jax.random.key(seed)
+        for path, leaf in flat:
+            tpath = tuple(path)
+            value = leaf.value
+            is_array = hasattr(value, "shape") and hasattr(value, "dtype")
+            existing = real.get(tpath)
+            if existing is not None:
+                # Anything the input module already holds is reused verbatim:
+                # base kernels, the eagerly installed sparse expert LoRA, and
+                # non-array variables (gpt-oss carries tuple-valued state that
+                # the Qwen CPU fixture does not; job 437).
+                real_value = existing.value
+                if is_array and hasattr(real_value, "shape") and (
+                        tuple(real_value.shape) != tuple(value.shape) or real_value.dtype != value.dtype):
+                    raise RuntimeError(f"qwix changed base leaf {tpath}: {real_value.shape}/{real_value.dtype}"
+                                       f" -> {value.shape}/{value.dtype}")
+                leaf.value = real_value
+                reused += 1
+                filled.append((path, leaf))
+                continue
+            name = str(tpath[-1])
+            if not name.endswith(("_lora_a", "_lora_b")) or not is_array:
+                raise RuntimeError(f"unexpected new leaf from qwix trace: {tpath} ({type(value).__name__})")
+            shape, dtype = tuple(value.shape), value.dtype
+            meta = leaf.get_metadata() if hasattr(leaf, "get_metadata") else {}
+            axes = next((meta[k] for k in ("out_sharding", "sharding_names", "sharding")
+                         if isinstance(meta.get(k), (tuple, list, P))), None)
+            target = None
+            if mesh is not None and rules and axes is not None and len(axes) == len(shape):
+                candidate = flax_linen.logical_to_mesh_sharding(P(*axes), mesh, rules)
+                if isinstance(candidate, NamedSharding):
+                    target = candidate
+            if name.endswith("_lora_b"):
+                init = lambda k, sh=shape, dt=dtype: jnp.zeros(sh, dt)
+            else:
+                he = jax.nn.initializers.he_uniform()
+                init = lambda k, sh=shape, dt=dtype, he=he: he(k, sh, dt)
+            key, sub = jax.random.split(key)
+            leaf.value = jax.jit(init, out_shardings=target)(sub)
+            created += 1
+            filled.append((path, leaf))
+        logger.info("qwix abstract init: reused %d base leaves, created %d LoRA factors (mesh=%s)",
+                    reused, created, mesh is not None)
+        return nnx.merge(graphdef, nnx.from_flat_state(filled))
 
     def _get_template(self, lora_config: types.LoraConfig) -> _Template:
         key = self._template_key(lora_config)
@@ -697,13 +1107,53 @@ class TunixBackend(AbstractBackend):
             kind=kind,
         )
         self.templates[key] = template
+        gc.collect()
+        self._log_hbm("template/ready")
         logger.info(f"Created LoRA template for key={key}")
         return template
 
     def _init_lora_state(self, lora_config: types.LoraConfig) -> nnx.State:
-        """Fresh, independently-seeded LoRA state for a new model."""
+        """Fresh, independently-seeded LoRA state for a new model.
+
+        Normally this wraps a second whole model just to read ~0.8 GiB of
+        adapters out of it, which is why create_model is so expensive (see
+        free_base_state_after_template). When the base state has been released
+        we cannot do that -- and must not, since every client restart calls
+        create_model again and would otherwise raise. The cached template
+        already holds a qwix-initialised LoRA state of exactly the right
+        structure, sharding and dtype, so copy that instead.
+
+        With independent_lora_init enabled, initialize only the adapter factors
+        from template shapes using the requested seed, including sparse expert
+        factors. Otherwise the legacy released-base path copies the seed-0
+        template and logs that a nonzero seed was ignored.
+        """
+        if getattr(self.config, "independent_lora_init", False):
+            from skyrl.backends.lora_init import initialize_lora
+            template = self.templates[self._template_key(lora_config)]
+            return initialize_lora(template.lora_shape, lora_config.seed)
+        if self.base_state is None:
+            template = self.templates.get(self._template_key(lora_config))
+            if template is None:
+                raise RuntimeError(
+                    "base parameter state was released and no cached template exists "
+                    "for this LoRA config; cannot initialise adapters."
+                )
+            if lora_config.seed != 0:
+                logger.warning(
+                    "LoRA seed %s ignored: base state released, seeding adapters from "
+                    "the cached seed-0 template.", lora_config.seed
+                )
+            return jax.tree.map(jnp.copy, template.lora_shape)
         model = self._wrap_with_lora(lora_config, seed=lora_config.seed)
         return nnx.state(model, nnx.LoRAParam)
+
+    @staticmethod
+    def _pass_lora_state(slot: ModelSlot) -> nnx.State:
+        """The LoRA state the model actually runs with (gamma-mixed when mixing)."""
+        if slot.mix is None:
+            return slot.lora_state
+        return lora_mix.effective_state(slot.lora_state, slot.mix.gamma, slot.mix.rank)
 
     # ------------------------------------------------------------------ jitted model passes
 
@@ -851,7 +1301,7 @@ class TunixBackend(AbstractBackend):
             return forward_backward_fn, forward_fn
         return jax.jit(forward_backward_fn), jax.jit(forward_fn)
 
-    def _build_model_pass_fns_nnx(self) -> tuple[Callable, Callable]:
+    def _build_model_pass_fns_nnx(self, stacked: bool = False) -> tuple[Callable, Callable]:
         """nnx-lifted model-pass fns (module-passing) for MaxText models.
 
         The MaxText pure-NNX decoder mutates its own state during forward
@@ -913,6 +1363,9 @@ class TunixBackend(AbstractBackend):
             _, (target_logprobs, per_token_losses) = loss_fn(model, *args)
             return per_token_losses, target_logprobs, None
 
+        if stacked:
+            from skyrl.backends.stacked_lora import vectorized_backward
+            return vectorized_backward(forward_backward_fn, eager=self.config.enforce_eager), None
         if self.config.enforce_eager:
             return forward_backward_fn, forward_fn
         return nnx.jit(forward_backward_fn, donate_argnums=1), nnx.jit(forward_fn)
@@ -932,8 +1385,36 @@ class TunixBackend(AbstractBackend):
         if lora_config.train_unembed:
             raise ValueError("TunixBackend does not support train_unembed=True yet")
 
-        template = self._get_template(lora_config)
-        lora_state = self._init_lora_state(lora_config)
+        mix_settings = lora_mix.mix_settings_from_env()
+        mix: lora_mix.MixState | None = None
+        template_config = lora_config
+        if mix_settings is not None and getattr(self.config, "independent_lora_init", False):
+            raise ValueError("Independent pooled adapters cannot use the carried/fresh LoRA mix")
+        if mix_settings is not None:
+            # Carried/fresh mix: both halves live in ONE rank-2r adapter with
+            # doubled alpha so qwix's alpha / rank scale is unchanged.
+            if 2 * lora_config.rank > self.config.max_lora_rank:
+                raise ValueError(
+                    f"LoRA mix needs rank {2 * lora_config.rank} (2 x {lora_config.rank}) "
+                    f"but max_lora_rank is {self.config.max_lora_rank}"
+                )
+            template_config = lora_config.model_copy(
+                update={"rank": 2 * lora_config.rank, "alpha": 2.0 * lora_config.alpha}
+            )
+        template = self._get_template(template_config)
+        lora_state = self._init_lora_state(template_config)
+        self._log_hbm("create_model/lora_state")
+        if mix_settings is not None:
+            gamma_init, gamma_lr = mix_settings
+            mix = lora_mix.MixState(
+                rank=lora_config.rank,
+                gamma=lora_mix.init_gamma(lora_state, gamma_init),
+                gamma_lr=gamma_lr,
+                gamma_init=gamma_init,
+            )
+        repeated_kv = getattr(self, "_repeated_kv_heads", None)
+        if repeated_kv is not None:
+            repeated_kv.validate(lora_state)
 
         # hyperparam_dtype must be float32: inject_hyperparams otherwise follows
         # the (possibly bfloat16) param dtype, which NaNs adamw's bias correction.
@@ -942,10 +1423,38 @@ class TunixBackend(AbstractBackend):
 
         self.models[model_id] = ModelSlot(
             lora_config=lora_config,
-            template_key=self._template_key(lora_config),
+            template_key=self._template_key(template_config),
             lora_state=lora_state,
             optimizer=optimizer,
+            mix=mix,
+            export_lora_config=template_config,
         )
+        if mix is not None:
+            logger.info(
+                "LoRA mix enabled for %s: rank %d + %d (old half frozen), gamma init %.3f, gamma lr %.4g, %d adapters",
+                model_id, lora_config.rank, lora_config.rank, mix.gamma_init, mix.gamma_lr, len(mix.gamma),
+            )
+        # Reclaim the two full-model copies this path leaves behind. Measured on
+        # muse-glimmer-30b (v5p, fsdp=4): HBM in_use 12.97 GiB after load ->
+        # 49.79 GiB after create_model, +36.8 GiB that is rank-INDEPENDENT (rank 4
+        # differs by 1.4 GiB), i.e. base weights, not adapters. Two sources:
+        # qwix.apply_lora_to_model does not share the merged arrays, and
+        # _init_lora_state wraps a SECOND whole model just to read ~0.77 GiB of
+        # freshly-seeded adapters. The second one is garbage by the time we get
+        # here; the pristine base_state is only needed to build additional
+        # templates, which single-config runs (every RL cell) never do.
+        gc.collect()
+        if self.config.free_base_state_after_template and self.base_state is not None:
+            self.base_state = None
+            gc.collect()
+            logger.info(
+                "Released the pristine base parameter state (the template holds its own "
+                "copy); additional LoRA configs are unavailable for this process."
+            )
+        self._log_hbm("create_model/done")
+        if os.environ.get("TUNIX_BACKWARD_WARMUP") == "1":
+            from skyrl.backends.backward_warmup import run as warm_backward
+            warm_backward(self, model_id)
         logger.info(f"Created model {model_id} with lora rank={lora_config.rank}, alpha={lora_config.alpha}")
 
     def delete_model(self, model_id: str) -> None:
@@ -1039,13 +1548,26 @@ class TunixBackend(AbstractBackend):
             if not getattr(self, "_shard_inputs_logged", False):
                 self._shard_inputs_logged = True
                 logger.info(f"Sharding microbatch inputs over mesh axes {batch_axes} (rows={nrows})")
-            return tuple(
-                jax.device_put(a, row_sharding)
-                if getattr(a, "ndim", 0) >= 1 and a.shape[0] == nrows
-                else a
-                for a in arrays
-            )
+            def place(array):
+                if getattr(array, "ndim", 0) < 1 or array.shape[0] != nrows:
+                    return array
+                if jax.process_count() == 1:
+                    return jax.device_put(array, row_sharding)
+                # Every RPC worker starts with the same complete host array.
+                # The callback is invoked only for this process's addressable
+                # device slices, so the global batch is neither duplicated nor
+                # reinterpreted as one full local contribution per process.
+                host_array = np.asarray(array)
+                return jax.make_array_from_callback(
+                    host_array.shape,
+                    row_sharding,
+                    lambda index, source=host_array: source[index],
+                )
+
+            return tuple(place(a) for a in arrays)
         except Exception as e:
+            if jax.process_count() > 1:
+                raise RuntimeError("distributed input sharding failed") from e
             logger.warning(f"input sharding failed ({e}); falling back to replicated inputs")
             return arrays
 
@@ -1071,6 +1593,7 @@ class TunixBackend(AbstractBackend):
         self,
         prepared_batch: types.PreparedModelPassBatch,
         with_grads: bool,
+        cohort: list[str] | None = None,
     ) -> dict[str, types.ForwardBackwardOutput | types.ErrorResponse]:
         if not prepared_batch.all_model_inputs:
             return {}
@@ -1089,6 +1612,7 @@ class TunixBackend(AbstractBackend):
 
         all_input_ids = [r.prompt_ids for r in render_model_input(prepared_batch.all_model_inputs)]
         n_examples = len(all_input_ids)
+        population = len(cohort) if cohort else 1
         seq_lens = [len(seq) for seq in all_input_ids]
         loss_fn_config = self._build_loss_fn_config(prepared_batch.all_loss_fn_configs)
         loss_fn_types = np.array([LOSS_TYPES[name] for name in prepared_batch.all_loss_fns], dtype=np.int32)
@@ -1098,13 +1622,29 @@ class TunixBackend(AbstractBackend):
         for i, model_id in enumerate(prepared_batch.all_model_ids):
             groups.setdefault(model_id, []).append(i)
 
-        token_losses_out: list[np.ndarray | None] = [None] * n_examples
-        logprobs_out: list[np.ndarray | None] = [None] * n_examples
+        token_losses_out: list[np.ndarray | None] = [None] * (n_examples * population)
+        logprobs_out: list[np.ndarray | None] = [None] * (n_examples * population)
 
         for model_id, indices in groups.items():
             slot = self.models[model_id]
+            if with_grads and slot.training_failed:
+                raise RuntimeError("Prior population training failed; reload a checkpoint before training")
             template = self.templates[slot.template_key]
             pass_fn = template.forward_backward_fn if with_grads else template.forward_fn
+            cohort_model = None
+            cohort_accum = None
+            if cohort:
+                from skyrl.backends.stacked_lora import stack_states, stacked_model, unstack_state
+                slots = [self.models[name] for name in cohort]
+                cohort_model = stacked_model(template.model, [s.lora_state for s in slots])
+                cohort_accum = stack_states([
+                    s.accum_grads if s.accum_grads is not None else jax.tree.map(jnp.zeros_like, s.lora_state)
+                    for s in slots
+                ])
+                # Keep a stable Python function across requests for JAX caching.
+                if not hasattr(self, "_stacked_backward_fn"):
+                    self._stacked_backward_fn, _ = self._build_model_pass_fns_nnx(stacked=True)
+                pass_fn = self._stacked_backward_fn
 
             budget = self.config.train_token_budget
             # Uniform-shape mode: TUNIX_UNIFORM_SEQ_LEN>0 forces EVERY microbatch to
@@ -1286,10 +1826,16 @@ class TunixBackend(AbstractBackend):
                     mb_config,
                 )
                 with self._jit_timing_context(max_len, mode="train"):
-                    if template.kind == "maxtext":
+                    if cohort:
+                        per_token_losses, target_logprobs, cohort_accum = pass_fn(
+                            cohort_model, cohort_accum, common_args
+                        )
+                        for member in slots:
+                            member.accum_count += len(mb_idx)
+                    elif template.kind == "maxtext":
                         # Swap this model's LoRA values into the shared template
                         # and run the module-passing (nnx-lifted) fns.
-                        nnx.update(template.model, slot.lora_state)
+                        nnx.update(template.model, self._pass_lora_state(slot))
                         if with_grads:
                             # In-jit donated accumulation (see forward_backward_fn).
                             # slot.accum_grads carries across fb REQUESTS until the
@@ -1312,8 +1858,9 @@ class TunixBackend(AbstractBackend):
                                 lambda: pass_fn(template.model, *common_args), "model_pass"
                             )
                     else:
+                        pass_state = self._pass_lora_state(slot)
                         per_token_losses, target_logprobs, lora_grads = self._with_oom_recovery(
-                            lambda: pass_fn(slot.lora_state, template.rest_state, *common_args),
+                            lambda: pass_fn(pass_state, template.rest_state, *common_args),
                             "model_pass",
                         )
                         # Non-maxtext (plain jax.jit) path keeps python-side
@@ -1325,16 +1872,31 @@ class TunixBackend(AbstractBackend):
                                 slot.accum_grads = jax.tree.map(jnp.add, slot.accum_grads, lora_grads)
                             slot.accum_count += len(mb_idx)
 
-                per_token_losses, target_logprobs = jax.device_get((per_token_losses, target_logprobs))
-                for row, i in enumerate(mb_idx):
-                    token_losses_out[i] = per_token_losses[row, : seq_lens[i]].astype(np.float32)
-                    logprobs_out[i] = target_logprobs[row, : seq_lens[i]].astype(np.float32)
+                if jax.process_count() > 1:
+                    # Convert non-addressable global outputs into replicated
+                    # host arrays on every process. Workers discard their API
+                    # result, but must participate in the gather in the same
+                    # order as process 0.
+                    per_token_losses, target_logprobs = jax.tree.map(
+                        lambda value: np.asarray(multihost_utils.process_allgather(value, tiled=True)),
+                        (per_token_losses, target_logprobs),
+                    )
+                else:
+                    per_token_losses, target_logprobs = jax.device_get(
+                        (per_token_losses, target_logprobs)
+                    )
+                for adapter in range(population):
+                    losses = per_token_losses[adapter] if cohort else per_token_losses
+                    logps = target_logprobs[adapter] if cohort else target_logprobs
+                    for row, i in enumerate(mb_idx):
+                        token_losses_out[adapter * n_examples + i] = losses[row, : seq_lens[i]].astype(np.float32)
+                        logprobs_out[adapter * n_examples + i] = logps[row, : seq_lens[i]].astype(np.float32)
                 # device_get above forces JAX's async dispatch to finish, so this
                 # elapsed time is the tile's real cost (not just enqueue time).
                 _mb_dt = time.time() - _mb_t0
                 _mb_el = time.time() - _mb_start
                 try:
-                    _ms = jax.devices()[0].memory_stats() or {}
+                    _ms = jax.local_devices()[0].memory_stats() or {}
                     _mem = (
                         f" hbm={_ms.get('bytes_in_use', 0) / 1e9:.1f}G"
                         f"/peak={_ms.get('peak_bytes_in_use', 0) / 1e9:.1f}G"
@@ -1343,7 +1905,7 @@ class TunixBackend(AbstractBackend):
                     _mem = ""
                 logger.info(
                     f"{'fb' if with_grads else 'fwd'} tile {_mb_n}/{_mb_total} "
-                    f"shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
+                    f"adapters={population} shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
                     f"(elapsed {_mb_el:.1f}s, eta {(_mb_el / _mb_n) * (_mb_total - _mb_n):.0f}s){_mem}"
                 )
                 if template.kind == "maxtext":
@@ -1394,6 +1956,13 @@ class TunixBackend(AbstractBackend):
                     except Exception:
                         pass
 
+            if cohort:
+                for adapter, member in enumerate(slots):
+                    member.accum_grads = unstack_state(cohort_accum, adapter, member.lora_state)
+                # The shared template and independent optimizer states were never
+                # replaced with stacked objects. Only gradients cross this boundary.
+                del cohort_model, cohort_accum
+
         # A training fb over a large batch returns per-token elementwise_loss +
         # logprobs for EVERY datum (e.g. 376 datums x ~10k tokens = millions of
         # floats). Serialized to JSON that is a huge REST body, and the client's
@@ -1406,7 +1975,25 @@ class TunixBackend(AbstractBackend):
         # logprob consumer, e.g. KL scoring).
         _minimal_out = with_grads and os.environ.get("TUNIX_MINIMAL_FB_OUTPUT", "0") == "1"
         results: dict[str, types.ForwardBackwardOutput | types.ErrorResponse] = {}
-        for request_id, _, start_idx, end_idx in prepared_batch.request_batch_slices:
+        output_slices = prepared_batch.request_batch_slices
+        if cohort:
+            output_slices = [(name, name, index * n_examples, (index + 1) * n_examples)
+                             for index, name in enumerate(cohort)]
+        # Trainer vs sampler logprob summary per datum (a few floats, so it
+        # survives minimal output); the client aggregates it per farm.
+        from skyrl.backends.sampler_mismatch import summarize as _mismatch_summary
+
+        if with_grads and os.environ.get("SKYRL_MISMATCH_DUMP_DIR") and jax.process_index() == 0:
+            from skyrl.backends.sampler_mismatch import dump as _mismatch_dump
+
+            _mismatch_dump(os.environ["SKYRL_MISMATCH_DUMP_DIR"], all_input_ids, prepared_batch.all_targets,
+                           prepared_batch.all_sampling_logprobs, logprobs_out[:n_examples])
+
+        def _mismatch(i):
+            data = _mismatch_summary(logprobs_out[i], prepared_batch.all_sampling_logprobs[i % n_examples])
+            return {"data": data, "dtype": "float32", "shape": [len(data)]}
+
+        for request_id, _, start_idx, end_idx in output_slices:
             loss_fn_outputs = []
             for i in range(start_idx, end_idx):
                 if _minimal_out:
@@ -1414,6 +2001,7 @@ class TunixBackend(AbstractBackend):
                         {
                             "elementwise_loss": {"data": [], "dtype": "float32", "shape": [0]},
                             "logprobs": {"data": [], "dtype": "float32", "shape": [0]},
+                            "sampler_mismatch": _mismatch(i),
                         }
                     )
                     continue
@@ -1433,6 +2021,7 @@ class TunixBackend(AbstractBackend):
                             "dtype": "float32",
                             "shape": [token_logprobs.shape[0]],
                         },
+                        "sampler_mismatch": _mismatch(i),
                     }
                 )
             results[request_id] = types.ForwardBackwardOutput(
@@ -1441,6 +2030,70 @@ class TunixBackend(AbstractBackend):
                 metrics={},
             )
         return results
+
+    def forward_backward_multi_lora(
+        self, prepared_batch: types.PreparedModelPassBatch, model_ids: list[str]
+    ) -> dict[str, types.ForwardBackwardOutput | types.ErrorResponse]:
+        if len(model_ids) < 2 or len(set(model_ids)) != len(model_ids):
+            raise ValueError("Stacked training requires at least two unique adapters")
+        slots = [self.models[name] for name in model_ids]
+        if any(s.training_failed for s in slots):
+            raise RuntimeError("Prior population training failed; reload a checkpoint before training")
+        if len({s.template_key for s in slots}) != 1 or any(s.mix is not None for s in slots):
+            raise ValueError("Stacked training requires identical adapter layouts without carried/fresh mixing")
+        if self.templates[slots[0].template_key].kind != "maxtext":
+            raise ValueError("Stacked training currently requires the MaxText NNX backend")
+        if set(prepared_batch.all_model_ids) != {model_ids[0]}:
+            raise ValueError("Stacked training expects one shared batch prepared for the first adapter")
+        verify = getattr(self.config, "stacked_lora_verify", False)
+        if verify and any(s.accum_grads is not None or s.accum_count for s in slots):
+            raise ValueError("Stacked replay verification requires empty initial accumulators")
+        started = time.perf_counter()
+        result = self._model_pass(prepared_batch, with_grads=True, cohort=model_ids)
+        stacked_seconds = time.perf_counter() - started
+        if verify:
+            # Diagnostic replay only: preserve the stacked gradients for the
+            # actual optimizer steps, and never update parameters during replay.
+            saved = [(s.accum_grads, s.accum_count) for s in slots]
+            started = time.perf_counter()
+            for name, slot, (stacked_grads, count) in zip(model_ids, slots, saved, strict=True):
+                slot.accum_grads, slot.accum_count = None, 0
+                replay = prepared_batch.model_copy(update={
+                    "all_model_ids": [name] * len(prepared_batch.all_model_ids),
+                    "request_batch_slices": [(name, name, 0, len(prepared_batch.all_model_ids))],
+                })
+                sequential = self._model_pass(replay, with_grads=True)[name]
+                from skyrl.backends.stacked_lora import gradient_relative_error
+                error = float(gradient_relative_error(stacked_grads, slot.accum_grads))
+                max_lp_error = 0.0
+                for actual, expected in zip(result[name].loss_fn_outputs, sequential.loss_fn_outputs, strict=True):
+                    a, b = np.asarray(actual["logprobs"]["data"]), np.asarray(expected["logprobs"]["data"])
+                    max_lp_error = max(max_lp_error, float(np.max(np.abs(a - b), initial=0)))
+                if slot.accum_count != count or not np.isfinite(error) or error > .02:
+                    from skyrl.backends.stacked_lora import gradient_comparison
+                    diagnostic = gradient_comparison(stacked_grads, slot.accum_grads)
+                    repeated_kv = getattr(self, "_repeated_kv_heads", None)
+                    if repeated_kv is not None:
+                        tied_actual, _ = repeated_kv.tie_gradients_and_norm(stacked_grads)
+                        tied_expected, _ = repeated_kv.tie_gradients_and_norm(slot.accum_grads)
+                        diagnostic["tied_kv_relative_l2"] = float(gradient_relative_error(tied_actual, tied_expected))
+                    logger.error("Stacked replay diagnostic: adapter=%s relative_l2=%s logprob_max_abs=%s "
+                                 "count=%s/%s matmul_precision=%s gradients=%s", name, error, max_lp_error,
+                                 slot.accum_count, count, jax.config.jax_default_matmul_precision, diagnostic)
+                    raise RuntimeError(f"Stacked gradient replay mismatch for {name}: relative_l2={error}, "
+                                       f"logprob_max_abs={max_lp_error}, cosine={diagnostic['cosine']}")
+                if not np.isfinite(max_lp_error) or max_lp_error > .05:
+                    raise RuntimeError(f"Stacked logprob replay mismatch for {name}: max_abs={max_lp_error}")
+                result[name].metrics.update(stacked_gradient_relative_l2=error, stacked_logprob_max_abs=max_lp_error)
+                slot.accum_grads, slot.accum_count = stacked_grads, count
+            sequential_seconds = time.perf_counter() - started
+            for output in result.values():
+                output.metrics.update(stacked_replay_verified=1, stacked_seconds=stacked_seconds,
+                                      sequential_replay_seconds=sequential_seconds)
+            logger.info("Stacked TPU replay verified: adapters=%d stacked=%.3fs sequential=%.3fs metrics=%s",
+                        len(slots), stacked_seconds, sequential_seconds,
+                        {name: output.metrics for name, output in result.items()})
+        return result
 
     def forward_backward(
         self, prepared_batch: types.PreparedModelPassBatch
@@ -1454,8 +2107,135 @@ class TunixBackend(AbstractBackend):
 
     # ------------------------------------------------------------------ optim step
 
+    @staticmethod
+    def _host_global_norm(flat_grads: dict[str, np.ndarray]) -> float:
+        """Compute a gradient norm from collectively gathered host arrays.
+
+        Keeping this calculation on the host is important for multihost replay
+        diagnostics.  ``optax.global_norm`` outside a JIT emits one eager
+        ``jit_integer_pow`` launch per gradient leaf.  If the first MaxText
+        step leaves even one controller with a different leaf layout, those
+        launches enter different TPU launch groups and abort the whole slice
+        before the diagnostic can describe the difference.
+        """
+        squared_norm = 0.0
+        for value in flat_grads.values():
+            array = np.asarray(value, dtype=np.float32).reshape(-1)
+            squared_norm += float(np.dot(array, array))
+        return float(np.sqrt(squared_norm))
+
+    def _record_gradient_diagnostics(
+        self,
+        model_id: str,
+        mean_grads,
+        grad_norm: float,
+        *,
+        flat_grads: dict[str, np.ndarray] | None = None,
+    ) -> None:
+        """Persist per-leaf gradient fingerprints for strict replay diagnosis.
+
+        This is deliberately opt-in: gathering a rank-32 adapter's global
+        gradient adds host traffic. Every JAX process participates in the
+        gathers, while only process 0 writes the JSONL record.
+        """
+        if os.environ.get("TUNIX_REPLAY_DIAGNOSTICS", "0").lower() not in ("1", "true", "yes", "on"):
+            return
+
+        slot = self.models[model_id]
+
+        def array_layouts(state) -> dict[str, dict[str, Any]]:
+            layouts = {}
+            for key, value in _keystr_map(state).items():
+                sharding = getattr(value, "sharding", None)
+                layouts[key] = {
+                    "sharding": str(sharding) if sharding is not None else None,
+                    "committed": bool(getattr(value, "committed", False)),
+                    "fully_addressable": bool(getattr(value, "is_fully_addressable", True)),
+                }
+            return layouts
+
+        # Capture these before the host gather below.  NNX lifted JITs return
+        # updated module arguments, and GSPMD may choose a different output
+        # sharding from the freshly-created LoRA state.  A checkpoint restored
+        # later is rebuilt using the current state's sharding, so these fields
+        # distinguish a logical gradient mismatch from an initial-vs-restored
+        # layout transition.
+        model_state_layouts = array_layouts(slot.lora_state)
+        gradient_layouts = array_layouts(mean_grads)
+        flat = self._flat_numpy(mean_grads) if flat_grads is None else flat_grads
+        index = slot.diagnostic_grad_index
+        slot.diagnostic_grad_index += 1
+        if jax.process_index() != 0:
+            return
+
+        leaves = {}
+        for key, value in flat.items():
+            array = np.ascontiguousarray(value)
+            norm_array = np.asarray(array, dtype=np.float32)
+            leaves[key] = {
+                "shape": list(array.shape),
+                "dtype": str(array.dtype),
+                "norm": float(np.linalg.norm(norm_array.reshape(-1))),
+                "sha256": hashlib.sha256(array.tobytes()).hexdigest(),
+            }
+        record = {
+            "kind": "mean_gradient",
+            "model_id": model_id,
+            "index": index,
+            "global_norm": grad_norm,
+            "model_state_layouts": model_state_layouts,
+            "gradient_layouts": gradient_layouts,
+            "leaves": leaves,
+        }
+        output = Path(
+            os.environ.get(
+                "TUNIX_REPLAY_DIAGNOSTICS_PATH",
+                str(Path.home() / "tunix-replay-diagnostics-process-0.jsonl"),
+            )
+        )
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("a") as stream:
+            stream.write(json.dumps(record, sort_keys=True) + "\n")
+        logger.info("Wrote gradient replay diagnostic %s to %s", index, output)
+
+    def abort_multi_lora_training(self, model_ids: list[str]) -> None:
+        for model_id in model_ids:
+            slot = self.models[model_id]
+            slot.accum_grads = None
+            slot.accum_count = 0
+            slot.training_failed = True
+
     def optim_step(self, model_id: str, request_data: types.OptimStepInput) -> types.OptimStepOutput:
         slot = self.models[model_id]
+        if slot.training_failed:
+            raise RuntimeError("Prior population training failed; reload a checkpoint before optimizer step")
+        probe_dir = os.environ.get("TUNIX_GRADIENT_PROBE_DIR")
+        if probe_dir:
+            # Dedicated diagnostic jobs only. Do not touch Adam, its moments,
+            # the step counter, or model weights when draining the accumulator.
+            from skyrl.backends.gradient_probe import export_probe
+
+            if request_data.adam_params.learning_rate != 0 or request_data.adam_params.weight_decay != 0:
+                raise ValueError("Frozen gradient probe requires zero learning rate and weight decay")
+            if slot.accum_count <= 0 or slot.accum_grads is None:
+                raise ValueError("Frozen gradient probe has no accumulated samples")
+            gradients = self._flat_numpy(slot.accum_grads)
+            parameters = self._flat_numpy(slot.lora_state)
+            index = slot.diagnostic_grad_index
+            # TPU runtime rank zero need not be the API coordinator. The
+            # launcher marks the API host so its client can read local exports.
+            writer = os.environ.get("TUNIX_GRADIENT_PROBE_WRITER")
+            is_writer = writer == "1" if writer is not None else jax.process_index() == 0
+            if is_writer:
+                export_probe(probe_dir, model_id, index, gradients, parameters, slot.accum_count)
+            norm = self._host_global_norm(gradients) / slot.accum_count
+            slot.diagnostic_grad_index += 1
+            slot.accum_grads = None
+            slot.accum_count = 0
+            return types.OptimStepOutput(metrics={
+                "skyrl.ai/grad_norm": norm, "skyrl.ai/learning_rate": 0.0,
+                "gradient_probe/index": index,
+            })
         template = self.templates[slot.template_key]
         adam = request_data.adam_params
 
@@ -1466,6 +2246,11 @@ class TunixBackend(AbstractBackend):
             count = float(slot.accum_count)
             mean_grads = jax.tree.map(lambda g: g / count, slot.accum_grads)
 
+        repeated_kv = getattr(self, "_repeated_kv_heads", None)
+        canonical_grad_norm = None
+        if repeated_kv is not None:
+            mean_grads, canonical_grad_norm = repeated_kv.tie_gradients_and_norm(mean_grads)
+
         hp = slot.optimizer.opt_state.hyperparams
         hp["learning_rate"][...] = adam.learning_rate
         hp["b1"][...] = adam.beta1
@@ -1473,7 +2258,31 @@ class TunixBackend(AbstractBackend):
         hp["eps"][...] = adam.eps
         hp["weight_decay"][...] = adam.weight_decay
 
-        grad_norm = float(jax.device_get(optax.global_norm(mean_grads)))
+        diagnostics_enabled = os.environ.get("TUNIX_REPLAY_DIAGNOSTICS", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if diagnostics_enabled:
+            # _record_gradient_diagnostics needs these global host arrays
+            # anyway.  Gather once, compute the norm without launching more
+            # TPU programs, and pass the same arrays to the recorder.
+            flat_grads = self._flat_numpy(mean_grads)
+            grad_norm = (float(canonical_grad_norm) if canonical_grad_norm is not None
+                         else self._host_global_norm(flat_grads))
+            self._record_gradient_diagnostics(
+                model_id,
+                mean_grads,
+                grad_norm,
+                flat_grads=flat_grads,
+            )
+        else:
+            # A single compiled program keeps every JAX controller on the same
+            # launch ID.  Calling optax.global_norm eagerly here emits hundreds
+            # of independent integer_pow reductions for a rank-32 adapter.
+            grad_norm = float(jax.device_get(canonical_grad_norm if canonical_grad_norm is not None
+                                            else _jitted_global_norm(mean_grads)))
 
         if not np.isfinite(grad_norm):
             # Belt-and-braces: never apply non-finite gradients (they would
@@ -1492,11 +2301,27 @@ class TunixBackend(AbstractBackend):
                 }
             )
 
+        mix_metrics: dict[str, float] = {}
+        if slot.mix is not None:
+            # Gradients were accumulated in the gamma-mixed (effective) space;
+            # map them back onto the trainable half and gamma (chain rule).
+            mean_grads, gamma_grads = lora_mix.split_gradients(
+                mean_grads, slot.lora_state, slot.mix.gamma, slot.mix.rank
+            )
+            if adam.learning_rate != 0:
+                lora_mix.gamma_step(slot.mix, gamma_grads)
+            mix_metrics = slot.mix.metrics()
+            previous_state = slot.lora_state
+
         # Swap this model's LoRA values into the shared template, apply the
         # update in place, then snapshot the new state back into the slot.
         nnx.update(template.model, slot.lora_state)
         slot.optimizer.update(template.model, mean_grads)
-        slot.lora_state = nnx.state(template.model, nnx.LoRAParam)
+        slot.lora_state = jax.tree.map(jnp.copy, nnx.state(template.model, nnx.LoRAParam))
+        if slot.mix is not None:
+            # The old half got zero gradient; write it back verbatim so weight
+            # decay / Adam bookkeeping can never touch the carried weights.
+            slot.lora_state = lora_mix.restore_old_half(slot.lora_state, previous_state, slot.mix.rank)
 
         slot.accum_grads = None
         slot.accum_count = 0
@@ -1504,6 +2329,7 @@ class TunixBackend(AbstractBackend):
         metrics = {
             "skyrl.ai/grad_norm": grad_norm,
             "skyrl.ai/learning_rate": adam.learning_rate,
+            **mix_metrics,
         }
         logger.info(f"Applied optimizer step for model {model_id}, metrics={metrics}")
         return types.OptimStepOutput(metrics=metrics)
@@ -1540,7 +2366,11 @@ class TunixBackend(AbstractBackend):
                 f"Sampler checkpoint {checkpoint_id} for model {model_id} was ephemeral and is no longer "
                 "in memory (engine restarted?). Re-run save_weights_for_sampler."
             )
-        lora_state = self._state_from_flat(slot.lora_state, payload["lora_weights"])
+        lora_state = self._state_from_flat(
+            slot.lora_state,
+            payload["lora_weights"],
+            payload.get("lora_layouts"),
+        )
         slot.sampler_lora_states[checkpoint_id] = lora_state
         return lora_state
 
@@ -1829,15 +2659,27 @@ class TunixBackend(AbstractBackend):
             model, input_ids, positions, attn_mask, target_ids
         )
 
-    def _log_hbm(self, tag: str) -> None:
-        """One-line per-device HBM telemetry (in_use/peak), best-effort."""
+    def _log_hbm(self, tag: str, full: bool = False) -> None:
+        """One-line per-device HBM telemetry (in_use/peak), best-effort.
+
+        full=True dumps every allocator counter for every local device (largest
+        free block, reservable limit, ...): the TPU runtime refuses a program's
+        scoped reservation against those, not against bytes_in_use (job 415:
+        30 GiB in use of 102.8, "12.72G free" for a 29 GiB jit_scan reservation).
+        """
         try:
-            s = jax.devices()[0].memory_stats() or {}
+            s = jax.local_devices()[0].memory_stats() or {}
             logger.info(
                 f"HBM[{tag}] in_use={s.get('bytes_in_use', 0) / 1e9:.2f}G "
                 f"peak={s.get('peak_bytes_in_use', 0) / 1e9:.2f}G "
                 f"limit={(s.get('bytes_limit') or 0) / 1e9:.2f}G"
             )
+            if full:
+                for d in jax.local_devices():
+                    stats = d.memory_stats() or {}
+                    logger.info("HBM[%s] dev%s %s", tag, d.id,
+                                " ".join(f"{k}={v / 1e9:.2f}G" if isinstance(v, int) and v > 4096 else f"{k}={v}"
+                                         for k, v in sorted(stats.items())))
         except Exception:
             pass
 
@@ -1904,11 +2746,22 @@ class TunixBackend(AbstractBackend):
             int(self.config.maxtext_max_target_length or 32768),
             int(os.environ.get("TTD_TRAIN_MAX_SEQ", "24576") or 24576),
         )
+        # SKYRL_SCORE_FIXED_LEN: pin scoring to ONE bucket so exactly one
+        # scorer program ever exists. The 8192-bucket ladder compiles a NEW
+        # program (each pinning its own arena) as sequences grow across a run;
+        # on memory-edge cells (KL x Erdos) the accumulated scorer arenas
+        # eventually leave the fb unloadable -- observed as ENGINE-SICK trips
+        # arriving one step later per mitigation. Wastes pad compute on short
+        # sequences; only set it where the fb/scorer budget is tight.
+        _fixed = int(os.environ.get("SKYRL_SCORE_FIXED_LEN", "0") or 0)
         out: list[list[float]] = []
         for start in range(0, len(prompts), sub_batch):
             chunk = prompts[start : start + sub_batch]
             raw_len = max(len(p) for p in chunk)
-            max_len = min(score_cap, max(8192, -(-raw_len // 8192) * 8192))
+            if _fixed > 0:
+                max_len = min(score_cap, _fixed)
+            else:
+                max_len = min(score_cap, max(8192, -(-raw_len // 8192) * 8192))
             input_ids = pad_batch(chunk, max_len, np.int32)
             positions, attn_mask = self._positions_and_masks(chunk, max_len)
 
@@ -2002,10 +2855,17 @@ class TunixBackend(AbstractBackend):
     # ------------------------------------------------------------------ checkpointing
 
     @staticmethod
-    def _flat_numpy(state) -> dict[str, np.ndarray]:
+    def _global_numpy(value) -> np.ndarray:
+        """Materialize one possibly non-addressable global array on every host."""
+        if jax.process_count() > 1 and isinstance(value, jax.Array) and not value.is_fully_addressable:
+            value = multihost_utils.process_allgather(value, tiled=True)
+        return np.asarray(jax.device_get(value))
+
+    @classmethod
+    def _flat_numpy(cls, state) -> dict[str, np.ndarray]:
         out = {}
         for k, v in _keystr_map(state).items():
-            arr = np.asarray(jax.device_get(v))
+            arr = cls._global_numpy(v)
             if arr.dtype.kind == "V":
                 # npz cannot represent extension dtypes: bfloat16 saves as raw
                 # void bytes that np.load returns untyped. Store float32
@@ -2016,8 +2876,43 @@ class TunixBackend(AbstractBackend):
         return out
 
     @staticmethod
-    def _state_from_flat(target_state, flat: dict[str, np.ndarray]):
-        """Rebuild a pytree with target structure from a {keystr: array} dict."""
+    def _checkpoint_layouts(state) -> dict[str, dict[str, Any]]:
+        """Serialize array placement needed for numerically exact replay.
+
+        GSPMD can canonicalize an initially replicated LoRA leaf onto a TP/FSDP
+        sharding after its first update. Restoring only the values into that
+        newer layout can change reduction order, and therefore gradients, even
+        though the checkpoint values and pre-update logits are identical.
+        PartitionSpecs are topology-relative, so they remain valid when a spot
+        job is recreated on a fresh slice with the same mesh axes.
+        """
+        layouts: dict[str, dict[str, Any]] = {}
+        for key, value in _keystr_map(state).items():
+            sharding = getattr(value, "sharding", None)
+            spec = getattr(sharding, "spec", None)
+            if spec is None:
+                continue
+            encoded_spec = []
+            for axis in tuple(spec):
+                if axis is None or isinstance(axis, str):
+                    encoded_spec.append(axis)
+                elif isinstance(axis, tuple) and all(isinstance(name, str) for name in axis):
+                    encoded_spec.append(list(axis))
+                else:
+                    raise TypeError(f"Unsupported checkpoint sharding axis {axis!r} for {key}")
+            layouts[key] = {
+                "spec": encoded_spec,
+                "committed": bool(getattr(value, "committed", False)),
+            }
+        return layouts
+
+    @staticmethod
+    def _state_from_flat(
+        target_state,
+        flat: dict[str, np.ndarray],
+        layouts: dict[str, dict[str, Any]] | None = None,
+    ):
+        """Rebuild a pytree from values, preferring saved array placement."""
         target_map = _keystr_map(target_state)
         missing = set(target_map) - set(flat)
         extra = set(flat) - set(target_map)
@@ -2026,12 +2921,46 @@ class TunixBackend(AbstractBackend):
         leaves, treedef = jax.tree.flatten_with_path(target_state)
 
         def restore(path, leaf):
-            arr = flat[jax.tree_util.keystr(path)]
+            key = jax.tree_util.keystr(path)
+            arr = flat[key]
             dtype = np.dtype(leaf.dtype)
             if arr.dtype.kind == "V" and arr.dtype.itemsize == dtype.itemsize:
                 # Legacy checkpoint written before the float32 conversion in
                 # _flat_numpy: the void bytes are the target dtype verbatim.
                 arr = arr.view(dtype)
+            arr = np.asarray(arr, dtype=dtype)
+            sharding = getattr(leaf, "sharding", None)
+            layout = layouts.get(key) if layouts is not None else None
+            if layout is not None and sharding is not None and hasattr(sharding, "update"):
+                from jax.sharding import PartitionSpec as P
+
+                saved_spec = tuple(
+                    tuple(axis) if isinstance(axis, list) else axis
+                    for axis in layout.get("spec", [])
+                )
+                sharding = sharding.update(spec=P(*saved_spec))
+            if sharding is not None:
+                committed = (
+                    bool(layout["committed"])
+                    if layout is not None and "committed" in layout
+                    else bool(getattr(leaf, "committed", False))
+                )
+                if committed and jax.process_count() > 1:
+                    if not getattr(sharding, "is_fully_addressable", True):
+                        return jax.make_array_from_callback(
+                            arr.shape,
+                            sharding,
+                            lambda index, source=arr: source[index],
+                        )
+                # Preserve JAX's committed/uncommitted distinction.  Optax's
+                # scalar state (count and injected hyperparameters) starts as
+                # an uncommitted array, which lets JAX place it alongside a
+                # global multi-host gradient.  Explicitly device_put-ing that
+                # scalar onto each process's default TPU commits it to one
+                # device; the next optimizer step then rejects the scalar and
+                # global gradient as having incompatible device sets.
+                if committed:
+                    return jax.device_put(arr, sharding)
             return jnp.asarray(arr, dtype=dtype)
 
         return jax.tree.unflatten(treedef, [restore(p, leaf) for p, leaf in leaves])
@@ -2040,6 +2969,29 @@ class TunixBackend(AbstractBackend):
     def _write_npz(path: Path, flat: dict[str, np.ndarray]) -> None:
         np.savez(path, **flat)
 
+    def _mirror_checkpoint(
+        self,
+        output_path: AnyPath,
+        model_id: str,
+        family: str = "",
+    ) -> None:
+        mirror_base = self.config.checkpoint_mirror_gcs
+        if not mirror_base:
+            return
+
+        local_path = Path(str(output_path))
+        destination = mirror_checkpoint_to_gcs(
+            local_path,
+            mirror_base,
+            model_id,
+            family,
+        )
+        logger.info(
+            "Mirrored checkpoint to %s and verified %d bytes",
+            destination,
+            local_path.stat().st_size,
+        )
+
     @staticmethod
     def _read_npz(path: Path) -> dict[str, np.ndarray]:
         with np.load(path, allow_pickle=False) as data:
@@ -2047,12 +2999,38 @@ class TunixBackend(AbstractBackend):
 
     def save_checkpoint(self, output_path: AnyPath, model_id: str) -> None:
         slot = self.models[model_id]
+        # These are collectives in multi-process mode; every process must
+        # finish them before process 0 enters filesystem/GCS work.
+        optimizer_state = nnx.state(slot.optimizer)
+        lora_layouts = self._checkpoint_layouts(slot.lora_state)
+        optimizer_layouts = self._checkpoint_layouts(optimizer_state)
+        lora_flat = self._flat_numpy(slot.lora_state)
+        optimizer_flat = self._flat_numpy(optimizer_state)
+        if jax.process_index() != 0:
+            return
+        meta: dict[str, Any] = {
+            "lora_config": slot.lora_config.model_dump(),
+            "format": "tunix_backend_v2",
+            "lora_layouts": lora_layouts,
+            "optimizer_layouts": optimizer_layouts,
+        }
+        if slot.mix is not None:
+            # The weights file holds the rank-2r adapter; record the mix so a
+            # resume restores gamma and knows the client-facing rank.
+            meta["lora_mix"] = {
+                "rank": slot.mix.rank,
+                "gamma_lr": slot.mix.gamma_lr,
+                "gamma_init": slot.mix.gamma_init,
+                "old_loaded": slot.mix.old_loaded,
+                "template_lora_config": slot.export_lora_config.model_dump(),
+            }
         with pack_and_upload(AnyPath(output_path)) as tmp:
-            self._write_npz(tmp / "lora_weights.npz", self._flat_numpy(slot.lora_state))
-            self._write_npz(tmp / "optimizer_state.npz", self._flat_numpy(nnx.state(slot.optimizer)))
-            (tmp / _CHECKPOINT_META_FILE).write_text(
-                json.dumps({"lora_config": slot.lora_config.model_dump(), "format": "tunix_backend_v1"})
-            )
+            self._write_npz(tmp / "lora_weights.npz", lora_flat)
+            self._write_npz(tmp / "optimizer_state.npz", optimizer_flat)
+            if slot.mix is not None:
+                self._write_npz(tmp / _LORA_MIX_GAMMA_FILE, lora_mix.gamma_to_flat(slot.mix.gamma))
+            (tmp / _CHECKPOINT_META_FILE).write_text(json.dumps(meta))
+        self._mirror_checkpoint(output_path, model_id)
         logger.info(f"Saved training checkpoint to {output_path}")
 
     def _read_checkpoint_archive(self, checkpoint_path: AnyPath) -> dict[str, Any]:
@@ -2072,11 +3050,24 @@ class TunixBackend(AbstractBackend):
             opt_file = tmp / "optimizer_state.npz"
             if opt_file.exists():
                 payload["optimizer_state"] = self._read_npz(opt_file)
+            gamma_file = tmp / _LORA_MIX_GAMMA_FILE
+            if gamma_file.exists():
+                payload["lora_mix_gamma"] = self._read_npz(gamma_file)
             return payload
 
     def load_checkpoint(self, checkpoint_path: AnyPath, model_id: str) -> None:
         slot = self.models[model_id]
-        payload = self._read_checkpoint_archive(AnyPath(checkpoint_path))
+        local_checkpoint = Path(str(checkpoint_path))
+        if not local_checkpoint.is_file() and self.config.checkpoint_mirror_gcs:
+            # The checkpoint belongs to the source model, not the new slot
+            # receiving its weights (create_training_client_from_state).
+            source = restore_checkpoint_from_gcs(
+                local_checkpoint,
+                self.config.checkpoint_mirror_gcs,
+                local_checkpoint.parent.name,
+            )
+            logger.info("Restored missing trainer-rank checkpoint from %s", source)
+        payload = self._read_checkpoint_archive(AnyPath(local_checkpoint))
         if "lora_weights" not in payload:
             raise FileNotFoundError(f"Training checkpoint not found or incomplete at {checkpoint_path}")
 
@@ -2086,12 +3077,67 @@ class TunixBackend(AbstractBackend):
                 f"Rank mismatch: checkpoint has rank {ckpt_rank}, model configured with rank {slot.lora_config.rank}"
             )
 
-        slot.lora_state = self._state_from_flat(slot.lora_state, payload["lora_weights"])
+        if slot.mix is not None and "lora_mix" not in payload:
+            # A PLAIN rank-r checkpoint (the carried generation): it becomes the
+            # frozen OLD half; the fresh half keeps its template init (random A,
+            # zero B) and gamma restarts at gamma_init. No optimizer state can
+            # apply -- the carried run's Adam moments have the wrong shape and
+            # belong to weights that are frozen here anyway.
+            template_flat = self._flat_numpy(slot.lora_state)
+            merged = lora_mix.merge_plain_checkpoint(template_flat, payload["lora_weights"], slot.mix.rank)
+            slot.lora_state = self._state_from_flat(slot.lora_state, merged, None)
+            slot.mix.gamma = lora_mix.init_gamma(slot.lora_state, slot.mix.gamma_init)
+            slot.mix.opt_state = None
+            slot.mix.old_loaded = True
+            slot.accum_grads = None
+            slot.accum_count = 0
+            logger.info(
+                "LoRA mix: carried rank-%d checkpoint %s loaded into the frozen old half; gamma reset to %.3f",
+                slot.mix.rank, checkpoint_path, slot.mix.gamma_init,
+            )
+            return
+        if slot.mix is not None:
+            saved = payload["lora_mix"]
+            if int(saved.get("rank", -1)) != slot.mix.rank:
+                raise ValueError(
+                    f"LoRA mix rank mismatch: checkpoint half-rank {saved.get('rank')}, model {slot.mix.rank}"
+                )
+            if "lora_mix_gamma" not in payload:
+                raise FileNotFoundError(f"LoRA mix checkpoint at {checkpoint_path} has no gamma file")
+        elif "lora_mix" in payload:
+            raise ValueError(
+                f"Checkpoint {checkpoint_path} was saved with the LoRA mix; set {lora_mix.GAMMA_ENV} to load it"
+            )
+
+        lora_state = self._state_from_flat(
+            slot.lora_state,
+            payload["lora_weights"],
+            payload.get("lora_layouts"),
+        )
+        if slot.mix is not None:
+            slot.mix.gamma = lora_mix.gamma_from_flat(payload["lora_mix_gamma"])
+            slot.mix.opt_state = None  # Adam moments of gamma are not persisted (tiny, restart cold)
+            slot.mix.old_loaded = bool(payload["lora_mix"].get("old_loaded", True))
+        repeated_kv = getattr(self, "_repeated_kv_heads", None)
+        if repeated_kv is not None:
+            repeated_kv.validate(lora_state)
+        opt_state = None
         if "optimizer_state" in payload:
-            opt_state = self._state_from_flat(nnx.state(slot.optimizer), payload["optimizer_state"])
+            opt_state = self._state_from_flat(
+                nnx.state(slot.optimizer),
+                payload["optimizer_state"],
+                payload.get("optimizer_layouts"),
+            )
+            if repeated_kv is not None:
+                repeated_kv.validate(opt_state)
+        # Validate both trees before mutating the slot, including old checkpoints
+        # whose logical K/V heads were independently optimized.
+        slot.lora_state = lora_state
+        if opt_state is not None:
             nnx.update(slot.optimizer, opt_state)
         slot.accum_grads = None
         slot.accum_count = 0
+        slot.training_failed = False
         logger.info(f"Loaded training checkpoint from {checkpoint_path}")
 
     def save_sampler_checkpoint(self, output_path: AnyPath, model_id: str, persist: bool = True) -> None:
@@ -2099,54 +3145,88 @@ class TunixBackend(AbstractBackend):
         output_path = AnyPath(output_path)
         checkpoint_id = output_path.name.removesuffix(".tar.gz")
 
-        # Snapshot the current LoRA state in memory for the native sampler hot path.
-        slot.sampler_lora_states[checkpoint_id] = slot.lora_state
+        # Snapshot the current LoRA state in memory for the native sampler hot
+        # path. With the mix this is the gamma-mixed EFFECTIVE adapter: what
+        # the sampler must run is exactly what the trainer's forward ran.
+        sampler_state = self._pass_lora_state(slot)
+        slot.sampler_lora_states[checkpoint_id] = sampler_state
         slot.loaded_sampler_checkpoint_id = checkpoint_id
+
+        # Gather once, collectively, before gating external side effects. The
+        # same complete map feeds both PEFT export and the durable NPZ.
+        lora_layouts = self._checkpoint_layouts(sampler_state)
+        lora_flat = self._flat_numpy(sampler_state)
+
+        if jax.process_index() != 0:
+            return
 
         if self.vllm_client is not None:
             if self.config.vllm_lora_upload_endpoint:
                 # Push the adapter over HTTP straight to the vLLM server's
                 # local disk — no shared filesystem in the hot path.
-                self.vllm_client.push_adapter(model_id, checkpoint_id, self._peft_adapter_tar_bytes(slot))
+                self.vllm_client.push_adapter(
+                    model_id,
+                    checkpoint_id,
+                    self._peft_adapter_tar_bytes(slot, lora_flat),
+                )
             else:
                 # Fallback: write the PEFT dir into the shared lora_base_dir
                 # under the exact adapter name ensure_lora_loaded derives; its
                 # extractor early-returns on existing dirs, skipping the
                 # tar/extract round-trip through shared storage.
-                self._publish_peft_adapter(slot, model_id, checkpoint_id)
+                self._publish_peft_adapter(slot, model_id, checkpoint_id, lora_flat)
 
         if persist:
             with pack_and_upload(output_path) as tmp:
-                self._write_npz(tmp / "lora_weights.npz", self._flat_numpy(slot.lora_state))
+                self._write_npz(tmp / "lora_weights.npz", lora_flat)
                 (tmp / _CHECKPOINT_META_FILE).write_text(
-                    json.dumps({"lora_config": slot.lora_config.model_dump(), "format": "tunix_backend_v1"})
+                    json.dumps(
+                        {
+                            # The sampler adapter is the exported (rank-2r when
+                            # mixing) tensor layout, so describe THAT config.
+                            "lora_config": (slot.export_lora_config or slot.lora_config).model_dump(),
+                            "format": "tunix_backend_v2",
+                            "lora_layouts": lora_layouts,
+                        }
+                    )
                 )
         else:
             with pack_and_upload(output_path) as tmp:
                 (tmp / _EPHEMERAL_MARKER_FILE).write_text(
                     json.dumps({"checkpoint_id": checkpoint_id, "model_id": model_id})
                 )
+        self._mirror_checkpoint(output_path, model_id, "sampler_weights")
         logger.info(f"Saved sampler checkpoint for model {model_id} to {output_path} (persist={persist})")
 
         if self.vllm_client is not None and not self.config.vllm_lora_upload_endpoint:
             # push_adapter already loaded the adapter on the push path.
             self.vllm_client.ensure_lora_loaded(model_id, output_path, checkpoint_id=checkpoint_id)
 
-    def _peft_adapter_tar_bytes(self, slot: ModelSlot) -> bytes:
+    def _peft_adapter_tar_bytes(
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> bytes:
         """Serialize the HF-PEFT adapter export as an uncompressed in-memory tar."""
         import io
         import tarfile
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            self._export_peft_adapter(slot, Path(tmp))
+            self._export_peft_adapter(slot, Path(tmp), flat_lora)
             buf = io.BytesIO()
             with tarfile.open(fileobj=buf, mode="w:") as tar:
                 for f in sorted(Path(tmp).iterdir()):
                     tar.add(f, arcname=f.name)
             return buf.getvalue()
 
-    def _publish_peft_adapter(self, slot: ModelSlot, model_id: str, checkpoint_id: str) -> None:
+    def _publish_peft_adapter(
+        self,
+        slot: ModelSlot,
+        model_id: str,
+        checkpoint_id: str,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> None:
         """Atomically place the exported PEFT dir at <lora_base_dir>/<adapter-name>."""
         import shutil
         from skyrl.backends.vllm_sampling import _sanitize_lora_name
@@ -2158,7 +3238,7 @@ class TunixBackend(AbstractBackend):
         staging = target.with_name(target.name + ".staging")
         shutil.rmtree(staging, ignore_errors=True)
         staging.mkdir(parents=True)
-        self._export_peft_adapter(slot, staging)
+        self._export_peft_adapter(slot, staging, flat_lora)
         import os
 
         os.replace(staging, target)
@@ -2183,34 +3263,44 @@ class TunixBackend(AbstractBackend):
 
     # ------------------------------------------------------------------ HF-PEFT export
 
-    def _export_peft_adapter(self, slot: ModelSlot, out_dir: Path) -> None:
+    def _export_peft_adapter(
+        self,
+        slot: ModelSlot,
+        out_dir: Path,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> None:
         """Write adapter_model.safetensors + adapter_config.json (HF-PEFT layout).
 
-        gpt-oss additionally writes moe_lora.safetensors + moe_lora.json: the
-        raw expert/router LoRA factors, which standard PEFT cannot express —
-        the vLLM server's merge-on-load path consumes them.
+        gpt-oss additionally writes moe_lora.safetensors + moe_lora.json for
+        raw expert factors, which standard PEFT cannot express. The router is
+        a normal BF16 linear layer and stays in adapter_model.safetensors.
         """
         import safetensors.numpy as st_numpy
 
+        if flat_lora is None:
+            # Export what the model RUNS with (the gamma-mixed adapter when
+            # mixing); never the raw stacked halves.
+            flat_lora = self._flat_numpy(self._pass_lora_state(slot))
         if self.config.model_source == "maxtext":
             if self._is_gptoss_lora(slot):
-                tensors, moe_tensors, moe_meta = self._peft_tensors_gptoss(slot)
+                tensors, moe_tensors, moe_meta = self._peft_tensors_gptoss(slot, flat_lora)
                 if moe_tensors:
                     st_numpy.save_file(moe_tensors, str(out_dir / "moe_lora.safetensors"))
                     (out_dir / "moe_lora.json").write_text(json.dumps(moe_meta, indent=2))
             else:
-                tensors = self._peft_tensors_maxtext(slot)
+                tensors = self._peft_tensors_maxtext(slot, flat_lora)
         else:
-            tensors = self._peft_tensors_native(slot)
+            tensors = self._peft_tensors_native(slot, flat_lora)
 
         st_numpy.save_file(tensors, str(out_dir / "adapter_model.safetensors"))
         # ...self_attn.q_proj.lora_A.weight -> "q_proj"
         target_modules = sorted({k.rsplit(".", 2)[0].rsplit(".", 1)[-1] for k in tensors})
+        export_config = slot.export_lora_config or slot.lora_config
         adapter_config = {
             "peft_type": "LORA",
             "base_model_name_or_path": self.base_model,
-            "r": slot.lora_config.rank,
-            "lora_alpha": slot.lora_config.alpha,
+            "r": export_config.rank,
+            "lora_alpha": export_config.alpha,
             "lora_dropout": 0.0,
             "bias": "none",
             "target_modules": target_modules,
@@ -2218,15 +3308,19 @@ class TunixBackend(AbstractBackend):
         }
         (out_dir / "adapter_config.json").write_text(json.dumps(adapter_config, indent=2))
 
-    def _peft_tensors_native(self, slot: ModelSlot) -> dict[str, np.ndarray]:
+    def _peft_tensors_native(
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> dict[str, np.ndarray]:
         tensors: dict[str, np.ndarray] = {}
-        for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
-            keystr = jax.tree_util.keystr(path)
+        flat_lora = flat_lora if flat_lora is not None else self._flat_numpy(slot.lora_state)
+        for keystr, leaf in flat_lora.items():
             hf_module = self._qwix_path_to_hf_module(keystr)
             if hf_module is None:
                 logger.warning("Skipping unmapped LoRA param %s in PEFT export", keystr)
                 continue
-            arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
+            arr = np.asarray(leaf, dtype=np.float32)
             if "_lora_a" in keystr:
                 # qwix lora_a: (in, r) -> PEFT lora_A.weight: (r, in)
                 tensors[f"base_model.model.{hf_module}.lora_A.weight"] = np.ascontiguousarray(arr.T)
@@ -2236,6 +3330,7 @@ class TunixBackend(AbstractBackend):
                 tensors[f"base_model.model.{hf_module}.lora_B.weight"] = np.ascontiguousarray(out_matrix.T)
         return tensors
 
+
     @staticmethod
     def _is_gptoss_lora(slot: ModelSlot) -> bool:
         return any(
@@ -2244,9 +3339,11 @@ class TunixBackend(AbstractBackend):
         )
 
     def _peft_tensors_gptoss(
-        self, slot: ModelSlot
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
     ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict]:
-        """Split gpt-oss LoRA state into (attention PEFT tensors, MoE factors, meta).
+        """Split GPT-OSS LoRA into ordinary PEFT and fused-expert factors.
 
         gpt-oss decoders scan layers in ``layer_cycle_interval`` groups
         (``layers_{g}``: sliding/full attention alternation), stacked over
@@ -2256,7 +3353,7 @@ class TunixBackend(AbstractBackend):
         MoE factor shapes (rank r, E experts, d model dim, f ff dim):
           wi_0/wi_1: lora_a (d, L, r) shared over experts; lora_b (r, L, E, f)
           wo:        lora_a (E, L, f, r) per-expert;       lora_b (r, L, d)
-          router:    lora_a (d, L, r);                     lora_b (r, L, E)
+          router:    lora_a (d, L, r); lora_b (r, L, E), exported as PEFT
         Per-expert delta = scale * A @ B_e (see meta["contraction"]).
         """
         import re
@@ -2265,8 +3362,8 @@ class TunixBackend(AbstractBackend):
         moe: dict[str, np.ndarray] = {}
         entries = []
         groups: set[int] = set()
-        for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
-            keystr = jax.tree_util.keystr(path)
+        flat_lora = flat_lora if flat_lora is not None else self._flat_numpy(slot.lora_state)
+        for keystr, leaf in flat_lora.items():
             names = [a or b for a, b in re.findall(r"\['([A-Za-z_0-9]+)'\]|\[(\d+)\]", keystr)]
             group_name = next((n for n in names if re.fullmatch(r"layers_[0-9]+", n)), None)
             if group_name is None:
@@ -2274,7 +3371,7 @@ class TunixBackend(AbstractBackend):
                 continue
             group = int(group_name.split("_")[1])
             groups.add(group)
-            arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
+            arr = np.asarray(leaf, dtype=np.float32)
             entries.append((group, names, arr, keystr))
         n_groups = max(groups) + 1 if groups else 1
 
@@ -2296,7 +3393,18 @@ class TunixBackend(AbstractBackend):
             elif "GptOssMlp" in names:
                 after = names[names.index("GptOssMlp") + 1 :]
                 if after[0] == "gate":
-                    comp, leafname = "router", after[-1]
+                    leafname = after[-1]
+                    if "lora" not in leafname or arr.ndim != 3:
+                        logger.warning("Skipping unmapped gpt-oss router LoRA param %s", keystr)
+                        continue
+                    is_a = leafname.endswith("a")
+                    for j in range(arr.shape[1]):
+                        gl = j * n_groups + group
+                        per = arr[:, j, :]  # A: (d,r), B: (r,E)
+                        name = f"base_model.model.model.layers.{gl}.mlp.router"
+                        suffix = "lora_A.weight" if is_a else "lora_B.weight"
+                        attn[f"{name}.{suffix}"] = np.ascontiguousarray(per.T)
+                    continue
                 else:
                     m = re.fullmatch(r"(wi_0|wi_1|wo)_(lora_[ab])", after[0])
                     if m is None:
@@ -2324,12 +3432,15 @@ class TunixBackend(AbstractBackend):
                 "wi_0": "delta[e,d,f] = scale * sum_r A[d,r] * B[r,e,f]  (gate half)",
                 "wi_1": "delta[e,d,f] = scale * sum_r A[d,r] * B[r,e,f]  (up half)",
                 "wo": "delta[e,f,d] = scale * sum_r A[e,f,r] * B[r,d]",
-                "router": "delta[d,e] = scale * sum_r A[d,r] * B[r,e]",
             },
         }
         return attn, moe, meta
 
-    def _peft_tensors_maxtext(self, slot: ModelSlot) -> dict[str, np.ndarray]:
+    def _peft_tensors_maxtext(
+        self,
+        slot: ModelSlot,
+        flat_lora: dict[str, np.ndarray] | None = None,
+    ) -> dict[str, np.ndarray]:
         """MaxText LoRA params are stacked over the scanned layer axis (axis 1).
 
         Two layer layouts are handled, distinguished per-path by
@@ -2352,17 +3463,20 @@ class TunixBackend(AbstractBackend):
         # must also carry the composite-model HF names.
         composite_model = self._maxtext_model_name().startswith("gemma4")
 
-        for path, leaf in jax.tree.flatten_with_path(slot.lora_state)[0]:
-            keystr = jax.tree_util.keystr(path)
+        flat_lora = flat_lora if flat_lora is not None else self._flat_numpy(slot.lora_state)
+        for keystr, leaf in flat_lora.items():
             parsed = self._maxtext_path_to_hf(keystr)
             if parsed is None:
                 logger.warning("Skipping unmapped MaxText LoRA param %s in PEFT export", keystr)
                 continue
             hf_block, hf_proj, is_a, inner = parsed
-            arr = np.asarray(jax.device_get(leaf), dtype=np.float32)
+            arr = np.asarray(leaf, dtype=np.float32)
             if arr.ndim != 3:
                 logger.warning("Unexpected MaxText LoRA shape %s for %s; skipping", arr.shape, keystr)
                 continue
+            repeated_kv = getattr(self, "_repeated_kv_heads", None)
+            if repeated_kv is not None and hf_proj in ("k_proj", "v_proj") and not is_a:
+                arr = repeated_kv.collapse_numpy(arr)
             if inner is not None:
                 inner_ids.add(inner)
             # qwen3.5's HF checkpoints are ConditionalGeneration wrappers: the
@@ -2388,6 +3502,7 @@ class TunixBackend(AbstractBackend):
                 suffix = "lora_A.weight" if is_a else "lora_B.weight"
                 tensors[f"{name}.{suffix}"] = np.ascontiguousarray(per_layer.T)
         return tensors
+
 
     @staticmethod
     def _maxtext_path_to_hf(keystr: str) -> tuple[str, str, bool, int | None] | None:
@@ -2462,3 +3577,99 @@ class TunixBackend(AbstractBackend):
         if block not in block_map:
             return None
         return f"model.layers.{layer_idx}.{block_map[block]}.{proj}"
+
+
+class DistributedTunixBackend(TunixBackend):
+    """Process-0 Tunix facade that keeps all trainer processes in RPC order."""
+
+    def __init__(self, base_model: str, config: TunixBackendConfig):
+        self.process_id = 0
+        if config.coordinator_address is not None:
+            if config.num_processes is None:
+                raise ValueError("num_processes is required when coordinator_address is set")
+            jax.distributed.initialize(
+                coordinator_address=config.coordinator_address,
+                num_processes=config.num_processes,
+                process_id=self.process_id,
+            )
+            logger.info(
+                "Tunix JAX distributed initialized: process_id=%s (%s total), "
+                "local_devices=%s, global_devices=%s",
+                self.process_id,
+                jax.process_count(),
+                jax.local_device_count(),
+                jax.device_count(),
+            )
+
+        if jax.process_count() > 1:
+            broadcast_command(
+                RpcPayload(
+                    method="__init__",
+                    backend_name="tunix",
+                    kwargs={
+                        "base_model": base_model,
+                        "config": serialize_config(TunixBackendConfig, config),
+                    },
+                ),
+                process_id=self.process_id,
+            )
+        super().__init__(base_model=base_model, config=config)
+
+    def _broadcast_and_call(self, method: str, **kwargs):
+        if jax.process_count() > 1:
+            broadcast_command(
+                RpcPayload(
+                    method=method,
+                    kwargs=serialize_call_kwargs(TunixBackend, method, kwargs),
+                ),
+                process_id=self.process_id,
+            )
+        local_method = getattr(super(), method)
+        if jax.process_count() > 1:
+            return call_with_rpc_ack(local_method, kwargs)
+        return local_method(**kwargs)
+
+    def create_model(self, model_id: str, lora_config: types.LoraConfig, model_role: str = "policy") -> None:
+        self._broadcast_and_call(
+            "create_model",
+            model_id=model_id,
+            lora_config=lora_config,
+            model_role=model_role,
+        )
+
+    def delete_model(self, model_id: str) -> None:
+        self._broadcast_and_call("delete_model", model_id=model_id)
+
+    def forward_backward(self, prepared_batch: types.PreparedModelPassBatch):
+        return self._broadcast_and_call("forward_backward", prepared_batch=prepared_batch)
+
+    def forward_backward_multi_lora(self, prepared_batch: types.PreparedModelPassBatch, model_ids: list[str]):
+        return self._broadcast_and_call("forward_backward_multi_lora", prepared_batch=prepared_batch, model_ids=model_ids)
+
+    def forward(self, prepared_batch: types.PreparedModelPassBatch):
+        return self._broadcast_and_call("forward", prepared_batch=prepared_batch)
+
+    def abort_multi_lora_training(self, model_ids: list[str]) -> None:
+        return self._broadcast_and_call("abort_multi_lora_training", model_ids=model_ids)
+
+    def optim_step(self, model_id: str, request_data: types.OptimStepInput):
+        return self._broadcast_and_call("optim_step", model_id=model_id, request_data=request_data)
+
+    def sample(self, prepared_batch: types.PreparedSampleBatch):
+        if self.config.inference_backend == "vllm" and not prepared_batch.needs_prompt_logprobs:
+            return TunixBackend.sample(self, prepared_batch)
+        return self._broadcast_and_call("sample", prepared_batch=prepared_batch)
+
+    def save_checkpoint(self, output_path: AnyPath, model_id: str) -> None:
+        self._broadcast_and_call("save_checkpoint", output_path=output_path, model_id=model_id)
+
+    def load_checkpoint(self, checkpoint_path: AnyPath, model_id: str) -> None:
+        self._broadcast_and_call("load_checkpoint", checkpoint_path=checkpoint_path, model_id=model_id)
+
+    def save_sampler_checkpoint(self, output_path: AnyPath, model_id: str, persist: bool = True) -> None:
+        self._broadcast_and_call(
+            "save_sampler_checkpoint",
+            output_path=output_path,
+            model_id=model_id,
+            persist=persist,
+        )

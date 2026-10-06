@@ -1,0 +1,11 @@
+{
+  "SimpleTES": {
+    "commit": "47d3413da1d85dc24341219d47452d2601e56a57"
+  },
+  "circuit_training": {
+    "commit": "c417a3a13f40867b649c719c03daaf1b39a909bc"
+  },
+  "TradeMaster": {
+    "commit": "1747cc18db3fe2639af12defc80e138c51a625c0"
+  }
+}

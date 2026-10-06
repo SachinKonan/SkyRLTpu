@@ -1,0 +1,11 @@
+YAML to run: /scratch/gpfs/ZHUANGL/sk7524/builds/farm-v6e32-grading/farm-v6e32-qwen-grading-ac2-20260923.yaml
+Submitting to pool 'tpuswarm-v6e32-central1b' with 1 job.
+[?25l⠋ Initializing managed job
+[?25h[1A[2KLaunching managed job 'farm-v6e32-qwen-grading-ac2-20260923'...
+
+📋 Useful Commands
+Managed Job ID: 1619
+├── To cancel the job:		sky jobs cancel 1619
+├── To stream job logs:		sky jobs logs 1619
+├── To stream controller logs:	sky jobs logs --controller 1619
+└── To view all managed jobs:	sky jobs queue

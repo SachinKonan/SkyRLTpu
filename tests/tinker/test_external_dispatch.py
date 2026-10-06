@@ -16,7 +16,9 @@ from __future__ import annotations
 import asyncio
 import gc
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
+import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -30,6 +32,7 @@ from skyrl.tinker.dispatch import (
     complete_external_future,
     replay_request_from_sample_input,
 )
+from skyrl.tinker.extra.external_inference import ExternalInferenceClient
 
 pytestmark = pytest.mark.asyncio
 
@@ -196,6 +199,173 @@ async def test_watchdog_recovers_a_dropped_request(db_engine):
     future = await read_future(db_engine, request_id)
     assert future.result_data["sequences"][0]["tokens"] == [client.marker]
     assert future.completed_at is not None
+
+
+@pytest.mark.parametrize("failure", ["connection", "http_503"])
+@pytest.mark.parametrize("native_budget", [None, 8])
+async def test_engine_failure_is_retried_on_another_engine(db_engine, monkeypatch, tmp_path, failure, native_budget):
+    """Exercise the real inference client, dispatcher, and durable future together."""
+    requests = []
+
+    def handle(request):
+        import json
+        payload = json.loads(request.content)
+        assert payload.get("thinking_token_budget") == native_budget
+        assert ("thinking_token_budget" in payload) == (native_budget is not None)
+        requests.append(request)
+        if request.url.host == "engine-a":
+            if failure == "connection":
+                raise httpx.ConnectError("engine restarting", request=request)
+            return httpx.Response(503, json={"error": "engine restarting"})
+        annotation = {} if native_budget is None else dict(
+            loss_mask=[1.0], forced_token_positions=[],
+            served_by=dict(run_id="farm-b", accelerator="tpu-v5p-32", tp=4, engine="10.0.0.2:19801"),
+            thinking_budget=dict(enforced=True, forced=False,
+                                 budget_basis="phase1_generated_tokens", counted_phase1_tokens=1))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{
+                    "token_ids": [42],
+                    "logprobs": {"token_logprobs": [-0.1]},
+                    "finish_reason": "stop",
+                    **annotation,
+                }],
+            },
+        )
+
+    async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: async_client(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    config = SimpleNamespace(
+        external_inference_url="http://engine-a,http://engine-b",
+        external_inference_api_key="test",
+        external_inference_timeout_sec=1,
+        external_inference_prompt_logprobs=False,
+        checkpoints_base=tmp_path / "checkpoints",
+        external_inference_lora_base=tmp_path / "loras",
+    )
+    client = ExternalInferenceClient(config, db_engine)
+    dispatcher = ExternalDispatcher(client, db_engine, stale_after_sec=0, max_redispatch=3)
+    sample_input = make_sample_input().model_copy(update={"base_model": "test-model"})
+    sample_input.sampling_params.thinking_token_budget = native_budget
+    request_id = await insert_external_future(db_engine, sample_input)
+    try:
+        # The original API request carries the field. The watchdog must
+        # reconstruct it from durable SampleInput on the second attempt.
+        original = replay_request_from_sample_input(sample_input)
+        original = SimpleNamespace(**{**vars(original), "sampling_params": SimpleNamespace(
+            **{**vars(original.sampling_params), "thinking_token_budget": native_budget})})
+        task = dispatcher.dispatch(
+            request_id,
+            original,
+            "model_test",
+            "ckpt0",
+            base_model="test-model",
+        )
+        expected_error = httpx.ConnectError if failure == "connection" else httpx.HTTPStatusError
+        with pytest.raises(expected_error):
+            await task
+        assert (await read_future(db_engine, request_id)).status == RequestStatus.PENDING
+
+        report = await dispatcher.sweep_once()
+        assert report.redispatched == [request_id]
+        await asyncio.gather(*dispatcher._inflight.values())
+        future = await read_future(db_engine, request_id)
+        assert future.status == RequestStatus.COMPLETED
+        assert future.result_data["sequences"][0]["tokens"] == [42]
+        if native_budget is not None:
+            seq = future.result_data["sequences"][0]
+            assert seq["loss_mask"] == [1.0]
+            assert seq["thinking_budget"]["enforced"] is True
+            assert seq["served_by"]["run_id"] == "farm-b"
+        else:
+            assert future.result_data["sequences"][0]["served_by"] is None
+        assert [request.url.host for request in requests] == ["engine-a", "engine-b"]
+        assert requests[0].content == requests[1].content
+        assert (await dispatcher.sweep_once()).redispatched == []
+    finally:
+        await dispatcher.aclose()
+
+
+@pytest.mark.parametrize("model", ["qwen3.5-27b", "gemma4-31b", "muse-glimmer-30b"])
+async def test_inflight_timeout_replays_native_group_from_offloaded_db(
+    db_engine, monkeypatch, tmp_path, model
+):
+    """The live failure path: cancel a hanging group, reload its blob, retry."""
+    import json
+    import time
+    from pathlib import Path
+    from skyrl.tinker import db_models
+
+    monkeypatch.setattr(db_models, "_FUTURE_BLOB_DIR", tmp_path / "blobs")
+    monkeypatch.setattr(db_models, "_FUTURE_BLOB_THRESHOLD", 1)
+    fixtures = json.loads((Path(__file__).resolve().parents[1] /
+                          "tpu_swarm/fixtures/thinking_markers.json").read_text())
+    transition = fixtures[model]["transition"]
+    tokens = [42, 42] + transition + [43]
+    mask = [1.0, 1.0] + [0.0] * len(transition) + [1.0]
+    audit = dict(enforced=True, forced=True, budget_basis="phase1_generated_tokens",
+                 counted_phase1_tokens=2)
+    requests = []
+    started, cancelled = asyncio.Event(), asyncio.Event()
+
+    async def handle(request):
+        payload = json.loads(request.content)
+        assert payload["thinking_token_budget"] == 2
+        assert payload["n"] == 32
+        requests.append(payload)
+        if len(requests) == 1:
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        return httpx.Response(200, json={"choices": [dict(
+            token_ids=tokens, logprobs={"token_logprobs": [-0.1] * len(tokens)},
+            finish_reason="stop", loss_mask=mask, thinking_budget=audit,
+            forced_token_positions=list(range(2, 2 + len(transition)))) for _ in range(32)]})
+
+    async_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: async_client(
+        transport=httpx.MockTransport(handle), **kw))
+    config = SimpleNamespace(external_inference_url="http://engine", external_inference_api_key="test",
+        external_inference_timeout_sec=7200, external_inference_prompt_logprobs=False,
+        checkpoints_base=tmp_path / "checkpoints", external_inference_lora_base=tmp_path / "loras")
+    client = ExternalInferenceClient(config, db_engine)
+    dispatcher = ExternalDispatcher(client, db_engine, stale_after_sec=0, inflight_timeout_sec=3600)
+    sample = make_sample_input(num_samples=32).model_copy(update={"base_model": "test-model"})
+    sample.sampling_params.thinking_token_budget = 2
+    sample.sampling_params.max_tokens = 100
+    rid = await insert_external_future(db_engine, sample)
+    original = replay_request_from_sample_input(sample)
+    original = SimpleNamespace(**{**vars(original), "sampling_params": SimpleNamespace(
+        **{**vars(original.sampling_params), "thinking_token_budget": 2})})
+    try:
+        first = dispatcher.dispatch(rid, original, "model_test", "ckpt0", base_model="test-model")
+        await asyncio.wait_for(started.wait(), 5)
+        # Advance only the attempt age, without a one-hour test sleep.
+        dispatcher._started[rid] = time.monotonic() - 3601
+        report = await dispatcher.sweep_once()
+        assert report.cancelled == [rid] and report.redispatched == [rid]
+        await asyncio.gather(*list(dispatcher._inflight.values()))
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert cancelled.is_set()
+        result = await read_future(db_engine, rid)
+        assert result.status == RequestStatus.COMPLETED
+        assert requests[0] == requests[1]
+        assert len(result.result_data["sequences"]) == 32
+        for seq in result.result_data["sequences"]:
+            assert seq["tokens"] == tokens and seq["loss_mask"] == mask
+            assert seq["thinking_budget"] == audit
+            assert seq["logprobs"] == [-0.1 if m else 0.0 for m in mask]
+        assert len(list((tmp_path / "blobs").glob("*.json.gz"))) >= 2
+    finally:
+        await dispatcher.aclose()
 
 
 async def test_orphan_from_a_previous_api_process_is_redispatched(db_engine):
@@ -590,8 +760,6 @@ async def test_format_exception_keeps_the_type_for_blank_messages():
 
 async def test_failed_sample_records_an_attributable_error(db_engine):
     """A failing forward must not produce {"error": ""} in the futures row."""
-    import httpx
-
     from skyrl.tinker.extra import ExternalInferenceClient
 
     client = ExternalInferenceClient.__new__(ExternalInferenceClient)
@@ -603,7 +771,7 @@ async def test_failed_sample_records_an_attributable_error(db_engine):
     client.db_engine = db_engine
 
     async def boom(*args, **kwargs):
-        raise httpx.ReadTimeout("")
+        raise ValueError("")
 
     client._forward_to_engine = boom
 
@@ -612,7 +780,7 @@ async def test_failed_sample_records_an_attributable_error(db_engine):
 
     future = await read_future(db_engine, request_id)
     assert future.status == RequestStatus.FAILED
-    assert future.result_data["error"] == "ReadTimeout"
+    assert future.result_data["error"] == "ValueError"
 
 
 async def test_non_external_pending_rows_are_ignored(db_engine):

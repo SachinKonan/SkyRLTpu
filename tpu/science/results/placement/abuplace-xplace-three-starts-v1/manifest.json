@@ -1,0 +1,2087 @@
+{
+  "schema": "abuplace-xplace-three-starts-v1",
+  "benchmark_suite": "ibm17-proxy-v1",
+  "cases": {
+    "ibm01": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm01-off/report.json",
+          "report_sha256": "ff6b8d25535603e199c51664d53ca748f09c7d319aea198f7ae2490d384b804b",
+          "positions_sha256": "96ecb0dd89466f26147ebd90b294eb991fc7210b80c8c9ee3ac0420ddf98cefb",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 32653.0,
+            "overflow": 0.10635403543710709,
+            "gp_seconds": 6.607151508331299,
+            "iterations": 937,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 22.738608567
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm01-rudy/report.json",
+          "report_sha256": "8080c75538888769b376fd6c9faf0e978e2f950665792587cfa6d876b7687be1",
+          "positions_sha256": "9e0e8c92a01562e3bfa6c404e6ff98d2eb26a8b2416c0ad640fba1a1111e414b",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 32566.0,
+            "overflow": 0.10624266415834427,
+            "gp_seconds": 10.781959533691406,
+            "iterations": 946,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 28.066337047999998
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm01-rudy_hv/report.json",
+          "report_sha256": "0096a3e335daad3c368b6b3b14a7adbbe7ee8c2e6d870ae872f2ef7fcef152ab",
+          "positions_sha256": "64819e2002ed91be545ffbffdbb5778d3a099f70dd9f35aee408440129f05b73",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 32514.0,
+            "overflow": 0.10681337118148804,
+            "gp_seconds": 12.716591358184814,
+            "iterations": 930,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 30.056868436000002
+        }
+      ],
+      "fallback_problem_sha256": "09ea9fc8c565e2226b59abe6b087c44119d24808455f02ac3c06a1ccb08502ce",
+      "native_sha256": {
+        "netlist.pb.txt": "ca97cee4652966bc0afc16562ccc9aec224de31de1cfb317b61972a4ba1a4c96",
+        "initial.plc": "f5202ce7295ba2ae38781a6a658b5affaa0ee933110ec071f41dd14961b133ad"
+      },
+      "problem_sha256": "363cba87b23a0fd0dd6f02f03aed88dc093d1ca908d1d7faf9d8a22d23e46358"
+    },
+    "ibm02": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm02-off/report.json",
+          "report_sha256": "ac93c0eab4ee1e264081d37c89594f8c1e5dbdcf9ec9542673a25411ad637dfa",
+          "positions_sha256": "9f14443cd01b2851136d9daa20178b691f8888d570f70865e30ba0afe0743b87",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 82862.0,
+            "overflow": 0.24647627770900726,
+            "gp_seconds": 32.252188205718994,
+            "iterations": 915,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 48.622981986
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm02-rudy/report.json",
+          "report_sha256": "90d56ee86f92c80f3ec3b373d4a3e93fa25022415e921ddf58b0557cf5049bc1",
+          "positions_sha256": "289931cdd23d3581c9d58baee8bfb4f8ed46576cc29c2906aff13041fa7614ed",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 92218.0,
+            "overflow": 0.15306799113750458,
+            "gp_seconds": 44.220165729522705,
+            "iterations": 899,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 60.308585883999996
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm02-rudy_hv/report.json",
+          "report_sha256": "1fb5bfa1292075ea92e136efaa235eec366da8a93fababd1a2b3b739a6894e9b",
+          "positions_sha256": "165d61f6b3d4c98bf4d77d8cf8f4beb4147e3b4b8b55ca90419526d46da07c15",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 85026.0,
+            "overflow": 0.14076535403728485,
+            "gp_seconds": 94.93410277366638,
+            "iterations": 913,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 111.36010117500001
+        }
+      ],
+      "fallback_problem_sha256": "999348aa883d6cddf84bd89ee2a6b109c3bcd276c1e858be22198d4725e42f2f",
+      "native_sha256": {
+        "netlist.pb.txt": "fd4a02890a7c69c9af5669f0122cfef7d179275eca768829e3f1acb8a32a542e",
+        "initial.plc": "fde119c62b066294f640f1e656e63030396e8b0fe30ca6a59d8a08b4dfa86e38"
+      },
+      "problem_sha256": "7b704b45307ce84e0ccbc3db385a94c9119edc51cccf45e158630fa2456a949f"
+    },
+    "ibm03": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm03-off/report.json",
+          "report_sha256": "e0d048ae221a6608d87267ecde87d554ac74fbb75ea4aa62c82d6145584a1a8c",
+          "positions_sha256": "7ced8aa6204f3d4dbce0f64cf27ca7691c6c201a7233e6ad51a2b2aab10b98e1",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 81562.0,
+            "overflow": 0.13472352921962738,
+            "gp_seconds": 23.921330213546753,
+            "iterations": 924,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 49.419221087
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm03-rudy/report.json",
+          "report_sha256": "95f91983b0ba1da9fbe8f230f0b88814e9ba72693aa6c38822729b01e52fedd1",
+          "positions_sha256": "89721284ef271817e07e0fe51e54183d4286be8b080c3cc30ea39ac42455412d",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 83482.0,
+            "overflow": 0.13800139725208282,
+            "gp_seconds": 19.150004863739014,
+            "iterations": 912,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 32.86950911300001
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm03-rudy_hv/report.json",
+          "report_sha256": "d6a6a264d16e15fd5c1cc8dbae2938f84fe9402818ec92e0115c97588e26c87a",
+          "positions_sha256": "f09134866592c6578bdf413d02ae62287a1b6cc9f4e927b5d7f29a68ddd3f99d",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 81570.0,
+            "overflow": 0.13699497282505035,
+            "gp_seconds": 27.0634663105011,
+            "iterations": 906,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 47.259468878
+        }
+      ],
+      "fallback_problem_sha256": "4935de8bea1b9d68f64da5b845f6e54e22e0889aaca405ba8804b39a28a5d2e7",
+      "native_sha256": {
+        "netlist.pb.txt": "41e9a03d9188ce8c28da45b012974e65b3988433c7215e6d6a906506ad6c9214",
+        "initial.plc": "706d69c6f30a8a7e8a145bca67682a92a233755a0a5ac9e9b974fa9bbcd55898"
+      },
+      "problem_sha256": "124bf7aec2ff3888a87341b47cca7e0feec3b9aab18b4c2d48c75b1c020ad46d"
+    },
+    "ibm04": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm04-off/report.json",
+          "report_sha256": "028d4c5b64eb5d5872e1aec9fee77458932322366f43fda0d56c05cb12760068",
+          "positions_sha256": "3d186e584a90b9d4297381751994718fb8d1366445e702b8da34121f03da443b",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 90428.0,
+            "overflow": 0.13672475516796112,
+            "gp_seconds": 20.40902614593506,
+            "iterations": 915,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 34.113848781
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm04-rudy/report.json",
+          "report_sha256": "6e2f3b5ab463250b4134c7fea9139ae48e2c1d18c7a38e318937a56f98a23e11",
+          "positions_sha256": "a274717a442a470022d0379c32d76b83acaa4316cb798f5b3d7d7c4e9aeef858",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 90885.0,
+            "overflow": 0.13690142333507538,
+            "gp_seconds": 25.04779291152954,
+            "iterations": 924,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 38.85436216800001
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm04-rudy_hv/report.json",
+          "report_sha256": "bb38f6b3de586f589102c53cecf15118602ca8b0a5ca085a75f6d9a964bdc77f",
+          "positions_sha256": "ffc63355183099c4b148bb7ad6782cb94fa9fd9d78458f40e0d29bbe633ee2a4",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 93479.0,
+            "overflow": 0.13633427023887634,
+            "gp_seconds": 29.9884352684021,
+            "iterations": 912,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 44.575278518999994
+        }
+      ],
+      "fallback_problem_sha256": "8cccea125ac7d15d5d067d7ec32bba5196e966b67c21145be09964b004133a5e",
+      "native_sha256": {
+        "netlist.pb.txt": "347924f72a646c0295f32858b4e58c41b1f18739286e8e5c8250226222ca188a",
+        "initial.plc": "94aa5b8956d87b8851cf5bc156d4b0a14a8bdcfcdb6282bc41ed281ce7671f0b"
+      },
+      "problem_sha256": "5a487f62ca72be91683c58676302a37a0f82bc7bb5bf21e905edd42f788d7620"
+    },
+    "ibm06": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm06-off/report.json",
+          "report_sha256": "37cc7c446a72277477fe73d78a16e89f7ee14b07f39415f46d7d8d71d8473e09",
+          "positions_sha256": "68954c3d853467863ffb1cc62017cf048dc190281f9e44751fdfd196bba6a85b",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 97996.0,
+            "overflow": 0.13964539766311646,
+            "gp_seconds": 7.781083583831787,
+            "iterations": 957,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 19.473127818999984
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm06-rudy/report.json",
+          "report_sha256": "44a99c5f0945bd26d5ce04f1589ec5b7ccdedae17bd192d730089dda4ebad922",
+          "positions_sha256": "175994f89b39ed7cd43259cbf23674907177e141f30c810a0eed26a4b573968f",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 94486.0,
+            "overflow": 0.13592608273029327,
+            "gp_seconds": 16.29820489883423,
+            "iterations": 976,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 44.03773332
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm06-rudy_hv/report.json",
+          "report_sha256": "9afff18be7071eb33bc09d77e350d03e4634ce2e2ac6c244683832ffdaea3f26",
+          "positions_sha256": "00e53559836ff1192133780b039acd81383059c045784db30e1de8793683ee99",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 98393.0,
+            "overflow": 0.139496847987175,
+            "gp_seconds": 12.579147815704346,
+            "iterations": 955,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 24.180126640999987
+        }
+      ],
+      "fallback_problem_sha256": "7f82f1870ea5230c6e1a07ea5325a5b75650b5b8ec2f047979e07946ee4826c0",
+      "native_sha256": {
+        "netlist.pb.txt": "6c5bc1d6eaceb7b816345ba9dab7351a1215a2a9cb7baf3d17f9d7c2eeb84e9e",
+        "initial.plc": "9c195b80537e7a2ffd8efc62eb08a934f4cfb927fd7c0c6e7a3ae666829662b8"
+      },
+      "problem_sha256": "a936621efe4221180c9b7622205dd2c5f09ec2ea8afa35c8ce49cf026761abda"
+    },
+    "ibm07": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm07-off/report.json",
+          "report_sha256": "19b4c7232cc73f4bff7667a0a8f5bfd73c50548ecb320f3d4aae157c7e3eaf11",
+          "positions_sha256": "ae26ce6aaec447f2b5335ac1bca35f76154ffc9228d1cd476979872290506aaa",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 143326.0,
+            "overflow": 0.13398687541484833,
+            "gp_seconds": 6.58873438835144,
+            "iterations": 939,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 21.104185142000006
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm07-rudy/report.json",
+          "report_sha256": "cb080aac27218fa33323ebf62a0b9d5c78347067591f031bd59305aafbc295ce",
+          "positions_sha256": "11c6596b13864b029b705170eb93c8bc04d4791d5e1a44b1db3c9d53e02d2061",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 143564.0,
+            "overflow": 0.13211476802825928,
+            "gp_seconds": 15.546814680099487,
+            "iterations": 937,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 29.622287194999984
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm07-rudy_hv/report.json",
+          "report_sha256": "c7c51f5f78a6ce1b0cfdf09a3ff16dac71c2ec50736d49034afff54b8e7147ce",
+          "positions_sha256": "5e3c1928891b2c2c426b6ff66d252f8b5fe9c221c5c905960b3690c1da540c57",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 146586.0,
+            "overflow": 0.13304799795150757,
+            "gp_seconds": 15.0792236328125,
+            "iterations": 943,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 28.884554793999996
+        }
+      ],
+      "fallback_problem_sha256": "b2eaf097f9436181b7832495636c222e7131e55a44d654fc1a104132817d7f94",
+      "native_sha256": {
+        "netlist.pb.txt": "035e1c6869cb3a3abf944eef248858fd04c1771b6607d39242e5cf9b201b841c",
+        "initial.plc": "f7f8be92e8aad1558e5e3cd16678f1d2e66f65c94daf3bb34821ca51d5d9f606"
+      },
+      "problem_sha256": "2b7e63d1cd66df417f4fd34b77db6ef0552702150251c510e0cc35f4ff3d23e4"
+    },
+    "ibm08": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm08-off/report.json",
+          "report_sha256": "283beb05e303b6c75fdd0c8b95a0f8f35d1c81ef651ba4fe1bb5f39d6109091b",
+          "positions_sha256": "a62f2e8c782e6a7394d65784e9772100e15ffbed2377e967020782e00ee6cd52",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 185682.0,
+            "overflow": 0.13376285135746002,
+            "gp_seconds": 41.11225390434265,
+            "iterations": 947,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 66.381735722
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm08-rudy/report.json",
+          "report_sha256": "2e55b0a03294c98539255d672f376519537f3e9988cc0f1f82b2e125c8713831",
+          "positions_sha256": "ebf6f07bdb019701152c9abc78936f198074f05cd941c7a568bab05913b12ddd",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 174179.0,
+            "overflow": 0.34826380014419556,
+            "gp_seconds": 127.7399115562439,
+            "iterations": 940,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 142.81238433700003
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm08-rudy_hv/report.json",
+          "report_sha256": "519154dfddc8080b212c8ccebcdd75bc1912521b845f8a39628f8b3971b198ac",
+          "positions_sha256": "c407a0feda16f00647593bf8f6768419ef55962df0e477053bc89f2b3fd10029",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 190660.0,
+            "overflow": 0.13580015301704407,
+            "gp_seconds": 39.14470958709717,
+            "iterations": 902,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 53.68389545300002
+        }
+      ],
+      "fallback_problem_sha256": "a124ba699816b23110d2beac983037e7f99d9462a0be3d49cb32069fd79744ca",
+      "native_sha256": {
+        "netlist.pb.txt": "68d592796012b4885a5d65d2df646597061f77c245ce92a2bb85334ffc0138de",
+        "initial.plc": "243811e78c80c71e268b8143d94a6f3ac25230f105e38f60c2be190d50c2f5eb"
+      },
+      "problem_sha256": "8c4847551956a0f97f24e6ade0fefedc8c8ecf8b595aeee6815382009de09a27"
+    },
+    "ibm09": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm09-off/report.json",
+          "report_sha256": "16be614244fddef1b10c67eec5d01ee53f3d07419c8e5f94865cbe7f82660864",
+          "positions_sha256": "957835961c89937ed8cd0950c8c5455e0081d9fbdd035c5d5911940156179337",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 137165.0,
+            "overflow": 0.14313499629497528,
+            "gp_seconds": 12.739611625671387,
+            "iterations": 956,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 25.39418258699999
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm09-rudy/report.json",
+          "report_sha256": "ea0285a0f2c9d035a2f593390ecfa1a812951959d5396d9358b29c0f9ecfde9b",
+          "positions_sha256": "95643d776f067927590492c06fdfa4d3a64e23fa5594cf218feb6a629e724a41",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 143702.0,
+            "overflow": 0.14547193050384521,
+            "gp_seconds": 23.867748737335205,
+            "iterations": 949,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 36.47486537999998
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm09-rudy_hv/report.json",
+          "report_sha256": "df62f0f6299f274f6dd5fb671794ad4d23981e898ee7c15094931768dd67088e",
+          "positions_sha256": "10e0bf553ed9b1a33dfac426dd274457d00e553ac4f2d1605c0c53bcdc2950fe",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 128725.0,
+            "overflow": 0.30250564217567444,
+            "gp_seconds": 35.062007188797,
+            "iterations": 975,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 55.214805100000035
+        }
+      ],
+      "fallback_problem_sha256": "7bb370c1d49ad8d681a77e5ee9bd30001c9a9fff9f4aff0300aef527e3fb6190",
+      "native_sha256": {
+        "netlist.pb.txt": "fa99a121294cb2b8b050ae69e9e3af28ea1443d39cb0e8ddee7c2c39d66439e4",
+        "initial.plc": "3c09e6bbf8291ec9c90e7f86b42bef9aecb9d49ab0e05750245ae6fd72e069e9"
+      },
+      "problem_sha256": "d980c7143902de5d9ffa5625c4e7ddabc383f97d0d748c0152138010271f7ab5"
+    },
+    "ibm10": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm10-off/report.json",
+          "report_sha256": "036083b69a343a3c577ebd0a1c05dd01b67b8b64cb51f0396f318bfdbd79f5b0",
+          "positions_sha256": "fc0d5408a73fd69582c700a6caed29e6a780212f69b797ed5cddecdbe12f8a4f",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 409399.0,
+            "overflow": 0.19528712332248688,
+            "gp_seconds": 132.47159481048584,
+            "iterations": 800,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 201.45969553499998
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm10-rudy/report.json",
+          "report_sha256": "d43a4a47f283bccdea39926635d82436e6ce3bba8b8d7e24390e9adedfa9ea95",
+          "positions_sha256": "80e21ccfc58e5dac3b7b180b26902556ce2076d81bb6b884e356064b6efe15f8",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 497300.0,
+            "overflow": 0.19561713933944702,
+            "gp_seconds": 140.34881687164307,
+            "iterations": 795,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 215.591184295
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm10-rudy_hv/report.json",
+          "report_sha256": "307646665b548608a8bed592473196ff3acf0cf6c07c757848574abe8734d61f",
+          "positions_sha256": "06287a34f4698be54cfacea4718b86ba781aeb4db0b043dc45691a823ca12a38",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 562343.0,
+            "overflow": 0.19585299491882324,
+            "gp_seconds": 135.06093287467957,
+            "iterations": 798,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 193.342453641
+        }
+      ],
+      "fallback_problem_sha256": "47b8ead6fb1bfbf9b9c5cb721e4cc42cc81a6ec9dcdf9fcbaac98539e6ac03c9",
+      "native_sha256": {
+        "netlist.pb.txt": "ffb653f7a13fd9645385e4bd74c2c42c76a261a05e58d4a2490f4b73cd4c6ede",
+        "initial.plc": "a5dfc34b7b0dd2a4c7cb0c9a46f115f65fd9e0986895b1c4eef87b8274c6f149"
+      },
+      "problem_sha256": "e9787577843cd23c63cb647f8ba5c3d404015bb67882c304dd4a5eb09f91797d"
+    },
+    "ibm11": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm11-off/report.json",
+          "report_sha256": "c5ecf7ae5c795f19bd0d231017f06c2884472b72b566ee58e53b5d967ad60ef7",
+          "positions_sha256": "7a36354612d5676e740d622f6d5875ae898d1dbc04641ea53a98aa41f88dc835",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 193468.0,
+            "overflow": 0.11340334266424179,
+            "gp_seconds": 124.97899270057678,
+            "iterations": 937,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 151.06199014099997
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm11-rudy/report.json",
+          "report_sha256": "57d2dd02730ca692d7a7b4dcf580b92a8edf591dce7c9d445c06a2c23c33449d",
+          "positions_sha256": "4636bd69922d4d646f6a705c5eab92014f8337bdfb57c1b19f908f05d73e622c",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 193489.0,
+            "overflow": 0.11322855204343796,
+            "gp_seconds": 47.71461462974548,
+            "iterations": 933,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 65.56069098399996
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm11-rudy_hv/report.json",
+          "report_sha256": "7b36a62659f1a7e37c8caa67f463ec2afd74ebc54a0b5124b0fd97667814fa08",
+          "positions_sha256": "2b53cb46aa4208feca1189573f9e3d475c49797ca3e3ab0fb952e761e50ea5c3",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 197527.0,
+            "overflow": 0.11425163596868515,
+            "gp_seconds": 58.41751718521118,
+            "iterations": 936,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 75.957260604
+        }
+      ],
+      "fallback_problem_sha256": "fc7397ace1a09705cc7ff05aef0c5aad8cd3592c85014bac2ac8754c58552764",
+      "native_sha256": {
+        "netlist.pb.txt": "e3b1d5a8d8d1908bd4f07c744c4bcf70ebe47bb11cb1ab5ebe0a8b8b45be0733",
+        "initial.plc": "e3701970f61454b7b84b7d0c9e3aa0fe6e3d5e93c0f94b7a88b85311a637d11f"
+      },
+      "problem_sha256": "4f7500b8d9960fce4670689df3024f6785c4c20c960d7408105aa14616edc3fa"
+    },
+    "ibm12": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm12-off/report.json",
+          "report_sha256": "28a397da1967acce0bf52eabecbf037b68a27d8e788037f4c6f3a55b0147ecaf",
+          "positions_sha256": "d52ee5de6d975ed695914c98a4a586d908a20a749c39d21374a09c010a3d9a45",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 440665.0,
+            "overflow": 0.2043759971857071,
+            "gp_seconds": 125.19614696502686,
+            "iterations": 777,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 171.26532140099994
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm12-rudy/report.json",
+          "report_sha256": "90b7c980cfb1a6c8ec2070ecabc0edbb7ee42eb9de583c206e3e0e7bb05b2d11",
+          "positions_sha256": "9ce5e8ae86d4fd98b4282a668162d5f74dae7c4b455a7685cf90c76f49c7736e",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 566603.0,
+            "overflow": 0.19796143472194672,
+            "gp_seconds": 106.13378119468689,
+            "iterations": 768,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 158.162645247
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm12-rudy_hv/report.json",
+          "report_sha256": "f9acb11e7fefdff6f7a3d0a38f156327f1f5a20d77ae6c423f6d1fdbcb09a183",
+          "positions_sha256": "05af2b2c2ff03927443a966e417071b3627e50a88d9d0155fb492be5a7671724",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 616611.0,
+            "overflow": 0.19547487795352936,
+            "gp_seconds": 129.97385096549988,
+            "iterations": 775,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 170.552187775
+        }
+      ],
+      "fallback_problem_sha256": "29c04059c9ba93c82d8e343d075ff511523b256846585f3f49b0653876afca58",
+      "native_sha256": {
+        "netlist.pb.txt": "19145521d76b05b8522f564cabb5863b6c7ecdaf9efc50d3a70536bcc1513b0d",
+        "initial.plc": "1d99f17549974a69fc9756e2517ad97114d89d9ae0e9fa67a3190062a1289723"
+      },
+      "problem_sha256": "29161e7198e8b0f17f8249436fab65b23468a9c3cb16f5b10b013a30df7fd94f"
+    },
+    "ibm13": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm13-off/report.json",
+          "report_sha256": "6f3465d77fb81193930645f6e49f61a4dacbf398b307f82d2643be283dca8d85",
+          "positions_sha256": "cfb2a0c245c63fd546c9c85da81ea2756811732e72ad17203fa0fca277b60ec0",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 235587.0,
+            "overflow": 0.11317912489175797,
+            "gp_seconds": 108.46619963645935,
+            "iterations": 945,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 144.36146418599998
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm13-rudy/report.json",
+          "report_sha256": "e76892dc69648107f97fcd2fc8a6d948ba31e35d08120683cb85d1fd2b2cc412",
+          "positions_sha256": "6c97483bba92f37fc464036211f918b3b51fc1f18c1d18285c9789e1582c0b7b",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 246784.0,
+            "overflow": 0.11318647861480713,
+            "gp_seconds": 59.75329923629761,
+            "iterations": 943,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 78.66342501700001
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm13-rudy_hv/report.json",
+          "report_sha256": "31ff4bdde54c007ea00645826833a9edc525e7e00b07b50e739c01202b37c3fa",
+          "positions_sha256": "b83c5a348c6caac4178d9fa96d1af29ed0e4859bcb336d990c976f26bbcb8ecd",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 254375.0,
+            "overflow": 0.11728159338235855,
+            "gp_seconds": 82.16779208183289,
+            "iterations": 956,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 101.17285244699997
+        }
+      ],
+      "fallback_problem_sha256": "254e8ddf7d49dee632eace2f979be30d101f71bc3b5591995e7cc251cf9d30c9",
+      "native_sha256": {
+        "netlist.pb.txt": "d0323244eaf4192aea823164a8d0e13176411bd6a861ca8ea660cf4fb2034d2f",
+        "initial.plc": "71a912a8176d286ce43c0e65e93fc01ed349f9e79ced5cfa1d68a3b95a9491e7"
+      },
+      "problem_sha256": "e3005f9ab6638a980d3be364d68bd4de4acffdcdd4f99b346af635411bc6735b"
+    },
+    "ibm14": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm14-off/report.json",
+          "report_sha256": "b3769378a092b68bbbb1941403cbd6da95c4f0565c658bcde945aa60485b4b74",
+          "positions_sha256": "c2cd4786b02fe415016c480a394ade811adb0a12125b3a61932d1139ff9007a6",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 428423.0,
+            "overflow": 0.08634276688098907,
+            "gp_seconds": 12.205249786376953,
+            "iterations": 973,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 72.98230320000005
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm14-rudy/report.json",
+          "report_sha256": "1f4025c67128e89f204b87d5854c716d997c9dcb8d5fe52e8bd12ed259ae2bac",
+          "positions_sha256": "a8bbc7a269a66ba02db9aad4a6d6bc31dbbd8b5b93e87971766b4f24375d7153",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 434101.0,
+            "overflow": 0.08567389100790024,
+            "gp_seconds": 24.187323093414307,
+            "iterations": 978,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 101.67644022099998
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm14-rudy_hv/report.json",
+          "report_sha256": "41d31f57c187218f7e5b4cc8753a3a28a8435bd623fce139d147b86a0694bdad",
+          "positions_sha256": "015081eb8861d72b3b078d2c56b76fb7eb50b906c1d2553d7eadee3bf35a4a17",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 467117.0,
+            "overflow": 0.083699069917202,
+            "gp_seconds": 23.852555513381958,
+            "iterations": 992,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 70.89715055199997
+        }
+      ],
+      "fallback_problem_sha256": "5cacee4607a659e4e3257a6e764a75457a8164e5dd316a7b0cd43a9ef9c687f1",
+      "native_sha256": {
+        "netlist.pb.txt": "93ddc832033e693da578eb638d7b95badad91cc1258c503db9a3e4488218004b",
+        "initial.plc": "df7f5675eb6652893f8192f2c9bcd382fe5036956adde15824f575a462d6b3b7"
+      },
+      "problem_sha256": "29bd314b4a25c7b3ef4ebc8cf114ba8db71578ccd877ced74b868c6943dc5324"
+    },
+    "ibm15": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm15-off/report.json",
+          "report_sha256": "530491aae9e58195fa831316b134190e3adbf8d959b5b91c211efe1412e56e75",
+          "positions_sha256": "0917a5d79cdddbf5d47a10e53217590a4b014a517e54428927ee442320e0bb1a",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 431157.0,
+            "overflow": 0.09920129179954529,
+            "gp_seconds": 8.696391582489014,
+            "iterations": 949,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 43.898258804999955
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm15-rudy/report.json",
+          "report_sha256": "6e11a072eb46f6ac103d62c1cf1a4258f33523eaff54f95a515553d1c219fa36",
+          "positions_sha256": "4c6f3a6a85241d597da6f6acd90298a6df06c121434c7efb9f543d9b506f3695",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 437207.0,
+            "overflow": 0.10071781277656555,
+            "gp_seconds": 14.97336483001709,
+            "iterations": 942,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 41.36452295599997
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm15-rudy_hv/report.json",
+          "report_sha256": "6b3552682014d47cffaf113262934ad826d7e3d3d79e95d9c6ee61c5b130bce9",
+          "positions_sha256": "68147aedf602e05de26828b6911fd99e31b8460af9302e67d4c0f7bc91703fae",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 479828.0,
+            "overflow": 0.10013863444328308,
+            "gp_seconds": 13.489847660064697,
+            "iterations": 982,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 36.518477260000054
+        }
+      ],
+      "fallback_problem_sha256": "9ad70c86908f4e69c35154e2df601d1c1ae3d57ef946696b60ab28fdd0404e9a",
+      "native_sha256": {
+        "netlist.pb.txt": "ebd20e3d1284eebcd7891a1274ac5f00db23f76f7a91b614a52f4a36e24fc3a2",
+        "initial.plc": "2b9b3dc59e3b0ab564007b0d44924f40549dd06116dad11a2f84238df70eb3a2"
+      },
+      "problem_sha256": "8652c75f63a8de3026e4a259a2d0262e0b314a8f4807e7cd142d0b38b9db9666"
+    },
+    "ibm16": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm16-off/report.json",
+          "report_sha256": "8a5045b2985216d0e2a06db7dfd89c91680adf80212f1983d8504bdf8a849e03",
+          "positions_sha256": "9cdd294522468b38db8885b5bc86d4d61167c19353b73cb328d7bad38906a981",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 654988.0,
+            "overflow": 0.11495083570480347,
+            "gp_seconds": 124.96840333938599,
+            "iterations": 974,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 148.00163017399996
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm16-rudy/report.json",
+          "report_sha256": "179ddfbd34bf8ba5864a6dd708986cd77808fb78607a7d99135428f64dc52124",
+          "positions_sha256": "c8aed879ff9b5ced4aabd748d05dc66bbea797bdfb84954fc4d8f474aaaa66df",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 687177.0,
+            "overflow": 0.11328069120645523,
+            "gp_seconds": 132.43048357963562,
+            "iterations": 963,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 171.391061449
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm16-rudy_hv/report.json",
+          "report_sha256": "c22e426348f5743cb8f1acd8f979067135e269b36da94d290e0b8b66c783df93",
+          "positions_sha256": "7cb4d3b1754151547d92461957feac0bebcce019b75fab96316a3c3c9634aae5",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 635227.0,
+            "overflow": 0.31242671608924866,
+            "gp_seconds": 131.71301126480103,
+            "iterations": 971,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 96,
+              "stop_overflow": 0.07,
+              "inner_iter": 1500,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 75
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 157.72843762999992
+        }
+      ],
+      "fallback_problem_sha256": "0e2542926ca952a4a3122e92c5277e9fbe3a6304dea7286ddc48147eb18202a5",
+      "native_sha256": {
+        "netlist.pb.txt": "999b1dabb47938c7d6043505b3cf408975fd619d30701955d0cc8733efe0beb3",
+        "initial.plc": "48b3a612008611ebf3ce0bbece5579d111ea5c32caf000b5c2acd843e9bb2bef"
+      },
+      "problem_sha256": "8d5dda81bbbdbde903335c11e9027f2740b9c78317a222e9769b04084d3565ac"
+    },
+    "ibm17": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm17-off/report.json",
+          "report_sha256": "733d0df803f3e4756a2dc2747fe3e91d548aaf6ff8443c881518207e5304514b",
+          "positions_sha256": "f34b057aa9d0bb9bb965d82cf03af68c61244240e09009a4c160a4c6bc885f02",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 715833.0,
+            "overflow": 0.18934480845928192,
+            "gp_seconds": 35.97679018974304,
+            "iterations": 800,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 158.65073428999995
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm17-rudy/report.json",
+          "report_sha256": "db01fe330467faa9004c38eb277498d4903ba3d415a7d83812a4577e1ac64678",
+          "positions_sha256": "ffbff9506a07ef6c1a4c1758b9f30a75de3713ed1b297d9bc476fde120aafcd5",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 720716.0,
+            "overflow": 0.19032296538352966,
+            "gp_seconds": 92.65907526016235,
+            "iterations": 800,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 180.76366799599987
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm17-rudy_hv/report.json",
+          "report_sha256": "227adb3274683abe7ca49299a9ebf414786365cb7e08965e4391826e67ce218f",
+          "positions_sha256": "3def67c3c9d4d8d8d59d5fbff7c51719e130843b5123c5eed56ffd7582fd4214",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 741958.0,
+            "overflow": 0.19495370984077454,
+            "gp_seconds": 55.92901396751404,
+            "iterations": 800,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 32,
+              "stop_overflow": 0.1,
+              "inner_iter": 800,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 30
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 468.6984924869229
+        }
+      ],
+      "fallback_problem_sha256": "394606b918812c7aba35a10d661babb7ccfb61856ea3d294dca30968225fd98a",
+      "native_sha256": {
+        "netlist.pb.txt": "746185b7579805362449ea9827553a8e3424223d2f0ffac149d37cdf63c927ba",
+        "initial.plc": "041f13191e83f9f4e4173e473d040cebb95221a439fdd25bf5c2f3e4fef5e549"
+      },
+      "problem_sha256": "1f89c740bd51c6f5fecf05829b2fc37643f03354f5cbf4b1b028c8d5a229ea18"
+    },
+    "ibm18": {
+      "valid": true,
+      "variants": [
+        {
+          "variant": "off",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm18-off/report.json",
+          "report_sha256": "ccb42e6bf16990900f5acf85c948b69c9482eca43351428335b8a45851de711a",
+          "positions_sha256": "012be71ae418031d643412761ea93c8c22b71cd99168267a23e671e4fad4e7a5",
+          "gp": {
+            "variant": "off",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 465291.0,
+            "overflow": 0.11221471428871155,
+            "gp_seconds": 5.696886301040649,
+            "iterations": 965,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "0",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 23.320748041000115
+        },
+        {
+          "variant": "rudy",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm18-rudy/report.json",
+          "report_sha256": "47acdacd1314b9209c35e46ea6a7837225f1c7e73e2b60c7f72de6cf8de4308c",
+          "positions_sha256": "a144a1f42e0a395c231d63e4d35965c44527955304605c23e75ff487856636d1",
+          "gp": {
+            "variant": "rudy",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 465275.0,
+            "overflow": 0.11265253275632858,
+            "gp_seconds": 9.291457891464233,
+            "iterations": 964,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 26.717355412000188
+        },
+        {
+          "variant": "rudy_hv",
+          "report": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-circuit-300s-v5p32/.science/modal-xplace/results/ibm18-rudy_hv/report.json",
+          "report_sha256": "6b6f392a93478c91d12375cfa145e95badd060d3c5c43515de3bdbf9ef96eb24",
+          "positions_sha256": "39a829b8b372cec653b6ab087a5c241eda68d8948a3ee5df61d2106d3e9a776a",
+          "gp": {
+            "variant": "rudy_hv",
+            "source_commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+            "stage": "global_placement_only",
+            "hpwl": 466471.0,
+            "overflow": 0.1104925200343132,
+            "gp_seconds": 19.736886024475098,
+            "iterations": 976,
+            "gp_config": {
+              "target_density": 0.75,
+              "density_weight": 8e-05,
+              "num_bins": 128,
+              "stop_overflow": 0.07,
+              "inner_iter": 2000,
+              "lr": 0.01,
+              "wa_coeff": 4.0,
+              "seed": 0,
+              "density_weight_coef": 1.05,
+              "ignore_net_degree": 100
+            },
+            "environment": {
+              "XP_CONG_LOSS": "1",
+              "XP_CONG_LOSS_KERNEL": "rudy_hv"
+            },
+            "source_sha256": {
+              "placer.py": "a9943f449326cf4b4ee15a1ed0b88ecb892a68347e241f4a1390a9dd5d9deeeb",
+              "Xplace/src/calculator.py": "e86a5f861d5c84a8a7c22968be6f03f638be83e94f08abca4120fb55be5af8aa",
+              "Xplace/src/run_placement_nesterov.py": "29538f7bb649a9e12f841f37b0db4c39aacb18485b62a2ef3ab02b1398b160c4"
+            }
+          },
+          "preprocessing_seconds": 52.140963321
+        }
+      ],
+      "fallback_problem_sha256": "3a1622d6b29834b87c97c8aafd859a6a8b379732285bc1f8069e420f18aa6297",
+      "native_sha256": {
+        "netlist.pb.txt": "7e2bc08b5c1ff6ad659df9e1c639a1b6f8e9f867e4446a367fd1d9d8fccab773",
+        "initial.plc": "75a04aae366df17b34f2089ddc0f19e475fb4c6bcae4229842b60310eadeff96"
+      },
+      "problem_sha256": "a51a1f5d789233227014014f3593b5ffc95dc614bb714c48ec3495674da74d84"
+    }
+  },
+  "variants": [
+    "off",
+    "rudy",
+    "rudy_hv"
+  ],
+  "candidate_budget_excludes_precomputation": true,
+  "fallback": "unchanged frozen Xplace initial_positions"
+}

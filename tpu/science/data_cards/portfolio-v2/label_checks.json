@@ -1,0 +1,6 @@
+{
+  "all_numeric_fields_have_no_infinity": true,
+  "every_session_has_30_assets": true,
+  "all_forward_labels_match_prices_and_dividends": true,
+  "invalid_targets_are_null": true
+}

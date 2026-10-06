@@ -1,0 +1,24 @@
+name: math-v6e-muse-ac2-grpo-lr4e5-s1-20260920
+resources:
+  cloud: gcp
+  zone: us-central1-b
+  accelerators: tpu-v6e-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv6e
+  use_spot: true
+  disk_size: 150
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 3
+  priority: 120
+envs:
+  RAY_TRAIN_CODE: gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d.tar.gz
+  RAY_TRAIN_CODE_SHA256: 8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d
+run: "set -euo pipefail\nexport PATH=\"$HOME/.local/bin:$PATH\"\ncode=\"$HOME/.cache/skyrl-ray-code/$RAY_TRAIN_CODE_SHA256\"\
+  \nif [ ! -f \"$code/.complete\" ]; then\n  mkdir -p \"$code\"\n  gcloud storage\
+  \ cp \"$RAY_TRAIN_CODE\" \"$code/code.tar.gz\"\n  printf '%s  %s\\n' \"$RAY_TRAIN_CODE_SHA256\"\
+  \ \"$code/code.tar.gz\" | sha256sum -c -\n  tar -xzf \"$code/code.tar.gz\" -C \"\
+  $code\"\n  touch \"$code/.complete\"\nfi\nexport PYTHONPATH=\"$code:$code/tpu${PYTHONPATH:+:$PYTHONPATH}\"\
+  \nexec python3 -m tpu.swarm.ray_train.bootstrap \"$code/tpu/swarm/ray_train/profiles/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920-10step-deployment.json\"\
+  \n"

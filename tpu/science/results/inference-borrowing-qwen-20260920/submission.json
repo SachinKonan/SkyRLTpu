@@ -1,0 +1,13 @@
+{
+  "run_id": "science-circuit-v6e-qwen-borrow-supervised-20260920",
+  "pool": "tpuswarm-v6e32-central1b",
+  "state": "submitted",
+  "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-4fecefb44b9d0d79373e0194256a63aa6013b030aa745437427661fc112d8e9a.tar.gz",
+  "archive_sha256": "4fecefb44b9d0d79373e0194256a63aa6013b030aa745437427661fc112d8e9a",
+  "task_sha256": "934a1839f53a0ecbc3539c3ea3a5ba07729334578db3bdc1c74c8ffcdbadcf3d",
+  "external_discovery_pool": "tpuswarm-v4-32-central2-smoke",
+  "supersedes_job_id": 1270,
+  "submitted_at": "2026-09-20T16:29:07.052875+00:00",
+  "exit_code": 0,
+  "job_id": 1324
+}

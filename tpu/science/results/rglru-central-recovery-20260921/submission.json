@@ -1,0 +1,9 @@
+{
+  "time": 1789972551.1474729,
+  "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+  "old_job_id": 1343,
+  "pool": "tpuswarm-v6e32-central1b",
+  "state": "submitted",
+  "checkpoint": 0,
+  "job_id": 1365
+}

@@ -1,0 +1,170 @@
+# Frozen gradient diagnostic on an existing v4-32 pool worker.
+name: qwen-v4-32-gradient-conflict-v1-r5
+resources:
+  cloud: gcp
+  region: us-central2
+  zone: us-central2-b
+  accelerators: tpu-v4-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 0
+envs:
+  PROJECT: vision-mix
+  ZONE: us-central2-b
+  REMOTE_USER: gcpuser
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-gradient-probe
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v41.tar.gz
+  MODEL_NAME: Qwen/Qwen3.5-27B
+  TUNIX_MAXTEXT_MODEL_NAME: qwen3.5-27b
+  TRAIN_WORKERS: 0,1,2,3
+  VLLM_WORKERS: ''
+  TRAIN_TP_SIZE: '8'
+  TRAIN_FSDP_SIZE: '2'
+  TUNIX_ROW_SHARD: '2'
+  TRAIN_TPU_PROCESS_BOUNDS: 1,1,4
+  TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS: 2,2,1
+  TUNIX_LORA_RANK: '32'
+  TUNIX_UNIFORM_SEQ_LEN: '22528'
+  TUNIX_TRAIN_TOKEN_BUDGET: '45056'
+  TUNIX_SMOKE_ROWS: '2'
+  TUNIX_SMOKE_REPLAYS: '1'
+  TUNIX_MINIMAL_FB_OUTPUT: '0'
+  TUNIX_FREE_BASE_STATE: '1'
+  REMOTE_CHECKPOINTS: /home/gcpuser/gradient-probe/20260906-qwen-v1/checkpoints
+  TUNIX_MAXTEXT_CKPT_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts
+  TUNIX_JAX_CACHE_LOCAL: /home/gcpuser/jax-cache-v4-smoke
+  TUNIX_JAX_CACHE_GCS: gs://sk7524-tinker-tpu-us-central2/jax-compile-cache-v4-qwen35-tp8-fsdp2-r32-s22528-b45056-v1
+  SMOKE_RESULT_GCS: gs://sk7524-tinker-tpu-us-central2/gradient-conflict/20260906-qwen-v1/result.json
+  V6E_LOG_GCS: gs://sk7524-tinker-tpu-us-central2/gradient-conflict/20260906-qwen-v1/logs
+  GRADIENT_PROBE_RELEASE: 20260906-qwen-v1-r5
+  GRADIENT_PROBE_OVERLAY: gs://sk7524-tinker-tpu-us-central2/gradient-conflict/20260906-qwen-v1/overlay-v5.tar.gz
+  GRADIENT_PROBE_OVERLAY_SHA256: 66785f0e94ed84a26a29574b3114d1d137b2739575919a3b96a662db47b71026
+  GRADIENT_PROBE_INPUT_URL: gs://sk7524-tinker-tpu-us-central2/gradient-conflict/20260906-qwen-v1/pilot.json.gz
+  GRADIENT_PROBE_RESULT_PREFIX: gs://sk7524-tinker-tpu-us-central2/gradient-conflict/20260906-qwen-v1
+  TUNIX_GRADIENT_PROBE_INPUT: /home/gcpuser/gradient-probe/20260906-qwen-v1/pilot.json.gz
+  TUNIX_GRADIENT_PROBE_DIR: /home/gcpuser/gradient-probe/20260906-qwen-v1/gradients
+  TUNIX_SMOKE_SCRIPT: tpu/gradient_conflict/run.py
+  SKYRL_CKPT_GCS: gs://sk7524-tinker-tpu-us-central2/gradient-conflict/20260906-qwen-v1/checkpoints
+run: |
+  set -euo pipefail
+  : "${SKYPILOT_NODE_RANK:=0}"
+  : "${SKYPILOT_NODE_IPS:?SkyPilot must provide all v4-32 TPU VM IPs}"
+  export JOBMAN_WORKER_ID="$SKYPILOT_NODE_RANK"
+  export JOBMAN_TPU_INTERNAL_IPS
+  JOBMAN_TPU_INTERNAL_IPS=$(printf '%s\n' "$SKYPILOT_NODE_IPS" | awk 'NF' | paste -sd, -)
+  node_count=$(awk -F, '{print NF}' <<<"$JOBMAN_TPU_INTERNAL_IPS")
+  if [ "$node_count" -ne 4 ]; then
+    echo "v4-32 requires four TPU VMs; SkyPilot supplied $node_count" >&2
+    exit 2
+  fi
+
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  base_generation="$generation"
+  generation="${generation}-gradient-${GRADIENT_PROBE_RELEASE}"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    gcloud storage cp "$GRADIENT_PROBE_OVERLAY" "$archive"
+    printf '%s  %s\n' "$GRADIENT_PROBE_OVERLAY_SHA256" "$archive" | sha256sum -c -
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/jobman/v6e_tunix_smoke_worker.sh"
+    test -r "$staging/tpu/start_colocated_vllm_tinker.sh"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  marker_name="v4-smoke-bundle-$generation-ready"
+  printf '%s\n' "$generation" >"$HOME/.cache/tpuswarm/$marker_name"
+
+  # A completed vLLM smoke can leave its multiprocessing EngineCore adopted by
+  # PID 1 after tmux exits. It still owns libtpu, so clear only that workload;
+  # SkyPilot's Ray processes are intentionally untouched.
+  tmux kill-session -t vllm-tpu 2>/dev/null || true
+  pkill -TERM -u "$USER" -f '[V]LLM::EngineCore' || true
+  sleep 3
+  pkill -KILL -u "$USER" -f '[V]LLM::EngineCore' || true
+
+  # Trainer workers load Orbax, not HF safetensors. Pool workers may retain a
+  # different model's inference cache from an earlier job, which prevents the
+  # requested checkpoint from fitting on the current 97 GB boot disks.
+  hf_hub="$HOME/.cache/huggingface/hub"
+  if [ -d "$hf_hub" ]; then
+    find "$hf_hub" -mindepth 1 -maxdepth 1 -type d -name 'models--*' \
+      -exec rm -rf -- {} +
+  fi
+  ckpt_root="${TUNIX_MAXTEXT_CKPT_CACHE:-$HOME/skyrl-maxtext-ckpts-local}"
+  if [ -d "$ckpt_root" ]; then
+    find "$ckpt_root" -mindepth 1 -maxdepth 1 -type d \
+      ! -name "$TUNIX_MAXTEXT_MODEL_NAME" -exec rm -rf -- {} +
+  fi
+  find "$HOME" -mindepth 1 -maxdepth 1 -type d \
+    \( -name 'jax-cache-*' -o -name 'jax_cache_*' \) \
+    ! -path "$TUNIX_JAX_CACHE_LOCAL" -exec rm -rf -- {} +
+  rm -rf "$HOME/.cache/uv"
+  export UV_NO_CACHE=1
+  # gcloud 428's sliced downloader has produced repeatable hash mismatches on
+  # the 2 GiB Orbax objects on these small ext4 boot disks. Use one verified
+  # stream per object; checkpoint restore is a one-time worker warmup.
+  export CLOUDSDK_STORAGE_SLICED_OBJECT_DOWNLOAD_THRESHOLD=0
+  export CLOUDSDK_STORAGE_PROCESS_COUNT=1
+  export CLOUDSDK_STORAGE_THREAD_COUNT=1
+
+  mkdir -p "$(dirname "$TUNIX_GRADIENT_PROBE_INPUT")"
+  gcloud storage cp "$GRADIENT_PROBE_INPUT_URL" "$TUNIX_GRADIENT_PROBE_INPUT"
+  # Stage tarballs on every rank. The client subsequently registers the source
+  # checkpoint in this isolated API's database using reregister_states.py.
+  mkdir -p "$REMOTE_CHECKPOINTS/model_4ee1d2d2"
+  if [ ! -s "$REMOTE_CHECKPOINTS/model_4ee1d2d2/000003.tar.gz" ]; then
+    gcloud storage cp "$SKYRL_CKPT_GCS/model_4ee1d2d2/000003.tar.gz" \
+      "$REMOTE_CHECKPOINTS/model_4ee1d2d2/000003.tar.gz"
+  fi
+  export JOBMAN_WORKER_ID="$SKYPILOT_NODE_RANK"
+  bash "$SKYRL_REPO_DIR/tpu/jobman/ensure_orbax_ckpt.sh"
+  # Publish readiness only after both base and adapter checkpoints are ready.
+  printf '%s\n' "$generation" >"$HOME/.cache/tpuswarm/$marker_name-checkpoints"
+
+  if [ "$JOBMAN_WORKER_ID" != "0" ]; then
+    echo "rank $JOBMAN_WORKER_ID ready; rank 0 owns the trainer smoke"
+    exit 0
+  fi
+  key="$HOME/ray_bootstrap_key.pem"
+  test -f "$key"
+  mkdir -p "$HOME/.ssh"
+  chmod 700 "$HOME/.ssh"
+  chmod 600 "$key"
+  ln -sfn "$key" "$HOME/.ssh/jobman_tpu_ed25519"
+  IFS=, read -r -a node_ips <<<"$JOBMAN_TPU_INTERNAL_IPS"
+  ssh_opts=(-F /dev/null -i "$key" -o IdentitiesOnly=yes \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=20)
+  for ip in "${node_ips[@]}"; do
+    ready=0
+    for _attempt in $(seq 1 120); do
+      observed=$(ssh "${ssh_opts[@]}" "$REMOTE_USER@$ip" \
+        "cat \"\$HOME/.cache/tpuswarm/$marker_name-checkpoints\"" 2>/dev/null || true)
+      if [ "$observed" = "$generation" ]; then
+        ready=1
+        break
+      fi
+      sleep 5
+    done
+    if [ "$ready" != "1" ]; then
+      echo "bundle generation $generation did not become ready on $ip" >&2
+      exit 1
+    fi
+  done
+  exec bash "$SKYRL_REPO_DIR/tpu/jobman/v6e_tunix_smoke_worker.sh"

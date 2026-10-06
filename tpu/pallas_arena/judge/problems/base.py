@@ -230,7 +230,7 @@ def tolerance_from_reference(ref_fp32, ref_bf16) -> dict:
     }
 
 
-def grad_leaf_tolerances(ref_fp32, ref_bf16) -> list[dict]:
+def grad_leaf_tolerances(ref_fp32, *cal_grads) -> list[dict]:
     """PER-LEAF calibrated tolerances for a gradient pytree.
 
     One pooled band over all leaves lets the noisiest gradient set the bar for
@@ -238,11 +238,34 @@ def grad_leaf_tolerances(ref_fp32, ref_bf16) -> list[dict]:
     an order of magnitude above dv's (tokamax's own splash test encodes the
     same fact -- dq atol 1.5 vs dv 0.15), so under a pooled band a candidate
     with a WRONG dv but a quiet dq passes. Calibrating each leaf against its
-    own reference-bf16 error makes each gradient answer for itself."""
-    return [
-        tolerance_from_reference(r, b)
-        for r, b in zip(_leaves(ref_fp32), _leaves(ref_bf16))
-    ]
+    own honest error makes each gradient answer for itself.
+
+    Takes MULTIPLE calibration gradients and bands each leaf at the max across
+    them, because reference_bf16 alone is not enough -- the v5p validation run
+    (job 3719578) proved it: reference_bf16's gradient came out numerically
+    equal to the fp32 reference's, the band collapsed to the 1.5e-6 absolute
+    floor, and an HONEST blocked implementation's autodiff backward (error
+    2.6e-3, ordinary bf16 scale from a different reduction order in reverse
+    mode) was rejected. That is the exact phase-2 forward-calibration mistake
+    -- the band must span what honest implementations DO, so the honest
+    variants' gradients belong in it, just as their forwards belong in the
+    forward band."""
+    ref_leaves = _leaves(ref_fp32)
+    cal_leaf_sets = [_leaves(g) for g in cal_grads if g is not None]
+    tols = []
+    for i, r in enumerate(ref_leaves):
+        per_cal = []
+        for cal in cal_leaf_sets:
+            s = error_stats(cal[i], r)
+            if s.get("finite"):
+                per_cal.append(s)
+        mx = max((s["max"] for s in per_cal), default=0.0)
+        q99 = max((s["q99"] for s in per_cal), default=0.0)
+        tols.append({
+            "max": TOL_MULTIPLIER * max(mx, ABS_FLOOR),
+            "q99": TOL_MULTIPLIER * max(q99, ABS_FLOOR),
+        })
+    return tols
 
 
 def check_grad_tolerance(cand_g, ref_g, tols: list[dict]) -> tuple[bool, str]:
@@ -444,6 +467,31 @@ class Problem(abc.ABC):
         """
         return {"production": self.baseline}
 
+    def elected_candidates(self) -> dict:
+        """baseline_candidates(), filtered by the ARENA_BASELINE env knob.
+
+        ARENA_BASELINE=xla drops the tuned production kernel from the
+        denominator, leaving the naive/XLA implementations (splash: xla-*;
+        rg_lru: lax-associative-scan). Rationale (2026-09-02): against the
+        production kernel every candidate scores <= 1.0 and piles up below the
+        seed, so the reward has a VALIDITY gradient but no SPEED gradient --
+        nothing pulls a working kernel toward faster. Against XLA, which the
+        seed already beats, rewards spread ABOVE 1.0 and the slope keeps going.
+        Default 'all' preserves the historical fastest-of-all election, so
+        omitting the knob changes nothing.
+        """
+        import os
+        mode = os.environ.get("ARENA_BASELINE", "all").lower()
+        cands = self.baseline_candidates()
+        if mode == "xla":
+            kept = {k: v for k, v in cands.items()
+                    if k != "production" and not k.startswith("pallas")}
+            if kept:
+                return kept
+            # No non-production candidate for this task: fall back rather than
+            # score against an empty denominator.
+        return cands
+
     def baseline_available(self) -> tuple[bool, str]:
         try:
             import jax
@@ -458,6 +506,18 @@ class Problem(abc.ABC):
             return False, "no smoke case to probe with"
 
     # ------------------------------------------------------------- calibration
+    def grad_calibration_variants(self) -> list[Callable]:
+        """Implementations whose AUTODIFF backwards calibrate the gradient
+        band. Defaults to ``honest_variants()`` -- but the two bands answer
+        different questions, so a task may override: megablox's forward band
+        is correctly reference_bf16-only (a GMM is one fp32-accumulated
+        reduction; measured, job 3689440), while its BACKWARD accumulates
+        bf16-cast gradients over m rows across differently-compiled programs
+        and drifts at ~3e-3 (v5p run 3722139: an fp32 ragged_dot candidate's
+        own gradient failed a floor-collapsed 1.5e-6 band). Forward
+        calibration stays untouched; the backward gets an honest source."""
+        return self.honest_variants()
+
     def honest_variants(self) -> list[Callable]:
         """Legitimate alternative implementations spanning the honest
         precision/reduction space (different output dtypes, reduction
@@ -520,6 +580,14 @@ class Problem(abc.ABC):
         return []
 
     # ----------------------------------------------------------------- memory
+    def flops(self, case: ShapeCase) -> int | None:
+        """Analytic FLOP count for one case (compute-bound problems).
+
+        Powers the MXU-utilization line in the observation, the compute-side
+        twin of bytes_moved's speed-of-light fraction. None = not modelled.
+        """
+        return None
+
     def bytes_moved(self, case: ShapeCase) -> int | None:
         """Minimum HBM traffic for the op (speed-of-light denominator)."""
         return None

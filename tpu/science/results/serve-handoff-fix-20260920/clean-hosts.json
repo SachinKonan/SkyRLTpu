@@ -1,0 +1,618 @@
+[
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 0,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 1,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 2,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 3,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 4,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 5,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 6,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-662",
+    "rank": 7,
+    "exit": 255,
+    "stdout": "",
+    "stderr": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 69.9, \"free_inodes\": 12277599}, \"tmp\": {\"free_gib\": 69.9, \"free_inodes\": 12277599}}, \"mem_available_gib\": 326.6, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.3.239' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.4, \"free_inodes\": 12309257}, \"tmp\": {\"free_gib\": 72.4, \"free_inodes\": 12309257}}, \"mem_available_gib\": 342.32, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '108.59.88.118' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.23, \"free_inodes\": 12308889}, \"tmp\": {\"free_gib\": 72.23, \"free_inodes\": 12308889}}, \"mem_available_gib\": 342.4, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.109.7' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.4, \"free_inodes\": 12309236}, \"tmp\": {\"free_gib\": 72.4, \"free_inodes\": 12309236}}, \"mem_available_gib\": 342.37, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.23.194' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.47, \"free_inodes\": 12309278}, \"tmp\": {\"free_gib\": 72.47, \"free_inodes\": 12309278}}, \"mem_available_gib\": 342.39, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.31.178' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.47, \"free_inodes\": 12309297}, \"tmp\": {\"free_gib\": 72.47, \"free_inodes\": 12309297}}, \"mem_available_gib\": 342.38, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.66.36' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.77, \"free_inodes\": 12309162}, \"tmp\": {\"free_gib\": 71.77, \"free_inodes\": 12309162}}, \"mem_available_gib\": 342.11, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.69.17' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-678",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.41, \"free_inodes\": 12309219}, \"tmp\": {\"free_gib\": 72.41, \"free_inodes\": 12309219}}, \"mem_available_gib\": 342.32, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.80.147' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 68.76, \"free_inodes\": 12238170}, \"tmp\": {\"free_gib\": 68.76, \"free_inodes\": 12238170}}, \"mem_available_gib\": 325.41, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.108.26' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.84, \"free_inodes\": 12256481}, \"tmp\": {\"free_gib\": 70.84, \"free_inodes\": 12256481}}, \"mem_available_gib\": 340.96, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '107.167.175.18' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.92, \"free_inodes\": 12258358}, \"tmp\": {\"free_gib\": 70.92, \"free_inodes\": 12258358}}, \"mem_available_gib\": 341.03, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.0.103' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.86, \"free_inodes\": 12257088}, \"tmp\": {\"free_gib\": 70.86, \"free_inodes\": 12257088}}, \"mem_available_gib\": 341.02, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.100.123' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.85, \"free_inodes\": 12256498}, \"tmp\": {\"free_gib\": 70.85, \"free_inodes\": 12256498}}, \"mem_available_gib\": 340.97, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.118.180' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.85, \"free_inodes\": 12255585}, \"tmp\": {\"free_gib\": 70.85, \"free_inodes\": 12255585}}, \"mem_available_gib\": 340.95, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.120.47' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.9, \"free_inodes\": 12255382}, \"tmp\": {\"free_gib\": 70.9, \"free_inodes\": 12255382}}, \"mem_available_gib\": 340.89, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.124.51' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.66, \"free_inodes\": 12252983}, \"tmp\": {\"free_gib\": 70.66, \"free_inodes\": 12252983}}, \"mem_available_gib\": 340.82, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.186.76.5' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.43, \"free_inodes\": 12263161}, \"tmp\": {\"free_gib\": 70.43, \"free_inodes\": 12263161}}, \"mem_available_gib\": 629.82, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.115.225.61' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.37, \"free_inodes\": 12296855}, \"tmp\": {\"free_gib\": 72.37, \"free_inodes\": 12296855}}, \"mem_available_gib\": 642.77, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/0\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.112.244.78' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.71, \"free_inodes\": 12297026}, \"tmp\": {\"free_gib\": 72.71, \"free_inodes\": 12297026}}, \"mem_available_gib\": 642.75, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/2\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.65.218.123' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.52, \"free_inodes\": 12297004}, \"tmp\": {\"free_gib\": 72.52, \"free_inodes\": 12297004}}, \"mem_available_gib\": 642.72, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/0\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.132.202.41' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.7, \"free_inodes\": 12296842}, \"tmp\": {\"free_gib\": 72.7, \"free_inodes\": 12296842}}, \"mem_available_gib\": 642.68, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.27.83.187' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.66, \"free_inodes\": 12297010}, \"tmp\": {\"free_gib\": 72.66, \"free_inodes\": 12297010}}, \"mem_available_gib\": 642.75, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/3\", \"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.30.7.129' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.71, \"free_inodes\": 12297028}, \"tmp\": {\"free_gib\": 72.71, \"free_inodes\": 12297028}}, \"mem_available_gib\": 642.7, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/2\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.41.131.50' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-4",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.7, \"free_inodes\": 12297024}, \"tmp\": {\"free_gib\": 72.7, \"free_inodes\": 12297024}}, \"mem_available_gib\": 642.57, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.253.198.234' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.66, \"free_inodes\": 12269435}, \"tmp\": {\"free_gib\": 71.66, \"free_inodes\": 12269435}}, \"mem_available_gib\": 627.82, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/0\", \"/dev/vfio/3\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.253.73.120' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.5, \"free_inodes\": 12297653}, \"tmp\": {\"free_gib\": 72.5, \"free_inodes\": 12297653}}, \"mem_available_gib\": 640.34, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/0\", \"/dev/vfio/2\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.132.72.232' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.43, \"free_inodes\": 12297583}, \"tmp\": {\"free_gib\": 72.43, \"free_inodes\": 12297583}}, \"mem_available_gib\": 640.29, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.31.121.214' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.75, \"free_inodes\": 12297730}, \"tmp\": {\"free_gib\": 72.75, \"free_inodes\": 12297730}}, \"mem_available_gib\": 640.35, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.31.139.32' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.75, \"free_inodes\": 12297721}, \"tmp\": {\"free_gib\": 72.75, \"free_inodes\": 12297721}}, \"mem_available_gib\": 640.38, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.66.162.190' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.75, \"free_inodes\": 12297724}, \"tmp\": {\"free_gib\": 72.75, \"free_inodes\": 12297724}}, \"mem_available_gib\": 640.35, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.193.249.41' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.75, \"free_inodes\": 12297729}, \"tmp\": {\"free_gib\": 72.75, \"free_inodes\": 12297729}}, \"mem_available_gib\": 640.37, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.253.102.38' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-7",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.55, \"free_inodes\": 12297670}, \"tmp\": {\"free_gib\": 72.55, \"free_inodes\": 12297670}}, \"mem_available_gib\": 640.34, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.253.68.17' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.41, \"free_inodes\": 12269266}, \"tmp\": {\"free_gib\": 71.41, \"free_inodes\": 12269266}}, \"mem_available_gib\": 627.43, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.170.30.248' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.73, \"free_inodes\": 12297604}, \"tmp\": {\"free_gib\": 72.73, \"free_inodes\": 12297604}}, \"mem_available_gib\": 640.37, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/2\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.10.223.105' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.68, \"free_inodes\": 12297584}, \"tmp\": {\"free_gib\": 72.68, \"free_inodes\": 12297584}}, \"mem_available_gib\": 640.35, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.136.169.108' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.13, \"free_inodes\": 12297560}, \"tmp\": {\"free_gib\": 72.13, \"free_inodes\": 12297560}}, \"mem_available_gib\": 640.31, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.44.253.95' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.63, \"free_inodes\": 12297606}, \"tmp\": {\"free_gib\": 72.63, \"free_inodes\": 12297606}}, \"mem_available_gib\": 640.31, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/0\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.59.154.128' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.63, \"free_inodes\": 12297598}, \"tmp\": {\"free_gib\": 72.63, \"free_inodes\": 12297598}}, \"mem_available_gib\": 640.38, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.67.240.178' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.73, \"free_inodes\": 12297616}, \"tmp\": {\"free_gib\": 72.73, \"free_inodes\": 12297616}}, \"mem_available_gib\": 640.35, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/1\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.239.103.43' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-central1b-8",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.32, \"free_inodes\": 12297587}, \"tmp\": {\"free_gib\": 72.32, \"free_inodes\": 12297587}}, \"mem_available_gib\": 640.36, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/2\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '35.253.14.149' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 66.46, \"free_inodes\": 12194604}, \"tmp\": {\"free_gib\": 66.46, \"free_inodes\": 12194604}}, \"mem_available_gib\": 627.57, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.19.183' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 77.67, \"free_inodes\": 12264738}, \"tmp\": {\"free_gib\": 77.67, \"free_inodes\": 12264738}}, \"mem_available_gib\": 700.05, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.4.71' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.48, \"free_inodes\": 12226321}, \"tmp\": {\"free_gib\": 70.48, \"free_inodes\": 12226321}}, \"mem_available_gib\": 640.51, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/0\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.59.200' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.26, \"free_inodes\": 12226419}, \"tmp\": {\"free_gib\": 70.26, \"free_inodes\": 12226419}}, \"mem_available_gib\": 640.44, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.100.124' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.32, \"free_inodes\": 12226468}, \"tmp\": {\"free_gib\": 70.32, \"free_inodes\": 12226468}}, \"mem_available_gib\": 640.54, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/2\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.139.247' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.08, \"free_inodes\": 12226245}, \"tmp\": {\"free_gib\": 70.08, \"free_inodes\": 12226245}}, \"mem_available_gib\": 640.44, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.226.76' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 69.89, \"free_inodes\": 12226414}, \"tmp\": {\"free_gib\": 69.89, \"free_inodes\": 12226414}}, \"mem_available_gib\": 640.48, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.254.148' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5217",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.49, \"free_inodes\": 12226471}, \"tmp\": {\"free_gib\": 70.49, \"free_inodes\": 12226471}}, \"mem_available_gib\": 640.56, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.186.237.86' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.19, \"free_inodes\": 12264944}, \"tmp\": {\"free_gib\": 71.19, \"free_inodes\": 12264944}}, \"mem_available_gib\": 630.15, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/1\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.51.203' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.62, \"free_inodes\": 12297284}, \"tmp\": {\"free_gib\": 72.62, \"free_inodes\": 12297284}}, \"mem_available_gib\": 642.68, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.49.67' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.8, \"free_inodes\": 12297297}, \"tmp\": {\"free_gib\": 72.8, \"free_inodes\": 12297297}}, \"mem_available_gib\": 642.68, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.144.186.171' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.81, \"free_inodes\": 12297333}, \"tmp\": {\"free_gib\": 72.81, \"free_inodes\": 12297333}}, \"mem_available_gib\": 642.77, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/0\", \"/dev/vfio/1\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.152.125.106' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.62, \"free_inodes\": 12297298}, \"tmp\": {\"free_gib\": 72.62, \"free_inodes\": 12297298}}, \"mem_available_gib\": 642.71, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.153.21.119' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.8, \"free_inodes\": 12297328}, \"tmp\": {\"free_gib\": 72.8, \"free_inodes\": 12297328}}, \"mem_available_gib\": 642.73, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.155.55' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.81, \"free_inodes\": 12297328}, \"tmp\": {\"free_gib\": 72.81, \"free_inodes\": 12297328}}, \"mem_available_gib\": 642.75, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/2\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.177.112' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5229",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.58, \"free_inodes\": 12297126}, \"tmp\": {\"free_gib\": 72.58, \"free_inodes\": 12297126}}, \"mem_available_gib\": 642.73, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/0\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '8.234.44.64' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 69.39, \"free_inodes\": 12266654}, \"tmp\": {\"free_gib\": 69.39, \"free_inodes\": 12266654}}, \"mem_available_gib\": 634.73, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/0\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '8.234.54.245' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 79.82, \"free_inodes\": 12345792}, \"tmp\": {\"free_gib\": 79.82, \"free_inodes\": 12345792}}, \"mem_available_gib\": 700.21, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.28.79' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.51, \"free_inodes\": 12297477}, \"tmp\": {\"free_gib\": 72.51, \"free_inodes\": 12297477}}, \"mem_available_gib\": 647.51, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.30.95' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.51, \"free_inodes\": 12297473}, \"tmp\": {\"free_gib\": 72.51, \"free_inodes\": 12297473}}, \"mem_available_gib\": 647.48, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.5.41' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.51, \"free_inodes\": 12297474}, \"tmp\": {\"free_gib\": 72.51, \"free_inodes\": 12297474}}, \"mem_available_gib\": 647.48, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.63.121' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.51, \"free_inodes\": 12297487}, \"tmp\": {\"free_gib\": 72.51, \"free_inodes\": 12297487}}, \"mem_available_gib\": 647.47, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.233.178' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.5, \"free_inodes\": 12297465}, \"tmp\": {\"free_gib\": 72.5, \"free_inodes\": 12297465}}, \"mem_available_gib\": 647.46, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/3\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.27.215' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5236",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 72.45, \"free_inodes\": 12297444}, \"tmp\": {\"free_gib\": 72.45, \"free_inodes\": 12297444}}, \"mem_available_gib\": 647.45, \"devices\": [\"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/2\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '8.234.57.2' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 69.22, \"free_inodes\": 12241813}, \"tmp\": {\"free_gib\": 69.22, \"free_inodes\": 12241813}}, \"mem_available_gib\": 634.96, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.251.141' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.24, \"free_inodes\": 12267722}, \"tmp\": {\"free_gib\": 70.24, \"free_inodes\": 12267722}}, \"mem_available_gib\": 647.51, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.17.53' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.24, \"free_inodes\": 12267740}, \"tmp\": {\"free_gib\": 70.24, \"free_inodes\": 12267740}}, \"mem_available_gib\": 647.53, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.33.152' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.19, \"free_inodes\": 12267679}, \"tmp\": {\"free_gib\": 70.19, \"free_inodes\": 12267679}}, \"mem_available_gib\": 647.53, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.57.181' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.24, \"free_inodes\": 12267682}, \"tmp\": {\"free_gib\": 70.24, \"free_inodes\": 12267682}}, \"mem_available_gib\": 647.42, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/0\", \"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.127.163.98' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.05, \"free_inodes\": 12267709}, \"tmp\": {\"free_gib\": 70.05, \"free_inodes\": 12267709}}, \"mem_available_gib\": 647.52, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/3\", \"/dev/vfio/1\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.202.78' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.24, \"free_inodes\": 12267746}, \"tmp\": {\"free_gib\": 70.24, \"free_inodes\": 12267746}}, \"mem_available_gib\": 647.47, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.228.154' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5242",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 70.24, \"free_inodes\": 12267727}, \"tmp\": {\"free_gib\": 70.24, \"free_inodes\": 12267727}}, \"mem_available_gib\": 647.47, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/2\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '8.234.54.49' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 0,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.51, \"free_inodes\": 12451231}, \"tmp\": {\"free_gib\": 85.51, \"free_inodes\": 12451231}}, \"mem_available_gib\": 688.89, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/3\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '8.234.47.182' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 1,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.48, \"free_inodes\": 12452081}, \"tmp\": {\"free_gib\": 85.48, \"free_inodes\": 12452081}}, \"mem_available_gib\": 700.48, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/3\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '136.83.24.251' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 2,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.28, \"free_inodes\": 12451958}, \"tmp\": {\"free_gib\": 85.28, \"free_inodes\": 12451958}}, \"mem_available_gib\": 700.41, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/devices\", \"/dev/vfio/0\", \"/dev/vfio/3\", \"/dev/vfio/1\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.144.176.213' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 3,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.16, \"free_inodes\": 12451932}, \"tmp\": {\"free_gib\": 85.16, \"free_inodes\": 12451932}}, \"mem_available_gib\": 700.45, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/3\", \"/dev/vfio/1\", \"/dev/vfio/devices\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.144.186.187' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 4,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.53, \"free_inodes\": 12452099}, \"tmp\": {\"free_gib\": 85.53, \"free_inodes\": 12452099}}, \"mem_available_gib\": 700.45, \"devices\": [\"/dev/vfio/0\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.237.226' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 5,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.09, \"free_inodes\": 12451928}, \"tmp\": {\"free_gib\": 85.09, \"free_inodes\": 12451928}}, \"mem_available_gib\": 700.43, \"devices\": [\"/dev/vfio/2\", \"/dev/vfio/3\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/0\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.162.90.134' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 6,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.33, \"free_inodes\": 12452036}, \"tmp\": {\"free_gib\": 85.33, \"free_inodes\": 12452036}}, \"mem_available_gib\": 700.45, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/1\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '34.186.237.83' (ED25519) to the list of known hosts.\n"
+  },
+  {
+    "cluster": "tpuswarm-v6e32-east5b-qwen35-5249",
+    "rank": 7,
+    "exit": 0,
+    "stdout": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 85.31, \"free_inodes\": 12452080}, \"tmp\": {\"free_gib\": 85.31, \"free_inodes\": 12452080}}, \"mem_available_gib\": 700.44, \"devices\": [\"/dev/vfio/3\", \"/dev/vfio/1\", \"/dev/vfio/0\", \"/dev/vfio/devices\", \"/dev/vfio/2\"], \"owners\": [], \"stray_workloads\": []}\n",
+    "stderr": "Warning: Permanently added '8.234.34.214' (ED25519) to the list of known hosts.\n"
+  }
+]

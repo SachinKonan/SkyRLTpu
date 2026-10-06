@@ -1,0 +1,32 @@
+[
+  {
+    "model": "qwen",
+    "bootstrap_job": 1049,
+    "pid": 128785,
+    "plan": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/science-grpo-pwc-20260918/handoffs/qwen/plan.json",
+    "targets": [
+      "science-circuit-v4-qwen-grpo-20260918",
+      "science-circuit-v4-qwen-pwc-20260918"
+    ]
+  },
+  {
+    "model": "gemma",
+    "bootstrap_job": 1052,
+    "pid": 136544,
+    "plan": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/science-grpo-pwc-20260918/handoffs/gemma/plan.json",
+    "targets": [
+      "science-circuit-v4-gemma-grpo-20260918",
+      "science-circuit-v4-gemma-pwc-20260918"
+    ]
+  },
+  {
+    "model": "muse",
+    "bootstrap_job": 1055,
+    "pid": 142971,
+    "plan": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/science-grpo-pwc-20260918/handoffs/muse/plan.json",
+    "targets": [
+      "science-circuit-v4-muse-grpo-20260918",
+      "science-circuit-v4-muse-pwc-20260918"
+    ]
+  }
+]

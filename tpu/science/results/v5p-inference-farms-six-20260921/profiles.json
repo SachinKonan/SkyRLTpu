@@ -1,0 +1,8 @@
+[
+  "tpu/swarm/ray_train/profiles/inference-farm-v5p32-muse-1-20260921.json",
+  "tpu/swarm/ray_train/profiles/inference-farm-v5p32-muse-2-20260921.json",
+  "tpu/swarm/ray_train/profiles/inference-farm-v5p32-gemma-1-20260921.json",
+  "tpu/swarm/ray_train/profiles/inference-farm-v5p32-gemma-2-20260921.json",
+  "tpu/swarm/ray_train/profiles/inference-farm-v5p32-qwen-1-20260921.json",
+  "tpu/swarm/ray_train/profiles/inference-farm-v5p32-qwen-2-20260921.json"
+]

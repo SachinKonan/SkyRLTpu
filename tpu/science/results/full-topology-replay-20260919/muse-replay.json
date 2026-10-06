@@ -1,0 +1,394 @@
+{
+  "reward": 0.5231871495871643,
+  "correctness": 1.0,
+  "raw_score": 0.5231871495871643,
+  "msg": "Valid",
+  "result_construction": null,
+  "stdout": "",
+  "metrics": {
+    "weighted_baseline_cnots": 119874.00000000001,
+    "weighted_candidate_cnots": 109248.59999999999,
+    "added_cnots": 298431.0,
+    "swaps": 99477.0,
+    "improvement": 0.08863806997347234,
+    "cases": [
+      {
+        "case": "4gt13_92_q20",
+        "swaps": 3,
+        "added_cnots": 9
+      },
+      {
+        "case": "4gt13_92_willow",
+        "swaps": 12,
+        "added_cnots": 36
+      },
+      {
+        "case": "4gt13_92_heron_fez",
+        "swaps": 16,
+        "added_cnots": 48
+      },
+      {
+        "case": "4mod5-v1_22_q20",
+        "swaps": 1,
+        "added_cnots": 3
+      },
+      {
+        "case": "4mod5-v1_22_willow",
+        "swaps": 4,
+        "added_cnots": 12
+      },
+      {
+        "case": "4mod5-v1_22_heron_fez",
+        "swaps": 4,
+        "added_cnots": 12
+      },
+      {
+        "case": "9symml_195_q20",
+        "swaps": 4173,
+        "added_cnots": 12519
+      },
+      {
+        "case": "9symml_195_willow",
+        "swaps": 8615,
+        "added_cnots": 25845
+      },
+      {
+        "case": "9symml_195_heron_fez",
+        "swaps": 10711,
+        "added_cnots": 32133
+      },
+      {
+        "case": "adr4_197_q20",
+        "swaps": 379,
+        "added_cnots": 1137
+      },
+      {
+        "case": "adr4_197_willow",
+        "swaps": 855,
+        "added_cnots": 2565
+      },
+      {
+        "case": "adr4_197_heron_fez",
+        "swaps": 1085,
+        "added_cnots": 3255
+      },
+      {
+        "case": "alu-v0_27_q20",
+        "swaps": 4,
+        "added_cnots": 12
+      },
+      {
+        "case": "alu-v0_27_willow",
+        "swaps": 7,
+        "added_cnots": 21
+      },
+      {
+        "case": "alu-v0_27_heron_fez",
+        "swaps": 8,
+        "added_cnots": 24
+      },
+      {
+        "case": "co14_215_q20",
+        "swaps": 2128,
+        "added_cnots": 6384
+      },
+      {
+        "case": "co14_215_willow",
+        "swaps": 4504,
+        "added_cnots": 13512
+      },
+      {
+        "case": "co14_215_heron_fez",
+        "swaps": 5240,
+        "added_cnots": 15720
+      },
+      {
+        "case": "cycle10_2_110_q20",
+        "swaps": 614,
+        "added_cnots": 1842
+      },
+      {
+        "case": "cycle10_2_110_willow",
+        "swaps": 1491,
+        "added_cnots": 4473
+      },
+      {
+        "case": "cycle10_2_110_heron_fez",
+        "swaps": 1735,
+        "added_cnots": 5205
+      },
+      {
+        "case": "decod24-v2_43_q20",
+        "swaps": 0,
+        "added_cnots": 0
+      },
+      {
+        "case": "decod24-v2_43_willow",
+        "swaps": 13,
+        "added_cnots": 39
+      },
+      {
+        "case": "decod24-v2_43_heron_fez",
+        "swaps": 11,
+        "added_cnots": 33
+      },
+      {
+        "case": "ising_model_10_q20",
+        "swaps": 3,
+        "added_cnots": 9
+      },
+      {
+        "case": "ising_model_10_willow",
+        "swaps": 17,
+        "added_cnots": 51
+      },
+      {
+        "case": "ising_model_10_heron_fez",
+        "swaps": 25,
+        "added_cnots": 75
+      },
+      {
+        "case": "ising_model_13_q20",
+        "swaps": 8,
+        "added_cnots": 24
+      },
+      {
+        "case": "ising_model_13_willow",
+        "swaps": 16,
+        "added_cnots": 48
+      },
+      {
+        "case": "ising_model_13_heron_fez",
+        "swaps": 52,
+        "added_cnots": 156
+      },
+      {
+        "case": "ising_model_16_q20",
+        "swaps": 10,
+        "added_cnots": 30
+      },
+      {
+        "case": "ising_model_16_willow",
+        "swaps": 23,
+        "added_cnots": 69
+      },
+      {
+        "case": "ising_model_16_heron_fez",
+        "swaps": 37,
+        "added_cnots": 111
+      },
+      {
+        "case": "misex1_241_q20",
+        "swaps": 369,
+        "added_cnots": 1107
+      },
+      {
+        "case": "misex1_241_willow",
+        "swaps": 1148,
+        "added_cnots": 3444
+      },
+      {
+        "case": "misex1_241_heron_fez",
+        "swaps": 1380,
+        "added_cnots": 4140
+      },
+      {
+        "case": "mod5mils_65_q20",
+        "swaps": 1,
+        "added_cnots": 3
+      },
+      {
+        "case": "mod5mils_65_willow",
+        "swaps": 7,
+        "added_cnots": 21
+      },
+      {
+        "case": "mod5mils_65_heron_fez",
+        "swaps": 12,
+        "added_cnots": 36
+      },
+      {
+        "case": "qft_10_q20",
+        "swaps": 16,
+        "added_cnots": 48
+      },
+      {
+        "case": "qft_10_willow",
+        "swaps": 25,
+        "added_cnots": 75
+      },
+      {
+        "case": "qft_10_heron_fez",
+        "swaps": 56,
+        "added_cnots": 168
+      },
+      {
+        "case": "qft_16_q20",
+        "swaps": 55,
+        "added_cnots": 165
+      },
+      {
+        "case": "qft_16_willow",
+        "swaps": 93,
+        "added_cnots": 279
+      },
+      {
+        "case": "qft_16_heron_fez",
+        "swaps": 161,
+        "added_cnots": 483
+      },
+      {
+        "case": "radd_250_q20",
+        "swaps": 402,
+        "added_cnots": 1206
+      },
+      {
+        "case": "radd_250_willow",
+        "swaps": 795,
+        "added_cnots": 2385
+      },
+      {
+        "case": "radd_250_heron_fez",
+        "swaps": 957,
+        "added_cnots": 2871
+      },
+      {
+        "case": "rd73_252_q20",
+        "swaps": 533,
+        "added_cnots": 1599
+      },
+      {
+        "case": "rd73_252_willow",
+        "swaps": 1283,
+        "added_cnots": 3849
+      },
+      {
+        "case": "rd73_252_heron_fez",
+        "swaps": 1600,
+        "added_cnots": 4800
+      },
+      {
+        "case": "rd84_142_q20",
+        "swaps": 43,
+        "added_cnots": 129
+      },
+      {
+        "case": "rd84_142_willow",
+        "swaps": 93,
+        "added_cnots": 279
+      },
+      {
+        "case": "rd84_142_heron_fez",
+        "swaps": 134,
+        "added_cnots": 402
+      },
+      {
+        "case": "rd84_253_q20",
+        "swaps": 1630,
+        "added_cnots": 4890
+      },
+      {
+        "case": "rd84_253_willow",
+        "swaps": 3428,
+        "added_cnots": 10284
+      },
+      {
+        "case": "rd84_253_heron_fez",
+        "swaps": 4288,
+        "added_cnots": 12864
+      },
+      {
+        "case": "sqn_258_q20",
+        "swaps": 1100,
+        "added_cnots": 3300
+      },
+      {
+        "case": "sqn_258_willow",
+        "swaps": 2490,
+        "added_cnots": 7470
+      },
+      {
+        "case": "sqn_258_heron_fez",
+        "swaps": 3078,
+        "added_cnots": 9234
+      },
+      {
+        "case": "square_root_7_q20",
+        "swaps": 601,
+        "added_cnots": 1803
+      },
+      {
+        "case": "square_root_7_willow",
+        "swaps": 1811,
+        "added_cnots": 5433
+      },
+      {
+        "case": "square_root_7_heron_fez",
+        "swaps": 2305,
+        "added_cnots": 6915
+      },
+      {
+        "case": "sym6_145_q20",
+        "swaps": 306,
+        "added_cnots": 918
+      },
+      {
+        "case": "sym6_145_willow",
+        "swaps": 910,
+        "added_cnots": 2730
+      },
+      {
+        "case": "sym6_145_heron_fez",
+        "swaps": 1062,
+        "added_cnots": 3186
+      },
+      {
+        "case": "sym9_193_q20",
+        "swaps": 4173,
+        "added_cnots": 12519
+      },
+      {
+        "case": "sym9_193_willow",
+        "swaps": 8615,
+        "added_cnots": 25845
+      },
+      {
+        "case": "sym9_193_heron_fez",
+        "swaps": 10711,
+        "added_cnots": 32133
+      },
+      {
+        "case": "z4_268_q20",
+        "swaps": 321,
+        "added_cnots": 963
+      },
+      {
+        "case": "z4_268_willow",
+        "swaps": 756,
+        "added_cnots": 2268
+      },
+      {
+        "case": "z4_268_heron_fez",
+        "swaps": 925,
+        "added_cnots": 2775
+      }
+    ],
+    "case_count": 72,
+    "routing_suite": "full",
+    "build_seconds": 5.145691985000667,
+    "solve_seconds": 477.7895161409997,
+    "verify_seconds": 762.6986813029998,
+    "total_seconds": 1245.6985811860004,
+    "seed": 42,
+    "layout_trials": 20,
+    "routing_trials": 20,
+    "hardware": "cpu",
+    "cpus": 4,
+    "memory_gib": 8,
+    "source_sha256": "56156921b43edb6f5e6bd8442e3ca429452cd247726e2482acea3a489b94c5e8",
+    "allocation_memory": {
+      "memory_current_mib": 597.109375,
+      "memory_peak_mib": 827.5546875
+    }
+  }
+}

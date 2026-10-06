@@ -1,0 +1,47 @@
+[
+  {
+    "model": "gemma",
+    "swaps": {
+      "Q20": 14922,
+      "Willow": 32325,
+      "Heron": 43309
+    },
+    "total_swaps": 90556,
+    "reward": 0.5459041477676376,
+    "recorded_reward": 0.5445367798767509,
+    "recorded_total_swaps": 91205.0,
+    "valid_cases": 72,
+    "total_seconds": 1220.3904145739998,
+    "source_sha256": "49c84cefea2bcfb362394765c9e45c4ea2edf90eafc33e9158470e094daab703"
+  },
+  {
+    "model": "qwen",
+    "swaps": {
+      "Q20": 15257,
+      "Willow": 32718,
+      "Heron": 44268
+    },
+    "total_swaps": 92243,
+    "reward": 0.5414084369639504,
+    "recorded_reward": 0.5414084369639504,
+    "recorded_total_swaps": 92243.0,
+    "valid_cases": 72,
+    "total_seconds": 1394.9082736169994,
+    "source_sha256": "ab7df3690a2406a0942f500e16c3dd18f010e461eb3363865c36e395a1b0a8c4"
+  },
+  {
+    "model": "muse",
+    "swaps": {
+      "Q20": 16873,
+      "Willow": 37011,
+      "Heron": 45593
+    },
+    "total_swaps": 99477,
+    "reward": 0.5231871495871643,
+    "recorded_reward": 0.5231871495871643,
+    "recorded_total_swaps": 99477.0,
+    "valid_cases": 72,
+    "total_seconds": 1245.6985811860004,
+    "source_sha256": "56156921b43edb6f5e6bd8442e3ca429452cd247726e2482acea3a489b94c5e8"
+  }
+]

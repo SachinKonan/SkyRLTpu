@@ -1,0 +1,65 @@
+[
+  {
+    "run_id": "next-v6e-gemma-qubit-10step-20260921",
+    "pool": "tpuswarm-v6e32-central1b",
+    "priority": 100,
+    "epochs": 10,
+    "state": "submitted",
+    "time": 1789965363.3579228,
+    "uploads": [
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-1e5227b903f673c4a689eb110047a94dcedb3da1a55dff0dc5ee12442d18fa23.tar.gz",
+        "generation": 1789965361940790,
+        "sha256": "1e5227b903f673c4a689eb110047a94dcedb3da1a55dff0dc5ee12442d18fa23"
+      },
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/ray-training/next-v6e-gemma-qubit-10step-20260921/client/tinker_log/next-v6e-gemma-qubit-10step-20260921/puct_sampler_step_000000.json",
+        "generation": 1789965362877425,
+        "sha256": "ea7f747dfecad25519bc70b085a427571de5f976854fa31aa0e5a63966ae244d"
+      }
+    ],
+    "job_id": 1359
+  },
+  {
+    "run_id": "next-v6e-qwen-qubit-10step-20260921",
+    "pool": "tpuswarm-v6e32-central1b",
+    "priority": 100,
+    "epochs": 10,
+    "state": "submitted",
+    "time": 1789965373.2106647,
+    "uploads": [
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-4d0895c86ee1f940233f64632cfb2ddfca91c695ce4ea024c954bca0e72af8c9.tar.gz",
+        "generation": 1789965371855157,
+        "sha256": "4d0895c86ee1f940233f64632cfb2ddfca91c695ce4ea024c954bca0e72af8c9"
+      },
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/ray-training/next-v6e-qwen-qubit-10step-20260921/client/tinker_log/next-v6e-qwen-qubit-10step-20260921/puct_sampler_step_000000.json",
+        "generation": 1789965372791659,
+        "sha256": "bb6dfbb1d1ba7f50944e75cb2a5fdaf749931c06e95ae74e80d26e89c0fa60d5"
+      }
+    ],
+    "job_id": 1360
+  },
+  {
+    "run_id": "next-v6e-muse-qubit-10step-20260921",
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "priority": 100,
+    "epochs": 10,
+    "state": "submitted",
+    "time": 1789965382.8861003,
+    "uploads": [
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-74d9724c20c515852d4977343ba912435d1dc724ea296ede588c35019134fad3.tar.gz",
+        "generation": 1789965381577564,
+        "sha256": "74d9724c20c515852d4977343ba912435d1dc724ea296ede588c35019134fad3"
+      },
+      {
+        "uri": "gs://sk7524-tinker-tpu-us-central1/ray-training/next-v6e-muse-qubit-10step-20260921/client/tinker_log/next-v6e-muse-qubit-10step-20260921/puct_sampler_step_000000.json",
+        "generation": 1789965382459922,
+        "sha256": "bb8489682a6a7b764c113a92b1ade1d0ee95d947406baf8bbd2bf14f5e73f628"
+      }
+    ],
+    "job_id": 1361
+  }
+]

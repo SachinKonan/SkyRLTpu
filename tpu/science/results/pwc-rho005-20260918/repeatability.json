@@ -1,0 +1,171 @@
+{
+  "scope": "Local fixed-layout objective repeatability, not end-to-end candidate or cross-host repeatability",
+  "date": "2026-09-18",
+  "threads": 4,
+  "grader": "Pinned macro_place.objective.compute_proxy_cost; float32 positions; fresh benchmark/PlacementCost objects per repeat",
+  "records": [
+    {
+      "case": "ibm01",
+      "method": "xplace",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm01",
+      "method": "abuplace",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 0.7762379050254822,
+        "wirelength_cost": 0.07166572660207748,
+        "density_cost": 0.5015891194343567,
+        "congestion_cost": 0.9075552093358524
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm01",
+      "method": "archgen",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 0.7665479183197021,
+        "wirelength_cost": 0.07370573282241821,
+        "density_cost": 0.5027498006820679,
+        "congestion_cost": 0.8829345842098472
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm04",
+      "method": "xplace",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm04",
+      "method": "abuplace",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 0.9339389801025391,
+        "wirelength_cost": 0.08254335075616837,
+        "density_cost": 0.5115166902542114,
+        "congestion_cost": 1.191274643943604
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm04",
+      "method": "archgen",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 0.8923729658126831,
+        "wirelength_cost": 0.08399862051010132,
+        "density_cost": 0.5072536468505859,
+        "congestion_cost": 1.1094949991478624
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm08",
+      "method": "xplace",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm08",
+      "method": "abuplace",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 1.0909876823425293,
+        "wirelength_cost": 0.08700937032699585,
+        "density_cost": 0.5105376243591309,
+        "congestion_cost": 1.4974188443792442
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    },
+    {
+      "case": "ibm08",
+      "method": "archgen",
+      "repeats": 3,
+      "components": {
+        "proxy_cost": 1.006013035774231,
+        "wirelength_cost": 0.0843053013086319,
+        "density_cost": 0.5205994248390198,
+        "congestion_cost": 1.3228160544032983
+      },
+      "component_spread": {
+        "proxy_cost": 0,
+        "wirelength_cost": 0,
+        "density_cost": 0,
+        "congestion_cost": 0
+      },
+      "reward_spread": 0
+    }
+  ],
+  "tie_tolerance_enabled": false
+}

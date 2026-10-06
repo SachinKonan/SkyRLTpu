@@ -19,6 +19,37 @@ SPEED_OF_LIGHT_BYTES_PER_S = {
     "v5p": 2.8e12,
 }
 
+# Peak bf16 MXU throughput per CHIP (the unit our judges time on: one chip,
+# no TP). Compute-bound tasks report achieved FLOP/s as a fraction of this --
+# the tensorcore-side twin of speed_of_light_fraction.
+PEAK_BF16_FLOPS = {
+    "v6e": 918e12,
+    "v5p": 459e12,
+}
+
+
+def chip_from_device_kind(device_kind: str, fallback: str = "") -> str:
+    """Map JAX's ``device.device_kind`` onto our peak-table keys.
+
+    JAX does NOT report the marketing name: a v6e chip calls itself
+    ``'TPU v6 lite'``, so the obvious ``'v6e' in kind`` test never matched and
+    every roofline number silently vanished -- ``PEAK_BF16_FLOPS.get(<miss>)``
+    is None, ``mxu_utilization`` returns None, and the observation simply
+    omitted the lines (measured 2026-08-27: splash graded 6 cases on v6e-8
+    with empty ``mxu_fracs`` despite valid FLOP counts). Match the real
+    strings, and keep the fallback for anything unrecognized.
+    """
+    k = (device_kind or "").lower()
+    if "v6" in k:                      # 'TPU v6 lite' == v6e
+        return "v6e"
+    if "v5p" in k or "v5 p" in k:
+        return "v5p"
+    if "v5" in k:                      # 'TPU v5 lite' == v5e
+        return "v5e"
+    if "v4" in k:
+        return "v4"
+    return fallback
+
 
 def geomean(xs: list[float]) -> float:
     if not xs:
@@ -103,7 +134,19 @@ def amortized_call(fn, args, repeats: int):
 
 
 def device_timer(fn, args):
-    """Device-time one call of ``fn(*args)`` in milliseconds, or None.
+    """Device-time one call of ``fn(*args)`` in SECONDS, or None.
+
+    SECONDS is load-bearing. This value lands in ``CaseTiming.pairs``
+    alongside wallclock (`perf_counter`) pairs -- the timer can fall back
+    per iteration -- and every consumer reads those as seconds:
+    ``ref_median_s``/``cand_median_s``, the roofline
+    (``speed_of_light_fraction``, ``mxu_utilization``) and the observation
+    the model reads. Returning milliseconds here (as this did until
+    2026-08-27) left rewards correct -- ``interleaved_score`` is a median of
+    per-pair ratios, so a per-pair unit cancels -- while silently scaling
+    every reported latency and roofline number by 1000x: the splash seed's
+    feedback claimed "ref 1005.000ms" for a kernel the boot election had
+    just timed at 1.16 ms, and MXU utilization printed as 0%.
 
     Copies tokamax's TPU default (`hermetic_xprof`): profile the call and take
     the DISJOINT INTERVAL UNION of XLA op intervals -- total active device
@@ -136,7 +179,7 @@ def device_timer(fn, args):
         jax.block_until_ready(fn(*args))  # warm; never timed
         with XprofProfileSession(hermetic=True, use_jax_profiler=True) as prof:
             jax.block_until_ready(fn(*args))
-        return prof.total_op_time / datetime.timedelta(milliseconds=1)
+        return prof.total_op_time / datetime.timedelta(seconds=1)
     except Exception:  # noqa: BLE001 -- profiling must never fail a grade
         return None
 
@@ -297,6 +340,21 @@ def speed_of_light_fraction(bytes_moved: int, latency_s: float, chip: str) -> fl
     return (bytes_moved / latency_s) / bw
 
 
+def mxu_utilization(flops: int, latency_s: float, chip: str) -> float | None:
+    """Fraction of peak bf16 MXU throughput achieved (compute-bound tasks).
+
+    The compute-side counterpart of speed_of_light_fraction: together they
+    tell a candidate WHICH resource it is actually against -- a kernel at 12%
+    of both is latency/pipelining bound, not bandwidth bound, and the fix is
+    different. Analytic FLOP counts (problem.flops), not hardware counters:
+    no profiler, no extra device work, exact for these kernels.
+    """
+    peak = PEAK_BF16_FLOPS.get(chip)
+    if peak is None or latency_s <= 0 or not flops:
+        return None
+    return (flops / latency_s) / peak
+
+
 @dataclass
 class CaseTiming:
     """Timing result for one shape case."""
@@ -348,9 +406,19 @@ def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general:
     pool = [t for t in case_timings if not t.blind]
     declared = [t for t in pool if not t.holdout]
     holdout = [t for t in pool if t.holdout]
-    if not declared:
-        raise ValueError("no declared (non-holdout, non-blind) case timings")
+    # GUARD THE SCORED SET, NOT THE DECLARED ONE. In general mode holdouts
+    # ARE scored, so a holdout-only timing set is perfectly scoreable -- and
+    # under per-test dispatch that is the normal shape of a grade, because
+    # each task grades exactly ONE case. Demanding a declared case made every
+    # holdout task raise deterministically (both arena problems, every run
+    # since per-test dispatch landed); the deaths were read as a TPU fault
+    # for two days because the exception was truncated out of the verdict.
     scored = pool if general else declared
+    if not scored:
+        raise ValueError(
+            f"no scoreable case timings (general={general}, declared={len(declared)}, "
+            f"holdout={len(holdout)}, blind={len(blind)})"
+        )
     score = geomean([t.score for t in scored])
     return {
         "score": score,
@@ -367,3 +435,51 @@ def final_reward(case_timings: list[CaseTiming], noise_floor: float, *, general:
         "blind_score": geomean([t.score for t in blind]) if blind else None,
         "blind_per_case": {t.case: t.score for t in blind},
     }
+
+
+# The BACKWARD-FOLDED total: the training scalar for RL on has_bwd tasks.
+#
+# The backward is SWEPT across the same shapes as the forward (tokamax:
+# every arg_spec registers a forward AND a forward_and_vjp benchmark) and
+# joins the geomean with ONE FACTOR PER SHAPE -- one number, one domain,
+# TriMul's one-scalar discipline, but with fwd:bwd aggregate log-weight
+# ~1:1. That weight is deliberate: these kernels are upstream-bound for
+# TRAINING, where the backward is the more expensive half of the step; the
+# old single grad factor gave it 1/(n+1) weight as an artifact of how many
+# shapes the forward happened to sweep.
+#
+# Each missing/wrong grad factor takes an ABSENCE FLOOR instead of 0: a
+# literal zero in a geomean zeroes the total, which silently re-creates the
+# hard gradient gate that flattened 8/8 splash winners (flat reward = no RL
+# signal). max(noise_floor, 0.05) preserves the ordering that matters --
+# no backward (~40-60% haircut under the full sweep) < slow-but-correct
+# backward < fast backward -- without a cliff.
+GRAD_ABSENT_FLOOR = 0.05
+
+
+def fold_grad_reward(reward_frame: dict, grad_scores: list[float | None],
+                     noise_floor: float, n_scored: int) -> float:
+    """Fold the swept backward into the forward geomean.
+
+    ``grad_scores`` carries one entry per swept backward shape: a measured
+    baseline/candidate ratio, or None where the backward is absent or wrong
+    (floored). An EMPTY list means the judge could not time any backward
+    through no fault of the candidate -- the fold is a passthrough of the
+    forward reward, never a punishment for judge trouble.
+
+    A CORRECT backward is clamped UP to the floor as well: without the
+    clamp, a correct-but-very-slow backward (score < floor) totals WORSE
+    than shipping none -- a perverse incentive to delete a working
+    backward. With it, absent TIES the slowest correct backward and never
+    beats it; ordering is absent <= slow-correct < fast, with equality only
+    at the floor."""
+    fwd = reward_frame["score"]
+    floor = max(noise_floor, GRAD_ABSENT_FLOOR)
+    comps = [max(g, floor) if g else floor for g in grad_scores]
+    if not comps:
+        return gate_reward(fwd, noise_floor)
+    prod = 1.0
+    for c in comps:
+        prod *= c
+    total = (fwd ** n_scored * prod) ** (1.0 / (n_scored + len(comps)))
+    return gate_reward(total, noise_floor)

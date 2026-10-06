@@ -1,0 +1,352 @@
+"""Pure launch contracts shared by host actors and their regression tests.
+
+The defaults mirror the legacy v5p-32 cell launcher for the configured model
+preset (see config.PRESETS); tests/tpu_swarm/test_ray_train_commands.py pins
+the qwen command line and environment against tpu/start_vllm_tpu.sh,
+tpu/start_colocated_vllm_tinker.sh, tpu/jobman/cell_worker.sh and
+tpu/launch_cell.sh.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from .config import Config
+from .environment import workload_environment
+
+
+def _flag(value):
+    return "1" if value else "0"
+
+
+def inference_urls(config: Config, head, inference_ips=None):
+    """Where the trainer sends completions and adapters.
+
+    direct: the legacy contract -- every engine URL, comma-separated; the
+    backend round-robins requests and pushes each adapter to every engine.
+    ingress: the single Ray Serve endpoint on the head.
+    """
+    if config.inference.routing == "direct" and inference_ips:
+        return ",".join(f"http://{ip}:{config.ports.engine}" for ip in inference_ips)
+    return f"http://{head}:{config.ports.inference}"
+
+
+def trainer_environment(config: Config, root: Path, run: Path, train_ips, process_id):
+    t, p = config.trainer, config.ports
+    env = workload_environment()
+    for key in ("JAX_COORDINATOR_ADDRESS", "TPU_MULTIHOST_BACKEND", "TPU_MULTIPROCESS_DP"):
+        env.pop(key, None)
+    env.update(
+        JAX_PLATFORMS="tpu,cpu", HF_HOME=str(root / "ram/hf"), HF_HUB_OFFLINE="1",
+        JAX_COMPILATION_CACHE_DIR=str(root / "ram/compile"),
+        JAX_ENABLE_COMPILATION_CACHE="true",
+        JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS="0",
+        JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES="0",
+        TUNIX_UNIFORM_SEQ_LEN=str(t.sequence_length), TUNIX_ROW_SHARD=str(t.fsdp),
+        # Legacy cell_worker.sh forwards both to every trainer.
+        TUNIX_SEQ_BUCKETS=t.seq_buckets, TUNIX_MINIMAL_FB_OUTPUT=_flag(t.minimal_fb_output),
+        SKYRL_TRAIN_PROCESS_ID=str(process_id), SKYRL_TINKER_ENGINE_DIRECT_PYTHON="1",
+        TPU_PROCESS_BOUNDS=t.process_bounds, TPU_CHIPS_PER_PROCESS_BOUNDS=t.chip_bounds,
+        TPU_PROCESS_ADDRESSES=",".join(f"{ip}:{p.trainer_tpu}" for ip in train_ips),
+        TPU_PROCESS_PORT=str(p.trainer_tpu), CLOUD_TPU_TASK_ID=str(process_id),
+        TPU_VISIBLE_CHIPS=",".join(map(str, range(config.chips_per_host))), TINKER_API_KEY="tml-local-skyrl-no-auth",
+        SKYRL_DATABASE_URL="sqlite:///" + str(run / "tinker.db"),
+        SKYRL_FUTURE_BLOB_DIR=str(run / "future-blobs"),
+        TPUSWARM_BUNDLE_ID=config.base_bundle_sha256,
+        # No SKYRL_EXTERNAL_WATCHDOG_* overrides: the legacy v5p-32 cell runs the
+        # dispatch defaults (stale 300 s, inflight 3600 s, 2 redispatches,
+        # abandon 7200 s); the 0/28800/30/4 set belonged to the v4-64 launcher.
+        OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+    env.update(config.trainer_env)
+    if config.inference.remote_only:
+        # Requests queue inside the ingress until a farm is leased; the API
+        # server must never cancel, re-dispatch or abandon them (config.py
+        # rejects trainer_env overrides of these keys).
+        env.update(SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC="0", SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC="0",
+                   SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH="0")
+    env.update(TUNIX_BACKWARD_WARMUP=_flag(t.backward_warmup),
+               TUNIX_WARMUP_MAX_LENGTH=str(t.sequence_length),
+               TUNIX_WARMUP_LOSS_FN=config.client_env.get("TTD_LOSS_FN", "importance_sampling"))
+    return env
+
+
+def maxtext_kwargs(config: Config, root: Path):
+    """cell_worker.sh pick_tiles + the FSDP/TP injection of start_colocated."""
+    t = config.trainer
+    kwargs = dict(ici_tensor_parallelism=t.tp, ici_fsdp_parallelism=t.fsdp,
+                  ici_context_parallelism=1, remat_policy=t.remat, num_vocab_tiling=t.num_vocab_tiling,
+                  attention="autoselected")
+    if t.tokamax_splash:
+        kwargs["use_tokamax_splash"] = True
+    if t.tp == 8:
+        kwargs.update(allow_split_physical_axes=True, override_model_config=True,
+                      **{("global_num_kv_heads" if config.model_preset == "gemma4-31b"
+                          else "base_num_kv_heads"): t.logical_kv_heads})
+    kwargs.update(t.maxtext_kwargs)
+    kwargs["jax_cache_dir"] = str(root / "ram/compile")
+    return kwargs
+
+
+def trainer_backend_config(config, root, head, train_ips, inference_ips=None):
+    t, p = config.trainer, config.ports
+    direct = config.inference.routing == "direct" and bool(inference_ips)
+    backend = dict(
+        model_source="maxtext", maxtext_model_name=t.maxtext_model,
+        maxtext_max_target_length=t.effective_max_target_length, train_token_budget=t.token_budget,
+        flce_tile_size=t.flce_tile, max_lora_rank=t.effective_max_lora_rank,
+        train_micro_batch_size=1, sample_max_num_sequences=256,
+        param_dtype="bfloat16", free_base_state_after_template=t.free_base_state,
+        maxtext_ckpt_cache_dir=str(root / "ram/orbax"), maxtext_kwargs=maxtext_kwargs(config, root),
+        inference_backend="vllm", vllm_base_url=inference_urls(config, head, inference_ips),
+        vllm_model_name=config.model, vllm_lora_base_dir=str(root / "runs" / config.run_id / "loras"),
+        vllm_lora_load_endpoint="/v1/load_lora_adapter",
+        vllm_lora_unload_endpoint="/v1/unload_lora_adapter",
+        vllm_lora_upload_endpoint="/skyrl/v1/upload_lora_adapter",
+        vllm_client_side_round_robin=direct,
+        vllm_route_by_prompt_prefix=False,
+        vllm_max_concurrent_requests=t.max_concurrent_requests,
+        vllm_request_timeout_sec=t.request_timeout,
+        vllm_lora_load_retries=t.lora_load_retries, vllm_lora_load_retry_sleep_sec=t.lora_load_retry_sleep,
+        checkpoint_mirror_gcs=config.run_gcs + "/checkpoints")
+    # The pinned single-adapter backend predates these optional fields.
+    if config.adapter_count > 1:
+        backend.update(independent_lora_init=True,
+                       stacked_lora_training=t.stacked_lora_training,
+                       stacked_lora_verify=t.stacked_lora_verify)
+    if len(train_ips) > 1:
+        backend.update(coordinator_address=f"{train_ips[0]}:{p.trainer_jax}", num_processes=len(train_ips))
+    return backend
+
+
+def trainer_command(config, root, source, head, train_ips, process_id, inference_ips=None):
+    python = str(root / "envs/trainer/bin/python")
+    p = config.ports
+    if process_id:
+        return [python, "-m", "skyrl.backends.rpc", "--backend", "tunix",
+                "--coordinator-address", f"{train_ips[0]}:{p.trainer_jax}",
+                "--num-processes", str(len(train_ips)), "--process-id", str(process_id)]
+    return [python, "-m", "skyrl.tinker.api", "--base-model", config.model,
+            "--host", "0.0.0.0", "--port", str(p.trainer), "--backend", "tunix",
+            "--session-timeout-sec", "1800",
+            # The synchronous mirror requires a local staging file. It uploads
+            # and verifies this file in run_gcs before acknowledging the save.
+            "--checkpoints-base", str(root / "runs" / config.run_id / "checkpoints"),
+            "--external-inference-url", inference_urls(config, head, inference_ips),
+            "--external-inference-lora-base", str(root / "runs" / config.run_id / "loras"),
+            "--external-inference-timeout-sec", str(config.inference.request_timeout),
+            "--backend-config", json.dumps(trainer_backend_config(config, root, head, train_ips, inference_ips))]
+
+
+def inference_environment(config, root, run, head=None, group=None, slot=0):
+    """Engine process environment. group = the engine's host IPs (pairs run
+    pipeline-parallel over vLLM's Ray executor on the executor's own Ray
+    cluster at head:ports.ray; the worker for the second host runs under the
+    serving venv via the job runtime_env set in tpu/vllm_tpu_server.py)."""
+    v = config.inference
+    env = workload_environment()
+    for key in ("JAX_COORDINATOR_ADDRESS", "TPU_MULTIHOST_BACKEND", "TPU_MULTIPROCESS_DP"):
+        env.pop(key, None)
+    pair = bool(group) and len(group) > 1
+    env.update(
+        JAX_PLATFORMS="tpu,cpu", HF_HOME=str(root / "ram/hf"), HF_HUB_OFFLINE="1",
+        TPU_PROCESS_BOUNDS="1,1,1", TPU_CHIPS_PER_PROCESS_BOUNDS="2,2,1",
+        TPU_PROCESS_ADDRESSES=f"localhost:{config.ports.inference_tpu}",
+        TPU_PROCESS_PORT=str(config.ports.inference_tpu), CLOUD_TPU_TASK_ID="0",
+        TPU_VISIBLE_CHIPS="0,1,2,3", TPU_BACKEND_TYPE=v.tpu_backend, MODEL_IMPL_TYPE=v.model_impl,
+        VLLM_ALLOW_RUNTIME_LORA_UPDATING="True",
+        VLLM_XLA_CACHE_PATH=str(root / "ram/compile"), JAX_COMPILATION_CACHE_DIR=str(root / "ram/compile"),
+        JAX_ENABLE_COMPILATION_CACHE="true",
+        JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS="0", JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES="0",
+        # Legacy start_vllm_tpu.sh exports (per-model values from the preset).
+        VLLM_USE_RAY_EXECUTOR="0",
+        SKIP_JAX_PRECOMPILE=_flag(v.skip_precompile), USE_BATCHED_RPA_KERNEL=_flag(v.batched_rpa_kernel),
+        USE_JAX_RAGGED_CONV1D=_flag(v.ragged_conv1d),
+        CUSTOM_NUM_TOKENS_BUCKETS=v.custom_token_buckets,
+        SERIALIZE_MODEL_AND_SAMPLING=_flag(v.serialize_model_and_sampling),
+        VLLM_PLUGINS=v.plugins, VLLM_LORA_RESOLVER_CACHE_DIR=str(run / "loras"),
+        OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+    env.update(v.engine_env)
+    if v.unset_plugins:
+        # Empty still disables registration; the variable must be absent.
+        env.pop("VLLM_PLUGINS", None)
+    if pair:
+        if not head:
+            raise ValueError("pipeline-parallel engines need the executor Ray head address")
+        # tpu-inference (multihost=ray) isolates each host as its own JAX
+        # cluster and sets the TPU process variables itself; leave them unset
+        # so they do not describe a single-host slice to a two-host engine.
+        for key in ("TPU_PROCESS_BOUNDS", "TPU_CHIPS_PER_PROCESS_BOUNDS", "TPU_PROCESS_ADDRESSES",
+                    "TPU_PROCESS_PORT", "CLOUD_TPU_TASK_ID", "TPU_VISIBLE_CHIPS"):
+            env.pop(key, None)
+        env.update(TPU_MULTIHOST_BACKEND="ray", VLLM_USE_RAY_EXECUTOR="1",
+                   RAY_ADDRESS=f"{head}:{config.ports.ray}",
+                   SKYRL_RAY_PLACEMENT_HOSTS=",".join(group))
+    if v.tp == 8:
+        # One engine owns all eight chips of a v6e-8 host. (Qwen3.5 rejects
+        # this shape in config validation: its TP8 engines halt in SparseCore.)
+        if slot != 0 or pair or config.accelerator != "tpu-v6e-8":
+            raise ValueError("invalid TP8 v6e-8 engine slot")
+        env.update(TPU_VISIBLE_CHIPS="0,1,2,3,4,5,6,7",
+                   TPU_CHIPS_PER_PROCESS_BOUNDS="2,4,1")
+    elif v.tp == 2:
+        if slot not in (0, 1) or pair:
+            raise ValueError("invalid TP2 engine slot")
+        port = config.ports.inference_tpu + slot
+        env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(slot * 2, slot * 2 + 2)),
+                   TPU_CHIPS_PER_PROCESS_BOUNDS="1,2,1", TPU_PROCESS_PORT=str(port),
+                   TPU_PROCESS_ADDRESSES=f"localhost:{port}")
+    elif config.engines_per_host > 1:
+        # A host with more chips than one engine uses (v6e-8 at TP4) runs
+        # several engines, each pinned to its own disjoint block of chips.
+        if slot not in range(config.engines_per_host) or pair:
+            raise ValueError("invalid single-host TP4 engine slot")
+        first = slot * v.tp
+        port = config.ports.inference_tpu + slot
+        # libtpu takes a host-wide lockfile, so without this override the
+        # second engine aborts with "TPU is already in use" even on disjoint chips.
+        env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(first, first + v.tp)),
+                   TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}",
+                   ALLOW_MULTIPLE_LIBTPU_LOAD="1")
+    if v.native_thinking_budget:
+        env["SKYRL_THINKING_FORMAT"] = config.model_preset
+    else:
+        env.pop("SKYRL_TPU_THINKING_BUDGET", None)
+        env.pop("SKYRL_THINKING_FORMAT", None)
+    return env
+
+
+def inference_command(config, root, source, snapshot, run, group=None, slot=0):
+    v = config.inference
+    server = "tpu/thinking_budget/server.py" if v.native_thinking_budget else "tpu/vllm_tpu_server.py"
+    command = [str(root / "envs/serving/bin/python"), str(source / server),
+               str(snapshot), "--served-model-name", config.model, "--skyrl-lora-dir", str(run / "loras"),
+               "--host", "0.0.0.0", "--port", str(config.ports.engine + slot),
+               "--tensor-parallel-size", str(v.tp), "--max-model-len", str(v.max_model_length),
+               "--max-num-seqs", str(v.max_sequences)]
+    # vLLM enables prefix caching by default. Omitting the positive flag does
+    # not disable it, so honor the configured value explicitly in both cases.
+    command.append("--enable-prefix-caching" if v.prefix_caching
+                   else "--no-enable-prefix-caching")
+    command += ["--enable-lora", "--max-loras", str(v.max_loras), "--max-lora-rank", str(v.max_lora_rank),
+                "--download-dir", str(root / "ram/hf/hub")]
+    if v.limit_mm_per_prompt:
+        command += ["--limit-mm-per-prompt", v.limit_mm_per_prompt]
+    # Legacy VLLM_EXTRA_ARGS: batched tokens + memory utilization (+ model extras).
+    command += ["--max-num-batched-tokens", str(v.chunk_tokens),
+                "--gpu-memory-utilization", str(v.memory_utilization)]
+    if v.chunked_prefill:
+        command.append("--enable-chunked-prefill")
+    if group and len(group) > 1:
+        command += ["--pipeline-parallel-size", str(len(group)), "--distributed-executor-backend", "ray",
+                    "--skyrl-ray-placement-hosts", ",".join(group)]
+    command += list(v.extra_args)
+    return command
+
+
+def client_environment(config, root, head, inference_ips=None, trainer_head=None):
+    config.validate()
+    env = workload_environment()
+    t = config.trainer
+    trainer_head = trainer_head or head
+    defaults = dict(
+        TINKER_API_KEY="tml-local-skyrl-no-auth", TINKER_BASE_URL=f"http://{trainer_head}:{config.ports.trainer}",
+        TTD_M0_BASE_URL=f"http://{trainer_head}:{config.ports.trainer}",
+        HF_HOME=str(root / "ram/hf"), HF_HUB_OFFLINE=_flag(config.client_hf_offline), JAX_PLATFORMS="cpu",
+        TTD_RUN_DIR=str(root / "runs" / config.run_id / "client"), EXPERIMENT_NAME=config.run_id,
+        TTD_ENV="erdos_min_overlap", TTD_PROBLEM_TYPE="", TTD_FCALGO_MAX_CASES="0", ARENA_RAY_ACTOR="",
+        TTD_ENSEMBLE_MODELS=config.client_member_spec,
+        TTD_ALLOW_SINGLE_MEMBER="1", TTD_QWEN_TWO_PHASE="1", TTD_DISABLE_WANDB_TABLES="1",
+        TTD_CROSS_WEIGHT="0", TTD_ADV_ESTIMATOR="mean_baseline", TTD_ELITE_SLOTS="2",
+        TTD_REJECT_TRUNCATED="1", TTD_RESTART_RATIO="0", TTD_KL_MEASURE_EVERY="0",
+        TTD_RESUME_STRICT="1", TTD_SAMPLING_PROGRESS_TIMEOUT="0", TTD_MAX_CONSEC_TRAIN_ERR="1",
+        TTD_EVAL_BACKEND="ray", TTD_RAY_PAYLOAD="1", TTD_LEAGUE_PIPELINE="1",
+        RAY_ADDRESS=f"{head}:{config.ports.ray}", RAY_NAMESPACE=config.run_id,
+        NUM_CPUS_PER_TASK="1", GROUPS_PER_BATCH="16", GROUP_SIZE="32", NUM_EPOCHS="15",
+        LEARNING_RATE=config.client_learning_rate, LORA_RANK=str(t.lora_rank), KL_PENALTY_COEF="0",
+        TEMPERATURE="1.0", EVAL_TIMEOUT="1100", SAVE_EVERY="1", WANDB_MODE="offline",
+        WANDB_PROJECT="tpu-tinker-exps", OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+    defaults.update(config.client_sampling_environment())
+    if config.is_recurrent_gemma:
+        defaults.update(TTD_PROBLEM_TYPE="rg_lru", EVAL_TIMEOUT="3600",
+                        GROUPS_PER_BATCH="1", GROUP_SIZE="8", TTD_EVAL_BACKEND="local")
+    defaults.update(config.client_env)
+    if config.inference.remote_only:
+        # -1 disables the SDK's stuck detection entirely (0 restores its
+        # 7200 s default), so a batch can wait for farms indefinitely.
+        defaults["TTD_SAMPLING_PROGRESS_TIMEOUT"] = "-1"
+    if t.backward_warmup:
+        defaults["TTD_WARMUP_FB"] = "0"
+    if config.science_task:
+        # Use the deployed profile even if the parent carries another TPU family.
+        defaults["SCIENCE_ACCELERATOR"] = config.accelerator
+        defaults["SCIENCE_ROUTING_SUITE"] = config.client_env.get("SCIENCE_ROUTING_SUITE", "full")
+        defaults["SCIENCE_ROUTING_SLOTS_PER_HOST"] = str(config.science_routing_slots_per_host)
+        defaults['SCIENCE_ROUTING_EVALUATOR'] = config.science_routing_evaluator
+        defaults["SCIENCE_PLACEMENT_HELPER"] = config.client_env.get("SCIENCE_PLACEMENT_HELPER", "none")
+        defaults["SCIENCE_PLACEMENT_BACKEND"] = config.science_placement_backend
+        defaults["SCIENCE_PLACEMENT_RUNTIME"] = config.science_placement_runtime
+        defaults["SCIENCE_PLACEMENT_SLOTS_PER_HOST"] = str(config.science_placement_slots_per_host)
+        if config.science_task == 'placement':
+            defaults['SCIENCE_PLACEMENT_SUITE'] = 'ibm17-proxy-v1'
+    if config.arena_grader_rank is not None:
+        defaults["ARENA_QUEUE_URL"] = ""
+        defaults["ARENA_RAY_ACTOR"] = ""
+        defaults["ARENA_RAY_TASKS"] = "1"
+        defaults["ARENA_RAY_ROOT"] = str(root)
+    defaults["TTD_NATIVE_THINKING_BUDGET"] = _flag(config.inference.native_thinking_budget)
+    grading_keys = ('SKYRL_GRADING_URL', 'SKYRL_GRADING_EVENTS', 'SKYRL_GRADING_LOCAL_SLOTS',
+                    'SKYRL_GRADING_MAX_INFRA_RETRIES', 'SKYRL_GRADING_LOCAL_SYSTEMD', 'SKYRL_GRADING_FAMILIES',
+                    'SKYRL_GRADING_FARM_REFRESH_SECONDS', 'SKYRL_GRADING_LONG_POLL_SECONDS')
+    families = config.grading_families
+    if families:
+        local_slots = families.get('ac2', {}).get('slots_per_host', 0) * config.trainer.hosts
+        defaults.update(SKYRL_GRADING_FAMILIES=json.dumps(families, sort_keys=True),
+                        SKYRL_GRADING_LOCAL_SLOTS=str(local_slots),
+                        SKYRL_GRADING_MAX_INFRA_RETRIES=str(config.grading.max_infra_retries),
+                        SKYRL_GRADING_LOCAL_SYSTEMD=_flag(config.grading.local_systemd),
+                        SKYRL_GRADING_EVENTS=str(root / "runs" / config.run_id / "inference-events.jsonl"),
+                        SKYRL_GRADING_FARM_REFRESH_SECONDS=str(config.grading.farm_refresh_seconds),
+                        SKYRL_GRADING_LONG_POLL_SECONDS=str(config.grading.long_poll_seconds))
+        if 'ac2' in families and config.client_env.get('TTD_PROBLEM_TYPE') in ('ac2', None):
+            # The transport replaces the cpu_scheduler actor path for AC2.
+            defaults['TTD_EVAL_BACKEND'] = 'hybrid'
+        if config.grading_farm_transport:
+            defaults['SKYRL_GRADING_URL'] = f'http://{head}:{config.ports.inference}'
+            # 64 grading threads would leave farm capacity idle.
+            defaults.setdefault('TTD_SAFE_GRADE_MAX_WORKERS', str(max(64, local_slots + 128)))
+    else:
+        for key in grading_keys:
+            defaults.pop(key, None)
+            env.pop(key, None)
+    if config.borrows_inference:
+        defaults['SKYRL_BORROWING_URL'] = f'http://{head}:{config.ports.inference}'
+        defaults['SKYRL_BORROWING_PREPARE_TIMEOUT'] = str(config.inference.external_pool_prepare_timeout + 10)
+        defaults['SKYRL_BORROWING_RELEASE_TIMEOUT'] = str(config.inference.external_pool_release_timeout + 5)
+        defaults['SKYRL_BORROWING_HEARTBEAT_SECONDS'] = str(config.inference.external_pool_heartbeat_seconds)
+    else:
+        # Do not accidentally enable a phase hook via an inherited client env.
+        for key in ('SKYRL_BORROWING_URL', 'SKYRL_BORROWING_PREPARE_TIMEOUT', 'SKYRL_BORROWING_RELEASE_TIMEOUT', 'SKYRL_BORROWING_HEARTBEAT_SECONDS'):
+            defaults.pop(key, None)
+            env.pop(key, None)
+    if config.adapter_count > 1:
+        renderer = config.client_member_spec.split(":")[1]
+        defaults.update(
+            TTD_ENSEMBLE_MODELS=",".join(f"{config.model}:{renderer}:adapter{i}" for i in range(config.adapter_count)),
+            TTD_POOLED_MULTI_LORA="1", GROUP_SIZE=str(config.pooled_group_size),
+            TTD_LOSS_FN="cispo", TTD_IS_CAP=str(config.importance_cap),
+            TTD_CROSS_WEIGHT="0", TTD_LEAGUE_PIPELINE="1", TTD_DISTILL_ENABLED="0",
+            TTD_WARMUP_FB="0", TTD_RESUME_STRICT="1", KL_PENALTY_COEF="0",
+            TTD_MIN_VALID_PER_GROUP="0", TTD_REJECT_TRUNCATED="0", TTD_RESTART_RATIO="0",
+            SAVE_EVERY="1", TEMPERATURE="1.0")
+        for i in range(config.adapter_count):
+            defaults.update({
+                f"TTD_M{i}_BASE_URL": f"http://{trainer_head}:{config.ports.trainer}",
+                f"TTD_M{i}_LORA_SEED": str(i + 1),
+                f"TTD_M{i}_CONTEXT_WINDOW": defaults["TTD_M0_CONTEXT_WINDOW"],
+                f"TTD_M{i}_TRAIN_MAX_SEQ": defaults["TTD_M0_TRAIN_MAX_SEQ"],
+                f"TTD_M{i}_PHASE1_MAX_TOKENS": defaults["TTD_M0_PHASE1_MAX_TOKENS"],
+                f"TTD_M{i}_KL_PENALTY_COEF": "0",
+            })
+    env.update(defaults)
+    return env

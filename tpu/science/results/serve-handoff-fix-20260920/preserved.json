@@ -1,0 +1,198 @@
+{
+  "runs": [
+    {
+      "old_job_id": 1227,
+      "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "bootstrap_contract": true,
+      "complete": {
+        "contract_sha256": "2b5fe176330a1e92c14abb2371909362a970c084180a80642d2859eeea738ed3",
+        "total": 1024,
+        "drafted": 1024,
+        "valid": 448,
+        "retained": 291,
+        "layers": 1,
+        "optimizer_steps": 0,
+        "stop_reason": "draft_cap",
+        "pool_sha256": "2ea03e78be86eb23f4fd757e3af74b34062947e43b5d00e53d212835efebaf19"
+      },
+      "contract_generation": 1789866554623978,
+      "retained": 291
+    },
+    {
+      "old_job_id": 1228,
+      "run_id": "fresh-v4-gemma-ac2-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-gemma-ac2-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789859668777302
+    },
+    {
+      "old_job_id": 1229,
+      "run_id": "fresh-v4-muse-ac2-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-muse-ac2-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1230,
+      "run_id": "fresh-v4-qwen-cp26-grpo-lr15e4-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-qwen-cp26-grpo-lr15e4-s1-20260919",
+      "bootstrap_contract": true,
+      "complete": {
+        "contract_sha256": "ffcc46aa75518a721418a41741acfd884fa7e20cd1c60d2233ca97ec3b71fda0",
+        "total": 1024,
+        "drafted": 1024,
+        "valid": 229,
+        "retained": 172,
+        "layers": 1,
+        "optimizer_steps": 0,
+        "stop_reason": "draft_cap",
+        "pool_sha256": "a51adfaf7061ad69175cead00dc93c4c4f10f33d99046c8b6f0df29c10eb422f"
+      },
+      "contract_generation": 1789862009245503,
+      "retained": 172
+    },
+    {
+      "old_job_id": 1231,
+      "run_id": "fresh-v4-gemma-cp26-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-gemma-cp26-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1232,
+      "run_id": "fresh-v4-muse-cp26-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-muse-cp26-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1233,
+      "run_id": "fresh-v4-qwen-qubit-grpo-lr15e4-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-qwen-qubit-grpo-lr15e4-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1234,
+      "run_id": "fresh-v4-gemma-qubit-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-gemma-qubit-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1235,
+      "run_id": "fresh-v4-muse-qubit-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-muse-qubit-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1236,
+      "run_id": "fresh-v4-qwen-circuit-grpo-lr15e4-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-qwen-circuit-grpo-lr15e4-s1-20260919",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789868366788977
+    },
+    {
+      "old_job_id": 1237,
+      "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1238,
+      "run_id": "fresh-v4-muse-circuit-grpo-lr4e5-s1-20260919",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central2/ray-training/fresh-v4-muse-circuit-grpo-lr4e5-s1-20260919",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1259,
+      "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789868357802958
+    },
+    {
+      "old_job_id": 1260,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789868376336106
+    },
+    {
+      "old_job_id": 1261,
+      "run_id": "fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789867809349690
+    },
+    {
+      "old_job_id": 1273,
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central1/ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789868367861975
+    },
+    {
+      "old_job_id": 1274,
+      "run_id": "math-v6e-muse-cp26-grpo-lr4e5-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/math-v6e-muse-cp26-grpo-lr4e5-s1-20260920",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789868361101473
+    },
+    {
+      "old_job_id": 1275,
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central1/ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789868379210550
+    },
+    {
+      "old_job_id": 1276,
+      "run_id": "math-v6e-gemma-cp26-grpo-lr4e5-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-central1/ray-training/math-v6e-gemma-cp26-grpo-lr4e5-s1-20260920",
+      "bootstrap_contract": true,
+      "complete": null,
+      "contract_generation": 1789868357479110
+    },
+    {
+      "old_job_id": 1277,
+      "run_id": "math-v6e-qwen-cp26-grpo-lr15e4-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/math-v6e-qwen-cp26-grpo-lr15e4-s1-20260920",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1278,
+      "run_id": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1279,
+      "run_id": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920",
+      "bootstrap_contract": false,
+      "complete": null
+    },
+    {
+      "old_job_id": 1280,
+      "run_id": "science-v6e-muse-qubit-grpo-lr4e5-s1-20260920",
+      "run_gcs": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-v6e-muse-qubit-grpo-lr4e5-s1-20260920",
+      "bootstrap_contract": false,
+      "complete": null
+    }
+  ]
+}

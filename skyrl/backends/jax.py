@@ -25,7 +25,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Literal, get_type_hints
+from typing import Callable, Literal
 
 import jax
 import jax.numpy as jnp
@@ -35,11 +35,23 @@ from cloudpathlib import AnyPath
 from flax import nnx
 from flax.training import checkpoints
 from jax.experimental import multihost_utils
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field
 from transformers import AutoConfig, AutoTokenizer
 
 from skyrl.backends.backend import AbstractBackend
 from skyrl.backends.renderer import render_model_input
+from skyrl.backends.rpc import (
+    RpcPayload,
+    call_with_rpc_ack,
+    serialize_call_kwargs,
+    serialize_config,
+)
+from skyrl.backends.rpc import (
+    broadcast_command as _broadcast_command,
+)
+from skyrl.backends.rpc import (
+    run_worker as _run_distributed_worker,
+)
 from skyrl.backends.utils import pad, pad_batch, pad_to_fsdp
 from skyrl.backends.vllm_sampling import GroupedCompletion, VllmSamplingClient
 from skyrl.tinker import types
@@ -1319,56 +1331,6 @@ class JaxBackendImpl(AbstractBackend):
         return adapter_indices
 
 
-# =============================================================================
-# Multi-host coordination
-# =============================================================================
-
-
-class RpcPayload(BaseModel):
-    """Generic RPC payload container using runtime type introspection.
-
-    Instead of defining separate command classes for each method, this single
-    generic container holds the method name and raw kwargs. The worker uses
-    type hints from the target method to automatically re-hydrate the kwargs
-    into the correct Pydantic models.
-    """
-
-    method: str
-    kwargs: dict[str, Any]  # Contains raw dicts/JSON types
-
-
-RpcPayloadAdapter: TypeAdapter[RpcPayload] = TypeAdapter(RpcPayload)
-
-
-def _broadcast_command(cmd: RpcPayload | None, process_id: int) -> RpcPayload:
-    """Broadcast an RpcPayload from coordinator to all workers using JSON.
-
-    On coordinator (process 0): serializes and broadcasts the payload.
-    On workers: receives and deserializes the payload (pass None).
-    """
-    is_source = process_id == 0
-
-    if is_source:
-        assert cmd is not None, "Coordinator must provide a command to broadcast."
-        data = RpcPayloadAdapter.dump_json(cmd)
-        size = np.array([len(data)], dtype=np.int64)
-    else:
-        size = np.array([0], dtype=np.int64)
-
-    # Broadcast size first
-    size = multihost_utils.broadcast_one_to_all(size, is_source=is_source)
-
-    if is_source:
-        data_arr = np.frombuffer(data, dtype=np.uint8)
-    else:
-        data_arr = np.zeros(size[0], dtype=np.uint8)
-
-    # Broadcast data
-    data_arr = multihost_utils.broadcast_one_to_all(data_arr, is_source=is_source)
-
-    return RpcPayloadAdapter.validate_json(data_arr.tobytes())
-
-
 class JaxBackend(JaxBackendImpl):
     """Distributed wrapper that broadcasts commands before calling JaxBackendImpl methods.
 
@@ -1394,9 +1356,10 @@ class JaxBackend(JaxBackendImpl):
             _broadcast_command(
                 RpcPayload(
                     method="__init__",
+                    backend_name="jax",
                     kwargs={
                         "base_model": base_model,
-                        "config": TypeAdapter(JaxBackendConfig).dump_python(config, mode="json"),
+                        "config": serialize_config(JaxBackendConfig, config),
                         "process_id": self.process_id,
                     },
                 ),
@@ -1418,21 +1381,24 @@ class JaxBackend(JaxBackendImpl):
     def _broadcast_and_call(self, method: str, **kwargs):
         """Broadcast method call to workers and execute locally via super()."""
         if jax.process_count() > 1:
-            hints = get_type_hints(getattr(JaxBackendImpl, method))
-
-            # TODO: Remove AnyPath special case once https://github.com/drivendataorg/cloudpathlib/issues/537 is released
-            def serialize(k, v):
-                if hints.get(k) is AnyPath:
-                    return str(v)
-                return TypeAdapter(hints[k]).dump_python(v, mode="json") if k in hints else v
-
             _broadcast_command(
-                RpcPayload(method=method, kwargs={k: serialize(k, v) for k, v in kwargs.items()}),
+                RpcPayload(
+                    method=method,
+                    kwargs=serialize_call_kwargs(JaxBackendImpl, method, kwargs),
+                ),
                 process_id=self.process_id,
             )
         if not _is_active_backend_worker(self.config, self.process_id):
-            raise RuntimeError("The coordinator must be an active backend worker to execute training RPCs")
-        return getattr(super(), method)(**kwargs)
+            def fail_inactive_coordinator():
+                raise RuntimeError("The coordinator must be an active backend worker to execute training RPCs")
+
+            if jax.process_count() > 1:
+                return call_with_rpc_ack(fail_inactive_coordinator, {})
+            fail_inactive_coordinator()
+        local_method = getattr(super(), method)
+        if jax.process_count() > 1:
+            return call_with_rpc_ack(local_method, kwargs)
+        return local_method(**kwargs)
 
     def create_model(self, model_id: str, lora_config: types.LoraConfig, model_role: str = "policy") -> None:
         self._broadcast_and_call("create_model", model_id=model_id, lora_config=lora_config, model_role=model_role)
@@ -1465,66 +1431,13 @@ class JaxBackend(JaxBackendImpl):
 
 
 def run_worker(coordinator_address: str, num_processes: int, process_id: int):
-    """Entry point for worker processes.
-
-    Initializes JAX distributed, receives config from coordinator, then runs
-    the worker loop using runtime type introspection to re-hydrate arguments.
-
-    Args:
-        coordinator_address: JAX coordinator address (host:port)
-        num_processes: Total number of processes in the cluster
-        process_id: This process's ID (must be > 0 for workers)
-    """
-    if process_id == 0:
-        raise ValueError("Worker process_id must be > 0 (process 0 is the coordinator)")
-
-    # Initialize JAX distributed first (before any other JAX operations)
-    jax.distributed.initialize(
-        coordinator_address=coordinator_address,
-        num_processes=num_processes,
-        process_id=process_id,
+    """Backward-compatible JAX worker entry point."""
+    _run_distributed_worker(
+        coordinator_address,
+        num_processes,
+        process_id,
+        expected_backend="jax",
     )
-    logger.info(
-        f"Worker process_id={process_id} ({jax.process_count()} total) initialized, waiting for config from coordinator..."
-    )
-
-    # Receive INIT payload with base_model and config from coordinator
-    init_payload = _broadcast_command(None, process_id=process_id)
-    assert init_payload.method == "__init__", f"Expected __init__, got {init_payload.method}"
-    config = JaxBackendConfig.model_validate(init_payload.kwargs["config"])
-    logger.info(f"Worker received config: base_model={init_payload.kwargs['base_model']}, config={config}")
-
-    if _needs_worker_process_index_map(config):
-        _get_worker_process_index_map(process_id)
-
-    backend = None
-    if _is_active_backend_worker(config, process_id):
-        backend = JaxBackendImpl(init_payload.kwargs["base_model"], config, process_id)
-    else:
-        logger.info(
-            "Worker process_id=%s is inactive for the JAX training backend; active_worker_ids=%s",
-            process_id,
-            config.active_worker_ids,
-        )
-
-    logger.info(f"Worker process_id={process_id} entering command loop")
-
-    while True:
-        payload: RpcPayload = _broadcast_command(None, process_id=process_id)
-
-        if not hasattr(backend, payload.method):
-            if backend is None:
-                logger.info("Inactive worker process_id=%s ignoring method %s", process_id, payload.method)
-                continue
-            logger.error(f"Unknown method: {payload.method}")
-            continue
-
-        method = getattr(backend, payload.method)
-
-        # Re-hydrate raw dicts into Pydantic models using type hints
-        hints = get_type_hints(method)
-        kwargs = {k: TypeAdapter(hints[k]).validate_python(v) if k in hints else v for k, v in payload.kwargs.items()}
-        method(**kwargs)
 
 
 def main():

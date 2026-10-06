@@ -1,0 +1,338 @@
+[
+  {
+    "worker": 385,
+    "rank": 0,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 71.03, \"free_inodes\": 12281574}, \"tmp\": {\"free_gib\": 71.03, \"free_inodes\": 12281574}}, \"mem_available_gib\": 334.62, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 385,
+    "rank": 1,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 74.69, \"free_inodes\": 12309132}, \"tmp\": {\"free_gib\": 74.69, \"free_inodes\": 12309132}}, \"mem_available_gib\": 355.19, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 385,
+    "rank": 2,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.86, \"free_inodes\": 12274824}, \"tmp\": {\"free_gib\": 67.86, \"free_inodes\": 12274824}}, \"mem_available_gib\": 340.51, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 385,
+    "rank": 3,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 68.63, \"free_inodes\": 12276366}, \"tmp\": {\"free_gib\": 68.63, \"free_inodes\": 12276366}}, \"mem_available_gib\": 340.69, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 385,
+    "rank": 4,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 74.99, \"free_inodes\": 12312196}, \"tmp\": {\"free_gib\": 74.99, \"free_inodes\": 12312196}}, \"mem_available_gib\": 355.26, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 385,
+    "rank": 5,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.55, \"free_inodes\": 12273309}, \"tmp\": {\"free_gib\": 67.55, \"free_inodes\": 12273309}}, \"mem_available_gib\": 340.53, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 385,
+    "rank": 6,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 75.19, \"free_inodes\": 12309169}, \"tmp\": {\"free_gib\": 75.19, \"free_inodes\": 12309169}}, \"mem_available_gib\": 355.42, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 385,
+    "rank": 7,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 67.98, \"free_inodes\": 12274833}, \"tmp\": {\"free_gib\": 67.98, \"free_inodes\": 12274833}}, \"mem_available_gib\": 340.62, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 392,
+    "rank": 0,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 392,
+    "rank": 1,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 392,
+    "rank": 2,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 392,
+    "rank": 3,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 392,
+    "rank": 4,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 392,
+    "rank": 5,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 392,
+    "rank": 6,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 392,
+    "rank": 7,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 0,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 1,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 2,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 3,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 4,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 5,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 6,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 397,
+    "rank": 7,
+    "exit": 255,
+    "output": "",
+    "error": "Can't open user config file /scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/generated/ssh/tpuswarm-v4-64-central: No such file or directory\n"
+  },
+  {
+    "worker": 398,
+    "rank": 0,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 82.08, \"free_inodes\": 12454449}, \"tmp\": {\"free_gib\": 82.08, \"free_inodes\": 12454449}}, \"mem_available_gib\": 379.03, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 398,
+    "rank": 1,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.07, \"free_inodes\": 12455501}, \"tmp\": {\"free_gib\": 83.07, \"free_inodes\": 12455501}}, \"mem_available_gib\": 394.96, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 398,
+    "rank": 2,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.13, \"free_inodes\": 12455504}, \"tmp\": {\"free_gib\": 83.13, \"free_inodes\": 12455504}}, \"mem_available_gib\": 395.0, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 398,
+    "rank": 3,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.48, \"free_inodes\": 12455508}, \"tmp\": {\"free_gib\": 83.48, \"free_inodes\": 12455508}}, \"mem_available_gib\": 395.13, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 398,
+    "rank": 4,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.07, \"free_inodes\": 12455489}, \"tmp\": {\"free_gib\": 83.07, \"free_inodes\": 12455489}}, \"mem_available_gib\": 394.98, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 398,
+    "rank": 5,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.26, \"free_inodes\": 12455523}, \"tmp\": {\"free_gib\": 83.26, \"free_inodes\": 12455523}}, \"mem_available_gib\": 395.07, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 398,
+    "rank": 6,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.48, \"free_inodes\": 12455513}, \"tmp\": {\"free_gib\": 83.48, \"free_inodes\": 12455513}}, \"mem_available_gib\": 395.15, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 398,
+    "rank": 7,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.07, \"free_inodes\": 12455477}, \"tmp\": {\"free_gib\": 83.07, \"free_inodes\": 12455477}}, \"mem_available_gib\": 395.0, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 402,
+    "rank": 0,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 35.186.106.63 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 402,
+    "rank": 1,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 107.167.162.131 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 402,
+    "rank": 2,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 107.167.162.73 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 402,
+    "rank": 3,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 108.59.91.139 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 402,
+    "rank": 4,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 173.255.125.208 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 402,
+    "rank": 5,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 35.186.133.57 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 402,
+    "rank": 6,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 35.186.79.41 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 402,
+    "rank": 7,
+    "exit": 255,
+    "output": "",
+    "error": "ssh: connect to host 35.186.96.51 port 22: Connection timed out\n"
+  },
+  {
+    "worker": 406,
+    "rank": 0,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 80.61, \"free_inodes\": 12423007}, \"tmp\": {\"free_gib\": 80.61, \"free_inodes\": 12423007}}, \"mem_available_gib\": 379.13, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 406,
+    "rank": 1,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.57, \"free_inodes\": 12455512}, \"tmp\": {\"free_gib\": 83.57, \"free_inodes\": 12455512}}, \"mem_available_gib\": 395.15, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 406,
+    "rank": 2,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.79, \"free_inodes\": 12455478}, \"tmp\": {\"free_gib\": 83.79, \"free_inodes\": 12455478}}, \"mem_available_gib\": 395.24, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 406,
+    "rank": 3,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.41, \"free_inodes\": 12455504}, \"tmp\": {\"free_gib\": 83.41, \"free_inodes\": 12455504}}, \"mem_available_gib\": 395.08, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 406,
+    "rank": 4,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.97, \"free_inodes\": 12455533}, \"tmp\": {\"free_gib\": 83.97, \"free_inodes\": 12455533}}, \"mem_available_gib\": 395.27, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 406,
+    "rank": 5,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.75, \"free_inodes\": 12455656}, \"tmp\": {\"free_gib\": 83.75, \"free_inodes\": 12455656}}, \"mem_available_gib\": 395.19, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 406,
+    "rank": 6,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.57, \"free_inodes\": 12455647}, \"tmp\": {\"free_gib\": 83.57, \"free_inodes\": 12455647}}, \"mem_available_gib\": 395.12, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  },
+  {
+    "worker": 406,
+    "rank": 7,
+    "exit": 0,
+    "output": "{\"event\": \"native_sweep_clean_host_audit\", \"rank\": null, \"storage\": {\"home\": {\"free_gib\": 83.4, \"free_inodes\": 12455519}, \"tmp\": {\"free_gib\": 83.4, \"free_inodes\": 12455519}}, \"mem_available_gib\": 395.11, \"devices\": [\"/dev/accel3\", \"/dev/accel2\", \"/dev/accel1\", \"/dev/accel0\"], \"owners\": [], \"stray_workloads\": []}",
+    "error": ""
+  }
+]

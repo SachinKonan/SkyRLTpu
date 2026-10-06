@@ -1,0 +1,44 @@
+{
+  "import_seconds": 3.3911154140369035,
+  "host": "della-h14n2",
+  "cpus": [
+    186,
+    187,
+    188,
+    189
+  ],
+  "torch": "2.5.1+cpu",
+  "challenge_commit": "996193c83eaad151e5ae3fb166cedbd83372d060",
+  "evaluator_commit": "45a721d01dfe56fc4800b95da52e9b4193b76d04",
+  "cases": [
+    {
+      "name": "ibm18",
+      "hard_macros": 285,
+      "soft_macros": 1029,
+      "nets": 26184,
+      "load_seconds": 1.8096076209913008,
+      "candidate_seconds": 0.014520718017593026,
+      "trials": [
+        {
+          "validation_seconds": 0.3711955199833028,
+          "score_seconds": 27.310212926997337,
+          "grading_seconds": 27.68140844698064,
+          "valid": true,
+          "violations": [],
+          "metrics": {
+            "proxy_cost": 2.093259334564209,
+            "wirelength_cost": 0.06165936589241028,
+            "density_cost": 1.0961180925369263,
+            "congestion_cost": 2.967082054353543,
+            "overlap_count": 0,
+            "total_overlap_area": 0.0,
+            "max_overlap_area": 0.0,
+            "num_macros_with_overlaps": 0,
+            "overlap_ratio": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "peak_rss_mib": 270.23046875
+}

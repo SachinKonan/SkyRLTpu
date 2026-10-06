@@ -1,0 +1,38 @@
+{
+  "event": "placement_fix_verified",
+  "references": 8,
+  "physical_chips": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "peak_concurrent_candidates": 4,
+  "rewards": [
+    0.4827349313801288,
+    0.42421713893055063,
+    0.40517453651981844,
+    0.4827672691170874,
+    0.4242171174776264,
+    0.3588439730474151,
+    0.40517453651981844,
+    0.3563217853740763
+  ],
+  "max_candidate_seconds": 12.355518027000016,
+  "debug_job": 884,
+  "accelerator": "tpu-v6e-32",
+  "hard_cpus": 4,
+  "hard_memory_gib": 16,
+  "max_peak_memory_gib": 4.7667999267578125,
+  "invalid_reward": 0.0,
+  "invalid_correctness": 0.0,
+  "aggregate_rewards": {
+    "challenge_seed.py": 0.41306899801970964,
+    "challenge_seed_jax.py": 0.41223517511243196
+  },
+  "files": {
+    "references.jsonl": "9ae5c78005cdfdc66ec9b2f91c5f11932f151f4bf4a4421be0d450a4fc368924",
+    "concurrency.json": "f5f580b675c573eb40e6786a1fc4fbd68057eca57c9ff61393d17a4d165939cc",
+    "summary.json": "3235d7d9d797c837475177ec8167456982ffcca80fb386589727b3bf2778adb9"
+  }
+}

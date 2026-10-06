@@ -8,6 +8,7 @@ import httpx
 from cloudpathlib import AnyPath
 
 from skyrl.backends.renderer import render_model_input
+from skyrl.backends.native_completion import validate_choice
 from skyrl.tinker import types
 from skyrl.tinker.config import EngineConfig
 from skyrl.tinker.db_models import RequestStatus
@@ -17,6 +18,16 @@ from skyrl.utils.storage import download_and_unpack
 
 if TYPE_CHECKING:
     from skyrl.tinker.api import SampleRequest
+
+
+def _is_retryable_external_error(exc: Exception) -> bool:
+    """Return whether another inference engine may serve this request."""
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status >= 500 or status in {404, 408, 409, 425, 429}
+    return False
 
 
 def _extract_checkpoint_sync(checkpoint_path: AnyPath, target_dir: Path) -> None:
@@ -68,12 +79,49 @@ class ExternalInferenceClient:
         self.checkpoints_base = engine_config.checkpoints_base
         self.lora_base_dir = engine_config.external_inference_lora_base
         self.db_engine = db_engine
-        # Adapter names already extracted this process — a sampling burst is
-        # hundreds of concurrent requests for the same checkpoint, and each
-        # gcsfuse stat/unpack is expensive. The per-name lock makes extraction
-        # single-flight: exactly one request unpacks, the rest wait on it.
-        self._extracted_adapters: set[str] = set()
-        self._extract_locks: dict[str, asyncio.Lock] = {}
+        # Adapter names already available on each engine. A sampler checkpoint
+        # can be pushed directly to every vLLM server by the trainer, so do not
+        # assume the API host must also be able to read the trainer-local path.
+        self._available_adapters: set[tuple[str, str]] = set()
+        self._adapter_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
+    def _invalidate_engine_state(self, base_url: str) -> None:
+        """Forget adapter state cached for an engine that may have restarted."""
+        normalized_url = base_url.rstrip("/")
+        self._available_adapters = {
+            engine_key
+            for engine_key in getattr(self, "_available_adapters", set())
+            if engine_key[0].rstrip("/") != normalized_url
+        }
+
+    @staticmethod
+    async def _adapter_is_loaded(http_client: httpx.AsyncClient, model_name: str) -> bool:
+        try:
+            response = await http_client.get("/models")
+            response.raise_for_status()
+            return any(model.get("id") == model_name for model in response.json().get("data", []))
+        except (httpx.HTTPError, ValueError, TypeError):
+            return False
+
+    async def _ensure_adapter_available(
+        self,
+        http_client: httpx.AsyncClient,
+        model_name: str,
+        checkpoint_path: AnyPath,
+        target_dir: Path,
+    ) -> None:
+        engine_key = (str(http_client.base_url), model_name)
+        if engine_key in self._available_adapters:
+            return
+
+        async with self._adapter_locks.setdefault(engine_key, asyncio.Lock()):
+            if engine_key in self._available_adapters:
+                return
+            if await self._adapter_is_loaded(http_client, model_name):
+                logger.info("LoRA adapter %s is already loaded on %s", model_name, http_client.base_url)
+            else:
+                await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
+            self._available_adapters.add(engine_key)
 
     async def call_and_store_result(
         self,
@@ -102,6 +150,12 @@ class ExternalInferenceClient:
             status = RequestStatus.COMPLETED
         except Exception as e:
             logger.exception("External engine error (request_id=%s, engine=%s)", request_id, base_url)
+            if _is_retryable_external_error(e):
+                # A restarted vLLM process has lost its loaded-adapter state.
+                # Leave the database row PENDING so ExternalDispatcher can
+                # retry it on the next round-robin engine.
+                self._invalidate_engine_state(base_url)
+                raise
             # format_exception, not str(e): httpx timeouts stringify to "".
             result_data = {"error": format_exception(e), "status": "failed"}
             status = RequestStatus.FAILED
@@ -144,11 +198,7 @@ class ExternalInferenceClient:
             checkpoint_path = self.checkpoints_base / model_id / "sampler_weights" / f"{checkpoint_id}.tar.gz"
             target_dir = self.lora_base_dir / model_name
 
-            if model_name not in self._extracted_adapters:
-                async with self._extract_locks.setdefault(model_name, asyncio.Lock()):
-                    if model_name not in self._extracted_adapters:
-                        await asyncio.to_thread(_extract_checkpoint_sync, checkpoint_path, target_dir)
-                        self._extracted_adapters.add(model_name)
+            await self._ensure_adapter_available(http_client, model_name, checkpoint_path, target_dir)
 
         payload = {
             "model": model_name,
@@ -164,6 +214,9 @@ class ExternalInferenceClient:
             "stream": False,
             "return_token_ids": True,
         }
+        native_budget = getattr(request.sampling_params, "thinking_token_budget", None)
+        if native_budget is not None:
+            payload["thinking_token_budget"] = native_budget
         # Forward stop conditions (previously dropped: clients only stopped on
         # the model's EOS). Ints are token ids, strings are text stops.
         if request.sampling_params.stop:
@@ -190,12 +243,17 @@ class ExternalInferenceClient:
 
         sequences = []
         for choice in result["choices"]:
+            if native_budget is not None:
+                validate_choice(choice, native_budget, request.sampling_params.max_tokens)
             lp = choice["logprobs"]
             sequences.append(
                 types.GeneratedSequence(
                     tokens=choice["token_ids"],
                     logprobs=lp["token_logprobs"],
                     stop_reason=choice["finish_reason"],
+                    loss_mask=choice.get("loss_mask"),
+                    thinking_budget=choice.get("thinking_budget"),
+                    served_by=choice.get("served_by"),
                 )
             )
 

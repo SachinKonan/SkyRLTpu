@@ -1,7 +1,10 @@
 import base64
 
+import numpy as np
 import pytest
 from pydantic import TypeAdapter, ValidationError
+from tinker.proto import tinker_public_pb2 as public_pb
+from tinker.proto.response_conv import deserialize_forward_backward_output, deserialize_sample_response
 
 from skyrl.tinker import api, types
 
@@ -82,6 +85,93 @@ def test_datum_to_types_preserves_values_and_returns():
 
     assert datum.loss_fn_inputs.values.data == [0.1, 0.2, 0.3]
     assert datum.loss_fn_inputs.returns.data == [0.4, 0.5, 0.6]
+
+
+def test_proto_forward_backward_request_decodes_current_sdk_wire_format():
+    request = public_pb.ForwardBackwardRequest(
+        model_id="model_proto",
+        seq_id=7,
+        loss_fn="importance_sampling",
+        forward_only=True,
+    )
+    datum = request.data.add()
+    datum.model_input.add().encoded_text.tokens = np.asarray([11, 12, 13], dtype=np.int32).tobytes()
+
+    tensors = {
+        "target_tokens": (public_pb.DTYPE_INT64, np.asarray([12, 13, 14], dtype=np.int64)),
+        "weights": (public_pb.DTYPE_FLOAT32, np.asarray([0.0, 1.0, 1.0], dtype=np.float32)),
+    }
+    for name, (dtype, values) in tensors.items():
+        tensor = datum.loss_fn_inputs[name]
+        tensor.dtype = dtype
+        tensor.dense = values.tobytes()
+        tensor.shape.extend(values.shape)
+
+    model_id, decoded, forward_only = api._decode_proto_forward_backward(request.SerializeToString())
+
+    assert model_id == "model_proto"
+    assert forward_only is True
+    assert decoded.loss_fn == "importance_sampling"
+    assert decoded.data[0].model_input.chunks[0].tokens == [11, 12, 13]
+    assert decoded.data[0].loss_fn_inputs.target_tokens.data == [12, 13, 14]
+    assert decoded.data[0].loss_fn_inputs.weights.data == [0.0, 1.0, 1.0]
+    assert decoded.data[0].loss_fn_inputs.advantages.data == [0.0, 0.0, 0.0]
+    assert decoded.data[0].loss_fn_inputs.logprobs.data == [0.0, 0.0, 0.0]
+
+
+def test_proto_forward_backward_request_rejects_malformed_tensor_shape():
+    request = public_pb.ForwardBackwardRequest(model_id="model_proto", loss_fn="cross_entropy")
+    datum = request.data.add()
+    datum.model_input.add().encoded_text.tokens = np.asarray([11], dtype=np.int32).tobytes()
+    target = datum.loss_fn_inputs["target_tokens"]
+    target.dtype = public_pb.DTYPE_INT64
+    target.dense = np.asarray([12], dtype=np.int64).tobytes()
+    target.shape.extend([2])
+
+    with pytest.raises(ValueError, match="byte count does not match"):
+        api._decode_proto_forward_backward(request.SerializeToString())
+
+
+def test_forward_backward_result_proto_round_trip_preserves_ragged_rows():
+    result = {
+        "loss_fn_output_type": "scalar",
+        "loss_fn_outputs": [
+            {
+                "logprobs": {"data": [-1.0, -2.0], "dtype": "float32", "shape": [2]},
+                "token_ids": {"data": [11, 12], "dtype": "int64", "shape": [2]},
+            },
+            {
+                "logprobs": {"data": [-3.0, -4.0, -5.0], "dtype": "float32", "shape": [3]},
+                "token_ids": {"data": [13, 14, 15], "dtype": "int64", "shape": [3]},
+            },
+        ],
+        "metrics": {"loss:mean": 1.25},
+    }
+
+    decoded = deserialize_forward_backward_output(api._encode_forward_backward_result_proto(result))
+
+    assert decoded.loss_fn_output_type == "scalar"
+    assert decoded.metrics == {"loss:mean": 1.25}
+    assert decoded.loss_fn_outputs[0]["logprobs"].data == [-1.0, -2.0]
+    assert decoded.loss_fn_outputs[1]["logprobs"].shape == [3]
+    assert decoded.loss_fn_outputs[1]["token_ids"].data == [13, 14, 15]
+
+
+def test_sample_result_proto_round_trip_preserves_tokens_and_prompt_logprobs():
+    result = {
+        "sequences": [
+            {"stop_reason": "stop", "tokens": [7, 8], "logprobs": [-0.5, -0.25]},
+            {"stop_reason": "length", "tokens": [9], "logprobs": [-1.5]},
+        ],
+        "prompt_logprobs": [None, -0.75],
+    }
+
+    decoded = deserialize_sample_response(api._encode_sample_result_proto(result))
+
+    assert decoded.sequences[0].stop_reason == "stop"
+    assert decoded.sequences[0].tokens == [7, 8]
+    assert decoded.sequences[1].logprobs == [-1.5]
+    assert decoded.prompt_logprobs == [None, -0.75]
 
 
 # --- ModelInputChunk discriminator tests (api) ---

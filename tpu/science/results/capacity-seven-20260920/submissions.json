@@ -1,0 +1,82 @@
+{
+  "jobs": [
+    {
+      "run_id": "capacity-v5p-qwen-ac2-grpo-15e4-20260920",
+      "model": "qwen",
+      "task": "ac2",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "retained": 291,
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-2343fc2a448fe9efb4761cc22addd104cf25f279c39ecfc519c957a564f0ced5.tar.gz",
+      "archive_sha256": "2343fc2a448fe9efb4761cc22addd104cf25f279c39ecfc519c957a564f0ced5",
+      "state": "submitted",
+      "submitted_at": "2026-09-20T16:02:07.448998+00:00",
+      "exit_code": 0,
+      "job_id": 1318
+    },
+    {
+      "run_id": "capacity-v5p-gemma-ac2-grpo-4e5-20260920",
+      "model": "gemma",
+      "task": "ac2",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "retained": 160,
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-918991f349913b46fe9dc2d6d33d30d27eccfea644b777514d3f0f25b2aebcba.tar.gz",
+      "archive_sha256": "918991f349913b46fe9dc2d6d33d30d27eccfea644b777514d3f0f25b2aebcba",
+      "state": "submitted",
+      "submitted_at": "2026-09-20T16:02:17.021365+00:00",
+      "exit_code": 0,
+      "job_id": 1319
+    },
+    {
+      "run_id": "capacity-v5p-gemma-qubit-grpo-4e5-20260920",
+      "model": "gemma",
+      "task": "qubit",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "retained": 96,
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-38eff59e48223d9449c3bb1da5741a4ac3ae28b52a26c4228cc12eba422a6911.tar.gz",
+      "archive_sha256": "38eff59e48223d9449c3bb1da5741a4ac3ae28b52a26c4228cc12eba422a6911",
+      "state": "submitted",
+      "submitted_at": "2026-09-20T16:02:24.893324+00:00",
+      "exit_code": 0,
+      "job_id": 1320
+    },
+    {
+      "run_id": "capacity-v6e-muse-ac2-grpo-4e5-20260920",
+      "model": "muse",
+      "task": "ac2",
+      "pool": "tpuswarm-v6e32-central1b",
+      "retained": 440,
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-385f59cc942a3cca5e0504e90296d065b514000373a46cd6641177c82f7a8589.tar.gz",
+      "archive_sha256": "385f59cc942a3cca5e0504e90296d065b514000373a46cd6641177c82f7a8589",
+      "state": "submitted",
+      "submitted_at": "2026-09-20T16:02:35.830339+00:00",
+      "exit_code": 0,
+      "job_id": 1321
+    },
+    {
+      "run_id": "capacity-v6e-qwen-qubit-grpo-15e4-20260920",
+      "model": "qwen",
+      "task": "qubit",
+      "pool": "tpuswarm-v6e32-central1b",
+      "retained": 46,
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-651443e9e0e7185df2581bd8c307c17ea18d216336c83548939383b740f25177.tar.gz",
+      "archive_sha256": "651443e9e0e7185df2581bd8c307c17ea18d216336c83548939383b740f25177",
+      "state": "submitted",
+      "submitted_at": "2026-09-20T16:02:48.097117+00:00",
+      "exit_code": 0,
+      "job_id": 1322
+    },
+    {
+      "run_id": "capacity-v6e-muse-qubit-grpo-4e5-20260920",
+      "model": "muse",
+      "task": "qubit",
+      "pool": "tpuswarm-v6e32-central1b",
+      "retained": 0,
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/science-training-c5f38a27740927097306d7d73c8875ce9a9535d0994acb47abb44f79e0a4ee63.tar.gz",
+      "archive_sha256": "c5f38a27740927097306d7d73c8875ce9a9535d0994acb47abb44f79e0a4ee63",
+      "state": "submitted",
+      "submitted_at": "2026-09-20T16:03:00.073944+00:00",
+      "exit_code": 0,
+      "job_id": 1323
+    }
+  ]
+}

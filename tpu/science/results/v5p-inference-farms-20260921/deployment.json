@@ -1,0 +1,67 @@
+{
+  "service": "skyrl-hybrid-farm-discovery.service",
+  "before": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/hybrid-migration/supervisor/a7318058324fde0e2d6db107427721e6183a7583a9d5289adeef3bf8469708b9",
+  "after": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/hybrid-migration/supervisor/72fc4505741a196bf1509e4f83c17ac82f3bc02338f301930b083290ef9e1a1d",
+  "sha256": "72fc4505741a196bf1509e4f83c17ac82f3bc02338f301930b083290ef9e1a1d",
+  "verified_at": "2026-09-21T03:58:46.013005+00:00",
+  "farm_name_contains": "inference-farm",
+  "legacy_farm_pool": "tpuswarm-v4-32-central2-smoke",
+  "trainer_pools": [
+    "tpuswarm-v6e32-east5b-qwen35",
+    "tpuswarm-v6e32-central1b"
+  ],
+  "tests": "35 passed; two unrelated circuit-queue tests excluded because the build environment lacks google-cloud-storage",
+  "farms_submitted": false,
+  "live_pass": {
+    "time": 1789963088.7034426,
+    "farms": [
+      {
+        "job_id": 1331,
+        "state": "ready"
+      },
+      {
+        "job_id": 1330,
+        "state": "ready"
+      }
+    ],
+    "targets": [
+      {
+        "job_id": 1343,
+        "state": "unreachable_or_not_supported"
+      },
+      {
+        "job_id": 1342,
+        "state": "unchanged"
+      },
+      {
+        "job_id": 1336,
+        "state": "unchanged"
+      },
+      {
+        "job_id": 1335,
+        "state": "unchanged"
+      },
+      {
+        "job_id": 1334,
+        "state": "unchanged"
+      }
+    ]
+  },
+  "profiles": [
+    {
+      "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-qwen-20260921.json",
+      "sha256": "d035e97b7b79d57cfcd89bfc42f64e0e057a1e1ea231f4a2cd0ff141a34ebb53",
+      "built_archive_sha256": "9aa4ad892aa7b054d7d887e3f156044e8c4b0cc4be1d101caa5432b4f679fff6"
+    },
+    {
+      "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-gemma-20260921.json",
+      "sha256": "52c1428306d9f5393b112b52f4ebbc4fce403887ad5499d4bf9a8833d8b2b530",
+      "built_archive_sha256": "d58ff6023c3c80d56b212c4dc2989aac32b3e9c78db3d146b64a91a2938d25c4"
+    },
+    {
+      "profile": "tpu/swarm/ray_train/profiles/inference-farm-v5p32-muse-20260921.json",
+      "sha256": "7e37d174e1e48cdadc89b9c2b7bf79a421aab17dad18ad2d327d88bbc967f4b0",
+      "built_archive_sha256": "f4111f1a4661d2fbe3e8a463d47db55cce87638bb8505c8d5c4e8f5b1c935ca5"
+    }
+  ]
+}

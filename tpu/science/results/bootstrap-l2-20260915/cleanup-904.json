@@ -1,0 +1,314 @@
+{
+  "retired_job_id": 904,
+  "failed_job_id": 929,
+  "processes_stopped": 5,
+  "hosts_verified": 8,
+  "disk_reclaimed_gib": 11.104610443115234,
+  "tmpfs_contents_released_gib": 356.2636184692383,
+  "run_artifacts_preserved": true,
+  "preflight": [
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 62.08,
+          "free_inodes": 12282226
+        },
+        "tmp": {
+          "free_gib": 62.08,
+          "free_inodes": 12282226
+        }
+      },
+      "mem_available_gib": 377.55,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    },
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 77.88,
+          "free_inodes": 12309982
+        },
+        "tmp": {
+          "free_gib": 77.88,
+          "free_inodes": 12309982
+        }
+      },
+      "mem_available_gib": 394.56,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    },
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 69.23,
+          "free_inodes": 12271796
+        },
+        "tmp": {
+          "free_gib": 69.23,
+          "free_inodes": 12271796
+        }
+      },
+      "mem_available_gib": 394.54,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    },
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 69.17,
+          "free_inodes": 12271813
+        },
+        "tmp": {
+          "free_gib": 69.17,
+          "free_inodes": 12271813
+        }
+      },
+      "mem_available_gib": 394.55,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    },
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 69.23,
+          "free_inodes": 12271811
+        },
+        "tmp": {
+          "free_gib": 69.23,
+          "free_inodes": 12271811
+        }
+      },
+      "mem_available_gib": 394.58,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    },
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 78.97,
+          "free_inodes": 12315905
+        },
+        "tmp": {
+          "free_gib": 78.97,
+          "free_inodes": 12315905
+        }
+      },
+      "mem_available_gib": 392.42,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    },
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 77.87,
+          "free_inodes": 12309971
+        },
+        "tmp": {
+          "free_gib": 77.87,
+          "free_inodes": 12309971
+        }
+      },
+      "mem_available_gib": 394.54,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    },
+    {
+      "event": "native_sweep_clean_host_audit",
+      "rank": null,
+      "storage": {
+        "home": {
+          "free_gib": 77.93,
+          "free_inodes": 12309974
+        },
+        "tmp": {
+          "free_gib": 77.93,
+          "free_inodes": 12309974
+        }
+      },
+      "mem_available_gib": 394.55,
+      "devices": [
+        "/dev/accel3",
+        "/dev/accel2",
+        "/dev/accel1",
+        "/dev/accel0"
+      ],
+      "owners": [],
+      "stray_workloads": []
+    }
+  ],
+  "cleanup": [
+    {
+      "host": "t1v-n-9408395c-w-0",
+      "terminated": [
+        303786
+      ],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.4605636596679688,
+      "mem_available_gib": 377.49243545532227
+    },
+    {
+      "host": "t1v-n-9408395c-w-7",
+      "terminated": [],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.3404426574707031,
+      "mem_available_gib": 394.5604057312012
+    },
+    {
+      "host": "t1v-n-9408395c-w-4",
+      "terminated": [
+        114571,
+        114696
+      ],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.4566650390625,
+      "mem_available_gib": 394.54547119140625
+    },
+    {
+      "host": "t1v-n-9408395c-w-2",
+      "terminated": [
+        115786,
+        115910
+      ],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.4566688537597656,
+      "mem_available_gib": 394.53365325927734
+    },
+    {
+      "host": "t1v-n-9408395c-w-1",
+      "terminated": [],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.4566650390625,
+      "mem_available_gib": 394.581600189209
+    },
+    {
+      "host": "t1v-n-9408395c-w-5",
+      "terminated": [],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.2527313232421875,
+      "mem_available_gib": 392.41061782836914
+    },
+    {
+      "host": "t1v-n-9408395c-w-6",
+      "terminated": [],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.3404388427734375,
+      "mem_available_gib": 394.5413246154785
+    },
+    {
+      "host": "t1v-n-9408395c-w-3",
+      "terminated": [],
+      "tpu_owners": [],
+      "preserved": "/home/gcpuser/.cache/science-placement-v4-gemma-16x32-e2e-001/runs",
+      "removed": [
+        "ram",
+        "sources",
+        "envs"
+      ],
+      "disk_reclaimed_gib": 1.3404350280761719,
+      "mem_available_gib": 394.5542335510254
+    }
+  ],
+  "relaunch_job_id": 934,
+  "relaunch_timestamp": 1789518298.1205552,
+  "relaunch_profile": "science-routing-v4-muse-bootstrap-l2-001",
+  "relaunch_status": "submitted",
+  "bundle_unchanged": true
+}

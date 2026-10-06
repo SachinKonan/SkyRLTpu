@@ -1,0 +1,10 @@
+absl-py==2.5.0
+iniconfig==2.3.0
+networkx==3.6.1
+numpy==2.4.6
+packaging==26.3
+pluggy==1.6.0
+protobuf==7.36.1
+pygments==2.21.0
+pytest==9.1.1
+scipy==1.17.1

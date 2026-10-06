@@ -1,0 +1,36 @@
+{
+  "version": "science_v1_pilot",
+  "shared": {
+    "cpus_per_candidate": 4,
+    "memory_scope": "entire task including child processes",
+    "timing": "start after Ray admission, fixed dependency setup and input staging; include candidate import/build, all solve/fit work and validation",
+    "queue_wait_counts": false,
+    "fixed_dependency_install_counts": false,
+    "library_memory_budgets": "shared task budget, not separate allocations"
+  },
+  "qubit_routing": {
+    "memory_gib": 8,
+    "candidate_build_and_route_seconds": 900,
+    "verification_seconds": 900,
+    "total_seconds": 1800,
+    "cases": 72,
+    "layout_trials": 20,
+    "routing_trials": 20,
+    "status": "recommended from full-suite Slurm pilot; validate under concurrent v4 Ray load"
+  },
+  "macro_placement": {
+    "memory_gib": 16,
+    "candidate_seconds_per_netlist": 60,
+    "netlists": 4,
+    "completion_and_grading_seconds": 360,
+    "total_seconds": 600,
+    "status": "provisional: native PlacementCost unavailable; cannot freeze from measurements"
+  },
+  "portfolio": {
+    "memory_gib": 8,
+    "fit_seconds": 180,
+    "inference_and_replay_seconds": 60,
+    "total_seconds": 300,
+    "status": "v4 CPU reference: 23.4-23.6 s total and 285 MiB peak for all-library learner; retain budget for stronger discovered algorithms"
+  }
+}

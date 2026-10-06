@@ -1,0 +1,91 @@
+{
+  "started": 1789977366.0172358,
+  "source": "/home/gcpuser/.cache/farm10-muse-1-20260921/runs/farm10-muse-1-20260921/engine-slot-0/loras/borrow-9ad1a6f52c4a43dda625ffb403305431-f7633bd016cd1724557110dad47aa2fa5942e7163dad8ecd9ec3112955decbd2",
+  "source_config": {
+    "peft_type": "LORA",
+    "base_model_name_or_path": "meta-models/Muse-Glimmer-30B",
+    "r": 32,
+    "lora_alpha": 32.0,
+    "lora_dropout": 0.0,
+    "bias": "none",
+    "target_modules": [
+      "down_proj",
+      "gate_proj",
+      "k_proj",
+      "o_proj",
+      "q_proj",
+      "up_proj",
+      "v_proj"
+    ],
+    "task_type": "CAUSAL_LM"
+  },
+  "request_count": 4,
+  "n": 16,
+  "max_tokens": 64,
+  "temperature": 1.0,
+  "archive_sha256": "9a607aecbb8ef4b4fab0338e9e49aab92b4e5e13d068e2ce17b154e1b933bea8",
+  "upload": {
+    "loaded_engines": 4,
+    "sha256": "9a607aecbb8ef4b4fab0338e9e49aab92b4e5e13d068e2ce17b154e1b933bea8"
+  },
+  "requests": [
+    {
+      "request": 0,
+      "seconds": 162.19080018997192,
+      "choices": 16,
+      "tokens": 1024,
+      "finite_logprobs": true,
+      "usage": {
+        "prompt_tokens": 11,
+        "total_tokens": 1035,
+        "completion_tokens": 1024,
+        "prompt_tokens_details": null
+      }
+    },
+    {
+      "request": 1,
+      "seconds": 154.11702227592468,
+      "choices": 16,
+      "tokens": 1024,
+      "finite_logprobs": true,
+      "usage": {
+        "prompt_tokens": 11,
+        "total_tokens": 1035,
+        "completion_tokens": 1024,
+        "prompt_tokens_details": null
+      }
+    },
+    {
+      "request": 2,
+      "seconds": 156.63604617118835,
+      "choices": 16,
+      "tokens": 1024,
+      "finite_logprobs": true,
+      "usage": {
+        "prompt_tokens": 11,
+        "total_tokens": 1035,
+        "completion_tokens": 1024,
+        "prompt_tokens_details": null
+      }
+    },
+    {
+      "request": 3,
+      "seconds": 157.92075276374817,
+      "choices": 16,
+      "tokens": 1024,
+      "finite_logprobs": true,
+      "usage": {
+        "prompt_tokens": 11,
+        "total_tokens": 1035,
+        "completion_tokens": 1024,
+        "prompt_tokens_details": null
+      }
+    }
+  ],
+  "success": true,
+  "release": {
+    "state": "unleased",
+    "released": true
+  },
+  "finished": 1789977540.2333384
+}

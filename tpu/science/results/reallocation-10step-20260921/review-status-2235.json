@@ -1,0 +1,1175 @@
+{
+  "snapshot_utc": "2026-09-21T02:36:50.994134+00:00",
+  "code_head_before_review": "67e9fa2a",
+  "jobs": [
+    {
+      "job_id": 1342,
+      "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5597",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110
+    },
+    {
+      "job_id": 1341,
+      "run_id": "farm10-gemma-2-20260921",
+      "status": "PENDING",
+      "cluster": null,
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 110
+    },
+    {
+      "job_id": 1340,
+      "run_id": "capacity-v6e-muse-qubit-grpo-4e5-20260920",
+      "status": "PENDING",
+      "cluster": null,
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 110
+    },
+    {
+      "job_id": 1339,
+      "run_id": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920",
+      "status": "PENDING",
+      "cluster": null,
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 110
+    },
+    {
+      "job_id": 1338,
+      "run_id": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-681",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "priority": 110
+    },
+    {
+      "job_id": 1337,
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5590",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 110
+    },
+    {
+      "job_id": 1336,
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5587",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 120
+    },
+    {
+      "job_id": 1335,
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5570",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 120
+    },
+    {
+      "job_id": 1334,
+      "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v6e32-east5b-qwen35-5568",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 120
+    },
+    {
+      "job_id": 1333,
+      "run_id": "farm10-muse-1-20260921",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v4-32-central2-smoke-177",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120
+    },
+    {
+      "job_id": 1332,
+      "run_id": "farm10-gemma-2-20260921",
+      "status": "CANCELLED",
+      "cluster": null,
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120
+    },
+    {
+      "job_id": 1331,
+      "run_id": "farm10-gemma-1-20260921",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v4-32-central2-smoke-176",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120
+    },
+    {
+      "job_id": 1330,
+      "run_id": "farm10-qwen-1-20260921",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v4-32-central2-smoke-173",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120
+    }
+  ],
+  "other_active": [
+    {
+      "job_id": 1313,
+      "run_id": "cont28-g-orig-v5p",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1238",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1312,
+      "run_id": "cont27-q-orig-v5p",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1242",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1311,
+      "run_id": "gen1-g-on-q0",
+      "status": "RECOVERING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1269",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1221,
+      "run_id": "stageK-M-ms2",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1249",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1220,
+      "run_id": "stageK-M-ms1",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1243",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1219,
+      "run_id": "stageK-G-gs2",
+      "status": "RECOVERING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1252",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1218,
+      "run_id": "stageK-G-gs1",
+      "status": "RECOVERING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1260",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1217,
+      "run_id": "stageK-Q-qs2",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1224",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    },
+    {
+      "job_id": 1216,
+      "run_id": "stageK-Q-qs1",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1254",
+      "pool": "tpuswarm-v5p32-east5a-erdos",
+      "priority": 0
+    }
+  ],
+  "pools_summary": "Pools\nNAME                                  VERSION  UPTIME            STATUS      WORKERS  AUTOSCALING_POLICY                                      REQUESTED_RESOURCES  \ntpuswarm-v6e32-central1b              -        1d 3h 13m 38s     NO_REPLICA  0/20     Autoscaling from 20 to 20 workers (queue threshold: 1)  1x[tpu-v6e-32:1]     \ntpuswarm-v5p32-east5a-erdos           -        1w 1d 3h 2m       NO_REPLICA  0/48     Autoscaling from 48 to 48 workers (queue threshold: 1)  1x[tpu-v5p-32:1]     \ntpuswarm-v6e32-east5b-qwen35          9        1w 1d 2h 19m 56s  READY       5/15     Autoscaling from 15 to 15 workers (queue threshold: 1)  1x[tpu-v6e-32:1]     \ntpuswarm-v4-32-central2-smoke         4        1w 1d 2h 32m 17s  READY       3/6      Autoscaling from 6 to 6 workers (queue threshold: 1)    1x[tpu-v4-32:1]      \ntpuswarm-v4-64-central2-qwen35-erdos  7        1w 1d 2h 57m 2s   READY       1/29     Autoscaling from 29 to 29 workers (queue threshold: 1)  1x[tpu-v4-64:1]      \n\n",
+  "circuit_queue": {
+    "index": 0,
+    "attempt": 4,
+    "phase": "blocked",
+    "external_ips": [
+      "34.58.61.190",
+      "34.136.9.17",
+      "34.122.223.241",
+      "35.222.180.160",
+      "35.223.208.106",
+      "34.31.132.165",
+      "35.239.3.84",
+      "34.134.8.42"
+    ],
+    "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919"
+  },
+  "runtime": {
+    "runtime-1342": {
+      "time": 1789958211.3664498,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "grader_self_test_passed",
+          "time": 1789958138.3368592
+        },
+        {
+          "event": "grader_client_check_passed",
+          "time": 1789958143.8413818
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789958143.8416338
+        },
+        {
+          "event": "grader_status",
+          "time": 1789958168.0157785
+        },
+        {
+          "event": "grader_status",
+          "time": 1789958198.0232065
+        }
+      ],
+      "last_failure": null,
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "grader_environment_ready",
+          "role": "grader",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "time": 1789958198.0244863,
+        "exhausted": [],
+        "fatal_error": null,
+        "replicas": [],
+        "version": null
+      },
+      "farm": null,
+      "ingress": "TimeoutError"
+    },
+    "runtime-1338": {
+      "time": 1789958212.7065318,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "science_reference_result",
+          "time": 1789957713.5279553
+        },
+        {
+          "event": "science_reference_result",
+          "time": 1789957713.5281835
+        },
+        {
+          "event": "science_reference_result",
+          "time": 1789957713.5284157
+        },
+        {
+          "event": "science_reference_passed",
+          "time": 1789957713.5309842
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789957713.5311925
+        }
+      ],
+      "last_failure": null,
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "time": 1789958202.0343673,
+        "exhausted": [],
+        "fatal_error": null,
+        "replicas": [],
+        "version": null
+      },
+      "farm": {
+        "state": null,
+        "owner_run": null,
+        "active": 0,
+        "expected_engines": null,
+        "ready_engines": null,
+        "exhausted": [],
+        "updating": false,
+        "compatibility_sha256": null
+      },
+      "ingress": null
+    },
+    "runtime-1336": {
+      "time": 1789958211.463355,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "inference_membership_verified",
+          "time": 1789957027.382086
+        },
+        {
+          "event": "waiting_for_farm",
+          "time": 1789957027.385745
+        },
+        {
+          "event": "farm_admitted",
+          "time": 1789957740.4428651
+        },
+        {
+          "event": "services_ready",
+          "time": 1789957765.656635
+        },
+        {
+          "event": "client_started",
+          "time": 1789957765.6639516
+        }
+      ],
+      "last_failure": null,
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "client_running",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "time": 1789958181.7276056,
+        "exhausted": [],
+        "fatal_error": null,
+        "replicas": [
+          {
+            "instance": "37db041ae54c48d1be77568233041afe",
+            "ip": "10.202.0.85",
+            "registered": 1789957022.2486458
+          },
+          {
+            "instance": "f1e951d65f5545179f51cc8ebc8d6e18",
+            "ip": "10.202.0.106",
+            "registered": 1789957022.7139106
+          },
+          {
+            "instance": "c5b83cf55007435ba0d9f9deab107b3b",
+            "ip": "10.202.0.107",
+            "registered": 1789957023.3635988
+          },
+          {
+            "instance": "8659767933d941979914ca46d82dba32",
+            "ip": "10.202.0.105",
+            "registered": 1789957025.246387
+          }
+        ],
+        "version": "model_9f2b6482_ss0_seq2"
+      },
+      "farm": {
+        "state": null,
+        "owner_run": null,
+        "active": 16,
+        "expected_engines": null,
+        "ready_engines": null,
+        "exhausted": [],
+        "updating": false,
+        "compatibility_sha256": "b85b17feece06d34ab0496fa83374bd45f8b0de7ea1bfdf4f06807cab7d99a1d"
+      },
+      "ingress": null
+    },
+    "runtime-1335": {
+      "time": 1789958211.4586744,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "inference_membership_verified",
+          "time": 1789957903.5751941
+        },
+        {
+          "event": "waiting_for_farm",
+          "time": 1789957903.57836
+        },
+        {
+          "event": "farm_admitted",
+          "time": 1789957913.8251936
+        },
+        {
+          "event": "services_ready",
+          "time": 1789957939.0295856
+        },
+        {
+          "event": "client_started",
+          "time": 1789957939.0363688
+        }
+      ],
+      "last_failure": null,
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "client_running",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "time": 1789958203.0746186,
+        "exhausted": [],
+        "fatal_error": null,
+        "replicas": [
+          {
+            "instance": "a5e51ebb8cc547c1af4433dca8b4cee0",
+            "ip": "10.202.0.38",
+            "registered": 1789957896.2417626
+          },
+          {
+            "instance": "7b68327b1a5644debf370c3e98502b08",
+            "ip": "10.202.0.37",
+            "registered": 1789957896.3129046
+          },
+          {
+            "instance": "a5ba77353a254dc497de13ac223009f1",
+            "ip": "10.202.0.17",
+            "registered": 1789957897.5914183
+          },
+          {
+            "instance": "f85706384ee64bf5ac0c79c3b2127cff",
+            "ip": "10.202.0.26",
+            "registered": 1789957898.3033488
+          }
+        ],
+        "version": "model_a98a3f06_ss0_seq2"
+      },
+      "farm": {
+        "state": null,
+        "owner_run": null,
+        "active": 16,
+        "expected_engines": null,
+        "ready_engines": null,
+        "exhausted": [],
+        "updating": false,
+        "compatibility_sha256": "4970783063bc6b1fff3e541e56ec0d7a0572a27ee357280eadeb00494339eab0"
+      },
+      "ingress": null
+    },
+    "runtime-1334": {
+      "time": 1789958211.459258,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "inference_membership_verified",
+          "time": 1789957813.8799672
+        },
+        {
+          "event": "waiting_for_farm",
+          "time": 1789957813.8837326
+        },
+        {
+          "event": "farm_admitted",
+          "time": 1789958019.9442315
+        },
+        {
+          "event": "services_ready",
+          "time": 1789958040.1775255
+        },
+        {
+          "event": "client_started",
+          "time": 1789958040.1846938
+        }
+      ],
+      "last_failure": null,
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "client_running",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "trainer_started",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "time": 1789958210.3006916,
+        "exhausted": [],
+        "fatal_error": null,
+        "replicas": [
+          {
+            "instance": "3b808a4305964e389e53572f4baf89e5",
+            "ip": "10.202.0.241",
+            "registered": 1789957799.996107
+          },
+          {
+            "instance": "573f105e10f44ebe876d92f2498e5b5c",
+            "ip": "10.202.0.242",
+            "registered": 1789957801.3126025
+          },
+          {
+            "instance": "5f0069d7fb7447f29adab2cc7d64afac",
+            "ip": "10.202.0.238",
+            "registered": 1789957804.5075066
+          },
+          {
+            "instance": "da9451959e8c49c6a36a0813186d801c",
+            "ip": "10.202.0.243",
+            "registered": 1789957811.650887
+          }
+        ],
+        "version": "model_4ea0adcc_ss0_seq2"
+      },
+      "farm": {
+        "state": null,
+        "owner_run": null,
+        "active": 16,
+        "expected_engines": null,
+        "ready_engines": null,
+        "exhausted": [],
+        "updating": false,
+        "compatibility_sha256": "c5c76dd3f4210c52e915e306e030c6d8d4ebeffb8c12c2cf3ea0b412e70e5230"
+      },
+      "ingress": null
+    },
+    "runtime-1331": {
+      "time": 1789958211.791254,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "topology_validated",
+          "time": 1789956339.4571786
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789956892.9816053
+        },
+        {
+          "event": "services_ready",
+          "time": 1789957702.5146468
+        },
+        {
+          "event": "inference_only_waiting",
+          "time": 1789957702.533939
+        }
+      ],
+      "last_failure": null,
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "time": 1789958201.8585486,
+        "exhausted": [],
+        "fatal_error": null,
+        "replicas": [
+          {
+            "instance": "491c2b8573454adebf5f5274ee94db9c",
+            "ip": "10.130.1.53",
+            "registered": 1789957677.4373083
+          },
+          {
+            "instance": "bf6c63407c284700b7f2fee27e6cb809",
+            "ip": "10.130.1.55",
+            "registered": 1789957681.633071
+          },
+          {
+            "instance": "b42d542caae34c4780a196b1687e3f10",
+            "ip": "10.130.1.54",
+            "registered": 1789957683.8407516
+          },
+          {
+            "instance": "a68c301b36ce41b0b5b898070964edc8",
+            "ip": "10.130.1.52",
+            "registered": 1789957699.5064769
+          }
+        ],
+        "version": "borrow-4ae0b39d12df47a9b50e767663f6f0c3-d9d58a4317d94409e498a1367cec5bd19e8ac4466b15a118683627ba9a6888b3"
+      },
+      "farm": {
+        "state": "ready",
+        "owner_run": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920:712b19a3f75b45f7908443dd74c32906",
+        "active": 4,
+        "expected_engines": 4,
+        "ready_engines": 4,
+        "exhausted": [],
+        "updating": false,
+        "compatibility_sha256": "4970783063bc6b1fff3e541e56ec0d7a0572a27ee357280eadeb00494339eab0"
+      },
+      "ingress": null
+    },
+    "runtime-1330": {
+      "time": 1789958211.7839718,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "waiting_nodes",
+          "time": 1789956254.2427604
+        },
+        {
+          "event": "topology_validated",
+          "time": 1789956288.6242785
+        },
+        {
+          "event": "cache_barrier_complete",
+          "time": 1789956516.8445992
+        },
+        {
+          "event": "services_ready",
+          "time": 1789958016.550467
+        },
+        {
+          "event": "inference_only_waiting",
+          "time": 1789958016.561384
+        }
+      ],
+      "last_failure": null,
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "prepared",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": {
+        "time": 1789958210.1259584,
+        "exhausted": [],
+        "fatal_error": null,
+        "replicas": [
+          {
+            "instance": "fabd0fe17b7b49ac936e749feaa48bc3",
+            "ip": "10.130.0.174",
+            "registered": 1789957883.5797713
+          },
+          {
+            "instance": "3d45b28bd6fc4ea986592f9264d2b45b",
+            "ip": "10.130.0.171",
+            "registered": 1789957934.116951
+          },
+          {
+            "instance": "f45f18c013ec4d21b39717c2cc8d5dce",
+            "ip": "10.130.0.170",
+            "registered": 1789957963.9686937
+          },
+          {
+            "instance": "efa18adbd3ae4280bbe870573c86f223",
+            "ip": "10.130.0.173",
+            "registered": 1789958011.9933565
+          }
+        ],
+        "version": "borrow-c19e2f843dcd4e749dc4bc0acc64fb62-ec061b5009ab7526c612d4efffce8376c28a996eacf5e4ddb23ecc10221a4edb"
+      },
+      "farm": {
+        "state": "ready",
+        "owner_run": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919:1c187f1972bd4c89828f5b8c283d3909",
+        "active": 4,
+        "expected_engines": 4,
+        "ready_engines": 4,
+        "exhausted": [],
+        "updating": false,
+        "compatibility_sha256": "c5c76dd3f4210c52e915e306e030c6d8d4ebeffb8c12c2cf3ea0b412e70e5230"
+      },
+      "ingress": null
+    },
+    "circuit": {
+      "time": 1789958213.1130297,
+      "run_exists": true,
+      "events": [
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789957401.2562764
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789957401.2563567
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789957401.256426
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789957401.2564943
+        },
+        {
+          "event": "final_run_writeback_complete",
+          "time": 1789957401.2565596
+        }
+      ],
+      "last_failure": {
+        "detail": "\u001b[36mray::Host.prepare()\u001b[39m (pid=1741550, ip=10.128.1.93, actor_id=0e56262aced4478d235af83804000000, repr=<tpu.swarm.ray_train.host.Host object at 0x7fece8797fe0>)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/gcpuser/.cache/skyrl-ray-code/8f333ebe1e39f8afbc49b7ce4dd7102443094c6018f4922d8c22a524fd109f3d/tpu/swarm/ray_train/host.py\", line 366, in prepare\n    self.store.restore_compile(seed)\n  File \"/home/gcpuser/.cache/skyrl-ray-code/8f333ebe1e39f8afbc49b7ce4dd7102443094c6018f4922d8c22a524fd109f3d/tpu/swarm/ray_train/cache.py\", line 340, in restore_compile\n    self.gcs.transfer([\"cp\", *[o.uri + \"#\" + o.generation for o in batch], str(cache)],\n  File \"/home/gcpuser/.cache/skyrl-ray-code/8f333ebe1e39f8afbc49b7ce4dd7102443094c6018f4922d8c22a524fd109f3d/tpu/swarm/ray_train/cache.py\", line 209, in transfer\n    raise RuntimeError(f\"{label} failed; see {log}\")\nRuntimeError: compile-restore failed; see /home/gcpuser/.cache/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/runs/fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919/transfers/compile-restore.log",
+        "event": "controller_failed",
+        "host": "t1v-n-addd4d77-w-0",
+        "pid": 2763591,
+        "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+        "time": 1789957382.7588181
+      },
+      "hosts": [
+        {
+          "rank": 0,
+          "phase": "prepared",
+          "role": "trainer",
+          "stopped": false
+        },
+        {
+          "rank": 1,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 2,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 3,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 4,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 5,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 6,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        },
+        {
+          "rank": 7,
+          "phase": "cache_setup",
+          "role": "inference",
+          "stopped": false
+        }
+      ],
+      "inference": null,
+      "farm": null,
+      "ingress": "URLError"
+    }
+  },
+  "durable": [
+    {
+      "run_id": "fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919",
+      "kind": "ac2",
+      "model": "qwen",
+      "resume_min": 1,
+      "checkpoint": {
+        "name": "000001",
+        "batch": 1,
+        "state_path": "tinker://model_e37ed8e4/weights/000001",
+        "sampler_path": "tinker://model_e37ed8e4/000001"
+      },
+      "checkpoint_updated": "2026-09-21 02:35:56.399000+00:00",
+      "metrics_updated": "2026-09-21 02:35:56.389000+00:00",
+      "metrics": {
+        "step": 1,
+        "time/sampling": 6034.81213259697,
+        "pool/best_value": 0.9283269740415173,
+        "qwen/time/train": 373.2853469848633,
+        "time/total": 6462.3912007808685,
+        "train/consec_all_member_errors": 0.0
+      }
+    },
+    {
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "kind": "ac2",
+      "model": "gemma",
+      "resume_min": 1,
+      "checkpoint": {
+        "name": "000001",
+        "batch": 1,
+        "state_path": "tinker://model_25a9d811/weights/000001",
+        "sampler_path": "tinker://model_25a9d811/000001"
+      },
+      "checkpoint_updated": "2026-09-21 02:36:21.411000+00:00",
+      "metrics": {}
+    },
+    {
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "kind": "ac2",
+      "model": "muse",
+      "resume_min": 2,
+      "checkpoint": {
+        "name": "000002",
+        "batch": 2,
+        "state_path": "tinker://model_7056acdd/weights/000002",
+        "sampler_path": "tinker://model_7056acdd/000002"
+      },
+      "checkpoint_updated": "2026-09-21 02:36:30.673000+00:00",
+      "metrics_updated": "2026-09-21 02:36:30.640000+00:00",
+      "metrics": {
+        "step": 2,
+        "time/sampling": 4106.958809375763,
+        "pool/best_value": 0.9375454227781059,
+        "muse/time/train": 72.63864088058472,
+        "time/total": 4217.921096324921,
+        "train/consec_all_member_errors": 0.0
+      }
+    },
+    {
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "kind": "rglru",
+      "model": "gemma",
+      "resume_min": 0,
+      "metrics": {}
+    },
+    {
+      "run_id": "science-v6e-qwen-qubit-grpo-lr15e4-s1-20260920",
+      "kind": "qubit",
+      "model": "qwen",
+      "resume_min": 2,
+      "checkpoint": {
+        "name": "000003",
+        "batch": 3,
+        "state_path": "tinker://model_93368d2b/weights/000003",
+        "sampler_path": "tinker://model_93368d2b/000003"
+      },
+      "checkpoint_updated": "2026-09-21 02:35:44.936000+00:00",
+      "metrics_updated": "2026-09-21 02:35:44.751000+00:00",
+      "metrics": {
+        "step": 3,
+        "time/sampling": 2919.477616786957,
+        "pool/best_value": 0.5233968531743329,
+        "qwen/time/train": 153.26192665100098,
+        "time/total": 3103.833570957184,
+        "train/consec_all_member_errors": 0.0
+      }
+    },
+    {
+      "run_id": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920",
+      "kind": "qubit",
+      "model": "gemma",
+      "resume_min": 0,
+      "checkpoint": {
+        "name": "000001",
+        "batch": 1,
+        "state_path": "tinker://model_677dd3c7/weights/000001",
+        "sampler_path": "tinker://model_677dd3c7/000001"
+      },
+      "checkpoint_updated": "2026-09-21 01:55:42.605000+00:00",
+      "metrics_updated": "2026-09-21 01:55:42.495000+00:00",
+      "metrics": {
+        "step": 1,
+        "time/sampling": 6135.929670572281,
+        "pool/best_value": 0.5329396104918068,
+        "gemma/time/train": 91.64736747741699,
+        "time/total": 6297.062416791916,
+        "train/consec_all_member_errors": 0.0
+      }
+    },
+    {
+      "run_id": "capacity-v6e-muse-qubit-grpo-4e5-20260920",
+      "kind": "qubit",
+      "model": "muse",
+      "resume_min": 3,
+      "checkpoint": {
+        "name": "000003",
+        "batch": 3,
+        "state_path": "tinker://model_910b8d08/weights/000003",
+        "sampler_path": "tinker://model_910b8d08/000003"
+      },
+      "checkpoint_updated": "2026-09-21 00:36:19.593000+00:00",
+      "metrics_updated": "2026-09-21 00:36:19.505000+00:00",
+      "metrics": {
+        "step": 3,
+        "time/sampling": 3974.1536903381348,
+        "pool/best_value": 0.5214706312250736,
+        "muse/time/train": 91.68227672576904,
+        "time/total": 4106.078081846237,
+        "train/consec_all_member_errors": 0.0
+      }
+    },
+    {
+      "run_id": "fresh-v4-gemma-circuit-grpo-lr4e5-s1-20260919",
+      "kind": "circuit",
+      "model": "gemma",
+      "resume_min": 0,
+      "metrics": {}
+    },
+    {
+      "run_id": "placement-v5p64-muse-10step-20260921",
+      "kind": "circuit",
+      "model": "muse",
+      "resume_min": 0,
+      "metrics": {}
+    },
+    {
+      "run_id": "placement-v5p64-qwen-10step-20260921",
+      "kind": "circuit",
+      "model": "qwen",
+      "resume_min": 0,
+      "metrics": {}
+    },
+    {
+      "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+      "kind": "rglru",
+      "model": "qwen",
+      "resume_min": 5,
+      "checkpoint": {
+        "name": "000005",
+        "batch": 5,
+        "state_path": "tinker://model_ab00c67f/weights/000005",
+        "sampler_path": "tinker://model_ab00c67f/000005"
+      },
+      "checkpoint_updated": "2026-09-21 02:36:22.434000+00:00",
+      "metrics_updated": "2026-09-21 02:36:19.588000+00:00",
+      "metrics": {
+        "step": 5,
+        "time/sampling": 1036.3143632411957,
+        "pool/best_value": 1.5552895485826974,
+        "qwen/time/train": 82.29198718070984,
+        "time/total": 1146.8214015960693,
+        "train/consec_all_member_errors": 0.0
+      }
+    }
+  ]
+}

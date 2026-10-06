@@ -1,0 +1,87 @@
+{
+  "host": "della-h12n10",
+  "cpus": 4,
+  "memory_gib": 16,
+  "wall_limit_seconds": 180,
+  "profile": "upstream_cpu_fallback_pilot",
+  "challenge_commit": "996193c83eaad151e5ae3fb166cedbd83372d060",
+  "evaluator_commit": "45a721d01dfe56fc4800b95da52e9b4193b76d04",
+  "runs": [
+    {
+      "method": "abuplace",
+      "case": "ibm01",
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "valid": true,
+      "reward": 0.47607804594228786,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "MPLCONFIGDIR": "/tmp/matplotlib",
+        "MPLBACKEND": "Agg",
+        "XDG_CACHE_HOME": "/tmp/cache",
+        "XDG_CONFIG_HOME": "/tmp/config",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4"
+      },
+      "isolated_seconds": 6.700055618071929,
+      "import_and_load_seconds": 3.9357865219935775,
+      "candidate_seconds": 1.9255295229377225,
+      "peak_rss_mib": 242.6484375,
+      "cuda_available": false,
+      "violations": [],
+      "metrics": {
+        "proxy_cost": 1.1004959344863892,
+        "wirelength_cost": 0.06828062981367111,
+        "density_cost": 0.889373779296875,
+        "congestion_cost": 1.1750567740624844,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "grading_seconds": 3.12133204494603,
+      "total_seconds": 9.8517376530217
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm18",
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "valid": true,
+      "reward": 0.35874989939223073,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "MPLCONFIGDIR": "/tmp/matplotlib",
+        "MPLBACKEND": "Agg",
+        "XDG_CACHE_HOME": "/tmp/cache",
+        "XDG_CONFIG_HOME": "/tmp/config",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4"
+      },
+      "isolated_seconds": 7.561819756985642,
+      "import_and_load_seconds": 5.057707097032107,
+      "candidate_seconds": 1.5372201959835365,
+      "peak_rss_mib": 287.2421875,
+      "cuda_available": false,
+      "violations": [],
+      "metrics": {
+        "proxy_cost": 1.7874572277069092,
+        "wirelength_cost": 0.053216006606817245,
+        "density_cost": 1.0405701398849487,
+        "congestion_cost": 2.427912204080636,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0
+      },
+      "grading_seconds": 46.99807524296921,
+      "total_seconds": 54.5941918019671
+    }
+  ]
+}

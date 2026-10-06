@@ -1,0 +1,129 @@
+"""CPU science grading on the existing Ray v2 workload cluster.
+
+Ray reserves logical resources. A distinct systemd cgroup enforces each task's
+CPU set, aggregate memory, process count, and lifetime. All prepared nodes,
+including TPU inference nodes, are eligible. Candidates never run in Ray.
+"""
+import json
+import os
+from pathlib import Path
+import pwd
+import shutil
+import subprocess
+import time
+import uuid
+
+import ray
+from .cpu_slots import acquire_slot, slot_cpus, validate_slots
+
+
+def cleanup_builds(folder):
+    """Discard reproducible private builds, retaining source, logs and outputs."""
+    work = Path(folder) / 'evaluation'
+    if work.is_symlink():
+        raise RuntimeError('unexpected evaluation symlink')
+    removed = []
+    for name in ('target', 'rust'):
+        path = work / name
+        if path.is_symlink():
+            path.unlink()
+            removed.append(name)
+        elif path.exists():
+            shutil.rmtree(path)
+            removed.append(name)
+    return removed
+
+
+@ray.remote(num_cpus=4,memory=8*1024**3,max_retries=0)
+def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, routing_suite='full', resource_contract=None):
+    if resource_contract is not None:
+        from .routing_resources import validate_request, acquire
+        validate_request(resource_contract)
+        if task != 'routing' or routing_suite != 'full': raise ValueError('parallel resources require full routing')
+        root = Path(root).resolve(); jobs = root / '.science/ray-jobs'; jobs.mkdir(exist_ok=True)
+        if not (root/'.science/ready.json').is_file(): raise RuntimeError('CPU worker not prepared')
+        queued=time.monotonic()
+        slot, cpus, lease = acquire(slots=slots_per_host, deadline_seconds=admission_timeout_s)
+        waited=time.monotonic()-queued
+        with lease:
+            result=_grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite, resource_contract, cpus)
+            result['metrics']['admission_wait_seconds']=waited
+            return result
+    if task not in ('portfolio','portfolio_v2','routing'):raise ValueError('unsupported science task')
+    from .routing_suite import validate_suite
+    validate_suite(routing_suite)
+    if task != 'routing' and routing_suite != 'full':raise ValueError('Q20 requires routing')
+    validate_slots(slots_per_host)
+    if task != 'routing' and slots_per_host != 2:raise ValueError('expanded slots apply only to routing')
+    root=Path(root).resolve();jobs=root/'.science/ray-jobs';jobs.mkdir(exist_ok=True)
+    if not (root/'.science/ready.json').is_file():raise RuntimeError('CPU worker dependencies not prepared')
+    # Admission belongs to the batch queue allowance, not candidate runtime.
+    # Locks are shared across payload directories; never unlink them on release.
+    slot,lock=acquire_slot(slots=slots_per_host, deadline_seconds=admission_timeout_s)
+    with lock:
+        return _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite)
+
+
+def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suite='full', resource_contract=None, reserved_cpus=None):
+    from .cgroup_limits import runtime_owner_properties
+    from .worker import process_identity
+    from .rewards import invalid
+    job_id=uuid.uuid4().hex;unit='science-grade-'+job_id
+    folder=jobs/job_id;folder.mkdir()
+    (folder/'candidate.py').write_text(source)
+    (folder/'request.json').write_text(json.dumps(dict(task=task,source=str(folder/'candidate.py'),
+        work=str(folder/'evaluation'),root=str(root),routing_suite=routing_suite,resource_contract=resource_contract)))
+    seconds=resource_contract['outer_seconds'] if resource_contract else (1800 if task=='routing' else 300)
+    memory_gib=resource_contract['program_memory_gib'] if resource_contract else 8
+    # Sixteen disjoint four-CPU sets, leaving CPUs 0-15 and 80+ for the host.
+    cpus=reserved_cpus if resource_contract else slot_cpus(slot)
+    if not set(cpus)<=os.sched_getaffinity(0):raise RuntimeError('configured grading CPU set unavailable')
+    user=pwd.getpwuid(os.getuid()).pw_name
+    command=['sudo','-n','systemd-run','--unit='+unit,'--uid='+user,'--gid='+str(os.getgid()),
+        '--wait','--collect','--pipe','--quiet',*runtime_owner_properties(),
+        '--property=MemoryMax='+str(memory_gib)+'G','--property=MemorySwapMax=0',
+        *(['--property=Delegate=cpu cpuset memory pids'] if resource_contract else []),
+        '--property=CPUQuota='+str(100*len(cpus))+'%','--property=AllowedCPUs='+','.join(map(str,cpus)),
+        '--property=TasksMax='+str(640 if resource_contract else 128),'--property=RuntimeMaxSec='+str(seconds),
+        '--property=KillMode=control-group','--property=TimeoutStopSec=2','--property=OOMPolicy=stop',
+        '--working-directory='+str(root),str(root/'.science/venv/bin/python'),'-m','tpu.science.worker',
+        '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
+        '--owner-pid',str(os.getpid()),'--owner-start',process_identity(os.getpid())]
+    started=time.monotonic()
+    result = None
+    try:
+        with (folder/'worker.log').open('wb') as log:
+            proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
+            try:code=proc.wait(timeout=seconds+20)
+            finally:
+                if proc.poll() is None:proc.terminate();proc.wait(timeout=5)
+        if code:
+            result=invalid(f'CPU task exited {code} (timeout, resource limit, or worker failure)',phase='worker')
+            result['stdout']=(folder/'worker.log').read_text(errors='replace')[-4000:]
+        else:result=json.loads((folder/'result.json').read_text())
+    finally:
+        # This also executes on cooperative Ray cancellation. A dead Ray worker
+        # is detected by the unit's watchdog; RuntimeMaxSec is the final backstop.
+        try:
+            subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
+        finally:
+            if task == 'routing':
+                try:
+                    removed = cleanup_builds(folder)
+                    if result is not None:
+                        result['metrics']['removed_build_dirs'] = removed
+                except OSError as exc:
+                    if result is not None:
+                        result['metrics']['build_cleanup_error'] = str(exc)
+    result['metrics'].update(ray_node_id=ray.get_runtime_context().get_node_id(),
+        host=__import__('socket').gethostname(),job_id=job_id,task=task,ray_executor=True,
+        task_envelope_seconds=time.monotonic()-started,hard_memory_gib=memory_gib,hard_cpus=cpus,
+        artifact_directory=str(folder),grading_slots_per_host=slots_per_host,
+        grading_memory_cap_gib=memory_gib*slots_per_host,resource_contract=resource_contract)
+    if resource_contract and result['correctness'] != 1 and 'case_statuses' not in result['metrics']:
+        from .routing_parallel import partial_metrics
+        result['metrics'].update(partial_metrics(folder/'evaluation'))
+    (folder/'verdict.json').write_text(json.dumps(result,allow_nan=False,indent=2)+'\n')
+    if result.get('failure_class')=='infrastructure':
+        raise RuntimeError('Routing grader infrastructure failed: '+result['msg'])
+    return result

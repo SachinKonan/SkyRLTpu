@@ -1,0 +1,44 @@
+{
+  "passed": true,
+  "archive_sha256": "4fecefb44b9d0d79373e0194256a63aa6013b030aa745437427661fc112d8e9a",
+  "checks": [
+    {
+      "imports": [
+        "tpu.swarm.ray_train.controller",
+        "tpu.swarm.ray_train.borrowing",
+        "tpu.swarm.ray_train.borrowing_phase",
+        "tpu.science.training_setup",
+        "tpu.science.placement_ray",
+        "tpu.science.placement_task",
+        "tpu.science.ray_cpu",
+        "tpu.science.seed_pool",
+        "tpu.science.placement_suite_guard"
+      ],
+      "cases": 17
+    },
+    {
+      "verified_cases": [
+        "ibm01",
+        "ibm02",
+        "ibm03",
+        "ibm04",
+        "ibm06",
+        "ibm07",
+        "ibm08",
+        "ibm09",
+        "ibm10",
+        "ibm11",
+        "ibm12",
+        "ibm13",
+        "ibm14",
+        "ibm15",
+        "ibm16",
+        "ibm17",
+        "ibm18"
+      ],
+      "c_helper_compiled": true,
+      "dynamic_discovery": true,
+      "local_failure_fatal": true
+    }
+  ]
+}

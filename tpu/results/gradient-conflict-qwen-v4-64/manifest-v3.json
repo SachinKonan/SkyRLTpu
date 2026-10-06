@@ -1,0 +1,24 @@
+{
+  "release": "20260906-qwen-v4-64-v1",
+  "parent_commit": "86db6ec4054292d4f53fb91d3a67caee3e6716cf",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v41.tar.gz",
+  "files": {
+    "skyrl/backends/gradient_probe.py": "aa0cf0c21f72754be418baa3b62e9768cd8fc97c00a2f3c176553b6ee66f406d",
+    "skyrl/backends/tunix_backend.py": "a16ad30afa82c989355a77d38d5407879e0ae267a49248737aa017efc802b2ce",
+    "tpu/start_colocated_vllm_tinker.sh": "a666f2994c718410ff748719d0850693452953eaa10f827dc25e8ba5963165c4",
+    "tpu/jobman/v6e_tunix_smoke_worker.sh": "617e236aa251b29cbd444f6f62fa82f3c81e0e7aec61eb8031f5eb0cd01addab",
+    "tpu/gradient_conflict/run.py": "50cee12c2a545a1120441c7650393d8df01ef4767943a7204931e82cfa9d2a9c",
+    "tpu/gradient_conflict/prepare.py": "40d7d613cf5eefc10a65ddf3c3d4ed73bc05baedaab2fb86eb0afc56effce7b6",
+    "gradient-probe-manifest.json": "23237f1c555348eceaee0b560a5aba924df0750e9538d1eb745048992ff5330a",
+    "tpu/swarm/discover_v4_64_topology.sh": "f84a88018a0d6ab314d56a3be3bfa75aa002af6faae84036cc08e584e857ecc9",
+    "tpu/swarm/select_v4_64_topology.py": "df6c8a2f44cb0a62fe7c1641f76e70ba0b6b0ca55b5ea87a183b81ef974e075e",
+    "tpu/probe_topology.py": "dd791c2e7c89c37b6cc1fe5514ef11dc70b288cc452785da9de221db81d07d0e",
+    "tpu/reregister_states.py": "42046b1193b8f48868b1c93dfc2f58e7ea514f0ace95194c0d3ba5005123c03a",
+    "tpu/gradient_conflict/prune_canary_weights.py": "ecf22f11678e7f95a68b9f68d6603fa00d6197f786e6de9de0c2f9e7f10a03e5"
+  },
+  "overlay_revision": 3,
+  "accelerator": "tpu-v4-64",
+  "mesh": "TP8/FSDP2 on the validated four-host training row",
+  "overlay_sha256": "33e250e1cfb64f01fd4ab35c5b1fba8ecd4a8825de4682cdfbe97eb377a1599b",
+  "task_yaml_sha256": "1dc5abc824226fedb21f864e8ddee59a76d7455a8f8f46c86f74e5970bd75d0d"
+}

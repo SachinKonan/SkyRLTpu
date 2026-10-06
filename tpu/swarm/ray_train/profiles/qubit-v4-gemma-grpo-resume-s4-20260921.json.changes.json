@@ -1,0 +1,106 @@
+{
+  "source_profile": "science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920-10step-deployment.json",
+  "reason": "Resume strongest saved Gemma GRPO run at step 4; stop at 10 total",
+  "differences": [
+    {
+      "field": "cache.reserve_gib",
+      "old": 128,
+      "new": 240
+    },
+    {
+      "field": "cache.trainer_gib",
+      "old": 128,
+      "new": 96
+    },
+    {
+      "field": "client_env.SCIENCE_ROUTING_EVALUATOR",
+      "old": null,
+      "new": "parallel-v2"
+    },
+    {
+      "field": "inference.external_pool_attestation",
+      "old": null,
+      "new": true
+    },
+    {
+      "field": "inference.external_pool_engines",
+      "old": null,
+      "new": 4
+    },
+    {
+      "field": "inference.external_pool_health_grace_seconds",
+      "old": null,
+      "new": 90
+    },
+    {
+      "field": "inference.external_pool_heartbeat_seconds",
+      "old": null,
+      "new": 30
+    },
+    {
+      "field": "inference.external_pool_initial_wait_seconds",
+      "old": null,
+      "new": 300
+    },
+    {
+      "field": "inference.external_pool_lease_scope",
+      "old": null,
+      "new": "run"
+    },
+    {
+      "field": "inference.external_pool_lease_seconds",
+      "old": null,
+      "new": 300
+    },
+    {
+      "field": "inference.external_pool_max_concurrent_requests",
+      "old": null,
+      "new": 4
+    },
+    {
+      "field": "inference.external_pool_max_n",
+      "old": null,
+      "new": 32
+    },
+    {
+      "field": "inference.external_pool_prepare_timeout",
+      "old": null,
+      "new": 1800
+    },
+    {
+      "field": "inference.external_pool_require_initial",
+      "old": null,
+      "new": false
+    },
+    {
+      "field": "inference.external_pool_rpc_timeout",
+      "old": null,
+      "new": 10
+    },
+    {
+      "field": "inference.external_pool_scheduler",
+      "old": null,
+      "new": true
+    },
+    {
+      "field": "inference.external_pool_updates",
+      "old": null,
+      "new": true
+    },
+    {
+      "field": "resume_min_checkpoint_step",
+      "old": 0,
+      "new": 4
+    },
+    {
+      "field": "science_routing_evaluator",
+      "old": null,
+      "new": "parallel-v2"
+    },
+    {
+      "field": "science_routing_slots_per_host",
+      "old": 16,
+      "new": 8
+    }
+  ]
+}

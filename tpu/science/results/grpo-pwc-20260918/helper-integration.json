@@ -1,0 +1,80 @@
+{
+  "rows": [
+    {
+      "case": "ibm01",
+      "candidate_seconds": 2.3864155730698258,
+      "score": {
+        "proxy_cost": 0.9234001636505127,
+        "wirelength_cost": 0.06840118020772934,
+        "density_cost": 0.5256261229515076,
+        "congestion_cost": 1.18437184848909,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 5.639246506965719
+      }
+    },
+    {
+      "case": "ibm04",
+      "candidate_seconds": 0.7798699849518016,
+      "score": {
+        "proxy_cost": 1.171065092086792,
+        "wirelength_cost": 0.07752249389886856,
+        "density_cost": 0.5866239070892334,
+        "congestion_cost": 1.6004613143964384,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 8.63785461394582
+      }
+    },
+    {
+      "case": "ibm08",
+      "candidate_seconds": 1.1401697050314397,
+      "score": {
+        "proxy_cost": 1.411608338356018,
+        "wirelength_cost": 0.078281931579113,
+        "density_cost": 0.5808132886886597,
+        "congestion_cost": 2.085839482328291,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 20.96441244496964
+      }
+    },
+    {
+      "case": "ibm18",
+      "candidate_seconds": 0.9213222760008648,
+      "score": {
+        "proxy_cost": 1.5994070768356323,
+        "wirelength_cost": 0.06958018988370895,
+        "density_cost": 0.4983830451965332,
+        "congestion_cost": 2.5612707391051015,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 66.9561368910363
+      }
+    }
+  ],
+  "hashes": {
+    "__init__.py": "040bb1dfeac99dbc9d47035c0ba4c50442cea0855acec2c2ef728e51a285f243",
+    "congestion.c": "33a62973be565991868e8d411cfaad449ed43177f3ae4cdc256159a36a6e53b8",
+    "libproxy.so": "9bea17c2a85be198ead18cbf949c3728d04621c205d659e5c23e53d21790dbb6"
+  },
+  "cpus": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "hard_memory_cap": false
+}

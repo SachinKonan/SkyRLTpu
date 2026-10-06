@@ -1,0 +1,70 @@
+{
+  "job": 999,
+  "name": "science-qubit-q20-v6e-gemma-seeded-001",
+  "root": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/global_step.json",
+      "source_generation": "1789726008858154",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/global_step.json",
+      "size": 18,
+      "crc32c": "daG7Hw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/life_state.json",
+      "source_generation": "1789726008834236",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/life_state.json",
+      "size": 81,
+      "crc32c": "NNf6SA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/member_gemma/checkpoints.jsonl",
+      "source_generation": "1789726008668981",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/member_gemma/checkpoints.jsonl",
+      "size": 274,
+      "crc32c": "0a3Tvg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/metrics.jsonl",
+      "source_generation": "1789726008854312",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/metrics.jsonl",
+      "size": 15513,
+      "crc32c": "8PWGBw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000000.json",
+      "source_generation": "1789726009430036",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000000.json",
+      "size": 114662,
+      "crc32c": "rY//IQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000001.json",
+      "source_generation": "1789726008665304",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000001.json",
+      "size": 560694,
+      "crc32c": "kKZkuA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000002.json",
+      "source_generation": "1789726008862205",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000002.json",
+      "size": 924640,
+      "crc32c": "H7awbQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/checkpoints/model_7c3e4a6f/000002.tar.gz",
+      "source_generation": "1789724639388982",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/checkpoints/model_7c3e4a6f/000002.tar.gz",
+      "size": 2938939279,
+      "crc32c": "WUIIBQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-q20-v6e-gemma-seeded-001/tinker-backup.db",
+      "source_generation": "1789726022141213",
+      "target": "gs://sk7524-tinker-tpu-us-east5/science-preserved/20260918-grpo-pwc/science-qubit-q20-v6e-gemma-seeded-001/tinker-backup.db",
+      "size": 151138304,
+      "crc32c": "13201A=="
+    }
+  ]
+}

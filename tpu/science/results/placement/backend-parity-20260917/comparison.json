@@ -1,0 +1,273 @@
+{
+  "runtime": {
+    "jax": "0.10.1",
+    "jaxlib": "0.10.1",
+    "optax": "0.2.8",
+    "numpy": "2.4.6",
+    "libtpu": "0.0.41",
+    "hardware": "v6e"
+  },
+  "original_tpu_reward": 0.4406274672863859,
+  "cpu_reward": 0.36448144996444737,
+  "tpu_barrier_reward": 0.36447304094298,
+  "all_cases_valid": true,
+  "rows": [
+    {
+      "case": "ibm01",
+      "cpu_cost": 1.364079475402832,
+      "tpu_barrier_cost": 1.364500641822815,
+      "absolute_cost_difference": 0.00042116641998291016,
+      "cpu_metrics": {
+        "proxy_cost": 1.364079475402832,
+        "wirelength_cost": 0.054731909185647964,
+        "density_cost": 1.6663895845413208,
+        "congestion_cost": 0.9523054217332578,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 5.578612713958137
+      },
+      "tpu_barrier_metrics": {
+        "proxy_cost": 1.364500641822815,
+        "wirelength_cost": 0.05472949147224426,
+        "density_cost": 1.667015552520752,
+        "congestion_cost": 0.9525268185927781,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 5.417426654999872,
+        "candidate_wall_seconds": 10.282830524000019,
+        "candidate_started_unix": 1789654097.8261755,
+        "candidate_finished_unix": 1789654108.1090035,
+        "case": "ibm01",
+        "backend": "tpu",
+        "candidate_device": {
+          "candidate_seconds": 8.933774801000254,
+          "sandbox_tpu_visible_chips": "0",
+          "sandbox_device_paths": [
+            "/dev/vfio/0"
+          ],
+          "jax_version": "0.10.1",
+          "devices": [
+            "TPU_0(process=0,(0,0,0,0))"
+          ],
+          "device_kind": "TPU v6 lite",
+          "device_count": 1,
+          "initialization_seconds": 4.370983945998887
+        },
+        "allocation_memory": {
+          "memory_current_mib": 16.390625,
+          "memory_peak_mib": 4741.03125
+        },
+        "worker_seconds": 16.11388294399876,
+        "cpu_affinity": [
+          16,
+          17,
+          18,
+          19
+        ],
+        "candidate_limit_seconds": 180,
+        "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/0\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/0\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.370983945998887}\n",
+        "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/7ab6a72ce38b94369298f3c0e940722cbc2211cb3b15a7c55e14029d45278fbb/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm01/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 45, Row: 41\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+        "child.json": "{\"candidate_seconds\": 8.933774801000254, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/0\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.370983945998887}"
+      }
+    },
+    {
+      "case": "ibm04",
+      "cpu_cost": 1.6056188344955444,
+      "tpu_barrier_cost": 1.605312466621399,
+      "absolute_cost_difference": 0.0003063678741455078,
+      "cpu_metrics": {
+        "proxy_cost": 1.6056188344955444,
+        "wirelength_cost": 0.059936173260211945,
+        "density_cost": 1.744032859802246,
+        "congestion_cost": 1.3473324318938018,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 7.7278715879656374
+      },
+      "tpu_barrier_metrics": {
+        "proxy_cost": 1.605312466621399,
+        "wirelength_cost": 0.059939492493867874,
+        "density_cost": 1.7434134483337402,
+        "congestion_cost": 1.3473324318938018,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 8.235949841997353,
+        "candidate_wall_seconds": 13.00961374200051,
+        "candidate_started_unix": 1789654097.8240721,
+        "candidate_finished_unix": 1789654110.8336859,
+        "case": "ibm04",
+        "backend": "tpu",
+        "candidate_device": {
+          "candidate_seconds": 11.673137556997972,
+          "sandbox_tpu_visible_chips": "0",
+          "sandbox_device_paths": [
+            "/dev/vfio/1"
+          ],
+          "jax_version": "0.10.1",
+          "devices": [
+            "TPU_0(process=0,(0,0,0,0))"
+          ],
+          "device_kind": "TPU v6 lite",
+          "device_count": 1,
+          "initialization_seconds": 4.007220169998618
+        },
+        "allocation_memory": {
+          "memory_current_mib": 16.57421875,
+          "memory_peak_mib": 4762.2109375
+        },
+        "worker_seconds": 21.665784176999296,
+        "cpu_affinity": [
+          20,
+          21,
+          22,
+          23
+        ],
+        "candidate_limit_seconds": 180,
+        "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/1\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/1\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.007220169998618}\n",
+        "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/7ab6a72ce38b94369298f3c0e940722cbc2211cb3b15a7c55e14029d45278fbb/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm04/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 31, Row: 30\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+        "child.json": "{\"candidate_seconds\": 11.673137556997972, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/1\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.007220169998618}"
+      }
+    },
+    {
+      "case": "ibm08",
+      "cpu_cost": 1.704717755317688,
+      "tpu_barrier_cost": 1.7046585083007812,
+      "absolute_cost_difference": 5.924701690673828e-05,
+      "cpu_metrics": {
+        "proxy_cost": 1.704717755317688,
+        "wirelength_cost": 0.058447547256946564,
+        "density_cost": 1.860128402709961,
+        "congestion_cost": 1.432412029942256,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 13.112173797097057
+      },
+      "tpu_barrier_metrics": {
+        "proxy_cost": 1.7046585083007812,
+        "wirelength_cost": 0.05844748392701149,
+        "density_cost": 1.8602992296218872,
+        "congestion_cost": 1.4321229825145327,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 13.657977855000354,
+        "candidate_wall_seconds": 14.318687846000103,
+        "candidate_started_unix": 1789654097.8361847,
+        "candidate_finished_unix": 1789654112.1548717,
+        "case": "ibm08",
+        "backend": "tpu",
+        "candidate_device": {
+          "candidate_seconds": 12.916900427997462,
+          "sandbox_tpu_visible_chips": "0",
+          "sandbox_device_paths": [
+            "/dev/vfio/2"
+          ],
+          "jax_version": "0.10.1",
+          "devices": [
+            "TPU_0(process=0,(0,0,0,0))"
+          ],
+          "device_kind": "TPU v6 lite",
+          "device_count": 1,
+          "initialization_seconds": 4.243297326996981
+        },
+        "allocation_memory": {
+          "memory_current_mib": 16.22265625,
+          "memory_peak_mib": 4791.453125
+        },
+        "worker_seconds": 28.413102055001218,
+        "cpu_affinity": [
+          24,
+          25,
+          26,
+          27
+        ],
+        "candidate_limit_seconds": 180,
+        "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/2\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/2\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.243297326996981}\n",
+        "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/7ab6a72ce38b94369298f3c0e940722cbc2211cb3b15a7c55e14029d45278fbb/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm08/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 38, Row: 34\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+        "child.json": "{\"candidate_seconds\": 12.916900427997462, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/2\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.243297326996981}"
+      }
+    },
+    {
+      "case": "ibm18",
+      "cpu_cost": 2.300079345703125,
+      "tpu_barrier_cost": 2.3002769947052,
+      "absolute_cost_difference": 0.0001976490020751953,
+      "cpu_metrics": {
+        "proxy_cost": 2.300079345703125,
+        "wirelength_cost": 0.04429047554731369,
+        "density_cost": 2.769702672958374,
+        "congestion_cost": 1.7418749660894481,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 30.570511356927454
+      },
+      "tpu_barrier_metrics": {
+        "proxy_cost": 2.3002769947052,
+        "wirelength_cost": 0.04429108276963234,
+        "density_cost": 2.77079439163208,
+        "congestion_cost": 1.7411773961268244,
+        "overlap_count": 0.0,
+        "total_overlap_area": 0.0,
+        "max_overlap_area": 0.0,
+        "num_macros_with_overlaps": 0.0,
+        "overlap_ratio": 0.0,
+        "grading_seconds": 34.0795427890007,
+        "candidate_wall_seconds": 17.026298173001123,
+        "candidate_started_unix": 1789654097.8646562,
+        "candidate_finished_unix": 1789654114.890952,
+        "case": "ibm18",
+        "backend": "tpu",
+        "candidate_device": {
+          "candidate_seconds": 15.65414993900049,
+          "sandbox_tpu_visible_chips": "0",
+          "sandbox_device_paths": [
+            "/dev/vfio/3"
+          ],
+          "jax_version": "0.10.1",
+          "devices": [
+            "TPU_0(process=0,(0,0,0,0))"
+          ],
+          "device_kind": "TPU v6 lite",
+          "device_count": 1,
+          "initialization_seconds": 4.654741342001216
+        },
+        "allocation_memory": {
+          "memory_current_mib": 16.1328125,
+          "memory_peak_mib": 4897.48046875
+        },
+        "worker_seconds": 51.59213962600188,
+        "cpu_affinity": [
+          28,
+          29,
+          30,
+          31
+        ],
+        "candidate_limit_seconds": 180,
+        "candidate.log": "{\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/3\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/3\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.654741342001216}\n",
+        "grader.log": "#[INFO] Reading from /home/gcpuser/.cache/skyrl-ray-code/7ab6a72ce38b94369298f3c0e940722cbc2211cb3b15a7c55e14029d45278fbb/.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04/ibm18/netlist.pb.txt\n[INFO] Retrieving Meta information from .plc comments\n#[PLACEMENT GRID] Col: 55, Row: 39\n#[ROUTES PER MICRON] Hor: 65.96, Ver: 106.96\n#[CONGESTION SMOOTH RANGE] Smooth Range: 2\n#[OVERLAP THRESHOLD] Threshold: 0.0040\n",
+        "child.json": "{\"candidate_seconds\": 15.65414993900049, \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/vfio/3\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v6 lite\", \"device_count\": 1, \"initialization_seconds\": 4.654741342001216}"
+      }
+    }
+  ],
+  "production_changed": false
+}

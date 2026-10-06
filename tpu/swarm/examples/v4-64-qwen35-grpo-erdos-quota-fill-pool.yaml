@@ -1,0 +1,113 @@
+# One additional v4-64 Spot slice for filling residual us-central2 quota.
+# Each pool worker is one eight-VM, 32-chip TPU slice in us-central2-b.
+pool:
+  workers: 1
+  min_workers: 1
+  max_workers: 1
+  queue_length_threshold: 1
+  upscale_delay_seconds: 60
+  downscale_delay_seconds: 1200
+
+resources:
+  cloud: gcp
+  region: us-central2
+  zone: us-central2-b
+  accelerators: tpu-v4-64
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+
+envs:
+  PROJECT: vision-mix
+  ZONE: us-central2-b
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v4-mixed-v26.tar.gz
+
+setup: |
+  set -uo pipefail
+  setup_script="/tmp/tpuswarm-pool-setup.$$.sh"
+  cat >"$setup_script" <<'TPUSWARM_POOL_SETUP'
+  set -euo pipefail
+  wait_for_apt() {
+    local waited=0
+    while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+      if [ "$waited" -ge 600 ]; then return 1; fi
+      sleep 5
+      waited=$((waited + 5))
+    done
+  }
+  if ! { command -v git && command -v tmux && command -v g++; } >/dev/null 2>&1; then
+    wait_for_apt
+    sudo apt-get update -y
+    wait_for_apt
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+      git curl tmux python3 python3-venv python3-pip build-essential
+  fi
+  command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+
+  node_count=$(printf '%s\n' "$SKYPILOT_SETUP_NODE_IPS" | awk 'NF' | wc -l)
+  if [ "$node_count" -ne 8 ]; then
+    echo "v4-64 requires eight TPU VMs; SkyPilot supplied $node_count" >&2
+    exit 2
+  fi
+
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/swarm/run_qwen35_v4_64_grpo.sh"
+    test -r "$staging/tpu/swarm/discover_v4_64_topology.sh"
+    test -r "$staging/tpu/swarm/select_v4_64_topology.py"
+    test -r "$staging/tpu/swarm/reconcile_v4_64_role_caches.sh"
+    test -r "$staging/tpu/swarm/reconcile_v4_64_host_role.sh"
+    test -r "$staging/tpu/swarm/prune_hf_weight_cache.py"
+    test -r "$staging/tpu/swarm/stage_hf_metadata_cache.py"
+    test -r "$staging/tpu/probe_topology.py"
+    test -r "$staging/tpu/jobman/grader_ray.sh"
+    test -r "$staging/tpu/start_colocated_vllm_tinker.sh"
+    test -f "$staging/.tpuswarm-bundle-manifest"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  root="$HOME/SkyRLTpu-tpuswarm"
+  if [ -e "$root" ] && [ ! -L "$root" ]; then
+    echo "$root exists and is not a TPUSwarm-managed symlink" >&2
+    exit 1
+  fi
+  ln -sfn "$destination" "$root"
+  topology_venv="$HOME/.venvs/tpu-topology"
+  if [ ! -x "$topology_venv/bin/python" ]; then
+    UV_NO_CONFIG=1 uv venv "$topology_venv" --python 3.12
+  fi
+  UV_NO_CONFIG=1 uv pip install --python "$topology_venv/bin/python" \
+    'jax==0.11.1' 'jaxlib==0.11.1' 'libtpu==0.0.46' 'requests==2.32.5'
+  mkdir -p "$HOME/.ssh" "$HOME/skyrl-logs" "$HOME/skyrl-runs"
+  chmod 700 "$HOME/.ssh"
+  echo "v4-64 pool rank $SKYPILOT_SETUP_NODE_RANK ready with bundle generation $generation"
+  TPUSWARM_POOL_SETUP
+
+  setup_attempt=0
+  setup_retry_seconds="${TPUSWARM_SETUP_RETRY_SECONDS:-60}"
+  while true; do
+    setup_attempt=$((setup_attempt + 1))
+    echo "[tpuswarm setup] rank $SKYPILOT_SETUP_NODE_RANK attempt $setup_attempt"
+    if bash "$setup_script"; then
+      break
+    else
+      setup_rc=$?
+      echo "[tpuswarm setup] rank $SKYPILOT_SETUP_NODE_RANK attempt $setup_attempt failed with rc=$setup_rc; retaining the TPU and retrying in ${setup_retry_seconds}s" >&2
+    fi
+    sleep "$setup_retry_seconds"
+  done

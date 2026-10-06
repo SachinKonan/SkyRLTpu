@@ -1,0 +1,30 @@
+{
+  "time": 1789961941.220363,
+  "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+  "verified": true,
+  "retained": 29,
+  "optimizer_steps": 0,
+  "objects": {
+    "client/bootstrap/contract.json": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/bootstrap/contract.json",
+      "generation": 1789957515118488,
+      "size": 19190,
+      "sha256": "86daed36b83b59ea7b44e97bc842dc8944e5b650b44671945a446bfad22a24b6",
+      "snapshot": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/gemma-bootstrap-fix-20260921/ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/bootstrap/contract.json"
+    },
+    "client/bootstrap/complete.json": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/bootstrap/complete.json",
+      "generation": 1789957515110069,
+      "size": 295,
+      "sha256": "c01e24d1ec89ea95c9d5f8c5f204e0fefec5726f168f8bd0c7ad61e63f19c8d6",
+      "snapshot": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/gemma-bootstrap-fix-20260921/ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/bootstrap/complete.json"
+    },
+    "client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json",
+      "generation": 1789957527642844,
+      "size": 236909,
+      "sha256": "6f85137570f376a47a48eb1eef26f0508d81066dc6ef41d91c1f9ab9636db813",
+      "snapshot": "gs://sk7524-tinker-tpu-us-east5/migration-snapshots/gemma-bootstrap-fix-20260921/ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json"
+    }
+  }
+}

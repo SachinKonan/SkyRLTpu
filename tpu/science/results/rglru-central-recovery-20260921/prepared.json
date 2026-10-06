@@ -1,0 +1,41 @@
+{
+  "time": 1789972483.384047,
+  "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+  "old_job_id": 1343,
+  "old_cluster": "tpuswarm-v6e32-east5b-qwen35-5597",
+  "pool": "tpuswarm-v6e32-central1b",
+  "priority": 110,
+  "task": "tpu/science/results/rglru-central-recovery-20260921/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1.yaml",
+  "task_sha256": "60c549981a30f0aa825f411c66fc5baf9cc807662f71a7fbb90c4081b6d5f2ee",
+  "source_task_sha256": "89a34886d3e8614e8b7285392cac3d02dcc4b18c9cf6ff7dea3d11b4d6308ebd",
+  "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-5d9638d7ebe5fa15b43546f5d3cbc0545bbc881e0fa4fbba595a4090857ec382.tar.gz",
+  "code_sha256": "5d9638d7ebe5fa15b43546f5d3cbc0545bbc881e0fa4fbba595a4090857ec382",
+  "objects": {
+    "client/bootstrap/contract.json": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/bootstrap/contract.json",
+      "generation": 1789971707854649,
+      "size": 19190,
+      "sha256": "86daed36b83b59ea7b44e97bc842dc8944e5b650b44671945a446bfad22a24b6"
+    },
+    "client/bootstrap/complete.json": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/bootstrap/complete.json",
+      "generation": 1789971707801941,
+      "size": 295,
+      "sha256": "c01e24d1ec89ea95c9d5f8c5f204e0fefec5726f168f8bd0c7ad61e63f19c8d6"
+    },
+    "client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json": {
+      "name": "ray-training/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/client/tinker_log/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1/puct_sampler_step_000000.json",
+      "generation": 1789971660178912,
+      "size": 236909,
+      "sha256": "6f85137570f376a47a48eb1eef26f0508d81066dc6ef41d91c1f9ab9636db813"
+    }
+  },
+  "checkpoint": 0,
+  "retained": 29,
+  "change": {
+    "resources.zone": [
+      "us-east5-b",
+      "us-central1-b"
+    ]
+  }
+}

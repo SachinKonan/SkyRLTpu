@@ -1,0 +1,50 @@
+{
+  "qwen": {
+    "pool_sha256": "706e4cea5a2e324ba85221089dc61ac0427f76a1e30af4c8ba53c402d5ef58d6",
+    "routing_suite": "q20",
+    "case_count": 24,
+    "valid": 99,
+    "distinct_valid": 26,
+    "retained": 6,
+    "maximum": 32,
+    "best_reward": 0.576775602447881,
+    "best_q20_swaps": 16667.0,
+    "optimizer_steps": 0,
+    "model_initialization": "pretrained",
+    "excluded_full_suite_failures": 925,
+    "admission": "Top two per original root, global code deduplication; Q20 rewards only",
+    "failure_policy": "Full-suite failures not assumed invalid on Q20; excluded without imported visits"
+  },
+  "gemma": {
+    "pool_sha256": "03f7c7c208bdef97e256fd62938a3346f4fcbdd5f9d98d3b992e0e9930b032f3",
+    "routing_suite": "q20",
+    "case_count": 24,
+    "valid": 194,
+    "distinct_valid": 52,
+    "retained": 7,
+    "maximum": 32,
+    "best_reward": 0.5828137428476123,
+    "best_q20_swaps": 16259.0,
+    "optimizer_steps": 0,
+    "model_initialization": "pretrained",
+    "excluded_full_suite_failures": 830,
+    "admission": "Top two per original root, global code deduplication; Q20 rewards only",
+    "failure_policy": "Full-suite failures not assumed invalid on Q20; excluded without imported visits"
+  },
+  "muse": {
+    "pool_sha256": "b9ff7f78c6f36324645f34e5c4ab76d5a4db995360b3621fe73cc38e42ef964c",
+    "routing_suite": "q20",
+    "case_count": 24,
+    "valid": 110,
+    "distinct_valid": 30,
+    "retained": 7,
+    "maximum": 32,
+    "best_reward": 0.5694587208865044,
+    "best_q20_swaps": 17173.0,
+    "optimizer_steps": 0,
+    "model_initialization": "pretrained",
+    "excluded_full_suite_failures": 914,
+    "admission": "Top two per original root, global code deduplication; Q20 rewards only",
+    "failure_policy": "Full-suite failures not assumed invalid on Q20; excluded without imported visits"
+  }
+}

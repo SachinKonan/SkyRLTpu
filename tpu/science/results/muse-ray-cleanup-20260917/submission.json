@@ -1,0 +1,9 @@
+{
+  "run_id": "science-circuit-v4-muse-cpu-seeded-train-001",
+  "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+  "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/science-training-1f5e8367f09f724ec27f36f30c8d573d009c93a207a6af1e48564abcc6d1cb29.tar.gz",
+  "submitted_at": "2026-09-17T19:29:27.664884+00:00",
+  "state": "submitted",
+  "exit_code": 0,
+  "job_id": 984
+}

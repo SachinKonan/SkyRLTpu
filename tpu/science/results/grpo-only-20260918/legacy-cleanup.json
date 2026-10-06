@@ -1,0 +1,569 @@
+{
+  "host-450-0.json": [
+    {
+      "pid": 69430,
+      "parent": 1,
+      "start": "967132",
+      "exe": "/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/lib/python3.12/site-packages/ray/core/src/ray/gcs/gcs_server",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69741,
+      "parent": 1,
+      "start": "967221",
+      "exe": "/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69742,
+      "parent": 1,
+      "start": "967222",
+      "exe": "/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69743,
+      "parent": 1,
+      "start": "967228",
+      "exe": "/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69853,
+      "parent": 69743,
+      "start": "967319",
+      "exe": "/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69854,
+      "parent": 69743,
+      "start": "967319",
+      "exe": "ray-dashboard-MetricsHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_ha",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69855,
+      "parent": 69743,
+      "start": "967319",
+      "exe": "ray-dashboard-DataHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_handl",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69856,
+      "parent": 69743,
+      "start": "967319",
+      "exe": "ray-dashboard-EventHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69857,
+      "parent": 69743,
+      "start": "967319",
+      "exe": "ray-dashboard-JobHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_handle",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69858,
+      "parent": 69743,
+      "start": "967319",
+      "exe": "ray-dashboard-NodeHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_handl",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69859,
+      "parent": 69743,
+      "start": "967320",
+      "exe": "ray-dashboard-ReportHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_han",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69860,
+      "parent": 69743,
+      "start": "967320",
+      "exe": "ray-dashboard-ServeHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69861,
+      "parent": 69743,
+      "start": "967320",
+      "exe": "ray-dashboard-StateHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 69862,
+      "parent": 69743,
+      "start": "967320",
+      "exe": "ray-dashboard-TrainHead-0 (/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 70297,
+      "parent": 1,
+      "start": "967391",
+      "exe": "/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/bin/python",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 70298,
+      "parent": 1,
+      "start": "967399",
+      "exe": "/home/gcpuser/.cache/science-circuit-v4-qwen-cpu-seeded-train-001/envs/controller/lib/python3.12/site-packages/ray/core/src/ray/raylet/raylet",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 70395,
+      "parent": 70298,
+      "start": "967502",
+      "exe": "ray::DashboardAgent",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 70397,
+      "parent": 70298,
+      "start": "967502",
+      "exe": "ray::RuntimeEnvAgent",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    },
+    {
+      "pid": 70574,
+      "parent": 70298,
+      "start": "967654",
+      "exe": "ray::RuntimeStatus",
+      "uid": 2012,
+      "cgroup": "0::/user.slice/user-2012.slice/session-3.scope"
+    }
+  ],
+  "host-450-1.json": [
+    {
+      "pid": 125358,
+      "parent": 1,
+      "start": "1861981",
+      "exe": "/usr/bin/python3",
+      "uid": 2013,
+      "cgroup": "0::/user.slice/user-2013.slice/user@2013.service/app.slice/snap.google-cloud-cli.gcloud-61542eb6-413c-480f-8a6e-512bbc4b39fa.scope"
+    },
+    {
+      "pid": 125401,
+      "parent": 125358,
+      "start": "1862184",
+      "exe": "/usr/bin/python3",
+      "uid": 2013,
+      "cgroup": "0::/user.slice/user-2013.slice/user@2013.service/app.slice/snap.google-cloud-cli.gcloud-61542eb6-413c-480f-8a6e-512bbc4b39fa.scope"
+    }
+  ],
+  "host-450-5.json": [
+    {
+      "pid": 125490,
+      "parent": 1,
+      "start": "1861876",
+      "exe": "/usr/bin/python3",
+      "uid": 2002,
+      "cgroup": "0::/user.slice/user-2002.slice/user@2002.service/app.slice/snap.google-cloud-cli.gcloud-4b0ddf45-5a5b-4211-a62d-5a87b0892a0d.scope"
+    },
+    {
+      "pid": 125539,
+      "parent": 125490,
+      "start": "1862085",
+      "exe": "/usr/bin/python3",
+      "uid": 2002,
+      "cgroup": "0::/user.slice/user-2002.slice/user@2002.service/app.slice/snap.google-cloud-cli.gcloud-4b0ddf45-5a5b-4211-a62d-5a87b0892a0d.scope"
+    }
+  ],
+  "host-475-1.json": [
+    {
+      "pid": 205707,
+      "parent": 1,
+      "start": "2552534",
+      "exe": "/usr/bin/python3",
+      "uid": 2016,
+      "cgroup": "0::/user.slice/user-2016.slice/user@2016.service/app.slice/snap.google-cloud-cli.gcloud-6c7de34b-ff02-4c2c-846b-dc225c893b2f.scope"
+    },
+    {
+      "pid": 205811,
+      "parent": 205707,
+      "start": "2552735",
+      "exe": "/usr/bin/python3",
+      "uid": 2016,
+      "cgroup": "0::/user.slice/user-2016.slice/user@2016.service/app.slice/snap.google-cloud-cli.gcloud-6c7de34b-ff02-4c2c-846b-dc225c893b2f.scope"
+    }
+  ],
+  "host-491-5.json": [],
+  "host-450-7.json": [
+    {
+      "pid": 122299,
+      "parent": 1,
+      "start": "1860976",
+      "exe": "/usr/bin/python3",
+      "uid": 2007,
+      "cgroup": "0::/user.slice/user-2007.slice/user@2007.service/app.slice/snap.google-cloud-cli.gcloud-93978ee9-355a-454a-adf7-4e3b6d8d13ee.scope"
+    },
+    {
+      "pid": 122343,
+      "parent": 122299,
+      "start": "1861177",
+      "exe": "/usr/bin/python3",
+      "uid": 2007,
+      "cgroup": "0::/user.slice/user-2007.slice/user@2007.service/app.slice/snap.google-cloud-cli.gcloud-93978ee9-355a-454a-adf7-4e3b6d8d13ee.scope"
+    }
+  ],
+  "host-475-7.json": [
+    {
+      "pid": 206392,
+      "parent": 1,
+      "start": "2552428",
+      "exe": "/usr/bin/python3",
+      "uid": 2001,
+      "cgroup": "0::/user.slice/user-2001.slice/user@2001.service/app.slice/snap.google-cloud-cli.gcloud-a994839b-4eef-47bc-928a-7816e66db978.scope"
+    },
+    {
+      "pid": 206495,
+      "parent": 206392,
+      "start": "2552626",
+      "exe": "/usr/bin/python3",
+      "uid": 2001,
+      "cgroup": "0::/user.slice/user-2001.slice/user@2001.service/app.slice/snap.google-cloud-cli.gcloud-a994839b-4eef-47bc-928a-7816e66db978.scope"
+    }
+  ],
+  "host-475-2.json": [
+    {
+      "pid": 216338,
+      "parent": 1,
+      "start": "2552235",
+      "exe": "/usr/bin/python3",
+      "uid": 2001,
+      "cgroup": "0::/user.slice/user-2001.slice/user@2001.service/app.slice/snap.google-cloud-cli.gcloud-d001a098-6f2b-4fe3-ad5a-b138e82237b7.scope"
+    },
+    {
+      "pid": 216442,
+      "parent": 216338,
+      "start": "2552438",
+      "exe": "/usr/bin/python3",
+      "uid": 2001,
+      "cgroup": "0::/user.slice/user-2001.slice/user@2001.service/app.slice/snap.google-cloud-cli.gcloud-d001a098-6f2b-4fe3-ad5a-b138e82237b7.scope"
+    }
+  ],
+  "host-475-3.json": [],
+  "host-491-1.json": [],
+  "host-491-3.json": [],
+  "host-450-4.json": [
+    {
+      "pid": 120769,
+      "parent": 1,
+      "start": "1861979",
+      "exe": "/usr/bin/python3",
+      "uid": 2001,
+      "cgroup": "0::/user.slice/user-2001.slice/user@2001.service/app.slice/snap.google-cloud-cli.gcloud-af236c03-f2ca-4313-993a-133653ea4708.scope"
+    },
+    {
+      "pid": 120813,
+      "parent": 120769,
+      "start": "1862183",
+      "exe": "/usr/bin/python3",
+      "uid": 2001,
+      "cgroup": "0::/user.slice/user-2001.slice/user@2001.service/app.slice/snap.google-cloud-cli.gcloud-af236c03-f2ca-4313-993a-133653ea4708.scope"
+    }
+  ],
+  "host-450-6.json": [
+    {
+      "pid": 121224,
+      "parent": 1,
+      "start": "1861878",
+      "exe": "/usr/bin/python3",
+      "uid": 2005,
+      "cgroup": "0::/user.slice/user-2005.slice/user@2005.service/app.slice/snap.google-cloud-cli.gcloud-61a3fef6-b2b4-43fc-acb3-d8c887d7bc88.scope"
+    },
+    {
+      "pid": 121269,
+      "parent": 121224,
+      "start": "1862080",
+      "exe": "/usr/bin/python3",
+      "uid": 2005,
+      "cgroup": "0::/user.slice/user-2005.slice/user@2005.service/app.slice/snap.google-cloud-cli.gcloud-61a3fef6-b2b4-43fc-acb3-d8c887d7bc88.scope"
+    }
+  ],
+  "host-475-6.json": [
+    {
+      "pid": 203451,
+      "parent": 1,
+      "start": "2552234",
+      "exe": "/usr/bin/python3",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/user@2009.service/app.slice/snap.google-cloud-cli.gcloud-9b1fde04-3115-4f5b-9d58-e8ad819f9357.scope"
+    },
+    {
+      "pid": 203554,
+      "parent": 203451,
+      "start": "2552437",
+      "exe": "/usr/bin/python3",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/user@2009.service/app.slice/snap.google-cloud-cli.gcloud-9b1fde04-3115-4f5b-9d58-e8ad819f9357.scope"
+    }
+  ],
+  "host-450-3.json": [
+    {
+      "pid": 126729,
+      "parent": 1,
+      "start": "1861078",
+      "exe": "/usr/bin/python3",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/user@2009.service/app.slice/snap.google-cloud-cli.gcloud-99fe3aa7-966d-4a6f-add0-f763378d62b5.scope"
+    },
+    {
+      "pid": 126773,
+      "parent": 126729,
+      "start": "1861283",
+      "exe": "/usr/bin/python3",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/user@2009.service/app.slice/snap.google-cloud-cli.gcloud-99fe3aa7-966d-4a6f-add0-f763378d62b5.scope"
+    }
+  ],
+  "host-491-6.json": [],
+  "host-475-4.json": [
+    {
+      "pid": 211688,
+      "parent": 1,
+      "start": "2552633",
+      "exe": "/usr/bin/python3",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/user@2009.service/app.slice/snap.google-cloud-cli.gcloud-2850f0d5-a4d1-4b7c-803a-eb5618726402.scope"
+    },
+    {
+      "pid": 211791,
+      "parent": 211688,
+      "start": "2552834",
+      "exe": "/usr/bin/python3",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/user@2009.service/app.slice/snap.google-cloud-cli.gcloud-2850f0d5-a4d1-4b7c-803a-eb5618726402.scope"
+    }
+  ],
+  "host-450-2.json": [
+    {
+      "pid": 124293,
+      "parent": 1,
+      "start": "1862074",
+      "exe": "/usr/bin/python3",
+      "uid": 2014,
+      "cgroup": "0::/user.slice/user-2014.slice/user@2014.service/app.slice/snap.google-cloud-cli.gcloud-99eec01c-eb96-4e1f-835c-08247632bd38.scope"
+    },
+    {
+      "pid": 124340,
+      "parent": 124293,
+      "start": "1862275",
+      "exe": "/usr/bin/python3",
+      "uid": 2014,
+      "cgroup": "0::/user.slice/user-2014.slice/user@2014.service/app.slice/snap.google-cloud-cli.gcloud-99eec01c-eb96-4e1f-835c-08247632bd38.scope"
+    }
+  ],
+  "host-475-5.json": [
+    {
+      "pid": 207756,
+      "parent": 1,
+      "start": "2552639",
+      "exe": "/usr/bin/python3",
+      "uid": 2010,
+      "cgroup": "0::/user.slice/user-2010.slice/user@2010.service/app.slice/snap.google-cloud-cli.gcloud-3ce8806c-cae6-4fbc-85b2-d58977af92fc.scope"
+    },
+    {
+      "pid": 207859,
+      "parent": 207756,
+      "start": "2552844",
+      "exe": "/usr/bin/python3",
+      "uid": 2010,
+      "cgroup": "0::/user.slice/user-2010.slice/user@2010.service/app.slice/snap.google-cloud-cli.gcloud-3ce8806c-cae6-4fbc-85b2-d58977af92fc.scope"
+    }
+  ],
+  "host-475-0.json": [
+    {
+      "pid": 58288,
+      "parent": 1,
+      "start": "102826",
+      "exe": "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/lib/python3.12/site-packages/ray/core/src/ray/gcs/gcs_server",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58598,
+      "parent": 1,
+      "start": "102915",
+      "exe": "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58599,
+      "parent": 1,
+      "start": "102916",
+      "exe": "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58600,
+      "parent": 1,
+      "start": "102922",
+      "exe": "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58715,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58716,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-MetricsHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_ha",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58717,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-DataHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_handl",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58718,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-EventHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58719,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-JobHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_handle",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58720,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-NodeHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_handl",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58721,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-ReportHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_han",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58722,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-ServeHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58723,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-StateHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 58724,
+      "parent": 58600,
+      "start": "103015",
+      "exe": "ray-dashboard-TrainHead-0 (/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python -Wignore -c \"from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=28, pipe_hand",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 59206,
+      "parent": 1,
+      "start": "103102",
+      "exe": "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/bin/python",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 59207,
+      "parent": 1,
+      "start": "103110",
+      "exe": "/home/gcpuser/.cache/science-routing-v4-muse-seeded-train-002-runtime-20260917/envs/controller/lib/python3.12/site-packages/ray/core/src/ray/raylet/raylet",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 59304,
+      "parent": 59207,
+      "start": "103213",
+      "exe": "ray::DashboardAgent",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 59306,
+      "parent": 59207,
+      "start": "103213",
+      "exe": "ray::RuntimeEnvAgent",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 59497,
+      "parent": 59207,
+      "start": "103362",
+      "exe": "ray::RuntimeStatus",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 59517,
+      "parent": 59207,
+      "start": "103368",
+      "exe": "ray::IDLE",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    },
+    {
+      "pid": 59524,
+      "parent": 59207,
+      "start": "103369",
+      "exe": "ray::IDLE",
+      "uid": 2009,
+      "cgroup": "0::/user.slice/user-2009.slice/session-3.scope"
+    }
+  ],
+  "host-491-7.json": [],
+  "host-491-0.json": [],
+  "host-491-2.json": [],
+  "host-491-4.json": []
+}

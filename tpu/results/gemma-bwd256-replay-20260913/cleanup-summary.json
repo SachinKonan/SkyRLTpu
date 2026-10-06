@@ -1,0 +1,23 @@
+{
+  "cancelled": [
+    794
+  ],
+  "already_failed": [
+    795,
+    796,
+    797,
+    798,
+    799,
+    800,
+    801
+  ],
+  "hosts_inspected": 28,
+  "idle_hosts_passed": 16,
+  "preserved_active_slices": [
+    488,
+    490,
+    493
+  ],
+  "manual_process_kills": 0,
+  "storage_deletions": 0
+}

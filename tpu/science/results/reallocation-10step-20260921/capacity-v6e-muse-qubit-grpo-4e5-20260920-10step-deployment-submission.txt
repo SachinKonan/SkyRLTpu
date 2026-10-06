@@ -1,0 +1,10 @@
+YAML to run: /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/reallocation-10step/packages/capacity-v6e-muse-qubit-grpo-4e5-20260920-10step-deployment/capacity-v6e-muse-qubit-grpo-4e5-20260920.yaml
+Submitting to pool 'tpuswarm-v4-64-central2-qwen35-erdos' with 1 job.
+[33mLaunching managed job 'capacity-v6e-muse-qubit-grpo-4e5-20260920'...[0m
+
+📋 Useful Commands
+Managed Job ID: 1340
+├── To cancel the job:		sky jobs cancel 1340
+├── To stream job logs:		sky jobs logs 1340
+├── To stream controller logs:	sky jobs logs --controller 1340
+└── To view all managed jobs:	sky jobs queue

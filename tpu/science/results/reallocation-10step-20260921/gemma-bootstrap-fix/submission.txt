@@ -1,0 +1,10 @@
+YAML to run: /scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/reallocation-10step/gemma-bootstrap-fix/package/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1.yaml
+Submitting to pool 'tpuswarm-v6e32-east5b-qwen35' with 1 job.
+[33mLaunching managed job 'fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1'...[0m
+
+📋 Useful Commands
+Managed Job ID: 1343
+├── To cancel the job:		sky jobs cancel 1343
+├── To stream job logs:		sky jobs logs 1343
+├── To stream controller logs:	sky jobs logs --controller 1343
+└── To view all managed jobs:	sky jobs queue

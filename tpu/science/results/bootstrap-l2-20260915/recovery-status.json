@@ -1,0 +1,86 @@
+{
+  "observed_at": 1789525184.9552226,
+  "jobs": [
+    {
+      "job": 949,
+      "run": "science-placement-v4-gemma-bootstrap-l2-001",
+      "generations": 16,
+      "grades": 39,
+      "valid": 11,
+      "best": 0.35756112480627916,
+      "summaries": {},
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "preflight_complete"
+      ],
+      "controller_failed": null
+    },
+    {
+      "job": 947,
+      "run": "science-routing-v4-muse-bootstrap-l2-002",
+      "generations": 0,
+      "grades": 0,
+      "valid": 0,
+      "best": null,
+      "summaries": {},
+      "phases": [
+        "cache_setup",
+        "cache_setup",
+        "cache_setup",
+        "prepared",
+        "cache_setup",
+        "cache_setup",
+        "cache_setup",
+        "cache_setup"
+      ],
+      "controller_failed": null
+    },
+    {
+      "job": 938,
+      "run": "science-routing-v4-gemma-bootstrap-l2-001",
+      "generations": 5,
+      "grades": 30,
+      "valid": 0,
+      "best": 0.0,
+      "summaries": {},
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared"
+      ],
+      "controller_failed": null
+    },
+    {
+      "job": 935,
+      "run": "science-routing-v4-qwen-bootstrap-l2-001",
+      "generations": 16,
+      "grades": 311,
+      "valid": 16,
+      "best": 0.519567993217712,
+      "summaries": {},
+      "phases": [
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared",
+        "prepared"
+      ],
+      "controller_failed": null
+    }
+  ],
+  "queue": "951  -     science-placement-v4-muse-bootstrap-l2-002                     1x[tpu-v4-64:1][Spot]   3 mins ago   3m 30s          -               0            PENDING            -         tpuswarm-v4-64-central2-qwen35-erdos               \n950  -     science-placement-v4-qwen-bootstrap-l2-001                     1x[tpu-v4-64:1][Spot]   3 mins ago   3m 43s          -               0            PENDING            -         tpuswarm-v4-64-central2-qwen35-erdos               \n949  -     science-placement-v4-gemma-bootstrap-l2-001                    1x[tpu-v4-64:1][Spot]   6 mins ago   6m 50s          4m 58s          0            RUNNING            -         tpuswarm-v4-64-central2-qwen35-erdos (worker=368)  \n947  -     science-routing-v4-muse-bootstrap-l2-002                       1x[tpu-v4-64:1][Spot]   12 mins ago  12m 17s         7m 54s          0            RUNNING            -         tpuswarm-v4-64-central2-qwen35-erdos (worker=354)  \n938  -     science-routing-v4-gemma-bootstrap-l2-001                      1x[tpu-v4-64:1][Spot]   1 hr ago     1h 19m 49s      1h 17m 22s      0            RUNNING            -         tpuswarm-v4-64-central2-qwen35-erdos (worker=367)  \n935  -     science-routing-v4-qwen-bootstrap-l2-001                       1x[tpu-v4-64:1][Spot]   1 hr ago     1h 20m 9s       1h 17m 49s      0            RUNNING            -         tpuswarm-v4-64-central2-qwen35-erdos (worker=344)  \n"
+}

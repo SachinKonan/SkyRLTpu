@@ -1,0 +1,180 @@
+{
+  "hosts_before_repair": [
+    {
+      "rank": 0,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        },
+        "lock": {
+          "uid": 2014,
+          "mode": "0o100600",
+          "writable": false,
+          "mtime": 1789897861.6634812
+        }
+      }
+    },
+    {
+      "rank": 1,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "lock file absent"
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "rank": 2,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "lock file absent"
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "rank": 3,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "lock file absent"
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "rank": 4,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "lock file absent"
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "rank": 5,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "lock file absent"
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "rank": 6,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "lock file absent"
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "rank": 7,
+      "exit": 0,
+      "data": {
+        "devices": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": ""
+        },
+        "lock_users": {
+          "exit": 1,
+          "stdout": "",
+          "stderr": "lock file absent"
+        },
+        "unit": {
+          "exit": 0,
+          "stdout": "MainPID=0\nActiveState=failed\n",
+          "stderr": ""
+        }
+      }
+    }
+  ],
+  "root_cause": "rank 0 lock file uid 2014 mode 0600, inaccessible to gcpuser; no open handles or TPU owners",
+  "repair": "Root rechecked no device/lock handles, acquired both flock and lockf without blocking, verified inode, and removed only the stale lock."
+}

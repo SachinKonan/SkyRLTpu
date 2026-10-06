@@ -1,0 +1,7 @@
+{
+  "tests_passed": 119,
+  "tests_skipped": 1,
+  "skipped": "optional pinned Qwen tokenizer integration requires THINKING_TEST_TOKENIZER",
+  "tested": "native control, API, both external forwarding methods, real output schema serialization, actual two-phase completer parity for three models",
+  "hardware_end_to_end": "not yet verified; user authorized direct sweep requeue"
+}

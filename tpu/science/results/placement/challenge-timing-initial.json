@@ -1,0 +1,153 @@
+{
+  "import_seconds": 3.696118129999377,
+  "host": "della-r3c4n12",
+  "cpus": [
+    5,
+    18,
+    22,
+    31
+  ],
+  "torch": "2.5.1+cpu",
+  "challenge_commit": "996193c83eaad151e5ae3fb166cedbd83372d060",
+  "evaluator_commit": "45a721d01dfe56fc4800b95da52e9b4193b76d04",
+  "cases": [
+    {
+      "name": "ibm01",
+      "hard_macros": 246,
+      "soft_macros": 894,
+      "nets": 5993,
+      "load_seconds": 0.5921480660326779,
+      "candidate_seconds": 0.015341391030233353,
+      "trials": [
+        {
+          "validation_seconds": 0.4266221119905822,
+          "score_seconds": 2.064658632967621,
+          "grading_seconds": 2.4912807449582033,
+          "valid": true,
+          "violations": [],
+          "metrics": {
+            "proxy_cost": 2.0463192462921143,
+            "wirelength_cost": 0.12094743549823761,
+            "density_cost": 1.2446010112762451,
+            "congestion_cost": 2.606142722168395,
+            "overlap_count": 0,
+            "total_overlap_area": 0.0,
+            "max_overlap_area": 0.0,
+            "num_macros_with_overlaps": 0,
+            "overlap_ratio": 0.0
+          }
+        },
+        {
+          "validation_seconds": 0.422202423971612,
+          "score_seconds": 2.0610854330006987,
+          "grading_seconds": 2.4832878569723107,
+          "valid": true,
+          "violations": [],
+          "metrics": {
+            "proxy_cost": 2.0463192462921143,
+            "wirelength_cost": 0.12094743549823761,
+            "density_cost": 1.2446010112762451,
+            "congestion_cost": 2.606142722168395,
+            "overlap_count": 0,
+            "total_overlap_area": 0.0,
+            "max_overlap_area": 0.0,
+            "num_macros_with_overlaps": 0,
+            "overlap_ratio": 0.0
+          }
+        },
+        {
+          "validation_seconds": 0.43027549801627174,
+          "score_seconds": 2.061108184978366,
+          "grading_seconds": 2.4913836829946376,
+          "valid": true,
+          "violations": [],
+          "metrics": {
+            "proxy_cost": 2.0463192462921143,
+            "wirelength_cost": 0.12094743549823761,
+            "density_cost": 1.2446010112762451,
+            "congestion_cost": 2.606142722168395,
+            "overlap_count": 0,
+            "total_overlap_area": 0.0,
+            "max_overlap_area": 0.0,
+            "num_macros_with_overlaps": 0,
+            "overlap_ratio": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "name": "ibm18",
+      "hard_macros": 285,
+      "soft_macros": 1029,
+      "nets": 26184,
+      "load_seconds": 2.549664269958157,
+      "candidate_seconds": 0.006777088972739875,
+      "trials": [
+        {
+          "validation_seconds": 0.5837864819914103,
+          "score_seconds": 39.02570489497157,
+          "grading_seconds": 39.60949137696298,
+          "valid": false,
+          "violations": [
+            "Macros outside horizontal canvas bounds",
+            "Macros outside vertical canvas bounds"
+          ],
+          "metrics": {
+            "proxy_cost": 2.0997705459594727,
+            "wirelength_cost": 0.06177719309926033,
+            "density_cost": 1.0941386222839355,
+            "congestion_cost": 2.981847918247297,
+            "overlap_count": 0,
+            "total_overlap_area": 0.0,
+            "max_overlap_area": 0.0,
+            "num_macros_with_overlaps": 0,
+            "overlap_ratio": 0.0
+          }
+        },
+        {
+          "validation_seconds": 0.5813918900093995,
+          "score_seconds": 39.00029482902028,
+          "grading_seconds": 39.581686719029676,
+          "valid": false,
+          "violations": [
+            "Macros outside horizontal canvas bounds",
+            "Macros outside vertical canvas bounds"
+          ],
+          "metrics": {
+            "proxy_cost": 2.0997705459594727,
+            "wirelength_cost": 0.06177719309926033,
+            "density_cost": 1.0941386222839355,
+            "congestion_cost": 2.981847918247297,
+            "overlap_count": 0,
+            "total_overlap_area": 0.0,
+            "max_overlap_area": 0.0,
+            "num_macros_with_overlaps": 0,
+            "overlap_ratio": 0.0
+          }
+        },
+        {
+          "validation_seconds": 0.5753380219684914,
+          "score_seconds": 39.00138412899105,
+          "grading_seconds": 39.57672215095954,
+          "valid": false,
+          "violations": [
+            "Macros outside horizontal canvas bounds",
+            "Macros outside vertical canvas bounds"
+          ],
+          "metrics": {
+            "proxy_cost": 2.0997705459594727,
+            "wirelength_cost": 0.06177719309926033,
+            "density_cost": 1.0941386222839355,
+            "congestion_cost": 2.981847918247297,
+            "overlap_count": 0,
+            "total_overlap_area": 0.0,
+            "max_overlap_area": 0.0,
+            "num_macros_with_overlaps": 0,
+            "overlap_ratio": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "peak_rss_mib": 295.5
+}

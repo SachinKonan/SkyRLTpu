@@ -1,0 +1,46 @@
+{
+  "model": "Qwen/Qwen3.5-27B",
+  "requests": 64,
+  "output_tokens": 512,
+  "endpoint": "http://10.130.0.102:19800",
+  "start_time": 1788787934.2985432,
+  "initial_status": {
+    "version": null,
+    "replicas": [
+      {
+        "ip": "10.130.0.102",
+        "instance": "7dba5598ee13469b82526fd07ad26c2d",
+        "registered": 1788785932.3465943
+      },
+      {
+        "ip": "10.130.0.100",
+        "instance": "180b262db3e34bdb9f44b7ed5071b492",
+        "registered": 1788785932.387764
+      },
+      {
+        "ip": "10.130.0.101",
+        "instance": "c9ca1d6a92c94a779bda3c5831f65d5b",
+        "registered": 1788785932.3955743
+      },
+      {
+        "ip": "10.130.0.103",
+        "instance": "a41bbd9992b542359f134a5fdcc9c3de",
+        "registered": 1788785938.4162934
+      }
+    ],
+    "starts": {
+      "10.130.0.102": 1,
+      "10.130.0.103": 1,
+      "10.130.0.100": 1,
+      "10.130.0.101": 1
+    },
+    "exhausted": [],
+    "active": 0,
+    "updating": false,
+    "committed": null
+  },
+  "temperature": 0.7,
+  "ignore_eos": true,
+  "adapter": null,
+  "timeout": 1800
+}

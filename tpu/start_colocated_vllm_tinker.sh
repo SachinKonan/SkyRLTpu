@@ -10,7 +10,10 @@ SSH_KEY_FILE="${SSH_KEY_FILE:-$HOME/.ssh/jobman_tpu_ed25519}"
 TRAIN_WORKER="${TRAIN_WORKER:-0}"
 VLLM_WORKER="${VLLM_WORKER:-1}"
 TRAIN_WORKERS="${TRAIN_WORKERS:-$TRAIN_WORKER}"
-VLLM_WORKERS="${VLLM_WORKERS:-$VLLM_WORKER}"
+VLLM_WORKERS="${VLLM_WORKERS-$VLLM_WORKER}"
+# Comma-separated already-running vLLM URLs. When set, VLLM_WORKERS may be
+# empty and START_VLLM must be 0; this is the training-only v6e-32 path.
+VLLM_BASE_URL_OVERRIDE="${VLLM_BASE_URL_OVERRIDE:-}"
 SYNC_SKYRL="${SYNC_SKYRL:-1}"
 SYNC_MODE="${SYNC_MODE:-worktree}"
 START_VLLM="${START_VLLM:-1}"
@@ -19,12 +22,14 @@ START_TINKER="${START_TINKER:-1}"
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3.5-4B}"
 SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL_NAME}"
 REMOTE_SKYRL_DIR="${REMOTE_SKYRL_DIR:-/home/${REMOTE_USER}/SkyRLTpu}"
+REMOTE_SKYRL_DIR=$(readlink -f "$REMOTE_SKYRL_DIR")
 REMOTE_HF_HOME="${REMOTE_HF_HOME:-/home/${REMOTE_USER}/.cache/huggingface}"
 # Optional shared HF weight cache on GCS, forwarded to start_vllm_tpu.sh (see
 # there). Empty = vLLM downloads from HuggingFace as before.
 HF_CACHE_GCS="${HF_CACHE_GCS:-}"
 REMOTE_CHECKPOINTS="${REMOTE_CHECKPOINTS:-/home/${REMOTE_USER}/gcs/skyrl-checkpoints}"
 REMOTE_LORA_BASE="${REMOTE_LORA_BASE:-/home/${REMOTE_USER}/gcs/skyrl-lora-models}"
+SKYRL_CKPT_GCS="${SKYRL_CKPT_GCS:-}"
 TINKER_API_KEY="${TINKER_API_KEY:-tml-dummy}"
 
 API_PORT="${API_PORT:-8000}"
@@ -47,11 +52,15 @@ VLLM_XLA_CACHE_GCS="${VLLM_XLA_CACHE_GCS:-}"
 VLLM_TP_SIZE="${VLLM_TP_SIZE:-auto}"
 VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-2048}"
 VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-256}"
+VLLM_ENABLE_LORA="${VLLM_ENABLE_LORA:-1}"
+VLLM_USE_BATCHED_RPA_KERNEL="${VLLM_USE_BATCHED_RPA_KERNEL:-0}"
+VLLM_USE_JAX_RAGGED_CONV1D="${VLLM_USE_JAX_RAGGED_CONV1D:-0}"
 VLLM_MAX_LORAS="${VLLM_MAX_LORAS:-8}"
 VLLM_MAX_LORA_RANK="${VLLM_MAX_LORA_RANK:-32}"
 VLLM_DATA_PARALLEL_SIZE="${VLLM_DATA_PARALLEL_SIZE:-auto}"
 VLLM_DATA_PARALLEL_BACKEND="${VLLM_DATA_PARALLEL_BACKEND:-auto}"
 VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-}"
+VLLM_LIMIT_MM_PER_PROMPT="${VLLM_LIMIT_MM_PER_PROMPT:-}"
 VLLM_TPU_PROCESS_BOUNDS="${VLLM_TPU_PROCESS_BOUNDS:-auto}"
 VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS="${VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS:-auto}"
 VLLM_TPU_PROCESS_PORT="${VLLM_TPU_PROCESS_PORT:-8476}"
@@ -78,6 +87,7 @@ TRAIN_TPU_VISIBLE_CHIPS="${TRAIN_TPU_VISIBLE_CHIPS:-}"
 
 TP_SIZE="${TP_SIZE:-4}"
 FSDP_SIZE="${FSDP_SIZE:-auto}"
+CP_SIZE="${CP_SIZE:-1}"
 TRAIN_MICRO_BATCH_SIZE="${TRAIN_MICRO_BATCH_SIZE:-1}"
 SAMPLE_MAX_NUM_SEQUENCES="${SAMPLE_MAX_NUM_SEQUENCES:-256}"
 MAX_LORA_ADAPTERS="${MAX_LORA_ADAPTERS:-8}"
@@ -89,14 +99,20 @@ VLLM_LORA_UPLOAD_ENDPOINT="${VLLM_LORA_UPLOAD_ENDPOINT:-/skyrl/v1/upload_lora_ad
 VLLM_LORA_LOAD_RETRIES="${VLLM_LORA_LOAD_RETRIES:-3}"
 VLLM_LORA_LOAD_RETRY_SLEEP_SEC="${VLLM_LORA_LOAD_RETRY_SLEEP_SEC:-2}"
 VLLM_REQUEST_TIMEOUT_SEC="${VLLM_REQUEST_TIMEOUT_SEC:-300}"
+EXTERNAL_INFERENCE_TIMEOUT_SEC="${EXTERNAL_INFERENCE_TIMEOUT_SEC:-7200}"
+# Release the pristine base params once the LoRA template exists (see
+# tunix_backend.free_base_state_after_template). Off by default: it makes a
+# second LoRA config an error, which single-config RL cells never need.
+TUNIX_FREE_BASE_STATE="${TUNIX_FREE_BASE_STATE:-0}"
+# Prefix-hash engine routing so phase 2 returns to the engine holding phase-1 KV.
+VLLM_ROUTE_BY_PROMPT_PREFIX="${VLLM_ROUTE_BY_PROMPT_PREFIX:-0}"
 VLLM_MAX_CONCURRENT_REQUESTS="${VLLM_MAX_CONCURRENT_REQUESTS:-256}"
 VLLM_CLIENT_SIDE_ROUND_ROBIN="${VLLM_CLIENT_SIDE_ROUND_ROBIN:-0}"
 
 READY_ATTEMPTS="${READY_ATTEMPTS:-720}"
 READY_SLEEP_SEC="${READY_SLEEP_SEC:-5}"
 
-# Training backend for the Tinker engine: "jax" (skyrl/tx) or "tunix"
-# (tunix backend; single train host only in v1).
+# Training backend for the Tinker engine: "jax" (skyrl/tx) or "tunix".
 TINKER_BACKEND="${TINKER_BACKEND:-jax}"
 TUNIX_MODEL_SOURCE="${TUNIX_MODEL_SOURCE:-maxtext}"
 TUNIX_MAX_TARGET_LENGTH="${TUNIX_MAX_TARGET_LENGTH:-4096}"
@@ -106,6 +122,8 @@ TUNIX_TRAIN_TOKEN_BUDGET="${TUNIX_TRAIN_TOKEN_BUDGET:-0}"
 # flattened B*T token axis in tiles of this many TOKENS, never forming [B*T,V]).
 # Requires maxtext_kwargs.num_vocab_tiling>1 so the decoder returns hidden.
 TUNIX_FLCE_TILE_SIZE="${TUNIX_FLCE_TILE_SIZE:-0}"
+TUNIX_REPLAY_DIAGNOSTICS="${TUNIX_REPLAY_DIAGNOSTICS:-0}"
+TUNIX_GRADIENT_PROBE_DIR="${TUNIX_GRADIENT_PROBE_DIR:-}"
 TUNIX_MAXTEXT_MODEL_NAME="${TUNIX_MAXTEXT_MODEL_NAME:-}"
 # Converted HF->orbax MaxText checkpoints are cached on LOCAL SSD (reading
 # orbax through the gcsfuse mount is slow, and writing during conversion to a
@@ -125,6 +143,15 @@ TUNIX_MAXTEXT_PIP_SPEC="${TUNIX_MAXTEXT_PIP_SPEC:-maxtext}"
 # Extra MaxText pyconfig overrides as JSON (e.g. remat_policy / mesh knobs).
 # Defaulted so `set -u` doesn't abort when the caller omits it.
 TUNIX_MAXTEXT_KWARGS="${TUNIX_MAXTEXT_KWARGS:-}"
+TUNIX_UNIFORM_SEQ_LEN="${TUNIX_UNIFORM_SEQ_LEN:-0}"
+TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-0}"
+TUNIX_SEQ_BUCKETS="${TUNIX_SEQ_BUCKETS:-}"
+TUNIX_ROW_SHARD="${TUNIX_ROW_SHARD:-0}"
+# MaxText writes its persistent compilation cache here (base.yml overrides the
+# generic JAX cache env). Every trainer host restores the same seed; only
+# process 0 publishes it back to GCS.
+TUNIX_JAX_CACHE_LOCAL="${TUNIX_JAX_CACHE_LOCAL:-/home/${REMOTE_USER}/jax_cache}"
+TUNIX_JAX_CACHE_GCS="${TUNIX_JAX_CACHE_GCS:-}"
 if [[ "$TINKER_BACKEND" == "tunix" ]]; then
   TINKER_ENGINE_EXTRA="tunix"
 else
@@ -200,13 +227,24 @@ PY
 }
 
 mapfile -t train_workers < <(parse_worker_list "$TRAIN_WORKERS")
-mapfile -t vllm_workers < <(parse_worker_list "$VLLM_WORKERS")
+vllm_workers=()
+if [[ -n "${VLLM_WORKERS//[[:space:]]/}" ]]; then
+  mapfile -t vllm_workers < <(parse_worker_list "$VLLM_WORKERS")
+elif [[ -z "$VLLM_BASE_URL_OVERRIDE" ]]; then
+  echo "VLLM_WORKERS may be empty only when VLLM_BASE_URL_OVERRIDE is set." >&2
+  exit 1
+fi
 train_worker_count="${#train_workers[@]}"
 vllm_worker_count="${#vllm_workers[@]}"
 train_workers_csv="$(join_csv "${train_workers[@]}")"
 vllm_workers_csv="$(join_csv "${vllm_workers[@]}")"
 train_coord_worker="${train_workers[0]}"
-vllm_coord_worker="${vllm_workers[0]}"
+vllm_coord_worker="${vllm_workers[0]:-$train_coord_worker}"
+
+if [[ "$START_VLLM" == "1" && "$vllm_worker_count" -eq 0 ]]; then
+  echo "START_VLLM=1 requires at least one VLLM_WORKERS entry." >&2
+  exit 1
+fi
 
 if ! [[ "$VLLM_ENGINES_PER_HOST" =~ ^[0-9]+$ ]] || (( VLLM_ENGINES_PER_HOST < 1 )); then
   echo "VLLM_ENGINES_PER_HOST must be a positive integer, got '${VLLM_ENGINES_PER_HOST}'." >&2
@@ -301,6 +339,14 @@ fi
 if [[ "$FSDP_SIZE" == "auto" ]]; then
   FSDP_SIZE="$train_worker_count"
 fi
+if [[ "$TINKER_BACKEND" == "tunix" && "$train_worker_count" -gt 1 ]]; then
+  if [[ "$TUNIX_ROW_SHARD" == "0" ]]; then
+    TUNIX_ROW_SHARD="$FSDP_SIZE"
+  elif [[ "$TUNIX_ROW_SHARD" != "$FSDP_SIZE" ]]; then
+    echo "TUNIX_ROW_SHARD(${TUNIX_ROW_SHARD}) must equal FSDP_SIZE(${FSDP_SIZE}) for multi-host Tunix." >&2
+    exit 1
+  fi
+fi
 if [[ "$VLLM_TP_SIZE" == "auto" ]]; then
   if (( VLLM_ENGINES_PER_HOST > 1 )); then
     if (( chips_per_vllm_worker % VLLM_ENGINES_PER_HOST != 0 )); then
@@ -320,10 +366,10 @@ if (( VLLM_ENGINES_PER_HOST > 1 )) && (( VLLM_TP_SIZE * VLLM_ENGINES_PER_HOST !=
 fi
 
 expected_train_devices="$((train_worker_count * $(product_csv "$TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS")))"
-mesh_devices="$((FSDP_SIZE * TP_SIZE))"
+mesh_devices="$((FSDP_SIZE * CP_SIZE * TP_SIZE))"
 if (( mesh_devices != expected_train_devices )); then
-  echo "SkyRL mesh mismatch: FSDP_SIZE(${FSDP_SIZE}) * TP_SIZE(${TP_SIZE}) = ${mesh_devices}, but TRAIN_WORKERS=${train_workers_csv} exposes ${expected_train_devices} devices." >&2
-  echo "For workers 0,1 on v5p-32, use TP_SIZE=4 FSDP_SIZE=2." >&2
+  echo "SkyRL mesh mismatch: FSDP_SIZE(${FSDP_SIZE}) * CP_SIZE(${CP_SIZE}) * TP_SIZE(${TP_SIZE}) = ${mesh_devices}, but TRAIN_WORKERS=${train_workers_csv} exposes ${expected_train_devices} devices." >&2
+  echo "For workers 0,1 on v5p-32, use TP_SIZE=4 FSDP_SIZE=2 CP_SIZE=1." >&2
   exit 1
 fi
 
@@ -384,7 +430,10 @@ vllm_internal_ip="$(worker_internal_ip "$vllm_coord_worker")"
 train_external_ip="$(worker_external_ip "$train_coord_worker")"
 train_process_addresses="$(process_addresses_for_workers "$TRAIN_TPU_PROCESS_PORT" "${train_workers[@]}")"
 vllm_process_addresses="$(process_addresses_for_workers "$VLLM_TPU_PROCESS_PORT" "${vllm_workers[@]}")"
-if [[ "$VLLM_RAY_EXECUTOR" == "0" ]]; then
+if [[ -n "$VLLM_BASE_URL_OVERRIDE" ]]; then
+  vllm_start_process_addresses=""
+  vllm_base_url="$VLLM_BASE_URL_OVERRIDE"
+elif [[ "$VLLM_RAY_EXECUTOR" == "0" ]]; then
   vllm_start_process_addresses=""
   if [[ "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "1" || "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "true" ]]; then
     vllm_base_url="$(base_urls_for_workers "$VLLM_PORT" "${vllm_workers[@]}")"
@@ -440,6 +489,29 @@ fi
   fi
 fi
 
+# Remove an old trainer before the potentially long vLLM startup. Otherwise a
+# stale API can keep answering port-8000 probes while the new samplers compile,
+# allowing an external monitor to launch a client against mixed generations.
+render_external_watchdog_env() {
+  local name
+  # SSH/tmux do not inherit the job's environment. Render explicit overrides,
+  # including zero, while leaving unspecified values to the API's defaults.
+  for name in SKYRL_EXTERNAL_WATCHDOG_ENABLED SKYRL_EXTERNAL_WATCHDOG_POLL_SEC \
+    SKYRL_EXTERNAL_WATCHDOG_STALE_SEC SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC \
+    SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC; do
+    if [[ -v "$name" ]]; then
+      printf 'export %s=%q\n' "$name" "${!name}"
+    fi
+  done
+}
+
+if [[ "$START_TINKER" == "1" ]]; then
+  cleanup_cmd='mkdir -p ~/skyrl-logs; tmux kill-session -t =skyrl-tinker 2>/dev/null || true; tmux list-sessions -F "#{session_name}" 2>/dev/null | awk "/^skyrl-tinker-worker-/ {print}" | xargs -r -n1 tmux kill-session -t; pkill -TERM -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true; sleep 5; pkill -KILL -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.(jax|rpc)" || true'
+  for worker in "${train_workers[@]}"; do
+    tpu_vm_ssh "$worker" "$cleanup_cmd"
+  done
+fi
+
 if [[ "$START_VLLM" == "1" ]]; then
   PROJECT="$PROJECT" \
     ZONE="$ZONE" \
@@ -451,6 +523,8 @@ if [[ "$START_VLLM" == "1" ]]; then
     SERVED_MODEL_NAME="$SERVED_MODEL_NAME" \
     VLLM_TPU_VERSION="$VLLM_TPU_VERSION" \
     VLLM_MODEL_IMPL_TYPE="$VLLM_MODEL_IMPL_TYPE" \
+    TPU_INFERENCE_FORK_URL="${TPU_INFERENCE_FORK_URL:-}" \
+    TPU_INFERENCE_FORK_REF="${TPU_INFERENCE_FORK_REF:-}" \
     VLLM_TPU_BACKEND_TYPE="$VLLM_TPU_BACKEND_TYPE" \
     VLLM_DISABLE_SHARDY="$VLLM_DISABLE_SHARDY" \
     VLLM_SKIP_JAX_PRECOMPILE="$VLLM_SKIP_JAX_PRECOMPILE" \
@@ -460,11 +534,15 @@ if [[ "$START_VLLM" == "1" ]]; then
     VLLM_TP_SIZE="$VLLM_TP_SIZE" \
     VLLM_MAX_MODEL_LEN="$VLLM_MAX_MODEL_LEN" \
     VLLM_MAX_NUM_SEQS="$VLLM_MAX_NUM_SEQS" \
+    VLLM_ENABLE_LORA="$VLLM_ENABLE_LORA" \
+    VLLM_USE_BATCHED_RPA_KERNEL="$VLLM_USE_BATCHED_RPA_KERNEL" \
+    VLLM_USE_JAX_RAGGED_CONV1D="$VLLM_USE_JAX_RAGGED_CONV1D" \
     VLLM_MAX_LORAS="$VLLM_MAX_LORAS" \
     VLLM_MAX_LORA_RANK="$VLLM_MAX_LORA_RANK" \
     VLLM_DATA_PARALLEL_SIZE="$VLLM_DATA_PARALLEL_SIZE" \
     VLLM_DATA_PARALLEL_BACKEND="$VLLM_DATA_PARALLEL_BACKEND" \
     VLLM_EXTRA_ARGS="$VLLM_EXTRA_ARGS" \
+    VLLM_LIMIT_MM_PER_PROMPT="$VLLM_LIMIT_MM_PER_PROMPT" \
     VLLM_TPU_PROCESS_BOUNDS="$VLLM_TPU_PROCESS_BOUNDS" \
     VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS="$VLLM_TPU_CHIPS_PER_PROCESS_BOUNDS" \
     VLLM_TPU_PROCESS_ADDRESSES="$vllm_start_process_addresses" \
@@ -484,12 +562,34 @@ wait_from_worker() {
   local worker="$1"
   local url="$2"
   local label="$3"
+  local inspect_vllm_log="${4:-0}"
+  # Fail fast when the engine is already dead: a vLLM whose EngineCore failed
+  # (commonly "No space left on device" from a partial HF-cache shard) never
+  # recovers, but the plain poll would still burn the full READY_ATTEMPTS
+  # window -- ~60min, i.e. an entire spot slice's median lifetime -- before the
+  # attempt fails and the guardian can recycle.
   local remote_cmd="
 set -euo pipefail
+vlog=\"\$HOME/skyrl-logs/vllm-tpu.log\"
+restart_attempted=0
 for i in \$(seq 1 '${READY_ATTEMPTS}'); do
   if curl -fsS --max-time 5 '${url}' >/dev/null 2>&1; then
     echo '${label} ready at ${url}'
     exit 0
+  fi
+  if [ '${inspect_vllm_log}' = '1' ] && [ -f \"\$vlog\" ] && grep -qE 'Engine core initialization failed|EngineCore failed to start|No space left on device|LocalEntryNotFoundError|IncompleteSnapshotError|offline HF snapshot is incomplete' \"\$vlog\" 2>/dev/null; then
+    echo '${label} FATAL: vLLM engine core died -- not waiting out the poll window' >&2
+    grep -aE 'RuntimeError|No space left on device|LocalEntryNotFoundError|IncompleteSnapshotError|offline HF snapshot is incomplete' \"\$vlog\" 2>/dev/null | tail -3 >&2
+    exit 1
+  fi
+  if [ '${inspect_vllm_log}' = '1' ] && [ '${VLLM_RAY_EXECUTOR}' = '0' ] &&
+     [ \"\$i\" -ge 3 ] && [ \"\$restart_attempted\" = '0' ] &&
+     ! tmux has-session -t =vllm-tpu 2>/dev/null &&
+     ! pgrep -u \"\$USER\" -f '[v]llm_tpu_server\.py|[v]llm serve|[g]cloud\.py storage cp.*hf-cache-' >/dev/null 2>&1; then
+    echo '${label}: detached vLLM session is absent; retrying its bootstrap once'
+    VLLM_RELATIVE_WORKER_ID=0 VLLM_USE_RAY_EXECUTOR=0 \
+      bash \"\$HOME/start_vllm_tpu_bootstrap.sh\"
+    restart_attempted=1
   fi
   sleep '${READY_SLEEP_SEC}'
 done
@@ -499,17 +599,28 @@ exit 1
   tpu_vm_ssh "$worker" "$remote_cmd"
 }
 
-if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
+wait_for_vllm() {
+  local vllm_worker engine engine_label
+  local -a ready_pids=()
+  local failed=0 pid
   for vllm_worker in "${vllm_workers[@]}"; do
-    for ((engine = 0; engine < VLLM_ENGINES_PER_HOST; engine++)); do
-      engine_label="vLLM worker ${vllm_worker}"
-      if (( VLLM_ENGINES_PER_HOST > 1 )); then
-        engine_label+=" engine ${engine}"
-      fi
-      wait_from_worker "$train_coord_worker" "http://$(worker_internal_ip "$vllm_worker"):$((VLLM_PORT + engine))/v1/models" "$engine_label"
-    done
+    (
+      for ((engine = 0; engine < VLLM_ENGINES_PER_HOST; engine++)); do
+        engine_label="vLLM worker ${vllm_worker}"
+        if (( VLLM_ENGINES_PER_HOST > 1 )); then
+          engine_label+=" engine ${engine}"
+        fi
+        # Engines on one host share bootstrap/cleanup; poll those serially.
+        wait_from_worker "$vllm_worker" "http://127.0.0.1:$((VLLM_PORT + engine))/v1/models" "$engine_label" 1 || exit 1
+      done
+    ) &
+    ready_pids+=("$!")
   done
-fi
+  for pid in "${ready_pids[@]}"; do
+    wait "$pid" || failed=1
+  done
+  return "$failed"
+}
 
 backend_config="$(
   python3 - <<PY
@@ -531,13 +642,13 @@ vllm_cfg = {
     "vllm_request_timeout_sec": float("${VLLM_REQUEST_TIMEOUT_SEC}"),
     "vllm_max_concurrent_requests": int("${VLLM_MAX_CONCURRENT_REQUESTS}"),
     "vllm_client_side_round_robin": "${VLLM_CLIENT_SIDE_ROUND_ROBIN}".lower() in ("1", "true", "yes", "on"),
+    "vllm_route_by_prompt_prefix": "${VLLM_ROUTE_BY_PROMPT_PREFIX}".lower() in ("1", "true", "yes", "on"),
 }
 
 if backend == "tunix":
-    if train_worker_count > 1:
-        raise SystemExit("TINKER_BACKEND=tunix supports a single train host (set TRAIN_WORKERS to one worker)")
     cfg = {
         "vllm_lora_upload_endpoint": "${VLLM_LORA_UPLOAD_ENDPOINT}",
+        "checkpoint_mirror_gcs": "${SKYRL_CKPT_GCS}",
         "model_source": "${TUNIX_MODEL_SOURCE}",
         "max_lora_rank": int("${MAX_LORA_RANK}"),
         "train_micro_batch_size": int("${TRAIN_MICRO_BATCH_SIZE}"),
@@ -547,6 +658,7 @@ if backend == "tunix":
         "train_token_budget": int("${TUNIX_TRAIN_TOKEN_BUDGET}"),
         "flce_tile_size": int("${TUNIX_FLCE_TILE_SIZE}"),
         "maxtext_ckpt_cache_dir": "${TUNIX_MAXTEXT_CKPT_CACHE}",
+        "free_base_state_after_template": "${TUNIX_FREE_BASE_STATE}".lower() in ("1", "true", "yes", "on"),
         **vllm_cfg,
     }
     if "${TUNIX_MAXTEXT_MODEL_NAME}":
@@ -554,6 +666,24 @@ if backend == "tunix":
     # Extra MaxText pyconfig overrides (JSON), e.g. remat_policy for activation
     # rematerialization / mesh parallelism knobs. Merged over the defaults.
     _mt_kwargs = json.loads('${TUNIX_MAXTEXT_KWARGS}' or "{}")
+    if train_worker_count > 1:
+        requested = {
+            "ici_tensor_parallelism": int("${TP_SIZE}"),
+            "ici_fsdp_parallelism": int("${FSDP_SIZE}"),
+            "ici_context_parallelism": int("${CP_SIZE}"),
+        }
+        for key, value in requested.items():
+            if key in _mt_kwargs and int(_mt_kwargs[key]) != value:
+                raise SystemExit(
+                    f"Tunix mesh mismatch: {key}={_mt_kwargs[key]} but launcher requests {value}"
+                )
+            _mt_kwargs[key] = value
+        cfg.update(
+            {
+                "coordinator_address": "${train_internal_ip}:${JAX_COORD_PORT}",
+                "num_processes": train_worker_count,
+            }
+        )
     if _mt_kwargs:
         cfg["maxtext_kwargs"] = _mt_kwargs
 else:
@@ -583,7 +713,10 @@ external_inference_flag=""
 if [[ "$EXTERNAL_SAMPLING" == "1" ]]; then
   # Round-robin sampling across every vLLM worker (the client splits this
   # comma-separated list). With one vLLM worker it's just the single URL.
-  if [[ "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "1" || "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "true" ]]; then
+  if [[ -n "$VLLM_BASE_URL_OVERRIDE" ]]; then
+    external_inference_urls="$VLLM_BASE_URL_OVERRIDE"
+    external_inference_flag="--external-inference-url ${external_inference_urls}"
+  elif [[ "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "1" || "$VLLM_CLIENT_SIDE_ROUND_ROBIN" == "true" ]]; then
     # Same per-engine URL list the backend CSV uses.
     external_inference_urls="$(base_urls_for_workers "$VLLM_PORT" "${vllm_workers[@]}")"
     external_inference_flag="--external-inference-url ${external_inference_urls}"
@@ -593,11 +726,6 @@ if [[ "$EXTERNAL_SAMPLING" == "1" ]]; then
 fi
 
 if [[ "$START_TINKER" == "1" ]]; then
-  cleanup_cmd='mkdir -p ~/skyrl-logs; tmux kill-session -t skyrl-tinker 2>/dev/null || true; tmux list-sessions -F "#{session_name}" 2>/dev/null | awk "/^skyrl-tinker-worker-/ {print}" | xargs -r -n1 tmux kill-session -t; pkill -TERM -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.jax" || true; sleep 5; pkill -KILL -u "$USER" -f "[s]kyrl\\.tinker|[s]kyrl\\.backends\\.jax" || true'
-  for worker in "${train_workers[@]}"; do
-    tpu_vm_ssh "$worker" "$cleanup_cmd"
-  done
-
   api_script="$tmpdir/start_colocated_skyrl_api.sh"
   cat > "$api_script" <<EOF
 #!/usr/bin/env bash
@@ -605,17 +733,37 @@ set -euo pipefail
 export PATH="\$HOME/.local/bin:\$PATH"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
 export TINKER_API_KEY="${TINKER_API_KEY}"
-export TUNIX_UNIFORM_SEQ_LEN="${TUNIX_UNIFORM_SEQ_LEN:-0}"
-export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT:-0}"
+export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-}"
+$(render_external_watchdog_env)
+export SKYRL_TRAIN_PROCESS_ID="\${SKYRL_TRAIN_PROCESS_ID:-0}"
+# Persist the TRAINER's JAX compiles (fb at the uniform length, optimizer
+# graphs). Without this every fresh node re-JITs them from scratch -- 10-20 min
+# of every bring-up, on every model, thrown away at each preemption. The vLLM
+# side has had a GCS-backed cache for a while; the trainer never did, though the
+# muse study scripts (rs_tpu.sh, e2e_tpu.sh) set exactly this. Cache misses are
+# free (JAX just compiles), so a stale or absent entry costs nothing.
+export JAX_COMPILATION_CACHE_DIR="${TUNIX_JAX_CACHE_LOCAL}"
+mkdir -p "\$JAX_COMPILATION_CACHE_DIR"
+if [[ -n "${TUNIX_JAX_CACHE_GCS}" ]]; then
+  bash "\$HOME/gcs_rsync.sh" -r "${TUNIX_JAX_CACHE_GCS}" "\$JAX_COMPILATION_CACHE_DIR" >/dev/null 2>&1 \
+    && echo "trainer JAX cache restored from ${TUNIX_JAX_CACHE_GCS}" \
+    || echo "trainer JAX cache empty/miss on process \$SKYRL_TRAIN_PROCESS_ID"
+fi
+export TUNIX_UNIFORM_SEQ_LEN="${TUNIX_UNIFORM_SEQ_LEN}"
+export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT}"
+export TUNIX_REPLAY_DIAGNOSTICS="${TUNIX_REPLAY_DIAGNOSTICS}"
+export TUNIX_GRADIENT_PROBE_DIR="${TUNIX_GRADIENT_PROBE_DIR}"
+export TUNIX_GRADIENT_PROBE_WRITER=1
 # Length-bucket ladder for training microbatches (see tunix_backend._bucket_len).
 # Empty => exact per-datum rounding (many XLA shapes). UNIFORM, if set, wins.
-export TUNIX_SEQ_BUCKETS="${TUNIX_SEQ_BUCKETS:-}"
+export TUNIX_SEQ_BUCKETS="${TUNIX_SEQ_BUCKETS}"
 # Row-padding multiple = the MaxText batch-sharding axis. Empty/0 => chip count
 # (correct under pure FSDP). Set to the fsdp/data axis when using tensor
 # parallelism, e.g. TUNIX_ROW_SHARD=2 alongside
 # TUNIX_MAXTEXT_KWARGS='{"ici_fsdp_parallelism":2,"ici_tensor_parallelism":2}'.
-export TUNIX_ROW_SHARD="${TUNIX_ROW_SHARD:-0}"
+export TUNIX_ROW_SHARD="${TUNIX_ROW_SHARD}"
 export TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS}"
 export TPU_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS}"
 export TPU_PROCESS_ADDRESSES="${train_process_addresses}"
@@ -629,8 +777,15 @@ if [[ -n "${TRAIN_TPU_VISIBLE_CHIPS}" ]]; then
 else
   unset TPU_VISIBLE_CHIPS
 fi
-mkdir -p "${REMOTE_HF_HOME}" "${REMOTE_CHECKPOINTS}" "${REMOTE_LORA_BASE}" "\$HOME/skyrl-logs"
+mkdir -p "${REMOTE_HF_HOME}" "${REMOTE_LORA_BASE}" "\$HOME/skyrl-logs"
+# Training checkpoints must be visible to every JAX process. URI-backed roots
+# (for example gs://...) are created lazily by cloudpathlib, not mkdir.
+case "${REMOTE_CHECKPOINTS}" in
+  *://*) ;;
+  *) mkdir -p "${REMOTE_CHECKPOINTS}" ;;
+esac
 cd "${REMOTE_SKYRL_DIR}"
+if [[ "\${SKYRL_TRAIN_SKIP_PROVISION:-0}" != "1" ]]; then
 if [[ -f uv.lock ]]; then
   python3 - <<'PY'
 from pathlib import Path
@@ -646,13 +801,19 @@ PY
 fi
 
 if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
-  # The tunix backend needs the tunix extra plus MaxText, which is not in the
-  # lock (heavy, TPU-only). Sync once, then install MaxText into the project
-  # venv from \$HOME — running uv pip inside the repo trips its
-  # extra-build-dependencies config.
-  uv sync --extra tpu --extra tinker --extra tunix
+  # The root project depends on HF peft, which pulls CUDA PyTorch and several
+  # GiB of NVIDIA wheels on Linux. Tunix uses Qwix LoRA, so provision its
+  # dedicated TPU-only lock and install SkyRL editable without root deps.
+  UV_PROJECT_ENVIRONMENT="${REMOTE_SKYRL_DIR}/.venv" \\
+    uv sync --project "${REMOTE_SKYRL_DIR}/tpu/tunix_runtime" --frozen
+  uv pip install --python "${REMOTE_SKYRL_DIR}/.venv/bin/python" \\
+    --no-deps --editable "${REMOTE_SKYRL_DIR}"
+  # MaxText declares no base dependencies. Install the caller-pinned revision
+  # into the same environment from \$HOME to avoid root build configuration.
+  # drjax is imported unconditionally by MaxText's DiLoCo sharding helper on
+  # the model-creation import path, even when DiLoCo itself is disabled.
   (cd "\$HOME" && uv pip install --python "${REMOTE_SKYRL_DIR}/.venv/bin/python" \\
-      "${TUNIX_MAXTEXT_PIP_SPEC}" aqtp pathwaysutils tokamax tiktoken)
+      "${TUNIX_MAXTEXT_PIP_SPEC}" 'drjax>=0.1.4' aqtp pathwaysutils tokamax tiktoken)
 fi
 
 # Converted orbax MaxText checkpoint cache. The engine reads a LOCAL dir
@@ -673,11 +834,42 @@ fi
 if [[ "${TINKER_BACKEND}" == "tunix" && -n "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}" && -n "${TUNIX_MAXTEXT_MODEL_NAME}" ]]; then
   export gsutil_bin="\$(command -v gsutil || echo "\$HOME/google-cloud-sdk/bin/gsutil")"
   mkdir -p "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}"
-  if "\$gsutil_bin" -m -q rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" 2>/dev/null; then
-    echo "restored MaxText ckpt cache from ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}"
+  # Retry + partial purge, same discipline as the HF-cache restore. An rsync cut
+  # short (preemption mid-bring-up is routine on spot) leaves *_.gstmp partials:
+  # every filename present, almost no bytes. The trainer then reads them and dies
+  # with "DATA_LOSS: Error reading shard entry" from TensorStore -- observed live
+  # on muse (132K local against a 40.58 GiB checkpoint). A partial cache is worse
+  # than none: absent, the backend just re-converts from HF.
+  _ck_dir="${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}"
+  # tpu/jobman/ensure_orbax_ckpt.sh (prepare hook) OWNS checkpoint acquisition.
+  # If it already put something here, do not touch it: two restore paths that
+  # each purge-on-incomplete race and delete each other's progress -- observed
+  # live as a sawtooth (10.5 GB -> purged -> 7.7 GB -> purged) that never
+  # converged. Presence is enough; prepare verified completeness.
+  if [ -n "\$(ls -A "\$_ck_dir" 2>/dev/null)" ]; then
+    echo "MaxText ckpt present at \$_ck_dir -- prepare hook owns it, skipping inline restore"
   else
-    echo "MaxText ckpt cache restore skipped/failed (will convert)"
+  _ck_ok=0
+  for _try in 1 2 3; do
+    "\$gsutil_bin" -m -q rsync -r "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" "\$_ck_dir" 2>/dev/null && _ck_ok=1
+    _parts="\$(find "\$_ck_dir" \( -name '*_.gstmp' -o -name '*.gstmp' \) 2>/dev/null | head -1)"
+    if [ "\$_ck_ok" = "1" ] && [ -z "\$_parts" ]; then
+      echo "restored MaxText ckpt cache from ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME} (attempt \$_try)"
+      break
+    fi
+    echo "MaxText ckpt restore incomplete (attempt \$_try): partial=\${_parts:-none}"
+    _ck_ok=0
+    sleep 15
+  done
+  if [ "\$_ck_ok" != "1" ]; then
+    _n="\$(find "\$_ck_dir" -mindepth 1 -delete -print 2>/dev/null | wc -l)"
+    echo "MaxText ckpt cache restore FAILED after 3 tries; purged \$_n partial path(s) so the backend converts from HF instead of reading corrupt shards"
   fi
+  fi
+  # Only process 0 may seed a missing shared prefix. Every trainer restores its
+  # own local copy above, but concurrent first-writer rsyncs can corrupt an
+  # otherwise valid one-time publication.
+  if [[ "\${SKYRL_TRAIN_PROCESS_ID}" == "0" ]]; then
   nohup bash -c '
     for _try in \$(seq 1 240); do
       if [ -n "\$(ls -A "${TUNIX_MAXTEXT_CKPT_CACHE}/${TUNIX_MAXTEXT_MODEL_NAME}" 2>/dev/null)" ]; then break; fi
@@ -689,6 +881,7 @@ if [[ "${TINKER_BACKEND}" == "tunix" && -n "${TUNIX_MAXTEXT_CKPT_CACHE_GCS}" && 
         echo "seeded MaxText ckpt cache to ${TUNIX_MAXTEXT_CKPT_CACHE_GCS}/${TUNIX_MAXTEXT_MODEL_NAME}" || true
     fi
   ' >"\$HOME/skyrl-logs/maxtext-ckpt-seed.log" 2>&1 &
+  fi
 fi
 
 # FLCE needs MaxText's Transformer.__call__ to surface hidden when
@@ -697,41 +890,75 @@ fi
 # above. Idempotent; only when FLCE is enabled.
 if [[ "${TUNIX_FLCE_TILE_SIZE}" -gt 0 ]]; then
   "${REMOTE_SKYRL_DIR}/.venv/bin/python" - <<'PYPATCH'
-import glob, os
-for mt in glob.glob(os.path.expanduser("~/SkyRLTpu/.venv/lib/python*/site-packages/maxtext/models/models.py")):
+import glob, os, re, sys
+# Same contract as tpu/swarm/ray_train/patch_maxtext.py: every pinned fork ends
+# each Transformer wrapper with `return hidden_state, kv_caches` / blank /
+# `return logits`, whatever the vLLM guard above looks like (the gpt-oss fork
+# spells it as a tuple and adds an expert_indices return). Anchor on that
+# shared tail and fail closed if the layout is unknown.
+TAIL = "      return hidden_state, kv_caches\n\n"
+RET = "    return logits"
+COND = "    if self.config.num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN:\n      return hidden_state\n\n"
+unpatched = re.compile(re.escape(TAIL) + re.escape(RET))
+patched = re.compile(re.escape(TAIL) + re.escape(COND) + re.escape(RET))
+for mt in glob.glob(os.path.join(sys.prefix, "lib/python*/site-packages/maxtext/models/models.py")):
     src = open(mt).read()
-    if "num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN" in src:
-        continue
-    old = ('    if self.config.attention == "vllm_rpa":\n'
-           '      # In vLLM, logits are computed separately after updating the KV cache.\n'
-           '      return hidden_state, kv_caches\n\n'
-           '    return logits')
-    new = ('    if self.config.attention == "vllm_rpa":\n'
-           '      # In vLLM, logits are computed separately after updating the KV cache.\n'
-           '      return hidden_state, kv_caches\n\n'
-           '    if self.config.num_vocab_tiling > 1 and model_mode == MODEL_MODE_TRAIN:\n'
-           '      return hidden_state\n\n'
-           '    return logits')
-    if old in src:
-        open(mt, "w").write(src.replace(old, new))
+    remaining, applied = len(unpatched.findall(src)), len(patched.findall(src))
+    if remaining + applied not in (1, 2):
+        sys.exit(f"FLCE patch: pinned MaxText {mt} does not match the wrapper contract")
+    if remaining:
+        open(mt, "w").write(unpatched.sub(lambda m: TAIL + COND + RET, src))
         print("FLCE-patched", mt, flush=True)
 PYPATCH
 fi
+fi
 
-exec uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}" -m skyrl.tinker.api \\
+if [[ "\${SKYRL_TRAIN_SETUP_ONLY:-0}" == "1" ]]; then
+  echo "trainer process \$SKYRL_TRAIN_PROCESS_ID provisioning complete"
+  exit 0
+fi
+
+runner=(uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}")
+if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
+  export SKYRL_TINKER_ENGINE_DIRECT_PYTHON=1
+  runner=("${REMOTE_SKYRL_DIR}/.venv/bin/python")
+fi
+exec "\${runner[@]}" -m skyrl.tinker.api \\
   --base-model "${MODEL_NAME}" \\
   --host 0.0.0.0 \\
   --port "${API_PORT}" \\
   --session-timeout-sec "${SESSION_TIMEOUT_SEC}" \\
   --checkpoints-base "${REMOTE_CHECKPOINTS}" \\
   --external-inference-lora-base "${REMOTE_LORA_BASE}" \\
+  --external-inference-timeout-sec "${EXTERNAL_INFERENCE_TIMEOUT_SEC}" \\
   --backend "${TINKER_BACKEND}" \\
   ${external_inference_flag} \\
   --backend-config '${backend_config}'
 EOF
   chmod +x "$api_script"
 
-  tpu_vm_scp "$train_coord_worker" "$api_script" "~/start_colocated_skyrl_api.sh"
+  # Provision every JAX process from the exact same generated program. Run the
+  # expensive uv/MaxText/cache work concurrently: serial setup costs several
+  # spot-window minutes per VM and made a four-process v6e-16 unnecessarily
+  # fragile. The real API/worker starts below set SKYRL_TRAIN_SKIP_PROVISION=1.
+  for worker in "${train_workers[@]}"; do
+    tpu_vm_scp "$worker" "$api_script" "~/start_colocated_skyrl_api.sh"
+    tpu_vm_scp "$worker" "${repo_root}/tpu/gcs_rsync.sh" "~/gcs_rsync.sh"
+  done
+  provision_pids=()
+  for ((process_id = 0; process_id < train_worker_count; process_id++)); do
+    worker="${train_workers[$process_id]}"
+    tpu_vm_ssh "$worker" "SKYRL_TRAIN_PROCESS_ID=${process_id} SKYRL_TRAIN_SETUP_ONLY=1 bash ~/start_colocated_skyrl_api.sh" &
+    provision_pids+=("$!")
+  done
+  provision_failed=0
+  for pid in "${provision_pids[@]}"; do
+    wait "$pid" || provision_failed=1
+  done
+  if (( provision_failed )); then
+    echo "At least one trainer process failed provisioning; collective start aborted." >&2
+    exit 1
+  fi
 
   for ((process_id = 1; process_id < train_worker_count; process_id++)); do
     worker="${train_workers[$process_id]}"
@@ -742,6 +969,16 @@ set -euo pipefail
 export PATH="\$HOME/.local/bin:\$PATH"
 export HF_HOME="${REMOTE_HF_HOME}"
 export TRANSFORMERS_CACHE="\${HF_HOME}/hub"
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
+export TPUSWARM_BUNDLE_ID="${TPUSWARM_BUNDLE_ID:-}"
+export JAX_COMPILATION_CACHE_DIR="${TUNIX_JAX_CACHE_LOCAL}"
+export TUNIX_UNIFORM_SEQ_LEN="${TUNIX_UNIFORM_SEQ_LEN}"
+export TUNIX_MINIMAL_FB_OUTPUT="${TUNIX_MINIMAL_FB_OUTPUT}"
+export TUNIX_REPLAY_DIAGNOSTICS="${TUNIX_REPLAY_DIAGNOSTICS}"
+export TUNIX_GRADIENT_PROBE_DIR="${TUNIX_GRADIENT_PROBE_DIR}"
+export TUNIX_GRADIENT_PROBE_WRITER=0
+export TUNIX_SEQ_BUCKETS="${TUNIX_SEQ_BUCKETS}"
+export TUNIX_ROW_SHARD="${TUNIX_ROW_SHARD}"
 export TPU_PROCESS_BOUNDS="${TRAIN_TPU_PROCESS_BOUNDS}"
 export TPU_CHIPS_PER_PROCESS_BOUNDS="${TRAIN_TPU_CHIPS_PER_PROCESS_BOUNDS}"
 export TPU_PROCESS_ADDRESSES="${train_process_addresses}"
@@ -754,30 +991,43 @@ else
   unset TPU_VISIBLE_CHIPS
 fi
 cd "${REMOTE_SKYRL_DIR}"
-exec uv run --extra tpu --extra tinker --extra jax -m skyrl.backends.jax \\
+runner=(uv run --extra tpu --extra tinker --extra "${TINKER_ENGINE_EXTRA}")
+if [[ "${TINKER_BACKEND}" == "tunix" ]]; then
+  runner=("${REMOTE_SKYRL_DIR}/.venv/bin/python")
+fi
+exec "\${runner[@]}" -m skyrl.backends.rpc \\
   --coordinator-address "${train_internal_ip}:${JAX_COORD_PORT}" \\
   --num-processes "${train_worker_count}" \\
-  --process-id "${process_id}"
+  --process-id "${process_id}" \\
+  --backend "${TINKER_BACKEND}"
 EOF
     chmod +x "$worker_script"
     tpu_vm_scp "$worker" "$worker_script" "~/start_colocated_skyrl_worker_${process_id}.sh"
-    tpu_vm_ssh "$worker" "mkdir -p ~/skyrl-logs; tmux new-session -d -c \"\$HOME\" -s skyrl-tinker-worker-${process_id} \"bash ~/start_colocated_skyrl_worker_${process_id}.sh 2>&1 | tee ~/skyrl-logs/tinker-worker-${process_id}.log\""
+    tpu_vm_ssh "$worker" "mkdir -p ~/skyrl-logs; tmux new-session -d -c \"\$HOME\" -s skyrl-tinker-worker-${process_id} \"SKYRL_TRAIN_SKIP_PROVISION=1 bash ~/start_colocated_skyrl_worker_${process_id}.sh 2>&1 | tee ~/skyrl-logs/tinker-worker-${process_id}.log\""
   done
 
-  tpu_vm_ssh "$train_coord_worker" 'mkdir -p ~/skyrl-logs; tmux new-session -d -c "$HOME" -s skyrl-tinker "bash ~/start_colocated_skyrl_api.sh 2>&1 | tee ~/skyrl-logs/tinker-api.log"'
+  tpu_vm_ssh "$train_coord_worker" 'mkdir -p ~/skyrl-logs; tmux new-session -d -c "$HOME" -s skyrl-tinker "SKYRL_TRAIN_SKIP_PROVISION=1 bash ~/start_colocated_skyrl_api.sh 2>&1 | tee ~/skyrl-logs/tinker-api.log"'
 
   wait_from_worker "$train_coord_worker" "http://127.0.0.1:${API_PORT}/api/v1/get_server_capabilities" "Tinker API"
 fi
 
+# Inference hosts can download/load while independent trainer hosts provision.
+# Keep the readiness barrier before returning control to the client launcher.
+if [[ "$START_VLLM" == "1" || "$START_TINKER" == "1" ]]; then
+  wait_for_vllm
+fi
+
 echo "Colocated vLLM/Tinker split is up."
 echo "Train workers: ${train_workers_csv}; Tinker API: http://127.0.0.1:${API_PORT} on worker ${train_coord_worker}"
-echo "Train TPU_PROCESS_BOUNDS=${TRAIN_TPU_PROCESS_BOUNDS}; TRAIN_TPU_PROCESS_ADDRESSES=${train_process_addresses}; mesh fsdp=${FSDP_SIZE}, tp=${TP_SIZE}"
-echo "vLLM workers: ${vllm_workers_csv}; vLLM URL from train workers: ${vllm_base_url}; vLLM tp=${VLLM_TP_SIZE}; engines/host=${VLLM_ENGINES_PER_HOST}"
+echo "Train TPU_PROCESS_BOUNDS=${TRAIN_TPU_PROCESS_BOUNDS}; TRAIN_TPU_PROCESS_ADDRESSES=${train_process_addresses}; mesh fsdp=${FSDP_SIZE}, cp=${CP_SIZE}, tp=${TP_SIZE}"
+echo "vLLM workers: ${vllm_workers_csv:-external}; vLLM URL from train workers: ${vllm_base_url}; vLLM tp=${VLLM_TP_SIZE}; engines/host=${VLLM_ENGINES_PER_HOST}"
 echo "vLLM data parallel: size=${VLLM_DATA_PARALLEL_SIZE}; backend=${VLLM_DATA_PARALLEL_BACKEND:-none}"
 echo "vLLM client-side round-robin: ${VLLM_CLIENT_SIDE_ROUND_ROBIN}"
 echo "vLLM TPU_PROCESS_BOUNDS=${VLLM_TPU_PROCESS_BOUNDS}; VLLM_TPU_PROCESS_ADDRESSES=${vllm_start_process_addresses}"
 echo "Tinker log: gcloud alpha compute tpus tpu-vm ssh ${REMOTE_USER}@${TPU_NAME} --project=${PROJECT} --zone=${ZONE} --worker=${train_coord_worker} --ssh-key-file=${SSH_KEY_FILE} --command 'tail -f ~/skyrl-logs/tinker-api.log'"
-echo "vLLM log: gcloud alpha compute tpus tpu-vm ssh ${REMOTE_USER}@${TPU_NAME} --project=${PROJECT} --zone=${ZONE} --worker=${vllm_coord_worker} --ssh-key-file=${SSH_KEY_FILE} --command 'tail -f ~/skyrl-logs/vllm-tpu.log'"
+if (( vllm_worker_count > 0 )); then
+  echo "vLLM log: gcloud alpha compute tpus tpu-vm ssh ${REMOTE_USER}@${TPU_NAME} --project=${PROJECT} --zone=${ZONE} --worker=${vllm_coord_worker} --ssh-key-file=${SSH_KEY_FILE} --command 'tail -f ~/skyrl-logs/vllm-tpu.log'"
+fi
 if [[ -n "$train_external_ip" ]]; then
   echo "Local tunnel: ssh -i ${SSH_KEY_FILE} -L 127.0.0.1:18025:127.0.0.1:${API_PORT} ${REMOTE_USER}@${train_external_ip}"
 fi

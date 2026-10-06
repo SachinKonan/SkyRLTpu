@@ -1,0 +1,28 @@
+{
+  "source": {
+    "job_id": 1361,
+    "run_id": "next-v6e-muse-qubit-10step-20260921",
+    "status": "STARTING",
+    "cluster": null,
+    "pool": "tpuswarm-v6e32-east5b-qwen35",
+    "priority": 100
+  },
+  "central": [
+    {
+      "job_id": 1360,
+      "run_id": "next-v6e-qwen-qubit-10step-20260921",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v6e32-central1b-145",
+      "pool": "tpuswarm-v6e32-central1b",
+      "priority": 100
+    },
+    {
+      "job_id": 1359,
+      "run_id": "next-v6e-gemma-qubit-10step-20260921",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v6e32-central1b-144",
+      "pool": "tpuswarm-v6e32-central1b",
+      "priority": 100
+    }
+  ]
+}

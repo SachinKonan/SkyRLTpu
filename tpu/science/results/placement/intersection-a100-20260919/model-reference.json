@@ -1,0 +1,20 @@
+[
+  {
+    "model": "gemma",
+    "cases": 16,
+    "valid": 16,
+    "mean_proxy_cost": 1.0455511435866356
+  },
+  {
+    "model": "qwen",
+    "cases": 16,
+    "valid": 16,
+    "mean_proxy_cost": 1.0727658160030842
+  },
+  {
+    "model": "muse",
+    "cases": 16,
+    "valid": 16,
+    "mean_proxy_cost": 1.0683691762387753
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "slice": "tpuswarm-v4-64-central2-qwen35-erdos-307",
+  "all_hosts_passed": true,
+  "host_count": 8,
+  "results": [
+    {
+      "rank": 0,
+      "exit": 0,
+      "output": "{\"event\": \"ram_cache_reused\", \"host\": \"t1v-n-8254e2fb-w-0\", \"pid\": 346750, \"previous_root\": \"/home/gcpuser/.cache/science-qwen-v4-tp8-fsdp2-replay-001\", \"role\": \"trainer\", \"root\": \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002\", \"time\": 1789483688.5015562}\n{\"event\": \"ram_cache_preserved\", \"host\": \"t1v-n-8254e2fb-w-0\", \"pid\": 346750, \"previous_root\": \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002\", \"reason\": \"root has live or uninspectable run processes\", \"time\": 1789483688.752059}\n{\"event\": \"ram_cache_preserved\", \"host\": \"t1v-n-8254e2fb-w-0\", \"pid\": 346750, \"previous_root\": \"/home/gcpuser/.cache/science-placement-v4-gemma-grpo-001\", \"reason\": \"root has live or uninspectable run processes\", \"time\": 1789483689.001043}\n{\"event\": \"cache_admission_verified\", \"role\": \"trainer\", \"before_available_gib\": 252.93264770507812, \"after_available_gib\": 253.0404167175293, \"mounts\": [\"/home/gcpuser/.cache/science-placement-v4-gemma-grpo-001/ram\", \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002/ram\", \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002/ram\"]}\n",
+      "error": "Warning: Permanently added '35.186.16.238' (ED25519) to the list of known hosts.\n"
+    },
+    {
+      "rank": 1,
+      "exit": 0,
+      "output": "{\"event\": \"ram_cache_reused\", \"host\": \"t1v-n-8254e2fb-w-3\", \"pid\": 134558, \"previous_root\": \"/home/gcpuser/.cache/science-qwen-v4-tp8-fsdp2-replay-001\", \"role\": \"inference\", \"root\": \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002\", \"time\": 1789483687.9202807}\n{\"bytes\": 55876501504, \"event\": \"ram_cache_reclaimed\", \"host\": \"t1v-n-8254e2fb-w-3\", \"pid\": 134558, \"previous_root\": \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002\", \"time\": 1789483693.7996788}\n{\"event\": \"cache_admission_verified\", \"role\": \"inference\", \"before_available_gib\": 290.18088150024414, \"after_available_gib\": 342.2197608947754, \"mounts\": [\"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002/ram\"]}\n",
+      "error": "Warning: Permanently added '108.59.91.89' (ED25519) to the list of known hosts.\n"
+    },
+    {
+      "rank": 2,
+      "exit": 0,
+      "output": "{\"event\": \"ram_cache_reused\", \"host\": \"t1v-n-8254e2fb-w-1\", \"pid\": 122466, \"previous_root\": \"/home/gcpuser/.cache/science-qwen-v4-tp8-fsdp2-replay-001\", \"role\": \"trainer\", \"root\": \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002\", \"time\": 1789483687.9593048}\n{\"bytes\": 41919070208, \"event\": \"ram_cache_reclaimed\", \"host\": \"t1v-n-8254e2fb-w-1\", \"pid\": 122466, \"previous_root\": \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002\", \"time\": 1789483692.226189}\n{\"event\": \"cache_admission_verified\", \"role\": \"trainer\", \"before_available_gib\": 316.6469535827637, \"after_available_gib\": 355.68888092041016, \"mounts\": [\"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002/ram\"]}\n",
+      "error": "Warning: Permanently added '35.186.1.18' (ED25519) to the list of known hosts.\n"
+    },
+    {
+      "rank": 3,
+      "exit": 0,
+      "output": "{\"event\": \"ram_cache_reused\", \"host\": \"t1v-n-8254e2fb-w-7\", \"pid\": 123872, \"previous_root\": \"/home/gcpuser/.cache/science-qwen-v4-tp8-fsdp2-replay-001\", \"role\": \"trainer\", \"root\": \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002\", \"time\": 1789483687.9717872}\n{\"bytes\": 41919070208, \"event\": \"ram_cache_reclaimed\", \"host\": \"t1v-n-8254e2fb-w-7\", \"pid\": 123872, \"previous_root\": \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002\", \"time\": 1789483692.2437646}\n{\"event\": \"cache_admission_verified\", \"role\": \"trainer\", \"before_available_gib\": 316.6481628417969, \"after_available_gib\": 355.69530868530273, \"mounts\": [\"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002/ram\"]}\n",
+      "error": "Warning: Permanently added '35.186.126.17' (ED25519) to the list of known hosts.\n"
+    },
+    {
+      "rank": 4,
+      "exit": 0,
+      "output": "{\"event\": \"ram_cache_reused\", \"host\": \"t1v-n-8254e2fb-w-4\", \"pid\": 135991, \"previous_root\": \"/home/gcpuser/.cache/science-qwen-v4-tp8-fsdp2-replay-001\", \"role\": \"inference\", \"root\": \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002\", \"time\": 1789483691.069175}\n{\"bytes\": 55875821568, \"event\": \"ram_cache_reclaimed\", \"host\": \"t1v-n-8254e2fb-w-4\", \"pid\": 135991, \"previous_root\": \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002\", \"time\": 1789483696.8514383}\n{\"event\": \"cache_admission_verified\", \"role\": \"inference\", \"before_available_gib\": 290.2196044921875, \"after_available_gib\": 342.2618980407715, \"mounts\": [\"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002/ram\"]}\n",
+      "error": "Warning: Permanently added '35.186.140.134' (ED25519) to the list of known hosts.\n"
+    },
+    {
+      "rank": 5,
+      "exit": 0,
+      "output": "{\"event\": \"ram_cache_reused\", \"host\": \"t1v-n-8254e2fb-w-6\", \"pid\": 138529, \"previous_root\": \"/home/gcpuser/.cache/science-qwen-v4-tp8-fsdp2-replay-001\", \"role\": \"inference\", \"root\": \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002\", \"time\": 1789483694.3105826}\n{\"bytes\": 55875825664, \"event\": \"ram_cache_reclaimed\", \"host\": \"t1v-n-8254e2fb-w-6\", \"pid\": 138529, \"previous_root\": \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002\", \"time\": 1789483699.873929}\n{\"event\": \"cache_admission_verified\", \"role\": \"inference\", \"before_available_gib\": 290.082706451416, \"after_available_gib\": 342.1290397644043, \"mounts\": [\"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002/ram\"]}\n",
+      "error": "Warning: Permanently added '35.186.38.38' (ED25519) to the list of known hosts.\n"
+    },
+    {
+      "rank": 6,
+      "exit": 0,
+      "output": "{\"event\": \"ram_cache_reused\", \"host\": \"t1v-n-8254e2fb-w-2\", \"pid\": 124621, \"previous_root\": \"/home/gcpuser/.cache/science-qwen-v4-tp8-fsdp2-replay-001\", \"role\": \"trainer\", \"root\": \"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002\", \"time\": 1789483694.3093789}\n{\"bytes\": 41919070208, \"event\": \"ram_cache_reclaimed\", \"host\": \"t1v-n-8254e2fb-w-2\", \"pid\": 124621, \"previous_root\": \"/home/gcpuser/.cache/science-routing-v4-qwen-grpo-002\", \"time\": 1789483698.5672019}\n{\"event\": \"cache_admission_verified\", \"role\": \"trainer\", \"before_available_gib\": 316.63385009765625, \"after_available_gib\": 355.6834144592285, \"mounts\": [\"/home/gcpuser/.cache/science-placement-v4-qwen-16x32-e2e-002/ram\"]}\n",
+      "error": "Warning: Permanently added '35.186.67.51' (ED25519) to the list of known hosts.\n"
+    },
+    {
+      "rank": 7,
+      "exit": 0,
+      "output": "{\"event\": \"cache_admission_verified\", \"role\": null, \"before_available_gib\": 394.56713104248047, \"after_available_gib\": 394.56713104248047, \"mounts\": []}\n",
+      "error": "Warning: Permanently added '35.186.87.174' (ED25519) to the list of known hosts.\n"
+    }
+  ]
+}

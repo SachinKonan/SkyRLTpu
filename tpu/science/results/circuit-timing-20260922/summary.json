@@ -1,0 +1,40 @@
+{
+  "run": "circuit300-v464-qwen-pwc05-three-starts-10step-20260922",
+  "job": 1550,
+  "step": 1,
+  "reference_utc": "2026-09-22T14:58:11.710210+00:00",
+  "reference_edt": "10:58:11.710 EDT",
+  "metric_total_min": 113.5818429629008,
+  "chart_span_min": 113.3742716828982,
+  "generation_wall_span_min": 55.71698977549871,
+  "grading_envelope_min": 89.76463803450267,
+  "grading_start_min": 14.194241058826446,
+  "grading_end_min": 103.95887909332912,
+  "grading_after_last_generation_min": 48.241889317830406,
+  "fb_request_span_min": 90.84991428454717,
+  "fb_start_min": 21.23550618092219,
+  "fb_end_min": 112.08542046546935,
+  "fb_requests": 74,
+  "final_drain_metric_min": 8.347701470057169,
+  "checkpoint_min": 1.044992168744405,
+  "cases": 8024,
+  "evaluated_programs": 472,
+  "rollouts": 512,
+  "case_slot_hours": 349.1743599305902,
+  "case_median_seconds": 44.37107990649929,
+  "max_concurrent_30s_average": 254.9992000023524,
+  "mean_active_grading_slots": 233.39326102760782,
+  "mean_rollout_env_step_min": 23.077073234179988,
+  "local": {
+    "groups": 8,
+    "median_service_min": 20.947906517808345,
+    "min_service_min": 12.848343194850047,
+    "max_service_min": 24.731754520499997
+  },
+  "remote": {
+    "groups": 8,
+    "median_service_min": 24.761740647908333,
+    "min_service_min": 23.11627610555,
+    "max_service_min": 29.15927608398336
+  }
+}

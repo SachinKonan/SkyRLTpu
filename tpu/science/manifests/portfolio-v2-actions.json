@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "first_vendor_quote": {"DOW": "2019-03-20"},
+  "conventions": {
+    "prices": "Undo vendor future split factors, including pseudo-splits for distributions, to reconstruct contemporaneous share units. Vendor rounding remains a precision limitation.",
+    "dividends": "Vendor cash dividends, converted to contemporaneous share units, are credited on ex-date. No payment-date financing or tax model.",
+    "spinoffs": "Parent share count stays unchanged. Fractional child shares are liquidated at their first regular-way open with the same proportional trading fee.",
+    "terminal": "Cash consideration credited at effective open. Nontransferable contingent rights are recorded as units and valued at zero; no future contingent payment is assumed.",
+    "missing": "Only reviewed terminal/prelisting absences are allowed. An unexplained missing quote aborts dataset preparation; it never becomes a zero return.",
+    "cash_return": 0.0
+  },
+  "splits": [
+    {"asset": "AAPL", "date": "2020-08-31", "shares": 4.0},
+    {"asset": "WMT", "date": "2024-02-26", "shares": 3.0}
+  ],
+  "spinoffs": [
+    {"asset": "UTX", "date": "2020-04-03", "children": {"CARR": 1.0, "OTIS": 0.5}, "vendor_factor": 1.589,
+     "source": "https://investors.rtx.com/news-releases/news-release-details/united-technologies-board-directors-approves-separation-carrier"},
+    {"asset": "PFE", "date": "2020-11-17", "children": {"VTRS": 0.124079}, "vendor_factor": 1.054,
+     "source": "https://www.pfizer.com/news/press-release/press-release-detail/pfizer-completes-transaction-combine-its-upjohn-business"},
+    {"asset": "MRK", "date": "2021-06-03", "children": {"OGN": 0.1}, "vendor_factor": 1.048,
+     "source": "https://www.merck.com/wp-content/uploads/sites/152/2021/06/Form-8937.pdf"},
+    {"asset": "IBM", "date": "2021-11-04", "children": {"KD": 0.2}, "vendor_factor": 1.046,
+     "source": "https://www.ibm.com/investor/services/faqs-about-the-kyndryl-holdings-inc-distribution"},
+    {"asset": "MMM", "date": "2024-04-01", "children": {"SOLV": 0.25}, "vendor_factor": 1.196,
+     "source": "https://investors.3m.com/news-events/press-releases/detail/1835/3m-completes-spin-off-of-solventum"}
+  ],
+  "terminal": [
+    {"asset": "WBA", "date": "2025-08-28", "cash_per_share": 11.45, "right_units_per_share": 1.0,
+     "right_value": 0.0,
+     "source": "https://www.nasdaqtrader.com/TraderNews.aspx?id=ECA2025-463"}
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "run_id": "qwen35-rglru-sampling-v5p-32-001",
+  "accelerator": "tpu-v5p-32",
+  "hosts": 4,
+  "bucket": "gs://sk7524-tinker-tpu-us-east5",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
+  "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-east5/skyrl-maxtext-ckpts",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/jax-compile-cache-v5p-qwen35-tp1-fsdp4-r32-s18432-ray-v1",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq128-mem90-chunk8192-ray-v2-arena-sampling-v1",
+    "trainer_gib": 128,
+    "inference_gib": 96,
+    "reserve_gib": 128,
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60,
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-east5/vllm-xla-cache-v5p-qwen35-tp4-s22528-seq128-mem90-chunk8192-ray-v2"
+  },
+  "trainer": {
+    "hosts": 0,
+    "tp": 1,
+    "fsdp": 4,
+    "process_bounds": "1,1,1",
+    "sequence_length": 18432,
+    "token_budget": 73728,
+    "logical_kv_heads": 4,
+    "remat": "full"
+  },
+  "inference": {
+    "backend": "ray_serve",
+    "tp": 4,
+    "memory_utilization": 0.9,
+    "restart_limit": 3,
+    "routing": "ingress"
+  },
+  "model_preset": "qwen3.5-27b",
+  "root": "~/.cache/skyrl-ray-arena-sampling",
+  "inference_only": true,
+  "inference_only_ranks": [
+    1,
+    2,
+    3
+  ],
+  "arena_samples": 24,
+  "checkpoint_cleanup_timeout": 0
+}

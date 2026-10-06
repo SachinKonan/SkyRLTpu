@@ -1,0 +1,24 @@
+{
+  "jobs": [
+    {
+      "model": "gemma",
+      "run_id": "farm-parity-gemma-prefix-20260922",
+      "profile": "tpu/swarm/ray_train/profiles/farm-parity-gemma-prefix-20260922.json",
+      "archive": "tpu/science/results/farm-parity-fix-20260922/farm-parity-gemma-prefix-20260922/ray-training.tar.gz",
+      "archive_sha256": "b866c1b88d811bfb551fae65f0bfbb3eb3c49f553de049b7b9f1543d442b59b3",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-b866c1b88d811bfb551fae65f0bfbb3eb3c49f553de049b7b9f1543d442b59b3.tar.gz",
+      "task": "tpu/science/results/farm-parity-fix-20260922/farm-parity-gemma-prefix-20260922/farm-parity-gemma-prefix-20260922.yaml",
+      "task_sha256": "b588203f96a64c1880578cfb6d3d7285ac3f217e4b99eb6712f6a603780fd664"
+    },
+    {
+      "model": "muse",
+      "run_id": "farm-parity-muse-rpa-seq16-20260922",
+      "profile": "tpu/swarm/ray_train/profiles/farm-parity-muse-rpa-seq16-20260922.json",
+      "archive": "tpu/science/results/farm-parity-fix-20260922/farm-parity-muse-rpa-seq16-20260922/ray-training.tar.gz",
+      "archive_sha256": "7965e5ac5f271eca118ff87991ff53cd9e6c80e1b586e09e3fd9e0cf5dca05a2",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-7965e5ac5f271eca118ff87991ff53cd9e6c80e1b586e09e3fd9e0cf5dca05a2.tar.gz",
+      "task": "tpu/science/results/farm-parity-fix-20260922/farm-parity-muse-rpa-seq16-20260922/farm-parity-muse-rpa-seq16-20260922.yaml",
+      "task_sha256": "b937c01fe67d7a5370a5ed8ec6f9f0133023f7ea3797ba9c114cdf0244922be6"
+    }
+  ]
+}

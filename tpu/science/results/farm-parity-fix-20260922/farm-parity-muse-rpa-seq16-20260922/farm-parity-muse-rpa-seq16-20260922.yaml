@@ -1,0 +1,24 @@
+name: farm-parity-muse-rpa-seq16-20260922
+resources:
+  cloud: gcp
+  zone: us-central2-b
+  accelerators: tpu-v4-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 3
+  priority: 120
+envs:
+  RAY_TRAIN_CODE: gs://sk7524-tinker-tpu-us-central2/code-bundles/ray-training-7965e5ac5f271eca118ff87991ff53cd9e6c80e1b586e09e3fd9e0cf5dca05a2.tar.gz
+  RAY_TRAIN_CODE_SHA256: 7965e5ac5f271eca118ff87991ff53cd9e6c80e1b586e09e3fd9e0cf5dca05a2
+run: "set -euo pipefail\nexport PATH=\"$HOME/.local/bin:$PATH\"\ncode=\"$HOME/.cache/skyrl-ray-code/$RAY_TRAIN_CODE_SHA256\"\
+  \nif [ ! -f \"$code/.complete\" ]; then\n  mkdir -p \"$code\"\n  gcloud storage\
+  \ cp \"$RAY_TRAIN_CODE\" \"$code/code.tar.gz\"\n  printf '%s  %s\\n' \"$RAY_TRAIN_CODE_SHA256\"\
+  \ \"$code/code.tar.gz\" | sha256sum -c -\n  tar -xzf \"$code/code.tar.gz\" -C \"\
+  $code\"\n  touch \"$code/.complete\"\nfi\nexport PYTHONPATH=\"$code:$code/tpu${PYTHONPATH:+:$PYTHONPATH}\"\
+  \nexec python3 -m tpu.swarm.ray_train.bootstrap \"$code/tpu/swarm/ray_train/profiles/farm10-muse-2-20260922-10step-deployment.json\"\
+  \n"

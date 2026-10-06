@@ -1,0 +1,18 @@
+[Unit]
+Description=SkyRL completed AC2 shared-best follow-up
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration
+EnvironmentFile=/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/hybrid-migration/supervisor/environment
+ExecStart=/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.venv/bin/python -u -m tpu.science.results.campaign-next-20260921.watch_ac2
+StandardOutput=append:/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/ac2-shared-best-20260921/watch.log
+StandardError=inherit
+Restart=no
+KillMode=control-group
+TimeoutStopSec=150
+UMask=0077
+
+[Install]
+WantedBy=default.target

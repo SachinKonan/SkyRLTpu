@@ -43,6 +43,10 @@ tinker = [
     "psycopg2-binary",
 ]
 
+swarm = [
+    "tpuswarm[server,skypilot]",
+]
+
 ray = [
     "ray[default]==2.51.1",
 ]
@@ -209,6 +213,10 @@ required-environments = [
 # megatron also clashes with the jax dependency from gpu and tpu extras
 conflicts = [
     [
+        { extra = "swarm" },
+        { extra = "harbor" },
+    ],
+    [
         { extra = "jax" },
         { extra = "megatron" },
         { extra = "fsdp" },
@@ -289,6 +297,7 @@ explicit = true
 
 [tool.uv.sources]
 skyrl-gym = { path = "./skyrl-gym", editable = true }
+tpuswarm = { path = "./third_party/TPUSwarm", editable = true }
 # Match torch's CUDA variant (cu128).
 flashinfer-jit-cache = { index = "flashinfer-cu128", marker = "sys_platform == 'linux'" }
 # vllm 0.23.0's PyPI wheel needs CUDA 13 (libcudart.so.13); the cu129 wheel
@@ -383,4 +392,3 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["skyrl", "skyrl_gym"]
-

@@ -1,0 +1,127 @@
+{
+  "cases": [
+    "ibm01",
+    "ibm02",
+    "ibm03",
+    "ibm04",
+    "ibm06",
+    "ibm07",
+    "ibm08",
+    "ibm09",
+    "ibm10",
+    "ibm11",
+    "ibm12",
+    "ibm13",
+    "ibm14",
+    "ibm15",
+    "ibm16",
+    "ibm17",
+    "ibm18"
+  ],
+  "files": {
+    ".science/challenge-probe/macro_place/__init__.py": "197cb7b4d13e82dae3dc72e1c7c71d1edd37c1727e649719b55767583ed41e86",
+    ".science/challenge-probe/macro_place/_plc.py": "dd7a1dddd48ef6dde0075e1670962533d659dafdb8da711ef2314b318986847a",
+    ".science/challenge-probe/macro_place/benchmark.py": "36bfe505ca1246b86dc53f320adaeba1e5c77366b4e5df64a3e933967e98bd17",
+    ".science/challenge-probe/macro_place/loader.py": "7ac77a987d8cae97126e17589568afa17a21b6ddb2ce914b3785f94bc82c5380",
+    ".science/challenge-probe/macro_place/objective.py": "ea83e02277f39525226f4f2a167907f89f45383a80af7a07e078c81ddcc2ebab",
+    ".science/challenge-probe/macro_place/utils.py": "ba6dab0810a791754f14174d91cee12d85fc9650f2c08c57b81f9911c3fd5386",
+    ".science/challenge-probe/external/MacroPlacement/CodeElements/Plc_client/plc_client_os.py": "49e5d0bb58fcb8e9ae4666bf1e11f8ba69baa49c2aa314cad82de8874237b29c",
+    "tpu/science/challenge_score_child.py": "93a54dbcdc2468b52615e7f419af716677ad36f6f3f5bdf8641a46f44b9376db",
+    "tpu/science/challenge_candidate_child.py": "2ba962b2007f752dcc2c2dfc44df7b92a4d74a5588d8bf61ae4cec8cc1682131",
+    "tpu/science/challenge_contract.py": "29f6fb60ec99cb7d26736e5557d26254a59dd7be0e6d9dd5bfb3ee101728e3db",
+    "tpu/science/full17_eval.py": "4704ca71e861c41ad9f1a9488ac42e7e7da72821c8932e38d4f21e733f474cd7",
+    "tpu/science/placement_gpu_suite.py": "71ba4c4f8f4688030d6076c6473a4f6ba09df1b97692fa7d80fcd849631e61b7"
+  },
+  "repositories": {
+    "abuplace": {
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "status": ""
+    },
+    "archgen-cuda-run": {
+      "commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+      "status": ""
+    },
+    "xplace-cuda": {
+      "commit": "49cf66bc75ba9908f145bb6686f03cde692367cf",
+      "status": " M CMakeLists.txt\n M README.md\n M cpp_to_py/gpugr/db/GRDatabase.cpp\n M cpp_to_py/gpugr/gr/GPURouter.cu\n M cpp_to_py/gpugr/gr/PatternRoute.cu\n M main.py\n M src/calculator.py\n M src/core/macro_legalization.py\n M src/core/route_force.py\n M src/initializer.py\n M src/run_placement_nesterov.py\n?? src/proxy_cong.py\n"
+    }
+  },
+  "native_inputs": {
+    "ibm01": {
+      "netlist.pb.txt": "ca97cee4652966bc0afc16562ccc9aec224de31de1cfb317b61972a4ba1a4c96",
+      "initial.plc": "f5202ce7295ba2ae38781a6a658b5affaa0ee933110ec071f41dd14961b133ad"
+    },
+    "ibm02": {
+      "netlist.pb.txt": "fd4a02890a7c69c9af5669f0122cfef7d179275eca768829e3f1acb8a32a542e",
+      "initial.plc": "fde119c62b066294f640f1e656e63030396e8b0fe30ca6a59d8a08b4dfa86e38"
+    },
+    "ibm03": {
+      "netlist.pb.txt": "41e9a03d9188ce8c28da45b012974e65b3988433c7215e6d6a906506ad6c9214",
+      "initial.plc": "706d69c6f30a8a7e8a145bca67682a92a233755a0a5ac9e9b974fa9bbcd55898"
+    },
+    "ibm04": {
+      "netlist.pb.txt": "347924f72a646c0295f32858b4e58c41b1f18739286e8e5c8250226222ca188a",
+      "initial.plc": "94aa5b8956d87b8851cf5bc156d4b0a14a8bdcfcdb6282bc41ed281ce7671f0b"
+    },
+    "ibm06": {
+      "netlist.pb.txt": "6c5bc1d6eaceb7b816345ba9dab7351a1215a2a9cb7baf3d17f9d7c2eeb84e9e",
+      "initial.plc": "9c195b80537e7a2ffd8efc62eb08a934f4cfb927fd7c0c6e7a3ae666829662b8"
+    },
+    "ibm07": {
+      "netlist.pb.txt": "035e1c6869cb3a3abf944eef248858fd04c1771b6607d39242e5cf9b201b841c",
+      "initial.plc": "f7f8be92e8aad1558e5e3cd16678f1d2e66f65c94daf3bb34821ca51d5d9f606"
+    },
+    "ibm08": {
+      "netlist.pb.txt": "68d592796012b4885a5d65d2df646597061f77c245ce92a2bb85334ffc0138de",
+      "initial.plc": "243811e78c80c71e268b8143d94a6f3ac25230f105e38f60c2be190d50c2f5eb"
+    },
+    "ibm09": {
+      "netlist.pb.txt": "fa99a121294cb2b8b050ae69e9e3af28ea1443d39cb0e8ddee7c2c39d66439e4",
+      "initial.plc": "3c09e6bbf8291ec9c90e7f86b42bef9aecb9d49ab0e05750245ae6fd72e069e9"
+    },
+    "ibm10": {
+      "netlist.pb.txt": "ffb653f7a13fd9645385e4bd74c2c42c76a261a05e58d4a2490f4b73cd4c6ede",
+      "initial.plc": "a5dfc34b7b0dd2a4c7cb0c9a46f115f65fd9e0986895b1c4eef87b8274c6f149"
+    },
+    "ibm11": {
+      "netlist.pb.txt": "e3b1d5a8d8d1908bd4f07c744c4bcf70ebe47bb11cb1ab5ebe0a8b8b45be0733",
+      "initial.plc": "e3701970f61454b7b84b7d0c9e3aa0fe6e3d5e93c0f94b7a88b85311a637d11f"
+    },
+    "ibm12": {
+      "netlist.pb.txt": "19145521d76b05b8522f564cabb5863b6c7ecdaf9efc50d3a70536bcc1513b0d",
+      "initial.plc": "1d99f17549974a69fc9756e2517ad97114d89d9ae0e9fa67a3190062a1289723"
+    },
+    "ibm13": {
+      "netlist.pb.txt": "d0323244eaf4192aea823164a8d0e13176411bd6a861ca8ea660cf4fb2034d2f",
+      "initial.plc": "71a912a8176d286ce43c0e65e93fc01ed349f9e79ced5cfa1d68a3b95a9491e7"
+    },
+    "ibm14": {
+      "netlist.pb.txt": "93ddc832033e693da578eb638d7b95badad91cc1258c503db9a3e4488218004b",
+      "initial.plc": "df7f5675eb6652893f8192f2c9bcd382fe5036956adde15824f575a462d6b3b7"
+    },
+    "ibm15": {
+      "netlist.pb.txt": "ebd20e3d1284eebcd7891a1274ac5f00db23f76f7a91b614a52f4a36e24fc3a2",
+      "initial.plc": "2b9b3dc59e3b0ab564007b0d44924f40549dd06116dad11a2f84238df70eb3a2"
+    },
+    "ibm16": {
+      "netlist.pb.txt": "999b1dabb47938c7d6043505b3cf408975fd619d30701955d0cc8733efe0beb3",
+      "initial.plc": "48b3a612008611ebf3ce0bbece5579d111ea5c32caf000b5c2acd843e9bb2bef"
+    },
+    "ibm17": {
+      "netlist.pb.txt": "746185b7579805362449ea9827553a8e3424223d2f0ffac149d37cdf63c927ba",
+      "initial.plc": "041f13191e83f9f4e4173e473d040cebb95221a439fdd25bf5c2f3e4fef5e549"
+    },
+    "ibm18": {
+      "netlist.pb.txt": "7e2bc08b5c1ff6ad659df9e1c639a1b6f8e9f867e4446a367fd1d9d8fccab773",
+      "initial.plc": "75a04aae366df17b34f2089ddc0f19e475fb4c6bcae4229842b60310eadeff96"
+    }
+  },
+  "cuda_versions": {
+    "python": "3.11.13 (main, Sep  2 2025, 14:20:25) [Clang 20.1.4 ]",
+    "numpy": "2.2.6"
+  },
+  "candidate_versions": {
+    "python": "3.12.0 (main, Oct  3 2023, 01:27:23) [Clang 17.0.1 ]",
+    "numpy": "2.4.6"
+  }
+}

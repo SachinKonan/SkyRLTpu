@@ -1,0 +1,26 @@
+[
+  {
+    "model": "qwen",
+    "case_count": 17,
+    "submitted": false,
+    "native_files_verified": true,
+    "prompt_verified": true,
+    "restore_guard_packaged": true
+  },
+  {
+    "model": "muse",
+    "case_count": 17,
+    "submitted": false,
+    "native_files_verified": true,
+    "prompt_verified": true,
+    "restore_guard_packaged": true
+  },
+  {
+    "model": "gemma",
+    "case_count": 17,
+    "submitted": false,
+    "native_files_verified": true,
+    "prompt_verified": true,
+    "restore_guard_packaged": true
+  }
+]

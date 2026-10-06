@@ -1,0 +1,27 @@
+{
+  "model": "gemma",
+  "step": 1,
+  "uri": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/checkpoints/model_0bfeb293/000001.tar.gz",
+  "size": 2938939279,
+  "members": [
+    "",
+    "lora_weights.npz",
+    "optimizer_state.npz",
+    "tunix_checkpoint_meta.json"
+  ],
+  "metadata": {
+    "tunix_checkpoint_meta.json": {
+      "format": "tunix_backend_v2",
+      "lora_config": {
+        "rank": 32,
+        "alpha": 32.0,
+        "seed": 2034855063,
+        "train_attn": true,
+        "train_mlp": true,
+        "train_unembed": false
+      },
+      "lora_layout_count": 82,
+      "optimizer_layout_count": 164
+    }
+  }
+}

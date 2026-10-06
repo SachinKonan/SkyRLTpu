@@ -1,0 +1,24 @@
+[
+  {
+    "round": "first",
+    "seconds": 499.3499880540039,
+    "successes": 64,
+    "failures": 0,
+    "output_tokens": 32768,
+    "output_tokens_per_second": 65.62130926987464,
+    "prompt_tokens": 1600,
+    "latency_median": 248.6883271045008,
+    "latency_p95": 499.2810391899984
+  },
+  {
+    "round": "repeat",
+    "seconds": 279.40090176599915,
+    "successes": 64,
+    "failures": 0,
+    "output_tokens": 32768,
+    "output_tokens_per_second": 117.27950694820414,
+    "prompt_tokens": 1600,
+    "latency_median": 55.93532936599877,
+    "latency_p95": 243.7145161790031
+  }
+]

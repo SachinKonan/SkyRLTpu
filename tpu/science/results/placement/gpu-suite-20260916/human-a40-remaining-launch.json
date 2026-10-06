@@ -1,0 +1,1 @@
+{"pid": 1579195, "cases": ["ibm04", "ibm08", "ibm18"], "methods": ["abuplace", "archgen"], "gpu": "A40 0", "sequential": true}

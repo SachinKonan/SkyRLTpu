@@ -1,0 +1,56 @@
+[
+  {
+    "spot_job_id": 1059,
+    "name": "science-q20-v4-gemma-grpo-clean-20260918",
+    "status": "RUNNING",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-450"
+  },
+  {
+    "spot_job_id": 1061,
+    "name": "science-q20-v4-muse-grpo-clean-20260918",
+    "status": "RUNNING",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-475"
+  },
+  {
+    "spot_job_id": 1063,
+    "name": "science-q20-v4-qwen-grpo-clean-20260918",
+    "status": "RUNNING",
+    "current_cluster_name": "tpuswarm-v4-64-central2-qwen35-erdos-491"
+  },
+  {
+    "spot_job_id": 1068,
+    "name": "science-q20-v6e-gemma-grpo-seedonly-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4455"
+  },
+  {
+    "spot_job_id": 1070,
+    "name": "science-q20-v6e-muse-grpo-seedonly-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4471"
+  },
+  {
+    "spot_job_id": 1072,
+    "name": "science-q20-v6e-qwen-grpo-seedonly-20260918",
+    "status": "CANCELLED",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4494"
+  },
+  {
+    "spot_job_id": 1075,
+    "name": "science-q20-v6e-gemma-grpo-hedge-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4455"
+  },
+  {
+    "spot_job_id": 1076,
+    "name": "science-q20-v6e-muse-grpo-hedge-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4471"
+  },
+  {
+    "spot_job_id": 1077,
+    "name": "science-q20-v6e-qwen-grpo-hedge-20260918",
+    "status": "STARTING",
+    "current_cluster_name": "tpuswarm-v6e32-east5b-qwen35-4494"
+  }
+]

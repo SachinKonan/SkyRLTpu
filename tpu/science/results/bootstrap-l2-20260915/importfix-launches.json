@@ -1,0 +1,38 @@
+[
+  {
+    "run_id": "science-routing-v4-qwen-bootstrap-l2-001",
+    "job_id": 935,
+    "sha256": "fab5032554e5dfdad9564e35cbff2c0cf631925cf660dfe7ddf054382e46dd58",
+    "submitted": 1789520358.4122443
+  },
+  {
+    "run_id": "science-routing-v4-muse-bootstrap-l2-001",
+    "job_id": 936,
+    "sha256": "c3483c8af2dd7399d5f5d420ae7872fa1dc86ef86a4d4cbaa5fde5c2f4a6031a",
+    "submitted": 1789520365.748867
+  },
+  {
+    "run_id": "science-placement-v4-qwen-bootstrap-l2-001",
+    "job_id": 937,
+    "sha256": "3acfac0f876c23b49ad55964aeb6035013d5c1358fe4b01a029e6732b1d0c76b",
+    "submitted": 1789520372.9053211
+  },
+  {
+    "run_id": "science-routing-v4-gemma-bootstrap-l2-001",
+    "job_id": 938,
+    "sha256": "ba9dc4e81cbcbf8aeab54f190927a59f23c5a080e94a12005fa4fd04aefd64bb",
+    "submitted": 1789520380.4113383
+  },
+  {
+    "run_id": "science-placement-v4-gemma-bootstrap-l2-001",
+    "job_id": 939,
+    "sha256": "e2235f972c990de8ad0a3ea45c8b713c31c1f02c2c8c4abdc2b8d401ac0d32ba",
+    "submitted": 1789520386.5270526
+  },
+  {
+    "run_id": "science-placement-v4-muse-bootstrap-l2-001",
+    "job_id": 940,
+    "sha256": "b0af58a61c8b400060ecb708bd41b8480615ee39d1a27aa668380cbc5ba59a91",
+    "submitted": 1789520394.830425
+  }
+]

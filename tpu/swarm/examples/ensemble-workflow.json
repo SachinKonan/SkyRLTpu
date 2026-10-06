@@ -1,0 +1,37 @@
+{
+  "workflow_id": "erdos-ensemble-001",
+  "kind": "static_multi.v1",
+  "consistency_mode": "ALL_AT_BARRIER",
+  "payload": {
+    "components": [
+      {
+        "key": "qwen",
+        "generation": 0,
+        "task": {
+          "kind": "skyrl.ttt.erdos_min_overlap.v1",
+          "resource_class": "gcp-tpu-v5p-32",
+          "task_id": "erdos-ensemble-001-qwen-g0",
+          "payload": {
+            "cell": "ttd-n",
+            "run_dir": "ensemble-001-qwen",
+            "repo_dir": "/home/sk7524_princeton_edu/SkyRLTpu-tpuswarm"
+          }
+        }
+      },
+      {
+        "key": "gemma",
+        "generation": 0,
+        "task": {
+          "kind": "skyrl.ttt.erdos_min_overlap.v1",
+          "resource_class": "gcp-tpu-v5p-32",
+          "task_id": "erdos-ensemble-001-gemma-g0",
+          "payload": {
+            "cell": "g-ttd-n",
+            "run_dir": "ensemble-001-gemma",
+            "repo_dir": "/home/sk7524_princeton_edu/SkyRLTpu-tpuswarm"
+          }
+        }
+      }
+    ]
+  }
+}

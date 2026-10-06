@@ -1,0 +1,2852 @@
+{
+  "scope": "Best saved single program per current PWC run; not per-case minima or an exhaustive all-history search.",
+  "baselines": {
+    "sabre_manifest": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-qubit-parallel-relaunch/tpu/science/manifests/routing-v1.json",
+    "suite_sha256": "84bc454b7505875a01a72e7f9ffe033185d273a2e7dddf3544dc89d7bc27f7cf",
+    "lightsabre": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-hybrid-inference-migration/.science/q20-transfer-local-20260921/SimpleTES/datasets/qubit_routing/swap_reduction/python/qiskit_lightsabre_20x20.json",
+    "lightsabre_sha256": "16148afbe17786639e80ecf8993738c4de0ee304898ec928d1915891d3ac3e74",
+    "simpletes": "Cached published Table 2, full-topology-replay-20260919/README.md; per-case SimpleTES counts not found.",
+    "gemini": "Local routing_resources.py GEMINI_TARGETS, also verified against https://arxiv.org/html/2604.19341v2#T5; extraction saved in simpletes-v2-tables.json. Not rerun."
+  },
+  "models": {
+    "Qwen": {
+      "job": 1590,
+      "run": "qubit-v4-qwen-parallel2-pwc-rho05-20260921",
+      "snapshot": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-qwen-parallel2-pwc-rho05-20260921/client/tinker_log/qubit-v4-qwen-parallel2-pwc-rho05-20260921/puct_sampler_step_000011.json",
+      "collected_epoch": 1790120923.901646,
+      "state_id": "f5b3c333-aa1f-4905-92ae-f91a316700f0",
+      "state_timestep": 10,
+      "source_sha256": "e2b141d1b54b998930b40b60cde17e2dc43dfa1223ab2b7b1aca294603c5cf9b",
+      "reward": 0.5485872758724842,
+      "observation": {
+        "reward": 0.5485872758724842,
+        "message": "Valid",
+        "metrics": {
+          "weighted_baseline_cnots": 119874.00000000001,
+          "weighted_candidate_cnots": 98639.99999999999,
+          "added_cnots": 266808.0,
+          "swaps": 88936.0,
+          "improvement": 0.1771359927924323,
+          "case_count": 72,
+          "routing_suite": "full",
+          "total_seconds": 410.4562339989934,
+          "case_columns": [
+            "case",
+            "swaps",
+            "baseline_swaps",
+            "delta_swaps"
+          ],
+          "cases": [
+            [
+              "4gt13_92_q20",
+              1,
+              0,
+              1
+            ],
+            [
+              "4gt13_92_willow",
+              13,
+              15,
+              -2
+            ],
+            [
+              "4gt13_92_heron_fez",
+              15,
+              15,
+              0
+            ],
+            [
+              "4mod5-v1_22_q20",
+              2,
+              0,
+              2
+            ],
+            [
+              "4mod5-v1_22_willow",
+              3,
+              5,
+              -2
+            ],
+            [
+              "4mod5-v1_22_heron_fez",
+              6,
+              4,
+              2
+            ],
+            [
+              "9symml_195_q20",
+              3126,
+              5756,
+              -2630
+            ],
+            [
+              "9symml_195_willow",
+              7517,
+              8907,
+              -1390
+            ],
+            [
+              "9symml_195_heron_fez",
+              10069,
+              11762,
+              -1693
+            ],
+            [
+              "adr4_197_q20",
+              312,
+              538,
+              -226
+            ],
+            [
+              "adr4_197_willow",
+              731,
+              901,
+              -170
+            ],
+            [
+              "adr4_197_heron_fez",
+              980,
+              1239,
+              -259
+            ],
+            [
+              "alu-v0_27_q20",
+              2,
+              1,
+              1
+            ],
+            [
+              "alu-v0_27_willow",
+              7,
+              7,
+              0
+            ],
+            [
+              "alu-v0_27_heron_fez",
+              8,
+              12,
+              -4
+            ],
+            [
+              "co14_215_q20",
+              2131,
+              2994,
+              -863
+            ],
+            [
+              "co14_215_willow",
+              4080,
+              4713,
+              -633
+            ],
+            [
+              "co14_215_heron_fez",
+              5197,
+              5971,
+              -774
+            ],
+            [
+              "cycle10_2_110_q20",
+              491,
+              874,
+              -383
+            ],
+            [
+              "cycle10_2_110_willow",
+              1277,
+              1564,
+              -287
+            ],
+            [
+              "cycle10_2_110_heron_fez",
+              1735,
+              1780,
+              -45
+            ],
+            [
+              "decod24-v2_43_q20",
+              0,
+              0,
+              0
+            ],
+            [
+              "decod24-v2_43_willow",
+              9,
+              12,
+              -3
+            ],
+            [
+              "decod24-v2_43_heron_fez",
+              12,
+              12,
+              0
+            ],
+            [
+              "ising_model_10_q20",
+              7,
+              0,
+              7
+            ],
+            [
+              "ising_model_10_willow",
+              15,
+              0,
+              15
+            ],
+            [
+              "ising_model_10_heron_fez",
+              33,
+              0,
+              33
+            ],
+            [
+              "ising_model_13_q20",
+              7,
+              0,
+              7
+            ],
+            [
+              "ising_model_13_willow",
+              18,
+              9,
+              9
+            ],
+            [
+              "ising_model_13_heron_fez",
+              53,
+              9,
+              44
+            ],
+            [
+              "ising_model_16_q20",
+              14,
+              0,
+              14
+            ],
+            [
+              "ising_model_16_willow",
+              30,
+              5,
+              25
+            ],
+            [
+              "ising_model_16_heron_fez",
+              57,
+              0,
+              57
+            ],
+            [
+              "misex1_241_q20",
+              373,
+              507,
+              -134
+            ],
+            [
+              "misex1_241_willow",
+              988,
+              1273,
+              -285
+            ],
+            [
+              "misex1_241_heron_fez",
+              1411,
+              1515,
+              -104
+            ],
+            [
+              "mod5mils_65_q20",
+              3,
+              0,
+              3
+            ],
+            [
+              "mod5mils_65_willow",
+              7,
+              7,
+              0
+            ],
+            [
+              "mod5mils_65_heron_fez",
+              8,
+              9,
+              -1
+            ],
+            [
+              "qft_10_q20",
+              16,
+              18,
+              -2
+            ],
+            [
+              "qft_10_willow",
+              29,
+              31,
+              -2
+            ],
+            [
+              "qft_10_heron_fez",
+              54,
+              46,
+              8
+            ],
+            [
+              "qft_16_q20",
+              55,
+              62,
+              -7
+            ],
+            [
+              "qft_16_willow",
+              89,
+              87,
+              2
+            ],
+            [
+              "qft_16_heron_fez",
+              153,
+              185,
+              -32
+            ],
+            [
+              "radd_250_q20",
+              294,
+              425,
+              -131
+            ],
+            [
+              "radd_250_willow",
+              680,
+              851,
+              -171
+            ],
+            [
+              "radd_250_heron_fez",
+              893,
+              1069,
+              -176
+            ],
+            [
+              "rd73_252_q20",
+              454,
+              711,
+              -257
+            ],
+            [
+              "rd73_252_willow",
+              1098,
+              1327,
+              -229
+            ],
+            [
+              "rd73_252_heron_fez",
+              1468,
+              1785,
+              -317
+            ],
+            [
+              "rd84_142_q20",
+              42,
+              35,
+              7
+            ],
+            [
+              "rd84_142_willow",
+              74,
+              93,
+              -19
+            ],
+            [
+              "rd84_142_heron_fez",
+              111,
+              103,
+              8
+            ],
+            [
+              "rd84_253_q20",
+              1288,
+              2049,
+              -761
+            ],
+            [
+              "rd84_253_willow",
+              2965,
+              3517,
+              -552
+            ],
+            [
+              "rd84_253_heron_fez",
+              4016,
+              4733,
+              -717
+            ],
+            [
+              "sqn_258_q20",
+              921,
+              1448,
+              -527
+            ],
+            [
+              "sqn_258_willow",
+              2129,
+              2512,
+              -383
+            ],
+            [
+              "sqn_258_heron_fez",
+              2844,
+              3458,
+              -614
+            ],
+            [
+              "square_root_7_q20",
+              345,
+              866,
+              -521
+            ],
+            [
+              "square_root_7_willow",
+              1574,
+              1882,
+              -308
+            ],
+            [
+              "square_root_7_heron_fez",
+              2233,
+              2632,
+              -399
+            ],
+            [
+              "sym6_145_q20",
+              192,
+              424,
+              -232
+            ],
+            [
+              "sym6_145_willow",
+              737,
+              938,
+              -201
+            ],
+            [
+              "sym6_145_heron_fez",
+              977,
+              1057,
+              -80
+            ],
+            [
+              "sym9_193_q20",
+              3126,
+              5551,
+              -2425
+            ],
+            [
+              "sym9_193_willow",
+              7517,
+              8907,
+              -1390
+            ],
+            [
+              "sym9_193_heron_fez",
+              10069,
+              11762,
+              -1693
+            ],
+            [
+              "z4_268_q20",
+              270,
+              455,
+              -185
+            ],
+            [
+              "z4_268_willow",
+              631,
+              789,
+              -158
+            ],
+            [
+              "z4_268_heron_fez",
+              844,
+              1028,
+              -184
+            ]
+          ],
+          "topologies": {
+            "q20": {
+              "case_count": 24,
+              "swaps": 13472,
+              "baseline_swaps": 22714,
+              "complete": true,
+              "gemini_target_swaps": 13470,
+              "gap_to_gemini": 2,
+              "delta_swaps": -9242
+            },
+            "willow": {
+              "case_count": 24,
+              "swaps": 32218,
+              "baseline_swaps": 38352,
+              "complete": true,
+              "gemini_target_swaps": 31481,
+              "gap_to_gemini": 737,
+              "delta_swaps": -6134
+            },
+            "heron_fez": {
+              "case_count": 24,
+              "swaps": 43246,
+              "baseline_swaps": 50186,
+              "complete": true,
+              "gemini_target_swaps": 42396,
+              "gap_to_gemini": 850,
+              "delta_swaps": -6940
+            }
+          }
+        }
+      },
+      "note": "Saved valid training evaluation; no independent replay performed in this comparison."
+    },
+    "Gemma": {
+      "job": 1493,
+      "run": "qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2",
+      "snapshot": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/client/tinker_log/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/puct_sampler_step_000007.json",
+      "collected_epoch": 1790120923.8779461,
+      "state_id": "cd04152e-502d-47be-b8b8-812547749da5",
+      "state_timestep": 6,
+      "source_sha256": "ee14329aae09325d5af18fe8fab87ef56a7eef92c90d82ff8dee98244bc5b6e6",
+      "reward": 0.5515663003177601,
+      "observation": {
+        "reward": 0.5515663003177601,
+        "message": "Valid",
+        "metrics": {
+          "weighted_baseline_cnots": 119874.00000000001,
+          "weighted_candidate_cnots": 97459.8,
+          "added_cnots": 265143.0,
+          "swaps": 88381.0,
+          "improvement": 0.1869813303969169,
+          "case_count": 72,
+          "routing_suite": "full",
+          "total_seconds": 364.94255270899885,
+          "case_columns": [
+            "case",
+            "swaps",
+            "baseline_swaps",
+            "delta_swaps"
+          ],
+          "cases": [
+            [
+              "4gt13_92_q20",
+              2,
+              0,
+              2
+            ],
+            [
+              "4gt13_92_willow",
+              12,
+              15,
+              -3
+            ],
+            [
+              "4gt13_92_heron_fez",
+              13,
+              15,
+              -2
+            ],
+            [
+              "4mod5-v1_22_q20",
+              0,
+              0,
+              0
+            ],
+            [
+              "4mod5-v1_22_willow",
+              3,
+              5,
+              -2
+            ],
+            [
+              "4mod5-v1_22_heron_fez",
+              3,
+              4,
+              -1
+            ],
+            [
+              "9symml_195_q20",
+              3137,
+              5756,
+              -2619
+            ],
+            [
+              "9symml_195_willow",
+              7485,
+              8907,
+              -1422
+            ],
+            [
+              "9symml_195_heron_fez",
+              9678,
+              11762,
+              -2084
+            ],
+            [
+              "adr4_197_q20",
+              328,
+              538,
+              -210
+            ],
+            [
+              "adr4_197_willow",
+              731,
+              901,
+              -170
+            ],
+            [
+              "adr4_197_heron_fez",
+              938,
+              1239,
+              -301
+            ],
+            [
+              "alu-v0_27_q20",
+              2,
+              1,
+              1
+            ],
+            [
+              "alu-v0_27_willow",
+              7,
+              7,
+              0
+            ],
+            [
+              "alu-v0_27_heron_fez",
+              10,
+              12,
+              -2
+            ],
+            [
+              "co14_215_q20",
+              2217,
+              2994,
+              -777
+            ],
+            [
+              "co14_215_willow",
+              4123,
+              4713,
+              -590
+            ],
+            [
+              "co14_215_heron_fez",
+              5315,
+              5971,
+              -656
+            ],
+            [
+              "cycle10_2_110_q20",
+              546,
+              874,
+              -328
+            ],
+            [
+              "cycle10_2_110_willow",
+              1254,
+              1564,
+              -310
+            ],
+            [
+              "cycle10_2_110_heron_fez",
+              1732,
+              1780,
+              -48
+            ],
+            [
+              "decod24-v2_43_q20",
+              0,
+              0,
+              0
+            ],
+            [
+              "decod24-v2_43_willow",
+              9,
+              12,
+              -3
+            ],
+            [
+              "decod24-v2_43_heron_fez",
+              10,
+              12,
+              -2
+            ],
+            [
+              "ising_model_10_q20",
+              0,
+              0,
+              0
+            ],
+            [
+              "ising_model_10_willow",
+              0,
+              0,
+              0
+            ],
+            [
+              "ising_model_10_heron_fez",
+              0,
+              0,
+              0
+            ],
+            [
+              "ising_model_13_q20",
+              0,
+              0,
+              0
+            ],
+            [
+              "ising_model_13_willow",
+              0,
+              9,
+              -9
+            ],
+            [
+              "ising_model_13_heron_fez",
+              0,
+              9,
+              -9
+            ],
+            [
+              "ising_model_16_q20",
+              0,
+              0,
+              0
+            ],
+            [
+              "ising_model_16_willow",
+              0,
+              5,
+              -5
+            ],
+            [
+              "ising_model_16_heron_fez",
+              0,
+              0,
+              0
+            ],
+            [
+              "misex1_241_q20",
+              334,
+              507,
+              -173
+            ],
+            [
+              "misex1_241_willow",
+              971,
+              1273,
+              -302
+            ],
+            [
+              "misex1_241_heron_fez",
+              1335,
+              1515,
+              -180
+            ],
+            [
+              "mod5mils_65_q20",
+              1,
+              0,
+              1
+            ],
+            [
+              "mod5mils_65_willow",
+              6,
+              7,
+              -1
+            ],
+            [
+              "mod5mils_65_heron_fez",
+              7,
+              9,
+              -2
+            ],
+            [
+              "qft_10_q20",
+              17,
+              18,
+              -1
+            ],
+            [
+              "qft_10_willow",
+              28,
+              31,
+              -3
+            ],
+            [
+              "qft_10_heron_fez",
+              42,
+              46,
+              -4
+            ],
+            [
+              "qft_16_q20",
+              57,
+              62,
+              -5
+            ],
+            [
+              "qft_16_willow",
+              80,
+              87,
+              -7
+            ],
+            [
+              "qft_16_heron_fez",
+              126,
+              185,
+              -59
+            ],
+            [
+              "radd_250_q20",
+              318,
+              425,
+              -107
+            ],
+            [
+              "radd_250_willow",
+              673,
+              851,
+              -178
+            ],
+            [
+              "radd_250_heron_fez",
+              850,
+              1069,
+              -219
+            ],
+            [
+              "rd73_252_q20",
+              452,
+              711,
+              -259
+            ],
+            [
+              "rd73_252_willow",
+              1089,
+              1327,
+              -238
+            ],
+            [
+              "rd73_252_heron_fez",
+              1481,
+              1785,
+              -304
+            ],
+            [
+              "rd84_142_q20",
+              39,
+              35,
+              4
+            ],
+            [
+              "rd84_142_willow",
+              78,
+              93,
+              -15
+            ],
+            [
+              "rd84_142_heron_fez",
+              101,
+              103,
+              -2
+            ],
+            [
+              "rd84_253_q20",
+              1344,
+              2049,
+              -705
+            ],
+            [
+              "rd84_253_willow",
+              2921,
+              3517,
+              -596
+            ],
+            [
+              "rd84_253_heron_fez",
+              3917,
+              4733,
+              -816
+            ],
+            [
+              "sqn_258_q20",
+              978,
+              1448,
+              -470
+            ],
+            [
+              "sqn_258_willow",
+              2108,
+              2512,
+              -404
+            ],
+            [
+              "sqn_258_heron_fez",
+              2762,
+              3458,
+              -696
+            ],
+            [
+              "square_root_7_q20",
+              506,
+              866,
+              -360
+            ],
+            [
+              "square_root_7_willow",
+              1575,
+              1882,
+              -307
+            ],
+            [
+              "square_root_7_heron_fez",
+              2187,
+              2632,
+              -445
+            ],
+            [
+              "sym6_145_q20",
+              217,
+              424,
+              -207
+            ],
+            [
+              "sym6_145_willow",
+              740,
+              938,
+              -198
+            ],
+            [
+              "sym6_145_heron_fez",
+              982,
+              1057,
+              -75
+            ],
+            [
+              "sym9_193_q20",
+              3545,
+              5551,
+              -2006
+            ],
+            [
+              "sym9_193_willow",
+              7485,
+              8907,
+              -1422
+            ],
+            [
+              "sym9_193_heron_fez",
+              9698,
+              11762,
+              -2064
+            ],
+            [
+              "z4_268_q20",
+              289,
+              455,
+              -166
+            ],
+            [
+              "z4_268_willow",
+              634,
+              789,
+              -155
+            ],
+            [
+              "z4_268_heron_fez",
+              853,
+              1028,
+              -175
+            ]
+          ],
+          "topologies": {
+            "q20": {
+              "case_count": 24,
+              "swaps": 14329,
+              "baseline_swaps": 22714,
+              "complete": true,
+              "gemini_target_swaps": 13470,
+              "gap_to_gemini": 859,
+              "delta_swaps": -8385
+            },
+            "willow": {
+              "case_count": 24,
+              "swaps": 32012,
+              "baseline_swaps": 38352,
+              "complete": true,
+              "gemini_target_swaps": 31481,
+              "gap_to_gemini": 531,
+              "delta_swaps": -6340
+            },
+            "heron_fez": {
+              "case_count": 24,
+              "swaps": 42040,
+              "baseline_swaps": 50186,
+              "complete": true,
+              "gemini_target_swaps": 42396,
+              "gap_to_gemini": -356,
+              "delta_swaps": -8146
+            }
+          }
+        }
+      },
+      "note": "Saved valid training evaluation; no independent replay performed in this comparison."
+    },
+    "Muse": {
+      "job": 1589,
+      "run": "qubit-v4-muse-parallel2-pwc-rho05-20260921",
+      "snapshot": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-muse-parallel2-pwc-rho05-20260921/client/tinker_log/qubit-v4-muse-parallel2-pwc-rho05-20260921/puct_sampler_step_000010.json",
+      "collected_epoch": 1790120923.92336,
+      "state_id": "e7146b56-e411-420f-ab96-2dc10fdaee41",
+      "state_timestep": 9,
+      "source_sha256": "23d729fcf2f1476cfd3016e044c1d64a8992f0945c7e218a53b1dd42bd77f134",
+      "reward": 0.5253055890789864,
+      "observation": {
+        "reward": 0.5253055890789864,
+        "message": "Valid",
+        "metrics": {
+          "weighted_baseline_cnots": 119874.00000000001,
+          "weighted_candidate_cnots": 108324.6,
+          "added_cnots": 295659.0,
+          "swaps": 98553.0,
+          "improvement": 0.09634616347164526,
+          "case_count": 72,
+          "routing_suite": "full",
+          "total_seconds": 322.2720950799994,
+          "case_columns": [
+            "case",
+            "swaps",
+            "baseline_swaps",
+            "delta_swaps"
+          ],
+          "cases": [
+            [
+              "4gt13_92_q20",
+              2,
+              0,
+              2
+            ],
+            [
+              "4gt13_92_willow",
+              13,
+              15,
+              -2
+            ],
+            [
+              "4gt13_92_heron_fez",
+              19,
+              15,
+              4
+            ],
+            [
+              "4mod5-v1_22_q20",
+              1,
+              0,
+              1
+            ],
+            [
+              "4mod5-v1_22_willow",
+              4,
+              5,
+              -1
+            ],
+            [
+              "4mod5-v1_22_heron_fez",
+              5,
+              4,
+              1
+            ],
+            [
+              "9symml_195_q20",
+              3691,
+              5756,
+              -2065
+            ],
+            [
+              "9symml_195_willow",
+              8606,
+              8907,
+              -301
+            ],
+            [
+              "9symml_195_heron_fez",
+              10638,
+              11762,
+              -1124
+            ],
+            [
+              "adr4_197_q20",
+              380,
+              538,
+              -158
+            ],
+            [
+              "adr4_197_willow",
+              841,
+              901,
+              -60
+            ],
+            [
+              "adr4_197_heron_fez",
+              1061,
+              1239,
+              -178
+            ],
+            [
+              "alu-v0_27_q20",
+              3,
+              1,
+              2
+            ],
+            [
+              "alu-v0_27_willow",
+              8,
+              7,
+              1
+            ],
+            [
+              "alu-v0_27_heron_fez",
+              10,
+              12,
+              -2
+            ],
+            [
+              "co14_215_q20",
+              2428,
+              2994,
+              -566
+            ],
+            [
+              "co14_215_willow",
+              4523,
+              4713,
+              -190
+            ],
+            [
+              "co14_215_heron_fez",
+              5242,
+              5971,
+              -729
+            ],
+            [
+              "cycle10_2_110_q20",
+              705,
+              874,
+              -169
+            ],
+            [
+              "cycle10_2_110_willow",
+              1459,
+              1564,
+              -105
+            ],
+            [
+              "cycle10_2_110_heron_fez",
+              1723,
+              1780,
+              -57
+            ],
+            [
+              "decod24-v2_43_q20",
+              0,
+              0,
+              0
+            ],
+            [
+              "decod24-v2_43_willow",
+              12,
+              12,
+              0
+            ],
+            [
+              "decod24-v2_43_heron_fez",
+              12,
+              12,
+              0
+            ],
+            [
+              "ising_model_10_q20",
+              4,
+              0,
+              4
+            ],
+            [
+              "ising_model_10_willow",
+              10,
+              0,
+              10
+            ],
+            [
+              "ising_model_10_heron_fez",
+              21,
+              0,
+              21
+            ],
+            [
+              "ising_model_13_q20",
+              6,
+              0,
+              6
+            ],
+            [
+              "ising_model_13_willow",
+              15,
+              9,
+              6
+            ],
+            [
+              "ising_model_13_heron_fez",
+              36,
+              9,
+              27
+            ],
+            [
+              "ising_model_16_q20",
+              11,
+              0,
+              11
+            ],
+            [
+              "ising_model_16_willow",
+              23,
+              5,
+              18
+            ],
+            [
+              "ising_model_16_heron_fez",
+              61,
+              0,
+              61
+            ],
+            [
+              "misex1_241_q20",
+              371,
+              507,
+              -136
+            ],
+            [
+              "misex1_241_willow",
+              1155,
+              1273,
+              -118
+            ],
+            [
+              "misex1_241_heron_fez",
+              1367,
+              1515,
+              -148
+            ],
+            [
+              "mod5mils_65_q20",
+              1,
+              0,
+              1
+            ],
+            [
+              "mod5mils_65_willow",
+              7,
+              7,
+              0
+            ],
+            [
+              "mod5mils_65_heron_fez",
+              12,
+              9,
+              3
+            ],
+            [
+              "qft_10_q20",
+              13,
+              18,
+              -5
+            ],
+            [
+              "qft_10_willow",
+              24,
+              31,
+              -7
+            ],
+            [
+              "qft_10_heron_fez",
+              51,
+              46,
+              5
+            ],
+            [
+              "qft_16_q20",
+              49,
+              62,
+              -13
+            ],
+            [
+              "qft_16_willow",
+              77,
+              87,
+              -10
+            ],
+            [
+              "qft_16_heron_fez",
+              169,
+              185,
+              -16
+            ],
+            [
+              "radd_250_q20",
+              371,
+              425,
+              -54
+            ],
+            [
+              "radd_250_willow",
+              780,
+              851,
+              -71
+            ],
+            [
+              "radd_250_heron_fez",
+              948,
+              1069,
+              -121
+            ],
+            [
+              "rd73_252_q20",
+              608,
+              711,
+              -103
+            ],
+            [
+              "rd73_252_willow",
+              1276,
+              1327,
+              -51
+            ],
+            [
+              "rd73_252_heron_fez",
+              1606,
+              1785,
+              -179
+            ],
+            [
+              "rd84_142_q20",
+              42,
+              35,
+              7
+            ],
+            [
+              "rd84_142_willow",
+              87,
+              93,
+              -6
+            ],
+            [
+              "rd84_142_heron_fez",
+              135,
+              103,
+              32
+            ],
+            [
+              "rd84_253_q20",
+              1708,
+              2049,
+              -341
+            ],
+            [
+              "rd84_253_willow",
+              3400,
+              3517,
+              -117
+            ],
+            [
+              "rd84_253_heron_fez",
+              4215,
+              4733,
+              -518
+            ],
+            [
+              "sqn_258_q20",
+              1105,
+              1448,
+              -343
+            ],
+            [
+              "sqn_258_willow",
+              2446,
+              2512,
+              -66
+            ],
+            [
+              "sqn_258_heron_fez",
+              3008,
+              3458,
+              -450
+            ],
+            [
+              "square_root_7_q20",
+              694,
+              866,
+              -172
+            ],
+            [
+              "square_root_7_willow",
+              1786,
+              1882,
+              -96
+            ],
+            [
+              "square_root_7_heron_fez",
+              2296,
+              2632,
+              -336
+            ],
+            [
+              "sym6_145_q20",
+              342,
+              424,
+              -82
+            ],
+            [
+              "sym6_145_willow",
+              897,
+              938,
+              -41
+            ],
+            [
+              "sym6_145_heron_fez",
+              1033,
+              1057,
+              -24
+            ],
+            [
+              "sym9_193_q20",
+              3691,
+              5551,
+              -1860
+            ],
+            [
+              "sym9_193_willow",
+              8606,
+              8907,
+              -301
+            ],
+            [
+              "sym9_193_heron_fez",
+              10638,
+              11762,
+              -1124
+            ],
+            [
+              "z4_268_q20",
+              339,
+              455,
+              -116
+            ],
+            [
+              "z4_268_willow",
+              738,
+              789,
+              -51
+            ],
+            [
+              "z4_268_heron_fez",
+              889,
+              1028,
+              -139
+            ]
+          ],
+          "topologies": {
+            "q20": {
+              "case_count": 24,
+              "swaps": 16565,
+              "baseline_swaps": 22714,
+              "complete": true,
+              "gemini_target_swaps": 13470,
+              "gap_to_gemini": 3095,
+              "delta_swaps": -6149
+            },
+            "willow": {
+              "case_count": 24,
+              "swaps": 36793,
+              "baseline_swaps": 38352,
+              "complete": true,
+              "gemini_target_swaps": 31481,
+              "gap_to_gemini": 5312,
+              "delta_swaps": -1559
+            },
+            "heron_fez": {
+              "case_count": 24,
+              "swaps": 45195,
+              "baseline_swaps": 50186,
+              "complete": true,
+              "gemini_target_swaps": 42396,
+              "gap_to_gemini": 2799,
+              "delta_swaps": -4991
+            }
+          }
+        }
+      },
+      "note": "Saved valid training evaluation; no independent replay performed in this comparison."
+    }
+  },
+  "aggregates": {
+    "SABRE": {
+      "topology_swaps": {
+        "Q20": 22714,
+        "Willow": 38352,
+        "Heron": 50186
+      },
+      "total_swaps": 111252,
+      "mean_swaps_per_case": 1545.1666666666667,
+      "weighted_mean_swaps_per_case": 1664.9166666666667,
+      "recomputed_reward": 0.5,
+      "weighted_reduction_vs_sabre_pct": 0.0,
+      "total_reduction_vs_lightsabre_pct": -8.335605499941568,
+      "wtl_vs_SABRE": [
+        0,
+        72,
+        0
+      ],
+      "wtl_vs_LightSABRE": [
+        1,
+        12,
+        59
+      ]
+    },
+    "LightSABRE": {
+      "topology_swaps": {
+        "Q20": 20063,
+        "Willow": 36802,
+        "Heron": 45827
+      },
+      "total_swaps": 102692,
+      "mean_swaps_per_case": 1426.2777777777778,
+      "weighted_mean_swaps_per_case": 1544.3416666666665,
+      "recomputed_reward": 0.5187854930137026,
+      "weighted_reduction_vs_sabre_pct": 7.242104209419898,
+      "total_reduction_vs_lightsabre_pct": 0.0,
+      "wtl_vs_SABRE": [
+        59,
+        12,
+        1
+      ],
+      "wtl_vs_LightSABRE": [
+        0,
+        72,
+        0
+      ]
+    },
+    "Qwen": {
+      "topology_swaps": {
+        "Q20": 13472,
+        "Willow": 32218,
+        "Heron": 43246
+      },
+      "total_swaps": 88936,
+      "mean_swaps_per_case": 1235.2222222222222,
+      "weighted_mean_swaps_per_case": 1370.0,
+      "recomputed_reward": 0.5485872758724841,
+      "weighted_reduction_vs_sabre_pct": 17.71359927924321,
+      "total_reduction_vs_lightsabre_pct": 13.395395941261246,
+      "wtl_vs_SABRE": [
+        49,
+        5,
+        18
+      ],
+      "wtl_vs_LightSABRE": [
+        38,
+        3,
+        31
+      ]
+    },
+    "Gemma": {
+      "topology_swaps": {
+        "Q20": 14329,
+        "Willow": 32012,
+        "Heron": 42040
+      },
+      "total_swaps": 88381,
+      "mean_swaps_per_case": 1227.513888888889,
+      "weighted_mean_swaps_per_case": 1353.6083333333333,
+      "recomputed_reward": 0.55156630031776,
+      "weighted_reduction_vs_sabre_pct": 18.698133039691665,
+      "total_reduction_vs_lightsabre_pct": 13.9358469987925,
+      "wtl_vs_SABRE": [
+        59,
+        9,
+        4
+      ],
+      "wtl_vs_LightSABRE": [
+        42,
+        15,
+        15
+      ]
+    },
+    "Muse": {
+      "topology_swaps": {
+        "Q20": 16565,
+        "Willow": 36793,
+        "Heron": 45195
+      },
+      "total_swaps": 98553,
+      "mean_swaps_per_case": 1368.7916666666667,
+      "weighted_mean_swaps_per_case": 1504.5083333333332,
+      "recomputed_reward": 0.5253055890789865,
+      "weighted_reduction_vs_sabre_pct": 9.634616347164526,
+      "total_reduction_vs_lightsabre_pct": 4.030498967787166,
+      "wtl_vs_SABRE": [
+        48,
+        4,
+        20
+      ],
+      "wtl_vs_LightSABRE": [
+        20,
+        3,
+        49
+      ]
+    },
+    "SimpleTES 20B": {
+      "topology_swaps": {
+        "Q20": 14180,
+        "Willow": 32135,
+        "Heron": 43032
+      },
+      "total_swaps": 89347,
+      "mean_swaps_per_case": 1240.9305555555557,
+      "weighted_mean_swaps_per_case": 1370.95,
+      "recomputed_reward": 0.5484156089419825,
+      "weighted_reduction_vs_sabre_pct": 17.656539366334645,
+      "total_reduction_vs_lightsabre_pct": 12.99517002298134
+    },
+    "SimpleTES 120B": {
+      "topology_swaps": {
+        "Q20": 15147,
+        "Willow": 32258,
+        "Heron": 42274
+      },
+      "total_swaps": 89679,
+      "mean_swaps_per_case": 1245.5416666666667,
+      "weighted_mean_swaps_per_case": 1368.4250000000002,
+      "recomputed_reward": 0.5488721184831908,
+      "weighted_reduction_vs_sabre_pct": 17.80819860853895,
+      "total_reduction_vs_lightsabre_pct": 12.671873174151838
+    },
+    "Gemini target": {
+      "topology_swaps": {
+        "Q20": 13470,
+        "Willow": 31481,
+        "Heron": 42396
+      },
+      "total_swaps": 87347,
+      "mean_swaps_per_case": 1213.1527777777778,
+      "weighted_mean_swaps_per_case": 1343.5333333333335,
+      "recomputed_reward": 0.5534134410299877,
+      "weighted_reduction_vs_sabre_pct": 19.30326843185344,
+      "total_reduction_vs_lightsabre_pct": 14.94274140147236
+    }
+  },
+  "historical_replay": [
+    {
+      "model": "gemma",
+      "swaps": {
+        "Q20": 14922,
+        "Willow": 32325,
+        "Heron": 43309
+      },
+      "total_swaps": 90556,
+      "reward": 0.5459041477676376,
+      "recorded_reward": 0.5445367798767509,
+      "recorded_total_swaps": 91205.0,
+      "valid_cases": 72,
+      "total_seconds": 1220.3904145739998,
+      "source_sha256": "49c84cefea2bcfb362394765c9e45c4ea2edf90eafc33e9158470e094daab703"
+    },
+    {
+      "model": "qwen",
+      "swaps": {
+        "Q20": 15257,
+        "Willow": 32718,
+        "Heron": 44268
+      },
+      "total_swaps": 92243,
+      "reward": 0.5414084369639504,
+      "recorded_reward": 0.5414084369639504,
+      "recorded_total_swaps": 92243.0,
+      "valid_cases": 72,
+      "total_seconds": 1394.9082736169994,
+      "source_sha256": "ab7df3690a2406a0942f500e16c3dd18f010e461eb3363865c36e395a1b0a8c4"
+    },
+    {
+      "model": "muse",
+      "swaps": {
+        "Q20": 16873,
+        "Willow": 37011,
+        "Heron": 45593
+      },
+      "total_swaps": 99477,
+      "reward": 0.5231871495871643,
+      "recorded_reward": 0.5231871495871643,
+      "recorded_total_swaps": 99477.0,
+      "valid_cases": 72,
+      "total_seconds": 1245.6985811860004,
+      "source_sha256": "56156921b43edb6f5e6bd8442e3ca429452cd247726e2482acea3a489b94c5e8"
+    }
+  ],
+  "cases": [
+    {
+      "case": "4gt13_92_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 1,
+      "Gemma": 2,
+      "Muse": 2,
+      "Qwen_minus_SABRE": 1,
+      "Qwen_minus_LightSABRE": 1,
+      "Gemma_minus_SABRE": 2,
+      "Gemma_minus_LightSABRE": 2,
+      "Muse_minus_SABRE": 2,
+      "Muse_minus_LightSABRE": 2
+    },
+    {
+      "case": "4gt13_92_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 15,
+      "LightSABRE": 12,
+      "Qwen": 13,
+      "Gemma": 12,
+      "Muse": 13,
+      "Qwen_minus_SABRE": -2,
+      "Qwen_minus_LightSABRE": 1,
+      "Gemma_minus_SABRE": -3,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": -2,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "4gt13_92_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 15,
+      "LightSABRE": 15,
+      "Qwen": 15,
+      "Gemma": 13,
+      "Muse": 19,
+      "Qwen_minus_SABRE": 0,
+      "Qwen_minus_LightSABRE": 0,
+      "Gemma_minus_SABRE": -2,
+      "Gemma_minus_LightSABRE": -2,
+      "Muse_minus_SABRE": 4,
+      "Muse_minus_LightSABRE": 4
+    },
+    {
+      "case": "4mod5-v1_22_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 2,
+      "Gemma": 0,
+      "Muse": 1,
+      "Qwen_minus_SABRE": 2,
+      "Qwen_minus_LightSABRE": 2,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 1,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "4mod5-v1_22_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 5,
+      "LightSABRE": 4,
+      "Qwen": 3,
+      "Gemma": 3,
+      "Muse": 4,
+      "Qwen_minus_SABRE": -2,
+      "Qwen_minus_LightSABRE": -1,
+      "Gemma_minus_SABRE": -2,
+      "Gemma_minus_LightSABRE": -1,
+      "Muse_minus_SABRE": -1,
+      "Muse_minus_LightSABRE": 0
+    },
+    {
+      "case": "4mod5-v1_22_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 4,
+      "LightSABRE": 4,
+      "Qwen": 6,
+      "Gemma": 3,
+      "Muse": 5,
+      "Qwen_minus_SABRE": 2,
+      "Qwen_minus_LightSABRE": 2,
+      "Gemma_minus_SABRE": -1,
+      "Gemma_minus_LightSABRE": -1,
+      "Muse_minus_SABRE": 1,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "9symml_195_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 5756,
+      "LightSABRE": 5283,
+      "Qwen": 3126,
+      "Gemma": 3137,
+      "Muse": 3691,
+      "Qwen_minus_SABRE": -2630,
+      "Qwen_minus_LightSABRE": -2157,
+      "Gemma_minus_SABRE": -2619,
+      "Gemma_minus_LightSABRE": -2146,
+      "Muse_minus_SABRE": -2065,
+      "Muse_minus_LightSABRE": -1592
+    },
+    {
+      "case": "9symml_195_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 8907,
+      "LightSABRE": 8686,
+      "Qwen": 7517,
+      "Gemma": 7485,
+      "Muse": 8606,
+      "Qwen_minus_SABRE": -1390,
+      "Qwen_minus_LightSABRE": -1169,
+      "Gemma_minus_SABRE": -1422,
+      "Gemma_minus_LightSABRE": -1201,
+      "Muse_minus_SABRE": -301,
+      "Muse_minus_LightSABRE": -80
+    },
+    {
+      "case": "9symml_195_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 11762,
+      "LightSABRE": 10993,
+      "Qwen": 10069,
+      "Gemma": 9678,
+      "Muse": 10638,
+      "Qwen_minus_SABRE": -1693,
+      "Qwen_minus_LightSABRE": -924,
+      "Gemma_minus_SABRE": -2084,
+      "Gemma_minus_LightSABRE": -1315,
+      "Muse_minus_SABRE": -1124,
+      "Muse_minus_LightSABRE": -355
+    },
+    {
+      "case": "adr4_197_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 538,
+      "LightSABRE": 334,
+      "Qwen": 312,
+      "Gemma": 328,
+      "Muse": 380,
+      "Qwen_minus_SABRE": -226,
+      "Qwen_minus_LightSABRE": -22,
+      "Gemma_minus_SABRE": -210,
+      "Gemma_minus_LightSABRE": -6,
+      "Muse_minus_SABRE": -158,
+      "Muse_minus_LightSABRE": 46
+    },
+    {
+      "case": "adr4_197_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 901,
+      "LightSABRE": 836,
+      "Qwen": 731,
+      "Gemma": 731,
+      "Muse": 841,
+      "Qwen_minus_SABRE": -170,
+      "Qwen_minus_LightSABRE": -105,
+      "Gemma_minus_SABRE": -170,
+      "Gemma_minus_LightSABRE": -105,
+      "Muse_minus_SABRE": -60,
+      "Muse_minus_LightSABRE": 5
+    },
+    {
+      "case": "adr4_197_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 1239,
+      "LightSABRE": 1050,
+      "Qwen": 980,
+      "Gemma": 938,
+      "Muse": 1061,
+      "Qwen_minus_SABRE": -259,
+      "Qwen_minus_LightSABRE": -70,
+      "Gemma_minus_SABRE": -301,
+      "Gemma_minus_LightSABRE": -112,
+      "Muse_minus_SABRE": -178,
+      "Muse_minus_LightSABRE": 11
+    },
+    {
+      "case": "alu-v0_27_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 1,
+      "LightSABRE": 1,
+      "Qwen": 2,
+      "Gemma": 2,
+      "Muse": 3,
+      "Qwen_minus_SABRE": 1,
+      "Qwen_minus_LightSABRE": 1,
+      "Gemma_minus_SABRE": 1,
+      "Gemma_minus_LightSABRE": 1,
+      "Muse_minus_SABRE": 2,
+      "Muse_minus_LightSABRE": 2
+    },
+    {
+      "case": "alu-v0_27_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 7,
+      "LightSABRE": 6,
+      "Qwen": 7,
+      "Gemma": 7,
+      "Muse": 8,
+      "Qwen_minus_SABRE": 0,
+      "Qwen_minus_LightSABRE": 1,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 1,
+      "Muse_minus_SABRE": 1,
+      "Muse_minus_LightSABRE": 2
+    },
+    {
+      "case": "alu-v0_27_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 12,
+      "LightSABRE": 8,
+      "Qwen": 8,
+      "Gemma": 10,
+      "Muse": 10,
+      "Qwen_minus_SABRE": -4,
+      "Qwen_minus_LightSABRE": 0,
+      "Gemma_minus_SABRE": -2,
+      "Gemma_minus_LightSABRE": 2,
+      "Muse_minus_SABRE": -2,
+      "Muse_minus_LightSABRE": 2
+    },
+    {
+      "case": "co14_215_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 2994,
+      "LightSABRE": 2548,
+      "Qwen": 2131,
+      "Gemma": 2217,
+      "Muse": 2428,
+      "Qwen_minus_SABRE": -863,
+      "Qwen_minus_LightSABRE": -417,
+      "Gemma_minus_SABRE": -777,
+      "Gemma_minus_LightSABRE": -331,
+      "Muse_minus_SABRE": -566,
+      "Muse_minus_LightSABRE": -120
+    },
+    {
+      "case": "co14_215_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 4713,
+      "LightSABRE": 4521,
+      "Qwen": 4080,
+      "Gemma": 4123,
+      "Muse": 4523,
+      "Qwen_minus_SABRE": -633,
+      "Qwen_minus_LightSABRE": -441,
+      "Gemma_minus_SABRE": -590,
+      "Gemma_minus_LightSABRE": -398,
+      "Muse_minus_SABRE": -190,
+      "Muse_minus_LightSABRE": 2
+    },
+    {
+      "case": "co14_215_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 5971,
+      "LightSABRE": 5268,
+      "Qwen": 5197,
+      "Gemma": 5315,
+      "Muse": 5242,
+      "Qwen_minus_SABRE": -774,
+      "Qwen_minus_LightSABRE": -71,
+      "Gemma_minus_SABRE": -656,
+      "Gemma_minus_LightSABRE": 47,
+      "Muse_minus_SABRE": -729,
+      "Muse_minus_LightSABRE": -26
+    },
+    {
+      "case": "cycle10_2_110_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 874,
+      "LightSABRE": 747,
+      "Qwen": 491,
+      "Gemma": 546,
+      "Muse": 705,
+      "Qwen_minus_SABRE": -383,
+      "Qwen_minus_LightSABRE": -256,
+      "Gemma_minus_SABRE": -328,
+      "Gemma_minus_LightSABRE": -201,
+      "Muse_minus_SABRE": -169,
+      "Muse_minus_LightSABRE": -42
+    },
+    {
+      "case": "cycle10_2_110_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 1564,
+      "LightSABRE": 1457,
+      "Qwen": 1277,
+      "Gemma": 1254,
+      "Muse": 1459,
+      "Qwen_minus_SABRE": -287,
+      "Qwen_minus_LightSABRE": -180,
+      "Gemma_minus_SABRE": -310,
+      "Gemma_minus_LightSABRE": -203,
+      "Muse_minus_SABRE": -105,
+      "Muse_minus_LightSABRE": 2
+    },
+    {
+      "case": "cycle10_2_110_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 1780,
+      "LightSABRE": 1703,
+      "Qwen": 1735,
+      "Gemma": 1732,
+      "Muse": 1723,
+      "Qwen_minus_SABRE": -45,
+      "Qwen_minus_LightSABRE": 32,
+      "Gemma_minus_SABRE": -48,
+      "Gemma_minus_LightSABRE": 29,
+      "Muse_minus_SABRE": -57,
+      "Muse_minus_LightSABRE": 20
+    },
+    {
+      "case": "decod24-v2_43_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 0,
+      "Gemma": 0,
+      "Muse": 0,
+      "Qwen_minus_SABRE": 0,
+      "Qwen_minus_LightSABRE": 0,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 0,
+      "Muse_minus_LightSABRE": 0
+    },
+    {
+      "case": "decod24-v2_43_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 12,
+      "LightSABRE": 11,
+      "Qwen": 9,
+      "Gemma": 9,
+      "Muse": 12,
+      "Qwen_minus_SABRE": -3,
+      "Qwen_minus_LightSABRE": -2,
+      "Gemma_minus_SABRE": -3,
+      "Gemma_minus_LightSABRE": -2,
+      "Muse_minus_SABRE": 0,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "decod24-v2_43_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 12,
+      "LightSABRE": 11,
+      "Qwen": 12,
+      "Gemma": 10,
+      "Muse": 12,
+      "Qwen_minus_SABRE": 0,
+      "Qwen_minus_LightSABRE": 1,
+      "Gemma_minus_SABRE": -2,
+      "Gemma_minus_LightSABRE": -1,
+      "Muse_minus_SABRE": 0,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "ising_model_10_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 7,
+      "Gemma": 0,
+      "Muse": 4,
+      "Qwen_minus_SABRE": 7,
+      "Qwen_minus_LightSABRE": 7,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 4,
+      "Muse_minus_LightSABRE": 4
+    },
+    {
+      "case": "ising_model_10_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 15,
+      "Gemma": 0,
+      "Muse": 10,
+      "Qwen_minus_SABRE": 15,
+      "Qwen_minus_LightSABRE": 15,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 10,
+      "Muse_minus_LightSABRE": 10
+    },
+    {
+      "case": "ising_model_10_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 33,
+      "Gemma": 0,
+      "Muse": 21,
+      "Qwen_minus_SABRE": 33,
+      "Qwen_minus_LightSABRE": 33,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 21,
+      "Muse_minus_LightSABRE": 21
+    },
+    {
+      "case": "ising_model_13_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 7,
+      "Gemma": 0,
+      "Muse": 6,
+      "Qwen_minus_SABRE": 7,
+      "Qwen_minus_LightSABRE": 7,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 6,
+      "Muse_minus_LightSABRE": 6
+    },
+    {
+      "case": "ising_model_13_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 9,
+      "LightSABRE": 0,
+      "Qwen": 18,
+      "Gemma": 0,
+      "Muse": 15,
+      "Qwen_minus_SABRE": 9,
+      "Qwen_minus_LightSABRE": 18,
+      "Gemma_minus_SABRE": -9,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 6,
+      "Muse_minus_LightSABRE": 15
+    },
+    {
+      "case": "ising_model_13_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 9,
+      "LightSABRE": 0,
+      "Qwen": 53,
+      "Gemma": 0,
+      "Muse": 36,
+      "Qwen_minus_SABRE": 44,
+      "Qwen_minus_LightSABRE": 53,
+      "Gemma_minus_SABRE": -9,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 27,
+      "Muse_minus_LightSABRE": 36
+    },
+    {
+      "case": "ising_model_16_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 14,
+      "Gemma": 0,
+      "Muse": 11,
+      "Qwen_minus_SABRE": 14,
+      "Qwen_minus_LightSABRE": 14,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 11,
+      "Muse_minus_LightSABRE": 11
+    },
+    {
+      "case": "ising_model_16_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 5,
+      "LightSABRE": 0,
+      "Qwen": 30,
+      "Gemma": 0,
+      "Muse": 23,
+      "Qwen_minus_SABRE": 25,
+      "Qwen_minus_LightSABRE": 30,
+      "Gemma_minus_SABRE": -5,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 18,
+      "Muse_minus_LightSABRE": 23
+    },
+    {
+      "case": "ising_model_16_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 0,
+      "LightSABRE": 0,
+      "Qwen": 57,
+      "Gemma": 0,
+      "Muse": 61,
+      "Qwen_minus_SABRE": 57,
+      "Qwen_minus_LightSABRE": 57,
+      "Gemma_minus_SABRE": 0,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 61,
+      "Muse_minus_LightSABRE": 61
+    },
+    {
+      "case": "misex1_241_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 507,
+      "LightSABRE": 352,
+      "Qwen": 373,
+      "Gemma": 334,
+      "Muse": 371,
+      "Qwen_minus_SABRE": -134,
+      "Qwen_minus_LightSABRE": 21,
+      "Gemma_minus_SABRE": -173,
+      "Gemma_minus_LightSABRE": -18,
+      "Muse_minus_SABRE": -136,
+      "Muse_minus_LightSABRE": 19
+    },
+    {
+      "case": "misex1_241_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 1273,
+      "LightSABRE": 1129,
+      "Qwen": 988,
+      "Gemma": 971,
+      "Muse": 1155,
+      "Qwen_minus_SABRE": -285,
+      "Qwen_minus_LightSABRE": -141,
+      "Gemma_minus_SABRE": -302,
+      "Gemma_minus_LightSABRE": -158,
+      "Muse_minus_SABRE": -118,
+      "Muse_minus_LightSABRE": 26
+    },
+    {
+      "case": "misex1_241_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 1515,
+      "LightSABRE": 1346,
+      "Qwen": 1411,
+      "Gemma": 1335,
+      "Muse": 1367,
+      "Qwen_minus_SABRE": -104,
+      "Qwen_minus_LightSABRE": 65,
+      "Gemma_minus_SABRE": -180,
+      "Gemma_minus_LightSABRE": -11,
+      "Muse_minus_SABRE": -148,
+      "Muse_minus_LightSABRE": 21
+    },
+    {
+      "case": "mod5mils_65_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 0,
+      "LightSABRE": 1,
+      "Qwen": 3,
+      "Gemma": 1,
+      "Muse": 1,
+      "Qwen_minus_SABRE": 3,
+      "Qwen_minus_LightSABRE": 2,
+      "Gemma_minus_SABRE": 1,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 1,
+      "Muse_minus_LightSABRE": 0
+    },
+    {
+      "case": "mod5mils_65_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 7,
+      "LightSABRE": 6,
+      "Qwen": 7,
+      "Gemma": 6,
+      "Muse": 7,
+      "Qwen_minus_SABRE": 0,
+      "Qwen_minus_LightSABRE": 1,
+      "Gemma_minus_SABRE": -1,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 0,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "mod5mils_65_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 9,
+      "LightSABRE": 7,
+      "Qwen": 8,
+      "Gemma": 7,
+      "Muse": 12,
+      "Qwen_minus_SABRE": -1,
+      "Qwen_minus_LightSABRE": 1,
+      "Gemma_minus_SABRE": -2,
+      "Gemma_minus_LightSABRE": 0,
+      "Muse_minus_SABRE": 3,
+      "Muse_minus_LightSABRE": 5
+    },
+    {
+      "case": "qft_10_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 18,
+      "LightSABRE": 12,
+      "Qwen": 16,
+      "Gemma": 17,
+      "Muse": 13,
+      "Qwen_minus_SABRE": -2,
+      "Qwen_minus_LightSABRE": 4,
+      "Gemma_minus_SABRE": -1,
+      "Gemma_minus_LightSABRE": 5,
+      "Muse_minus_SABRE": -5,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "qft_10_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 31,
+      "LightSABRE": 19,
+      "Qwen": 29,
+      "Gemma": 28,
+      "Muse": 24,
+      "Qwen_minus_SABRE": -2,
+      "Qwen_minus_LightSABRE": 10,
+      "Gemma_minus_SABRE": -3,
+      "Gemma_minus_LightSABRE": 9,
+      "Muse_minus_SABRE": -7,
+      "Muse_minus_LightSABRE": 5
+    },
+    {
+      "case": "qft_10_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 46,
+      "LightSABRE": 32,
+      "Qwen": 54,
+      "Gemma": 42,
+      "Muse": 51,
+      "Qwen_minus_SABRE": 8,
+      "Qwen_minus_LightSABRE": 22,
+      "Gemma_minus_SABRE": -4,
+      "Gemma_minus_LightSABRE": 10,
+      "Muse_minus_SABRE": 5,
+      "Muse_minus_LightSABRE": 19
+    },
+    {
+      "case": "qft_16_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 62,
+      "LightSABRE": 44,
+      "Qwen": 55,
+      "Gemma": 57,
+      "Muse": 49,
+      "Qwen_minus_SABRE": -7,
+      "Qwen_minus_LightSABRE": 11,
+      "Gemma_minus_SABRE": -5,
+      "Gemma_minus_LightSABRE": 13,
+      "Muse_minus_SABRE": -13,
+      "Muse_minus_LightSABRE": 5
+    },
+    {
+      "case": "qft_16_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 87,
+      "LightSABRE": 65,
+      "Qwen": 89,
+      "Gemma": 80,
+      "Muse": 77,
+      "Qwen_minus_SABRE": 2,
+      "Qwen_minus_LightSABRE": 24,
+      "Gemma_minus_SABRE": -7,
+      "Gemma_minus_LightSABRE": 15,
+      "Muse_minus_SABRE": -10,
+      "Muse_minus_LightSABRE": 12
+    },
+    {
+      "case": "qft_16_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 185,
+      "LightSABRE": 98,
+      "Qwen": 153,
+      "Gemma": 126,
+      "Muse": 169,
+      "Qwen_minus_SABRE": -32,
+      "Qwen_minus_LightSABRE": 55,
+      "Gemma_minus_SABRE": -59,
+      "Gemma_minus_LightSABRE": 28,
+      "Muse_minus_SABRE": -16,
+      "Muse_minus_LightSABRE": 71
+    },
+    {
+      "case": "radd_250_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 425,
+      "LightSABRE": 344,
+      "Qwen": 294,
+      "Gemma": 318,
+      "Muse": 371,
+      "Qwen_minus_SABRE": -131,
+      "Qwen_minus_LightSABRE": -50,
+      "Gemma_minus_SABRE": -107,
+      "Gemma_minus_LightSABRE": -26,
+      "Muse_minus_SABRE": -54,
+      "Muse_minus_LightSABRE": 27
+    },
+    {
+      "case": "radd_250_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 851,
+      "LightSABRE": 783,
+      "Qwen": 680,
+      "Gemma": 673,
+      "Muse": 780,
+      "Qwen_minus_SABRE": -171,
+      "Qwen_minus_LightSABRE": -103,
+      "Gemma_minus_SABRE": -178,
+      "Gemma_minus_LightSABRE": -110,
+      "Muse_minus_SABRE": -71,
+      "Muse_minus_LightSABRE": -3
+    },
+    {
+      "case": "radd_250_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 1069,
+      "LightSABRE": 934,
+      "Qwen": 893,
+      "Gemma": 850,
+      "Muse": 948,
+      "Qwen_minus_SABRE": -176,
+      "Qwen_minus_LightSABRE": -41,
+      "Gemma_minus_SABRE": -219,
+      "Gemma_minus_LightSABRE": -84,
+      "Muse_minus_SABRE": -121,
+      "Muse_minus_LightSABRE": 14
+    },
+    {
+      "case": "rd73_252_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 711,
+      "LightSABRE": 660,
+      "Qwen": 454,
+      "Gemma": 452,
+      "Muse": 608,
+      "Qwen_minus_SABRE": -257,
+      "Qwen_minus_LightSABRE": -206,
+      "Gemma_minus_SABRE": -259,
+      "Gemma_minus_LightSABRE": -208,
+      "Muse_minus_SABRE": -103,
+      "Muse_minus_LightSABRE": -52
+    },
+    {
+      "case": "rd73_252_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 1327,
+      "LightSABRE": 1282,
+      "Qwen": 1098,
+      "Gemma": 1089,
+      "Muse": 1276,
+      "Qwen_minus_SABRE": -229,
+      "Qwen_minus_LightSABRE": -184,
+      "Gemma_minus_SABRE": -238,
+      "Gemma_minus_LightSABRE": -193,
+      "Muse_minus_SABRE": -51,
+      "Muse_minus_LightSABRE": -6
+    },
+    {
+      "case": "rd73_252_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 1785,
+      "LightSABRE": 1580,
+      "Qwen": 1468,
+      "Gemma": 1481,
+      "Muse": 1606,
+      "Qwen_minus_SABRE": -317,
+      "Qwen_minus_LightSABRE": -112,
+      "Gemma_minus_SABRE": -304,
+      "Gemma_minus_LightSABRE": -99,
+      "Muse_minus_SABRE": -179,
+      "Muse_minus_LightSABRE": 26
+    },
+    {
+      "case": "rd84_142_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 35,
+      "LightSABRE": 34,
+      "Qwen": 42,
+      "Gemma": 39,
+      "Muse": 42,
+      "Qwen_minus_SABRE": 7,
+      "Qwen_minus_LightSABRE": 8,
+      "Gemma_minus_SABRE": 4,
+      "Gemma_minus_LightSABRE": 5,
+      "Muse_minus_SABRE": 7,
+      "Muse_minus_LightSABRE": 8
+    },
+    {
+      "case": "rd84_142_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 93,
+      "LightSABRE": 70,
+      "Qwen": 74,
+      "Gemma": 78,
+      "Muse": 87,
+      "Qwen_minus_SABRE": -19,
+      "Qwen_minus_LightSABRE": 4,
+      "Gemma_minus_SABRE": -15,
+      "Gemma_minus_LightSABRE": 8,
+      "Muse_minus_SABRE": -6,
+      "Muse_minus_LightSABRE": 17
+    },
+    {
+      "case": "rd84_142_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 103,
+      "LightSABRE": 93,
+      "Qwen": 111,
+      "Gemma": 101,
+      "Muse": 135,
+      "Qwen_minus_SABRE": 8,
+      "Qwen_minus_LightSABRE": 18,
+      "Gemma_minus_SABRE": -2,
+      "Gemma_minus_LightSABRE": 8,
+      "Muse_minus_SABRE": 32,
+      "Muse_minus_LightSABRE": 42
+    },
+    {
+      "case": "rd84_253_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 2049,
+      "LightSABRE": 1833,
+      "Qwen": 1288,
+      "Gemma": 1344,
+      "Muse": 1708,
+      "Qwen_minus_SABRE": -761,
+      "Qwen_minus_LightSABRE": -545,
+      "Gemma_minus_SABRE": -705,
+      "Gemma_minus_LightSABRE": -489,
+      "Muse_minus_SABRE": -341,
+      "Muse_minus_LightSABRE": -125
+    },
+    {
+      "case": "rd84_253_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 3517,
+      "LightSABRE": 3381,
+      "Qwen": 2965,
+      "Gemma": 2921,
+      "Muse": 3400,
+      "Qwen_minus_SABRE": -552,
+      "Qwen_minus_LightSABRE": -416,
+      "Gemma_minus_SABRE": -596,
+      "Gemma_minus_LightSABRE": -460,
+      "Muse_minus_SABRE": -117,
+      "Muse_minus_LightSABRE": 19
+    },
+    {
+      "case": "rd84_253_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 4733,
+      "LightSABRE": 4326,
+      "Qwen": 4016,
+      "Gemma": 3917,
+      "Muse": 4215,
+      "Qwen_minus_SABRE": -717,
+      "Qwen_minus_LightSABRE": -310,
+      "Gemma_minus_SABRE": -816,
+      "Gemma_minus_LightSABRE": -409,
+      "Muse_minus_SABRE": -518,
+      "Muse_minus_LightSABRE": -111
+    },
+    {
+      "case": "sqn_258_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 1448,
+      "LightSABRE": 1215,
+      "Qwen": 921,
+      "Gemma": 978,
+      "Muse": 1105,
+      "Qwen_minus_SABRE": -527,
+      "Qwen_minus_LightSABRE": -294,
+      "Gemma_minus_SABRE": -470,
+      "Gemma_minus_LightSABRE": -237,
+      "Muse_minus_SABRE": -343,
+      "Muse_minus_LightSABRE": -110
+    },
+    {
+      "case": "sqn_258_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 2512,
+      "LightSABRE": 2441,
+      "Qwen": 2129,
+      "Gemma": 2108,
+      "Muse": 2446,
+      "Qwen_minus_SABRE": -383,
+      "Qwen_minus_LightSABRE": -312,
+      "Gemma_minus_SABRE": -404,
+      "Gemma_minus_LightSABRE": -333,
+      "Muse_minus_SABRE": -66,
+      "Muse_minus_LightSABRE": 5
+    },
+    {
+      "case": "sqn_258_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 3458,
+      "LightSABRE": 3124,
+      "Qwen": 2844,
+      "Gemma": 2762,
+      "Muse": 3008,
+      "Qwen_minus_SABRE": -614,
+      "Qwen_minus_LightSABRE": -280,
+      "Gemma_minus_SABRE": -696,
+      "Gemma_minus_LightSABRE": -362,
+      "Muse_minus_SABRE": -450,
+      "Muse_minus_LightSABRE": -116
+    },
+    {
+      "case": "square_root_7_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 866,
+      "LightSABRE": 695,
+      "Qwen": 345,
+      "Gemma": 506,
+      "Muse": 694,
+      "Qwen_minus_SABRE": -521,
+      "Qwen_minus_LightSABRE": -350,
+      "Gemma_minus_SABRE": -360,
+      "Gemma_minus_LightSABRE": -189,
+      "Muse_minus_SABRE": -172,
+      "Muse_minus_LightSABRE": -1
+    },
+    {
+      "case": "square_root_7_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 1882,
+      "LightSABRE": 1779,
+      "Qwen": 1574,
+      "Gemma": 1575,
+      "Muse": 1786,
+      "Qwen_minus_SABRE": -308,
+      "Qwen_minus_LightSABRE": -205,
+      "Gemma_minus_SABRE": -307,
+      "Gemma_minus_LightSABRE": -204,
+      "Muse_minus_SABRE": -96,
+      "Muse_minus_LightSABRE": 7
+    },
+    {
+      "case": "square_root_7_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 2632,
+      "LightSABRE": 2322,
+      "Qwen": 2233,
+      "Gemma": 2187,
+      "Muse": 2296,
+      "Qwen_minus_SABRE": -399,
+      "Qwen_minus_LightSABRE": -89,
+      "Gemma_minus_SABRE": -445,
+      "Gemma_minus_LightSABRE": -135,
+      "Muse_minus_SABRE": -336,
+      "Muse_minus_LightSABRE": -26
+    },
+    {
+      "case": "sym6_145_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 424,
+      "LightSABRE": 351,
+      "Qwen": 192,
+      "Gemma": 217,
+      "Muse": 342,
+      "Qwen_minus_SABRE": -232,
+      "Qwen_minus_LightSABRE": -159,
+      "Gemma_minus_SABRE": -207,
+      "Gemma_minus_LightSABRE": -134,
+      "Muse_minus_SABRE": -82,
+      "Muse_minus_LightSABRE": -9
+    },
+    {
+      "case": "sym6_145_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 938,
+      "LightSABRE": 896,
+      "Qwen": 737,
+      "Gemma": 740,
+      "Muse": 897,
+      "Qwen_minus_SABRE": -201,
+      "Qwen_minus_LightSABRE": -159,
+      "Gemma_minus_SABRE": -198,
+      "Gemma_minus_LightSABRE": -156,
+      "Muse_minus_SABRE": -41,
+      "Muse_minus_LightSABRE": 1
+    },
+    {
+      "case": "sym6_145_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 1057,
+      "LightSABRE": 1024,
+      "Qwen": 977,
+      "Gemma": 982,
+      "Muse": 1033,
+      "Qwen_minus_SABRE": -80,
+      "Qwen_minus_LightSABRE": -47,
+      "Gemma_minus_SABRE": -75,
+      "Gemma_minus_LightSABRE": -42,
+      "Muse_minus_SABRE": -24,
+      "Muse_minus_LightSABRE": 9
+    },
+    {
+      "case": "sym9_193_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 5551,
+      "LightSABRE": 5283,
+      "Qwen": 3126,
+      "Gemma": 3545,
+      "Muse": 3691,
+      "Qwen_minus_SABRE": -2425,
+      "Qwen_minus_LightSABRE": -2157,
+      "Gemma_minus_SABRE": -2006,
+      "Gemma_minus_LightSABRE": -1738,
+      "Muse_minus_SABRE": -1860,
+      "Muse_minus_LightSABRE": -1592
+    },
+    {
+      "case": "sym9_193_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 8907,
+      "LightSABRE": 8686,
+      "Qwen": 7517,
+      "Gemma": 7485,
+      "Muse": 8606,
+      "Qwen_minus_SABRE": -1390,
+      "Qwen_minus_LightSABRE": -1169,
+      "Gemma_minus_SABRE": -1422,
+      "Gemma_minus_LightSABRE": -1201,
+      "Muse_minus_SABRE": -301,
+      "Muse_minus_LightSABRE": -80
+    },
+    {
+      "case": "sym9_193_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 11762,
+      "LightSABRE": 10993,
+      "Qwen": 10069,
+      "Gemma": 9698,
+      "Muse": 10638,
+      "Qwen_minus_SABRE": -1693,
+      "Qwen_minus_LightSABRE": -924,
+      "Gemma_minus_SABRE": -2064,
+      "Gemma_minus_LightSABRE": -1295,
+      "Muse_minus_SABRE": -1124,
+      "Muse_minus_LightSABRE": -355
+    },
+    {
+      "case": "z4_268_q20",
+      "topology": "Q20",
+      "weight": 0.2,
+      "SABRE": 455,
+      "LightSABRE": 326,
+      "Qwen": 270,
+      "Gemma": 289,
+      "Muse": 339,
+      "Qwen_minus_SABRE": -185,
+      "Qwen_minus_LightSABRE": -56,
+      "Gemma_minus_SABRE": -166,
+      "Gemma_minus_LightSABRE": -37,
+      "Muse_minus_SABRE": -116,
+      "Muse_minus_LightSABRE": 13
+    },
+    {
+      "case": "z4_268_willow",
+      "topology": "Willow",
+      "weight": 0.4,
+      "SABRE": 789,
+      "LightSABRE": 732,
+      "Qwen": 631,
+      "Gemma": 634,
+      "Muse": 738,
+      "Qwen_minus_SABRE": -158,
+      "Qwen_minus_LightSABRE": -101,
+      "Gemma_minus_SABRE": -155,
+      "Gemma_minus_LightSABRE": -98,
+      "Muse_minus_SABRE": -51,
+      "Muse_minus_LightSABRE": 6
+    },
+    {
+      "case": "z4_268_heron_fez",
+      "topology": "Heron",
+      "weight": 0.4,
+      "SABRE": 1028,
+      "LightSABRE": 896,
+      "Qwen": 844,
+      "Gemma": 853,
+      "Muse": 889,
+      "Qwen_minus_SABRE": -184,
+      "Qwen_minus_LightSABRE": -52,
+      "Gemma_minus_SABRE": -175,
+      "Gemma_minus_LightSABRE": -43,
+      "Muse_minus_SABRE": -139,
+      "Muse_minus_LightSABRE": -7
+    }
+  ]
+}

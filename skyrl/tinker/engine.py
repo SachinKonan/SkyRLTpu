@@ -193,9 +193,12 @@ def get_backend_classes(backend_name: str, use_ray: bool = False):
 
         return SkyRLTrainBackend, MegatronBackendOverrides
     elif backend_name == "tunix":
-        from skyrl.backends.tunix_backend import TunixBackend, TunixBackendConfig
+        from skyrl.backends.tunix_backend import (
+            DistributedTunixBackend,
+            TunixBackendConfig,
+        )
 
-        return TunixBackend, TunixBackendConfig
+        return DistributedTunixBackend, TunixBackendConfig
     else:
         raise ValueError(
             f"Unknown backend: {backend_name}. Available backends: jax, fsdp, megatron, tunix. "
@@ -658,7 +661,12 @@ class TinkerEngine:
         # When the caller provides a sampling_session_seq_id the save is
         # transient — weights only need to reach the inference engines, not
         # disk.  Backends can skip the expensive write in that case.
-        persist = request_data.sampling_session_seq_id is None
+        checkpoint_mirror = getattr(
+            getattr(self.backend, "config", None),
+            "checkpoint_mirror_gcs",
+            None,
+        )
+        persist = request_data.sampling_session_seq_id is None or bool(checkpoint_mirror)
 
         with self._checkpoint_status_context(model_id, checkpoint_id, types.CheckpointType.SAMPLER):
             self.backend.save_sampler_checkpoint(output_path, model_id, persist=persist)

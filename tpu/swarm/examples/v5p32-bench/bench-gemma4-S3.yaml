@@ -1,0 +1,62 @@
+name: bench-gemma4-S3
+
+# v5p-32 vLLM serving benchmark: gemma4 S3
+# Production cell shape on one pool worker: rank 0 = idle trainer/driver host,
+# ranks 1-3 = vLLM engines (no trainer is started).  Setting: 2x TP2 per host, max_num_seqs=64/engine, gpu util 0.92.
+
+resources:
+  cloud: gcp
+  region: us-east5
+  zone: us-east5-a
+  accelerators: tpu-v5p-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv5
+  use_spot: true
+  disk_size: 150
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 1
+
+envs:
+  PROJECT: vision-mix
+  ZONE: us-east5-a
+  REMOTE_USER: gcpuser
+  SKYRL_REPO_DIR: /home/gcpuser/SkyRLTpu-tpuswarm
+  TPUSWARM_SKYRL_BUNDLE_URL: gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-v5p32-bench-v2.tar.gz
+  TPUSWARM_BUNDLE_ID: bench-gemma4-S3
+
+  BENCH_NAME: bench-gemma4-S3
+  BENCH_MODE: realistic
+  BENCH_MODEL: gemma4
+  BENCH_ENGINES_PER_HOST: "2"
+  BENCH_MAX_NUM_SEQS: "64"
+  BENCH_GPU_UTIL: "0.92"
+  BENCH_REQUEST_SIZE: "32"
+  BENCH_STATES_URL: gs://sk7524-tinker-tpu-us-east5/v5p-bench/states-v1.json
+  BENCH_RESULT_GCS_PREFIX: gs://sk7524-tinker-tpu-us-east5/v5p-bench-results
+
+run: |
+  set -euo pipefail
+  export PATH="$HOME/.local/bin:$PATH"
+  generation=$(gcloud storage objects describe "$TPUSWARM_SKYRL_BUNDLE_URL" \
+    --format='value(generation)')
+  test -n "$generation"
+  bundles="$HOME/.cache/tpuswarm/bundles"
+  destination="$bundles/$generation"
+  mkdir -p "$bundles"
+  if [ ! -d "$destination" ]; then
+    archive=$(mktemp /tmp/tpuswarm-skyrl.XXXXXX.tar.gz)
+    staging=$(mktemp -d "$bundles/.extract.XXXXXX")
+    trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
+    gcloud storage cp "$TPUSWARM_SKYRL_BUNDLE_URL" "$archive"
+    tar -xzf "$archive" -C "$staging"
+    test -r "$staging/tpu/swarm/bench/run_v5p32_bench.sh"
+    test -r "$staging/tpu/swarm/bench/realistic_bench.py"
+    test -r "$staging/tpu/start_vllm_tpu.sh"
+    mv "$staging" "$destination"
+    rm -f -- "$archive"
+    trap - EXIT
+  fi
+  ln -sfn "$destination" "$SKYRL_REPO_DIR"
+  exec bash "$SKYRL_REPO_DIR/tpu/swarm/bench/run_v5p32_bench.sh"

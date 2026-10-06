@@ -1,0 +1,42 @@
+[project]
+name = "skyrl-tunix-runtime"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # SkyRL runtime without HF peft. Tunix uses Qwix LoRA and does not need
+    # PyTorch or the CUDA wheel stack pulled by the root project.
+    "cloudpathlib>=0.23.0",
+    "datasets>=4.0.0",
+    "hf-transfer",
+    "pillow>=11.3.0",
+    "rich>=14.1.0",
+    "safetensors>=0.6.2",
+    "tokenizers>=0.21.2",
+    "transformers>=5.6.1,<=5.8.0",
+    "typer>=0.17.4",
+
+    # TPU/JAX and Tunix training.
+    "jax[tpu]>=0.8,<1.0; sys_platform == 'linux'",
+    "flax>=0.12.2",
+    "optax>=0.2.5",
+    "google-tunix>=0.1.7",
+    "qwix>=0.1.6",
+    "sentencepiece",
+    "tiktoken",
+
+    # Local Tinker-compatible API server and client.
+    "tinker>=0.3.0",
+    "fastapi[standard]",
+    "sqlmodel",
+    "sqlalchemy[asyncio]",
+    "aiosqlite",
+    "asyncpg",
+    "psycopg2-binary",
+
+    # Editable SkyRL installation uses setuptools without pulling root deps.
+    "setuptools",
+]
+
+[[tool.uv.index]]
+name = "jax-tpu"
+url = "https://storage.googleapis.com/jax-releases/libtpu_releases.html"

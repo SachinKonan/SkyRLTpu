@@ -1,0 +1,36 @@
+{
+  "selected_at": "2026-09-19T13:42:34.039333+00:00",
+  "selection_rule": "Highest saved four-case reward across current GRPO and PWC runs per model; frozen before full17 evaluation",
+  "models": {
+    "qwen": {
+      "job": 1067,
+      "name": "science-circuit-v6e-qwen-helper-pwc-direct-20260918",
+      "pool_step": 8,
+      "reward": 0.5127815113851725,
+      "state_id": "915626b5-5af9-430d-8e24-0aa90be4fab6",
+      "observation": "{\"reward\":0.5127815113851725,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":0.9501483142375946,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.757224,\"wirelength_cost\":0.0772141,\"density_cost\":0.490288,\"congestion_cost\":0.869732,\"candidate_wall_seconds\":165.368,\"grading_seconds\":3.91928},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.874694,\"wirelength_cost\":0.0789188,\"density_cost\":0.50003,\"congestion_cost\":1.09152,\"candidate_wall_seconds\":165.266,\"grading_seconds\":6.63155},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.998477,\"wirelength_cost\":0.0833781,\"density_cost\":0.504602,\"congestion_cost\":1.3256,\"candidate_wall_seconds\":165.37,\"grading_seconds\":12.8998},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.1702,\"wirelength_cost\":0.0826974,\"density_cost\":0.5718,\"congestion_cost\":1.6032,\"candidate_wall_seconds\":165.381,\"grading_seconds\":32.3194}]}}",
+      "base": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-circuit-v6e-qwen-helper-pwc-direct-20260918",
+      "source_sha256": "c4e75e35826a0235c30cd5a0e98d9e3ffdf1f0504d8bdd1fea9c58bb312b9590"
+    },
+    "gemma": {
+      "job": 1060,
+      "name": "science-circuit-v6e-gemma-helper-grpo-direct-20260918",
+      "pool_step": 14,
+      "reward": 0.5189504607195834,
+      "state_id": "c9781730-fd95-48d4-ab2a-f5f7a4b6ffcc",
+      "observation": "{\"reward\":0.5189504607195834,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":0.926966205239296,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.756031,\"wirelength_cost\":0.0768504,\"density_cost\":0.489974,\"congestion_cost\":0.868387,\"candidate_wall_seconds\":167.367,\"grading_seconds\":3.85671},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.867919,\"wirelength_cost\":0.0778895,\"density_cost\":0.500001,\"congestion_cost\":1.08006,\"candidate_wall_seconds\":167.683,\"grading_seconds\":6.70105},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.974937,\"wirelength_cost\":0.0797495,\"density_cost\":0.513128,\"congestion_cost\":1.27725,\"candidate_wall_seconds\":167.677,\"grading_seconds\":12.4615},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.10898,\"wirelength_cost\":0.0789265,\"density_cost\":0.546678,\"congestion_cost\":1.51343,\"candidate_wall_seconds\":167.436,\"grading_seconds\":32.2287}]}}",
+      "base": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-circuit-v6e-gemma-helper-grpo-direct-20260918",
+      "source_sha256": "5922bcd2ad348299ea4a521e5103af12671b5ec3c41c749108c48a004ae11e97"
+    },
+    "muse": {
+      "job": 1066,
+      "name": "science-circuit-v6e-muse-helper-pwc-direct-20260918",
+      "pool_step": 6,
+      "reward": 0.5097001623419839,
+      "state_id": "bc789833-1bff-4c33-8a5a-d5919bf38d64",
+      "observation": "{\"reward\":0.5097001623419839,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":0.9619377702474594,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.760662,\"wirelength_cost\":0.0716033,\"density_cost\":0.49251,\"congestion_cost\":0.885608,\"candidate_wall_seconds\":168.922,\"grading_seconds\":3.98371},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.872204,\"wirelength_cost\":0.0780212,\"density_cost\":0.5,\"congestion_cost\":1.08836,\"candidate_wall_seconds\":169.024,\"grading_seconds\":6.85694},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.02107,\"wirelength_cost\":0.0826456,\"density_cost\":0.504874,\"congestion_cost\":1.37198,\"candidate_wall_seconds\":168.915,\"grading_seconds\":13.162},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.19381,\"wirelength_cost\":0.0775874,\"density_cost\":0.529143,\"congestion_cost\":1.70331,\"candidate_wall_seconds\":168.919,\"grading_seconds\":32.6892}]}}",
+      "base": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-circuit-v6e-muse-helper-pwc-direct-20260918",
+      "source_sha256": "afdb1792254b84e10ac0a0edff003e232097ae4a71f67538b87fa8cd08684c2a"
+    }
+  }
+}

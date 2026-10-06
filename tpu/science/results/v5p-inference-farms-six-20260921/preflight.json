@@ -1,0 +1,137 @@
+{
+  "checked_at": "2026-09-21T04:08:24.376580+00:00",
+  "identity": "289186856710-compute@developer.gserviceaccount.com",
+  "adc_identity_match": true,
+  "storage_read": true,
+  "pool": "tpuswarm-v5p32-east5a-erdos",
+  "pool_ready_workers": 23,
+  "existing_jobs": [
+    {
+      "job_id": 1352,
+      "run_id": "stageI-m-insp-n",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1277",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1351,
+      "run_id": "stageI-g-insp-n",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1275",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1350,
+      "run_id": "stageI-q-insp-n",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1273",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1349,
+      "run_id": "gen2-g-on-m0",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1271",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1348,
+      "run_id": "gen2-q-on-m0",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1270",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1347,
+      "run_id": "capacity-v5p-gemma-qubit-grpo-4e5-20260920",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1262",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1346,
+      "run_id": "capacity-v5p-gemma-ac2-grpo-4e5-20260920",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1261",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1345,
+      "run_id": "capacity-v5p-qwen-ac2-grpo-15e4-20260920",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1253",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1344,
+      "run_id": "cont26-m-orig-v5p",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1247",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1313,
+      "run_id": "cont28-g-orig-v5p",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1284",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1312,
+      "run_id": "cont27-q-orig-v5p",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1274",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1311,
+      "run_id": "gen1-g-on-q0",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1276",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1221,
+      "run_id": "stageK-M-ms2",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1278",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1220,
+      "run_id": "stageK-M-ms1",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1266",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1219,
+      "run_id": "stageK-G-gs2",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1268",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1218,
+      "run_id": "stageK-G-gs1",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1256",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1217,
+      "run_id": "stageK-Q-qs2",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1279",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    },
+    {
+      "job_id": 1216,
+      "run_id": "stageK-Q-qs1",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v5p32-east5a-erdos-1281",
+      "pool": "tpuswarm-v5p32-east5a-erdos"
+    }
+  ],
+  "provider_v5p32_ready": 23
+}

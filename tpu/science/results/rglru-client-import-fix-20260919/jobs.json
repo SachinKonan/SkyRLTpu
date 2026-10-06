@@ -1,0 +1,52 @@
+{
+  "jobs": [
+    {
+      "hardware": "v6e",
+      "task": "rglru",
+      "model": "qwen",
+      "run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1",
+      "original_run_id": "fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 50,
+      "package_dir": ".science/packages/rglru-client-import-fix-20260919/qwen",
+      "archive": ".science/packages/rglru-client-import-fix-20260919/qwen/ray-training.tar.gz",
+      "task_yaml": ".science/packages/rglru-client-import-fix-20260919/qwen/fresh-v6e-qwen-rglru-grpo-lr15e4-s1-20260919-fix1.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-4b1d272c46b5c1dc624b44f63b497a6079576dc2d6697490aa7339d4c36cddc8.tar.gz",
+      "archive_sha256": "4b1d272c46b5c1dc624b44f63b497a6079576dc2d6697490aa7339d4c36cddc8",
+      "yaml_sha256": "96f5e99d63673027c14090b50dae2232989339cb79a777a60c3e861eb7d49843"
+    },
+    {
+      "hardware": "v6e",
+      "task": "rglru",
+      "model": "gemma",
+      "run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "original_run_id": "fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 50,
+      "package_dir": ".science/packages/rglru-client-import-fix-20260919/gemma",
+      "archive": ".science/packages/rglru-client-import-fix-20260919/gemma/ray-training.tar.gz",
+      "task_yaml": ".science/packages/rglru-client-import-fix-20260919/gemma/fresh-v6e-gemma-rglru-grpo-lr4e5-s1-20260919-fix1.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-d088300e1ae5ae1f093222af8859a8829f5035bab95d7bc61f44df1fa621281d.tar.gz",
+      "archive_sha256": "d088300e1ae5ae1f093222af8859a8829f5035bab95d7bc61f44df1fa621281d",
+      "yaml_sha256": "8a722625d51903aa2d5ced248365bc2d8f5cccea2e3f9bc0d7e64dea00cd04c7"
+    },
+    {
+      "hardware": "v6e",
+      "task": "rglru",
+      "model": "muse",
+      "run_id": "fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919-fix1",
+      "original_run_id": "fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919",
+      "profile": "tpu/swarm/ray_train/profiles/fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919-fix1.json",
+      "pool": "tpuswarm-v6e32-east5b-qwen35",
+      "priority": 50,
+      "package_dir": ".science/packages/rglru-client-import-fix-20260919/muse",
+      "archive": ".science/packages/rglru-client-import-fix-20260919/muse/ray-training.tar.gz",
+      "task_yaml": ".science/packages/rglru-client-import-fix-20260919/muse/fresh-v6e-muse-rglru-grpo-lr4e5-s1-20260919-fix1.yaml",
+      "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/ray-training-6c226cda78f6bffdd8df2c3ec3ff68b7ec3907175b49c04d74415ff6454937d4.tar.gz",
+      "archive_sha256": "6c226cda78f6bffdd8df2c3ec3ff68b7ec3907175b49c04d74415ff6454937d4",
+      "yaml_sha256": "12e7bdff3665a12d4004a478c04d78e78b5e423c7d8047c914fb9aa7e3eaf5ae"
+    }
+  ]
+}

@@ -1,0 +1,396 @@
+{
+  "event": "placement_fix_verified",
+  "references": 8,
+  "physical_chips": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "peak_concurrent_candidates": 4,
+  "rewards": [
+    0.4827349313801288,
+    0.42421713893055063,
+    0.40517453651981844,
+    0.4827673524673678,
+    0.42421677423113374,
+    0.3588439730474151,
+    0.40517453651981844,
+    0.35626981787726486
+  ],
+  "max_candidate_seconds": 13.537822355996468,
+  "date_utc": "2026-09-15",
+  "job_id": 893,
+  "cluster": "tpuswarm-v4-64-central2-qwen35-erdos-289",
+  "host": "t1v-n-3d3ef179-w-7",
+  "accelerator": "tpu-v4-64",
+  "resources_per_case": {
+    "cpus": 4,
+    "host_memory_gib": 16,
+    "tpu_chips": 1
+  },
+  "source_hashes": {
+    "placement_slots.py": "456ac82bec7edec26e1654919335d14c0e89e8f28b2202b3c238237a95ab1466",
+    "placement_ray.py": "7fcaed9bc86c80056d37253014eb3985d31dc5c7dccd55c3d1d7c902b38a3a05",
+    "challenge_candidate_child.py": "3701d32aeb89f17f7bc2d75a13a1c4e65ac93e921caa82c1303a89822cf9bf82"
+  },
+  "cases": [
+    {
+      "source": "challenge_seed.py",
+      "reward": 0.4827349313801288,
+      "correctness": 1.0,
+      "case": "ibm01",
+      "physical_chip_id": 2,
+      "ray_tpu_ids": [
+        "2"
+      ],
+      "ray_tpu_visible_chips": "2",
+      "hard_cpus": [
+        24,
+        25,
+        26,
+        27
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 9.504876709994278,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel2"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 3.3152256070025032
+      },
+      "candidate_started_unix": 1789449285.0588508,
+      "candidate_finished_unix": 1789449295.3910356,
+      "candidate_wall_seconds": 10.332185735009261,
+      "task_envelope_seconds": 16.86891676200321,
+      "allocation_memory": {
+        "memory_current_mib": 17.26171875,
+        "memory_peak_mib": 1171.0859375
+      },
+      "proxy_cost": 1.0715302228927612,
+      "wirelength_cost": 0.06664804369211197,
+      "density_cost": 0.8503214120864868,
+      "congestion_cost": 1.1594429667181945
+    },
+    {
+      "source": "challenge_seed.py",
+      "reward": 0.42421713893055063,
+      "correctness": 1.0,
+      "case": "ibm04",
+      "physical_chip_id": 3,
+      "ray_tpu_ids": [
+        "3"
+      ],
+      "ray_tpu_visible_chips": "3",
+      "hard_cpus": [
+        28,
+        29,
+        30,
+        31
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 7.771631800002069,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel3"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 3.261581364000449
+      },
+      "candidate_started_unix": 1789449285.0616663,
+      "candidate_finished_unix": 1789449293.692217,
+      "candidate_wall_seconds": 8.630550841000513,
+      "task_envelope_seconds": 18.872158426995156,
+      "allocation_memory": {
+        "memory_current_mib": 15.9375,
+        "memory_peak_mib": 1182.08203125
+      },
+      "proxy_cost": 1.357283353805542,
+      "wirelength_cost": 0.07111144065856934,
+      "density_cost": 0.8365685343742371,
+      "congestion_cost": 1.7357754001789572
+    },
+    {
+      "source": "challenge_seed.py",
+      "reward": 0.40517453651981844,
+      "correctness": 1.0,
+      "case": "ibm08",
+      "physical_chip_id": 0,
+      "ray_tpu_ids": [
+        "0"
+      ],
+      "ray_tpu_visible_chips": "0",
+      "hard_cpus": [
+        16,
+        17,
+        18,
+        19
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 7.796663697998156,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel0"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 3.3064184300019406
+      },
+      "candidate_started_unix": 1789449285.061706,
+      "candidate_finished_unix": 1789449293.7416036,
+      "candidate_wall_seconds": 8.679897645008168,
+      "task_envelope_seconds": 26.132066621998092,
+      "allocation_memory": {
+        "memory_current_mib": 16.37890625,
+        "memory_peak_mib": 1180.96484375
+      },
+      "proxy_cost": 1.4680721759796143,
+      "wirelength_cost": 0.06845136731863022,
+      "density_cost": 0.8177465200424194,
+      "congestion_cost": 1.9814951019202387
+    },
+    {
+      "source": "challenge_seed_jax.py",
+      "reward": 0.4827673524673678,
+      "correctness": 1.0,
+      "case": "ibm01",
+      "physical_chip_id": 2,
+      "ray_tpu_ids": [
+        "2"
+      ],
+      "ray_tpu_visible_chips": "2",
+      "hard_cpus": [
+        24,
+        25,
+        26,
+        27
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 12.62125541298883,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel2"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 2.822634611002286
+      },
+      "candidate_started_unix": 1789449301.840534,
+      "candidate_finished_unix": 1789449315.3783562,
+      "candidate_wall_seconds": 13.537822355996468,
+      "task_envelope_seconds": 19.973184747010237,
+      "allocation_memory": {
+        "memory_current_mib": 15.9921875,
+        "memory_peak_mib": 1402.35546875
+      },
+      "proxy_cost": 1.0713911056518555,
+      "wirelength_cost": 0.06664766371250153,
+      "density_cost": 0.8445926904678345,
+      "congestion_cost": 1.1648941678274594
+    },
+    {
+      "source": "challenge_seed_jax.py",
+      "reward": 0.42421677423113374,
+      "correctness": 1.0,
+      "case": "ibm04",
+      "physical_chip_id": 3,
+      "ray_tpu_ids": [
+        "3"
+      ],
+      "ray_tpu_visible_chips": "3",
+      "hard_cpus": [
+        28,
+        29,
+        30,
+        31
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 11.41389327700017,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel3"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 2.859895736008184
+      },
+      "candidate_started_unix": 1789449303.851731,
+      "candidate_finished_unix": 1789449316.1396348,
+      "candidate_wall_seconds": 12.28790490499523,
+      "task_envelope_seconds": 22.426068544009468,
+      "allocation_memory": {
+        "memory_current_mib": 15.95703125,
+        "memory_peak_mib": 1433.1796875
+      },
+      "proxy_cost": 1.3572853803634644,
+      "wirelength_cost": 0.07111144065856934,
+      "density_cost": 0.8365687727928162,
+      "congestion_cost": 1.7357790372600652
+    },
+    {
+      "source": "challenge_seed.py",
+      "reward": 0.3588439730474151,
+      "correctness": 1.0,
+      "case": "ibm18",
+      "physical_chip_id": 1,
+      "ray_tpu_ids": [
+        "1"
+      ],
+      "ray_tpu_visible_chips": "1",
+      "hard_cpus": [
+        20,
+        21,
+        22,
+        23
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 6.309891516008065,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel1"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 3.286888540998916
+      },
+      "candidate_started_unix": 1789449285.0610905,
+      "candidate_finished_unix": 1789449292.1884959,
+      "candidate_wall_seconds": 7.127406202998827,
+      "task_envelope_seconds": 49.56299231998855,
+      "allocation_memory": {
+        "memory_current_mib": 16.10546875,
+        "memory_peak_mib": 1174.41796875
+      },
+      "proxy_cost": 1.786726474761963,
+      "wirelength_cost": 0.05319457873702049,
+      "density_cost": 1.0404595136642456,
+      "congestion_cost": 2.4266043425232513
+    },
+    {
+      "source": "challenge_seed_jax.py",
+      "reward": 0.40517453651981844,
+      "correctness": 1.0,
+      "case": "ibm08",
+      "physical_chip_id": 0,
+      "ray_tpu_ids": [
+        "0"
+      ],
+      "ray_tpu_visible_chips": "0",
+      "hard_cpus": [
+        16,
+        17,
+        18,
+        19
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 11.942154710006434,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel0"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 2.8515115970076295
+      },
+      "candidate_started_unix": 1789449311.113265,
+      "candidate_finished_unix": 1789449323.9508822,
+      "candidate_wall_seconds": 12.837618044999545,
+      "task_envelope_seconds": 31.48809358300059,
+      "allocation_memory": {
+        "memory_current_mib": 15.91015625,
+        "memory_peak_mib": 1475.65625
+      },
+      "proxy_cost": 1.4680721759796143,
+      "wirelength_cost": 0.06845136731863022,
+      "density_cost": 0.8177463412284851,
+      "congestion_cost": 1.9814951019202387
+    },
+    {
+      "source": "challenge_seed_jax.py",
+      "reward": 0.35626981787726486,
+      "correctness": 1.0,
+      "case": "ibm18",
+      "physical_chip_id": 2,
+      "ray_tpu_ids": [
+        "2"
+      ],
+      "ray_tpu_visible_chips": "2",
+      "hard_cpus": [
+        24,
+        25,
+        26,
+        27
+      ],
+      "hard_memory_gib": 16,
+      "candidate_device": {
+        "candidate_seconds": 11.97497330600163,
+        "sandbox_tpu_visible_chips": "0",
+        "sandbox_device_paths": [
+          "/dev/accel2"
+        ],
+        "jax_version": "0.10.1",
+        "devices": [
+          "TPU_0(process=0,(0,0,0,0))"
+        ],
+        "device_kind": "TPU v4",
+        "device_count": 1,
+        "initialization_seconds": 2.8533492870046757
+      },
+      "candidate_started_unix": 1789449321.8613005,
+      "candidate_finished_unix": 1789449334.6986926,
+      "candidate_wall_seconds": 12.837393415000406,
+      "task_envelope_seconds": 58.204601317003835,
+      "allocation_memory": {
+        "memory_current_mib": 15.85546875,
+        "memory_peak_mib": 1596.55078125
+      },
+      "proxy_cost": 1.806861400604248,
+      "wirelength_cost": 0.05310686677694321,
+      "density_cost": 1.0626001358032227,
+      "congestion_cost": 2.4449088297843202
+    }
+  ],
+  "rejection": {
+    "correctness": 0.0,
+    "reward": 0.0,
+    "msg": "RuntimeError: candidate exited 1: {\"event\": \"tpu_initialization_started\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel2\"]}\n{\"event\": \"tpu_initialization_complete\", \"sandbox_tpu_visible_chips\": \"0\", \"sandbox_device_paths\": [\"/dev/accel2\"], \"jax_version\": \"0.10.1\", \"devices\": [\"TPU_0(process=0,(0,0,0,0))\"], \"device_kind\": \"TPU v4\", \"device_count\": 1, \"initialization_seconds\": 2.8361220520018833}\nTraceback (most recent call last):\n  File \"/runner.py\", line 59, in <module>\n    raise ValueError('wrong shape or nonfinite placement')\nValueError: wrong shape or nonfinite placement\n"
+  }
+}

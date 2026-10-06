@@ -1,0 +1,32 @@
+[
+  [
+    "zone",
+    "us-east5-b",
+    "us-central1-b"
+  ],
+  [
+    "client_env.TTD_SICK_MARKER",
+    "/home/gcpuser/.cache/next-v6e-muse-qubit-10step-20260921/runs/next-v6e-muse-qubit-10step-20260921/ENGINE-SICK",
+    "/home/gcpuser/.cache/next-v6e-muse-qubit-central-10step-20260921/runs/next-v6e-muse-qubit-central-10step-20260921/ENGINE-SICK"
+  ],
+  [
+    "cache.trainer_compile",
+    "gs://sk7524-tinker-tpu-us-central1/campaign-next-20260921/next-v6e-muse-qubit-10step-20260921/trainer",
+    "gs://sk7524-tinker-tpu-us-central1/campaign-next-20260921/next-v6e-muse-qubit-central-10step-20260921/trainer"
+  ],
+  [
+    "cache.inference_compile",
+    "gs://sk7524-tinker-tpu-us-central1/campaign-next-20260921/next-v6e-muse-qubit-10step-20260921/inference",
+    "gs://sk7524-tinker-tpu-us-central1/campaign-next-20260921/next-v6e-muse-qubit-central-10step-20260921/inference"
+  ],
+  [
+    "run_id",
+    "next-v6e-muse-qubit-10step-20260921",
+    "next-v6e-muse-qubit-central-10step-20260921"
+  ],
+  [
+    "root",
+    "~/.cache/next-v6e-muse-qubit-10step-20260921",
+    "~/.cache/next-v6e-muse-qubit-central-10step-20260921"
+  ]
+]

@@ -1,0 +1,98 @@
+[
+  {
+    "model": "gemma",
+    "arm": "grpo",
+    "run_id": "science-q20-v6e-gemma-grpo-seedonly-20260918",
+    "profile": "tpu/swarm/ray_train/profiles/science-q20-v6e-gemma-grpo-seedonly-20260918.json",
+    "seed": ".science/science-grpo-only-20260918/forks/gemma/source-client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000000.json",
+    "seed_sha256": "03f7c7c208bdef97e256fd62938a3346f4fcbdd5f9d98d3b992e0e9930b032f3",
+    "step": 0,
+    "seed_count": 7,
+    "optimizer_checkpoint_imported": false,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-gemma-grpo-seedonly-20260918",
+    "verified_objects": [
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-gemma-grpo-seedonly-20260918/client/seed-import.json",
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-gemma-grpo-seedonly-20260918/client/tinker_log/science-q20-v6e-gemma-grpo-seedonly-20260918/puct_sampler_step_000000.json"
+    ]
+  },
+  {
+    "model": "gemma",
+    "arm": "pwc",
+    "run_id": "science-q20-v6e-gemma-pwc-seedonly-20260918",
+    "profile": "tpu/swarm/ray_train/profiles/science-q20-v6e-gemma-pwc-seedonly-20260918.json",
+    "seed": ".science/science-grpo-only-20260918/forks/gemma/source-client/tinker_log/science-qubit-q20-v6e-gemma-seeded-001/puct_sampler_step_000000.json",
+    "seed_sha256": "03f7c7c208bdef97e256fd62938a3346f4fcbdd5f9d98d3b992e0e9930b032f3",
+    "step": 0,
+    "seed_count": 7,
+    "optimizer_checkpoint_imported": false,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-gemma-pwc-seedonly-20260918",
+    "verified_objects": [
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-gemma-pwc-seedonly-20260918/client/seed-import.json",
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-gemma-pwc-seedonly-20260918/client/tinker_log/science-q20-v6e-gemma-pwc-seedonly-20260918/puct_sampler_step_000000.json"
+    ]
+  },
+  {
+    "model": "muse",
+    "arm": "grpo",
+    "run_id": "science-q20-v6e-muse-grpo-seedonly-20260918",
+    "profile": "tpu/swarm/ray_train/profiles/science-q20-v6e-muse-grpo-seedonly-20260918.json",
+    "seed": ".science/science-grpo-only-20260918/forks/muse/source-client/tinker_log/science-qubit-q20-v6e-muse-seeded-001/puct_sampler_step_000000.json",
+    "seed_sha256": "b9ff7f78c6f36324645f34e5c4ab76d5a4db995360b3621fe73cc38e42ef964c",
+    "step": 0,
+    "seed_count": 7,
+    "optimizer_checkpoint_imported": false,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-muse-grpo-seedonly-20260918",
+    "verified_objects": [
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-muse-grpo-seedonly-20260918/client/seed-import.json",
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-muse-grpo-seedonly-20260918/client/tinker_log/science-q20-v6e-muse-grpo-seedonly-20260918/puct_sampler_step_000000.json"
+    ]
+  },
+  {
+    "model": "muse",
+    "arm": "pwc",
+    "run_id": "science-q20-v6e-muse-pwc-seedonly-20260918",
+    "profile": "tpu/swarm/ray_train/profiles/science-q20-v6e-muse-pwc-seedonly-20260918.json",
+    "seed": ".science/science-grpo-only-20260918/forks/muse/source-client/tinker_log/science-qubit-q20-v6e-muse-seeded-001/puct_sampler_step_000000.json",
+    "seed_sha256": "b9ff7f78c6f36324645f34e5c4ab76d5a4db995360b3621fe73cc38e42ef964c",
+    "step": 0,
+    "seed_count": 7,
+    "optimizer_checkpoint_imported": false,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-muse-pwc-seedonly-20260918",
+    "verified_objects": [
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-muse-pwc-seedonly-20260918/client/seed-import.json",
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-muse-pwc-seedonly-20260918/client/tinker_log/science-q20-v6e-muse-pwc-seedonly-20260918/puct_sampler_step_000000.json"
+    ]
+  },
+  {
+    "model": "qwen",
+    "arm": "grpo",
+    "run_id": "science-q20-v6e-qwen-grpo-seedonly-20260918",
+    "profile": "tpu/swarm/ray_train/profiles/science-q20-v6e-qwen-grpo-seedonly-20260918.json",
+    "seed": ".science/science-grpo-only-20260918/forks/qwen/source-client/tinker_log/science-qubit-q20-v6e-qwen-seeded-001/puct_sampler_step_000000.json",
+    "seed_sha256": "706e4cea5a2e324ba85221089dc61ac0427f76a1e30af4c8ba53c402d5ef58d6",
+    "step": 0,
+    "seed_count": 6,
+    "optimizer_checkpoint_imported": false,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-qwen-grpo-seedonly-20260918",
+    "verified_objects": [
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-qwen-grpo-seedonly-20260918/client/seed-import.json",
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-qwen-grpo-seedonly-20260918/client/tinker_log/science-q20-v6e-qwen-grpo-seedonly-20260918/puct_sampler_step_000000.json"
+    ]
+  },
+  {
+    "model": "qwen",
+    "arm": "pwc",
+    "run_id": "science-q20-v6e-qwen-pwc-seedonly-20260918",
+    "profile": "tpu/swarm/ray_train/profiles/science-q20-v6e-qwen-pwc-seedonly-20260918.json",
+    "seed": ".science/science-grpo-only-20260918/forks/qwen/source-client/tinker_log/science-qubit-q20-v6e-qwen-seeded-001/puct_sampler_step_000000.json",
+    "seed_sha256": "706e4cea5a2e324ba85221089dc61ac0427f76a1e30af4c8ba53c402d5ef58d6",
+    "step": 0,
+    "seed_count": 6,
+    "optimizer_checkpoint_imported": false,
+    "destination": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-qwen-pwc-seedonly-20260918",
+    "verified_objects": [
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-qwen-pwc-seedonly-20260918/client/seed-import.json",
+      "gs://sk7524-tinker-tpu-us-east5/ray-training/science-q20-v6e-qwen-pwc-seedonly-20260918/client/tinker_log/science-q20-v6e-qwen-pwc-seedonly-20260918/puct_sampler_step_000000.json"
+    ]
+  }
+]

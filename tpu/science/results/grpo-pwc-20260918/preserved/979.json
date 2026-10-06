@@ -1,0 +1,70 @@
+{
+  "job": 979,
+  "name": "science-circuit-v4-gemma-cpu-seeded-train-001",
+  "root": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/global_step.json",
+      "source_generation": "1789743884869579",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/global_step.json",
+      "size": 18,
+      "crc32c": "ZgMjaA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/life_state.json",
+      "source_generation": "1789743884885584",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/life_state.json",
+      "size": 107,
+      "crc32c": "NYiHrA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/member_gemma/checkpoints.jsonl",
+      "source_generation": "1789743885297978",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/member_gemma/checkpoints.jsonl",
+      "size": 411,
+      "crc32c": "iNi0PA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/metrics.jsonl",
+      "source_generation": "1789743884896836",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/metrics.jsonl",
+      "size": 13588,
+      "crc32c": "ROK2Bw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000000.json",
+      "source_generation": "1789743884748570",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000000.json",
+      "size": 37566,
+      "crc32c": "Thu1JA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000001.json",
+      "source_generation": "1789743885298827",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000001.json",
+      "size": 332754,
+      "crc32c": "q74xdQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000002.json",
+      "source_generation": "1789743884742942",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000002.json",
+      "size": 627732,
+      "crc32c": "02pw6w=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000003.json",
+      "source_generation": "1789743945602618",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/client/tinker_log/science-circuit-v4-gemma-cpu-seeded-train-001/puct_sampler_step_000003.json",
+      "size": 957476,
+      "crc32c": "4SEbww=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-circuit-v4-gemma-cpu-seeded-train-001/checkpoints/model_c56ccd9f/000003.tar.gz",
+      "source_generation": "1789741125110553",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-circuit-v4-gemma-cpu-seeded-train-001/checkpoints/model_c56ccd9f/000003.tar.gz",
+      "size": 2938939279,
+      "crc32c": "5hDfCw=="
+    }
+  ]
+}

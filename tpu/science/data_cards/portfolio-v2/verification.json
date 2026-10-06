@@ -1,0 +1,44 @@
+{
+  "rows": 58020,
+  "equities": 30,
+  "news": 204982,
+  "causal_news_edges_checked": 986582,
+  "missing_price_rows": 314,
+  "labels_purged_at_boundaries": 238,
+  "prefix_checks": [
+    {
+      "cutoff": "2020-12-31",
+      "rows": 720
+    },
+    {
+      "cutoff": "2023-12-29",
+      "rows": 750
+    },
+    {
+      "cutoff": "2024-12-31",
+      "rows": 720
+    },
+    {
+      "cutoff": "2025-12-31",
+      "rows": 720
+    }
+  ],
+  "calendar_checks": [
+    {
+      "session": "2020-03-06",
+      "decision_at": "2020-03-06 21:15:00+00:00"
+    },
+    {
+      "session": "2020-03-09",
+      "decision_at": "2020-03-09 20:15:00+00:00"
+    },
+    {
+      "session": "2024-11-29",
+      "decision_at": "2024-11-29 18:15:00+00:00"
+    }
+  ],
+  "exported_observation_allowlist_verified": true,
+  "artifact_hashes_verified": true,
+  "no_infinite_numeric_features": true,
+  "seconds": 620.7933742490131
+}

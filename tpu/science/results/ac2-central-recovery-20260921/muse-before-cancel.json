@@ -1,0 +1,8 @@
+{
+  "job_id": 1336,
+  "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+  "status": "RECOVERING",
+  "cluster": "tpuswarm-v6e32-east5b-qwen35-5587",
+  "pool": "tpuswarm-v6e32-east5b-qwen35",
+  "priority": 120
+}

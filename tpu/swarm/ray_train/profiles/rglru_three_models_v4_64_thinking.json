@@ -1,0 +1,110 @@
+{
+  "run_id": "rglru-three-models-v4-64-001",
+  "accelerator": "tpu-v4-64",
+  "hosts": 8,
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
+  "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
+  "root": "~/.cache/skyrl-ray-rglru-v4-64-compare",
+  "model_preset": "qwen3.5-27b",
+  "inference_only": true,
+  "inference_only_ranks": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "arena_samples": 32,
+  "arena_models": [
+    {
+      "model_preset": "qwen3.5-27b",
+      "inference": {
+        "tp": 4,
+        "max_sequences": 16,
+        "memory_utilization": 0.8,
+        "routing": "ingress",
+        "restart_limit": 1,
+        "chunk_tokens": 4096,
+        "ragged_conv1d": true,
+        "native_thinking_budget": true,
+        "max_model_length": 40960,
+        "request_timeout": 7200
+      },
+      "cache": {
+        "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+        "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-qwen3.5-27b-tp4-seq16-mem80-chunk4096-jaxconv-v1",
+        "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-qwen3.5-27b-tp4-seq16-mem80-chunk4096-jaxconv-v1-s40960-thinking-v1"
+      }
+    },
+    {
+      "model_preset": "gemma4-31b",
+      "inference": {
+        "tp": 4,
+        "max_sequences": 16,
+        "memory_utilization": 0.8,
+        "routing": "ingress",
+        "restart_limit": 1,
+        "chunk_tokens": 1024,
+        "native_thinking_budget": true,
+        "max_model_length": 40960,
+        "request_timeout": 7200
+      },
+      "cache": {
+        "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-gemma4-v1",
+        "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-gemma4-31b-tp4-seq16-mem80-chunk1024-v1",
+        "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-gemma4-31b-tp4-seq16-mem80-chunk1024-v1-s40960-thinking-v1"
+      }
+    },
+    {
+      "model_preset": "muse-glimmer-30b",
+      "inference": {
+        "tp": 4,
+        "max_sequences": 16,
+        "memory_utilization": 0.8,
+        "routing": "ingress",
+        "restart_limit": 1,
+        "chunk_tokens": 1024,
+        "native_thinking_budget": true,
+        "max_model_length": 40960,
+        "request_timeout": 7200
+      },
+      "cache": {
+        "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-muse-glimmer-v1",
+        "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-muse-glimmer-30b-tp4-seq16-mem80-chunk1024-native-v2",
+        "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-muse-glimmer-30b-tp4-seq16-mem80-chunk1024-native-v2-s40960-thinking-v1"
+      }
+    }
+  ],
+  "arena_concurrency": 8,
+  "arena_max_tokens": 32768,
+  "trainer": {
+    "hosts": 0
+  },
+  "inference": {
+    "tp": 4,
+    "max_sequences": 16,
+    "memory_utilization": 0.8,
+    "routing": "ingress",
+    "restart_limit": 1,
+    "native_thinking_budget": true,
+    "max_model_length": 40960,
+    "request_timeout": 7200
+  },
+  "cache": {
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "inference_gib": 128,
+    "reserve_gib": 128,
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/unused-rglru-trainer",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/unused-rglru-head",
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60
+  },
+  "checkpoint_cleanup_timeout": 0,
+  "ready_timeout": 7200,
+  "arena_thinking_tokens": 20000,
+  "arena_replicas_per_model": 2
+}

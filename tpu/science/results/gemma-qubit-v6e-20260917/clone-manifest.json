@@ -1,0 +1,49 @@
+[
+  {
+    "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/checkpoints/model_0bfeb293/000001.tar.gz",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/checkpoints/model_0bfeb293/000001.tar.gz",
+    "size": 2938939279,
+    "crc32c": "hmCtmA=="
+  },
+  {
+    "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-gemma-bootstrap-l2-001/recovery-20260917/tinker-backup.db",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/tinker-backup.db",
+    "size": 149008384,
+    "crc32c": "YqrvcA=="
+  },
+  {
+    "source": ".science/gemma-qubit-v6e-20260917/client/tinker_log/science-qubit-v6e-gemma-runtime-001/metrics.jsonl",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/metrics.jsonl",
+    "sha256": "7872e35559ce3dd318bfff330674e3fdcc0193fa90c40ca3cc64d854473adadb"
+  },
+  {
+    "source": ".science/gemma-qubit-v6e-20260917/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000001.json",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000001.json",
+    "sha256": "36d0dcc7073b0299e679e2eea6a2143830c9067cac684eedf5a7a750159977ec"
+  },
+  {
+    "source": ".science/gemma-qubit-v6e-20260917/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000000.json",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000000.json",
+    "sha256": "17198a8b1d1a290d66d7243c3c7b55516b9ff46a87a85301aed4c64c1f36ab34"
+  },
+  {
+    "source": ".science/gemma-qubit-v6e-20260917/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000002.json",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/puct_sampler_step_000002.json",
+    "sha256": "a720abf91070ba5de269a0fbf23c2ac6109e8623781624830f749212fd85d1ba"
+  },
+  {
+    "source": ".science/gemma-qubit-v6e-20260917/client/tinker_log/science-qubit-v6e-gemma-runtime-001/life_state.json",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/life_state.json",
+    "sha256": "64611784a987bc19604d906030a5510da04bb8918d17f8b7b0ca218067a35c19"
+  },
+  {
+    "source": ".science/gemma-qubit-v6e-20260917/client/tinker_log/science-qubit-v6e-gemma-runtime-001/global_step.json",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/global_step.json",
+    "sha256": "1b39d099121006ca14eb6ed12b4aeff6ee6c84e978bd162da9baba26cabe26c1"
+  },
+  {
+    "source": ".science/gemma-qubit-v6e-20260917/client/tinker_log/science-qubit-v6e-gemma-runtime-001/member_gemma/checkpoints.jsonl",
+    "target": "gs://sk7524-tinker-tpu-us-east5/ray-training/science-qubit-v6e-gemma-runtime-001/client/tinker_log/science-qubit-v6e-gemma-runtime-001/member_gemma/checkpoints.jsonl",
+    "sha256": "0243e949f04b1360a23ba682bd7407262aaa57fa8a7210f0051f2a4f1dd8da4f"
+  }
+]

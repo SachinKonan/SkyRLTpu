@@ -1,0 +1,91 @@
+{
+  "job": 980,
+  "name": "science-routing-v4-qwen-bootstrap-l2-001",
+  "root": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001",
+  "objects": [
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/global_step.json",
+      "source_generation": "1789743893539171",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/global_step.json",
+      "size": 18,
+      "crc32c": "Oyvaww=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/life_state.json",
+      "source_generation": "1789743906388051",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/life_state.json",
+      "size": 138,
+      "crc32c": "9BNxDA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/member_qwen/checkpoints.jsonl",
+      "source_generation": "1789743893491698",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/member_qwen/checkpoints.jsonl",
+      "size": 822,
+      "crc32c": "NOKoRA=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/metrics.jsonl",
+      "source_generation": "1789743893764464",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/metrics.jsonl",
+      "size": 44921,
+      "crc32c": "MuGakg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000000.json",
+      "source_generation": "1789743906387447",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000000.json",
+      "size": 90056,
+      "crc32c": "ZIxMvw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000001.json",
+      "source_generation": "1789743893592946",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000001.json",
+      "size": 382439,
+      "crc32c": "QPrlYw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000002.json",
+      "source_generation": "1789743906419012",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000002.json",
+      "size": 728156,
+      "crc32c": "eZLVIw=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000003.json",
+      "source_generation": "1789743893548135",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000003.json",
+      "size": 1164682,
+      "crc32c": "Hj5nBQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000004.json",
+      "source_generation": "1789743906472069",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000004.json",
+      "size": 1563759,
+      "crc32c": "OS+eXQ=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000005.json",
+      "source_generation": "1789743893783526",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000005.json",
+      "size": 1994498,
+      "crc32c": "y/oJpg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000006.json",
+      "source_generation": "1789743893823825",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/client/tinker_log/science-routing-v4-qwen-bootstrap-l2-001/puct_sampler_step_000006.json",
+      "size": 2407337,
+      "crc32c": "5PV9Bg=="
+    },
+    {
+      "source": "gs://sk7524-tinker-tpu-us-central2/ray-training/science-routing-v4-qwen-bootstrap-l2-001/checkpoints/model_14add79b/000006.tar.gz",
+      "source_generation": "1789740471831296",
+      "target": "gs://sk7524-tinker-tpu-us-central2/science-preserved/20260918-grpo-pwc/science-routing-v4-qwen-bootstrap-l2-001/checkpoints/model_14add79b/000006.tar.gz",
+      "size": 1925557154,
+      "crc32c": "lI/hjw=="
+    }
+  ]
+}

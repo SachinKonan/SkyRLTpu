@@ -1,0 +1,98 @@
+{
+  "version": "portfolio_v1",
+  "source_sha256": "f7f9eb49eb9cd45ae88e13f31c9bef43a53138ced40628d62121786b68450713",
+  "feature_names": [
+    "close_return_1",
+    "close_return_5",
+    "close_return_20",
+    "open_to_close",
+    "high_to_close",
+    "low_to_close"
+  ],
+  "asset_names": [
+    "AAPL",
+    "AMGN",
+    "AXP",
+    "BA",
+    "CAT",
+    "CRM",
+    "CSCO",
+    "CVX",
+    "DIS",
+    "GS",
+    "HD",
+    "HON",
+    "IBM",
+    "INTC",
+    "JNJ",
+    "JPM",
+    "KO",
+    "MCD",
+    "MMM",
+    "MRK",
+    "MSFT",
+    "NKE",
+    "PG",
+    "TRV",
+    "UNH",
+    "V",
+    "VZ",
+    "WBA",
+    "WMT"
+  ],
+  "hardware": "cpu",
+  "allowed_libraries": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "sklearn",
+    "statsmodels",
+    "sympy",
+    "matplotlib",
+    "xgboost",
+    "cvxpy"
+  ],
+  "execution_lag": "features through close[t]; trade open[t+1]; mark holdings open[t+2]",
+  "price_convention": "adjusted open = open * adjcp / close; fixed historical constituents",
+  "fee_rate": 0.001,
+  "fee_rule": "wealth fraction = 0.001 * sum(abs(target_assets - drifted_assets)); deducted before next return; no cash leg fee",
+  "cash_return": 0.0,
+  "initial_weights": "all cash",
+  "seeds": [
+    1
+  ],
+  "sample_std_ddof": 1,
+  "std_floor": 1e-08,
+  "annualization": 252,
+  "context_length": 20,
+  "splits": {
+    "train": {
+      "first_decision": "2012-02-29",
+      "last_decision": "2018-12-27",
+      "last_return_date": "2018-12-31",
+      "observations": 1719,
+      "sha256": "9fd3ad86f6b5a465d062de5ecaca6be81c508425f28291379c64e488a4e95bc1"
+    },
+    "valid": {
+      "first_decision": "2019-01-02",
+      "last_decision": "2019-12-27",
+      "last_return_date": "2019-12-31",
+      "observations": 250,
+      "sha256": "b8a5cb4813dec16b73684b4a4ab361d6f9b54cf6a52fbd71085c3fb2f918ca55"
+    },
+    "discovery": {
+      "first_decision": "2020-01-02",
+      "last_decision": "2020-12-29",
+      "last_return_date": "2020-12-31",
+      "observations": 251,
+      "sha256": "bb5c964984d9196b0f8cde69b5f555953a9a6b7d075c3728036f58c5c4d1f3c5"
+    },
+    "final": {
+      "first_decision": "2021-01-04",
+      "last_decision": "2021-12-29",
+      "last_return_date": "2021-12-31",
+      "observations": 250,
+      "sha256": "baae88b8e6dbe2462c09ea1a32ba5ee119e17f5f67c1a78cfdeb04eb7a5e6767"
+    }
+  }
+}

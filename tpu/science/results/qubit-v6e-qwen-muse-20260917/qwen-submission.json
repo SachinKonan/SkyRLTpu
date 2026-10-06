@@ -1,0 +1,9 @@
+{
+  "run_id": "science-qubit-v6e-qwen-runtime-001",
+  "pool": "tpuswarm-v6e32-east5b-qwen35",
+  "code_uri": "gs://sk7524-tinker-tpu-us-east5/code-bundles/science-training-de6b64ed6aeed2799e1a71dcf36de5f4ee2f1fa54bbd1353bebfd668bbde1482.tar.gz",
+  "submitted_at": "2026-09-17T20:51:42.997011+00:00",
+  "state": "submitted",
+  "exit_code": 0,
+  "job_id": 991
+}

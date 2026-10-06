@@ -1,0 +1,8 @@
+{
+  "job_id": 1361,
+  "run_id": "next-v6e-muse-qubit-10step-20260921",
+  "status": "CANCELLED",
+  "cluster": null,
+  "pool": "tpuswarm-v6e32-east5b-qwen35",
+  "priority": 100
+}

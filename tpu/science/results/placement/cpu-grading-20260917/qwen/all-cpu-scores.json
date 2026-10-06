@@ -1,0 +1,5210 @@
+{
+  "ee07e28e4e7d34eb2959d48442da3ee70cefe278fd7d6d4d8215931f3f794fa7": {
+    "reward": 0.37418779355225434,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.3810070753097534,
+        "wirelength_cost": 0.05193302780389786,
+        "density_cost": 1.6960943937301636,
+        "congestion_cost": 0.9620536616757865,
+        "candidate_wall_seconds": 2.180160115000035,
+        "grading_seconds": 4.041688513003464,
+        "allocation_memory": {
+          "memory_current_mib": 16.10546875,
+          "memory_peak_mib": 188.359375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5385994911193848,
+        "wirelength_cost": 0.05789417773485184,
+        "density_cost": 1.5630278587341309,
+        "congestion_cost": 1.3983827469333052,
+        "candidate_wall_seconds": 2.1716320940031437,
+        "grading_seconds": 6.88996565600246,
+        "allocation_memory": {
+          "memory_current_mib": 16.0625,
+          "memory_peak_mib": 199.32421875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7055000066757202,
+        "wirelength_cost": 0.060480229556560516,
+        "density_cost": 1.6248399019241333,
+        "congestion_cost": 1.665199696702388,
+        "candidate_wall_seconds": 2.273001371999271,
+        "grading_seconds": 13.170402258998365,
+        "allocation_memory": {
+          "memory_current_mib": 16.09765625,
+          "memory_peak_mib": 216.03125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.0647130012512207,
+        "wirelength_cost": 0.04841969162225723,
+        "density_cost": 1.8919817209243774,
+        "congestion_cost": 2.1406048366154473,
+        "candidate_wall_seconds": 2.5860765389952576,
+        "grading_seconds": 34.509182157002215,
+        "allocation_memory": {
+          "memory_current_mib": 16.0078125,
+          "memory_peak_mib": 245.01953125
+        }
+      }
+    ]
+  },
+  "d6fe2845d906c12f9e858d2a7ec186658135fb5bdd6752dd9135d291d95eed18": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 150.36649565799598,
+        "grading_seconds": 4.00731080800324,
+        "allocation_memory": {
+          "memory_current_mib": 16.33984375,
+          "memory_peak_mib": 189.109375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 150.3974508020001,
+        "grading_seconds": 6.905827297996439,
+        "allocation_memory": {
+          "memory_current_mib": 16.11328125,
+          "memory_peak_mib": 199.3984375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 150.38753387500037,
+        "grading_seconds": 12.746969538995472,
+        "allocation_memory": {
+          "memory_current_mib": 16.19921875,
+          "memory_peak_mib": 215.5703125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 150.39054921000206,
+        "grading_seconds": 32.43687226600014,
+        "allocation_memory": {
+          "memory_current_mib": 16.15625,
+          "memory_peak_mib": 245.171875
+        }
+      }
+    ]
+  },
+  "13df41a66ccde0829d0fd8a649f4389cca6a97b62293b10a84610cd7ec7d3011": {
+    "reward": 0.4388772368893948,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.9238909482955933,
+        "wirelength_cost": 0.06846080720424652,
+        "density_cost": 0.5259460806846619,
+        "congestion_cost": 1.1849142471790395,
+        "candidate_wall_seconds": 167.7211068329998,
+        "grading_seconds": 4.1021705299936,
+        "allocation_memory": {
+          "memory_current_mib": 15.890625,
+          "memory_peak_mib": 214.83203125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1751248836517334,
+        "wirelength_cost": 0.07757481187582016,
+        "density_cost": 0.5871673226356506,
+        "congestion_cost": 1.6079329092537211,
+        "candidate_wall_seconds": 167.63500578599633,
+        "grading_seconds": 6.8821327760015265,
+        "allocation_memory": {
+          "memory_current_mib": 16.09765625,
+          "memory_peak_mib": 214.99609375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.413145899772644,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.581409752368927,
+        "congestion_cost": 2.088219639340907,
+        "candidate_wall_seconds": 167.63093060199753,
+        "grading_seconds": 12.819441153995285,
+        "allocation_memory": {
+          "memory_current_mib": 16.0703125,
+          "memory_peak_mib": 224.5703125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020042896270752,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991854429244995,
+        "congestion_cost": 2.565571110453778,
+        "candidate_wall_seconds": 167.631889494005,
+        "grading_seconds": 31.881176536000567,
+        "allocation_memory": {
+          "memory_current_mib": 15.90234375,
+          "memory_peak_mib": 245.27734375
+        }
+      }
+    ]
+  },
+  "4ae2ac8ef5b93601d51dbac77202f56ae422a16addfa3c6b482949add62c3840": {
+    "reward": 0.2711311941658658,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7449495792388916,
+        "wirelength_cost": 0.07949277758598328,
+        "density_cost": 1.9499669075012207,
+        "congestion_cost": 1.380946465882532,
+        "candidate_wall_seconds": 61.31640000599873,
+        "grading_seconds": 4.229745946002367,
+        "allocation_memory": {
+          "memory_current_mib": 16.34375,
+          "memory_peak_mib": 212.4296875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9912474155426025,
+        "wirelength_cost": 0.09163668006658554,
+        "density_cost": 1.9727345705032349,
+        "congestion_cost": 1.8264867051181874,
+        "candidate_wall_seconds": 56.69007395600056,
+        "grading_seconds": 6.668686930999684,
+        "allocation_memory": {
+          "memory_current_mib": 16.0625,
+          "memory_peak_mib": 218.3125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.3926405906677246,
+        "wirelength_cost": 0.0939667746424675,
+        "density_cost": 1.921129584312439,
+        "congestion_cost": 2.6762182285237555,
+        "candidate_wall_seconds": 74.63395637600479,
+        "grading_seconds": 12.691189270997711,
+        "allocation_memory": {
+          "memory_current_mib": 16.1328125,
+          "memory_peak_mib": 229.01171875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 4.6241679191589355,
+        "wirelength_cost": 0.093658946454525,
+        "density_cost": 3.487250328063965,
+        "congestion_cost": 5.573767488588251,
+        "candidate_wall_seconds": 62.58736431899888,
+        "grading_seconds": 32.268039310998574,
+        "allocation_memory": {
+          "memory_current_mib": 16.15234375,
+          "memory_peak_mib": 245.37109375
+        }
+      }
+    ]
+  },
+  "8a4e150c98d8d5e9c06d48e5fad8774667c7eba832cf4601c2714d60bc111373": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 6.209799947999272,
+        "grading_seconds": 4.230050265003229,
+        "allocation_memory": {
+          "memory_current_mib": 15.9609375,
+          "memory_peak_mib": 200.546875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 5.235517726003309,
+        "grading_seconds": 7.331377310998505,
+        "allocation_memory": {
+          "memory_current_mib": 16.078125,
+          "memory_peak_mib": 199.14453125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 5.884732611993968,
+        "grading_seconds": 12.74165174600057,
+        "allocation_memory": {
+          "memory_current_mib": 15.87109375,
+          "memory_peak_mib": 215.86328125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 8.452045565994922,
+        "grading_seconds": 32.76404942999943,
+        "allocation_memory": {
+          "memory_current_mib": 16.03125,
+          "memory_peak_mib": 245.10546875
+        }
+      }
+    ]
+  },
+  "795fa5cae4a8575f8e4a08aed0db2fdf41dd9cbb453391df4308009e85fb2355": {
+    "reward": 0.259817013869531,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.832456588745117,
+        "wirelength_cost": 0.06289219856262207,
+        "density_cost": 2.3620378971099854,
+        "congestion_cost": 3.1770910537421106,
+        "candidate_wall_seconds": 1.8233967650012346,
+        "grading_seconds": 4.123704488003568,
+        "allocation_memory": {
+          "memory_current_mib": 16.36328125,
+          "memory_peak_mib": 188.82421875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.5580456256866455,
+        "wirelength_cost": 0.04619733244180679,
+        "density_cost": 2.3910956382751465,
+        "congestion_cost": 2.6326010513452305,
+        "candidate_wall_seconds": 1.8231769380035985,
+        "grading_seconds": 7.0606611660005,
+        "allocation_memory": {
+          "memory_current_mib": 16.16015625,
+          "memory_peak_mib": 199.31640625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.7861557006835938,
+        "wirelength_cost": 0.05631151422858238,
+        "density_cost": 2.427035093307495,
+        "congestion_cost": 3.0326533746930053,
+        "candidate_wall_seconds": 1.7716633500021999,
+        "grading_seconds": 13.29343815100583,
+        "allocation_memory": {
+          "memory_current_mib": 15.96484375,
+          "memory_peak_mib": 215.55078125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 3.218792676925659,
+        "wirelength_cost": 0.012686754576861858,
+        "density_cost": 3.9469995498657227,
+        "congestion_cost": 2.4652123269420834,
+        "candidate_wall_seconds": 1.7716023699977086,
+        "grading_seconds": 33.02661108599568,
+        "allocation_memory": {
+          "memory_current_mib": 15.94921875,
+          "memory_peak_mib": 245.1484375
+        }
+      }
+    ]
+  },
+  "4e3db869bd9fe64f54feac65f2ce14ec89f030625dd2f82af192b5ade925700c": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.2797378610048327,
+        "grading_seconds": 4.290448533000017,
+        "allocation_memory": {
+          "memory_current_mib": 15.99609375,
+          "memory_peak_mib": 188.296875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 3.5267126269973232,
+        "grading_seconds": 6.998430485000426,
+        "allocation_memory": {
+          "memory_current_mib": 16.1328125,
+          "memory_peak_mib": 199.12109375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 3.1738855069997953,
+        "grading_seconds": 15.386986833000265,
+        "allocation_memory": {
+          "memory_current_mib": 16.06640625,
+          "memory_peak_mib": 215.421875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.830644591995224,
+        "grading_seconds": 32.203198183000495,
+        "allocation_memory": {
+          "memory_current_mib": 16.13671875,
+          "memory_peak_mib": 245.12890625
+        }
+      }
+    ]
+  },
+  "5b43ecc631b6bd534b45efb4ecd01c5cbaef718b495eab6aa675efa0fe48f10f": {
+    "reward": 0.30321067086128295,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7293099164962769,
+        "wirelength_cost": 0.03573312237858772,
+        "density_cost": 2.1772091388702393,
+        "congestion_cost": 1.20994450775272,
+        "candidate_wall_seconds": 168.3432022900015,
+        "grading_seconds": 4.009551597002428,
+        "allocation_memory": {
+          "memory_current_mib": 16.26953125,
+          "memory_peak_mib": 188.77734375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.095456838607788,
+        "wirelength_cost": 0.029673414304852486,
+        "density_cost": 2.386552333831787,
+        "congestion_cost": 1.7450144834386971,
+        "candidate_wall_seconds": 168.39525167900138,
+        "grading_seconds": 6.828222358999483,
+        "allocation_memory": {
+          "memory_current_mib": 16.05859375,
+          "memory_peak_mib": 199.2578125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.1555442810058594,
+        "wirelength_cost": 0.0338449589908123,
+        "density_cost": 2.4200000762939453,
+        "congestion_cost": 1.8233983155136133,
+        "candidate_wall_seconds": 168.36691173599684,
+        "grading_seconds": 12.599823994001781,
+        "allocation_memory": {
+          "memory_current_mib": 16.06640625,
+          "memory_peak_mib": 215.4140625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 3.211836814880371,
+        "wirelength_cost": 0.004641041159629822,
+        "density_cost": 3.9465041160583496,
+        "congestion_cost": 2.4678871247107095,
+        "candidate_wall_seconds": 168.44181574599497,
+        "grading_seconds": 32.55889913200372,
+        "allocation_memory": {
+          "memory_current_mib": 15.9375,
+          "memory_peak_mib": 245.4296875
+        }
+      }
+    ]
+  },
+  "24b16dafe34bdb80b495f08d76fe0db05047c3da65de44dd7ba93b62aa82176b": {
+    "reward": 0.29844101133289225,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7276058197021484,
+        "wirelength_cost": 0.08919626474380493,
+        "density_cost": 1.6269395351409912,
+        "congestion_cost": 1.6498797495001432,
+        "candidate_wall_seconds": 169.70788341499792,
+        "grading_seconds": 4.011920853998163,
+        "allocation_memory": {
+          "memory_current_mib": 15.96484375,
+          "memory_peak_mib": 254.296875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.1382827758789062,
+        "wirelength_cost": 0.09811676293611526,
+        "density_cost": 2.000725746154785,
+        "congestion_cost": 2.0796062136577764,
+        "candidate_wall_seconds": 169.63128465200134,
+        "grading_seconds": 6.827859147000709,
+        "allocation_memory": {
+          "memory_current_mib": 16.3359375,
+          "memory_peak_mib": 217.546875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.7313790321350098,
+        "wirelength_cost": 0.11306122690439224,
+        "density_cost": 1.8991215229034424,
+        "congestion_cost": 3.3375143328638313,
+        "candidate_wall_seconds": 169.56429988799937,
+        "grading_seconds": 12.640328449997469,
+        "allocation_memory": {
+          "memory_current_mib": 16.22265625,
+          "memory_peak_mib": 215.703125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.805716037750244,
+        "wirelength_cost": 0.08050533384084702,
+        "density_cost": 2.148723840713501,
+        "congestion_cost": 3.3016974289851664,
+        "candidate_wall_seconds": 169.70004513700405,
+        "grading_seconds": 32.18295322000631,
+        "allocation_memory": {
+          "memory_current_mib": 15.90625,
+          "memory_peak_mib": 245.3203125
+        }
+      }
+    ]
+  },
+  "4f3f91adc9a49ce53cb6c1bd688c05742b1352775f389f3eeba6a424648d1a39": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 25.56038455200178,
+        "grading_seconds": 4.149747985997237,
+        "allocation_memory": {
+          "memory_current_mib": 16.36328125,
+          "memory_peak_mib": 259.15625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 23.908396765997168,
+        "grading_seconds": 7.145708056006697,
+        "allocation_memory": {
+          "memory_current_mib": 15.90234375,
+          "memory_peak_mib": 266.015625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 25.212442768002802,
+        "grading_seconds": 12.659992291999515,
+        "allocation_memory": {
+          "memory_current_mib": 16.03515625,
+          "memory_peak_mib": 282.515625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 29.422847188005107,
+        "grading_seconds": 33.44854927100096,
+        "allocation_memory": {
+          "memory_current_mib": 15.9375,
+          "memory_peak_mib": 318.33984375
+        }
+      }
+    ]
+  },
+  "c3ede946f4e00d94f834460f801a2ba01df4067fdbb86385cd44fdd309de5bd2": {
+    "reward": 0.3987078675810712,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1075010299682617,
+        "wirelength_cost": 0.06773839890956879,
+        "density_cost": 0.9102105498313904,
+        "congestion_cost": 1.1693146371513143,
+        "candidate_wall_seconds": 30.93397804399865,
+        "grading_seconds": 4.133620888002042,
+        "allocation_memory": {
+          "memory_current_mib": 16.0625,
+          "memory_peak_mib": 479.828125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.372833490371704,
+        "wirelength_cost": 0.08848939090967178,
+        "density_cost": 0.7946819067001343,
+        "congestion_cost": 1.774006355587723,
+        "candidate_wall_seconds": 37.999068017001264,
+        "grading_seconds": 6.954328965002787,
+        "allocation_memory": {
+          "memory_current_mib": 16.328125,
+          "memory_peak_mib": 625.390625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.632412314414978,
+        "wirelength_cost": 0.0914645716547966,
+        "density_cost": 0.8399376273155212,
+        "congestion_cost": 2.2419580217627155,
+        "candidate_wall_seconds": 39.234039269002096,
+        "grading_seconds": 12.861539700999856,
+        "allocation_memory": {
+          "memory_current_mib": 16.23046875,
+          "memory_peak_mib": 594.4609375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9196611642837524,
+        "wirelength_cost": 0.07588379085063934,
+        "density_cost": 0.8771249651908875,
+        "congestion_cost": 2.8104297241306724,
+        "candidate_wall_seconds": 36.58261208699696,
+        "grading_seconds": 32.86049385499791,
+        "allocation_memory": {
+          "memory_current_mib": 16.04296875,
+          "memory_peak_mib": 525.2578125
+        }
+      }
+    ]
+  },
+  "9c80a321c80f8be130f24b22707903212b887be94b12af417a14df552f0a4119": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.872684162000951,
+        "grading_seconds": 4.422590330003004,
+        "allocation_memory": {
+          "memory_current_mib": 16.1171875,
+          "memory_peak_mib": 188.6484375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.822264747999725,
+        "grading_seconds": 7.319279503000871,
+        "allocation_memory": {
+          "memory_current_mib": 16.03515625,
+          "memory_peak_mib": 199.01953125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.7234035420042346,
+        "grading_seconds": 13.878108541000984,
+        "allocation_memory": {
+          "memory_current_mib": 16.09765625,
+          "memory_peak_mib": 215.48046875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.772408168995753,
+        "grading_seconds": 33.84925815799943,
+        "allocation_memory": {
+          "memory_current_mib": 16.05078125,
+          "memory_peak_mib": 245.078125
+        }
+      }
+    ]
+  },
+  "b2b09127b053f2453d6c9da3967536bd971a8418d8e6bd2e3f228c41169ce04c": {
+    "reward": 0.4388796019146174,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.6875135350019264,
+        "grading_seconds": 4.310120522000943,
+        "allocation_memory": {
+          "memory_current_mib": 16.0625,
+          "memory_peak_mib": 188.578125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.826237815002969,
+        "grading_seconds": 7.245721090999723,
+        "allocation_memory": {
+          "memory_current_mib": 16.234375,
+          "memory_peak_mib": 199.328125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4131468534469604,
+        "wirelength_cost": 0.0783311054110527,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.9221213959972374,
+        "grading_seconds": 14.003791376999288,
+        "allocation_memory": {
+          "memory_current_mib": 15.94140625,
+          "memory_peak_mib": 215.58203125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020102500915527,
+        "wirelength_cost": 0.06962541490793228,
+        "density_cost": 0.4991989731788635,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.8295322049962124,
+        "grading_seconds": 37.938180965000356,
+        "allocation_memory": {
+          "memory_current_mib": 16.05859375,
+          "memory_peak_mib": 245.1015625
+        }
+      }
+    ]
+  },
+  "81eb7db22812e22c9996f542fbdcde9eb1a3b2b16deb671dca10bc00b130d41b": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.5806080409965944,
+        "grading_seconds": 4.27861098399444,
+        "allocation_memory": {
+          "memory_current_mib": 16.1328125,
+          "memory_peak_mib": 188.7890625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.473453779999545,
+        "grading_seconds": 7.015117947001272,
+        "allocation_memory": {
+          "memory_current_mib": 16.12890625,
+          "memory_peak_mib": 199.046875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.5812621930017485,
+        "grading_seconds": 13.431431805998727,
+        "allocation_memory": {
+          "memory_current_mib": 15.890625,
+          "memory_peak_mib": 215.69921875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.4751817860014853,
+        "grading_seconds": 35.13174517399602,
+        "allocation_memory": {
+          "memory_current_mib": 16.00390625,
+          "memory_peak_mib": 245.28515625
+        }
+      }
+    ]
+  },
+  "c3885819de4f6302dac3149fe72f2112b440c3654a196c047f0348415e73b677": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.384857776996796,
+        "grading_seconds": 4.206219926003541,
+        "allocation_memory": {
+          "memory_current_mib": 15.96484375,
+          "memory_peak_mib": 188.3359375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.6237009780015796,
+        "grading_seconds": 7.112409933004528,
+        "allocation_memory": {
+          "memory_current_mib": 15.9609375,
+          "memory_peak_mib": 199.03125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.6231456480018096,
+        "grading_seconds": 13.22678444700432,
+        "allocation_memory": {
+          "memory_current_mib": 15.91796875,
+          "memory_peak_mib": 215.578125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.5301032870047493,
+        "grading_seconds": 37.636750161000236,
+        "allocation_memory": {
+          "memory_current_mib": 16.26171875,
+          "memory_peak_mib": 245.30078125
+        }
+      }
+    ]
+  },
+  "9cc6cbe61af7a14c2e1b7c310762f5d30f1e1574521b03a47c26569131073108": {
+    "reward": 0.369204185639293,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4076372385025024,
+        "wirelength_cost": 0.054379016160964966,
+        "density_cost": 1.7300945520401,
+        "congestion_cost": 0.9764218470237597,
+        "candidate_wall_seconds": 29.478426187997684,
+        "grading_seconds": 3.995546657999512,
+        "allocation_memory": {
+          "memory_current_mib": 16.140625,
+          "memory_peak_mib": 208.875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5848588943481445,
+        "wirelength_cost": 0.06396453082561493,
+        "density_cost": 1.6267914772033691,
+        "congestion_cost": 1.414997204020017,
+        "candidate_wall_seconds": 48.578405733002,
+        "grading_seconds": 6.753600969997933,
+        "allocation_memory": {
+          "memory_current_mib": 16.359375,
+          "memory_peak_mib": 229.90234375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7273045778274536,
+        "wirelength_cost": 0.06376387923955917,
+        "density_cost": 1.685437560081482,
+        "congestion_cost": 1.6416438517586747,
+        "candidate_wall_seconds": 44.38440978900326,
+        "grading_seconds": 12.5422472059945,
+        "allocation_memory": {
+          "memory_current_mib": 16.015625,
+          "memory_peak_mib": 233.77734375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.1143126487731934,
+        "wirelength_cost": 0.056930989027023315,
+        "density_cost": 1.824941873550415,
+        "congestion_cost": 2.2898217088871684,
+        "candidate_wall_seconds": 45.01065355799801,
+        "grading_seconds": 33.18896448000305,
+        "allocation_memory": {
+          "memory_current_mib": 15.91796875,
+          "memory_peak_mib": 245.171875
+        }
+      }
+    ]
+  },
+  "d22c2e32eb34547ab0f799fa90bd20935cc8388e6ad96e8be37e7ad76140532d": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.0263037710028584,
+        "grading_seconds": 4.057132022004225,
+        "allocation_memory": {
+          "memory_current_mib": 16.01953125,
+          "memory_peak_mib": 188.30859375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.9209713059972273,
+        "grading_seconds": 7.0328392740048,
+        "allocation_memory": {
+          "memory_current_mib": 15.96484375,
+          "memory_peak_mib": 199.26171875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.9712322839986882,
+        "grading_seconds": 13.105183431995101,
+        "allocation_memory": {
+          "memory_current_mib": 16.09765625,
+          "memory_peak_mib": 215.453125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.920445023002685,
+        "grading_seconds": 31.995378396000888,
+        "allocation_memory": {
+          "memory_current_mib": 16.03125,
+          "memory_peak_mib": 245.18359375
+        }
+      }
+    ]
+  },
+  "fef45e1bdb138273c3bb073519898871556f6840801da5e8cef3e7357cbee24f": {
+    "reward": 0.425899712824753,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.9910563826560974,
+        "wirelength_cost": 0.07310569286346436,
+        "density_cost": 0.6053264141082764,
+        "congestion_cost": 1.2305750168087741,
+        "candidate_wall_seconds": 17.596124811003392,
+        "grading_seconds": 4.129999292999855,
+        "allocation_memory": {
+          "memory_current_mib": 16.1953125,
+          "memory_peak_mib": 188.921875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.2393372058868408,
+        "wirelength_cost": 0.08800958096981049,
+        "density_cost": 0.6286309957504272,
+        "congestion_cost": 1.6740242549503752,
+        "candidate_wall_seconds": 27.262995506000152,
+        "grading_seconds": 6.831955087996903,
+        "allocation_memory": {
+          "memory_current_mib": 16.13671875,
+          "memory_peak_mib": 198.9921875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5415866374969482,
+        "wirelength_cost": 0.08140035718679428,
+        "density_cost": 0.7261673212051392,
+        "congestion_cost": 2.19420537342824,
+        "candidate_wall_seconds": 27.313074235993554,
+        "grading_seconds": 13.845755572001508,
+        "allocation_memory": {
+          "memory_current_mib": 16.08984375,
+          "memory_peak_mib": 215.51953125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6199021339416504,
+        "wirelength_cost": 0.06997967511415482,
+        "density_cost": 0.5336939096450806,
+        "congestion_cost": 2.566151166553194,
+        "candidate_wall_seconds": 25.959634216000268,
+        "grading_seconds": 32.52266656300344,
+        "allocation_memory": {
+          "memory_current_mib": 16.00390625,
+          "memory_peak_mib": 245.07421875
+        }
+      }
+    ]
+  },
+  "15f8d2c5dba5c5b2b0c7fc5d6d843f13e83440bdc5f6f37cafde2d84079ce134": {
+    "reward": 0.35015947944559844,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4722874164581299,
+        "wirelength_cost": 0.04497754946351051,
+        "density_cost": 1.9304993152618408,
+        "congestion_cost": 0.9241204488888969,
+        "candidate_wall_seconds": 9.200450832002389,
+        "grading_seconds": 3.960448184996494,
+        "allocation_memory": {
+          "memory_current_mib": 15.94921875,
+          "memory_peak_mib": 188.6484375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7567543983459473,
+        "wirelength_cost": 0.04707448184490204,
+        "density_cost": 1.9582502841949463,
+        "congestion_cost": 1.4611096342124887,
+        "candidate_wall_seconds": 5.330931085001794,
+        "grading_seconds": 6.788411406996602,
+        "allocation_memory": {
+          "memory_current_mib": 16.09765625,
+          "memory_peak_mib": 199.10546875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.794097900390625,
+        "wirelength_cost": 0.05134616419672966,
+        "density_cost": 1.9844824075698853,
+        "congestion_cost": 1.5010210410553535,
+        "candidate_wall_seconds": 6.184506871002668,
+        "grading_seconds": 12.791077874004259,
+        "allocation_memory": {
+          "memory_current_mib": 15.9140625,
+          "memory_peak_mib": 215.796875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.400226593017578,
+        "wirelength_cost": 0.035365138202905655,
+        "density_cost": 2.971658945083618,
+        "congestion_cost": 1.7580643070781348,
+        "candidate_wall_seconds": 11.556783428000927,
+        "grading_seconds": 32.014102968998486,
+        "allocation_memory": {
+          "memory_current_mib": 15.90625,
+          "memory_peak_mib": 245.12890625
+        }
+      }
+    ]
+  },
+  "df7aba566a6f464b1e7ecb55b6f6affe8e4e2e5c1e2ea82406fd643fc01ab912": {
+    "reward": 0.40795468568598886,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.33395516872406,
+        "wirelength_cost": 0.07522771507501602,
+        "density_cost": 1.1535693407058716,
+        "congestion_cost": 1.3638855022294798,
+        "candidate_wall_seconds": 6.781922202004353,
+        "grading_seconds": 4.014279172006354,
+        "allocation_memory": {
+          "memory_current_mib": 16.20703125,
+          "memory_peak_mib": 188.64453125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.2887446880340576,
+        "wirelength_cost": 0.07298101484775543,
+        "density_cost": 0.8790996670722961,
+        "congestion_cost": 1.552427689190067,
+        "candidate_wall_seconds": 8.634536487996229,
+        "grading_seconds": 6.9627818779990776,
+        "allocation_memory": {
+          "memory_current_mib": 16.2578125,
+          "memory_peak_mib": 199.1796875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5003039836883545,
+        "wirelength_cost": 0.07465526461601257,
+        "density_cost": 0.8221403956413269,
+        "congestion_cost": 2.0291569856641076,
+        "candidate_wall_seconds": 6.8386130389990285,
+        "grading_seconds": 12.77946609799983,
+        "allocation_memory": {
+          "memory_current_mib": 16.0234375,
+          "memory_peak_mib": 215.90625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6820067167282104,
+        "wirelength_cost": 0.06402560323476791,
+        "density_cost": 0.7756731510162354,
+        "congestion_cost": 2.4602889011149767,
+        "candidate_wall_seconds": 7.335558120001224,
+        "grading_seconds": 32.11476951700024,
+        "allocation_memory": {
+          "memory_current_mib": 15.9453125,
+          "memory_peak_mib": 245.0390625
+        }
+      }
+    ]
+  },
+  "a28b069c531ba83801b36da0499ece37ba7db6efe071b7aa1df2218a223160b8": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.6285263469981146,
+        "grading_seconds": 4.031697703001555,
+        "allocation_memory": {
+          "memory_current_mib": 16.09765625,
+          "memory_peak_mib": 206.71875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.726267876998463,
+        "grading_seconds": 7.673352885998611,
+        "allocation_memory": {
+          "memory_current_mib": 16.09375,
+          "memory_peak_mib": 219.03515625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.8239147610001964,
+        "grading_seconds": 13.31285707400093,
+        "allocation_memory": {
+          "memory_current_mib": 15.921875,
+          "memory_peak_mib": 215.5234375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 3.025437423006224,
+        "grading_seconds": 32.62947606899979,
+        "allocation_memory": {
+          "memory_current_mib": 16.140625,
+          "memory_peak_mib": 245.1328125
+        }
+      }
+    ]
+  },
+  "9b07b10adde71f7af0b2903c92c6b427fe14a5eecbaa5695accc7e4f3efadd3a": {
+    "reward": 0.397209436615375,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.2646360397338867,
+        "wirelength_cost": 0.05541884899139404,
+        "density_cost": 1.3694449663162231,
+        "congestion_cost": 1.048989450772836,
+        "candidate_wall_seconds": 19.734917474001122,
+        "grading_seconds": 4.011899863995495,
+        "allocation_memory": {
+          "memory_current_mib": 16.1328125,
+          "memory_peak_mib": 192.80859375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4101366996765137,
+        "wirelength_cost": 0.06447762250900269,
+        "density_cost": 1.1968142986297607,
+        "congestion_cost": 1.4945040097413305,
+        "candidate_wall_seconds": 14.672086145998037,
+        "grading_seconds": 6.834934357997554,
+        "allocation_memory": {
+          "memory_current_mib": 15.9609375,
+          "memory_peak_mib": 204.73046875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5575647354125977,
+        "wirelength_cost": 0.06707695126533508,
+        "density_cost": 1.147698998451233,
+        "congestion_cost": 1.833276648873465,
+        "candidate_wall_seconds": 17.83583290700335,
+        "grading_seconds": 12.780579197002226,
+        "allocation_memory": {
+          "memory_current_mib": 15.875,
+          "memory_peak_mib": 215.47265625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.8379167318344116,
+        "wirelength_cost": 0.056997574865818024,
+        "density_cost": 1.2495707273483276,
+        "congestion_cost": 2.3122675505096693,
+        "candidate_wall_seconds": 21.58843969499867,
+        "grading_seconds": 32.85307704200386,
+        "allocation_memory": {
+          "memory_current_mib": 16.2578125,
+          "memory_peak_mib": 245.26171875
+        }
+      }
+    ]
+  },
+  "5198e5994ef01b79980c4afd3f62391f38155f851c51553daf3d1d1ab0fcd6d0": {
+    "reward": 0.33132243067423633,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.548025369644165,
+        "wirelength_cost": 0.03741133585572243,
+        "density_cost": 2.1022794246673584,
+        "congestion_cost": 0.9189487100200165,
+        "candidate_wall_seconds": 6.888887321998482,
+        "grading_seconds": 4.82204472200101,
+        "allocation_memory": {
+          "memory_current_mib": 16.1171875,
+          "memory_peak_mib": 188.4765625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9066885709762573,
+        "wirelength_cost": 0.033025238662958145,
+        "density_cost": 2.338918447494507,
+        "congestion_cost": 1.408408147865412,
+        "candidate_wall_seconds": 8.53803794599662,
+        "grading_seconds": 6.88962065600208,
+        "allocation_memory": {
+          "memory_current_mib": 16.20703125,
+          "memory_peak_mib": 199.23828125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9105957746505737,
+        "wirelength_cost": 0.036790020763874054,
+        "density_cost": 2.358935832977295,
+        "congestion_cost": 1.3886757216769652,
+        "candidate_wall_seconds": 9.984896942994965,
+        "grading_seconds": 13.099760222998157,
+        "allocation_memory": {
+          "memory_current_mib": 15.93359375,
+          "memory_peak_mib": 215.7109375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.70752215385437,
+        "wirelength_cost": 0.019198646768927574,
+        "density_cost": 3.773775100708008,
+        "congestion_cost": 1.602871823974948,
+        "candidate_wall_seconds": 13.849995344004128,
+        "grading_seconds": 33.03138984499674,
+        "allocation_memory": {
+          "memory_current_mib": 15.8984375,
+          "memory_peak_mib": 245.11328125
+        }
+      }
+    ]
+  },
+  "906f1c7b89fd1d41a103ae5bc35aacc026bf178b07b7d608b7030372449a1b0c": {
+    "reward": 0.18464435964362172,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 3.3891286849975586,
+        "wirelength_cost": 0.13117338716983795,
+        "density_cost": 2.3476436138153076,
+        "congestion_cost": 4.1682672445721085,
+        "candidate_wall_seconds": 14.786240137997083,
+        "grading_seconds": 3.8614201140007935,
+        "allocation_memory": {
+          "memory_current_mib": 16.34765625,
+          "memory_peak_mib": 418.32421875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 3.6415200233459473,
+        "wirelength_cost": 0.11613140255212784,
+        "density_cost": 2.3782191276550293,
+        "congestion_cost": 4.672558023995627,
+        "candidate_wall_seconds": 11.412607524001942,
+        "grading_seconds": 7.175033163999615,
+        "allocation_memory": {
+          "memory_current_mib": 16.06640625,
+          "memory_peak_mib": 319.79296875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 5.130322456359863,
+        "wirelength_cost": 0.12669487297534943,
+        "density_cost": 2.408536672592163,
+        "congestion_cost": 7.5987180678488135,
+        "candidate_wall_seconds": 17.61912886400387,
+        "grading_seconds": 12.6178089229943,
+        "allocation_memory": {
+          "memory_current_mib": 16.3125,
+          "memory_peak_mib": 370.64453125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 5.50229549407959,
+        "wirelength_cost": 0.0738052949309349,
+        "density_cost": 3.9345569610595703,
+        "congestion_cost": 6.92242269905133,
+        "candidate_wall_seconds": 23.871253427001648,
+        "grading_seconds": 31.91416527399997,
+        "allocation_memory": {
+          "memory_current_mib": 16.11328125,
+          "memory_peak_mib": 462.578125
+        }
+      }
+    ]
+  },
+  "834a16f9b661c863b9b0b1e7d2a58acb0df511062c4403d9821cab9f9c465dc1": {
+    "reward": 0.32401714439412077,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9417657852172852,
+        "wirelength_cost": 0.049434587359428406,
+        "density_cost": 2.32340407371521,
+        "congestion_cost": 1.4612583407713917,
+        "candidate_wall_seconds": 169.99930082399806,
+        "grading_seconds": 4.023153542999353,
+        "allocation_memory": {
+          "memory_current_mib": 15.921875,
+          "memory_peak_mib": 188.68359375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9427807331085205,
+        "wirelength_cost": 0.0352550745010376,
+        "density_cost": 2.35074782371521,
+        "congestion_cost": 1.4643035407725986,
+        "candidate_wall_seconds": 169.86549452900363,
+        "grading_seconds": 6.603068219999841,
+        "allocation_memory": {
+          "memory_current_mib": 16.35546875,
+          "memory_peak_mib": 199.37109375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9697844982147217,
+        "wirelength_cost": 0.03692292049527168,
+        "density_cost": 2.388730525970459,
+        "congestion_cost": 1.476992530733456,
+        "candidate_wall_seconds": 170.3079452480015,
+        "grading_seconds": 12.713318997004535,
+        "allocation_memory": {
+          "memory_current_mib": 16.01953125,
+          "memory_peak_mib": 215.390625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.490694761276245,
+        "wirelength_cost": 0.0068969931453466415,
+        "density_cost": 3.9428226947784424,
+        "congestion_cost": 1.024772713215522,
+        "candidate_wall_seconds": 170.2360762870012,
+        "grading_seconds": 33.55979703099729,
+        "allocation_memory": {
+          "memory_current_mib": 16.25,
+          "memory_peak_mib": 245.22265625
+        }
+      }
+    ]
+  },
+  "8cd8c8159bc36b57c10229df58fb9da3d7ecbc2986746aa2d1d8732699b28ac3": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 150.7720616670049,
+        "grading_seconds": 4.051683929996216,
+        "allocation_memory": {
+          "memory_current_mib": 16.30078125,
+          "memory_peak_mib": 404.6328125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 150.72890758900394,
+        "grading_seconds": 6.794655249999778,
+        "allocation_memory": {
+          "memory_current_mib": 16.15625,
+          "memory_peak_mib": 413.33203125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 150.7908846709979,
+        "grading_seconds": 12.57940040500398,
+        "allocation_memory": {
+          "memory_current_mib": 15.9140625,
+          "memory_peak_mib": 419.51953125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 150.7904516760027,
+        "grading_seconds": 32.11410838700249,
+        "allocation_memory": {
+          "memory_current_mib": 16.27734375,
+          "memory_peak_mib": 465.9921875
+        }
+      }
+    ]
+  },
+  "9904bc9c848e8f7bb57d0abfe98da4786908d93dc791d2ddc3f99fa22ac652d8": {
+    "reward": 0.40852523254890494,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.0728299617767334,
+        "wirelength_cost": 0.08267296105623245,
+        "density_cost": 0.6973751187324524,
+        "congestion_cost": 1.2829388136112272,
+        "candidate_wall_seconds": 96.92799114199443,
+        "grading_seconds": 3.9744756759973825,
+        "allocation_memory": {
+          "memory_current_mib": 16.01953125,
+          "memory_peak_mib": 513.6171875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.270787239074707,
+        "wirelength_cost": 0.09503699094057083,
+        "density_cost": 0.7194467186927795,
+        "congestion_cost": 1.6320537099210284,
+        "candidate_wall_seconds": 91.57539692399587,
+        "grading_seconds": 6.876783436004189,
+        "allocation_memory": {
+          "memory_current_mib": 16.1640625,
+          "memory_peak_mib": 509.1640625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5901939868927002,
+        "wirelength_cost": 0.10389348119497299,
+        "density_cost": 0.7110775113105774,
+        "congestion_cost": 2.261523527768945,
+        "candidate_wall_seconds": 173.22895048600185,
+        "grading_seconds": 12.651779068997712,
+        "allocation_memory": {
+          "memory_current_mib": 16.015625,
+          "memory_peak_mib": 737.94140625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.8575056791305542,
+        "wirelength_cost": 0.08042251318693161,
+        "density_cost": 0.8012876510620117,
+        "congestion_cost": 2.7528787612330152,
+        "candidate_wall_seconds": 178.75563467299799,
+        "grading_seconds": 31.700790380004037,
+        "allocation_memory": {
+          "memory_current_mib": 16.27734375,
+          "memory_peak_mib": 1607.2734375
+        }
+      }
+    ]
+  },
+  "0d056a76c5d0b45f99ee1c7034640781c76ca4c43d40e82c44be0dba913f3898": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 3.6232617409987142,
+        "grading_seconds": 4.197957244003192,
+        "allocation_memory": {
+          "memory_current_mib": 15.98828125,
+          "memory_peak_mib": 188.5078125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 4.774898633997509,
+        "grading_seconds": 6.785876450005162,
+        "allocation_memory": {
+          "memory_current_mib": 16.1484375,
+          "memory_peak_mib": 199.25390625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 4.775228097998479,
+        "grading_seconds": 12.546481164994475,
+        "allocation_memory": {
+          "memory_current_mib": 16.234375,
+          "memory_peak_mib": 215.75
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 4.476528777995554,
+        "grading_seconds": 35.547047970001586,
+        "allocation_memory": {
+          "memory_current_mib": 15.85546875,
+          "memory_peak_mib": 245.125
+        }
+      }
+    ]
+  },
+  "47926202c8e0633d1bfecd42c6868f87435fc1d4331b8feac637498b5005d600": {
+    "reward": 0.3209473427879233,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9780100584030151,
+        "wirelength_cost": 0.05289574712514877,
+        "density_cost": 2.3083913326263428,
+        "congestion_cost": 1.5418372521483523,
+        "candidate_wall_seconds": 4.933563607999531,
+        "grading_seconds": 3.9806493049982237,
+        "allocation_memory": {
+          "memory_current_mib": 15.8984375,
+          "memory_peak_mib": 206.76953125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.8744771480560303,
+        "wirelength_cost": 0.03586432710289955,
+        "density_cost": 2.332895040512085,
+        "congestion_cost": 1.344330390660094,
+        "candidate_wall_seconds": 5.333231105003506,
+        "grading_seconds": 6.986259714998596,
+        "allocation_memory": {
+          "memory_current_mib": 15.99609375,
+          "memory_peak_mib": 219.3359375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9392609596252441,
+        "wirelength_cost": 0.039330776780843735,
+        "density_cost": 2.3503313064575195,
+        "congestion_cost": 1.4495292696878563,
+        "candidate_wall_seconds": 7.262765277999279,
+        "grading_seconds": 12.84933975199965,
+        "allocation_memory": {
+          "memory_current_mib": 16.0390625,
+          "memory_peak_mib": 221.203125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.6713554859161377,
+        "wirelength_cost": 0.023691190406680107,
+        "density_cost": 3.7245991230010986,
+        "congestion_cost": 1.570729558763328,
+        "candidate_wall_seconds": 5.93363637800212,
+        "grading_seconds": 32.50703031699959,
+        "allocation_memory": {
+          "memory_current_mib": 15.9921875,
+          "memory_peak_mib": 245.01171875
+        }
+      }
+    ]
+  },
+  "859a286fef288cc3437ccbedfc2c3eb0c148574e315cacc7578e6c34aed4e235": {
+    "reward": 0.43760832717469555,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.9661548137664795,
+        "wirelength_cost": 0.0651383101940155,
+        "density_cost": 0.660952091217041,
+        "congestion_cost": 1.1410809916634952,
+        "candidate_wall_seconds": 7.794663347995083,
+        "grading_seconds": 4.724936049002281,
+        "allocation_memory": {
+          "memory_current_mib": 16.1171875,
+          "memory_peak_mib": 283.48828125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1647813320159912,
+        "wirelength_cost": 0.07518408447504044,
+        "density_cost": 0.6152438521385193,
+        "congestion_cost": 1.563950503273486,
+        "candidate_wall_seconds": 5.634862852999504,
+        "grading_seconds": 7.457378020997567,
+        "allocation_memory": {
+          "memory_current_mib": 16.03515625,
+          "memory_peak_mib": 224.54296875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4072328805923462,
+        "wirelength_cost": 0.07627681642770767,
+        "density_cost": 0.5974783301353455,
+        "congestion_cost": 2.064433787877479,
+        "candidate_wall_seconds": 6.135017961998528,
+        "grading_seconds": 12.721729049000714,
+        "allocation_memory": {
+          "memory_current_mib": 15.86328125,
+          "memory_peak_mib": 215.53125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6024248600006104,
+        "wirelength_cost": 0.06771653890609741,
+        "density_cost": 0.5403456091880798,
+        "congestion_cost": 2.5290710737415933,
+        "candidate_wall_seconds": 12.92483139000251,
+        "grading_seconds": 34.51367961499636,
+        "allocation_memory": {
+          "memory_current_mib": 15.9609375,
+          "memory_peak_mib": 245.2109375
+        }
+      }
+    ]
+  },
+  "ac909088bc36c6948706fe8984f47df7840b7992b72503a635a46a4140a1cf9a": {
+    "reward": 0.3303978254088667,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5768773555755615,
+        "wirelength_cost": 0.03585052490234375,
+        "density_cost": 2.145531177520752,
+        "congestion_cost": 0.9365225819992112,
+        "candidate_wall_seconds": 165.51572408899665,
+        "grading_seconds": 3.925554417000967,
+        "allocation_memory": {
+          "memory_current_mib": 16.08984375,
+          "memory_peak_mib": 188.3515625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9128918647766113,
+        "wirelength_cost": 0.03099050745368004,
+        "density_cost": 2.3657093048095703,
+        "congestion_cost": 1.3980934717624636,
+        "candidate_wall_seconds": 165.46715068299818,
+        "grading_seconds": 6.922583495994331,
+        "allocation_memory": {
+          "memory_current_mib": 16.34375,
+          "memory_peak_mib": 199.37890625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.89886474609375,
+        "wirelength_cost": 0.03453656658530235,
+        "density_cost": 2.381086587905884,
+        "congestion_cost": 1.3475695795214233,
+        "candidate_wall_seconds": 165.52011527500144,
+        "grading_seconds": 13.340354643005412,
+        "allocation_memory": {
+          "memory_current_mib": 16.2734375,
+          "memory_peak_mib": 215.65625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.7179832458496094,
+        "wirelength_cost": 0.016596317291259766,
+        "density_cost": 3.824800491333008,
+        "congestion_cost": 1.5779735455755488,
+        "candidate_wall_seconds": 165.50026471599995,
+        "grading_seconds": 31.930628772999626,
+        "allocation_memory": {
+          "memory_current_mib": 16.0546875,
+          "memory_peak_mib": 245.11328125
+        }
+      }
+    ]
+  },
+  "017b5a1e8ec3700464317868376cb5d50a2e7400f19f3fff3010caf0159beeac": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 10.789723930000036,
+        "grading_seconds": 3.988193905002845,
+        "allocation_memory": {
+          "memory_current_mib": 16.109375,
+          "memory_peak_mib": 188.57421875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 15.04470015100378,
+        "grading_seconds": 6.911085107996769,
+        "allocation_memory": {
+          "memory_current_mib": 16.14453125,
+          "memory_peak_mib": 199.06640625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 11.643052976003673,
+        "grading_seconds": 12.687835761003953,
+        "allocation_memory": {
+          "memory_current_mib": 16.109375,
+          "memory_peak_mib": 215.63671875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 18.417869612996583,
+        "grading_seconds": 33.91818667500047,
+        "allocation_memory": {
+          "memory_current_mib": 15.921875,
+          "memory_peak_mib": 245.171875
+        }
+      }
+    ]
+  },
+  "2744bd36015d01da0259ef46f51d3fbe8ec20fb26801e47226fbdc1c4abf2ac2": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.8709528769977624,
+        "grading_seconds": 3.946403066998755,
+        "allocation_memory": {
+          "memory_current_mib": 16.08984375,
+          "memory_peak_mib": 188.50390625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.9226289560028818,
+        "grading_seconds": 6.8009197270002915,
+        "allocation_memory": {
+          "memory_current_mib": 16.1484375,
+          "memory_peak_mib": 198.9296875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.971999194000091,
+        "grading_seconds": 13.856335983000463,
+        "allocation_memory": {
+          "memory_current_mib": 16.08203125,
+          "memory_peak_mib": 215.53125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.073189768998418,
+        "grading_seconds": 33.34868114700657,
+        "allocation_memory": {
+          "memory_current_mib": 16.01171875,
+          "memory_peak_mib": 245.046875
+        }
+      }
+    ]
+  },
+  "a3c187c4c5613c1a3018cc1a98988963d5c5e6897f69a38f4ab1847e0a348ad9": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 5.176670018998266,
+        "grading_seconds": 4.048404894005216,
+        "allocation_memory": {
+          "memory_current_mib": 15.88671875,
+          "memory_peak_mib": 188.34375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 6.5772924609991605,
+        "grading_seconds": 6.741530070001318,
+        "allocation_memory": {
+          "memory_current_mib": 16.16796875,
+          "memory_peak_mib": 199.3359375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 6.93024090599647,
+        "grading_seconds": 12.859166565001942,
+        "allocation_memory": {
+          "memory_current_mib": 15.96484375,
+          "memory_peak_mib": 215.5703125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 6.129606922004314,
+        "grading_seconds": 32.290779151000606,
+        "allocation_memory": {
+          "memory_current_mib": 15.92578125,
+          "memory_peak_mib": 245.20703125
+        }
+      }
+    ]
+  },
+  "65459cd599c9084ab44017faeab77e0208c2ea9f2e179362aec54b107a768974": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 7.3309312040000805,
+        "grading_seconds": 4.107172520001768,
+        "allocation_memory": {
+          "memory_current_mib": 15.93359375,
+          "memory_peak_mib": 188.48828125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 9.884099750001042,
+        "grading_seconds": 7.021039253995696,
+        "allocation_memory": {
+          "memory_current_mib": 16.01953125,
+          "memory_peak_mib": 199.296875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 9.98148442299862,
+        "grading_seconds": 12.938260568997066,
+        "allocation_memory": {
+          "memory_current_mib": 15.9453125,
+          "memory_peak_mib": 215.625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 9.238042894998216,
+        "grading_seconds": 32.706134241001564,
+        "allocation_memory": {
+          "memory_current_mib": 16.015625,
+          "memory_peak_mib": 245.03125
+        }
+      }
+    ]
+  },
+  "be432b63c4783dacd7efde48def7b8ff9809fc46c8eec062185209c7b2f5bed1": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.8722208830004092,
+        "grading_seconds": 4.153917902003741,
+        "allocation_memory": {
+          "memory_current_mib": 15.921875,
+          "memory_peak_mib": 188.62890625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.9233461269977852,
+        "grading_seconds": 7.120126145004178,
+        "allocation_memory": {
+          "memory_current_mib": 16.484375,
+          "memory_peak_mib": 199.38671875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.8708482859947253,
+        "grading_seconds": 13.453916104997916,
+        "allocation_memory": {
+          "memory_current_mib": 16.02734375,
+          "memory_peak_mib": 215.44140625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.7713901399984024,
+        "grading_seconds": 32.673532478002016,
+        "allocation_memory": {
+          "memory_current_mib": 15.9296875,
+          "memory_peak_mib": 244.94921875
+        }
+      }
+    ]
+  },
+  "779fca3cb57e4429fcad4ed3006743cfcd2fbcda2617a4fb066cd1d9ee34bc19": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.7209238029972767,
+        "grading_seconds": 4.0075258939978085,
+        "allocation_memory": {
+          "memory_current_mib": 15.9375,
+          "memory_peak_mib": 188.25
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.9243496870039962,
+        "grading_seconds": 7.029241494994494,
+        "allocation_memory": {
+          "memory_current_mib": 16.1640625,
+          "memory_peak_mib": 199.21484375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.669786036000005,
+        "grading_seconds": 12.988128855999094,
+        "allocation_memory": {
+          "memory_current_mib": 15.859375,
+          "memory_peak_mib": 215.83984375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.7192854299937608,
+        "grading_seconds": 32.102922951002256,
+        "allocation_memory": {
+          "memory_current_mib": 16.0078125,
+          "memory_peak_mib": 245.0234375
+        }
+      }
+    ]
+  },
+  "83ab99e0b576921758526f49de6b2a4ec3d3f24c1d03e1ed055a07e071bd9937": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.4246783560010954,
+        "grading_seconds": 4.145736098995258,
+        "allocation_memory": {
+          "memory_current_mib": 15.9296875,
+          "memory_peak_mib": 188.3984375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.423431151000841,
+        "grading_seconds": 7.083041404999676,
+        "allocation_memory": {
+          "memory_current_mib": 16.2265625,
+          "memory_peak_mib": 199.01953125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.4209192380003515,
+        "grading_seconds": 12.764907969001797,
+        "allocation_memory": {
+          "memory_current_mib": 16.1328125,
+          "memory_peak_mib": 215.5625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.4211489079971216,
+        "grading_seconds": 32.64391029899707,
+        "allocation_memory": {
+          "memory_current_mib": 16.02734375,
+          "memory_peak_mib": 245.234375
+        }
+      }
+    ]
+  },
+  "01f06580a940b828359c8d922ad93b00c9b33d7e3a26c36637f43e385a2f09dd": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 5.033110833996034,
+        "grading_seconds": 4.442403546003334,
+        "allocation_memory": {
+          "memory_current_mib": 15.95703125,
+          "memory_peak_mib": 236.01953125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 4.729052461996616,
+        "grading_seconds": 7.182879961997969,
+        "allocation_memory": {
+          "memory_current_mib": 16.15625,
+          "memory_peak_mib": 239.1015625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 3.676714377004828,
+        "grading_seconds": 13.242200726999727,
+        "allocation_memory": {
+          "memory_current_mib": 16.12890625,
+          "memory_peak_mib": 240.9296875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 3.97588626799552,
+        "grading_seconds": 33.260253863998514,
+        "allocation_memory": {
+          "memory_current_mib": 16.10546875,
+          "memory_peak_mib": 250.98828125
+        }
+      }
+    ]
+  },
+  "c770dd1c8b5a271cad2cf753af6a9e4203fa4e8f4ca9ffa3f90218581384f929": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.472100965002028,
+        "grading_seconds": 4.216788667996298,
+        "allocation_memory": {
+          "memory_current_mib": 15.90625,
+          "memory_peak_mib": 188.609375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.2215222930026357,
+        "grading_seconds": 6.71806356000161,
+        "allocation_memory": {
+          "memory_current_mib": 16.19921875,
+          "memory_peak_mib": 198.9765625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.169639157000347,
+        "grading_seconds": 12.595048174000112,
+        "allocation_memory": {
+          "memory_current_mib": 16.2890625,
+          "memory_peak_mib": 215.4375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.172819776002143,
+        "grading_seconds": 31.78659286799666,
+        "allocation_memory": {
+          "memory_current_mib": 15.9140625,
+          "memory_peak_mib": 245.2109375
+        }
+      }
+    ]
+  },
+  "4aca9c008cbd9f56d6859eff84a68790f373ab70902e9e8614a9725a9014cd71": {
+    "reward": 0.43768376050582725,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.9293066263198853,
+        "wirelength_cost": 0.06848891824483871,
+        "density_cost": 0.5347115993499756,
+        "congestion_cost": 1.18692375297679,
+        "candidate_wall_seconds": 4.32957021099719,
+        "grading_seconds": 4.184628637005517,
+        "allocation_memory": {
+          "memory_current_mib": 15.94921875,
+          "memory_peak_mib": 188.3984375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1821800470352173,
+        "wirelength_cost": 0.07781476527452469,
+        "density_cost": 0.6023947596549988,
+        "congestion_cost": 1.6063358706535802,
+        "candidate_wall_seconds": 3.773967173998244,
+        "grading_seconds": 6.883585125993704,
+        "allocation_memory": {
+          "memory_current_mib": 15.921875,
+          "memory_peak_mib": 199.2109375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4253695011138916,
+        "wirelength_cost": 0.07844925671815872,
+        "density_cost": 0.5821250677108765,
+        "congestion_cost": 2.11171541933677,
+        "candidate_wall_seconds": 4.426055638999969,
+        "grading_seconds": 14.49829442799819,
+        "allocation_memory": {
+          "memory_current_mib": 16.09765625,
+          "memory_peak_mib": 215.671875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6021623611450195,
+        "wirelength_cost": 0.0696304589509964,
+        "density_cost": 0.4995638430118561,
+        "congestion_cost": 2.565499963649462,
+        "candidate_wall_seconds": 3.62360072699812,
+        "grading_seconds": 32.04729610000504,
+        "allocation_memory": {
+          "memory_current_mib": 16.0625,
+          "memory_peak_mib": 245.08203125
+        }
+      }
+    ]
+  },
+  "344f1e08da2c8d7fba2a1e2497368ecf2e3d5bd95d720715fdb11fafd206612a": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 3.6732941869995557,
+        "grading_seconds": 4.115271725997445,
+        "allocation_memory": {
+          "memory_current_mib": 16.19140625,
+          "memory_peak_mib": 278.0546875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 3.5239528880047146,
+        "grading_seconds": 6.716288550000172,
+        "allocation_memory": {
+          "memory_current_mib": 16.06640625,
+          "memory_peak_mib": 255.52734375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 3.6251459269988118,
+        "grading_seconds": 12.679470661001687,
+        "allocation_memory": {
+          "memory_current_mib": 16.0390625,
+          "memory_peak_mib": 273.0
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 3.6865356339985738,
+        "grading_seconds": 32.30014423099783,
+        "allocation_memory": {
+          "memory_current_mib": 16.00390625,
+          "memory_peak_mib": 316.171875
+        }
+      }
+    ]
+  },
+  "99c401f0a0672563badf5f4b3742524ef5488d0b9ed45f983014b4de63f7d6b6": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.9205113249990973,
+        "grading_seconds": 3.9920636449969606,
+        "allocation_memory": {
+          "memory_current_mib": 16.01953125,
+          "memory_peak_mib": 188.328125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.4744833200020366,
+        "grading_seconds": 7.5423045179995825,
+        "allocation_memory": {
+          "memory_current_mib": 15.98046875,
+          "memory_peak_mib": 199.05859375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.9200536260032095,
+        "grading_seconds": 12.99787063599797,
+        "allocation_memory": {
+          "memory_current_mib": 16.29296875,
+          "memory_peak_mib": 215.53125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.922020120997331,
+        "grading_seconds": 32.80593858400243,
+        "allocation_memory": {
+          "memory_current_mib": 15.94921875,
+          "memory_peak_mib": 244.98046875
+        }
+      }
+    ]
+  },
+  "5d6215f85097718be2f669f2fe9c4aa079cd3c67fd3ce5dd9983e673c56544ed": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.7208588040011819,
+        "grading_seconds": 4.1762702920023,
+        "allocation_memory": {
+          "memory_current_mib": 16.36328125,
+          "memory_peak_mib": 188.578125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.5712808819953352,
+        "grading_seconds": 6.861432548997982,
+        "allocation_memory": {
+          "memory_current_mib": 16.07421875,
+          "memory_peak_mib": 199.24609375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.57369708600163,
+        "grading_seconds": 13.081082926997624,
+        "allocation_memory": {
+          "memory_current_mib": 16.27734375,
+          "memory_peak_mib": 215.515625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.6205493550005485,
+        "grading_seconds": 31.362506931996904,
+        "allocation_memory": {
+          "memory_current_mib": 16.05859375,
+          "memory_peak_mib": 245.04296875
+        }
+      }
+    ]
+  },
+  "576f920250db71c0d8cdb710c17035fb0a880bd4d12e802591112594ac59a5bc": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.9233455450012116,
+        "grading_seconds": 4.021057653000753,
+        "allocation_memory": {
+          "memory_current_mib": 16.12890625,
+          "memory_peak_mib": 188.33984375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.4738689489968237,
+        "grading_seconds": 7.309738231000665,
+        "allocation_memory": {
+          "memory_current_mib": 16.28125,
+          "memory_peak_mib": 199.12109375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.8226009700010763,
+        "grading_seconds": 13.049902744001884,
+        "allocation_memory": {
+          "memory_current_mib": 16.14453125,
+          "memory_peak_mib": 215.53515625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.370538917995873,
+        "grading_seconds": 40.76435844300431,
+        "allocation_memory": {
+          "memory_current_mib": 15.875,
+          "memory_peak_mib": 245.171875
+        }
+      }
+    ]
+  },
+  "857295c45dcae1c2a6e952892b5388c2cc426ac6812b20fb72cfafebce2e4556": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.2238714100021753,
+        "grading_seconds": 3.956862822000403,
+        "allocation_memory": {
+          "memory_current_mib": 16.2578125,
+          "memory_peak_mib": 188.5078125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.221458272993914,
+        "grading_seconds": 7.178218305001792,
+        "allocation_memory": {
+          "memory_current_mib": 16.078125,
+          "memory_peak_mib": 198.9140625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.0201522010029294,
+        "grading_seconds": 12.645110793004278,
+        "allocation_memory": {
+          "memory_current_mib": 16.07421875,
+          "memory_peak_mib": 215.42578125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.0216135410009883,
+        "grading_seconds": 31.651430463003635,
+        "allocation_memory": {
+          "memory_current_mib": 15.953125,
+          "memory_peak_mib": 245.20703125
+        }
+      }
+    ]
+  },
+  "130949cbf96e5f13f27298acd671a0ef05952c01bf15a60edc1dc7afe662a56f": {
+    "reward": 0.0,
+    "correctness": 0.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.550366997718811,
+        "wirelength_cost": 0.03902341425418854,
+        "density_cost": 2.1125826835632324,
+        "congestion_cost": 0.9101045092673772,
+        "candidate_wall_seconds": 2.9324905059984303,
+        "grading_seconds": 4.151521338004386,
+        "allocation_memory": {
+          "memory_current_mib": 15.87890625,
+          "memory_peak_mib": 188.375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9299721717834473,
+        "wirelength_cost": 0.034612663090229034,
+        "density_cost": 2.326972484588623,
+        "congestion_cost": 1.463746525780836,
+        "candidate_wall_seconds": 2.4754405489948113,
+        "grading_seconds": 6.756833497995103,
+        "allocation_memory": {
+          "memory_current_mib": 16.296875,
+          "memory_peak_mib": 199.16796875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 0.0,
+        "message": "CalledProcessError: Command '['/home/gcpuser/.cache/science-placement-cpu-regrade-20260917/.science/venv/bin/python', '-m', 'tpu.science.challenge_score_child', '--root', '/home/gcpuser/.cache/science-placement-cpu-regrade-20260917', '--case', 'ibm08', '--positions', '/home/gcpuser/.cache/science-placement-cpu-regrade-20260917/.science/placement-jobs/ed8694f986b0478386a21fd786eb42c3/evaluation/positions.npy', '--result', '/home/gcpuser/.cache/science-placement-cpu-regrade-20260917/.science/placement-jobs/ed8694f986b0478386a21fd786eb42c3/evaluation/score.json']' returned non-zero exit status 1.",
+        "allocation_memory": {
+          "memory_current_mib": 16.11328125,
+          "memory_peak_mib": 215.3046875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.635089635848999,
+        "wirelength_cost": 0.02341661974787712,
+        "density_cost": 3.7183995246887207,
+        "congestion_cost": 1.5049463588775311,
+        "candidate_wall_seconds": 2.981531391000317,
+        "grading_seconds": 32.511916540999664,
+        "allocation_memory": {
+          "memory_current_mib": 16.1953125,
+          "memory_peak_mib": 245.18359375
+        }
+      }
+    ]
+  },
+  "217b20660ae0cbe7c72a7744aaeaa5c95e0d12857aa808eacf50811871a2b811": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.822809094999684,
+        "grading_seconds": 4.019864866997523,
+        "allocation_memory": {
+          "memory_current_mib": 16.1015625,
+          "memory_peak_mib": 188.58203125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.022299816002487,
+        "grading_seconds": 7.035441986001388,
+        "allocation_memory": {
+          "memory_current_mib": 16.078125,
+          "memory_peak_mib": 199.1328125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.720339232000697,
+        "grading_seconds": 12.77582374800113,
+        "allocation_memory": {
+          "memory_current_mib": 16.19140625,
+          "memory_peak_mib": 215.79296875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.7287020209987531,
+        "grading_seconds": 38.020826465995924,
+        "allocation_memory": {
+          "memory_current_mib": 16.125,
+          "memory_peak_mib": 245.1171875
+        }
+      }
+    ]
+  },
+  "60ddb22a72f9dee2bb260b387e591d23f7ed6b3bb92e5eeee282d40306e03c59": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.7702074010012439,
+        "grading_seconds": 3.9939913249982055,
+        "allocation_memory": {
+          "memory_current_mib": 16.11328125,
+          "memory_peak_mib": 188.35546875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.8191464980045566,
+        "grading_seconds": 6.747847597995133,
+        "allocation_memory": {
+          "memory_current_mib": 16.0625,
+          "memory_peak_mib": 199.125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.8195876899990253,
+        "grading_seconds": 12.943438217997027,
+        "allocation_memory": {
+          "memory_current_mib": 16.30078125,
+          "memory_peak_mib": 215.50390625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.9252088089997414,
+        "grading_seconds": 32.97752899300394,
+        "allocation_memory": {
+          "memory_current_mib": 16.00390625,
+          "memory_peak_mib": 245.05078125
+        }
+      }
+    ]
+  },
+  "19ab89445298b42be6c9842c62c9cef1530cf9c8f7ef60462017d1c9ed5c7880": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.671452237002086,
+        "grading_seconds": 3.921185373001208,
+        "allocation_memory": {
+          "memory_current_mib": 16.1171875,
+          "memory_peak_mib": 188.57421875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.8227644590006093,
+        "grading_seconds": 6.831255058001261,
+        "allocation_memory": {
+          "memory_current_mib": 16.10546875,
+          "memory_peak_mib": 199.01953125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.8207765289989766,
+        "grading_seconds": 12.852557254998828,
+        "allocation_memory": {
+          "memory_current_mib": 15.91796875,
+          "memory_peak_mib": 215.640625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.7196746510016965,
+        "grading_seconds": 31.49492910799745,
+        "allocation_memory": {
+          "memory_current_mib": 15.9765625,
+          "memory_peak_mib": 245.17578125
+        }
+      }
+    ]
+  },
+  "074ad44d53874de3c3cba5564be1f3da32d3a8ac13719f2baf50b67045a3f480": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.9824917540026945,
+        "grading_seconds": 5.017068773995561,
+        "allocation_memory": {
+          "memory_current_mib": 15.96875,
+          "memory_peak_mib": 188.2890625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.879313926998293,
+        "grading_seconds": 6.894484156000544,
+        "allocation_memory": {
+          "memory_current_mib": 16.30859375,
+          "memory_peak_mib": 199.34765625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.871663397992961,
+        "grading_seconds": 13.840675753999676,
+        "allocation_memory": {
+          "memory_current_mib": 15.99609375,
+          "memory_peak_mib": 215.81640625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.8725982050018501,
+        "grading_seconds": 32.595626768998045,
+        "allocation_memory": {
+          "memory_current_mib": 16.16015625,
+          "memory_peak_mib": 244.90625
+        }
+      }
+    ]
+  },
+  "02a51df004e5b968dafe98cee929aaaecc2906011e412be8e75489cfde89a147": {
+    "reward": 0.3408490942011816,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4751499891281128,
+        "wirelength_cost": 0.11363189667463303,
+        "density_cost": 0.9301645755767822,
+        "congestion_cost": 1.7928715350994768,
+        "candidate_wall_seconds": 150.91295025600266,
+        "grading_seconds": 3.9910166320041753,
+        "allocation_memory": {
+          "memory_current_mib": 16.15625,
+          "memory_peak_mib": 391.05078125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7511043548583984,
+        "wirelength_cost": 0.13227583467960358,
+        "density_cost": 0.9713409543037415,
+        "congestion_cost": 2.266315877662384,
+        "candidate_wall_seconds": 150.74854783799674,
+        "grading_seconds": 6.749032178995549,
+        "allocation_memory": {
+          "memory_current_mib": 16.4140625,
+          "memory_peak_mib": 279.33203125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.184849739074707,
+        "wirelength_cost": 0.1277923882007599,
+        "density_cost": 0.9642771482467651,
+        "congestion_cost": 3.149837226596289,
+        "candidate_wall_seconds": 151.0063294940046,
+        "grading_seconds": 12.873790003999602,
+        "allocation_memory": {
+          "memory_current_mib": 16.125,
+          "memory_peak_mib": 347.1796875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.3242945671081543,
+        "wirelength_cost": 0.10217130929231644,
+        "density_cost": 0.9647529125213623,
+        "congestion_cost": 3.4794938118190304,
+        "candidate_wall_seconds": 150.6357791019982,
+        "grading_seconds": 32.00560338100331,
+        "allocation_memory": {
+          "memory_current_mib": 16.4765625,
+          "memory_peak_mib": 245.25390625
+        }
+      }
+    ]
+  },
+  "f1950479e4bddc493ae408a3c7f841c30b929b052ecd5f0c7ed66fef6f155b09": {
+    "reward": 0.41310721571340436,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.0793344974517822,
+        "wirelength_cost": 0.07408535480499268,
+        "density_cost": 0.8036226034164429,
+        "congestion_cost": 1.2068758152472634,
+        "candidate_wall_seconds": 9.696436671998526,
+        "grading_seconds": 4.251009813997371,
+        "allocation_memory": {
+          "memory_current_mib": 16.2421875,
+          "memory_peak_mib": 211.015625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.3032314777374268,
+        "wirelength_cost": 0.0839894562959671,
+        "density_cost": 0.8566569685935974,
+        "congestion_cost": 1.5818270122228688,
+        "candidate_wall_seconds": 7.738413605002279,
+        "grading_seconds": 6.747546828002669,
+        "allocation_memory": {
+          "memory_current_mib": 15.93359375,
+          "memory_peak_mib": 236.1328125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4435060024261475,
+        "wirelength_cost": 0.08357241004705429,
+        "density_cost": 0.821606457233429,
+        "congestion_cost": 1.8982608802938452,
+        "candidate_wall_seconds": 16.21709073099919,
+        "grading_seconds": 12.802970643999288,
+        "allocation_memory": {
+          "memory_current_mib": 15.875,
+          "memory_peak_mib": 215.6953125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.8566443920135498,
+        "wirelength_cost": 0.07338491082191467,
+        "density_cost": 0.8968159556388855,
+        "congestion_cost": 2.6697029699899613,
+        "candidate_wall_seconds": 17.49165549600002,
+        "grading_seconds": 32.74914158300089,
+        "allocation_memory": {
+          "memory_current_mib": 16.0078125,
+          "memory_peak_mib": 245.03125
+        }
+      }
+    ]
+  },
+  "ae1cf654209a7df7c5c2937f7ed7ab3d64c1481262c2d78f88a8488f86aae227": {
+    "reward": 0.41793447667926,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.03144371509552,
+        "wirelength_cost": 0.07180783152580261,
+        "density_cost": 0.6815527081489563,
+        "congestion_cost": 1.237719014735722,
+        "candidate_wall_seconds": 19.100490400996932,
+        "grading_seconds": 3.9508692269955645,
+        "allocation_memory": {
+          "memory_current_mib": 16.3125,
+          "memory_peak_mib": 278.42578125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.3698227405548096,
+        "wirelength_cost": 0.08000588417053223,
+        "density_cost": 0.8589495420455933,
+        "congestion_cost": 1.7206841161195567,
+        "candidate_wall_seconds": 29.0673044139985,
+        "grading_seconds": 6.726252679996833,
+        "allocation_memory": {
+          "memory_current_mib": 15.90234375,
+          "memory_peak_mib": 225.5234375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5448472499847412,
+        "wirelength_cost": 0.0802002102136612,
+        "density_cost": 0.7121830582618713,
+        "congestion_cost": 2.217111225704969,
+        "candidate_wall_seconds": 37.930421897006454,
+        "grading_seconds": 12.951427151994721,
+        "allocation_memory": {
+          "memory_current_mib": 16.11328125,
+          "memory_peak_mib": 269.6171875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6247645616531372,
+        "wirelength_cost": 0.07013828307390213,
+        "density_cost": 0.5229880213737488,
+        "congestion_cost": 2.5862647170364705,
+        "candidate_wall_seconds": 30.27697759900184,
+        "grading_seconds": 32.22879455200018,
+        "allocation_memory": {
+          "memory_current_mib": 16.0546875,
+          "memory_peak_mib": 247.7734375
+        }
+      }
+    ]
+  },
+  "24dcbdd0b8d0b7d401c4c576cdf4fa54f11632754b37b16edf71c503c7188a1c": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.7705920110020088,
+        "grading_seconds": 4.015177553003014,
+        "allocation_memory": {
+          "memory_current_mib": 16.02734375,
+          "memory_peak_mib": 188.5078125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.9721139359971858,
+        "grading_seconds": 7.224307561999012,
+        "allocation_memory": {
+          "memory_current_mib": 15.90625,
+          "memory_peak_mib": 199.3203125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.8202398599969456,
+        "grading_seconds": 13.023151214998506,
+        "allocation_memory": {
+          "memory_current_mib": 15.953125,
+          "memory_peak_mib": 216.05859375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.472647747999872,
+        "grading_seconds": 39.17858640600025,
+        "allocation_memory": {
+          "memory_current_mib": 15.875,
+          "memory_peak_mib": 245.015625
+        }
+      }
+    ]
+  },
+  "dd457e2150267b9ffed0c3a269d262198d979ce5413b8e98769d2003b32f4ade": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.7221257729979698,
+        "grading_seconds": 4.022786884997913,
+        "allocation_memory": {
+          "memory_current_mib": 15.9453125,
+          "memory_peak_mib": 188.66796875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.0250674260023516,
+        "grading_seconds": 7.207703703999869,
+        "allocation_memory": {
+          "memory_current_mib": 15.87890625,
+          "memory_peak_mib": 199.16796875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.6718277640029555,
+        "grading_seconds": 12.577465294998547,
+        "allocation_memory": {
+          "memory_current_mib": 15.89453125,
+          "memory_peak_mib": 215.63671875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.720294571001432,
+        "grading_seconds": 33.1847763209953,
+        "allocation_memory": {
+          "memory_current_mib": 15.98046875,
+          "memory_peak_mib": 245.24609375
+        }
+      }
+    ]
+  },
+  "f3419059d7ae1226a50b126c8c484c3e7578db0b849316fb843bd98907330afa": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 24.638324770006875,
+        "grading_seconds": 4.096731830002682,
+        "allocation_memory": {
+          "memory_current_mib": 15.9765625,
+          "memory_peak_mib": 283.44921875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 28.07982138799707,
+        "grading_seconds": 7.037164774999837,
+        "allocation_memory": {
+          "memory_current_mib": 16.03515625,
+          "memory_peak_mib": 277.98828125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 28.771433595000417,
+        "grading_seconds": 13.113493281001865,
+        "allocation_memory": {
+          "memory_current_mib": 15.96484375,
+          "memory_peak_mib": 306.81640625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 28.220854250997945,
+        "grading_seconds": 33.18908832699526,
+        "allocation_memory": {
+          "memory_current_mib": 16.1171875,
+          "memory_peak_mib": 261.66015625
+        }
+      }
+    ]
+  },
+  "b8a95868f8c87e06fadd00b7c3a59e89c930e2a7fd0d575a2cab2e7358ad8f3d": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.7293190659984248,
+        "grading_seconds": 4.0237903950037435,
+        "allocation_memory": {
+          "memory_current_mib": 16.12109375,
+          "memory_peak_mib": 188.578125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.670413270003337,
+        "grading_seconds": 6.799027499000658,
+        "allocation_memory": {
+          "memory_current_mib": 16.15625,
+          "memory_peak_mib": 199.0703125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.7722798610047903,
+        "grading_seconds": 13.050869637998403,
+        "allocation_memory": {
+          "memory_current_mib": 15.9921875,
+          "memory_peak_mib": 215.703125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.6199794949934585,
+        "grading_seconds": 31.64415897300205,
+        "allocation_memory": {
+          "memory_current_mib": 16.06640625,
+          "memory_peak_mib": 245.10546875
+        }
+      }
+    ]
+  },
+  "a6f563500fd1385bdcfdda186d9321b26d1e74025089a233ef48aa71f5939449": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.021664250998583,
+        "grading_seconds": 4.019014613004401,
+        "allocation_memory": {
+          "memory_current_mib": 16.04296875,
+          "memory_peak_mib": 188.6015625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.9718800560003729,
+        "grading_seconds": 6.756173558002047,
+        "allocation_memory": {
+          "memory_current_mib": 16.07421875,
+          "memory_peak_mib": 199.10546875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.0199549419994582,
+        "grading_seconds": 13.217567617997702,
+        "allocation_memory": {
+          "memory_current_mib": 15.94921875,
+          "memory_peak_mib": 215.5625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.1204649380015326,
+        "grading_seconds": 32.15188054800092,
+        "allocation_memory": {
+          "memory_current_mib": 16.33984375,
+          "memory_peak_mib": 244.94921875
+        }
+      }
+    ]
+  },
+  "ea5691818f883d99ca7df9decd026bd36971bab38c6deb78ef08e9e312f21ae6": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849432963623274,
+        "candidate_wall_seconds": 2.3713814910006477,
+        "grading_seconds": 4.292730711997137,
+        "allocation_memory": {
+          "memory_current_mib": 16.12109375,
+          "memory_peak_mib": 188.85546875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757481187582016,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.6077928684518519,
+        "candidate_wall_seconds": 1.973192827004823,
+        "grading_seconds": 6.772459829997388,
+        "allocation_memory": {
+          "memory_current_mib": 15.9140625,
+          "memory_peak_mib": 199.1015625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.1347413980038255,
+        "grading_seconds": 12.568669835003675,
+        "allocation_memory": {
+          "memory_current_mib": 16.3671875,
+          "memory_peak_mib": 215.46875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962596625089645,
+        "density_cost": 0.49918606877326965,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.121608716995979,
+        "grading_seconds": 33.22293883800012,
+        "allocation_memory": {
+          "memory_current_mib": 16.109375,
+          "memory_peak_mib": 245.14453125
+        }
+      }
+    ]
+  },
+  "813947060794c8518183081e622b5ba761c27c2d3d5c713fdc544f472d1725bf": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.5746199999994133,
+        "grading_seconds": 4.3422625309976866,
+        "allocation_memory": {
+          "memory_current_mib": 16.03125,
+          "memory_peak_mib": 188.31640625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.5245721690007485,
+        "grading_seconds": 7.664332735999778,
+        "allocation_memory": {
+          "memory_current_mib": 16.3515625,
+          "memory_peak_mib": 199.3671875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.9210201349997078,
+        "grading_seconds": 13.2602734960019,
+        "allocation_memory": {
+          "memory_current_mib": 15.96484375,
+          "memory_peak_mib": 215.76171875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.021637334000843,
+        "grading_seconds": 32.22742761200061,
+        "allocation_memory": {
+          "memory_current_mib": 16.05859375,
+          "memory_peak_mib": 245.0859375
+        }
+      }
+    ]
+  },
+  "e216f339097d8ddde096740d98195475168a1c3034a7e8beb541623cccb823c7": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.9204763810048462,
+        "grading_seconds": 3.9085156840010313,
+        "allocation_memory": {
+          "memory_current_mib": 16.23046875,
+          "memory_peak_mib": 188.51171875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.9214483980031218,
+        "grading_seconds": 6.799542439002835,
+        "allocation_memory": {
+          "memory_current_mib": 16.23046875,
+          "memory_peak_mib": 199.2421875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.0201623320026556,
+        "grading_seconds": 12.849953914999787,
+        "allocation_memory": {
+          "memory_current_mib": 16.171875,
+          "memory_peak_mib": 215.64453125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.9714288719987962,
+        "grading_seconds": 31.24756928599527,
+        "allocation_memory": {
+          "memory_current_mib": 16.109375,
+          "memory_peak_mib": 245.11328125
+        }
+      }
+    ]
+  },
+  "9b36b60128e07cc828dbefe50a5fa4bb5ab5e798d5fb2f96274a578c7cab7f07": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.4246051049995003,
+        "grading_seconds": 4.386835118995805,
+        "allocation_memory": {
+          "memory_current_mib": 16.0859375,
+          "memory_peak_mib": 188.375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.7194108089970541,
+        "grading_seconds": 6.774557607001043,
+        "allocation_memory": {
+          "memory_current_mib": 16.2265625,
+          "memory_peak_mib": 199.2265625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.774498072001734,
+        "grading_seconds": 13.432148190004227,
+        "allocation_memory": {
+          "memory_current_mib": 15.97265625,
+          "memory_peak_mib": 215.5859375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.4770311239990406,
+        "grading_seconds": 32.55309064500034,
+        "allocation_memory": {
+          "memory_current_mib": 16.31640625,
+          "memory_peak_mib": 245.046875
+        }
+      }
+    ]
+  },
+  "d30033734393458cf01c5af04a2fab12bab9b1e52cbd30954f1d6b5cc08922b5": {
+    "reward": 0.4187275971327824,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.2000722885131836,
+        "wirelength_cost": 0.08537058532238007,
+        "density_cost": 0.8055257201194763,
+        "congestion_cost": 1.4238776040877061,
+        "candidate_wall_seconds": 162.95053216799715,
+        "grading_seconds": 4.244789234006021,
+        "allocation_memory": {
+          "memory_current_mib": 16.24609375,
+          "memory_peak_mib": 188.61328125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.2640726566314697,
+        "wirelength_cost": 0.07962983101606369,
+        "density_cost": 0.6991339921951294,
+        "congestion_cost": 1.669751749903659,
+        "candidate_wall_seconds": 163.37282376799703,
+        "grading_seconds": 6.795211038996058,
+        "allocation_memory": {
+          "memory_current_mib": 16.14453125,
+          "memory_peak_mib": 199.078125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.469885230064392,
+        "wirelength_cost": 0.0771949291229248,
+        "density_cost": 0.6827619671821594,
+        "congestion_cost": 2.102618708258653,
+        "candidate_wall_seconds": 161.0046282559997,
+        "grading_seconds": 12.603726414003177,
+        "allocation_memory": {
+          "memory_current_mib": 16.10546875,
+          "memory_peak_mib": 215.5078125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6187196969985962,
+        "wirelength_cost": 0.06838282942771912,
+        "density_cost": 0.5588428974151611,
+        "congestion_cost": 2.5418307709429664,
+        "candidate_wall_seconds": 161.24234435000108,
+        "grading_seconds": 32.57300088100601,
+        "allocation_memory": {
+          "memory_current_mib": 16.03515625,
+          "memory_peak_mib": 245.0546875
+        }
+      }
+    ]
+  },
+  "def3ca28e04b4616985f04f9ac9038e17229ef1e91162fe61832899f51ca35a8": {
+    "reward": 0.40200131153725316,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.2076313495635986,
+        "wirelength_cost": 0.09023760259151459,
+        "density_cost": 0.7030154466629028,
+        "congestion_cost": 1.5317719993868597,
+        "candidate_wall_seconds": 172.6571875610025,
+        "grading_seconds": 3.9121778170010657,
+        "allocation_memory": {
+          "memory_current_mib": 16.0390625,
+          "memory_peak_mib": 501.4921875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.3775365352630615,
+        "wirelength_cost": 0.09403377771377563,
+        "density_cost": 0.6749948263168335,
+        "congestion_cost": 1.8920105411249057,
+        "candidate_wall_seconds": 173.19066035899596,
+        "grading_seconds": 6.795224137997138,
+        "allocation_memory": {
+          "memory_current_mib": 16.171875,
+          "memory_peak_mib": 543.8515625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7217738628387451,
+        "wirelength_cost": 0.09677170217037201,
+        "density_cost": 0.7402611970901489,
+        "congestion_cost": 2.509743247240993,
+        "candidate_wall_seconds": 173.63725762000104,
+        "grading_seconds": 12.820239813001535,
+        "allocation_memory": {
+          "memory_current_mib": 15.921875,
+          "memory_peak_mib": 614.91015625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6432745456695557,
+        "wirelength_cost": 0.07359039038419724,
+        "density_cost": 0.5285036563873291,
+        "congestion_cost": 2.6108646747355433,
+        "candidate_wall_seconds": 173.84210931500274,
+        "grading_seconds": 33.26343078199716,
+        "allocation_memory": {
+          "memory_current_mib": 16.109375,
+          "memory_peak_mib": 603.42578125
+        }
+      }
+    ]
+  },
+  "486eb4a44776d9ace690e7b63729d07f3bbdb807e07302d2d2f1166f432a664b": {
+    "reward": 0.4351037254333481,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.9434264302253723,
+        "wirelength_cost": 0.0680348202586174,
+        "density_cost": 0.566091775894165,
+        "congestion_cost": 1.1846914156071477,
+        "candidate_wall_seconds": 170.53323304899823,
+        "grading_seconds": 3.9576205820048926,
+        "allocation_memory": {
+          "memory_current_mib": 16.390625,
+          "memory_peak_mib": 579.62890625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1917338371276855,
+        "wirelength_cost": 0.07709549367427826,
+        "density_cost": 0.6162426471710205,
+        "congestion_cost": 1.613033994929478,
+        "candidate_wall_seconds": 169.93237701999897,
+        "grading_seconds": 6.875180317998456,
+        "allocation_memory": {
+          "memory_current_mib": 16.16796875,
+          "memory_peak_mib": 523.05078125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4221436977386475,
+        "wirelength_cost": 0.07809953391551971,
+        "density_cost": 0.5995967388153076,
+        "congestion_cost": 2.0884914674029678,
+        "candidate_wall_seconds": 169.88980474600248,
+        "grading_seconds": 12.895117423999181,
+        "allocation_memory": {
+          "memory_current_mib": 16.26171875,
+          "memory_peak_mib": 515.515625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6359062194824219,
+        "wirelength_cost": 0.06906663626432419,
+        "density_cost": 0.5737519860267639,
+        "congestion_cost": 2.5599271539878057,
+        "candidate_wall_seconds": 169.73885844199685,
+        "grading_seconds": 33.14644024200243,
+        "allocation_memory": {
+          "memory_current_mib": 16.109375,
+          "memory_peak_mib": 511.47265625
+        }
+      }
+    ]
+  },
+  "72b40d9dad320db1ab12c1bb0c1e5df26b0de822546d87848b7a077eef04a526": {
+    "reward": 0.313559473768117,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.181727647781372,
+        "wirelength_cost": 0.08669915795326233,
+        "density_cost": 2.3658742904663086,
+        "congestion_cost": 1.8241828827672046,
+        "candidate_wall_seconds": 155.8363584059989,
+        "grading_seconds": 3.9845992650007247,
+        "allocation_memory": {
+          "memory_current_mib": 16.05859375,
+          "memory_peak_mib": 188.51953125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.013685703277588,
+        "wirelength_cost": 0.04653002321720123,
+        "density_cost": 2.4010369777679443,
+        "congestion_cost": 1.533274561178436,
+        "candidate_wall_seconds": 155.83930871999473,
+        "grading_seconds": 7.682870295997418,
+        "allocation_memory": {
+          "memory_current_mib": 16.39453125,
+          "memory_peak_mib": 199.41796875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.2380528450012207,
+        "wirelength_cost": 0.05506369471549988,
+        "density_cost": 2.442657232284546,
+        "congestion_cost": 1.9233213022939897,
+        "candidate_wall_seconds": 155.82911927000532,
+        "grading_seconds": 12.932285377995868,
+        "allocation_memory": {
+          "memory_current_mib": 16.140625,
+          "memory_peak_mib": 215.53515625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.323284387588501,
+        "wirelength_cost": 0.010352874174714088,
+        "density_cost": 3.8464698791503906,
+        "congestion_cost": 0.7793931786304049,
+        "candidate_wall_seconds": 155.94222788700426,
+        "grading_seconds": 33.12003393699706,
+        "allocation_memory": {
+          "memory_current_mib": 16.1171875,
+          "memory_peak_mib": 245.15625
+        }
+      }
+    ]
+  },
+  "1a6dcb14c162055e9eb9fe376ad44161b17d2783583a29e1ee855e5ec907e840": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.870332694001263,
+        "grading_seconds": 3.9528941249955096,
+        "allocation_memory": {
+          "memory_current_mib": 15.99609375,
+          "memory_peak_mib": 188.72265625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.2729518129999633,
+        "grading_seconds": 7.240582303995325,
+        "allocation_memory": {
+          "memory_current_mib": 16.16015625,
+          "memory_peak_mib": 198.828125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.1199557989966706,
+        "grading_seconds": 12.521771656996862,
+        "allocation_memory": {
+          "memory_current_mib": 16.07421875,
+          "memory_peak_mib": 215.9921875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.8720135359981214,
+        "grading_seconds": 32.055647148998105,
+        "allocation_memory": {
+          "memory_current_mib": 16.12109375,
+          "memory_peak_mib": 245.3828125
+        }
+      }
+    ]
+  },
+  "3dbe0d1e4ec63662921e422c7339b1c5f5f5b6e6eaf57dd04ff0479e66d8372c": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.6733642460021656,
+        "grading_seconds": 4.078839370995411,
+        "allocation_memory": {
+          "memory_current_mib": 15.9375,
+          "memory_peak_mib": 188.421875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.7823207460023696,
+        "grading_seconds": 6.95403452499886,
+        "allocation_memory": {
+          "memory_current_mib": 15.98828125,
+          "memory_peak_mib": 199.2421875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.7721853219991317,
+        "grading_seconds": 12.636002400999132,
+        "allocation_memory": {
+          "memory_current_mib": 15.93359375,
+          "memory_peak_mib": 215.703125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 2.9716343700056314,
+        "grading_seconds": 32.82278001800296,
+        "allocation_memory": {
+          "memory_current_mib": 15.921875,
+          "memory_peak_mib": 245.203125
+        }
+      }
+    ]
+  },
+  "31b7f2c400f57107be8e89c16d8ddbfa938b41817ec05f2b563030ff38a9e380": {
+    "reward": 0.3183774160918745,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.0037598609924316,
+        "wirelength_cost": 0.05262976512312889,
+        "density_cost": 2.3470847606658936,
+        "congestion_cost": 1.5551755194719274,
+        "candidate_wall_seconds": 137.22536643900094,
+        "grading_seconds": 4.470547538003302,
+        "allocation_memory": {
+          "memory_current_mib": 16.1953125,
+          "memory_peak_mib": 188.6171875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.8834929466247559,
+        "wirelength_cost": 0.037535540759563446,
+        "density_cost": 2.370060443878174,
+        "congestion_cost": 1.3218544658758145,
+        "candidate_wall_seconds": 136.96529863199976,
+        "grading_seconds": 6.774814219999826,
+        "allocation_memory": {
+          "memory_current_mib": 16.125,
+          "memory_peak_mib": 199.01953125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.903968334197998,
+        "wirelength_cost": 0.03593631088733673,
+        "density_cost": 2.4193923473358154,
+        "congestion_cost": 1.3166716163146968,
+        "candidate_wall_seconds": 137.02463487599744,
+        "grading_seconds": 12.748541018998367,
+        "allocation_memory": {
+          "memory_current_mib": 16.18359375,
+          "memory_peak_mib": 215.54296875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.772484064102173,
+        "wirelength_cost": 0.018243437632918358,
+        "density_cost": 3.8086812496185303,
+        "congestion_cost": 1.699800011918405,
+        "candidate_wall_seconds": 137.03302673500002,
+        "grading_seconds": 31.241383665998,
+        "allocation_memory": {
+          "memory_current_mib": 16.10546875,
+          "memory_peak_mib": 245.078125
+        }
+      }
+    ]
+  },
+  "872ad03e7755ba0bb9ba11a495d6473162b90c90e06dde3aa2fac7a7d5bbdcd3": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.9704610830012825,
+        "grading_seconds": 4.155738827997993,
+        "allocation_memory": {
+          "memory_current_mib": 16.03125,
+          "memory_peak_mib": 188.56640625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.0720877749990905,
+        "grading_seconds": 6.9476586259988835,
+        "allocation_memory": {
+          "memory_current_mib": 16.109375,
+          "memory_peak_mib": 199.1796875
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 2.1224071180040482,
+        "grading_seconds": 12.92299094900227,
+        "allocation_memory": {
+          "memory_current_mib": 16.203125,
+          "memory_peak_mib": 215.80859375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.87280227500014,
+        "grading_seconds": 32.53498859099636,
+        "allocation_memory": {
+          "memory_current_mib": 15.96875,
+          "memory_peak_mib": 245.234375
+        }
+      }
+    ]
+  },
+  "d69b0fff0e3d5a2f992669097b4ae48a67ce12f2640a06691377836dfcae334c": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 2.2237868289957987,
+        "grading_seconds": 3.953325695001695,
+        "allocation_memory": {
+          "memory_current_mib": 16.3046875,
+          "memory_peak_mib": 188.49609375
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 2.3243623219968867,
+        "grading_seconds": 6.819989119001548,
+        "allocation_memory": {
+          "memory_current_mib": 16.12890625,
+          "memory_peak_mib": 199.0234375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 3.1809310629978427,
+        "grading_seconds": 12.834976325997559,
+        "allocation_memory": {
+          "memory_current_mib": 15.92578125,
+          "memory_peak_mib": 215.55078125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 3.273234318003233,
+        "grading_seconds": 31.731978690004325,
+        "allocation_memory": {
+          "memory_current_mib": 16.0,
+          "memory_peak_mib": 245.375
+        }
+      }
+    ]
+  },
+  "e6f57aeb3c583ee0e962dc12b56f0dbce649695a0cde82d26529e0bb9df91c4f": {
+    "reward": 0.32512431964489136,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.0072503089904785,
+        "wirelength_cost": 0.050336018204689026,
+        "density_cost": 2.3473904132843018,
+        "congestion_cost": 1.5664384535566631,
+        "candidate_wall_seconds": 168.51291960199887,
+        "grading_seconds": 4.045998062996659,
+        "allocation_memory": {
+          "memory_current_mib": 16.0703125,
+          "memory_peak_mib": 188.25
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.9001383781433105,
+        "wirelength_cost": 0.03564954176545143,
+        "density_cost": 2.370751142501831,
+        "congestion_cost": 1.3582266349500733,
+        "candidate_wall_seconds": 168.4896864149996,
+        "grading_seconds": 6.770295228001487,
+        "allocation_memory": {
+          "memory_current_mib": 15.9140625,
+          "memory_peak_mib": 199.453125
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.912095546722412,
+        "wirelength_cost": 0.035637304186820984,
+        "density_cost": 2.416935920715332,
+        "congestion_cost": 1.335980724720995,
+        "candidate_wall_seconds": 168.39843086300243,
+        "grading_seconds": 12.498649444998591,
+        "allocation_memory": {
+          "memory_current_mib": 16.12109375,
+          "memory_peak_mib": 215.46484375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 2.48350191116333,
+        "wirelength_cost": 0.007018683012574911,
+        "density_cost": 3.9469046592712402,
+        "congestion_cost": 1.0060619608713315,
+        "candidate_wall_seconds": 168.54795775499952,
+        "grading_seconds": 34.288732911001716,
+        "allocation_memory": {
+          "memory_current_mib": 16.1796875,
+          "memory_peak_mib": 245.15625
+        }
+      }
+    ]
+  },
+  "e9a7b76865b04f033df3ad3de945d448ac323d2e24e29fca79be3e982be48f8d": {
+    "reward": 0.4396741693912491,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.9244728088378906,
+        "wirelength_cost": 0.06730028986930847,
+        "density_cost": 0.5445011854171753,
+        "congestion_cost": 1.1698438434540364,
+        "candidate_wall_seconds": 168.42066879300546,
+        "grading_seconds": 4.098049730004277,
+        "allocation_memory": {
+          "memory_current_mib": 16.16015625,
+          "memory_peak_mib": 188.6171875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.170928955078125,
+        "wirelength_cost": 0.07676701247692108,
+        "density_cost": 0.5879970788955688,
+        "congestion_cost": 1.600326680060972,
+        "candidate_wall_seconds": 168.3617211689998,
+        "grading_seconds": 6.811741388999508,
+        "allocation_memory": {
+          "memory_current_mib": 16.3125,
+          "memory_peak_mib": 199.2265625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4066680669784546,
+        "wirelength_cost": 0.07695884257555008,
+        "density_cost": 0.5868657827377319,
+        "congestion_cost": 2.0725527684640452,
+        "candidate_wall_seconds": 168.44568302400148,
+        "grading_seconds": 13.359700908004015,
+        "allocation_memory": {
+          "memory_current_mib": 16.0625,
+          "memory_peak_mib": 215.6484375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.595576286315918,
+        "wirelength_cost": 0.06896453350782394,
+        "density_cost": 0.5029297471046448,
+        "congestion_cost": 2.550293789159344,
+        "candidate_wall_seconds": 168.371208468001,
+        "grading_seconds": 31.826284746006422,
+        "allocation_memory": {
+          "memory_current_mib": 15.90234375,
+          "memory_peak_mib": 245.16015625
+        }
+      }
+    ]
+  },
+  "7dd4877860d5395eb5f3f5d325e26cd3f32a35bc4c5b5a9525b7a213cfbc702b": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.7719449099968188,
+        "grading_seconds": 4.03990126199642,
+        "allocation_memory": {
+          "memory_current_mib": 16.02734375,
+          "memory_peak_mib": 188.5
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.720118409000861,
+        "grading_seconds": 6.830884807000984,
+        "allocation_memory": {
+          "memory_current_mib": 16.0078125,
+          "memory_peak_mib": 199.3515625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.7204465230024653,
+        "grading_seconds": 12.819929362995026,
+        "allocation_memory": {
+          "memory_current_mib": 15.9140625,
+          "memory_peak_mib": 215.83984375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.8215888900012942,
+        "grading_seconds": 33.843331562005915,
+        "allocation_memory": {
+          "memory_current_mib": 15.96875,
+          "memory_peak_mib": 245.2265625
+        }
+      }
+    ]
+  },
+  "5f317032f854ae768e4d2221eb370058d5609f02f012ef597cf99d75fad95527": {
+    "reward": 0.4396555154574843,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923371434211731,
+        "wirelength_cost": 0.0679396539926529,
+        "density_cost": 0.5275355577468872,
+        "congestion_cost": 1.1833280915811832,
+        "candidate_wall_seconds": 2.021333673998015,
+        "grading_seconds": 4.124492167000426,
+        "allocation_memory": {
+          "memory_current_mib": 15.87890625,
+          "memory_peak_mib": 188.61328125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1702194213867188,
+        "wirelength_cost": 0.07687986642122269,
+        "density_cost": 0.5876370668411255,
+        "congestion_cost": 1.5990419062826962,
+        "candidate_wall_seconds": 2.0744817449958646,
+        "grading_seconds": 6.623712700995384,
+        "allocation_memory": {
+          "memory_current_mib": 16.07421875,
+          "memory_peak_mib": 199.27734375
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.4041728973388672,
+        "wirelength_cost": 0.07744147628545761,
+        "density_cost": 0.5833339095115662,
+        "congestion_cost": 2.0701288160007643,
+        "candidate_wall_seconds": 2.3717012900015106,
+        "grading_seconds": 12.914183113003673,
+        "allocation_memory": {
+          "memory_current_mib": 15.99609375,
+          "memory_peak_mib": 215.60546875
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6002683639526367,
+        "wirelength_cost": 0.06935463100671768,
+        "density_cost": 0.5001539587974548,
+        "congestion_cost": 2.5616737548233948,
+        "candidate_wall_seconds": 2.9239398510035244,
+        "grading_seconds": 37.49079719300062,
+        "allocation_memory": {
+          "memory_current_mib": 16.06640625,
+          "memory_peak_mib": 245.12109375
+        }
+      }
+    ]
+  },
+  "6cb193f21a3f71ae679e2a6ff12dd92965aef06f192f53a9ecd58ac3330f8b73": {
+    "reward": 0.4380332877123069,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.9527109265327454,
+        "wirelength_cost": 0.06649639457464218,
+        "density_cost": 0.6083007454872131,
+        "congestion_cost": 1.1641283588530988,
+        "candidate_wall_seconds": 4.328434691997245,
+        "grading_seconds": 4.2338544850063045,
+        "allocation_memory": {
+          "memory_current_mib": 16.05078125,
+          "memory_peak_mib": 190.66796875
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1727339029312134,
+        "wirelength_cost": 0.07619169354438782,
+        "density_cost": 0.5960039496421814,
+        "congestion_cost": 1.597080423483559,
+        "candidate_wall_seconds": 3.4745981079977355,
+        "grading_seconds": 6.781017707995488,
+        "allocation_memory": {
+          "memory_current_mib": 16.04296875,
+          "memory_peak_mib": 199.16015625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.408200740814209,
+        "wirelength_cost": 0.07705187052488327,
+        "density_cost": 0.5877156257629395,
+        "congestion_cost": 2.074582000452518,
+        "candidate_wall_seconds": 3.4264604369964218,
+        "grading_seconds": 12.442427738002152,
+        "allocation_memory": {
+          "memory_current_mib": 16.10546875,
+          "memory_peak_mib": 215.78125
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5980805158615112,
+        "wirelength_cost": 0.06835904717445374,
+        "density_cost": 0.5172697305679321,
+        "congestion_cost": 2.542173195742824,
+        "candidate_wall_seconds": 3.623177836998366,
+        "grading_seconds": 33.05843613199977,
+        "allocation_memory": {
+          "memory_current_mib": 16.015625,
+          "memory_peak_mib": 245.29296875
+        }
+      }
+    ]
+  },
+  "5cfc469ccccf93cb7eeb8f2bfb2d070903c8dabfd35bdd8f3c2187aa90ea4241": {
+    "reward": 0.4388798774531943,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 0.923904299736023,
+        "wirelength_cost": 0.06846079230308533,
+        "density_cost": 0.5259437561035156,
+        "congestion_cost": 1.1849433109395504,
+        "candidate_wall_seconds": 1.9231952490008553,
+        "grading_seconds": 4.149720376000914,
+        "allocation_memory": {
+          "memory_current_mib": 16.33203125,
+          "memory_peak_mib": 189.05078125
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.1750555038452148,
+        "wirelength_cost": 0.07757479697465897,
+        "density_cost": 0.5871685147285461,
+        "congestion_cost": 1.607792869413217,
+        "candidate_wall_seconds": 1.671094509998511,
+        "grading_seconds": 6.8236565190018155,
+        "allocation_memory": {
+          "memory_current_mib": 15.9453125,
+          "memory_peak_mib": 199.09765625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.41314697265625,
+        "wirelength_cost": 0.07833116501569748,
+        "density_cost": 0.5814116597175598,
+        "congestion_cost": 2.088219927545536,
+        "candidate_wall_seconds": 1.87168943699362,
+        "grading_seconds": 13.08688694799639,
+        "allocation_memory": {
+          "memory_current_mib": 16.29296875,
+          "memory_peak_mib": 215.8359375
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.6020044088363647,
+        "wirelength_cost": 0.06962597370147705,
+        "density_cost": 0.4991860091686249,
+        "congestion_cost": 2.5655708549058267,
+        "candidate_wall_seconds": 1.721992291000788,
+        "grading_seconds": 31.462329668996972,
+        "allocation_memory": {
+          "memory_current_mib": 16.06640625,
+          "memory_peak_mib": 245.109375
+        }
+      }
+    ]
+  },
+  "eb3f35272439afae46aac5308c4b599716cfa8d70fd15ed927244105099ac72b": {
+    "reward": 0.4026785736894283,
+    "correctness": 1.0,
+    "cases": [
+      {
+        "case": "ibm01",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.302375078201294,
+        "wirelength_cost": 0.08450206369161606,
+        "density_cost": 0.8559896945953369,
+        "congestion_cost": 1.57975636283174,
+        "candidate_wall_seconds": 168.3946971769983,
+        "grading_seconds": 3.984672695005429,
+        "allocation_memory": {
+          "memory_current_mib": 15.8984375,
+          "memory_peak_mib": 188.69140625
+        }
+      },
+      {
+        "case": "ibm04",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.3427071571350098,
+        "wirelength_cost": 0.08080840110778809,
+        "density_cost": 0.8285340070724487,
+        "congestion_cost": 1.69526332728257,
+        "candidate_wall_seconds": 168.37674076700205,
+        "grading_seconds": 6.745454247997259,
+        "allocation_memory": {
+          "memory_current_mib": 16.1875,
+          "memory_peak_mib": 199.22265625
+        }
+      },
+      {
+        "case": "ibm08",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.5451087951660156,
+        "wirelength_cost": 0.07900018244981766,
+        "density_cost": 0.820448637008667,
+        "congestion_cost": 2.111768509277419,
+        "candidate_wall_seconds": 168.54972146599903,
+        "grading_seconds": 13.461855147994356,
+        "allocation_memory": {
+          "memory_current_mib": 16.15234375,
+          "memory_peak_mib": 215.47265625
+        }
+      },
+      {
+        "case": "ibm18",
+        "valid": 1.0,
+        "message": "Valid",
+        "proxy_cost": 1.7432900667190552,
+        "wirelength_cost": 0.06363291293382645,
+        "density_cost": 0.9064465165138245,
+        "congestion_cost": 2.4528677601921713,
+        "candidate_wall_seconds": 168.3843041489963,
+        "grading_seconds": 32.25249838000309,
+        "allocation_memory": {
+          "memory_current_mib": 16.01953125,
+          "memory_peak_mib": 245.15234375
+        }
+      }
+    ]
+  }
+}

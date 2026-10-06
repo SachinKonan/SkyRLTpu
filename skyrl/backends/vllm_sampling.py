@@ -94,10 +94,17 @@ class VllmSamplingClient:
     request_timeout_sec: float = 300.0
     max_concurrent_requests: int = 64
     client_side_round_robin: bool = False
+    route_by_prompt_prefix: bool = False
+    route_prefix_tokens: int = 1536
+    _prefix_engine: dict[int, int] = field(default_factory=dict)
+    _route_rr: int = 0
     _loaded_loras: dict[str, dict[str, str]] = field(default_factory=dict)
     _latest_lora_by_model: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        import threading
+
+        self._route_lock = threading.Lock()
         url_pairs = _normalize_vllm_url_list(self.base_url)
         self.server_base_urls = tuple(pair[0] for pair in url_pairs)
         self.openai_base_urls = tuple(pair[1] for pair in url_pairs)
@@ -111,10 +118,59 @@ class VllmSamplingClient:
         self.lora_load_retry_sleep_sec = max(0.0, self.lora_load_retry_sleep_sec)
         self.max_concurrent_requests = max(1, self.max_concurrent_requests)
 
-    def _completion_url_for_index(self, index: int) -> str:
-        if self.client_side_round_robin:
-            return self.openai_base_urls[index % len(self.openai_base_urls)]
-        return self.openai_base_url
+    def _completion_url_for_index(self, index: int, prompt_ids: list[int] | None = None) -> str:
+        """Pick the engine for a request.
+
+        With route_by_prompt_prefix, hash a fixed-length PREFIX of the prompt so
+        that every request sharing that prefix lands on the same engine and hits
+        its prefix cache. This matters for the two-phase completer: phase 2
+        re-sends the original prompt PLUS all of phase 1's generated tokens
+        (~13.8k tokens for muse), and under plain index round-robin it reaches
+        the engine holding that KV only ~1 time in N. Measured on m-grpo-n: 49%
+        prefix-cache hit rate and generation throughput collapsing to 28-114
+        tok/s while 39-64 sequences were "running" -- engines re-prefilling
+        context another engine had just produced.
+
+        The prefix length must sit BELOW the shortest prompt: phase 2's prompt is
+        phase 1's prompt plus generated tokens, so any prefix contained in the
+        original prompt is identical across both phases, while a longer one would
+        start absorbing generated tokens and route the two phases apart. 1024
+        tokens is comfortably inside the ~2.8k-token Erdos prompts and past the
+        ~400-token point where group prompts start to differ (measured: 1024-char
+        prefixes are identical across all 16 groups, so a short prefix would send
+        every group to ONE engine -- do not shrink this without re-measuring).
+
+        crc32, not hash(): PYTHONHASHSEED randomises str/tuple hashing per
+        process, which would scatter the mapping across restarts.
+        """
+        if not self.client_side_round_robin:
+            return self.openai_base_url
+        urls = self.openai_base_urls
+        if self.route_by_prompt_prefix and prompt_ids:
+            import zlib
+
+            head = prompt_ids[: max(1, self.route_prefix_tokens)]
+            key = zlib.crc32(",".join(map(str, head)).encode())
+            # Round-robin ALLOCATION, sticky LOOKUP. Hashing the key straight to
+            # an engine would pin phase 2 correctly but wreck balance -- measured
+            # on the real Erdos prompts, crc%6 puts 6 of 16 groups on one engine
+            # and leaves another idle, and a step is gated by its slowest engine.
+            # Allocating each new prefix to the next engine keeps today's even
+            # spread while still returning a group's phase 2 to the engine that
+            # holds its phase-1 KV.
+            with self._route_lock:
+                slot = self._prefix_engine.get(key)
+                if slot is None:
+                    slot = self._route_rr % len(urls)
+                    self._route_rr += 1
+                    # Bounded: prompts change every step, so old keys are dead
+                    # weight. Drop the oldest half rather than grow forever.
+                    if len(self._prefix_engine) >= 4096:
+                        for k in list(self._prefix_engine)[:2048]:
+                            del self._prefix_engine[k]
+                    self._prefix_engine[key] = slot
+            return urls[slot]
+        return urls[index % len(urls)]
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -202,21 +258,21 @@ class VllmSamplingClient:
         """
         checkpoint_id = checkpoint_id or _checkpoint_id_from_path(checkpoint_path)
         lora_name = _sanitize_lora_name(model_id, checkpoint_id)
+        loaded_servers = self._loaded_loras.setdefault(lora_name, {})
+        if all(server_url in loaded_servers for server_url in self.server_base_urls):
+            return lora_name
+
         target_dir = self.lora_base_dir / lora_name
         self._extract_lora_checkpoint(checkpoint_path, target_dir)
 
         target_path = str(target_dir)
-        loaded_servers = self._loaded_loras.setdefault(lora_name, {})
-        if all(loaded_servers.get(server_url) == target_path for server_url in self.server_base_urls):
-            return lora_name
-
         previous_lora = self._latest_lora_by_model.get(model_id)
         if previous_lora and previous_lora != lora_name:
             self._unload_lora(previous_lora)
 
         payload = {"lora_name": lora_name, "lora_path": target_path}
         for server_url in self.server_base_urls:
-            if loaded_servers.get(server_url) == target_path:
+            if server_url in loaded_servers:
                 continue
             self._post_json_with_retries(f"{server_url}{self.lora_load_endpoint}", payload)
             loaded_servers[server_url] = target_path
@@ -263,7 +319,8 @@ class VllmSamplingClient:
 
         finish_reason = choice.get("finish_reason")
         stop_reason = "stop" if finish_reason in ("stop", "stop_token") else "length"
-        return types.GeneratedSequence(tokens=tokens, logprobs=logprobs, stop_reason=stop_reason)
+        return types.GeneratedSequence(tokens=tokens, logprobs=logprobs, stop_reason=stop_reason,
+            loss_mask=choice.get("loss_mask"), thinking_budget=choice.get("thinking_budget"))
 
     def _completion_request(
         self,
@@ -297,6 +354,9 @@ class VllmSamplingClient:
             "stream": False,
             "return_token_ids": True,
         }
+        native_budget = sampling_params.thinking_token_budget
+        if native_budget is not None:
+            payload["thinking_token_budget"] = native_budget
         if sampling_params.stop_tokens:
             payload["stop_token_ids"] = sampling_params.stop_tokens
         if sampling_params.stop_strings:
@@ -313,6 +373,10 @@ class VllmSamplingClient:
         choices = sorted(choices, key=lambda choice: choice.get("index", 0))
 
         prompt_lps = self._prompt_logprobs_from_response(result, prompt_ids) if prompt_logprobs else None
+        if native_budget is not None:
+            from skyrl.backends.native_completion import validate_choice
+            for choice in choices:
+                validate_choice(choice, native_budget, sampling_params.max_tokens)
         return [self._sequence_from_choice(choice) for choice in choices], prompt_lps
 
     def sample_one(
@@ -357,7 +421,7 @@ class VllmSamplingClient:
                 model_name=model_names[i],
                 session_id=session_ids[i],
                 prompt_logprobs=prompt_logprobs,
-                openai_base_url=self._completion_url_for_index(i),
+                openai_base_url=self._completion_url_for_index(i, prompt_ids[i]),
             )
 
         workers = min(self.max_concurrent_requests, len(prompt_ids))
@@ -383,6 +447,7 @@ class VllmSamplingClient:
             query += f"&previous_lora_name={previous}"
 
         last_error: Exception | None = None
+        loaded_servers = self._loaded_loras.setdefault(lora_name, {})
         for server_url in self.server_base_urls:
             url = f"{server_url}{self.lora_upload_endpoint}?{query}"
             for attempt in range(1, self.lora_load_retries + 1):
@@ -399,13 +464,47 @@ class VllmSamplingClient:
                     break
                 except Exception as e:  # noqa: BLE001
                     last_error = e
+                    # An upload is not failed until the server says the adapter
+                    # is absent. When the first load compiles (muse: first LoRA
+                    # load under VLLM_SKIP_JAX_PRECOMPILE=1 runs for minutes),
+                    # the server finishes AFTER our socket timeout and logs
+                    # 200 to nobody; retries then hit the extracted-dir skip
+                    # path and get their connection reset. Both look like
+                    # failures here while /v1/models already lists the
+                    # adapter — observed live on m-grpo-n: 3/3 "failed" pushes
+                    # all loaded, 206 client relaunches over a lost ACK.
+                    if self._adapter_is_loaded(server_url, lora_name):
+                        logger.info(
+                            "adapter %s upload to %s reported %r but the server lists it as loaded; treating as success",
+                            lora_name, server_url, e,
+                        )
+                        last_error = None
+                        break
                     if attempt < self.lora_load_retries:
                         time.sleep(self.lora_load_retry_sleep_sec)
             if last_error is not None:
                 raise VllmRequestError(f"adapter upload to {url} failed: {last_error}")
+            loaded_servers[server_url] = "http-upload"
 
         self._latest_lora_by_model[model_id] = lora_name
         return lora_name
+
+    def _adapter_is_loaded(self, server_url: str, lora_name: str) -> bool:
+        """True when the server's /v1/models already lists ``lora_name``.
+
+        The ground truth for whether a push worked. Kept deliberately cheap and
+        non-raising: it runs inside the upload retry loop, where the server may
+        be busy compiling — a probe failure just means "unknown", not "absent".
+        """
+        req = urllib.request.Request(
+            f"{server_url}/v1/models", headers={"Authorization": f"Bearer {self.api_key}"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return any(m.get("id") == lora_name for m in data.get("data", []))
+        except Exception:  # noqa: BLE001
+            return False
 
     def sample_groups(
         self,
@@ -431,7 +530,7 @@ class VllmSamplingClient:
                 model_name=group.model_name,
                 session_id=group.session_id,
                 prompt_logprobs=prompt_logprobs,
-                openai_base_url=self._completion_url_for_index(i),
+                openai_base_url=self._completion_url_for_index(i, group.prompt_ids),
             )
 
         workers = min(self.max_concurrent_requests, len(groups))

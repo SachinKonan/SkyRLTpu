@@ -1,0 +1,72 @@
+{
+  "time": 1789979332.187445,
+  "jobs": [
+    {
+      "job_id": 1371,
+      "run_id": "farm10-gemma-2-20260921",
+      "status": "PENDING",
+      "cluster": null,
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 110
+    },
+    {
+      "job_id": 1368,
+      "run_id": "farm10-muse-1-20260921",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v4-32-central2-smoke-177",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120
+    },
+    {
+      "job_id": 1331,
+      "run_id": "farm10-gemma-1-20260921",
+      "status": "PENDING",
+      "cluster": "tpuswarm-v4-32-central2-smoke-176",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120
+    },
+    {
+      "job_id": 1330,
+      "run_id": "farm10-qwen-1-20260921",
+      "status": "RUNNING",
+      "cluster": "tpuswarm-v4-32-central2-smoke-173",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 120
+    },
+    {
+      "job_id": 77,
+      "run_id": "v4-gemma4-inference-job76-log-diagnostic",
+      "status": "FAILED_PRECHECKS",
+      "cluster": "tpuswarm-v4-32-central2-smoke-39",
+      "pool": "tpuswarm-v4-32-central2-smoke",
+      "priority": 0
+    }
+  ],
+  "old_remote_jobs": [
+    {
+      "job_id": 6,
+      "status": "JobStatus.FAILED"
+    },
+    {
+      "job_id": 5,
+      "status": "JobStatus.FAILED"
+    },
+    {
+      "job_id": 4,
+      "status": "JobStatus.FAILED"
+    },
+    {
+      "job_id": 3,
+      "status": "JobStatus.CANCELLED"
+    },
+    {
+      "job_id": 2,
+      "status": "JobStatus.CANCELLED"
+    },
+    {
+      "job_id": 1,
+      "status": "JobStatus.SUCCEEDED"
+    }
+  ],
+  "active_exec_requests": []
+}

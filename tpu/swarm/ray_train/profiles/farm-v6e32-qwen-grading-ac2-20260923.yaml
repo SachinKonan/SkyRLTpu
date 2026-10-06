@@ -1,0 +1,24 @@
+name: farm-v6e32-qwen-grading-ac2-20260923
+resources:
+  cloud: gcp
+  zone: us-central1-b
+  accelerators: tpu-v6e-32
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: v2-alpha-tpuv6e
+  use_spot: true
+  disk_size: 150
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 3
+envs:
+  RAY_TRAIN_CODE: gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-33c1a13bf815aff3aa7f44b43571ca5aa84010f772852bfce0163201fd69f70a.tar.gz
+  RAY_TRAIN_CODE_SHA256: 33c1a13bf815aff3aa7f44b43571ca5aa84010f772852bfce0163201fd69f70a
+run: "set -euo pipefail\nexport PATH=\"$HOME/.local/bin:$PATH\"\ncode=\"$HOME/.cache/skyrl-ray-code/$RAY_TRAIN_CODE_SHA256\"\
+  \nif [ ! -f \"$code/.complete\" ]; then\n  mkdir -p \"$code\"\n  gcloud storage\
+  \ cp \"$RAY_TRAIN_CODE\" \"$code/code.tar.gz\"\n  printf '%s  %s\\n' \"$RAY_TRAIN_CODE_SHA256\"\
+  \ \"$code/code.tar.gz\" | sha256sum -c -\n  tar -xzf \"$code/code.tar.gz\" -C \"\
+  $code\"\n  touch \"$code/.complete\"\nfi\nexport PYTHONPATH=\"$code:$code/tpu${PYTHONPATH:+:$PYTHONPATH}\"\
+  \nexport SCIENCE_WORKER_ROOT=\"$code\"\nexec python3 -m tpu.swarm.ray_train.bootstrap\
+  \ \"$code/tpu/swarm/ray_train/profiles/farm-v6e32-qwen-grading-ac2-20260923.json\"\
+  \n"

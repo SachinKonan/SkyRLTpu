@@ -1,0 +1,20 @@
+{
+  "qwen": {
+    "completed_grade_records": 1024,
+    "valid_records": 86,
+    "selected": 18,
+    "maximum": 32
+  },
+  "gemma": {
+    "completed_grade_records": 216,
+    "valid_records": 85,
+    "selected": 3,
+    "maximum": 32
+  },
+  "muse": {
+    "completed_grade_records": 568,
+    "valid_records": 499,
+    "selected": 6,
+    "maximum": 32
+  }
+}

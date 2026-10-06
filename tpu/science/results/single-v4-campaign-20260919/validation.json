@@ -1,0 +1,20 @@
+{
+  "bounded_bootstrap": {
+    "tests": 27,
+    "passed": true
+  },
+  "science_config_lifecycle_regression": {
+    "tests": 96,
+    "subtests": 5,
+    "passed": true,
+    "note": "Includes an earlier 19-test subset of bounded-bootstrap tests; counts overlap."
+  },
+  "legacy_bootstrap_and_mesh": {
+    "tests": 17,
+    "subtests": 7,
+    "passed": true
+  },
+  "packages": 12,
+  "tpu_launched": false,
+  "cancelled_jobs": []
+}

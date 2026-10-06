@@ -1,0 +1,91 @@
+{
+  "host": "della-h14n2",
+  "cpus": 4,
+  "memory_gib": 16,
+  "wall_limit_seconds": 180,
+  "profile": "upstream_cpu_fallback_pilot",
+  "challenge_commit": "996193c83eaad151e5ae3fb166cedbd83372d060",
+  "evaluator_commit": "45a721d01dfe56fc4800b95da52e9b4193b76d04",
+  "runs": [
+    {
+      "method": "archgen",
+      "case": "ibm01",
+      "commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+      "valid": false,
+      "reward": 0.0,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4",
+        "EVO_XRA_ENABLE": "0",
+        "PAD80_CD_TIME": "140",
+        "EVO_TARGET_TOTAL_TIME_S": "140",
+        "AUTODMP_TOTAL_TIME_LIMIT": "140",
+        "EVO_UNDER60_DEADLINE_S": "140",
+        "EVO_UNDER60_SCORE_SAFETY_S": "10"
+      },
+      "error": "RuntimeError: isolated process exited 1: cro_place/_plc.py\", line 25, in <module>\n    from plc_client_os import PlacementCost # noqa  # type: ignore\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/eval/external/MacroPlacement/CodeElements/Plc_client/plc_client_os.py\", line 9, in <module>\n    import matplotlib.pyplot as plt\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 1010, in <module>\n    rcParams._update_raw(_rc_params_in_file(matplotlib_fname()))\n                                            ^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 636, in matplotlib_fname\n    for fname in gen_candidates():\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 633, in gen_candidates\n    yield os.path.join(get_configdir(), 'matplotlibrc')\n                       ^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 340, in wrapper\n    ret = func(**kwargs)\n          ^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 579, in get_configdir\n    return _get_config_or_cache_dir(_get_xdg_config_dir)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 529, in _get_config_or_cache_dir\n    configdir = Path(xdg_base_getter(), \"matplotlib\")\n                     ^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 510, in _get_xdg_config_dir\n    return os.environ.get('XDG_CONFIG_HOME') or str(Path.home() / \".config\")\n                                                    ^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 914, in home\n    return cls(\"~\").expanduser()\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 1385, in expanduser\n    raise RuntimeError(\"Could not determine home directory.\")\nRuntimeError: Could not determine home directory.\n",
+      "total_seconds": 1.4473178000189364
+    },
+    {
+      "method": "archgen",
+      "case": "ibm18",
+      "commit": "6b3661bad55d81c00fad151d81ec1e74ef0271e0",
+      "valid": false,
+      "reward": 0.0,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4",
+        "EVO_XRA_ENABLE": "0",
+        "PAD80_CD_TIME": "140",
+        "EVO_TARGET_TOTAL_TIME_S": "140",
+        "AUTODMP_TOTAL_TIME_LIMIT": "140",
+        "EVO_UNDER60_DEADLINE_S": "140",
+        "EVO_UNDER60_SCORE_SAFETY_S": "10"
+      },
+      "error": "RuntimeError: isolated process exited 1: cro_place/_plc.py\", line 25, in <module>\n    from plc_client_os import PlacementCost # noqa  # type: ignore\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/eval/external/MacroPlacement/CodeElements/Plc_client/plc_client_os.py\", line 9, in <module>\n    import matplotlib.pyplot as plt\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 1010, in <module>\n    rcParams._update_raw(_rc_params_in_file(matplotlib_fname()))\n                                            ^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 636, in matplotlib_fname\n    for fname in gen_candidates():\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 633, in gen_candidates\n    yield os.path.join(get_configdir(), 'matplotlibrc')\n                       ^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 340, in wrapper\n    ret = func(**kwargs)\n          ^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 579, in get_configdir\n    return _get_config_or_cache_dir(_get_xdg_config_dir)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 529, in _get_config_or_cache_dir\n    configdir = Path(xdg_base_getter(), \"matplotlib\")\n                     ^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 510, in _get_xdg_config_dir\n    return os.environ.get('XDG_CONFIG_HOME') or str(Path.home() / \".config\")\n                                                    ^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 914, in home\n    return cls(\"~\").expanduser()\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 1385, in expanduser\n    raise RuntimeError(\"Could not determine home directory.\")\nRuntimeError: Could not determine home directory.\n",
+      "total_seconds": 1.3961478179553524
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm01",
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "valid": false,
+      "reward": 0.0,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4"
+      },
+      "error": "RuntimeError: isolated process exited 1: cro_place/_plc.py\", line 25, in <module>\n    from plc_client_os import PlacementCost # noqa  # type: ignore\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/eval/external/MacroPlacement/CodeElements/Plc_client/plc_client_os.py\", line 9, in <module>\n    import matplotlib.pyplot as plt\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 1010, in <module>\n    rcParams._update_raw(_rc_params_in_file(matplotlib_fname()))\n                                            ^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 636, in matplotlib_fname\n    for fname in gen_candidates():\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 633, in gen_candidates\n    yield os.path.join(get_configdir(), 'matplotlibrc')\n                       ^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 340, in wrapper\n    ret = func(**kwargs)\n          ^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 579, in get_configdir\n    return _get_config_or_cache_dir(_get_xdg_config_dir)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 529, in _get_config_or_cache_dir\n    configdir = Path(xdg_base_getter(), \"matplotlib\")\n                     ^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 510, in _get_xdg_config_dir\n    return os.environ.get('XDG_CONFIG_HOME') or str(Path.home() / \".config\")\n                                                    ^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 914, in home\n    return cls(\"~\").expanduser()\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 1385, in expanduser\n    raise RuntimeError(\"Could not determine home directory.\")\nRuntimeError: Could not determine home directory.\n",
+      "total_seconds": 1.4457814460038207
+    },
+    {
+      "method": "abuplace",
+      "case": "ibm18",
+      "commit": "a24087c45588f1873eb2dc18293e407e5477041d",
+      "valid": false,
+      "reward": 0.0,
+      "environment": {
+        "PYTHONPATH": "/eval:/baseline",
+        "CUDA_VISIBLE_DEVICES": "",
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4",
+        "MKL_NUM_THREADS": "4",
+        "NUMEXPR_NUM_THREADS": "4"
+      },
+      "error": "RuntimeError: isolated process exited 1: cro_place/_plc.py\", line 25, in <module>\n    from plc_client_os import PlacementCost # noqa  # type: ignore\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/eval/external/MacroPlacement/CodeElements/Plc_client/plc_client_os.py\", line 9, in <module>\n    import matplotlib.pyplot as plt\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 1010, in <module>\n    rcParams._update_raw(_rc_params_in_file(matplotlib_fname()))\n                                            ^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 636, in matplotlib_fname\n    for fname in gen_candidates():\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 633, in gen_candidates\n    yield os.path.join(get_configdir(), 'matplotlibrc')\n                       ^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 340, in wrapper\n    ret = func(**kwargs)\n          ^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 579, in get_configdir\n    return _get_config_or_cache_dir(_get_xdg_config_dir)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 529, in _get_config_or_cache_dir\n    configdir = Path(xdg_base_getter(), \"matplotlib\")\n                     ^^^^^^^^^^^^^^^^^\n  File \"/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-science-placement/.science/venv/lib/python3.11/site-packages/matplotlib/__init__.py\", line 510, in _get_xdg_config_dir\n    return os.environ.get('XDG_CONFIG_HOME') or str(Path.home() / \".config\")\n                                                    ^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 914, in home\n    return cls(\"~\").expanduser()\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/sk7524/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/pathlib.py\", line 1385, in expanduser\n    raise RuntimeError(\"Could not determine home directory.\")\nRuntimeError: Could not determine home directory.\n",
+      "total_seconds": 1.3967092700186186
+    }
+  ]
+}

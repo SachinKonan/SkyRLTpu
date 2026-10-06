@@ -16,6 +16,8 @@ Compatible with vllm==0.23 (mirrors skyrl's GPU vllm_server_actor pattern).
 
 import argparse
 import asyncio
+import sys
+import os
 import inspect
 import logging
 import shutil
@@ -41,8 +43,18 @@ from vllm.utils.system_utils import set_ulimit
 logger = logging.getLogger(__name__)
 
 
-def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
+def _add_upload_endpoint(app, lora_dir: Path, engine, *, max_loras: int = 1,
+                         expert_lora_slots: bool = False) -> None:
+    import hashlib
     lora_dir.mkdir(parents=True, exist_ok=True)
+
+    @app.get("/skyrl/v1/adapter_status")
+    async def _adapter_status(request: Request):
+        adapters = {}
+        for name in request.app.state.openai_serving_models.lora_requests:
+            marker = lora_dir / name / ".skyrl-archive-sha256"
+            adapters[name] = marker.read_text().strip() if marker.is_file() else None
+        return {"adapters": adapters}
 
     @app.post("/skyrl/v1/upload_lora_adapter")
     async def _upload_lora_adapter(request: Request):
@@ -51,7 +63,22 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
         if not lora_name or "/" in lora_name or lora_name.startswith("."):
             raise HTTPException(status_code=400, detail="valid 'lora_name' query param required")
 
+        # The trainer-side client is recreated when only the trainer restarts,
+        # while this vLLM process may stay alive. Persist the last upload here
+        # so a fresh client cannot leak old adapters by forgetting their name.
+        # Multiple adapters need explicit replacement: a global last-upload
+        # marker cannot distinguish a peer adapter from an older version.
+        latest_marker = lora_dir / ".skyrl-latest-lora"
+        if not previous and max_loras == 1:
+            try:
+                candidate = latest_marker.read_text().strip()
+                if candidate and "/" not in candidate and not candidate.startswith("."):
+                    previous = candidate
+            except FileNotFoundError:
+                pass
+
         target = lora_dir / lora_name
+        digest = hashlib.sha256()
         if not target.exists():
             # Stream the tar body to disk (payloads are up to ~GBs of f32
             # LoRA factors; never buffer fully in RAM).
@@ -59,24 +86,106 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                 tmp_path = Path(tmp.name)
                 async for chunk in request.stream():
                     tmp.write(chunk)
+                    digest.update(chunk)
             staging = lora_dir / f".{lora_name}.staging"
             shutil.rmtree(staging, ignore_errors=True)
             staging.mkdir(parents=True)
             try:
                 with tarfile.open(tmp_path, "r:") as tar:
                     tar.extractall(staging, filter="data")
+            except tarfile.ReadError as exc:
+                # 0-byte or truncated body (health probes POST with no body).
+                # A 400 keeps the log clean; a raw ReadError is a 500 traceback
+                # that reads like an export bug — it cost a day of muse triage.
+                shutil.rmtree(staging, ignore_errors=True)
+                raise HTTPException(status_code=400, detail=f"unreadable tar body: {exc}") from exc
             finally:
                 tmp_path.unlink(missing_ok=True)
             if not (staging / "adapter_config.json").exists():
                 shutil.rmtree(staging, ignore_errors=True)
                 raise HTTPException(status_code=400, detail="tar does not contain adapter_config.json at its root")
+            (staging / ".skyrl-archive-sha256").write_text(digest.hexdigest())
             staging.replace(target)
+        else:
+            # The adapter is already extracted (a retry after a lost ACK), but
+            # the body must still be drained: responding with megabytes of
+            # request unread makes uvicorn close the socket mid-upload, the
+            # client sees ECONNRESET instead of our 200, and every retry
+            # repeats the cycle — the trainer never learns the push succeeded.
+            async for chunk in request.stream():
+                digest.update(chunk)
+            marker = target / ".skyrl-archive-sha256"
+            if not marker.is_file() or marker.read_text().strip() != digest.hexdigest():
+                raise HTTPException(status_code=409, detail="adapter version is immutable or has no verified archive hash; use a new name")
 
-        # MoE LoRA sidecar (gpt-oss): merge expert/router deltas into the
-        # base weights via a worker RPC. This must run on EVERY upload call —
-        # even when the tar extract above was skipped because the adapter dir
-        # already existed — since the worker-side merge is incremental and
-        # keyed off its own previously applied factors, not the filesystem.
+        # Load the ordinary PEFT half first. vLLM assigns the adapter a
+        # physical Punica slot here; the expert sidecar must be installed in
+        # that exact slot so mixed base/A/B requests select matching router,
+        # attention, and expert factors.
+        models = request.app.state.openai_serving_models
+
+        if max_loras == 1:
+            # A failed fanout may have installed an uncommitted version on
+            # this engine. A new lease must also replace that partial version.
+            for stale in list(models.lora_requests):
+                if stale != lora_name and stale != previous:
+                    await models.unload_lora_adapter(UnloadLoRAAdapterRequest(lora_name=stale))
+                    shutil.rmtree(lora_dir / stale, ignore_errors=True)
+        if previous and previous != lora_name:
+            await models.unload_lora_adapter(
+                UnloadLoRAAdapterRequest(lora_name=previous))
+            # Not-loaded is fine (server restart, first sync).
+            shutil.rmtree(lora_dir / previous, ignore_errors=True)
+
+        was_loaded = lora_name in models.lora_requests
+        resp = await models.load_lora_adapter(
+            LoadLoRAAdapterRequest(lora_name=lora_name,
+                                   lora_path=str(target),
+                                   load_inplace=was_loaded))
+        if not isinstance(resp, str):  # vllm returns ErrorResponse objects on failure
+            detail = getattr(resp, "message", None) or str(resp)
+            raise HTTPException(
+                status_code=400,
+                detail=f"load_lora_adapter failed: {detail}")
+        lora_request = models.lora_requests.get(lora_name)
+        if lora_request is None:
+            raise HTTPException(
+                status_code=500,
+                detail=f"loaded adapter {lora_name!r} has no vLLM request id")
+        lora_int_id = int(lora_request.lora_int_id)
+
+        async def _rollback_new_adapter() -> None:
+            if not was_loaded:
+                await models.unload_lora_adapter(
+                    UnloadLoRAAdapterRequest(lora_name=lora_name))
+
+        def _validate_moe_update(result, *, cleared: bool):
+            updates = result if isinstance(result, list) else [result]
+            if not updates:
+                raise RuntimeError(
+                    "expert LoRA update returned no worker results")
+            for item in updates:
+                if not isinstance(item, dict):
+                    raise RuntimeError(
+                        f"unexpected expert LoRA result: {item!r}")
+                if item.get("base_weights_mutated") is not False:
+                    raise RuntimeError(
+                        "worker did not prove immutable MXFP4 base: "
+                        f"{item!r}")
+                if item.get("cleared") is not cleared:
+                    raise RuntimeError(
+                        f"worker returned the wrong clear state: {item!r}")
+                if item.get("lora_id") != lora_int_id:
+                    raise RuntimeError(
+                        f"worker updated the wrong LoRA id: {item!r}")
+            return result
+
+        # GPT-OSS expert sidecar: replace the fixed-shape BF16 factor buffers
+        # evaluated beside the immutable MXFP4 base GMMs. This must run on
+        # every upload call, including retries whose directory already exists.
+        # The BF16 router is part of adapter_model.safetensors and follows
+        # vLLM's ordinary ReplicatedLinear LoRA path below.
+        moe_update = None
         moe_path = target / "moe_lora.safetensors"
         if moe_path.exists():
             import json as _json
@@ -87,14 +196,15 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
             with _safe_open(str(moe_path), framework="numpy") as _f:
                 n_tensors = len(list(_f.keys()))
 
-            async def _rpc(rpc_factors):
+            async def _rpc(rpc_factors, rpc_meta=meta):
                 # vllm 0.23: AsyncLLMEngine is v1 AsyncLLM
                 # (vllm/engine/async_llm_engine.py aliases it), whose
                 # `collective_rpc(method, timeout=None, args=(), kwargs=None)`
                 # is an async method fanning out to the TPU workers (the
                 # isawaitable branch also covers a sync variant).
                 res = engine.collective_rpc(
-                    "apply_moe_lora_deltas", args=(rpc_factors, meta)
+                    "set_moe_lora_factors",
+                    args=(rpc_factors, rpc_meta, lora_int_id),
                 )
                 if inspect.isawaitable(res):
                     res = await res
@@ -116,39 +226,123 @@ def _add_upload_endpoint(app, lora_dir: Path, engine) -> None:
                     result = await _rpc(str(moe_path))
                 except Exception:
                     logger.exception(
-                        "MoE LoRA merge: path-based RPC for %s failed; "
+                        "MoE LoRA factor update: path-based RPC for %s failed; "
                         "retrying with inline nested-list factors", lora_name,
                     )
                     from safetensors.numpy import load_file as _st_load
                     result = await _rpc({
                         k: v.tolist() for k, v in _st_load(str(moe_path)).items()
                     })
+                result = _validate_moe_update(result, cleared=False)
             except Exception as exc:
+                await _rollback_new_adapter()
                 raise HTTPException(
                     status_code=500,
-                    detail=f"apply_moe_lora_deltas RPC failed: {exc!r}",
+                    detail=f"set_moe_lora_factors RPC failed: {exc!r}",
                 ) from exc
             logger.info(
-                "MoE LoRA merge-on-load for %s: %d tensors -> %s",
+                "MXFP4 expert LoRA factor update for %s: %d tensors -> %s",
                 lora_name, n_tensors, result,
             )
+            moe_update = result
+        elif expert_lora_slots:
+            # An attention/router-only adapter still owns a physical expert
+            # slot. Explicitly zero it in case vLLM reused a formerly active
+            # expert slot. Dense models such as Qwen have no such buffers;
+            # issuing this GPT-OSS RPC there fails an otherwise valid upload.
+            try:
+                res = engine.collective_rpc(
+                    "set_moe_lora_factors",
+                    args=(None, {"scale": 0.0}, lora_int_id),
+                )
+                if inspect.isawaitable(res):
+                    res = await res
+                res = _validate_moe_update(res, cleared=True)
+            except Exception as exc:
+                await _rollback_new_adapter()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"clear expert LoRA slot failed: {exc!r}",
+                ) from exc
+            logger.info("Cleared MXFP4 expert LoRA factors for %s", lora_name)
+            moe_update = res
 
-        models = request.app.state.openai_serving_models
+        if max_loras == 1:
+            marker_tmp = latest_marker.with_suffix(".tmp")
+            marker_tmp.write_text(f"{lora_name}\n")
+            marker_tmp.replace(latest_marker)
 
-        if previous and previous != lora_name:
-            resp = await models.unload_lora_adapter(UnloadLoRAAdapterRequest(lora_name=previous))
-            # Not-loaded is fine (server restart, first sync); surface other errors.
-            shutil.rmtree(lora_dir / previous, ignore_errors=True)
+        # Returning the worker result makes the live acceptance gate capable
+        # of proving that all MXFP4 expert buffers were updated (or cleared),
+        # without scraping a human-oriented server log. Existing clients only
+        # consume status/lora_name, so this is backward compatible.
+        return {
+            "status": "ok",
+            "lora_name": lora_name,
+            "lora_int_id": lora_int_id,
+            "sha256": digest.hexdigest(),
+            "moe_update": moe_update,
+        }
 
-        resp = await models.load_lora_adapter(
-            LoadLoRAAdapterRequest(lora_name=lora_name, lora_path=str(target))
-        )
-        if not isinstance(resp, str):  # vllm returns ErrorResponse objects on failure
-            detail = getattr(resp, "message", None) or str(resp)
-            if "already been loaded" not in detail:
-                raise HTTPException(status_code=400, detail=f"load_lora_adapter failed: {detail}")
 
-        return {"status": "ok", "lora_name": lora_name}
+# Environment the second host's vLLM worker needs verbatim (vLLM itself only
+# copies VLLM_* and the TPU platform's additional_env_vars to Ray workers).
+_WORKER_ENV_KEYS = (
+    "HF_HOME", "HF_HUB_OFFLINE", "JAX_PLATFORMS", "JAX_COMPILATION_CACHE_DIR",
+    "JAX_ENABLE_COMPILATION_CACHE", "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS",
+    "JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "VLLM_XLA_CACHE_PATH", "TPU_BACKEND_TYPE",
+    "MODEL_IMPL_TYPE", "TPU_MULTIHOST_BACKEND", "SKIP_JAX_PRECOMPILE", "USE_BATCHED_RPA_KERNEL",
+    "USE_JAX_RAGGED_CONV1D", "USE_MOE_EP_KERNEL", "MOE_REQUANTIZE_WEIGHT_DTYPE",
+    "MOE_REQUANTIZE_BLOCK_SIZE", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+    "CUSTOM_NUM_TOKENS_BUCKETS", "SERIALIZE_MODEL_AND_SAMPLING",
+)
+
+
+def _sanitize_ray_worker_environment(expected):
+    """Run before the remote engine imports JAX/vLLM, including on host two."""
+    import os
+    prefixes = ("TUNIX_", "SKYRL_", "TTD_", "JAX_", "XLA_", "TPU_",
+                "CLOUD_TPU_", "VLLM_", "LIBTPU_", "PJRT_")
+    keys = {"CUSTOM_NUM_TOKENS_BUCKETS", "SERIALIZE_MODEL_AND_SAMPLING",
+            "SKIP_JAX_PRECOMPILE", "USE_BATCHED_RPA_KERNEL", "USE_JAX_RAGGED_CONV1D",
+            "MODEL_IMPL_TYPE", "USE_MOE_EP_KERNEL", "MOE_REQUANTIZE_WEIGHT_DTYPE",
+            "MOE_REQUANTIZE_BLOCK_SIZE"}
+    for key in list(os.environ):
+        if (key.startswith(prefixes) or key in keys) and key not in expected:
+            del os.environ[key]
+    os.environ.update(expected)
+
+
+def _engine_on_existing_ray(engine_args, hosts: list[str]):
+    """Pipeline-parallel engine over `hosts` on an already-running Ray cluster.
+
+    Joins the cluster named by RAY_ADDRESS as a driver whose job runtime_env
+    runs every actor under THIS interpreter (the serving venv; the cluster's
+    raylets were started from another venv), reserves TPU:4 on exactly the
+    given hosts with a placement group, and hands that group to vLLM so its
+    Ray executor does not try to span every TPU node in the cluster. One
+    worker per host: pipeline stage i on hosts[i], tensor-parallel over that
+    host's own chips (tpu-inference's Ray multihost mode).
+    """
+    import ray
+    from functools import partial
+    from ray.util.placement_group import placement_group
+
+    env_vars = {k: os.environ[k] for k in _WORKER_ENV_KEYS if k in os.environ}
+    # vLLM needs its explicit driver settings too; only the driver environment
+    # has been resolved/isolated by the executor at this point.
+    env_vars.update({k: v for k, v in os.environ.items() if k.startswith("VLLM_")})
+    ray.init(address=os.environ.get("RAY_ADDRESS", "auto"), ignore_reinit_error=True,
+             runtime_env={"py_executable": sys.executable, "env_vars": env_vars,
+                          "worker_process_setup_hook": partial(_sanitize_ray_worker_environment, env_vars)})
+    chips = int(engine_args.tensor_parallel_size)
+    bundles = [{"TPU": chips, f"node:{host}": 0.001} for host in hosts]
+    group = placement_group(bundles, strategy="STRICT_SPREAD")
+    ray.get(group.ready(), timeout=300)
+    logger.info("placement group ready on %s (%d TPU each)", hosts, chips)
+    vllm_config = engine_args.create_engine_config(usage_context=UsageContext.OPENAI_API_SERVER)
+    vllm_config.parallel_config.placement_group = group
+    return AsyncLLMEngine.from_vllm_config(vllm_config, usage_context=UsageContext.OPENAI_API_SERVER)
 
 
 async def _serve(args) -> None:
@@ -162,12 +356,20 @@ async def _serve(args) -> None:
     set_ulimit()
     app = build_app(args)
 
-    engine = AsyncLLMEngine.from_engine_args(
-        engine_args=AsyncEngineArgs.from_cli_args(args),
-        usage_context=UsageContext.OPENAI_API_SERVER,
-    )
+    engine_args = AsyncEngineArgs.from_cli_args(args)
+    placement_hosts = [h for h in (args.skyrl_ray_placement_hosts or "").split(",") if h]
+    if placement_hosts:
+        engine = _engine_on_existing_ray(engine_args, placement_hosts)
+    else:
+        engine = AsyncLLMEngine.from_engine_args(
+            engine_args=engine_args,
+            usage_context=UsageContext.OPENAI_API_SERVER,
+        )
 
-    _add_upload_endpoint(app, Path(args.skyrl_lora_dir), engine)
+    _add_upload_endpoint(
+        app, Path(args.skyrl_lora_dir), engine, max_loras=args.max_loras,
+        expert_lora_slots=engine.model_config.hf_config.model_type == "gpt_oss",
+    )
     await init_app_state(engine, app.state, args)
 
     config = uvicorn.Config(
@@ -177,7 +379,10 @@ async def _serve(args) -> None:
         log_level=args.uvicorn_log_level,
         timeout_keep_alive=envs.VLLM_HTTP_TIMEOUT_KEEP_ALIVE,
     )
-    await uvicorn.Server(config).serve()
+    server = uvicorn.Server(config)
+    # vLLM request error handlers call through this attribute.
+    app.state.server = server
+    await server.serve()
 
 
 def main() -> None:
@@ -187,6 +392,13 @@ def main() -> None:
         type=str,
         default=str(Path.home() / "skyrl-local-loras"),
         help="Local directory where uploaded adapters are extracted.",
+    )
+    parser.add_argument(
+        "--skyrl-ray-placement-hosts",
+        type=str,
+        default="",
+        help="Comma-separated host IPs of a pipeline-parallel engine on an existing Ray "
+             "cluster (RAY_ADDRESS); one TPU worker per host, this host first.",
     )
     parser = make_arg_parser(parser)
     # Newer vllm defines the `model_tag` positional itself; adding a second

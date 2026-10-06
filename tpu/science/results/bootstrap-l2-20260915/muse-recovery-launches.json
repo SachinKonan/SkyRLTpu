@@ -1,0 +1,19 @@
+[
+  {
+    "job_id": 947,
+    "run_id": "science-routing-v4-muse-bootstrap-l2-002",
+    "sha256": "3ebfc64a703e896270a1a65bb8c2a9e14d797d86ae7bcb6791c5e03adc76c0ed",
+    "inference_memory_utilization": 0.65,
+    "trainer_unchanged": true,
+    "reason": "inference HBM headroom and host-local gcloud resolution"
+  },
+  {
+    "job_id": 951,
+    "run_id": "science-placement-v4-muse-bootstrap-l2-002",
+    "sha256": "1786e5900822738d13a0be86cfb21e4425ff75082fe83784a672a83db735a208",
+    "inference_memory_utilization": 0.65,
+    "trainer_unchanged": true,
+    "reason": "inference HBM headroom and host-local gcloud resolution",
+    "superseded_pending_job": 948
+  }
+]

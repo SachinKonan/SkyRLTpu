@@ -1,0 +1,11 @@
+{
+  "run_id": "shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920",
+  "profile": "tpu/swarm/ray_train/profiles/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920.json",
+  "source_run_id": "math-v6e-gemma-cp26-grpo-lr4e5-s1-20260920",
+  "source_generation": 1789919484973700,
+  "source_pool_sha256": "d272468ac450248259feaa03f4714c33d6a9668e961d5dd2185fa801b47addbd",
+  "file_sha256": "254892c697025e8541587c457d012895999d353f144a2b1082a455d4d746f3a0",
+  "retained": 51,
+  "model_optimizer": "fresh; source step-1 checkpoint followed failed training",
+  "destination": "gs://sk7524-tinker-tpu-us-central1/ray-training/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/client/tinker_log/shu-v5p64-gemma-cp26-grpo-lr4e5-s1-20260920/puct_sampler_step_000000.json"
+}

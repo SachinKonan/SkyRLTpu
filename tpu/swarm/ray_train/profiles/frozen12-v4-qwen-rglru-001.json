@@ -1,0 +1,55 @@
+{
+  "run_id": "frozen12-v4-qwen-rglru-001",
+  "accelerator": "tpu-v4-64",
+  "hosts": 8,
+  "bucket": "gs://sk7524-tinker-tpu-us-central2",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-central2/code-bundles/tpuswarm-skyrl-v5p32-cells-v22.tar.gz",
+  "base_bundle_sha256": "515ed9a5f2c3021b31ec78bd5eb9baaab983e2e20aa7c84fede9188f02d93a12",
+  "root": "~/.cache/skyrl-ray-frozen12",
+  "model_preset": "qwen3.5-27b",
+  "inference_only": true,
+  "inference_only_ranks": [
+    1,
+    2,
+    3
+  ],
+  "trainer": {
+    "hosts": 0
+  },
+  "inference": {
+    "tp": 4,
+    "max_sequences": 16,
+    "memory_utilization": 0.8,
+    "routing": "ingress",
+    "restart_limit": 0,
+    "chunk_tokens": 4096,
+    "ragged_conv1d": true,
+    "native_thinking_budget": true,
+    "max_model_length": 22528,
+    "request_timeout": 7200
+  },
+  "cache": {
+    "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
+    "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
+    "inference_gib": 128,
+    "reserve_gib": 128,
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/unused-rglru-trainer",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-frozen12-v4-qwen-tp4-seq16-chunk4096-s22528-nativecompat-v1",
+    "process_count": 4,
+    "thread_count": 8,
+    "sync_seconds": 60,
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-central2/vllm-xla-cache-rglru-compare-v4-qwen3.5-27b-tp4-seq16-mem80-chunk4096-jaxconv-v1-s38400-thinking-v1"
+  },
+  "checkpoint_cleanup_timeout": 0,
+  "ready_timeout": 7200,
+  "arena_samples": 1,
+  "client_context_window": 22528,
+  "client_phase1_max_tokens": 16384,
+  "frozen_benchmark": {
+    "task": "rglru",
+    "groups": 16,
+    "group_size": 32,
+    "manifest_sha256": "7c9cc8dc33e8208955256b24a8f7284d4f5c00f983db7323426c228f07639898"
+  },
+  "client_hf_offline": true
+}

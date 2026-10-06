@@ -1,0 +1,17 @@
+name: ray-canary-temporary-placement-hold
+resources:
+  cloud: gcp
+  region: us-central2
+  zone: us-central2-b
+  accelerators: tpu-v4-64
+  accelerator_args:
+    gcp_queued_resource: true
+    runtime_version: tpu-ubuntu2204-base
+  use_spot: true
+  disk_size: 300
+  job_recovery:
+    strategy: FAILOVER
+    max_restarts_on_errors: 0
+run: |
+  # Temporarily occupies a scheduler slot without touching detached workloads.
+  sleep 300

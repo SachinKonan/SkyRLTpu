@@ -1,0 +1,4 @@
+stage=setup job=local-a40 host=della-vis2.princeton.edu
+stage=build_xplace
+stage=candidate_3600_second_cap
+job_exit_code=1

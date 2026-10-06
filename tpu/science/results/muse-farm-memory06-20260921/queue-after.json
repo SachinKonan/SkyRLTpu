@@ -1,0 +1,34 @@
+[
+  {
+    "job_id": 1373,
+    "run_id": "farm10-muse-1-20260921",
+    "status": "STARTING",
+    "cluster": null,
+    "pool": "tpuswarm-v4-32-central2-smoke",
+    "priority": 120
+  },
+  {
+    "job_id": 1371,
+    "run_id": "farm10-gemma-2-20260921",
+    "status": "STARTING",
+    "cluster": "tpuswarm-v4-32-central2-smoke-177",
+    "pool": "tpuswarm-v4-32-central2-smoke",
+    "priority": 110
+  },
+  {
+    "job_id": 1368,
+    "run_id": "farm10-muse-1-20260921",
+    "status": "CANCELLED",
+    "cluster": "tpuswarm-v4-32-central2-smoke-177",
+    "pool": "tpuswarm-v4-32-central2-smoke",
+    "priority": 120
+  },
+  {
+    "job_id": 1331,
+    "run_id": "farm10-gemma-1-20260921",
+    "status": "PENDING",
+    "cluster": "tpuswarm-v4-32-central2-smoke-176",
+    "pool": "tpuswarm-v4-32-central2-smoke",
+    "priority": 120
+  }
+]

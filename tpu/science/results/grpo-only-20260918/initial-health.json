@@ -1,0 +1,2218 @@
+[
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.27,
+            "free_inodes": 12451131
+          },
+          "tmp": {
+            "free_gib": 85.27,
+            "free_inodes": 12451131
+          }
+        },
+        "mem_available_gib": 688.76,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.54,
+            "free_inodes": 12452096
+          },
+          "tmp": {
+            "free_gib": 85.54,
+            "free_inodes": 12452096
+          }
+        },
+        "mem_available_gib": 700.48,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/2",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.1,
+            "free_inodes": 12451935
+          },
+          "tmp": {
+            "free_gib": 85.1,
+            "free_inodes": 12451935
+          }
+        },
+        "mem_available_gib": 700.53,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12452069
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12452069
+          }
+        },
+        "mem_available_gib": 700.42,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/2",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 84.88,
+            "free_inodes": 12451931
+          },
+          "tmp": {
+            "free_gib": 84.88,
+            "free_inodes": 12451931
+          }
+        },
+        "mem_available_gib": 700.47,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.24,
+            "free_inodes": 12451948
+          },
+          "tmp": {
+            "free_gib": 85.24,
+            "free_inodes": 12451948
+          }
+        },
+        "mem_available_gib": 700.51,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/0",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          }
+        },
+        "mem_available_gib": 700.5,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4463",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.22,
+            "free_inodes": 12451946
+          },
+          "tmp": {
+            "free_gib": 85.22,
+            "free_inodes": 12451946
+          }
+        },
+        "mem_available_gib": 700.49,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.42,
+            "free_inodes": 12451235
+          },
+          "tmp": {
+            "free_gib": 85.42,
+            "free_inodes": 12451235
+          }
+        },
+        "mem_available_gib": 688.77,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          }
+        },
+        "mem_available_gib": 700.42,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.49,
+            "free_inodes": 12452078
+          },
+          "tmp": {
+            "free_gib": 85.49,
+            "free_inodes": 12452078
+          }
+        },
+        "mem_available_gib": 700.53,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.35,
+            "free_inodes": 12452066
+          },
+          "tmp": {
+            "free_gib": 85.35,
+            "free_inodes": 12452066
+          }
+        },
+        "mem_available_gib": 700.46,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/2",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          }
+        },
+        "mem_available_gib": 700.51,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/3",
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          }
+        },
+        "mem_available_gib": 700.49,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          }
+        },
+        "mem_available_gib": 700.49,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4475",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.1,
+            "free_inodes": 12451936
+          },
+          "tmp": {
+            "free_gib": 85.1,
+            "free_inodes": 12451936
+          }
+        },
+        "mem_available_gib": 700.48,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/0",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 84.94,
+            "free_inodes": 12451220
+          },
+          "tmp": {
+            "free_gib": 84.94,
+            "free_inodes": 12451220
+          }
+        },
+        "mem_available_gib": 688.84,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.12,
+            "free_inodes": 12452057
+          },
+          "tmp": {
+            "free_gib": 85.12,
+            "free_inodes": 12452057
+          }
+        },
+        "mem_available_gib": 700.43,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.1,
+            "free_inodes": 12451925
+          },
+          "tmp": {
+            "free_gib": 85.1,
+            "free_inodes": 12451925
+          }
+        },
+        "mem_available_gib": 700.47,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/0",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          }
+        },
+        "mem_available_gib": 700.51,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.35,
+            "free_inodes": 12452055
+          },
+          "tmp": {
+            "free_gib": 85.35,
+            "free_inodes": 12452055
+          }
+        },
+        "mem_available_gib": 700.47,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.53,
+            "free_inodes": 12452085
+          },
+          "tmp": {
+            "free_gib": 85.53,
+            "free_inodes": 12452085
+          }
+        },
+        "mem_available_gib": 700.43,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451966
+          }
+        },
+        "mem_available_gib": 700.47,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/3",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4479",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.35,
+            "free_inodes": 12452077
+          },
+          "tmp": {
+            "free_gib": 85.35,
+            "free_inodes": 12452077
+          }
+        },
+        "mem_available_gib": 700.41,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/2",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.27,
+            "free_inodes": 12451131
+          },
+          "tmp": {
+            "free_gib": 85.27,
+            "free_inodes": 12451131
+          }
+        },
+        "mem_available_gib": 688.81,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.22,
+            "free_inodes": 12451957
+          },
+          "tmp": {
+            "free_gib": 85.22,
+            "free_inodes": 12451957
+          }
+        },
+        "mem_available_gib": 700.51,
+        "devices": [
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/0",
+          "/dev/vfio/3",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.35,
+            "free_inodes": 12452066
+          },
+          "tmp": {
+            "free_gib": 85.35,
+            "free_inodes": 12452066
+          }
+        },
+        "mem_available_gib": 700.47,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          }
+        },
+        "mem_available_gib": 700.44,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/0",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.54,
+            "free_inodes": 12452107
+          },
+          "tmp": {
+            "free_gib": 85.54,
+            "free_inodes": 12452107
+          }
+        },
+        "mem_available_gib": 700.44,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.1,
+            "free_inodes": 12451936
+          },
+          "tmp": {
+            "free_gib": 85.1,
+            "free_inodes": 12451936
+          }
+        },
+        "mem_available_gib": 700.52,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.05,
+            "free_inodes": 12451919
+          },
+          "tmp": {
+            "free_gib": 85.05,
+            "free_inodes": 12451919
+          }
+        },
+        "mem_available_gib": 700.45,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/2",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4484",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.12,
+            "free_inodes": 12451952
+          },
+          "tmp": {
+            "free_gib": 85.12,
+            "free_inodes": 12451952
+          }
+        },
+        "mem_available_gib": 700.45,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.28,
+            "free_inodes": 12451120
+          },
+          "tmp": {
+            "free_gib": 85.28,
+            "free_inodes": 12451120
+          }
+        },
+        "mem_available_gib": 688.86,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/1",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.05,
+            "free_inodes": 12451908
+          },
+          "tmp": {
+            "free_gib": 85.05,
+            "free_inodes": 12451908
+          }
+        },
+        "mem_available_gib": 700.52,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          }
+        },
+        "mem_available_gib": 700.46,
+        "devices": [
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 84.7,
+            "free_inodes": 12451902
+          },
+          "tmp": {
+            "free_gib": 84.7,
+            "free_inodes": 12451902
+          }
+        },
+        "mem_available_gib": 700.47,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/2",
+          "/dev/vfio/0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.35,
+            "free_inodes": 12452066
+          },
+          "tmp": {
+            "free_gib": 85.35,
+            "free_inodes": 12452066
+          }
+        },
+        "mem_available_gib": 700.49,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          },
+          "tmp": {
+            "free_gib": 85.29,
+            "free_inodes": 12451955
+          }
+        },
+        "mem_available_gib": 700.45,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/3",
+          "/dev/vfio/1"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.35,
+            "free_inodes": 12452077
+          },
+          "tmp": {
+            "free_gib": 85.35,
+            "free_inodes": 12452077
+          }
+        },
+        "mem_available_gib": 700.51,
+        "devices": [
+          "/dev/vfio/3",
+          "/dev/vfio/1",
+          "/dev/vfio/devices",
+          "/dev/vfio/0",
+          "/dev/vfio/2"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v6e32-east5b-qwen35-4515",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 85.54,
+            "free_inodes": 12452107
+          },
+          "tmp": {
+            "free_gib": 85.54,
+            "free_inodes": 12452107
+          }
+        },
+        "mem_available_gib": 700.54,
+        "devices": [
+          "/dev/vfio/0",
+          "/dev/vfio/2",
+          "/dev/vfio/devices",
+          "/dev/vfio/1",
+          "/dev/vfio/3"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 72.11,
+            "free_inodes": 12283076
+          },
+          "tmp": {
+            "free_gib": 72.11,
+            "free_inodes": 12283076
+          }
+        },
+        "mem_available_gib": 338.99,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 70.39,
+            "free_inodes": 12275839
+          },
+          "tmp": {
+            "free_gib": 70.39,
+            "free_inodes": 12275839
+          }
+        },
+        "mem_available_gib": 339.68,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 73.26,
+            "free_inodes": 12309594
+          },
+          "tmp": {
+            "free_gib": 73.26,
+            "free_inodes": 12309594
+          }
+        },
+        "mem_available_gib": 354.92,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 70.27,
+            "free_inodes": 12275798
+          },
+          "tmp": {
+            "free_gib": 70.27,
+            "free_inodes": 12275798
+          }
+        },
+        "mem_available_gib": 339.67,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 76.44,
+            "free_inodes": 12309594
+          },
+          "tmp": {
+            "free_gib": 76.44,
+            "free_inodes": 12309594
+          }
+        },
+        "mem_available_gib": 354.98,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 76.2,
+            "free_inodes": 12309699
+          },
+          "tmp": {
+            "free_gib": 76.2,
+            "free_inodes": 12309699
+          }
+        },
+        "mem_available_gib": 354.92,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 70.5,
+            "free_inodes": 12275883
+          },
+          "tmp": {
+            "free_gib": 70.5,
+            "free_inodes": 12275883
+          }
+        },
+        "mem_available_gib": 339.73,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-450",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 70.55,
+            "free_inodes": 12275894
+          },
+          "tmp": {
+            "free_gib": 70.55,
+            "free_inodes": 12275894
+          }
+        },
+        "mem_available_gib": 339.74,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 62.23,
+            "free_inodes": 12260364
+          },
+          "tmp": {
+            "free_gib": 62.23,
+            "free_inodes": 12260364
+          }
+        },
+        "mem_available_gib": 336.86,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 62.42,
+            "free_inodes": 12250781
+          },
+          "tmp": {
+            "free_gib": 62.42,
+            "free_inodes": 12250781
+          }
+        },
+        "mem_available_gib": 337.47,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 59.62,
+            "free_inodes": 12284652
+          },
+          "tmp": {
+            "free_gib": 59.62,
+            "free_inodes": 12284652
+          }
+        },
+        "mem_available_gib": 352.96,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 62.09,
+            "free_inodes": 12250415
+          },
+          "tmp": {
+            "free_gib": 62.09,
+            "free_inodes": 12250415
+          }
+        },
+        "mem_available_gib": 337.3,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 69.13,
+            "free_inodes": 12284891
+          },
+          "tmp": {
+            "free_gib": 69.13,
+            "free_inodes": 12284891
+          }
+        },
+        "mem_available_gib": 353.09,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 62.44,
+            "free_inodes": 12250627
+          },
+          "tmp": {
+            "free_gib": 62.44,
+            "free_inodes": 12250627
+          }
+        },
+        "mem_available_gib": 337.43,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 62.37,
+            "free_inodes": 12250897
+          },
+          "tmp": {
+            "free_gib": 62.37,
+            "free_inodes": 12250897
+          }
+        },
+        "mem_available_gib": 337.45,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-475",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 69.11,
+            "free_inodes": 12285382
+          },
+          "tmp": {
+            "free_gib": 69.11,
+            "free_inodes": 12285382
+          }
+        },
+        "mem_available_gib": 353.07,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 0,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 82.52,
+            "free_inodes": 12442135
+          },
+          "tmp": {
+            "free_gib": 82.52,
+            "free_inodes": 12442135
+          }
+        },
+        "mem_available_gib": 379.4,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 1,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 82.85,
+            "free_inodes": 12443354
+          },
+          "tmp": {
+            "free_gib": 82.85,
+            "free_inodes": 12443354
+          }
+        },
+        "mem_available_gib": 395.17,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 2,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 82.97,
+            "free_inodes": 12443150
+          },
+          "tmp": {
+            "free_gib": 82.97,
+            "free_inodes": 12443150
+          }
+        },
+        "mem_available_gib": 395.22,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 3,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 82.58,
+            "free_inodes": 12443178
+          },
+          "tmp": {
+            "free_gib": 82.58,
+            "free_inodes": 12443178
+          }
+        },
+        "mem_available_gib": 395.07,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 4,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 83.03,
+            "free_inodes": 12443236
+          },
+          "tmp": {
+            "free_gib": 83.03,
+            "free_inodes": 12443236
+          }
+        },
+        "mem_available_gib": 395.23,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 5,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 83.0,
+            "free_inodes": 12443439
+          },
+          "tmp": {
+            "free_gib": 83.0,
+            "free_inodes": 12443439
+          }
+        },
+        "mem_available_gib": 395.22,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 6,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 82.89,
+            "free_inodes": 12443472
+          },
+          "tmp": {
+            "free_gib": 82.89,
+            "free_inodes": 12443472
+          }
+        },
+        "mem_available_gib": 395.28,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  },
+  {
+    "worker": "tpuswarm-v4-64-central2-qwen35-erdos-491",
+    "rank": 7,
+    "exit_code": 0,
+    "checks": [
+      {
+        "event": "native_sweep_clean_host_audit",
+        "rank": null,
+        "storage": {
+          "home": {
+            "free_gib": 82.87,
+            "free_inodes": 12443420
+          },
+          "tmp": {
+            "free_gib": 82.87,
+            "free_inodes": 12443420
+          }
+        },
+        "mem_available_gib": 395.26,
+        "devices": [
+          "/dev/accel3",
+          "/dev/accel2",
+          "/dev/accel1",
+          "/dev/accel0"
+        ],
+        "owners": [],
+        "stray_workloads": []
+      },
+      {
+        "event": "ports_free",
+        "ports_checked": 1018
+      }
+    ]
+  }
+]

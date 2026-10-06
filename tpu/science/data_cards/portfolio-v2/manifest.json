@@ -1,0 +1,233 @@
+{
+  "version": "portfolio_public_news_v2",
+  "universe": {
+    "AAPL": "Apple",
+    "AXP": "American Express",
+    "BA": "Boeing",
+    "CAT": "Caterpillar",
+    "CSCO": "Cisco",
+    "CVX": "Chevron",
+    "DIS": "Walt Disney",
+    "DOW": "Dow",
+    "GS": "Goldman Sachs",
+    "HD": "Home Depot",
+    "IBM": "IBM",
+    "INTC": "Intel",
+    "JNJ": "Johnson & Johnson",
+    "JPM": "JPMorgan Chase",
+    "KO": "Coca-Cola",
+    "MCD": "McDonald\u2019s",
+    "MMM": "3M",
+    "MRK": "Merck",
+    "MSFT": "Microsoft",
+    "NKE": "Nike",
+    "PFE": "Pfizer",
+    "PG": "Procter & Gamble",
+    "TRV": "Travelers",
+    "UNH": "UnitedHealth",
+    "UTX": "United Technologies",
+    "V": "Visa",
+    "VZ": "Verizon",
+    "WBA": "Walgreens Boots Alliance",
+    "WMT": "Walmart",
+    "XOM": "Exxon Mobil"
+  },
+  "selection_date": "2019-12-31",
+  "periods": {
+    "train": [
+      "2020-01-01",
+      "2024-01-01"
+    ],
+    "valid": [
+      "2024-01-01",
+      "2025-01-01"
+    ],
+    "discovery": [
+      "2025-01-01",
+      "2026-01-01"
+    ],
+    "final": [
+      "2026-01-01",
+      "2027-01-01"
+    ]
+  },
+  "features": [
+    "return_1d",
+    "return_5d",
+    "return_20d",
+    "close_open_return",
+    "high_close_ratio",
+    "low_close_ratio",
+    "volume_change_1d",
+    "relative_volume_20d",
+    "volatility_20d",
+    "treasury_3m_yield",
+    "news_count_1d",
+    "news_count_7d"
+  ],
+  "observation_columns": [
+    "asset_id",
+    "symbol_asof",
+    "session",
+    "decision_at",
+    "price_observed",
+    "feature_ready",
+    "news_ids",
+    "headline_text",
+    "news_completeness_unknown",
+    "return_1d",
+    "return_5d",
+    "return_20d",
+    "close_open_return",
+    "high_close_ratio",
+    "low_close_ratio",
+    "volume_change_1d",
+    "relative_volume_20d",
+    "volatility_20d",
+    "treasury_3m_yield",
+    "news_count_1d",
+    "news_count_7d"
+  ],
+  "audit": {
+    "rows": 58020,
+    "equities": 30,
+    "news": 204982,
+    "causal_news_edges_checked": 986582,
+    "missing_price_rows": 314,
+    "labels_purged_at_boundaries": 238
+  },
+  "sources": [
+    {
+      "file": "daily_treasury_yield.parquet",
+      "bytes": 150515,
+      "sha256": "27cd348299b4380c8d2ccaaabdec5e7c3931398c83e9741e31cd5f6211793c0d"
+    },
+    {
+      "file": "fnspid/All_external.parquet",
+      "bytes": 1066195,
+      "sha256": "d632f59e03ef67a8fa3632a83c79981f5ea0c1e41a41449b1fecf5dce446192a"
+    },
+    {
+      "file": "fnspid/nasdaq_exteral_data.parquet",
+      "bytes": 5362052,
+      "sha256": "d561a54e2b0cb0b7c419843c593621c566e99c770c05024942d566d30c8f7456"
+    },
+    {
+      "file": "fnspid/source.json",
+      "bytes": 557,
+      "sha256": "30200e0b97298ad662fb7840838ca488fef6c049701eb1a4fbd78efe582de735"
+    },
+    {
+      "file": "fnspid-downloads/All_external.parquet",
+      "bytes": 1700060032,
+      "sha256": "4df38f596835fede79089fba62f761fee3d24b9ae9c405e025255625cca890c3"
+    },
+    {
+      "file": "fnspid-downloads/nasdaq_exteral_data.parquet",
+      "bytes": 6436743237,
+      "sha256": "a6f733c12a2c61aff82d2d665689017e91d5e447ee37974ba84212199ffc4a79"
+    },
+    {
+      "file": "kaggle/frankossai-apple_news_data.csv",
+      "bytes": 105470603,
+      "sha256": "24e80ca982002bbaacd75c3d5868d9ae2563c0afa7b42a614e11668d52f05d2d"
+    },
+    {
+      "file": "kaggle/frankossai.zip",
+      "bytes": 35999135,
+      "sha256": "ae2fdefebb6e5051a69ddd1c2cd2cd30a47718b2765c2394e3af7e65682e3039"
+    },
+    {
+      "file": "kaggle/rdolphin-polygon_news_sample.json",
+      "bytes": 10141272,
+      "sha256": "7e657dfc6dfba46b59700b44dcfdbea4f5c53d9445be21652ea95944b8a58274"
+    },
+    {
+      "file": "kaggle/rdolphin.zip",
+      "bytes": 2266290,
+      "sha256": "0ae51125ef1920476d2854c7fdb97e08daf85628adf04b2a1fdefd4333a55dfd"
+    },
+    {
+      "file": "sources.json",
+      "bytes": 1725,
+      "sha256": "7e3d263fa8e07507d486fb1f3466e27b3036660c5d20a52a33aebbb4de20495c"
+    },
+    {
+      "file": "stock_dividend_events.parquet",
+      "bytes": 719043,
+      "sha256": "a803c90e5c85e1bedbb12ee5892316951774ebcc7f5a3fcaf4d2b9317b7f3190"
+    },
+    {
+      "file": "stock_news.parquet",
+      "bytes": 1173775589,
+      "sha256": "47a0f34ce52f8c8bd452c2f15e05b6b52bf49d9da6b7ef52fd2ac1dba641302c"
+    },
+    {
+      "file": "stock_prices.parquet",
+      "bytes": 466593902,
+      "sha256": "584094d710b72129a546fe29c11115cd7bdea1830d729ea778d0a3ae430864d8"
+    },
+    {
+      "file": "stock_split_events.parquet",
+      "bytes": 68310,
+      "sha256": "9c64cc01b8f4702c239719dfe3f1c4357a036973006ef047b25956244e95aba5"
+    }
+  ],
+  "defeatbeta_revision": "9ab94c890bf72f574bccd10fe89ee10a4227d26d",
+  "fnspid_revision": "749c61187fb353c62c91a36f775a909de8c1ecb2",
+  "kaggle_versions": {
+    "rdolphin": 1,
+    "frankossai": 1
+  },
+  "build_code": {
+    "portfolio_v2.py": "22377a138721484f2a887a4c56dc8483b21dc2ca06e6c83d3e704fd3178117da",
+    "build_portfolio_v2.py": "3445b2e49902936ecbd3d572ec3aff63c2ca97c5c6534ef8a012d62a9c777967",
+    "requirements-data.lock": "5c07cb07651dd7599cc5dd640c6e162701499cf22894ae45ea9e4cde838dbd95"
+  },
+  "files": {
+    "coverage.csv": {
+      "bytes": 24229,
+      "sha256": "ea086022365ae04ef8f94bd0d1deb9a9ba892ebd46357441a76d7421740566fd"
+    },
+    "news.parquet": {
+      "bytes": 17880845,
+      "sha256": "3a30b556c5992fd01f65fb1e2580045e214314973b6961390ec43de335399375"
+    },
+    "rejected_news.parquet": {
+      "bytes": 3993,
+      "sha256": "7438d43fcf5e934f755b7934c3be523bb2df7b210007f4df2af1ed94aa5c4b40"
+    },
+    "joined.parquet": {
+      "bytes": 22539982,
+      "sha256": "2db18176e3a4ba81fe8e9d4318f362ab45d51475ad6980912995cf65c7d17ca6"
+    },
+    "trusted/discovery_observations.parquet": {
+      "bytes": 2380627,
+      "sha256": "00ce900d89a12154bb2c91c3c108f4c82b2ea8a3f9a90e2ef0d166045dc68fe9"
+    },
+    "trusted/final_observations.parquet": {
+      "bytes": 4381769,
+      "sha256": "dc7a1792c85a8fc2dcd5a92068f7b2686a494876d534893b08e05201a0ceb64f"
+    },
+    "trusted/discovery_labels.parquet": {
+      "bytes": 76987,
+      "sha256": "bc589a1014339ac5ba109b29dbed9df82c5d5974a166b369f80495751659660d"
+    },
+    "trusted/final_labels.parquet": {
+      "bytes": 54146,
+      "sha256": "6d88baff421142a5412b2b4b112b8ebc38b9694b834201cbe0ac4fb0f6e613b3"
+    },
+    "candidate/train.parquet": {
+      "bytes": 11122034,
+      "sha256": "e57c9e9e3ada720a82fcd8523b0f6a8bcb10384419c08d54aa3ab4a38e6a16f1"
+    },
+    "candidate/valid.parquet": {
+      "bytes": 1139272,
+      "sha256": "634918e14ef3411b7899635776d1abaa792bfe8569a28070e45bee3be6d5cd4a"
+    }
+  },
+  "build_seconds": 77.0404532289831,
+  "peak_rss_mib": 920.203125,
+  "source_point_in_time_certified": false,
+  "grading_status": "Dataframe and causal accessors; not yet connected to the v1 array-based Ray grader."
+}

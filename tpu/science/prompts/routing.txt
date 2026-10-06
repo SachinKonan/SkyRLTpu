@@ -1,0 +1,10 @@
+Design a routing policy that reduces added SWAPs while preserving every required circuit operation and dependency. The trusted SimpleTES engine handles parsing, mapping updates, routing and output construction. Replace only the existing policy's EVOLVE-BLOCK using the exact Rust API below.
+
+Return one fenced Python module containing exactly one literal assignment:
+RUST_CODE = r'''<complete replacement EVOLVE-BLOCK contents>'''
+
+Include all policy definitions/helpers. Do not return marker lines or a patch, repeat scaffold definitions, change engine code, or add crates. Implement choose_best_initial_layout with an injective logical-to-physical mapping and choose_best_swap returning a legal coupling edge according to the supplied interface.
+
+Every case must route correctly. The trusted grader independently checks topology, original operations/dependencies, and SWAP counts. B=sum(weight*baseline_added_CNOTs)>0, C=sum(weight*candidate_added_CNOTs), one inserted SWAP costs three CNOTs. Reward=max(1e-6,B/(B+C)); reference reward=0.5; invalid code, one failed case, or timeout receives zero. Use only supplied RNG, computational standard library and pinned scaffold crates. No filesystem/network access, external processes, unsafe code, include macros, or case-name hardcoding.
+
+Resources: four CPU cores, 8 GiB RAM, 1800 seconds total: up to 900 seconds for changed-policy compilation and routing all cases with 20 layout/20 routing trials, then up to 900 seconds for independent verification. No accelerator. Installed dependencies are prewarmed outside timing.

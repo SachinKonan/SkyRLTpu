@@ -1,0 +1,83 @@
+{
+  "time": 1789972038.8749568,
+  "jobs": [
+    {
+      "model": "gemma",
+      "old_job_id": 1335,
+      "old_cluster": "tpuswarm-v6e32-east5b-qwen35-5570",
+      "run_id": "math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-central1b",
+      "task": "tpu/science/results/ac2-central-recovery-20260921/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920.yaml",
+      "task_sha256": "0103993c5967993d4e76d30e09ad6fc33216f402cddd4b5652df5da821f0e8e5",
+      "source_task_sha256": "4f9cf6a44bea1d5e55729308c31ed62980b3d9b3368e9794594eba615d19d435",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d.tar.gz",
+      "code_sha256": "8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d",
+      "checkpoint": {
+        "name": "000002",
+        "batch": 2,
+        "state_path": "tinker://model_a98a3f06/weights/000002",
+        "sampler_path": "tinker://model_a98a3f06/000002"
+      },
+      "checkpoint_index_generation": 1789971695484623,
+      "pool_generation": 1789971696070183,
+      "database_generation": 1789971719045700,
+      "checkpoint_objects": [
+        {
+          "name": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_a98a3f06/000002.tar.gz",
+          "size": 2938939279,
+          "generation": 1789964744232256
+        },
+        {
+          "name": "ray-training/math-v6e-gemma-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_a98a3f06/sampler_weights/000002.tar.gz",
+          "size": 979646449,
+          "generation": 1789964775031589
+        }
+      ],
+      "change": {
+        "resources.zone": [
+          "us-east5-b",
+          "us-central1-b"
+        ]
+      }
+    },
+    {
+      "model": "muse",
+      "old_job_id": 1336,
+      "old_cluster": "tpuswarm-v6e32-east5b-qwen35-5587",
+      "run_id": "math-v6e-muse-ac2-grpo-lr4e5-s1-20260920",
+      "pool": "tpuswarm-v6e32-central1b",
+      "task": "tpu/science/results/ac2-central-recovery-20260921/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920.yaml",
+      "task_sha256": "082563bd9e478ca67c44b872afd88e7639afd86e1647dba4d353856a20739d5c",
+      "source_task_sha256": "c9e5bb773847bb97ef746aff30c028fa956bbc959cd8f6427d8b58b85827840d",
+      "code_uri": "gs://sk7524-tinker-tpu-us-central1/code-bundles/ray-training-8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d.tar.gz",
+      "code_sha256": "8b885c71e8a2a4bd4e6d0a412eedeea21a937874e6ea4f3d33d15dd8a8b41d3d",
+      "checkpoint": {
+        "name": "000004",
+        "batch": 4,
+        "state_path": "tinker://model_9f2b6482/weights/000004",
+        "sampler_path": "tinker://model_9f2b6482/000004"
+      },
+      "checkpoint_index_generation": 1789971715462265,
+      "pool_generation": 1789971717469772,
+      "database_generation": 1789971682036331,
+      "checkpoint_objects": [
+        {
+          "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_9f2b6482/000004.tar.gz",
+          "size": 2331471244,
+          "generation": 1789966530131615
+        },
+        {
+          "name": "ray-training/math-v6e-muse-ac2-grpo-lr4e5-s1-20260920/checkpoints/model_9f2b6482/sampler_weights/000004.tar.gz",
+          "size": 777160514,
+          "generation": 1789966546864778
+        }
+      ],
+      "change": {
+        "resources.zone": [
+          "us-east5-b",
+          "us-central1-b"
+        ]
+      }
+    }
+  ]
+}

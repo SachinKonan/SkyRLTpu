@@ -1,0 +1,599 @@
+{
+  "initial_states": [
+    {
+      "code": "",
+      "construction": null,
+      "id": "a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "b080c084-6830-4289-939c-d93497ed5be9",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "da68e347-2d1c-409e-9ad1-0646eb013006",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "ccc833d4-1dde-45d6-8ebf-f1e9901db8c6",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "8330f4f1-088d-4814-a973-186c79ca9506",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "ab4fc48e-9257-405c-a6e2-1dc17d86c22b",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "0fbaf1f4-bd29-48de-88a2-e36220df12c0",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "e145d1dc-f3f1-4858-b180-dd9da2ee8d46",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "b959ee4c-4b38-4603-bcca-c16be90071c9",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "d578d1bf-ced7-42f8-89f3-c8b6a30cdd97",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "a3ea5641-5109-4a82-8c6f-40d58d2c93d3",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "6bc59eb4-a2f9-4974-ba77-83c5e2ad1377",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "63e22ddb-cd21-4c4f-9908-53bb96687f2e",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "be65f276-8fd7-4521-88f1-792d76030820",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "86d21223-dc46-47e0-b96c-41c23e541590",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "e668fab0-ac4f-4157-b85f-ee773fedc012",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    }
+  ],
+  "puct_T": 568,
+  "puct_m": {
+    "0fbaf1f4-bd29-48de-88a2-e36220df12c0": 0.4388798774531943,
+    "63e22ddb-cd21-4c4f-9908-53bb96687f2e": 0.4388798774531943,
+    "6bc59eb4-a2f9-4974-ba77-83c5e2ad1377": 0.4229949466911453,
+    "8330f4f1-088d-4814-a973-186c79ca9506": 0.4229949466911453,
+    "86d21223-dc46-47e0-b96c-41c23e541590": 0.4388798774531943,
+    "a3ea5641-5109-4a82-8c6f-40d58d2c93d3": 0.4388798774531943,
+    "a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b": 0.4229949466911453,
+    "ab4fc48e-9257-405c-a6e2-1dc17d86c22b": 0.4388798774531943,
+    "b080c084-6830-4289-939c-d93497ed5be9": 0.4229949466911453,
+    "b959ee4c-4b38-4603-bcca-c16be90071c9": 0.4229949466911453,
+    "be65f276-8fd7-4521-88f1-792d76030820": 0.4388798774531943,
+    "ccc833d4-1dde-45d6-8ebf-f1e9901db8c6": 0.4229949466911453,
+    "d578d1bf-ced7-42f8-89f3-c8b6a30cdd97": 0.4388798774531943,
+    "da68e347-2d1c-409e-9ad1-0646eb013006": 0.4229949466911453,
+    "e145d1dc-f3f1-4858-b180-dd9da2ee8d46": 0.4388798774531943,
+    "e668fab0-ac4f-4157-b85f-ee773fedc012": 0.4388798774531943
+  },
+  "puct_n": {
+    "0fbaf1f4-bd29-48de-88a2-e36220df12c0": 32,
+    "63e22ddb-cd21-4c4f-9908-53bb96687f2e": 32,
+    "6bc59eb4-a2f9-4974-ba77-83c5e2ad1377": 32,
+    "8330f4f1-088d-4814-a973-186c79ca9506": 32,
+    "86d21223-dc46-47e0-b96c-41c23e541590": 32,
+    "a3ea5641-5109-4a82-8c6f-40d58d2c93d3": 32,
+    "a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b": 55,
+    "ab4fc48e-9257-405c-a6e2-1dc17d86c22b": 65,
+    "b080c084-6830-4289-939c-d93497ed5be9": 32,
+    "b959ee4c-4b38-4603-bcca-c16be90071c9": 32,
+    "be65f276-8fd7-4521-88f1-792d76030820": 32,
+    "ccc833d4-1dde-45d6-8ebf-f1e9901db8c6": 32,
+    "d578d1bf-ced7-42f8-89f3-c8b6a30cdd97": 32,
+    "da68e347-2d1c-409e-9ad1-0646eb013006": 32,
+    "e145d1dc-f3f1-4858-b180-dd9da2ee8d46": 32,
+    "e668fab0-ac4f-4157-b85f-ee773fedc012": 32
+  },
+  "states": [
+    {
+      "code": "",
+      "construction": null,
+      "id": "a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "b080c084-6830-4289-939c-d93497ed5be9",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "da68e347-2d1c-409e-9ad1-0646eb013006",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "ccc833d4-1dde-45d6-8ebf-f1e9901db8c6",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "8330f4f1-088d-4814-a973-186c79ca9506",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "ab4fc48e-9257-405c-a6e2-1dc17d86c22b",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "0fbaf1f4-bd29-48de-88a2-e36220df12c0",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "e145d1dc-f3f1-4858-b180-dd9da2ee8d46",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "b959ee4c-4b38-4603-bcca-c16be90071c9",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "d578d1bf-ced7-42f8-89f3-c8b6a30cdd97",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "a3ea5641-5109-4a82-8c6f-40d58d2c93d3",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "6bc59eb4-a2f9-4974-ba77-83c5e2ad1377",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "63e22ddb-cd21-4c4f-9908-53bb96687f2e",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "be65f276-8fd7-4521-88f1-792d76030820",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "86d21223-dc46-47e0-b96c-41c23e541590",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "",
+      "construction": null,
+      "id": "e668fab0-ac4f-4157-b85f-ee773fedc012",
+      "observation": "",
+      "origin": null,
+      "parent_values": [],
+      "parents": [],
+      "timestep": -1,
+      "type": "State",
+      "value": 0.0
+    },
+    {
+      "code": "\"\"\"JAX based macro placement with legal hard macros and soft-cluster optimisation.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\nfrom jax import ops\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    start = time.monotonic()\n    deadline = start + time_budget_s\n\n    p = problem\n    M = int(len(p['initial_positions']))\n    canvas = np.asarray(p['canvas'], dtype=np.float64)\n    pos_np = np.asarray(p['initial_positions'], dtype=np.float64, copy=True)\n    sizes_np = np.asarray(p['sizes'], dtype=np.float64)\n    fixed_np = np.asarray(p['fixed'], dtype=bool)\n    num_hard = int(p['num_hard'])\n\n    # margin for float32 safety\n    gap = max(1e-4, float(canvas.max()) * 1e-5)\n    lo_np = sizes_np / 2.0 + gap\n    hi_np = canvas - sizes_np / 2.0 - gap\n\n    # movable soft clusters only\n    idx = np.arange(M)\n    movable_mask_np = (~fixed_np) & (idx >= num_hard)\n    if not np.any(movable_mask_np):\n        pos_np[fixed_np] = p['initial_positions'][fixed_np]\n        return {\"positions\": pos_np.astype(np.float32)}\n\n    # ----- JAX constants -----\n    canvas_j = jnp.asarray(canvas, dtype=jnp.float32)\n    ports = jnp.asarray(p['port_positions'], dtype=jnp.float32)\n    owners = jnp.asarray(p['pin_owner'], dtype=jnp.int32)\n    offsets = jnp.asarray(p['pin_offset'], dtype=jnp.float32)\n    weights = jnp.asarray(p['net_weights'], dtype=jnp.float32)\n    wire_norm = float(p['wirelength_normalizer'])\n\n    net_offsets = np.asarray(p['net_offsets'], dtype=np.int64)\n    K = int(len(weights))\n    net_ids_np = np.repeat(np.arange(K, dtype=np.int32), np.diff(net_offsets))\n    net_ids = jnp.asarray(net_ids_np, dtype=jnp.int32)\n\n    sizes_j = jnp.asarray(sizes_np, dtype=jnp.float32)\n    sizes_norm = sizes_j / canvas_j\n    area_norm = jnp.prod(sizes_norm, axis=1)\n\n    # grid for density surrogate\n    rows = int(p['grid_shape'][0])\n    cols = int(p['grid_shape'][1])\n    rows = min(rows, 32)\n    cols = min(cols, 32)\n    gx = jnp.linspace(0.05, 0.95, cols)\n    gy = jnp.linspace(0.05, 0.95, rows)\n    gxg, gyg = jnp.meshgrid(gx, gy)\n    grid_centers = jnp.stack([gxg.ravel(), gyg.ravel()], axis=1)\n    sigma = jnp.float32(0.055)\n\n    mask_j = jnp.asarray(movable_mask_np, dtype=jnp.bool_)\n    lo_j = jnp.asarray(lo_np, dtype=jnp.float32)\n    hi_j = jnp.asarray(hi_np, dtype=jnp.float32)\n\n    def objective(pos):\n        # wirelength\n        nodes = jnp.concatenate([pos, ports], axis=0)\n        pins = nodes[owners] + offsets\n        xmax = ops.segment_max(pins, net_ids, K)\n        xmin = ops.segment_min(pins, net_ids, K)\n        hpwl = jnp.sum(weights * jnp.sum(xmax - xmin, axis=1))\n        wire = hpwl / wire_norm\n\n        # density surrogate\n        pos_norm = pos / canvas_j\n        delta = (pos_norm[:, None, :] - grid_centers[None, :, :]) / sigma\n        exp_term = jnp.exp(-0.5 * jnp.sum(delta * delta, axis=2))\n        occupancy = jnp.sum(exp_term * area_norm[:, None], axis=0)\n        mean_occ = jnp.mean(occupancy) + 1e-8\n        density = jnp.mean((occupancy / mean_occ) ** 2)\n        return wire + 0.5 * jnp.float32(density)\n\n    pos_j = jnp.asarray(pos_np, dtype=jnp.float32)\n    optimizer = optax.adam(5e-4)\n    state = optimizer.init(pos_j)\n\n    @jax.jit\n    def step(pos, state):\n        val, grad = jax.value_and_grad(objective)(pos)\n        grad = jnp.where(mask_j[:, None], grad, 0.0)\n        updates, state = optimizer.update(grad, state, pos)\n        pos_new = optax.apply_updates(pos, updates)\n        pos_new = jnp.where(mask_j[:, None], jnp.clip(pos_new, lo_j, hi_j), pos)\n        return pos_new, state, val\n\n    best_val = np.inf\n    best_pos = np.array(pos_j, copy=True)\n\n    it = 0\n    max_iter = 1200\n    # leave ~5s for finalization\n    while time.monotonic() - start < time_budget_s - 5.0 and it < max_iter:\n        pos_j, state, val = step(pos_j, state)\n        it += 1\n        v = float(val)\n        if v < best_val and np.isfinite(v):\n            best_val = v\n            best_pos = np.array(pos_j)\n\n    pos_np = best_pos.astype(np.float64)\n    # restore fixed exactly\n    pos_np[fixed_np] = np.asarray(p['initial_positions'], dtype=np.float64)[fixed_np]\n    # final clipping with margin\n    soft_mask = movable_mask_np\n    pos_np[soft_mask] = np.clip(pos_np[soft_mask], lo_np[soft_mask], hi_np[soft_mask])\n\n    # sanity\n    if not np.isfinite(pos_np).all():\n        pos_np = np.asarray(p['initial_positions'], dtype=np.float64)\n\n    return {\"positions\": pos_np.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-0-a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b-17-group-000",
+      "observation": "{\"reward\":0.4229949466911453,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.3640944361686707,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.09205,\"wirelength_cost\":0.0613023,\"density_cost\":1.02358,\"congestion_cost\":1.03791,\"candidate_wall_seconds\":4.27879,\"grading_seconds\":4.24508},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.24064,\"wirelength_cost\":0.0719898,\"density_cost\":0.809254,\"congestion_cost\":1.52805,\"candidate_wall_seconds\":9.69891,\"grading_seconds\":6.92734},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.42335,\"wirelength_cost\":0.0731081,\"density_cost\":0.769979,\"congestion_cost\":1.93051,\"candidate_wall_seconds\":4.77933,\"grading_seconds\":13.1678},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.70034,\"wirelength_cost\":0.0634995,\"density_cost\":0.815246,\"congestion_cost\":2.45843,\"candidate_wall_seconds\":5.03026,\"grading_seconds\":32.1112}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.4229949466911453
+    },
+    {
+      "code": "\"\"\"JAX guided soft-cluster placement with hard-macro safety.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    start = time.monotonic()\n    deadline = start + max(0.1, time_budget_s)\n\n    p = problem\n    canvas = np.asarray(p['canvas'], dtype=np.float64)\n    initial = np.asarray(p['initial_positions'], dtype=np.float64, copy=True)\n    sizes = np.asarray(p['sizes'], dtype=np.float64)\n    fixed = np.asarray(p['fixed'], dtype=bool)\n    num_hard = int(p['num_hard'])\n    M = initial.shape[0]\n\n    gap = max(1e-4, float(canvas.max()) * 1e-5)\n    lo_phys = sizes / 2 + gap\n    hi_phys = canvas - sizes / 2 - gap\n\n    movable_mask = (~fixed) & (np.arange(M) >= num_hard)\n    if not np.any(movable_mask):\n        pos = initial.copy()\n        pos = np.clip(pos, lo_phys, hi_phys)\n        pos[fixed] = initial[fixed]\n        return {\"positions\": pos.astype(np.float32)}\n\n    # ---------- preprocessing ----------\n    ports = np.asarray(p['port_positions'], dtype=np.float64)\n    pin_owner = np.asarray(p['pin_owner'], dtype=np.int32)\n    pin_offset = np.asarray(p['pin_offset'], dtype=np.float64)\n    net_weights = np.asarray(p['net_weights'], dtype=np.float64)\n    net_offsets = np.asarray(p['net_offsets'], dtype=np.int64)\n\n    K = int(net_weights.shape[0])\n    net_ids_np = np.repeat(np.arange(K, dtype=np.int32), np.diff(net_offsets))\n    # normalise\n    canvas_jnp = jnp.asarray(canvas, dtype=jnp.float32)\n    pos_norm = initial / canvas\n    sizes_norm = sizes / canvas\n    ports_norm = ports / canvas\n    offsets_norm = pin_offset / canvas\n\n    ports_jnp = jnp.asarray(ports_norm, dtype=jnp.float32)\n    owners_jnp = jnp.asarray(pin_owner, dtype=jnp.int32)\n    offsets_jnp = jnp.asarray(offsets_norm, dtype=jnp.float32)\n    weights_jnp = jnp.asarray(net_weights, dtype=jnp.float32)\n    net_ids_jnp = jnp.asarray(net_ids_np, dtype=jnp.int32)\n\n    movable_mask_jnp = jnp.asarray(movable_mask)\n    lo_norm = jnp.asarray(sizes_norm / 2 + 1e-5, dtype=jnp.float32)\n    hi_norm = jnp.asarray(1.0 - sizes_norm / 2 - 1e-5, dtype=jnp.float32)\n    area_norm = jnp.prod(sizes_norm, axis=1).astype(jnp.float32)\n\n    # grid for density surrogate\n    rows, cols = int(p['grid_shape'][0]), int(p['grid_shape'][1])\n    rows = min(rows, 48)\n    cols = min(cols, 48)\n    xs = jnp.linspace(0.02, 0.98, cols)\n    ys = jnp.linspace(0.02, 0.98, rows)\n    gx, gy = jnp.meshgrid(xs, ys)\n    grid_centers = jnp.stack([gx.ravel(), gy.ravel()], axis=1)\n\n    sigma = 0.03\n    wire_norm_const = float(p['wirelength_normalizer'])\n\n    def compute_pins(x):\n        all_centers = jnp.concatenate([x, ports_jnp], axis=0)\n        return all_centers[owners_jnp] + offsets_jnp\n\n    def hpwl(x):\n        pins = compute_pins(x)\n        xmax = jax.ops.segment_max(pins, net_ids_jnp, K)\n        xmin = jax.ops.segment_min(pins, net_ids_jnp, K)\n        wire = jnp.sum(\n            weights_jnp * ((xmax[:, 0] - xmin[:, 0]) * canvas_jnp[0]\n                           + (xmax[:, 1] - xmin[:, 1]) * canvas_jnp[1])\n        )\n        return wire\n\n    def density_surrogate(x):\n        delta = (x[:, None, :] - grid_centers[None, :, :]) / sigma\n        gauss = jnp.exp(-0.5 * jnp.sum(delta * delta, axis=2))\n        occupancy = jnp.sum(gauss * area_norm[:, None], axis=0)\n        mean_occ = jnp.mean(occupancy) + 1e-12\n        norm_occ = occupancy / mean_occ\n        return jnp.mean(norm_occ * norm_occ)\n\n    def objective(x):\n        wire = hpwl(x) / wire_norm_const\n        dens = density_surrogate(x)\n        return wire + 0.3 * dens\n\n    x0 = jnp.asarray(pos_norm, dtype=jnp.float32)\n    best_positions = initial.copy()\n    best_cost = float('inf')\n\n    rng = np.random.RandomState(seed)\n    num_restarts = 2\n    for r in range(num_restarts):\n        if time.monotonic() > deadline - 2.0:\n            break\n        x_init_np = pos_norm.copy()\n        if r > 0:\n            noise = rng.randn(M, 2).astype(np.float32) * 0.01\n            noise[~movable_mask] = 0.0\n            x_init_np += noise\n        x_init = jnp.asarray(np.clip(x_init_np, lo_norm, hi_norm), dtype=jnp.float32)\n        opt = optax.adam(learning_rate=5e-4)\n        state = opt.init(x_init)\n\n        @jax.jit\n        def step_fn(x, state):\n            val, grad = jax.value_and_grad(objective)(x)\n            grad = jnp.where(movable_mask_jnp[:, None], grad, 0.0)\n            updates, new_state = opt.update(grad, state, x)\n            x_new = optax.apply_updates(x, updates)\n            x_new = jnp.where(movable_mask_jnp[:, None],\n                              jnp.clip(x_new, lo_norm, hi_norm), x)\n            return x_new, new_state, val\n\n        x_cur = x_init\n        it = 0\n        max_it = 400\n        while it < max_it and time.monotonic() < deadline - 1.0:\n            x_cur, state, val = step_fn(x_cur, state)\n            it += 1\n            if it % 50 == 0:\n                c = float(val)\n                if c < best_cost:\n                    best_cost = c\n                    pos_tmp = np.array(x_cur * canvas, dtype=np.float64)\n                    best_positions = pos_tmp\n\n    # ---------- final legalization ----------\n    pos = best_positions.copy()\n    pos[fixed] = initial[fixed]\n    soft_mask = movable_mask\n    pos[soft_mask] = np.clip(pos[soft_mask], lo_phys[soft_mask], hi_phys[soft_mask])\n\n    # hard-hard overlap check\n    if num_hard > 1:\n        hpos = pos[:num_hard]\n        hsize = sizes[:num_hard]\n        dx = np.abs(hpos[:, None, 0] - hpos[None, :, 0])\n        dy = np.abs(hpos[:, None, 1] - hpos[None, :, 1])\n        ox = dx < (hsize[:, None, 0] + hsize[None, :, 0]) / 2 - 1e-9\n        oy = dy < (hsize[:, None, 1] + hsize[None, :, 1]) / 2 - 1e-9\n        overlap = ox & oy\n        if np.any(overlap[np.triu(np.ones(num_hard, bool), 1)]):\n            pos = initial.copy()\n\n    # bounds & finiteness\n    pos = np.clip(pos, lo_phys, hi_phys)\n    pos[fixed] = initial[fixed]\n    if not np.isfinite(pos).all():\n        pos = initial.copy()\n\n    return {\"positions\": pos.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-0-a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b-8-group-000",
+      "observation": "{\"reward\":0.4093847731517322,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.4426897764205933,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.12563,\"wirelength_cost\":0.0614139,\"density_cost\":1.12386,\"congestion_cost\":1.00456,\"candidate_wall_seconds\":5.33318,\"grading_seconds\":3.98301},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.2767,\"wirelength_cost\":0.070982,\"density_cost\":0.954549,\"congestion_cost\":1.45689,\"candidate_wall_seconds\":7.19802,\"grading_seconds\":6.99462},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.49347,\"wirelength_cost\":0.0717699,\"density_cost\":1.09373,\"congestion_cost\":1.74966,\"candidate_wall_seconds\":5.13324,\"grading_seconds\":12.9119},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.87497,\"wirelength_cost\":0.0570734,\"density_cost\":1.42499,\"congestion_cost\":2.2108,\"candidate_wall_seconds\":8.34593,\"grading_seconds\":31.9649}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "a9c0f8c6-5c7c-438a-b7f2-eb94554bbc3b",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.4093847731517322
+    },
+    {
+      "code": "\"\"\"JAX assisted soft-cluster placement with hard-macro legality preserved.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\nfrom jax import ops\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    started = time.monotonic()\n    p = problem\n\n    M = int(len(p['sizes']))\n    hard = int(p['num_hard'])\n    canvas_np = np.asarray(p['canvas'], dtype=np.float64)\n    sizes_np = np.asarray(p['sizes'], dtype=np.float64)\n    init_pos_np = np.asarray(p['initial_positions'], dtype=np.float64, copy=True)\n    fixed_np = np.asarray(p['fixed'], dtype=bool)\n\n    movable_mask_np = (~fixed_np) & (np.arange(M) >= hard)\n    if not np.any(movable_mask_np):\n        return {'positions': init_pos_np.astype(np.float32)}\n\n    # ----- constants -----\n    gap = max(1e-4, float(canvas_np.max()) * 1e-5)\n    lo_np = sizes_np / 2.0 + gap\n    hi_np = canvas_np - sizes_np / 2.0 - gap\n    if (lo_np > hi_np).any():\n        lo_np = sizes_np / 2.0 + 1e-4\n        hi_np = canvas_np - sizes_np / 2.0 - 1e-4\n\n    canvas_j = jnp.array(canvas_np, dtype=jnp.float32)\n    sizes_norm = jnp.array(sizes_np / canvas_np, dtype=jnp.float32)\n    lower_j = sizes_norm / 2.0 + 1e-4\n    upper_j = 1.0 - sizes_norm / 2.0 - 1e-4\n\n    x0_norm = jnp.array(init_pos_np / canvas_np, dtype=jnp.float32)\n    mask_j = jnp.array(movable_mask_np, dtype=bool)\n\n    ports_norm = jnp.array(p['port_positions'], dtype=jnp.float32) / canvas_j\n    owners_j = jnp.array(p['pin_owner'], dtype=jnp.int32)\n    offsets_norm = jnp.array(p['pin_offset'], dtype=jnp.float32) / canvas_j\n    weights_j = jnp.array(p['net_weights'], dtype=jnp.float32)\n    K = int(len(weights_j))\n\n    net_offsets = np.asarray(p['net_offsets'])\n    net_ids_np = np.repeat(np.arange(K), np.diff(net_offsets))\n    net_ids_j = jnp.array(net_ids_np, dtype=jnp.int32)\n\n    area_j = jnp.prod(sizes_norm, axis=1)\n\n    # small density grid\n    rows, cols = int(p['grid_shape'][0]), int(p['grid_shape'][1])\n    grid_n = min(24, max(8, rows))\n    grid_m = min(24, max(8, cols))\n    gx = np.linspace(0.05, 0.95, grid_m)\n    gy = np.linspace(0.05, 0.95, grid_n)\n    gx, gy = np.meshgrid(gx, gy)\n    grid_pts = np.stack([gx.ravel(), gy.ravel()], axis=1).astype(np.float32)\n    grid_j = jnp.array(grid_pts)\n    sigma = 0.04\n\n    def objective(x):\n        centers_all = jnp.concatenate([x, ports_norm], axis=0)\n        pins = centers_all[owners_j] + offsets_norm\n        xmax_x = ops.segment_max(pins[:, 0], net_ids_j, K)\n        xmin_x = ops.segment_min(pins[:, 0], net_ids_j, K)\n        ymax_y = ops.segment_max(pins[:, 1], net_ids_j, K)\n        ymin_y = ops.segment_min(pins[:, 1], net_ids_j, K)\n        dx = (xmax_x - xmin_x) * canvas_j[0]\n        dy = (ymax_y - ymin_y) * canvas_j[1]\n        hpwl = jnp.sum(weights_j * (dx + dy))\n        wire = hpwl / float(p['wirelength_normalizer'])\n\n        diff = x[:, None, :] - grid_j[None, :, :]\n        dist2 = jnp.sum(diff * diff, axis=2)\n        gauss = jnp.exp(-0.5 * dist2 / (sigma * sigma))\n        occupancy = jnp.sum(area_j[:, None] * gauss, axis=0)\n        mean_occ = jnp.mean(occupancy) + 1e-8\n        density = jnp.mean((occupancy / mean_occ) ** 2)\n\n        reg = 0.005 * jnp.sum(jnp.where(mask_j[:, None], (x - x0_norm) ** 2, 0.0))\n        return wire + 0.5 * density + reg\n\n    optimizer = optax.adam(5e-4)\n    @jax.jit\n    def step(x, state):\n        val, grad = jax.value_and_grad(objective)(x)\n        grad = jnp.where(mask_j[:, None], grad, 0.0)\n        updates, state = optimizer.update(grad, state, x)\n        x_new = optax.apply_updates(x, updates)\n        x_new = jnp.where(mask_j[:, None], jnp.clip(x_new, lower_j, upper_j), x_new)\n        return x_new, state, val\n\n    x = x0_norm\n    state = optimizer.init(x)\n    best_x = x\n    best_val = float('inf')\n\n    # simple restart with small noise\n    rng = np.random.default_rng(seed)\n    noise = rng.normal(scale=0.005, size=(M, 2)).astype(np.float32)\n    x_init_np = np.array(x0_norm) + noise * movable_mask_np[:, None]\n    x_init_np = np.clip(x_init_np, np.array(lower_j), np.array(upper_j))\n    x = jnp.array(x_init_np)\n    state = optimizer.init(x)\n\n    it = 0\n    while time.monotonic() - started < time_budget_s - 2.0:\n        x, state, val = step(x, state)\n        it += 1\n        v = float(val)\n        if v < best_val:\n            best_val = v\n            best_x = x\n        if it % 200 == 0 and time.monotonic() - started > time_budget_s - 1.5:\n            break\n\n    best_norm = np.array(best_x, dtype=np.float64)\n    pos = best_norm * canvas_np\n\n    # restore fixed exactly\n    pos[fixed_np] = init_pos_np[fixed_np]\n\n    soft_mask = np.logical_and(~fixed_np, np.arange(M) >= hard)\n    if np.any(soft_mask):\n        pos[soft_mask] = np.clip(pos[soft_mask], lo_np[soft_mask], hi_np[soft_mask])\n\n    # final sanity\n    if not np.isfinite(pos).all():\n        pos = init_pos_np.copy()\n    pos[fixed_np] = init_pos_np[fixed_np]\n\n    # hard-hard overlap check (hard macros were never moved)\n    hard_idx = np.arange(min(hard, M))\n    hard_pos = pos[hard_idx]\n    hard_sz = sizes_np[hard_idx]\n    overlap = False\n    for i in range(len(hard_idx)):\n        for j in range(i + 1, len(hard_idx)):\n            if np.all(np.abs(hard_pos[i] - hard_pos[j]) < (hard_sz[i] + hard_sz[j]) / 2.0):\n                overlap = True\n                break\n        if overlap:\n            break\n    if overlap:\n        pos = init_pos_np.copy()\n\n    return {'positions': pos.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-0-ab4fc48e-9257-405c-a6e2-1dc17d86c22b-18-group-005",
+      "observation": "{\"reward\":0.4388798774531943,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.2785277962684631,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.923904,\"wirelength_cost\":0.0684608,\"density_cost\":0.525944,\"congestion_cost\":1.18494,\"candidate_wall_seconds\":168.456,\"grading_seconds\":4.10311},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.17506,\"wirelength_cost\":0.0775748,\"density_cost\":0.587169,\"congestion_cost\":1.60779,\"candidate_wall_seconds\":168.584,\"grading_seconds\":6.68941},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.41315,\"wirelength_cost\":0.0783312,\"density_cost\":0.581412,\"congestion_cost\":2.08822,\"candidate_wall_seconds\":168.469,\"grading_seconds\":12.7755},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.602,\"wirelength_cost\":0.069626,\"density_cost\":0.499186,\"congestion_cost\":2.56557,\"candidate_wall_seconds\":168.455,\"grading_seconds\":31.402}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "ab4fc48e-9257-405c-a6e2-1dc17d86c22b",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.4388798774531943
+    },
+    {
+      "code": "\"\"\"Safe fallback placer for Partcl TILOS Tier-1.\n\nThe Xplace initial placement is verified legal. We keep all hard macros\nexactly as provided and only optionally re-clip movable soft clusters\ninside the canvas with a tiny margin. This guarantees legality while\npreserving fixed positions.\n\"\"\"\nimport time\nimport numpy as np\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    started = time.monotonic()\n    # copy inputs to avoid mutation\n    canvas = np.asarray(problem['canvas'], dtype=np.float64)\n    sizes = np.asarray(problem['sizes'], dtype=np.float64)\n    fixed = np.asarray(problem['fixed'], dtype=bool)\n    num_hard = int(problem['num_hard'])\n    M = int(problem['initial_positions'].shape[0])\n\n    orig_pos = np.asarray(problem['initial_positions'], dtype=np.float64)\n    pos = orig_pos.copy()\n\n    # Hard macros must stay exactly on the verified legal Xplace positions\n    pos[:num_hard] = orig_pos[:num_hard]\n\n    # Preserve fixed positions exactly\n    pos[fixed] = orig_pos[fixed]\n\n    # Soft movable clusters: keep inside canvas with a tiny margin\n    idx = np.arange(M)\n    movable_soft = (~fixed) & (idx >= num_hard)\n    if np.any(movable_soft):\n        gap = max(1e-4, float(np.max(canvas)) * 1e-6)\n        lo = sizes[movable_soft] / 2.0 + gap\n        hi = canvas - sizes[movable_soft] / 2.0 - gap\n        pos[movable_soft] = np.clip(pos[movable_soft], lo, hi)\n\n    # Final sanity: finiteness and exact fixed restore\n    pos = np.where(np.isfinite(pos), pos, orig_pos)\n    pos[fixed] = orig_pos[fixed]\n    pos[:num_hard] = orig_pos[:num_hard]\n\n    # Return float32 as required\n    return {\"positions\": pos.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-1-ab4fc48e-9257-405c-a6e2-1dc17d86c22b-15-group-003",
+      "observation": "{\"reward\":0.4388798774531943,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.2785277962684631,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.923904,\"wirelength_cost\":0.0684608,\"density_cost\":0.525944,\"congestion_cost\":1.18494,\"candidate_wall_seconds\":1.37069,\"grading_seconds\":3.96881},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.17506,\"wirelength_cost\":0.0775748,\"density_cost\":0.587169,\"congestion_cost\":1.60779,\"candidate_wall_seconds\":1.37135,\"grading_seconds\":6.76712},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.41315,\"wirelength_cost\":0.0783312,\"density_cost\":0.581412,\"congestion_cost\":2.08822,\"candidate_wall_seconds\":1.32093,\"grading_seconds\":12.5322},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.602,\"wirelength_cost\":0.069626,\"density_cost\":0.499186,\"congestion_cost\":2.56557,\"candidate_wall_seconds\":1.37395,\"grading_seconds\":32.8038}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "ab4fc48e-9257-405c-a6e2-1dc17d86c22b",
+          "timestep": -1
+        }
+      ],
+      "timestep": -3,
+      "type": "State",
+      "value": 0.4388798774531943
+    },
+    {
+      "code": "\"\"\"JAX assisted soft-cluster placement with hard-macro legality preserved.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\nfrom jax import ops\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    started = time.monotonic()\n    p = problem\n\n    M = int(len(p['sizes']))\n    hard = int(p['num_hard'])\n    canvas_np = np.asarray(p['canvas'], dtype=np.float64)\n    sizes_np = np.asarray(p['sizes'], dtype=np.float64)\n    init_pos_np = np.asarray(p['initial_positions'], dtype=np.float64, copy=True)\n    fixed_np = np.asarray(p['fixed'], dtype=bool)\n\n    movable_mask_np = (~fixed_np) & (np.arange(M) >= hard)\n    if not np.any(movable_mask_np):\n        return {'positions': init_pos_np.astype(np.float32)}\n\n    # ----- constants -----\n    gap = max(1e-4, float(canvas_np.max()) * 1e-5)\n    lo_np = sizes_np / 2.0 + gap\n    hi_np = canvas_np - sizes_np / 2.0 - gap\n    if (lo_np > hi_np).any():\n        lo_np = sizes_np / 2.0 + 1e-4\n        hi_np = canvas_np - sizes_np / 2.0 - 1e-4\n\n    canvas_j = jnp.array(canvas_np, dtype=jnp.float32)\n    sizes_norm = jnp.array(sizes_np / canvas_np, dtype=jnp.float32)\n    lower_j = sizes_norm / 2.0 + 1e-4\n    upper_j = 1.0 - sizes_norm / 2.0 - 1e-4\n\n    x0_norm = jnp.array(init_pos_np / canvas_np, dtype=jnp.float32)\n    mask_j = jnp.array(movable_mask_np, dtype=bool)\n\n    ports_norm = jnp.array(p['port_positions'], dtype=jnp.float32) / canvas_j\n    owners_j = jnp.array(p['pin_owner'], dtype=jnp.int32)\n    offsets_norm = jnp.array(p['pin_offset'], dtype=jnp.float32) / canvas_j\n    weights_j = jnp.array(p['net_weights'], dtype=jnp.float32)\n    K = int(len(weights_j))\n\n    net_offsets = np.asarray(p['net_offsets'])\n    net_ids_np = np.repeat(np.arange(K), np.diff(net_offsets))\n    net_ids_j = jnp.array(net_ids_np, dtype=jnp.int32)\n\n    # density grid, small fixed surrogate\n    rows, cols = 20, 20\n    gx = np.linspace(0.05, 0.95, cols)\n    gy = np.linspace(0.05, 0.95, rows)\n    gx, gy = np.meshgrid(gx, gy)\n    grid_pts = np.stack([gx.ravel(), gy.ravel()], axis=1).astype(np.float32)\n    grid_j = jnp.array(grid_pts)\n    area_j = jnp.prod(sizes_norm, axis=1)\n    sigma = 0.04\n\n    def objective(x):\n        centers_all = jnp.concatenate([x, ports_norm], axis=0)\n        pins = centers_all[owners_j] + offsets_norm\n\n        xmax_x = ops.segment_max(pins[:, 0], net_ids_j, K)\n        xmin_x = ops.segment_min(pins[:, 0], net_ids_j, K)\n        ymax_y = ops.segment_max(pins[:, 1], net_ids_j, K)\n        ymin_y = ops.segment_min(pins[:, 1], net_ids_j, K)\n\n        dx = (xmax_x - xmin_x) * canvas_j[0]\n        dy = (ymax_y - ymin_y) * canvas_j[1]\n        hpwl = jnp.sum(weights_j * (dx + dy))\n        wire = hpwl / float(p['wirelength_normalizer'])\n\n        diff = x[:, None, :] - grid_j[None, :, :]\n        dist2 = jnp.sum(diff * diff, axis=2)\n        gauss = jnp.exp(-0.5 * dist2 / (sigma * sigma))\n        occ = jnp.sum(area_j[:, None] * gauss, axis=0)\n        mean_occ = jnp.mean(occ) + 1e-8\n        density = jnp.mean((occ / mean_occ) ** 2)\n\n        reg = 0.005 * jnp.sum(jnp.where(mask_j[:, None], (x - x0_norm) ** 2, 0.0))\n        return wire + 0.5 * density + reg\n\n    optimizer = optax.adam(5e-4)\n    @jax.jit\n    def step(x, state):\n        val, grad = jax.value_and_grad(objective)(x)\n        grad = jnp.where(mask_j[:, None], grad, 0.0)\n        updates, state = optimizer.update(grad, state, x)\n        x_new = optax.apply_updates(x, updates)\n        x_new = jnp.where(mask_j[:, None], jnp.clip(x_new, lower_j, upper_j), x_new)\n        return x_new, state, val\n\n    rng = np.random.default_rng(seed)\n    noise = rng.normal(scale=0.005, size=(M, 2)).astype(np.float32)\n    x_init = np.array(x0_norm, dtype=np.float32)\n    x_init[movable_mask_np] += noise[movable_mask_np]\n    x_init = np.clip(x_init, np.array(lower_j), np.array(upper_j))\n    x = jnp.array(x_init)\n    state = optimizer.init(x)\n\n    best_x = x\n    best_val = np.inf\n    it = 0\n    max_iter = 1200\n    while time.monotonic() - started < time_budget_s - 2.0 and it < max_iter:\n        x, state, val = step(x, state)\n        it += 1\n        v = float(val)\n        if v < best_val:\n            best_val = v\n            best_x = x\n\n    best_norm = np.array(best_x, dtype=np.float64)\n    pos = best_norm * canvas_np\n\n    # ---- final legalisation / safety ----\n    pos[fixed_np] = init_pos_np[fixed_np]\n    soft_mask = (~fixed_np) & (np.arange(M) >= hard)\n    pos[soft_mask] = np.clip(pos[soft_mask], lo_np[soft_mask], hi_np[soft_mask])\n\n    if not np.isfinite(pos).all():\n        pos = init_pos_np.copy()\n\n    # hard-hard overlap guard (hard macros never moved)\n    hard_idx = np.arange(min(hard, M))\n    overlap = False\n    if len(hard_idx) > 1:\n        hp = pos[hard_idx]\n        hs = sizes_np[hard_idx]\n        for i in range(len(hard_idx)):\n            for j in range(i + 1, len(hard_idx)):\n                d = np.abs(hp[i] - hp[j])\n                if np.all(d < (hs[i] + hs[j]) / 2.0 - 1e-9):\n                    overlap = True\n                    break\n            if overlap:\n                break\n    if overlap:\n        pos = init_pos_np.copy()\n\n    pos[fixed_np] = init_pos_np[fixed_np]\n    return {'positions': pos.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-0-0fbaf1f4-bd29-48de-88a2-e36220df12c0-18-group-006",
+      "observation": "{\"reward\":0.4388798774531943,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.2785277962684631,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.923904,\"wirelength_cost\":0.0684608,\"density_cost\":0.525944,\"congestion_cost\":1.18494,\"candidate_wall_seconds\":4.97766,\"grading_seconds\":3.93681},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.17506,\"wirelength_cost\":0.0775748,\"density_cost\":0.587169,\"congestion_cost\":1.60779,\"candidate_wall_seconds\":5.62765,\"grading_seconds\":6.67686},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.41315,\"wirelength_cost\":0.0783312,\"density_cost\":0.581412,\"congestion_cost\":2.08822,\"candidate_wall_seconds\":5.72857,\"grading_seconds\":12.7474},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.602,\"wirelength_cost\":0.069626,\"density_cost\":0.499186,\"congestion_cost\":2.56557,\"candidate_wall_seconds\":9.49483,\"grading_seconds\":31.602}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "0fbaf1f4-bd29-48de-88a2-e36220df12c0",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.4388798774531943
+    },
+    {
+      "code": "\"\"\"JAX-driven soft cluster placement with quadratic wirelength surrogate.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    started = time.monotonic()\n    deadline = started + time_budget_s\n\n    p = problem\n    M = int(len(p['initial_positions']))\n    num_hard = int(p['num_hard'])\n    canvas_np = np.asarray(p['canvas'], dtype=np.float64)\n    sizes_np = np.asarray(p['sizes'], dtype=np.float64)\n    fixed_np = np.asarray(p['fixed'], dtype=bool)\n    init_pos_np = np.asarray(p['initial_positions'], dtype=np.float64)\n\n    margin = max(1e-4, float(canvas_np.max()) * 1e-5)\n    lo_np = sizes_np / 2 + margin\n    hi_np = canvas_np - sizes_np / 2 - margin\n\n    movable_mask_np = (~fixed_np) & (np.arange(M) >= num_hard)\n    if not np.any(movable_mask_np):\n        pos_out = init_pos_np.copy()\n        pos_out[~fixed_np] = np.clip(pos_out[~fixed_np], lo_np[~fixed_np], hi_np[~fixed_np])\n        pos_out[fixed_np] = init_pos_np[fixed_np]\n        return {\"positions\": pos_out.astype(np.float32)}\n\n    # ----- JAX data -----\n    canvas_j = jnp.asarray(canvas_np, dtype=jnp.float32)\n    sizes_j = jnp.asarray(sizes_np, dtype=jnp.float32)\n    pos_j = jnp.asarray(init_pos_np.astype(np.float32))\n    fixed_j = jnp.asarray(fixed_np)\n    movable_j = jnp.asarray(movable_mask_np)\n\n    pos_norm = pos_j / canvas_j\n\n    ports_np = np.asarray(p['port_positions'], dtype=np.float32)\n    ports_norm = jnp.asarray(ports_np) / canvas_j\n\n    pin_offset_np = np.asarray(p['pin_offset'], dtype=np.float32)\n    offsets_norm = jnp.asarray(pin_offset_np) / canvas_j\n\n    owners_np = np.asarray(p['pin_owner'], dtype=np.int32)\n    owners_j = jnp.asarray(owners_np, dtype=jnp.int32)\n\n    weights_np = np.asarray(p['net_weights'], dtype=np.float32)\n    weights_j = jnp.asarray(weights_np)\n    K = int(len(weights_np))\n\n    net_offsets_np = np.asarray(p['net_offsets'], dtype=np.int64)\n    net_ids_np = np.repeat(np.arange(K, dtype=np.int32), np.diff(net_offsets_np))\n    net_ids_j = jnp.asarray(net_ids_np, dtype=jnp.int32)\n\n    # density grid\n    grid_res = 20\n    xs = jnp.linspace(0.03, 0.97, grid_res)\n    ys = jnp.linspace(0.03, 0.97, grid_res)\n    gx, gy = jnp.meshgrid(xs, ys)\n    centers_grid = jnp.stack([gx.ravel(), gy.ravel()], axis=1)\n    area_norm = jnp.prod(sizes_j / canvas_j, axis=1)\n    sigma = 0.055\n\n    size_norm_half = sizes_j / (2.0 * canvas_j)\n    lo_norm = size_norm_half + 1e-3\n    hi_norm = 1.0 - size_norm_half - 1e-3\n\n    def objective(x):\n        combined = jnp.concatenate([x, ports_norm], axis=0)\n        pin_centers = combined[owners_j] + offsets_norm\n        px = pin_centers[:, 0]\n        py = pin_centers[:, 1]\n\n        sum_x = jax.ops.segment_sum(px, net_ids_j, K)\n        sum_y = jax.ops.segment_sum(py, net_ids_j, K)\n        sum_x2 = jax.ops.segment_sum(px * px, net_ids_j, K)\n        sum_y2 = jax.ops.segment_sum(py * py, net_ids_j, K)\n        cnt = jax.ops.segment_sum(jnp.ones_like(px), net_ids_j, K)\n        cnt = jnp.maximum(cnt, 1.0)\n\n        quad = (sum_x2 - sum_x * sum_x / cnt) + (sum_y2 - sum_y * sum_y / cnt)\n        wire = jnp.sum(weights_j * quad) / max(K, 1)\n\n        delta = (x[:, None, :] - centers_grid[None, :, :]) / sigma\n        sq = jnp.sum(delta * delta, axis=2)\n        kernel = jnp.exp(-0.5 * sq)\n        occupancy = jnp.sum(area_norm[:, None] * kernel, axis=0)\n        mean_occ = jnp.mean(occupancy) + 1e-12\n        density_val = jnp.mean((occupancy / mean_occ) ** 2)\n        return wire + 0.1 * density_val\n\n    optimizer = optax.adam(learning_rate=0.008)\n    opt_state = optimizer.init(pos_norm)\n\n    @jax.jit\n    def step_fn(x, state):\n        val, grad = jax.value_and_grad(objective)(x)\n        grad = jnp.where(movable_j[:, None], grad, 0.0)\n        updates, new_state = optimizer.update(grad, state, x)\n        x_new = optax.apply_updates(x, updates)\n        x_clipped = jnp.clip(x_new, lo_norm, hi_norm)\n        x_new = jnp.where(movable_j[:, None], x_clipped, x)\n        x_new = jnp.where(fixed_j[:, None], pos_norm, x_new)\n        return x_new, new_state, val\n\n    x = pos_norm\n    # reserve a few seconds for final sync / copy\n    while time.monotonic() < deadline - 2.0:\n        x, opt_state, _ = step_fn(x, opt_state)\n\n    pos_final_microns = x * canvas_j\n    pos_out = np.array(pos_final_microns, dtype=np.float32)\n    pos_out[fixed_np] = init_pos_np[fixed_np]\n    # keep movable soft clusters inside canvas with margin\n    mask_soft = ~fixed_np\n    pos_out[mask_soft] = np.clip(pos_out[mask_soft], lo_np[mask_soft], hi_np[mask_soft])\n\n    # final sanity\n    pos_out = np.asarray(pos_out, dtype=np.float32)\n    if not np.isfinite(pos_out).all():\n        pos_out = init_pos_np.astype(np.float32)\n\n    return {\"positions\": pos_out}\n",
+      "construction": null,
+      "id": "bootstrap-0-0fbaf1f4-bd29-48de-88a2-e36220df12c0-17-group-006",
+      "observation": "{\"reward\":0.401976817806359,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.487705647945404,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.17785,\"wirelength_cost\":0.0663271,\"density_cost\":1.09063,\"congestion_cost\":1.13241,\"candidate_wall_seconds\":168.374,\"grading_seconds\":3.99143},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.32204,\"wirelength_cost\":0.0723042,\"density_cost\":1.0138,\"congestion_cost\":1.48567,\"candidate_wall_seconds\":168.471,\"grading_seconds\":6.81513},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.53338,\"wirelength_cost\":0.0712904,\"density_cost\":1.09318,\"congestion_cost\":1.83101,\"candidate_wall_seconds\":168.413,\"grading_seconds\":12.4489},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.91755,\"wirelength_cost\":0.0578787,\"density_cost\":1.4924,\"congestion_cost\":2.22694,\"candidate_wall_seconds\":168.484,\"grading_seconds\":32.1146}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "0fbaf1f4-bd29-48de-88a2-e36220df12c0",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.401976817806359
+    },
+    {
+      "code": "\"\"\"JAX guided soft-cluster placement with hard-macro legality preserved.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    start = time.monotonic()\n    reserve = 3.0\n    deadline = start + max(1e-6, time_budget_s - reserve)\n\n    p = problem\n    M = int(p['initial_positions'].shape[0])\n    canvas = np.asarray(p['canvas'], dtype=np.float64)\n    init_pos = np.asarray(p['initial_positions'], dtype=np.float64).copy()\n    sizes = np.asarray(p['sizes'], dtype=np.float64)\n    fixed = np.asarray(p['fixed'], dtype=bool)\n    num_hard = int(p['num_hard'])\n\n    gap = max(1e-4, float(canvas.max()) * 1e-5)\n\n    movable_mask = (~fixed) & (np.arange(M) >= num_hard)\n    movable_idx = np.where(movable_mask)[0]\n    if movable_idx.size == 0:\n        pos = init_pos.copy()\n        pos[fixed] = p['initial_positions'][fixed]\n        lo = sizes / 2 + gap\n        hi = canvas - sizes / 2 - gap\n        pos[~fixed] = np.clip(pos[~fixed], lo[~fixed], hi[~fixed])\n        return {\"positions\": pos.astype(np.float32)}\n\n    net_offsets = np.asarray(p['net_offsets'], dtype=np.int64)\n    pin_owner = np.asarray(p['pin_owner'], dtype=np.int64)\n    pin_offset = np.asarray(p['pin_offset'], dtype=np.float64)\n    net_weights = np.asarray(p['net_weights'], dtype=np.float64)\n    K = int(len(net_weights))\n    net_ids = np.repeat(np.arange(K, dtype=np.int32), np.diff(net_offsets))\n    ports = np.asarray(p['port_positions'], dtype=np.float64)\n\n    canvas_j = jnp.array(canvas, dtype=jnp.float32)\n    sizes_norm = jnp.array(sizes, dtype=jnp.float32) / canvas_j\n    init_pos_norm = jnp.array(init_pos, dtype=jnp.float32) / canvas_j\n    ports_norm = jnp.array(ports, dtype=jnp.float32) / canvas_j\n    pin_offset_norm = jnp.array(pin_offset, dtype=jnp.float32) / canvas_j\n    net_weights_j = jnp.array(net_weights, dtype=jnp.float32)\n    net_ids_j = jnp.array(net_ids, dtype=jnp.int32)\n    pin_owner_j = jnp.array(pin_owner, dtype=jnp.int32)\n\n    mask_j = jnp.array(movable_mask, dtype=jnp.bool_)\n    mask_expand = mask_j[:, None]\n\n    rows = int(p['grid_shape'][0])\n    cols = int(p['grid_shape'][1])\n    rows_g = min(rows, 64)\n    cols_g = min(cols, 64)\n    xs = jnp.linspace(1.0 / (2 * cols_g), 1.0 - 1.0 / (2 * cols_g), cols_g)\n    ys = jnp.linspace(1.0 / (2 * rows_g), 1.0 - 1.0 / (2 * rows_g), rows_g)\n    gx, gy = jnp.meshgrid(xs, ys)\n    grid_centers_norm = jnp.stack([gx.ravel(), gy.ravel()], axis=1)\n\n    smoothing_range = int(p.get('congestion_smoothing_range', 1))\n    cell_w = 1.0 / cols_g\n    cell_h = 1.0 / rows_g\n    sigma_norm = max(float(smoothing_range) * np.sqrt(cell_w * cell_h) * 0.5, 0.01)\n    sigma2 = sigma_norm * sigma_norm\n\n    area_norm = jnp.prod(sizes_norm, axis=1)\n    normalizer = float(p['wirelength_normalizer'])\n\n    rng = np.random.RandomState(seed)\n    x_np = np.array(init_pos_norm)\n    jitter = 0.015\n    noise = (rng.rand(movable_idx.size, 2) - 0.5) * jitter\n    x_np[movable_idx] += noise\n    # keep inside bounds\n    low_n = np.array(sizes_norm) / 2 + 1e-4\n    high_n = 1.0 - np.array(sizes_norm) / 2 - 1e-4\n    x_np[movable_idx] = np.clip(x_np[movable_idx], low_n[movable_idx], high_n[movable_idx])\n    x = jnp.array(x_np, dtype=jnp.float32)\n\n    def cost_fn(x_):\n        all_pos = jnp.concatenate([x_, ports_norm], axis=0)\n        pin_pos = all_pos[pin_owner_j] + pin_offset_norm\n        xmax = jax.ops.segment_max(pin_pos, net_ids_j, K)\n        xmin = jax.ops.segment_min(pin_pos, net_ids_j, K)\n        diff = xmax - xmin\n        wire_phys = jnp.sum(net_weights_j * jnp.sum(diff * canvas_j, axis=1))\n        wire_norm = wire_phys / normalizer\n\n        dx = x_[:, None, :] - grid_centers_norm[None, :, :]\n        dist2 = jnp.sum(dx * dx, axis=2)\n        occ = jnp.sum(area_norm[:, None] * jnp.exp(-0.5 * dist2 / sigma2), axis=0)\n        occ_mean = jnp.mean(occ) + 1e-12\n        density = jnp.mean((occ / occ_mean) ** 2)\n        return wire_norm + 0.5 * density\n\n    optimizer = optax.adam(learning_rate=5e-4)\n    opt_state = optimizer.init(x)\n\n    @jax.jit\n    def step(x_, state_):\n        val, grad = jax.value_and_grad(cost_fn)(x_)\n        grad_masked = jnp.where(mask_expand, grad, 0.0)\n        updates, new_state = optimizer.update(grad_masked, state_, x_)\n        x_new = optax.apply_updates(x_, updates)\n        x_new = jnp.where(mask_expand, x_new, x_)\n        low = sizes_norm / 2 + 1e-4\n        high = 1.0 - sizes_norm / 2 - 1e-4\n        x_new = jnp.where(mask_expand, jnp.clip(x_new, low, high), x_new)\n        return x_new, new_state, val\n\n    best_val = float('inf')\n    best_x = x\n    it = 0\n    while time.monotonic() < deadline:\n        x, opt_state, val = step(x, opt_state)\n        it += 1\n        v = float(val)\n        if v < best_val:\n            best_val = v\n            best_x = x\n        if it % 200 == 0:\n            # light learning-rate decay\n            pass\n\n    best_pos_norm = np.array(best_x)\n    best_pos_phys = best_pos_norm * canvas\n\n    pos_out = best_pos_phys.copy()\n    pos_out[fixed] = init_pos[fixed]\n    soft_mask = (~fixed) & (np.arange(M) >= num_hard)\n    lo = sizes / 2 + gap\n    hi = canvas - sizes / 2 - gap\n    if np.any(soft_mask):\n        pos_out[soft_mask] = np.clip(pos_out[soft_mask], lo[soft_mask], hi[soft_mask])\n\n    if not np.isfinite(pos_out).all():\n        pos_out = init_pos.copy()\n\n    return {\"positions\": pos_out.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-0-d578d1bf-ced7-42f8-89f3-c8b6a30cdd97-21-group-009",
+      "observation": "{\"reward\":0.4127423741618777,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.4228188395500183,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.07237,\"wirelength_cost\":0.0651278,\"density_cost\":0.959256,\"congestion_cost\":1.05523,\"candidate_wall_seconds\":167.414,\"grading_seconds\":4.03386},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.33038,\"wirelength_cost\":0.0719124,\"density_cost\":1.08296,\"congestion_cost\":1.43398,\"candidate_wall_seconds\":167.401,\"grading_seconds\":6.84746},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.53909,\"wirelength_cost\":0.0764175,\"density_cost\":1.09383,\"congestion_cost\":1.83153,\"candidate_wall_seconds\":167.375,\"grading_seconds\":12.4975},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.74943,\"wirelength_cost\":0.0647184,\"density_cost\":0.872962,\"congestion_cost\":2.49646,\"candidate_wall_seconds\":167.363,\"grading_seconds\":31.9341}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "d578d1bf-ced7-42f8-89f3-c8b6a30cdd97",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.4127423741618777
+    },
+    {
+      "code": "\"\"\"JAX soft-cluster placement with differentiable quadratic wirelength and density.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\n\n\ndef _legal(pos, sizes, canvas, fixed, init_pos, num_hard):\n    if not np.isfinite(pos).all():\n        return False\n    gap = max(1e-4, float(np.max(canvas)) * 1e-5)\n    lo = sizes / 2 + gap\n    hi = canvas - sizes / 2 - gap\n    if np.any(pos < lo - 1e-6) or np.any(pos > hi + 1e-6):\n        return False\n    if not np.allclose(pos[fixed], init_pos[fixed], atol=1e-6):\n        return False\n    # hard-hard overlap\n    hard_idx = np.arange(num_hard)\n    ph = pos[hard_idx]\n    sh = sizes[hard_idx]\n    H = len(hard_idx)\n    for i in range(H):\n        dx = np.abs(ph[i, 0] - ph[i + 1 :, 0])\n        dy = np.abs(ph[i, 1] - ph[i + 1 :, 1])\n        if np.any(dx < (sh[i, 0] + sh[i + 1 :, 0]) / 2 - 1e-7):\n            if np.any(dy < (sh[i, 1] + sh[i + 1 :, 1]) / 2 - 1e-7):\n                return False\n    return True\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    start = time.monotonic()\n    reserve = 4.0\n    deadline = start + max(0.0, time_budget_s - reserve)\n    p = problem\n\n    canvas = np.asarray(p['canvas'], dtype=np.float64)\n    init_pos = np.asarray(p['initial_positions'], dtype=np.float64, copy=True)\n    sizes = np.asarray(p['sizes'], dtype=np.float64)\n    fixed = np.asarray(p['fixed'], dtype=bool)\n    num_hard = int(p['num_hard'])\n    M = init_pos.shape[0]\n\n    movable_mask = (~fixed) & (np.arange(M) >= num_hard)\n    if not np.any(movable_mask):\n        return {\"positions\": init_pos.astype(np.float32)}\n\n    # ---------- preprocessing ----------\n    pos_norm = init_pos.astype(np.float32) / canvas\n    sizes_norm = sizes.astype(np.float32) / canvas\n    ports_norm = np.asarray(p['port_positions'], dtype=np.float32) / canvas\n    pin_owner = np.asarray(p['pin_owner'], dtype=np.int32)\n    pin_offset = np.asarray(p['pin_offset'], dtype=np.float32) / canvas\n    net_weights = np.asarray(p['net_weights'], dtype=np.float32)\n    net_offsets = np.asarray(p['net_offsets'], dtype=np.int64)\n    k = int(len(net_weights))\n    total_pins = int(net_offsets[-1])\n    net_ids = np.repeat(np.arange(k, dtype=np.int32), np.diff(net_offsets))\n    counts = np.diff(net_offsets).astype(np.float32)\n\n    # grid for density surrogate\n    rows, cols = map(int, p['grid_shape'])\n    rows = min(rows, 24)\n    cols = min(cols, 24)\n    gx = jnp.linspace(0.5 / cols, 1.0 - 0.5 / cols, cols)\n    gy = jnp.linspace(0.5 / rows, 1.0 - 0.5 / rows, rows)\n    gx, gy = jnp.meshgrid(gx, gy)\n    grid_coords = jnp.stack([gx.ravel(), gy.ravel()], axis=1)\n\n    # JAX constants\n    ports_j = jnp.asarray(ports_norm, dtype=jnp.float32)\n    owners_j = jnp.asarray(pin_owner, dtype=jnp.int32)\n    offsets_j = jnp.asarray(pin_offset, dtype=jnp.float32)\n    weights_j = jnp.asarray(net_weights, dtype=jnp.float32)\n    net_ids_j = jnp.asarray(net_ids, dtype=jnp.int32)\n    counts_j = jnp.asarray(counts, dtype=jnp.float32)\n    mask_j = jnp.asarray(movable_mask, dtype=bool)[:, None]\n    low = jnp.asarray(sizes_norm, dtype=jnp.float32) / 2 + 1e-5\n    high = 1.0 - jnp.asarray(sizes_norm, dtype=jnp.float32) / 2 - 1e-5\n    area_j = jnp.prod(jnp.asarray(sizes_norm, dtype=jnp.float32), axis=1)\n    sigma = 0.04\n    lambda_dens = 1.0\n\n    def objective(x):\n        centers_all = jnp.concatenate([x, ports_j], axis=0)\n        pins = centers_all[owners_j] + offsets_j\n        sum_pins = jax.ops.segment_sum(pins, net_ids_j, k)\n        centroids = sum_pins / counts_j[:, None]\n        centroid_per_pin = centroids[net_ids_j]\n        diff = pins - centroid_per_pin\n        sqdist = jnp.sum(diff * diff, axis=1)\n        per_net_sq = jax.ops.segment_sum(sqdist, net_ids_j, k)\n        per_net_avg = per_net_sq / counts_j\n        wire = jnp.sum(weights_j * per_net_avg) / (jnp.sum(weights_j) + 1e-12)\n        # density surrogate\n        delta = (x[:, None, :] - grid_coords[None, :, :]) / sigma\n        d2 = jnp.sum(delta * delta, axis=2)\n        exp_term = jnp.exp(-0.5 * d2)\n        occ = jnp.sum(area_j[:, None] * exp_term, axis=0)\n        density = jnp.mean(occ * occ)\n        return wire + lambda_dens * density\n\n    rng = np.random.default_rng(seed)\n    best_pos = init_pos.copy()\n    best_val = float('inf')\n\n    x0 = jnp.asarray(pos_norm, dtype=jnp.float32)\n    fixed_pos = x0\n\n    optimizer = optax.adam(1e-3)\n    @jax.jit\n    def step(x, state):\n        val, grad = jax.value_and_grad(objective)(x)\n        grad = jnp.where(mask_j, grad, 0.0)\n        updates, new_state = optimizer.update(grad, state)\n        x_new = optax.apply_updates(x, updates)\n        x_new = jnp.where(mask_j, jnp.clip(x_new, low, high), x)\n        x_new = jnp.where(mask_j, x_new, fixed_pos)\n        return x_new, new_state, val\n\n    # simple multi-restart\n    for restart in range(2):\n        if time.monotonic() > deadline:\n            break\n        x = x0\n        if restart > 0:\n            noise = rng.normal(scale=0.015, size=(M, 2)).astype(np.float32)\n            x = jnp.clip(x + noise, low, high)\n        state = optimizer.init(x)\n        for _ in range(1200):\n            if time.monotonic() > deadline:\n                break\n            x, state, val = step(x, state)\n        val_f = float(val)\n        pos_candidate = np.array(x * canvas, dtype=np.float64)\n        pos_candidate[fixed] = init_pos[fixed]\n        if _legal(pos_candidate, sizes, canvas, fixed, init_pos, num_hard):\n            if val_f < best_val:\n                best_val = val_f\n                best_pos = pos_candidate.copy()\n        # early exit if time is low\n        if time.monotonic() > deadline - 1.0:\n            break\n\n    if not _legal(best_pos, sizes, canvas, fixed, init_pos, num_hard):\n        best_pos = init_pos.copy()\n\n    # final margin clip for soft clusters\n    gap = max(1e-4, float(np.max(canvas)) * 1e-5)\n    lo = sizes / 2 + gap\n    hi = canvas - sizes / 2 - gap\n    soft = (~fixed) & (np.arange(M) >= num_hard)\n    best_pos[soft] = np.clip(best_pos[soft], lo[soft], hi[soft])\n    best_pos[fixed] = init_pos[fixed]\n\n    return {\"positions\": best_pos.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-0-63e22ddb-cd21-4c4f-9908-53bb96687f2e-27-group-012",
+      "observation": "{\"reward\":0.4388798774531943,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.2785277962684631,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.923904,\"wirelength_cost\":0.0684608,\"density_cost\":0.525944,\"congestion_cost\":1.18494,\"candidate_wall_seconds\":4.07859,\"grading_seconds\":3.95451},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.17506,\"wirelength_cost\":0.0775748,\"density_cost\":0.587169,\"congestion_cost\":1.60779,\"candidate_wall_seconds\":4.4784,\"grading_seconds\":6.92853},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.41315,\"wirelength_cost\":0.0783312,\"density_cost\":0.581412,\"congestion_cost\":2.08822,\"candidate_wall_seconds\":4.6274,\"grading_seconds\":12.639},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.602,\"wirelength_cost\":0.069626,\"density_cost\":0.499186,\"congestion_cost\":2.56557,\"candidate_wall_seconds\":4.88152,\"grading_seconds\":32.4376}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "63e22ddb-cd21-4c4f-9908-53bb96687f2e",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.4388798774531943
+    },
+    {
+      "code": "\"\"\"JAX-assisted soft-cluster placement with a wirelength + density surrogate.\"\"\"\nimport time\nimport numpy as np\nimport jax\nimport jax.numpy as jnp\nimport optax\n\njax.config.update(\"jax_enable_x64\", False)\n\n\ndef place(problem: dict, seed: int, *, time_budget_s: float) -> dict:\n    started = time.monotonic()\n    deadline = started + max(0.0, time_budget_s)\n    p = problem\n\n    canvas_np = np.asarray(p[\"canvas\"], dtype=np.float64)\n    sizes_np = np.asarray(p[\"sizes\"], dtype=np.float64)\n    pos_np = np.asarray(p[\"initial_positions\"], dtype=np.float64, copy=True)\n    fixed_np = np.asarray(p[\"fixed\"], dtype=bool)\n    num_hard = int(p[\"num_hard\"])\n    M = pos_np.shape[0]\n\n    gap_abs = max(1e-4, float(canvas_np.max()) * 1e-5)\n    lo_abs = sizes_np / 2.0 + gap_abs\n    hi_abs = canvas_np - sizes_np / 2.0 - gap_abs\n\n    movable_mask_np = (~fixed_np) & (np.arange(M) >= num_hard)\n    movable_idx = np.where(movable_mask_np)[0]\n    if movable_idx.size == 0 or time_budget_s < 3.0:\n        pos_out = pos_np.copy()\n        pos_out[fixed_np] = p[\"initial_positions\"][fixed_np]\n        soft = (~fixed_np) & (np.arange(M) >= num_hard)\n        pos_out[soft] = np.clip(pos_out[soft], lo_abs[soft], hi_abs[soft])\n        return {\"positions\": pos_out.astype(np.float32)}\n\n    # ---- JAX constants -------------------------------------------------\n    canvas_jnp = jnp.array(canvas_np, dtype=jnp.float32)\n    sizes_jnp = jnp.array(sizes_np, dtype=jnp.float32)\n    ports_jnp = jnp.array(p.get(\"port_positions\", []), dtype=jnp.float32)\n    owners_jnp = jnp.array(p[\"pin_owner\"], dtype=jnp.int32)\n    offsets_jnp = jnp.array(p[\"pin_offset\"], dtype=jnp.float32)\n    weights_jnp = jnp.array(p[\"net_weights\"], dtype=jnp.float32)\n    net_offsets = np.asarray(p[\"net_offsets\"], dtype=np.int64)\n    net_ids_np = np.repeat(np.arange(len(weights_jnp)), np.diff(net_offsets)).astype(np.int32)\n    net_ids_jnp = jnp.array(net_ids_np)\n    num_segments = int(len(weights_jnp))\n    wire_norm = float(p[\"wirelength_normalizer\"])\n\n    lo_norm = (lo_abs / canvas_np).astype(np.float32)\n    hi_norm = (hi_abs / canvas_np).astype(np.float32)\n    lo_norm_jnp = jnp.array(lo_norm)\n    hi_norm_jnp = jnp.array(hi_norm)\n\n    x0_norm = (pos_np / canvas_np).astype(np.float32)\n    # small seed-driven perturbation\n    rng = np.random.default_rng(seed)\n    pert = rng.normal(scale=0.008, size=x0_norm.shape).astype(np.float32)\n    x0_norm = x0_norm + np.where(movable_mask_np[:, None], pert, 0.0)\n    x0_norm = np.clip(x0_norm, lo_norm, hi_norm)\n    x_jnp = jnp.array(x0_norm)\n\n    movable_mask_jnp = jnp.array(movable_mask_np, dtype=jnp.bool_)\n    areas_jnp = jnp.prod(sizes_jnp, axis=1)\n\n    # density grid\n    rows, cols = map(int, p[\"grid_shape\"])\n    g_rows = min(rows, 64)\n    g_cols = min(cols, 64)\n    xs = (jnp.arange(g_cols) + 0.5) * canvas_jnp[0] / g_cols\n    ys = (jnp.arange(g_rows) + 0.5) * canvas_jnp[1] / g_rows\n    gx, gy = jnp.meshgrid(xs, ys)\n    grid_centers = jnp.stack([gx.ravel(), gy.ravel()], axis=1)\n    sigma = float(canvas_np.max()) / max(g_rows, g_cols) * 0.75\n    sigma_jnp = jnp.array(sigma, dtype=jnp.float32)\n\n    def obj_fn(x_norm):\n        macro_abs = x_norm * canvas_jnp\n        combined = jnp.concatenate([macro_abs, ports_jnp], axis=0)\n        pin_pos = combined[owners_jnp] + offsets_jnp\n        xmax = jax.ops.segment_max(pin_pos, net_ids_jnp, num_segments)\n        xmin = jax.ops.segment_min(pin_pos, net_ids_jnp, num_segments)\n        hpwl = jnp.sum(weights_jnp * jnp.sum(xmax - xmin, axis=1))\n        wire_cost = hpwl / wire_norm\n\n        delta = (macro_abs[:, None, :] - grid_centers[None, :, :]) / sigma_jnp\n        kernel = jnp.exp(-0.5 * jnp.sum(delta * delta, axis=2))\n        occupancy = jnp.sum(kernel * areas_jnp[:, None], axis=0)\n        mean_occ = jnp.mean(occupancy) + 1e-8\n        density_penalty = jnp.mean((occupancy / mean_occ) ** 2)\n        return wire_cost + 0.10 * density_penalty\n\n    optimizer = optax.adam(1e-2)\n    state = optimizer.init(x_jnp)\n\n    @jax.jit\n    def step(x, state):\n        val, grad = jax.value_and_grad(obj_fn)(x)\n        grad_masked = jnp.where(movable_mask_jnp[:, None], grad, 0.0)\n        updates, state = optimizer.update(grad_masked, state, x)\n        x_new = optax.apply_updates(x, updates)\n        x_new = jnp.where(movable_mask_jnp[:, None],\n                          jnp.clip(x_new, lo_norm_jnp, hi_norm_jnp), x)\n        return x_new, state, val\n\n    best_x = x_jnp\n    best_val = float(\"inf\")\n    it = 0\n    max_iter = 400\n    # warm up compile\n    try:\n        x_jnp, state, _ = step(x_jnp, state)\n    except Exception:\n        pass\n\n    while time.monotonic() < deadline - 1.0 and it < max_iter:\n        x_jnp, state, val = step(x_jnp, state)\n        v = float(val)\n        if v < best_val:\n            best_val = v\n            best_x = x_jnp\n        it += 1\n\n    best_norm = np.array(best_x)\n    pos_out = pos_np.copy()\n    pos_out[movable_idx] = best_norm[movable_idx] * canvas_np\n    # exact restore\n    pos_out[fixed_np] = p[\"initial_positions\"][fixed_np]\n    # final bounds\n    soft_mask = (~fixed_np) & (np.arange(M) >= num_hard)\n    pos_out[soft_mask] = np.clip(pos_out[soft_mask], lo_abs[soft_mask], hi_abs[soft_mask])\n\n    if not np.all(np.isfinite(pos_out)):\n        pos_out = np.asarray(p[\"initial_positions\"], dtype=np.float64)\n\n    return {\"positions\": pos_out.astype(np.float32)}\n",
+      "construction": null,
+      "id": "bootstrap-0-63e22ddb-cd21-4c4f-9908-53bb96687f2e-31-group-012",
+      "observation": "{\"reward\":0.4370207615205582,\"message\":\"Valid\",\"metrics\":{\"mean_proxy_cost\":1.2882208079099655,\"cases\":[{\"case\":\"ibm01\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":0.975907,\"wirelength_cost\":0.0642341,\"density_cost\":0.688091,\"congestion_cost\":1.13526,\"candidate_wall_seconds\":5.62939,\"grading_seconds\":4.05125},{\"case\":\"ibm04\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.20652,\"wirelength_cost\":0.067315,\"density_cost\":0.825422,\"congestion_cost\":1.45298,\"candidate_wall_seconds\":4.17805,\"grading_seconds\":6.76385},{\"case\":\"ibm08\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.35065,\"wirelength_cost\":0.0701424,\"density_cost\":0.75779,\"congestion_cost\":1.80323,\"candidate_wall_seconds\":5.98785,\"grading_seconds\":13.4168},{\"case\":\"ibm18\",\"valid\":true,\"candidate_limit_seconds\":180,\"proxy_cost\":1.61981,\"wirelength_cost\":0.0646454,\"density_cost\":0.628962,\"congestion_cost\":2.48136,\"candidate_wall_seconds\":8.09999,\"grading_seconds\":31.3574}]}}",
+      "origin": "muse",
+      "parent_values": [
+        0.0
+      ],
+      "parents": [
+        {
+          "id": "63e22ddb-cd21-4c4f-9908-53bb96687f2e",
+          "timestep": -1
+        }
+      ],
+      "timestep": -2,
+      "type": "State",
+      "value": 0.4370207615205582
+    }
+  ],
+  "step": 0
+}

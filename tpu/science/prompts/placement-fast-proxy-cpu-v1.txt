@@ -1,0 +1,229 @@
+Design a chip macro-placement algorithm using the provided fast objective evaluator to guide optimization. Return one complete fenced
+Python module implementing:
+
+```python
+def place(problem: dict, seed: int, *, time_budget_s: float) -> dict:
+    # Return all hard-macro and soft-cluster centers, in input order.
+    return {"positions": positions}  # numeric array [M, 2], x then y
+```
+
+Optimize the Partcl/TILOS Tier 1 proxy:
+
+    cost = wirelength + 0.5 * density + 0.5 * congestion
+
+The evaluator computes these normalized components with its pinned TILOS
+implementation. Lower cost is better. Across the supplied evaluation cases,
+reward = max(1e-6, 1 / (1 + mean(cost))). Any invalid case makes the whole
+submission's reward zero. A cost of 1 gives reward 0.5; cost 2 gives 1/3.
+No baseline division is applied. For selected valid programs, feedback includes
+per-case proxy_cost, wirelength_cost, density_cost, congestion_cost,
+candidate_wall_seconds, candidate_limit_seconds, grading_seconds, and the
+suite's mean_proxy_cost. Candidate runtime includes imports, initialization,
+JIT compilation, and completed device work; grading time is separate.
+Components are normalized costs before applying the weights above. Use this
+breakdown to identify which cases and components need improvement, while
+optimizing the suite mean and preserving legality on every case.
+
+Provided fast objective evaluator:
+Evaluator is already imported and available in your program. Do not import or
+implement it yourself. It caches layout state for efficient incremental scoring;
+you design the search strategy, proposals, acceptance rules and use of the budget.
+
+    with Evaluator(problem, problem["initial_positions"]) as ev:
+        current = ev.score()
+
+Methods:
+- score(): return the current layout's score components.
+- apply(block_id, xy): temporarily move one block to center xy; return scores.
+- commit(): accept the pending move; returns None.
+- revert(): undo the pending move; return scores for the restored layout.
+- evaluate_moves(ids, positions): return a list of score dictionaries for
+  independent single-block alternatives against the current layout, leaving
+  it unchanged. ids has shape [K], positions has shape [K,2].
+- evaluate_batch(layouts): return a list of score dictionaries for complete
+  alternative layouts [K,M,2], leaving the current layout unchanged.
+- rebuild(): recompute cached state to limit numerical drift; return scores.
+
+Each score dictionary contains proxy_cost, wirelength_cost, density_cost and
+congestion_cost. Lower is better. These score the objective defined above;
+there is no need to implement its components yourself.
+Keep one evaluator alive across your search loop to reuse its caches. Only one
+move may be pending: commit or revert before another move or full-layout scoring.
+score() may inspect the pending state. Batch calls run serially on CPU; moves
+in evaluate_moves are independent alternatives, not a sequence of accepted moves.
+Use a separate evaluator initialized at a different layout for a new search state.
+Each evaluator is single-threaded; do not share it across threads.
+
+Scores do NOT certify legality. Check complete rectangle bounds, fixed positions
+and hard-macro overlaps yourself. Keep your own copy of your best legal positions;
+the evaluator does not retain your best solution. Periodic automatic rebuilds
+limit drift; rebuild the state corresponding to your final choice before return.
+The independent final grader determines validity and reward.
+
+NumPy and concrete JAX CPU arrays are accepted. Calls are host-side, stateful and
+non-differentiable: keep them outside jax.jit, jax.grad and jax.vmap. JAX may generate
+proposals before passing them to the evaluator. All helper initialization,
+scoring time and native memory count against the existing per-case budget.
+
+All coordinates and sizes are in microns. Positions are continuous rectangle
+CENTERS, not grid-cell IDs. The metric grid does not restrict legal centers.
+The first H = problem["num_hard"] rows are hard macros; the remaining M-H rows
+are soft standard-cell clusters. You may move either kind when not fixed.
+There is no automatic soft-cluster completion after your algorithm returns.
+
+Hard constraints:
+- Return exactly M finite (x, y) centers in the original order.
+- Keep the entire rectangle of EVERY macro and cluster inside the canvas.
+- Preserve fixed positions exactly. Ports are fixed and are not returned.
+- Hard macros must have zero overlap with every other hard macro, including
+  fixed hard macros. Soft-cluster overlap is permitted and affects the proxy.
+- Dimensions and the supplied pin offsets are fixed. This interface optimizes
+  positions only; do not return flips, rotations, or resized soft clusters.
+- Initial positions are a precomputed Xplace placement with deterministic
+  legalization, verified legal by the trusted grader. They are provided on
+  every case. You may refine them or construct other starting layouts. Keep
+  a verified legal fallback and a positive margin against float32 violations.
+  Xplace precomputation is fixed and outside your candidate runtime budget.
+
+Input schema (all arrays are NumPy arrays; all indices are zero based):
+- canvas: float[2], width and height.
+- initial_positions: float[M,2], the verified Xplace starting layout.
+- sizes: float[M,2], width and height.
+- fixed: bool[M]; num_hard: integer H.
+- port_positions: float[P,2].
+- net_offsets: int[K+1], compressed offsets into the endpoint arrays below.
+- pin_owner: int[L]; pin_offset: float[L,2]; net_weights: float[K].
+  Net k contains endpoints [net_offsets[k]:net_offsets[k+1]], driver first,
+  followed by sinks. Preserve this order for routing calculations. An owner
+  below M refers to a macro/cluster; owner M+j refers to port j. A pin's
+  location is its owner's center plus its offset. Multi-pin nets, repeated
+  owners, and non-unit net weights are preserved.
+- wirelength_normalizer: positive float used by the native weighted HPWL.
+- grid_shape: int[2], rows and columns used for density and congestion.
+- routes_per_micron: float[2], horizontal and vertical routing capacities.
+- macro_routing_allocation: float[2]; congestion_smoothing_range: integer.
+- schema_version: "partcl_cpu_positions_v1".
+
+Allowed imports: numpy, scipy, networkx, jax,
+jax.numpy, jax.scipy, optax, and these standard-library modules:
+math, random, time, itertools, functools, collections, heapq, bisect, array,
+statistics, dataclasses, typing, enum, copy, operator, __future__. Seed your random choices
+from the supplied seed. Use time.monotonic() to manage the supplied budget.
+Use JAX JIT compilation, automatic differentiation, and vectorized candidate
+evaluation where they improve results within the budget. NumPy/SciPy remain
+available for CPU preprocessing and final legalization. Compile outside inner
+Python loops, avoid unnecessary host/device transfers, and return completed
+finite positions. JIT compilation and device synchronization count against
+your time budget. JAX does not compile the trusted Python grader.
+No PyTorch, external placer, external compiler process, filesystem, network,
+external process, dynamic Python code execution, or instance-name lookup is allowed.
+
+Execution profile: CPU only, with 4 logical CPU cores and 8 GiB total RAM
+shared by the candidate process tree. No GPU or TPU is available. JAX runs
+on CPU; do not select an accelerator backend. There is no per-library memory
+allowance. NumPy/SciPy BLAS and OpenMP pools are capped at four threads;
+JAX also runs within the same enforced four-core CPU allocation.
+JAX and jaxlib 0.10.1; Optax 0.2.8; NumPy 2.4.6;
+SciPy 1.17.1; NetworkX 3.6.1; candidate Python 3.12.12.
+
+Each case has a hard 180-second candidate deadline including imports, initialization,
+JIT compilation, and completed device work. The supplied time_budget_s is slightly
+smaller to reserve worker startup and serialization time. Return before it expires.
+Trusted CPU grading has a separate 90-second cap; a case has a 300-second total cap.
+The four-case suite has a 1,200-second execution cap, excluding queue wait.
+NumPy/SciPy BLAS and OpenMP pools are capped at four threads, within the same
+four-core allocation. Memory is a shared process-tree allowance, not 8 GiB
+per library. Respect time_budget_s; reserve time to return your best legal
+placement. Final independent grading has a separate allowance.
+
+Runtime below the limit does not directly increase your reward. If useful,
+spend available time exploring additional placements or refining promising
+candidates. Return your best legal placement before the supplied time_budget_s
+expires. Additional computation is optional; preserve improvements rather than
+running longer for its own sake. Use time_budget_s to plan your work, not the
+larger hard deadline shown in feedback.
+
+This initial scaffold provides no in-process proxy helper. You can implement
+cheap wirelength, density, or congestion estimates from the supplied data;
+the independent evaluator determines the actual reward. Optimize generally
+across problems, without embedded solutions or benchmark-specific branches.
+
+
+You may use JAX or the other allowed libraries for smooth wirelength/density
+objectives, batched move evaluation, or restarts within the CPU budget. Preserve exact hard-macro legality in
+the final result; a better surrogate cost never overrides the trusted score.
+
+
+You may treat congestion and density as spatial fields and apply image-processing
+methods, including Gaussian smoothing, convolutions, multiscale analysis, and
+spatial gradients to guide placement. Use the allowed numerical libraries for
+these operations. All preprocessing and optimization count against the same
+runtime and memory limits. Final placements must satisfy every legality
+constraint and are scored by the trusted evaluator.
+
+Implementation checklist (apply before returning your complete module):
+- The supplied Xplace initial_positions are a legal fallback. You may replace
+  the starter entirely. Reserve time to return your best legal placement.
+- Keep hard-macro legalization on the CPU unless your replacement enforces
+  every rectangle constraint. A penalty objective alone does not ensure legality.
+- The installed segment reductions are jax.ops.segment_sum, segment_min, and
+  segment_max, not jax.lax.segment_*. Set num_segments to the Python integer
+  len(problem["net_weights"]) outside JIT. Precompute net IDs with NumPy.
+- Inside JIT use fixed array shapes. Avoid int/float/bool conversions of tracers,
+  data-dependent Python branches, and boolean indexing with dynamic lengths.
+  Use jnp.where masks and precomputed integer indices where appropriate.
+- Check broadcasting explicitly: positions and sizes [M,2], fixed [M],
+  fixed[:,None] [M,1], pin_owner [L], pin_offset [L,2], net_weights [K].
+  A pin owner can refer to a port; concatenate macro centers and port centers.
+- Copy input arrays before modifying them; restore fixed rows exactly. Check
+  finiteness, full rectangle bounds, and hard-hard overlaps before returning.
+- Include every helper/import you use. Return one complete Python code fence,
+  with the exact place(problem, seed, *, time_budget_s) signature; no patch.
+
+Starting implementation (replace with your improved algorithm):
+```python
+"""Small legal local-search example using the injected Evaluator."""
+import time
+import numpy as np
+
+
+def place(problem: dict, seed: int, *, time_budget_s: float) -> dict:
+    deadline = time.monotonic() + max(0.0, time_budget_s - 5.0)
+    rng = np.random.default_rng(seed)
+    pos = np.array(problem['initial_positions'], dtype=np.float32, copy=True)
+    sizes = np.asarray(problem['sizes'], dtype=np.float64)
+    canvas = np.asarray(problem['canvas'], dtype=np.float64)
+    hard = int(problem['num_hard'])
+    movable = np.flatnonzero(~problem['fixed'])
+    gap = max(1e-4, float(canvas.max()) * 1e-5)
+    best = pos.copy()
+    with Evaluator(problem, pos) as ev:
+        current = ev.score()['proxy_cost']
+        initial_score = current
+        # Illustrative search only: extend or replace the proposal strategy.
+        for _ in range(256):
+            if not len(movable) or time.monotonic() >= deadline:
+                break
+            i = int(rng.choice(movable))
+            xy = np.asarray(pos[i] + rng.normal(size=2) * canvas * .002,
+                            dtype=np.float32)
+            if np.any(xy - sizes[i]/2 < gap) or np.any(xy + sizes[i]/2 > canvas-gap):
+                continue
+            if i < hard:
+                overlaps = np.all(np.abs(pos[:hard] - xy) < (sizes[:hard] + sizes[i])/2 + gap, axis=1)
+                overlaps[i] = False
+                if overlaps.any():
+                    continue
+            trial = ev.apply(i, xy)
+            if trial['proxy_cost'] < current:
+                ev.commit()
+                pos[i] = xy
+                current = ev.score()['proxy_cost']
+                best = pos.copy()
+            else:
+                ev.revert()
+        # Rebuild the final state; retain the original legal fallback if needed.
+        if ev.rebuild()['proxy_cost'] > initial_score:
+            best = np.array(problem['initial_positions'], copy=True)
+    return {'positions': best}
+```
