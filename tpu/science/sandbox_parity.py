@@ -106,6 +106,22 @@ class RunnerTransport:
         return json.loads((folder / 'result.json').read_text())
 
 
+class SystemdTransport:
+    """The production pooled path on a TPU host: core pool + systemd MemoryMax."""
+    FAMILIES = {'math': {'slots_per_host': 64, 'cpus': 2, 'memory_gib': 4, 'memory_max_gib': 8}}
+
+    def __init__(self, root):
+        self.root = Path(root)
+
+    def grade_sync(self, request, timeout=None):
+        from tpu.science.math_grade import grade_math_admitted, GradingInfrastructureFailure
+        spec = dict(request.spec, admission_timeout_s=request.admission_timeout_s, systemd=True, stdout_limit_bytes=16384)
+        try:
+            return grade_math_admitted(spec, self.FAMILIES, root=self.root)
+        except GradingInfrastructureFailure as exc:
+            return dict(result=None, error=f'infrastructure: {exc}', stdout='')
+
+
 def grade_one(args):
     row = json.loads(Path(args.candidate).read_text())
     env, evaluator_type, problem = load_kind(row['kind'])
@@ -116,6 +132,8 @@ def grade_one(args):
                                    eval_timeout=EVAL_TIMEOUT, eval_backend=backend)
         if args.mode == 'pooled':
             evaluator.transport = RunnerTransport(tmp)
+        elif args.mode == 'systemd':
+            evaluator.transport = SystemdTransport(args.root)
         started = time.monotonic()
         out = evaluator.get_reward(row['code'], state)
     print(json.dumps(dict(correctness=out.get('correctness'), reward=out.get('reward'), raw_score=out.get('raw_score'),
@@ -142,8 +160,73 @@ def same(a, b):
     return close(a['raw_score'], b['raw_score']) and close(a['reward'], b['reward'])
 
 
+def drive_host(args):
+    """On a TPU host: legacy grades pinned to idle service cores, pooled grades via systemd."""
+    from tpu.science import core_pool
+    pool = core_pool.read()
+    pairs = [pool['service'][i:i + 2] for i in range(0, len(pool['service']) - 1, 2)][:args.parallel]
+    rows = [json.loads(l) for l in open(args.candidates)]
+    work = Path(args.out).with_suffix('.d')
+    work.mkdir(exist_ok=True)
+    jobs = []
+    for i, row in enumerate(rows):
+        path = work / f'{i:04d}.json'
+        path.write_text(json.dumps(row))
+        jobs.append((row, path))
+    free = list(pairs)
+    import threading
+    lock = threading.Lock()
+
+    def run(mode, path):
+        cores = None
+        if mode == 'legacy':
+            with lock:
+                cores = free.pop()
+        try:
+            command = [sys.executable, '-m', 'tpu.science.sandbox_parity', 'one', '--mode', mode,
+                       '--candidate', str(path), '--root', args.root]
+            if cores:
+                command = ['taskset', '-c', ','.join(map(str, cores))] + command
+            proc = subprocess.run(command, capture_output=True, text=True, timeout=EVAL_TIMEOUT + 600, cwd=args.root)
+            lines = [l for l in proc.stdout.splitlines() if l.startswith('{')]
+            return json.loads(lines[-1]) if lines else dict(correctness=0.0, reward=0.0, raw_score=None,
+                                                            msg=f'exited {proc.returncode}: {proc.stderr[-300:]}')
+        finally:
+            if cores:
+                with lock:
+                    free.append(cores)
+
+    results = {}
+    with cf.ThreadPoolExecutor(len(pairs)) as legacy_pool, cf.ThreadPoolExecutor(args.parallel) as pooled_pool:
+        futures = {}
+        for row, path in jobs:
+            futures[legacy_pool.submit(run, 'legacy', path)] = (row['id'], 'legacy')
+            futures[pooled_pool.submit(run, 'systemd', path)] = (row['id'], 'pooled')
+        for future in cf.as_completed(futures):
+            key, mode = futures[future]
+            results.setdefault(key, {})[mode] = future.result()
+            print(key, mode, results[key][mode]['correctness'], flush=True)
+    finish(jobs, results, args.out)
+
+
+def finish(jobs, results, out):
+    report = []
+    for row, _ in jobs:
+        legacy, pooled = results[row['id']]['legacy'], results[row['id']]['pooled']
+        report.append(dict(id=row['id'], kind=row['kind'], same=same(legacy, pooled), legacy=legacy, pooled=pooled,
+                           recorded=row['recorded']))
+    summary = dict(candidates=len(report), identical=sum(r['same'] for r in report),
+                   differ=[r['id'] for r in report if not r['same']],
+                   valid_legacy=sum(r['legacy']['correctness'] == 1 for r in report),
+                   valid_pooled=sum(r['pooled']['correctness'] == 1 for r in report))
+    Path(out).write_text(json.dumps(dict(summary=summary, rows=report), indent=1, default=float))
+    print(json.dumps(summary, indent=1))
+
+
 def drive(args):
     rows = [json.loads(l) for l in open(args.candidates)]
+    index, count = map(int, args.shard.split('/'))
+    rows = rows[index::count]
     work = Path(args.out).with_suffix('.d')
     work.mkdir(exist_ok=True)
     jobs = []
@@ -178,11 +261,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
     c = sub.add_parser('collect'); c.add_argument('--runs', nargs='+', required=True); c.add_argument('--out', required=True)
-    o = sub.add_parser('one'); o.add_argument('--mode', choices=['legacy', 'pooled'], required=True); o.add_argument('--candidate', required=True)
+    o = sub.add_parser('one'); o.add_argument('--mode', choices=['legacy', 'pooled', 'systemd'], required=True); o.add_argument('--candidate', required=True)
+    o.add_argument('--root', default=os.getcwd())
+    h = sub.add_parser('drive-host'); h.add_argument('--candidates', required=True); h.add_argument('--out', required=True)
+    h.add_argument('--parallel', type=int, default=20); h.add_argument('--root', default=os.getcwd())
     d = sub.add_parser('drive'); d.add_argument('--candidates', required=True); d.add_argument('--out', required=True)
     d.add_argument('--parallel', type=int, default=30); d.add_argument('--legacy-mem', type=int, default=64)
+    d.add_argument('--shard', default='0/1', help='i/n: grade every n-th candidate starting at i')
     args = parser.parse_args()
-    {'collect': collect, 'one': grade_one, 'drive': drive}[args.command](args)
+    {'collect': collect, 'one': grade_one, 'drive': drive, 'drive-host': drive_host}[args.command](args)
 
 
 if __name__ == '__main__':
