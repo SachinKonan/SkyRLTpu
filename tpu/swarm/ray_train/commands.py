@@ -209,7 +209,7 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
                    TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}",
                    ALLOW_MULTIPLE_LIBTPU_LOAD="1")
     if v.native_thinking_budget:
-        env["SKYRL_THINKING_FORMAT"] = config.model_preset
+        env["SKYRL_THINKING_FORMAT"] = config.native_thinking_format
     else:
         env.pop("SKYRL_TPU_THINKING_BUDGET", None)
         env.pop("SKYRL_THINKING_FORMAT", None)
