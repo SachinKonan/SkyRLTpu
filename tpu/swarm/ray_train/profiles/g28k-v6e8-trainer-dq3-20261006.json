@@ -110,7 +110,7 @@
   },
   "grading": {
     "families": {
-      "ac2": {
+      "math": {
         "slots_per_host": 16,
         "cpus": 2,
         "memory_gib": 4

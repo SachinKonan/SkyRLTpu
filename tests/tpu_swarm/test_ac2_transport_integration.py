@@ -40,7 +40,7 @@ def test_hybrid_backend_keeps_verifier_injection_and_driver_reverification(tmp_p
     task = evaluator(tmp_path, transport)
     out = task.get_reward(CODE, state)
     request = transport.requests[0]
-    assert request.task == 'ac2' and request.spec['function_name'] == 'construct_function'
+    assert request.task == 'math' and request.spec['function_name'] == 'construct_function'
     assert request.spec['eval_timeout_seconds'] == 1105 and request.admission_timeout_s == 1100
     assert 'def evaluate_sequence' in request.spec['program_code'] and 'height_sequence_1' in request.spec['program_code']
     assert 'return list(height_sequence_1)' in request.spec['program_code']
@@ -116,7 +116,7 @@ class RunnerTransport:
         spec = dict(request.spec, cpus=sorted(os.sched_getaffinity(0))[:2], stdout_limit_bytes=16384,
                     memory_gib=4, systemd=False)
         (folder / 'request.json').write_text(json.dumps(spec))
-        subprocess.run([sys.executable, '-m', 'tpu.science.ac2_runner', '--request', str(folder / 'request.json'),
+        subprocess.run([sys.executable, '-m', 'tpu.science.math_runner', '--request', str(folder / 'request.json'),
                         '--result', str(folder / 'result.json'), '--owner-pid', str(os.getpid()),
                         '--owner-start', process_identity(os.getpid())], check=True, timeout=120,
                        cwd=str(Path(__file__).resolve().parents[2]))

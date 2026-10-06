@@ -314,7 +314,7 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
                         SKYRL_GRADING_FARM_REFRESH_SECONDS=str(config.grading.farm_refresh_seconds),
                         SKYRL_GRADING_LONG_POLL_SECONDS=str(config.grading.long_poll_seconds))
         from .config import SANDBOX_ENVS
-        if 'ac2' in families and config.client_env.get('TTD_ENV') in SANDBOX_ENVS:
+        if 'math' in families and config.client_env.get('TTD_ENV') in SANDBOX_ENVS:
             # The transport replaces the cpu_scheduler actor path for every sandbox task.
             defaults['TTD_EVAL_BACKEND'] = 'hybrid'
         if config.grading_farm_transport:

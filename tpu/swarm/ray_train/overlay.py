@@ -80,11 +80,11 @@ ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
 BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
                    'tpu/swarm/ray_train/borrowing_phase.py'}
-# Client-side grading transport (local Ray pool + leased farms) and the AC2
+# Client-side grading transport (local Ray pool + leased farms) and the math
 # executor it dispatches; shipped whenever a profile declares grading families.
 GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.py',
                  'tpu/science/__init__.py', 'tpu/science/grading_transport.py', 'tpu/science/grading_dedup.py',
-                 'tpu/science/ac2_grade.py', 'tpu/science/ac2_runner.py', 'tpu/science/farm_resources.py', 'tpu/science/core_pool.py',
+                 'tpu/science/math_grade.py', 'tpu/science/math_runner.py', 'tpu/science/farm_resources.py', 'tpu/science/core_pool.py',
                  'tpu/science/cgroup_limits.py', 'tpu/science/cpu_slots.py', 'tpu/science/worker.py',
                  'tpu/science/routing_resources.py', 'tpu/science/placement_resources.py',
                  'third_party/discover/ttt_discover/environments/sandbox_reward_evaluator.py',

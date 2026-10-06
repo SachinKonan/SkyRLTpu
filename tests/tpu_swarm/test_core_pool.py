@@ -140,3 +140,71 @@ def test_remote_only_trainer_may_bootstrap_one_bounded_layer_through_farms(tmp_p
                    dict(bootstrap_layers=2)):
         with pytest.raises(ValueError):
             Config.from_dict(dict(raw, **change))
+
+
+def test_math_reserves_four_gib_but_kills_at_eight(tmp_path):
+    from tpu.swarm.ray_train.config import Config, MATH_KILL_GIB, MATH_RESERVED_GIB
+    from pathlib import Path
+    profile = Path(__file__).parents[2] / 'tpu/swarm/ray_train/profiles/farm-v6e8-east5b-qwen-grading-ac2-20260924.json'
+    config = Config.load(profile)
+    math = config.grading_families['math']
+    assert (math['memory_gib'], math['memory_max_gib']) == (MATH_RESERVED_GIB, MATH_KILL_GIB) == (4, 8)
+    raw = config.to_dict()
+    raw['root'] = str(tmp_path)
+    raw['grading'] = dict(raw['grading'], families={'ac2': {}, 'routing': {'slots_per_host': 2}})
+    legacy = Config.from_dict(raw)  # the old family name still loads
+    assert set(legacy.grading_families) == {'math', 'routing'}
+    assert legacy.grading_families['routing']['memory_max_gib'] == legacy.grading_families['routing']['memory_gib']
+    for bad in ({'routing': {'memory_gib': 8, 'memory_max_gib': 16}}, {'math': {'memory_gib': 8, 'memory_max_gib': 4}},
+                {'math': {}, 'ac2': {}}):
+        raw['grading'] = dict(raw['grading'], families=bad)
+        with pytest.raises(ValueError):
+            Config.from_dict(raw)
+
+
+def test_math_grade_admits_by_reservation_and_kills_at_the_limit(tmp_path, monkeypatch):
+    from contextlib import ExitStack
+    from tpu.science import math_grade
+    seen = {}
+
+    def acquire(cpus, memory_gib, deadline_seconds):
+        seen['admitted'] = (cpus, memory_gib)
+        return [7, 8], ExitStack()
+    monkeypatch.setattr(math_grade.core_pool, 'acquire', acquire)
+    families = {'math': {'slots_per_host': 4, 'cpus': 2, 'memory_gib': 4, 'memory_max_gib': 8}}
+    slot, cpus, lease, kind = math_grade.admit(families, 10)
+    assert seen['admitted'] == (2, 4) and cpus == [7, 8] and kind == 'core-pool-v1'
+    command = math_grade.unit_command('u', tmp_path, tmp_path / 'r', tmp_path / 'o', cpus,
+                                      families['math']['memory_max_gib'], 30, 1, 'x')
+    assert '--property=MemoryMax=8G' in command
+
+    def too_big(cpus, memory_gib, deadline_seconds):
+        raise ValueError('a grade cannot hold 2 of 1 pool CPUs')
+    monkeypatch.setattr(math_grade.core_pool, 'acquire', too_big)
+    with pytest.raises(math_grade.GradingInfrastructureFailure, match='does not fit'):
+        math_grade.admit(families, 10)
+
+
+def test_uninstall_clears_a_stale_pool_but_not_one_in_use(tmp_path):
+    root, _ = install(tmp_path)
+    cpus, lease = core_pool.try_acquire(2, 4, root=root)
+    with pytest.raises(RuntimeError, match='still holds'):
+        core_pool.uninstall(root=root)
+    lease.close()
+    assert core_pool.uninstall(root=root) and not core_pool.uninstall(root=root)
+    with pytest.raises(core_pool.PoolUnavailable):
+        core_pool.read(root)
+
+
+def test_ray_service_cpus_follow_each_host_role(tmp_path):
+    from pathlib import Path
+    from tpu.swarm.ray_train.config import Config
+    P = Path(__file__).parents[2] / 'tpu/swarm/ray_train/profiles'
+    farm = Config.load(P / 'farm-v6e8-east5b-qwen-grading-ac2-20260924.json')
+    assert farm.ray_service_cpus(0) == 8 * 2 + 1 and farm.ray_service_cpus(1) == 16
+    remote = Config.load(P / 'remote-only-v5p32-qwen-ac2-pilot-20260924.json')
+    assert remote.ray_service_cpus(0) == 9 and remote.ray_service_cpus(3) == 8
+    mixed = Config.load(P / 'science-circuit-v5p-qwen-ibm17-helper-grpo-20260919.json')
+    assert mixed.ray_service_cpus(0) == 9 and mixed.ray_service_cpus(2) == 8
+    # Trainer hosts keep their declared grading memory (legacy 16 x 4 = 64 GiB for math).
+    assert remote.grading_memory_gib == min(remote.cache.reserve_gib - 64, 16 * 4)

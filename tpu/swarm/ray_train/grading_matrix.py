@@ -40,7 +40,7 @@ def cpus(text):
     return sorted(out)
 pool = Path(f'/tmp/science-cpu-locks-{os.getuid()}/core-pool-v1.json')
 names = subprocess.run(['systemctl', 'list-units', '--no-legend', '--plain', '--type=service', '--state=running',
-                        'ac2-grade-*', 'science-grade-*', 'placement-grade-*'], capture_output=True, text=True).stdout.split('\n')
+                        'math-grade-*', 'science-grade-*', 'placement-grade-*'], capture_output=True, text=True).stdout.split('\n')
 units = {}
 for line in names:
     if not line.strip():

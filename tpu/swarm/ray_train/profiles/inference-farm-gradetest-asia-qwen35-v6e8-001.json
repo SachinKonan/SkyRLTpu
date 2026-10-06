@@ -31,7 +31,7 @@
   "pooled_group_size": 32,
   "grading": {
     "families": {
-      "ac2": {
+      "math": {
         "slots_per_host": 64,
         "cpus": 2,
         "memory_gib": 4

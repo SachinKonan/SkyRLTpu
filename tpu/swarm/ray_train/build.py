@@ -15,7 +15,7 @@ import yaml
 from .config import ACCELERATOR_RUNTIME, Config
 
 
-GRADING_BUNDLE_FILES = ("__init__.py", "ac2_grade.py", "ac2_runner.py", "farm_resources.py", "cgroup_limits.py",
+GRADING_BUNDLE_FILES = ("__init__.py", "math_grade.py", "math_runner.py", "farm_resources.py", "cgroup_limits.py",
                         "cpu_slots.py", "worker.py", "grading_dedup.py", "grading_transport.py",
                         "routing_resources.py", "placement_resources.py", "rewards.py", "core_pool.py")
 

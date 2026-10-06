@@ -100,12 +100,12 @@ class LocalRayPool(Pool):
         self.refs = {}
 
     def dispatch(self, request):
-        if request.task == 'ac2':
-            from tpu.science.ac2_grade import grade_ac2
-            family = self.families['ac2']
+        if request.task == 'math':
+            from tpu.science.math_grade import grade_math
+            family = self.families['math']
             spec = dict(request.spec, systemd=self.systemd, admission_timeout_s=request.admission_timeout_s)
-            return grade_ac2.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
-                                     resources={'grading_ac2': 1}, scheduling_strategy='SPREAD'
+            return grade_math.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
+                                     resources={'grading_math': 1}, scheduling_strategy='SPREAD'
                                      ).remote(spec, self.families, self.root)
         if request.task == 'routing':
             from tpu.science.ray_cpu import grade

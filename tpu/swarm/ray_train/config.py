@@ -59,17 +59,26 @@ class Cache:
     sync_seconds: int = 60
 
 
-GRADING_FAMILIES = ('ac2', 'routing', 'placement')
-# Sandbox tasks whose programs run through the AC2 executor (flat numeric results).
+GRADING_FAMILIES = ('math', 'routing', 'placement')
+# Older profiles and bundles call the math sandbox family 'ac2'.
+FAMILY_ALIASES = {'ac2': 'math'}
+# Sandbox tasks whose programs run through the math executor (flat numeric results).
 SANDBOX_ENVS = ('ac_inequalities', 'erdos_min_overlap')
+# Math programs reserve 4 GiB in the core pool but are killed only above 8 GiB.
+# The legacy grader enforced no memory limit at all (its Ray 1 GiB was only
+# bookkeeping), so the headroom preserves that unbounded behaviour for the rare
+# program that spikes, while admission still packs hosts by the 4 GiB norm.
+# Science contracts (routing, placement) keep kill limit == reservation.
+MATH_RESERVED_GIB, MATH_KILL_GIB = 4, 8
 
 
 @dataclass(frozen=True)
 class Grading:
     """CPU grading capacity on this profile's hosts (trainer or farm).
 
-    ``families`` maps 'ac2' | 'routing' | 'placement' to
-    ``{slots_per_host, cpus, memory_gib}``; unspecified keys take the family
+    ``families`` maps 'math' | 'routing' | 'placement' to
+    ``{slots_per_host, cpus, memory_gib[, memory_max_gib]}``; memory_gib is
+    reserved at admission, memory_max_gib is the kill limit. Unspecified keys take the family
     defaults (see ``Config.grading_families``). On an inference-only farm the
     families are served through the lease-fenced grading endpoints; on a
     trainer they bound the local Ray pool. ``farm_transport`` lets the
@@ -472,7 +481,7 @@ class Config:
         parallel = self.science_routing_evaluator == 'parallel-v2'
         modern = self.science_placement_runtime == 'cpu300-4g-v1'
         defaults = {
-            'ac2': dict(slots_per_host=16, cpus=2, memory_gib=4),
+            'math': dict(slots_per_host=16, cpus=2, memory_gib=MATH_RESERVED_GIB, memory_max_gib=MATH_KILL_GIB),
             'routing': dict(slots_per_host=self.science_routing_slots_per_host,
                             cpus=10 if parallel else 4, memory_gib=20 if parallel else 8),
             'placement': dict(slots_per_host=self.science_placement_slots_per_host,
@@ -481,11 +490,14 @@ class Config:
         declared = self.grading.families or {}
         if not declared and self.default_sandbox_grading:
             # Trainers grade sandbox programs through the shared core pool by
-            # default; Ray admission (not this cap) bounds concurrency.
-            declared = {'ac2': dict(slots_per_host=64)}
+            # default, with the legacy local capacity (16 per host).
+            declared = {'math': {}}
         result = {}
         for name, raw in declared.items():
-            result[name] = dict(defaults.get(name, {}), **(raw or {}))
+            name = FAMILY_ALIASES.get(name, name)
+            spec = dict(defaults.get(name, {}), **(raw or {}))
+            spec.setdefault('memory_max_gib', spec.get('memory_gib'))
+            result[name] = spec
         return result
 
     @property
@@ -508,16 +520,23 @@ class Config:
     def _validate_grading(self):
         g = self.grading
         families = self.grading_families
-        if not isinstance(g.families, dict) or not set(g.families) <= set(GRADING_FAMILIES):
+        if not isinstance(g.families, dict) or not set(g.families) <= set(GRADING_FAMILIES) | set(FAMILY_ALIASES):
             raise ValueError(f'grading.families keys must be a subset of {GRADING_FAMILIES}')
+        if len({FAMILY_ALIASES.get(name, name) for name in g.families}) != len(g.families):
+            raise ValueError('grading.families declares a family twice (math and its alias ac2)')
+        keys = ('slots_per_host', 'cpus', 'memory_gib', 'memory_max_gib')
         for name, spec in families.items():
-            if set(spec) != {'slots_per_host', 'cpus', 'memory_gib'}:
-                raise ValueError(f'grading family {name} accepts slots_per_host, cpus, memory_gib only')
-            if any(type(spec[k]) is not int or spec[k] < 1 for k in ('slots_per_host', 'cpus', 'memory_gib')):
+            if not set(spec) <= set(keys) or set(keys[:3]) - set(spec):
+                raise ValueError(f'grading family {name} accepts slots_per_host, cpus, memory_gib, memory_max_gib only')
+            if any(type(spec[k]) is not int or spec[k] < 1 for k in keys):
                 raise ValueError(f'grading family {name} limits must be positive integers')
-        if 'ac2' in families and not (families['ac2']['slots_per_host'] <= 64 and families['ac2']['cpus'] <= 8
-                                      and families['ac2']['memory_gib'] <= 64):
-            raise ValueError('ac2 grading: at most 64 slots, 8 CPUs and 64 GiB per host')
+            if spec['memory_max_gib'] < spec['memory_gib']:
+                raise ValueError(f'grading family {name}: memory_max_gib must be at least memory_gib')
+            if name != 'math' and spec['memory_max_gib'] != spec['memory_gib']:
+                raise ValueError(f'grading family {name}: science contracts kill at their reservation')
+        if 'math' in families and not (families['math']['slots_per_host'] <= 64 and families['math']['cpus'] <= 8
+                                       and families['math']['memory_max_gib'] <= 64):
+            raise ValueError('math grading: at most 64 slots, 8 CPUs and 64 GiB per host')
         for key in ('max_infra_retries', 'queue_factor', 'max_requests', 'result_retention_seconds',
                     'long_poll_seconds', 'farm_refresh_seconds', 'stdout_limit_bytes'):
             if type(getattr(g, key)) is not int or getattr(g, key) < 1:
@@ -535,7 +554,7 @@ class Config:
             if not v.require_lease or not self.systemd_runtime or v.routing != 'ingress':
                 raise ValueError('farm grading requires a lease-fenced systemd farm through ingress')
             # The pool admits by GiB, so the reserve must hold the largest program.
-            needed = 64 + max(f['memory_gib'] for f in families.values())
+            needed = 64 + max(f['memory_max_gib'] for f in families.values())
             if self.cache.reserve_gib < needed:
                 raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for one program plus services')
         if type(g.service_cpus) is not int or g.service_cpus < 0 or 0 < g.service_cpus < 24:
@@ -557,13 +576,36 @@ class Config:
 
     @property
     def grading_memory_gib(self):
-        """GiB of the cache reserve available to grades (64 stay for services)."""
-        return self.cache.reserve_gib - 64
+        """GiB of the cache reserve available to grades (64 stay for services).
 
-    @property
-    def ray_service_cpus(self):
-        """Ray CPUs for non-grading actors: engines, trainer rank, ingress/Serve."""
-        return 8 * self.engines_per_host + 8 + 9
+        A farm grades with its whole reserve. A trainer host keeps the grading
+        memory its declared families always had (slots x reservation, e.g. the
+        legacy 16 x 4 = 64 GiB math cap), so host-RAM offload keeps its headroom.
+        """
+        available = self.cache.reserve_gib - 64
+        if self.inference_only:
+            return available
+        caps = [f['slots_per_host'] * f['memory_gib'] for f in self.grading_families.values()]
+        if self.science_routing_evaluator == 'parallel-v2':
+            caps.append(self.science_routing_slots_per_host * 20)
+        if self.science_placement_runtime == 'cpu300-4g-v1':
+            caps.append(self.science_placement_slots_per_host * self.science_placement_memory_gib)
+        return max(1, min([available, *caps])) if caps else available
+
+    def ray_service_cpus(self, rank):
+        """Ray CPUs for this host's non-grading actors.
+
+        Engines take 8 each (on a group's head host), a TrainerRank 8 and the
+        ingress 1 (head only). Roles of train+infer ranks are chosen after the
+        topology probe, so such a host budgets for the larger of the two.
+        """
+        ingress = 1 if rank == 0 else 0
+        engines = 8 * self.engines_per_host if self.inference.hosts_per_engine == 1 else 8
+        if self.inference_only:
+            return engines + ingress
+        if self.inference.remote_only:
+            return 8 + ingress
+        return max(8, engines) + ingress
 
     @property
     def ray_cpus_per_host(self):

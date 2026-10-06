@@ -119,6 +119,23 @@ def install(service_cpus, memory_gib, *, root=None, affinity=None, topology_root
     return document
 
 
+def uninstall(*, root=None):
+    """Remove a pool file left by an earlier job; True if one was removed.
+
+    Graders prefer the pool whenever the file exists, so a runtime that does
+    not install a pool must clear a stale one rather than inherit its layout.
+    """
+    root = lock_root(root)
+    path = root / POOL_FILE
+    with _blocking(root / (VERSION + '.lock')):
+        if not path.is_file():
+            return False
+        if _held(root, json.loads(path.read_text())):
+            raise RuntimeError('a grading job still holds the previous core pool; drain it first')
+        path.unlink()
+        return True
+
+
 def read(root=None):
     path = lock_root(root) / POOL_FILE
     if not path.is_file():

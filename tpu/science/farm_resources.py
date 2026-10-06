@@ -66,37 +66,37 @@ def partition(families, affinity=None, topology_root='/sys/devices/system/node')
         grading, service = host_partition(affinity=set(remaining), topology_root=topology_root)
         blocks['routing'] = sorted(grading)
         remaining = sorted(service)
-    if 'ac2' in families:
-        spec = families['ac2']
+    if 'math' in families:
+        spec = families['math']
         count = spec['slots_per_host'] * spec['cpus']
         if len(remaining) - count < SERVICE_MIN:
-            raise RuntimeError(f'ac2 grading needs {count} CPUs plus {SERVICE_MIN} service CPUs')
-        blocks['ac2'] = remaining[-count:]
+            raise RuntimeError(f'math grading needs {count} CPUs plus {SERVICE_MIN} service CPUs')
+        blocks['math'] = remaining[-count:]
         remaining = remaining[:-count]
     if families and len(remaining) < SERVICE_MIN:
         raise RuntimeError('grading partition leaves too few service CPUs')
     return blocks, remaining
 
 
-def ac2_slot_cpus(families, slot, affinity=None):
-    spec = families['ac2']
+def math_slot_cpus(families, slot, affinity=None):
+    spec = families['math']
     block, _ = partition(families, affinity)
-    cpus = block['ac2']
+    cpus = block['math']
     if not 0 <= slot < spec['slots_per_host']:
         raise ValueError('invalid ac2 grading slot')
     return cpus[slot * spec['cpus']:(slot + 1) * spec['cpus']]
 
 
-def acquire_ac2(families, deadline_seconds=1100, root=None, affinity=None):
+def acquire_math(families, deadline_seconds=1100, root=None, affinity=None):
     """Hold one AC2 slot; returns (slot, cpus, ExitStack releasing the lock).
 
     The CPU map is pinned per host in ``farm-ac2-map.json`` so two runtimes
     with different affinities cannot silently disagree about slot CPU sets.
     """
-    spec = families['ac2']
+    spec = families['math']
     slots = spec['slots_per_host']
     block, _ = partition(families, affinity)
-    cpus = block['ac2']
+    cpus = block['math']
     root = _lock_root(root)
     deadline = time.monotonic() + deadline_seconds
     while True:

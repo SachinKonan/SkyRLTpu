@@ -40,9 +40,9 @@ def workload_resources(config, rank):
     if config.inference_only_ranks is not None and rank not in config.inference_only_ranks:
         # An omitted TPU key enables Ray's automatic hardware detection.
         return {"TPU": 0}
-    if "ac2" in families:
+    if "math" in families:
         # Trainer hosts bound local AC2 grading by the same slot token.
-        return {"TPU": config.chips_per_host, "grading_ac2": families["ac2"]["slots_per_host"]}
+        return {"TPU": config.chips_per_host, "grading_math": families["math"]["slots_per_host"]}
     return {"TPU": config.chips_per_host}
 
 
@@ -269,10 +269,16 @@ def main():
             # many CPUs and GiB for grades on top of its service actors.
             from tpu.science import core_pool
             pool = core_pool.install(config.grading_service_cpus, config.grading_memory_gib)
-            ray_cpus = len(pool['grading']) + config.ray_service_cpus
+            ray_cpus = len(pool['grading']) + config.ray_service_cpus(rank)
             ray_memory = [f"--memory={pool['memory_gib'] * 1024 ** 3}"]
             emit(log, "grading_pool_installed", rank=rank, grading_cpus=len(pool['grading']),
                  service_cpus=pool['service'], memory_gib=pool['memory_gib'], ray_cpus=ray_cpus)
+        else:
+            # A pool file left by an earlier job on this VM must not steer graders.
+            from tpu.science import core_pool
+            removed = core_pool.uninstall()
+            if removed:
+                emit(log, "grading_pool_removed", rank=rank)
         command = [str(runtime / "bin/ray"), "start", f"--node-ip-address={ips[rank]}",
             f"--num-cpus={ray_cpus}", *ray_memory, "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
             f"--object-manager-port={p.object_manager}", f"--node-manager-port={p.node_manager}",

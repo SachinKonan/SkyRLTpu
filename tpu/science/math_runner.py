@@ -1,4 +1,4 @@
-"""Trusted AC2 sandbox runner inside a systemd-limited CPU unit.
+"""Trusted math sandbox runner (Erdős, AC1, AC2) inside a systemd-limited CPU unit.
 
 Executes one prepared candidate program (verifier already injected by the
 trainer) with the same sandbox semantics as the discover evaluator's injected

@@ -108,7 +108,7 @@
   },
   "grading": {
     "families": {
-      "ac2": {
+      "math": {
         "slots_per_host": 64
       }
     },
