@@ -6,6 +6,7 @@ from tpu.swarm.ray_train.config import Config, PRESETS
 from tpu.swarm.ray_train.overlay import manifest
 
 PROFILES = sorted(Path('tpu/swarm/ray_train/profiles').glob('qwen38-v464-*.json'))
+FARMS = sorted(Path('tpu/swarm/ray_train/profiles').glob('inference-farm-v6e8-*-qwen38-*.json'))
 
 
 def test_matrix():
@@ -41,3 +42,19 @@ def test_run_contract(profile):
     assert 'third_party/discover/ttt_discover/rl/ensemble.py' in sources
     if config.has_math_environment:
         assert f"third_party/discover/examples/{config.client_env['TTD_ENV']}/env.py" in sources
+
+
+@pytest.mark.parametrize('profile', FARMS, ids=lambda p: p.stem)
+def test_regional_farm_contract(profile):
+    config = Config.load(profile)
+    assert config.model == 'Qwen/Qwen3.8-27B'
+    assert config.inference_only and config.trainer.hosts == 0
+    assert config.inference.tp == 4 and config.engines_per_host == 2
+    assert config.native_thinking_format == 'qwen3.5-27b'
+    assert config.inference.require_lease and config.inference.max_loras == 1
+    assert config.inference.external_pool_attestation
+    assert not config.inference.prefix_caching
+    assert config.cache.hf_layout == 'snapshot'
+    region = config.zone.rsplit('-', 1)[0]
+    assert config.bucket == 'gs://sk7524-tinker-tpu-' + region
+    assert config.cache.hf == config.bucket + '/hf-cache-qwen38-1d4bf0f2'
