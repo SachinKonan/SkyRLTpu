@@ -15,12 +15,13 @@ def _load(name: str) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-def test_v4_64_pool_is_separate_and_fixed_at_ten_workers():
+def test_v4_64_pool_is_separate_and_fixed_size():
     config = _load("v4-64-qwen35-grpo-erdos-pool.yaml")
 
-    assert config["pool"]["workers"] == 10
-    assert config["pool"]["min_workers"] == 10
-    assert config["pool"]["max_workers"] == 10
+    # Live target recorded in the spec (2026-10-05); the pool is fixed-size.
+    assert config["pool"]["workers"] == 29
+    assert config["pool"]["min_workers"] == 29
+    assert config["pool"]["max_workers"] == 29
     assert config["resources"]["accelerators"] == "tpu-v4-64"
     assert config["resources"]["zone"] == "us-central2-b"
     assert "run_qwen35_v4_64_grpo.sh" in config["setup"]
