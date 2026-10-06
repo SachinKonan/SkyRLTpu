@@ -1,0 +1,113 @@
+{
+  "checked_at": 1790185363.9079714,
+  "models": {
+    "qwen": {
+      "run": "qubit-v4-qwen-parallel2-pwc-rho05-20260921",
+      "metrics_uri": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-qwen-parallel2-pwc-rho05-20260921/client/tinker_log/qubit-v4-qwen-parallel2-pwc-rho05-20260921/metrics.jsonl",
+      "metrics_generation": 1790177190738097,
+      "metrics_updated": "2026-09-23T15:26:30.747000+00:00",
+      "bootstrap_generation": 1790177191186360,
+      "initial_pool_size": 46,
+      "best_by_completed_step": {
+        "0": 0.5202905231030451,
+        "1": 0.5222953913882303,
+        "2": 0.5230378553850987,
+        "3": 0.5279499822950854,
+        "4": 0.5335216864188168,
+        "5": 0.5335216864188168,
+        "6": 0.5336086086754466,
+        "7": 0.5425139912074664,
+        "8": 0.5453453617392966,
+        "9": 0.5461682927696055,
+        "10": 0.5477420274597535,
+        "11": 0.5485872758724842,
+        "12": 0.5489761823637384,
+        "13": 0.5496452437350237,
+        "14": 0.5499024273434641,
+        "15": 0.5499024273434641,
+        "16": 0.5505479576624515
+      },
+      "improvement": 0.030257434559406327,
+      "step10_to16": 0.002805930202697926,
+      "latest_checkpoint": {
+        "name": "000016",
+        "batch": 16,
+        "state_path": "tinker://model_bdc7f571/weights/000016",
+        "sampler_path": "tinker://model_bdc7f571/000016"
+      },
+      "checkpoint_index_generation": 1790177190776525
+    },
+    "gemma": {
+      "run": "qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2",
+      "metrics_uri": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/client/tinker_log/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/metrics.jsonl",
+      "metrics_generation": 1790185274808408,
+      "metrics_updated": "2026-09-23T17:41:14.817000+00:00",
+      "bootstrap_generation": 1790185274629196,
+      "initial_pool_size": 111,
+      "best_by_completed_step": {
+        "0": 0.5329396104918068,
+        "1": 0.5395005454682926,
+        "2": 0.5424639085965013,
+        "3": 0.5432175969982871,
+        "4": 0.5436817642512709,
+        "5": 0.5448664628542286,
+        "6": 0.5491391442015919,
+        "7": 0.5515663003177601,
+        "8": 0.5525013135698682,
+        "9": 0.5531269293274382,
+        "10": 0.5531269293274382,
+        "11": 0.5535192342323624,
+        "12": 0.5535192342323624,
+        "13": 0.5535192342323624,
+        "14": 0.5535882515932392,
+        "15": 0.5535882515932392,
+        "16": 0.5539842835831656
+      },
+      "improvement": 0.021044673091358823,
+      "step10_to16": 0.0008573542557274161,
+      "latest_checkpoint": {
+        "name": "000016",
+        "batch": 16,
+        "state_path": "tinker://model_52cf6768/weights/000016",
+        "sampler_path": "tinker://model_52cf6768/000016"
+      },
+      "checkpoint_index_generation": 1790185274942791
+    },
+    "muse": {
+      "run": "qubit-v4-muse-parallel2-pwc-rho05-20260921",
+      "metrics_uri": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-muse-parallel2-pwc-rho05-20260921/client/tinker_log/qubit-v4-muse-parallel2-pwc-rho05-20260921/metrics.jsonl",
+      "metrics_generation": 1790185249580664,
+      "metrics_updated": "2026-09-23T17:40:49.590000+00:00",
+      "bootstrap_generation": 1790185249550218,
+      "initial_pool_size": 82,
+      "best_by_completed_step": {
+        "0": 0.5207190348231995,
+        "1": 0.5207190348231995,
+        "2": 0.5211292219970317,
+        "3": 0.5211292219970317,
+        "4": 0.5222107505521649,
+        "5": 0.5223855230784115,
+        "6": 0.5230008874182934,
+        "7": 0.5234503339193406,
+        "8": 0.5250750332459041,
+        "9": 0.5251385194452914,
+        "10": 0.5253055890789864,
+        "11": 0.5254921145935254,
+        "12": 0.5254921145935254,
+        "13": 0.5255169946709173,
+        "14": 0.5255169946709173,
+        "15": 0.5255169946709173,
+        "16": 0.5261619332546773
+      },
+      "improvement": 0.005442898431477827,
+      "step10_to16": 0.0008563441756909151,
+      "latest_checkpoint": {
+        "name": "000016",
+        "batch": 16,
+        "state_path": "tinker://model_81f4355b/weights/000016",
+        "sampler_path": "tinker://model_81f4355b/000016"
+      },
+      "checkpoint_index_generation": 1790185249488129
+    }
+  }
+}

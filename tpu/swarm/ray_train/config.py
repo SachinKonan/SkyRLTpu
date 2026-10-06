@@ -399,6 +399,8 @@ class Config:
     # must be in the job's own region: no cross-region reads or writes.
     single_bucket: bool = False
     resume_min_checkpoint_step: int = 0
+    # Explicit host scheduler capacity; zero preserves workload-specific defaults.
+    ray_cpu_capacity: int = 0
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
     inference: Inference = field(default_factory=Inference)
@@ -511,6 +513,8 @@ class Config:
 
     @property
     def ray_cpus_per_host(self):
+        if self.ray_cpu_capacity:
+            return self.ray_cpu_capacity
         # Leave scheduler capacity for controller/Serve actors as well as graders.
         if self.inference_only and self.grading_families:
             # Every engine on the host takes 8, plus ingress (1) and host/service
@@ -649,6 +653,8 @@ class Config:
 
     def validate(self):
         from urllib.parse import urlsplit
+        if type(self.ray_cpu_capacity) is not int or self.ray_cpu_capacity < 0:
+            raise ValueError('ray_cpu_capacity must be a nonnegative integer')
         if type(self.inference.external_pool_updates) is not bool:
             raise ValueError('external_pool_updates must be boolean')
         pool = self.inference.external_pool_urls

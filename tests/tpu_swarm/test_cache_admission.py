@@ -169,3 +169,43 @@ def test_interrupted_empty_reservation_does_not_prevent_reuse(tmp_path, local_mo
     assert mounted == {new / 'ram'}
     assert calls[0] == ['sudo', '-n', 'umount', str(new / 'ram')]
     assert calls[1][2:4] == ['mount', '--bind']
+
+
+@pytest.mark.parametrize('env,args,active', [
+    ({'RAY_NAMESPACE': 'same-run', 'SKYPILOT_TASK_ID': 'new-task'}, ['python'], False),
+    ({'RAY_NAMESPACE': 'same-run', 'SKYPILOT_TASK_ID': 'old-task'}, ['python'], True),
+    ({'RAY_NAMESPACE': 'same-run'}, ['python'], True),
+    ({'RAY_NAMESPACE': 'same-run', 'SKYPILOT_TASK_ID': 'new-task',
+      'TTD_RUN_DIR': '/old/runs/same-run/client'}, ['python'], True),
+    ({'SKYPILOT_TASK_ID': 'new-task'}, ['python', '/old/runs/same-run/worker.py'], True),
+])
+def test_continuation_identity_matches_in_both_process_audits(env, args, active):
+    import ast
+    from tpu.swarm.ray_train.checkpoint_retention import process_matches_run
+    # Run the actual helper embedded in the privileged subprocess, without
+    # executing its /proc scan. Both privilege paths must make the same decision.
+    tree = ast.parse(admission.PROCESS_AUDIT)
+    fn = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+              and node.name == 'process_matches_run')
+    namespace = {}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), '<privileged-audit>', 'exec'), namespace)
+    for match in (process_matches_run, namespace['process_matches_run']):
+        assert match(env, args, 'old-task', 'same-run', '/old/runs/same-run') is active
+
+
+def test_same_run_continuation_reuses_idle_cache(tmp_path, local_mounts, monkeypatch):
+    import psutil
+    from tpu.swarm.ray_train.checkpoint_retention import run_is_active
+    mounted, calls, cfg = local_mounts
+    old = make_root(tmp_path, 'same-run'); mounted.add(old / 'ram')
+    new = tmp_path / 'same-run-continue25'; new.mkdir()
+    process = SimpleNamespace(uids=lambda: SimpleNamespace(real=os.getuid()),
+                              status=lambda: 'running',
+                              environ=lambda: {'RAY_NAMESPACE': 'same-run',
+                                               'SKYPILOT_TASK_ID': 'sky-managed-next_200-0'},
+                              cmdline=lambda: ['python', str(new / 'runs/same-run/driver.py')])
+    monkeypatch.setattr(psutil, 'process_iter', lambda: [process])
+    monkeypatch.setattr(admission, 'run_is_active', run_is_active)
+    admission.admit_cache(cfg, new, 'inference', tmp_path / 'events')
+    assert mounted == {new / 'ram'}
+    assert (old / 'runs/same-run/checkpoint.tar').read_bytes() == b'durable state'

@@ -1,0 +1,62 @@
+{
+  "checked_at": 1790187763.4031878,
+  "models": [
+    {
+      "model": "Qwen",
+      "run": "qubit-v4-qwen-parallel2-pwc-rho05-20260921",
+      "latest_saved_step": 16,
+      "best_reward": 0.5505479576624515,
+      "state_id": "22919e25-dd42-4021-a0f1-46d69eaecb9a",
+      "state_timestep": 15,
+      "first_recorded_completed_step": 16,
+      "counts": {
+        "q20": 13239,
+        "heron_fez": 42871,
+        "willow": 32061
+      },
+      "total": 88171,
+      "snapshot_uri": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-qwen-parallel2-pwc-rho05-20260921/client/tinker_log/qubit-v4-qwen-parallel2-pwc-rho05-20260921/puct_sampler_step_000016.json",
+      "snapshot_generation": 1790187577577471,
+      "metrics_generation": 1790187577244308,
+      "best_source_sha256": "7ce118474ebad0bffaba7a6b076b15486ed28e4e2893cac4d49ef0a955675c42"
+    },
+    {
+      "model": "Gemma",
+      "run": "qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2",
+      "latest_saved_step": 16,
+      "best_reward": 0.5539842835831656,
+      "state_id": "9e1468b4-ec12-4dbc-a3f6-8d32eac852cc",
+      "state_timestep": 15,
+      "first_recorded_completed_step": 16,
+      "counts": {
+        "q20": 13706,
+        "heron_fez": 41810,
+        "willow": 31763
+      },
+      "total": 87279,
+      "snapshot_uri": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/client/tinker_log/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/puct_sampler_step_000016.json",
+      "snapshot_generation": 1790187620277245,
+      "metrics_generation": 1790187620060762,
+      "best_source_sha256": "8a39acde1050721230142cbe95ba86e4edef5dab351c5205f6b7dbc38a01bd6f"
+    },
+    {
+      "model": "Muse",
+      "run": "qubit-v4-muse-parallel2-pwc-rho05-20260921",
+      "latest_saved_step": 16,
+      "best_reward": 0.5261619332546773,
+      "state_id": "9ca48aff-21cf-4268-9fe8-002a4103e770",
+      "state_timestep": 15,
+      "first_recorded_completed_step": 16,
+      "counts": {
+        "q20": 16156,
+        "heron_fez": 45024,
+        "willow": 36859
+      },
+      "total": 98039,
+      "snapshot_uri": "gs://sk7524-tinker-tpu-us-central2/ray-training/qubit-v4-muse-parallel2-pwc-rho05-20260921/client/tinker_log/qubit-v4-muse-parallel2-pwc-rho05-20260921/puct_sampler_step_000016.json",
+      "snapshot_generation": 1790185460453160,
+      "metrics_generation": 1790185460025778,
+      "best_source_sha256": "a526fad3700b3e01c8094cfedf3589cf04023e65221a868193913ebbf54b1857"
+    }
+  ]
+}

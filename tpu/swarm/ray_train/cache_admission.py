@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
 import fcntl
+import inspect
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import subprocess
 
 from .cache import mount_cache
 from .checkpoint_retention import MANIFEST, LEASE, private_path, run_is_active as unprivileged_run_is_active
+from .checkpoint_retention import process_matches_run
 from .events import emit
 
 # Only disposable cache contents may be moved or discarded. Unknown files
@@ -21,7 +23,7 @@ CACHE_ENTRIES = {'hf', 'orbax', 'compile', 'compile.prefix', 'compile-upload',
 
 # Root can inspect the same-user sshd/PAM processes whose /proc environment is
 # unreadable to the workload UID. Return only a boolean, never environment data.
-PROCESS_AUDIT = r'''
+PROCESS_AUDIT = inspect.getsource(process_matches_run) + r'''
 import json, os, sys
 from pathlib import Path
 uid, task_id, run_id, run = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
@@ -46,8 +48,7 @@ for proc in Path('/proc').iterdir():
             continue
         env = dict(entry.split('=', 1) for entry in (proc/'environ').read_bytes().decode(errors='replace').split('\0') if '=' in entry)
         args = (proc/'cmdline').read_bytes().decode(errors='replace').split('\0')
-        if (env.get('SKYPILOT_TASK_ID') == task_id or env.get('RAY_NAMESPACE') == run_id
-                or env.get('TTD_RUN_DIR') == run + '/client' or any(run in arg for arg in args)):
+        if process_matches_run(env, args, task_id, run_id, run):
             active = True
             break
     except (FileNotFoundError, ProcessLookupError):
