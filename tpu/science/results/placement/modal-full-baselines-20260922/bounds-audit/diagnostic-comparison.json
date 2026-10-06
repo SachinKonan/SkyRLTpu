@@ -1,0 +1,7 @@
+{
+  "label": "diagnostic score of unchanged saved positions; strict boundary failures preserved",
+  "cases": 17,
+  "mean_proxy_cost": 0.9611068438081181,
+  "reward": 0.5099161237223461,
+  "qwen_cost_reduction_pct": 1.3889913430603442
+}

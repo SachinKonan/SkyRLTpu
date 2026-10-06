@@ -23,7 +23,7 @@ def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s
         validate(resource_contract)
         if resource_contract['slots'] != slots_per_host:
             raise ValueError('placement admission differs from resource contract')
-        slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s)
+        slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s, cpus_per_case=resource_contract["cpus"])
         with lock:
             return _grade_case(source, case, root, 'cpu-jax', None, None,
                 cpu_slot=slot, slots_per_host=slots_per_host, helper=helper,
@@ -105,7 +105,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
          '--wait','--collect','--pipe','--quiet',*runtime_owner_properties(),
          f'--property=MemoryMax={memory_gib}G','--property=MemorySwapMax=0',
          '--property=LimitMEMLOCK=infinity',
-         '--property=CPUQuota=400%','--property=AllowedCPUs='+','.join(map(str,cpus)),
+         f'--property=CPUQuota={100 * len(cpus)}%','--property=AllowedCPUs='+','.join(map(str,cpus)),
          '--property=TasksMax=1024',f'--property=RuntimeMaxSec={envelope_seconds}','--property=KillMode=control-group',
          '--property=TimeoutStopSec=2','--property=OOMPolicy=stop','--working-directory='+str(root),
          str(root/'.science/venv/bin/python'),'-m','tpu.science.placement_task',

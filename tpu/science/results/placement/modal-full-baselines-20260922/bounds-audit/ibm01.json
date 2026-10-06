@@ -1,0 +1,25 @@
+{
+  "case": "ibm01",
+  "valid": true,
+  "errors": [],
+  "canvas": [
+    22.950000762939453,
+    23.040000915527344
+  ],
+  "bad_count": 0,
+  "max_excess": 0.0,
+  "max_excess_canvas_ulps": 0.0,
+  "fixed_unchanged": true,
+  "bad_indices": [],
+  "diagnostic_metrics": {
+    "proxy_cost": 0.7594674825668335,
+    "wirelength_cost": 0.07544849812984467,
+    "density_cost": 0.5001153349876404,
+    "congestion_cost": 0.8679226687045617,
+    "overlap_count": 0.0,
+    "total_overlap_area": 0.0,
+    "max_overlap_area": 0.0,
+    "num_macros_with_overlaps": 0.0,
+    "overlap_ratio": 0.0
+  }
+}

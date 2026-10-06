@@ -1,0 +1,30 @@
+{
+  "case": "ibm15",
+  "valid": false,
+  "errors": [
+    "Macros outside vertical canvas bounds"
+  ],
+  "canvas": [
+    67.63999938964844,
+    67.5199966430664
+  ],
+  "bad_count": 2,
+  "max_excess": 7.62939453125e-06,
+  "max_excess_canvas_ulps": 1.0,
+  "fixed_unchanged": true,
+  "bad_indices": [
+    664,
+    741
+  ],
+  "diagnostic_metrics": {
+    "proxy_cost": 1.0589226484298706,
+    "wirelength_cost": 0.07763531059026718,
+    "density_cost": 0.547075629234314,
+    "congestion_cost": 1.4154990620116426,
+    "overlap_count": 0.0,
+    "total_overlap_area": 0.0,
+    "max_overlap_area": 0.0,
+    "num_macros_with_overlaps": 0.0,
+    "overlap_ratio": 0.0
+  }
+}

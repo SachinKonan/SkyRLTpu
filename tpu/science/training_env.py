@@ -57,7 +57,7 @@ def task_prompt(task, *, include_starter=True, environment=None):
                   'Every case must be legal with zero hard-macro overlaps. Any invalid or missing '
                   'case gives reward zero; otherwise reward = max(1e-6, 1/(1+mean_proxy_cost)).\n\n') + prompt
     if cpu and environment.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1':
-        prompt=prompt.replace('8 GiB', '4 GiB')
+        prompt=prompt.replace('8 GiB', environment.get('SCIENCE_PLACEMENT_MEMORY_GIB', '4') + ' GiB')
         import re
         prompt=re.sub(r'Each case has a hard 180-second candidate deadline.*?Return before it expires\.',
             'Each case supplies 300 seconds of search time to place(). Return your best legal positions '
@@ -136,9 +136,9 @@ async def evaluate(task, source, timeout):
             from .placement_ray import grade_cpu_case
             from .placement_task import CASES
             from .placement_resources import contract
-            resources = contract(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32'))) if os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1' else None
+            resources = contract(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32')), cpus=int(os.environ.get('SCIENCE_PLACEMENT_CPUS_PER_CASE', '4')), memory_gib=int(os.environ.get('SCIENCE_PLACEMENT_MEMORY_GIB', '4'))) if os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1' else None
             for case in CASES:
-                refs.append(grade_cpu_case.options(scheduling_strategy='SPREAD', **(dict(memory=4*1024**3) if resources else {})).remote(
+                refs.append(grade_cpu_case.options(scheduling_strategy='SPREAD', **(dict(num_cpus=resources['cpus'], memory=resources['memory_gib']*1024**3) if resources else {})).remote(
                     source, case, root, admission_timeout_s=timeout,
                     slots_per_host=int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16')),
                     helper=os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none'),

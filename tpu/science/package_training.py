@@ -63,6 +63,8 @@ def package(profile, output):
                        SCIENCE_PLACEMENT_RUNTIME=config.science_placement_runtime,
                        SCIENCE_PLACEMENT_HELPER=config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none'),
                        SCIENCE_PLACEMENT_SLOTS_PER_HOST=str(config.science_placement_slots_per_host),
+                       SCIENCE_PLACEMENT_CPUS_PER_CASE=str(config.science_placement_cpus_per_case),
+                       SCIENCE_PLACEMENT_MEMORY_GIB=str(config.science_placement_memory_gib),
                        PLACEMENT_TPU_RANKS=','.join(map(str, range(config.hosts))))
     prep = '''cd "$code"
 export SCIENCE_WORKER_ROOT="$code"

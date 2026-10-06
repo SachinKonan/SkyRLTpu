@@ -34,6 +34,18 @@ def validate_reuse(config, document, summary):
         for key in ('trainer_gib', 'inference_gib'):
             old['cache'].pop(key)
             new['cache'].pop(key)
+    # Reviewed v4-64 -> v6e-32 placement continuation: preserve the run and
+    # scientific settings while relocating durable storage and physical topology.
+    if (old['science_placement_runtime'] == new['science_placement_runtime'] == 'cpu300-4g-v1'
+            and (old['accelerator'], new['accelerator']) == ('tpu-v4-64', 'tpu-v6e-32')
+            and (old['zone'], new['zone']) == ('us-central2-b', 'us-central1-b')
+            and (old['bucket'], new['bucket']) == (
+                'gs://sk7524-tinker-tpu-us-central2', 'gs://sk7524-tinker-tpu-us-central1')
+            and (old['trainer']['process_bounds'], new['trainer']['process_bounds']) == ('1,1,4', '2,2,1')):
+        for settings in (old, new):
+            for key in ('accelerator', 'zone', 'bucket'):
+                settings.pop(key)
+            settings['trainer'].pop('process_bounds')
     for settings in (old, new):
         settings.pop('resume_min_checkpoint_step', None)
         for key in ('bootstrap_reuse_contract_sha256', 'bootstrap_reuse_pool_sha256'):
