@@ -42,7 +42,12 @@ def evaluate(request):
         env.update(JAX_PLATFORMS='cpu', JAX_NUM_THREADS='4', TF_NUM_INTRAOP_THREADS='4',
                    TF_NUM_INTEROP_THREADS='1',
                    XLA_FLAGS='--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=4')
-    if runtime:env['SCIENCE_PLACEMENT_SEARCH_SECONDS']=str(runtime['search_seconds'])
+    if runtime:
+        env['SCIENCE_PLACEMENT_SEARCH_SECONDS']=str(runtime['search_seconds'])
+        threads = str(runtime['cpus'])
+        for key in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS', 'JAX_NUM_THREADS', 'TF_NUM_INTRAOP_THREADS'):
+            env[key] = threads
+        env['XLA_FLAGS'] = '--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=' + threads
     mounts = python_mounts(python)+[(source,'/candidate.py'),(problem,'/problem.npz'),
         (root/'tpu/science/challenge_candidate_child.py','/runner.py')]
     helper = request.get('helper', 'none')
@@ -74,7 +79,7 @@ def evaluate(request):
         resource.setrlimit(resource.RLIMIT_FSIZE,(2*1024**2,)*2)
         resource.setrlimit(resource.RLIMIT_CORE,(0,0))
         resource.setrlimit(resource.RLIMIT_NOFILE,(1024,1024))
-        resource.setrlimit(resource.RLIMIT_CPU,((candidate_limit*4+5),)*2)
+        resource.setrlimit(resource.RLIMIT_CPU,((candidate_limit*(runtime['cpus'] if runtime else 4)+5),)*2)
     candidate_started_unix = time.time()
     started = time.monotonic()
     with (work/'candidate.log').open('wb') as log:
@@ -93,7 +98,7 @@ def evaluate(request):
            '--result',str(work/'score.json')]
     with (work/'grader.log').open('wb') as log:
         subprocess.run(cmd,check=True,timeout=grading_limit,stdout=log,stderr=subprocess.STDOUT,
-                       env=dict(os.environ,OPENBLAS_NUM_THREADS='4',OMP_NUM_THREADS='4',MKL_NUM_THREADS='4'))
+                       env=dict(os.environ, **{k: str(runtime['cpus'] if runtime else 4) for k in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS')}))
     scores = json.loads((work/'score.json').read_text())
     cost = scores['proxy_cost']
     return valid(max(1e-6,1/(1+cost)), dict(**scores,

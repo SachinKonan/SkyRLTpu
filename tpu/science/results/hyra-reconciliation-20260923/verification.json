@@ -1,0 +1,508 @@
+{
+  "suite_sha256": "84bc454b7505875a01a72e7f9ffe033185d273a2e7dddf3544dc89d7bc27f7cf",
+  "solution_sha256": "83611e50181452c6f2eba8d674d487b997197585f9f6ab51d4997ff40ce87961",
+  "verifier_sha256": "77df7a454f7e4b97de423eb57890cc56115c47eaff707bf410ff29774407ea50",
+  "validated_exported_cases": 61,
+  "exported_cases": 61,
+  "missing": [
+    {
+      "id": "4gt13_92_q20",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "4mod5-v1_22_q20",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "alu-v0_27_q20",
+      "baseline_swaps": 1
+    },
+    {
+      "id": "decod24-v2_43_q20",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "ising_model_10_q20",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "ising_model_10_willow",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "ising_model_10_heron_fez",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "ising_model_13_q20",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "ising_model_16_q20",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "ising_model_16_heron_fez",
+      "baseline_swaps": 0
+    },
+    {
+      "id": "mod5mils_65_q20",
+      "baseline_swaps": 0
+    }
+  ],
+  "cases": [
+    {
+      "id": "4gt13_92_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 13,
+      "seconds": 4.625877979211509
+    },
+    {
+      "id": "4gt13_92_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 10,
+      "seconds": 4.625859529012814
+    },
+    {
+      "id": "4mod5-v1_22_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 3,
+      "seconds": 4.596691443119198
+    },
+    {
+      "id": "4mod5-v1_22_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 3,
+      "seconds": 4.596894684014842
+    },
+    {
+      "id": "9symml_195_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 9709,
+      "seconds": 42.35164786106907
+    },
+    {
+      "id": "9symml_195_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 3110,
+      "seconds": 38.27973343501799
+    },
+    {
+      "id": "9symml_195_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 7459,
+      "seconds": 41.255378876114264
+    },
+    {
+      "id": "adr4_197_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 961,
+      "seconds": 3.3089668171014637
+    },
+    {
+      "id": "adr4_197_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 263,
+      "seconds": 7.442920406116173
+    },
+    {
+      "id": "adr4_197_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 729,
+      "seconds": 3.2049391199834645
+    },
+    {
+      "id": "alu-v0_27_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 7,
+      "seconds": 0.04388732393272221
+    },
+    {
+      "id": "alu-v0_27_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 5,
+      "seconds": 0.04354902193881571
+    },
+    {
+      "id": "co14_215_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 5026,
+      "seconds": 19.416480775922537
+    },
+    {
+      "id": "co14_215_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 1798,
+      "seconds": 17.199107497930527
+    },
+    {
+      "id": "co14_215_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 4110,
+      "seconds": 18.935921235010028
+    },
+    {
+      "id": "cycle10_2_110_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 1673,
+      "seconds": 6.446846912847832
+    },
+    {
+      "id": "cycle10_2_110_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 448,
+      "seconds": 5.508494837908074
+    },
+    {
+      "id": "cycle10_2_110_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 1278,
+      "seconds": 6.035464067943394
+    },
+    {
+      "id": "decod24-v2_43_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 9,
+      "seconds": 0.04870510310865939
+    },
+    {
+      "id": "decod24-v2_43_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 9,
+      "seconds": 0.048459680983796716
+    },
+    {
+      "id": "ising_model_13_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 0,
+      "seconds": 0.542404763167724
+    },
+    {
+      "id": "ising_model_13_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 0,
+      "seconds": 0.6478636481333524
+    },
+    {
+      "id": "ising_model_16_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 0,
+      "seconds": 0.6267957310192287
+    },
+    {
+      "id": "misex1_241_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 1285,
+      "seconds": 5.2854047359433025
+    },
+    {
+      "id": "misex1_241_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 183,
+      "seconds": 4.030750978039578
+    },
+    {
+      "id": "misex1_241_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 966,
+      "seconds": 4.8035232671536505
+    },
+    {
+      "id": "mod5mils_65_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 6,
+      "seconds": 0.03891780390404165
+    },
+    {
+      "id": "mod5mils_65_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 6,
+      "seconds": 0.03878141287714243
+    },
+    {
+      "id": "qft_10_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 29,
+      "seconds": 0.16114061907865107
+    },
+    {
+      "id": "qft_10_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 9,
+      "seconds": 0.15710766590200365
+    },
+    {
+      "id": "qft_10_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 15,
+      "seconds": 0.6552709320094436
+    },
+    {
+      "id": "qft_16_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 91,
+      "seconds": 0.40694938809610903
+    },
+    {
+      "id": "qft_16_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 36,
+      "seconds": 0.4912487850524485
+    },
+    {
+      "id": "qft_16_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 57,
+      "seconds": 0.5483133681118488
+    },
+    {
+      "id": "radd_250_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 867,
+      "seconds": 3.178216709056869
+    },
+    {
+      "id": "radd_250_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 252,
+      "seconds": 2.7077531800605357
+    },
+    {
+      "id": "radd_250_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 673,
+      "seconds": 3.409311220049858
+    },
+    {
+      "id": "rd73_252_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 1448,
+      "seconds": 5.729962131008506
+    },
+    {
+      "id": "rd73_252_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 437,
+      "seconds": 4.650317225139588
+    },
+    {
+      "id": "rd73_252_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 1096,
+      "seconds": 5.116734941955656
+    },
+    {
+      "id": "rd84_142_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 76,
+      "seconds": 0.29406915907748044
+    },
+    {
+      "id": "rd84_142_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 19,
+      "seconds": 0.34858569712378085
+    },
+    {
+      "id": "rd84_142_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 63,
+      "seconds": 0.3504816179629415
+    },
+    {
+      "id": "rd84_253_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 4003,
+      "seconds": 15.084937437903136
+    },
+    {
+      "id": "rd84_253_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 1353,
+      "seconds": 13.437984111020342
+    },
+    {
+      "id": "rd84_253_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 2926,
+      "seconds": 14.513753931969404
+    },
+    {
+      "id": "sqn_258_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 2738,
+      "seconds": 11.73215473908931
+    },
+    {
+      "id": "sqn_258_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 832,
+      "seconds": 9.737174917012453
+    },
+    {
+      "id": "sqn_258_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 2105,
+      "seconds": 10.708337160060182
+    },
+    {
+      "id": "square_root_7_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 2112,
+      "seconds": 8.112668045097962
+    },
+    {
+      "id": "square_root_7_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 338,
+      "seconds": 7.346887438092381
+    },
+    {
+      "id": "square_root_7_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 1565,
+      "seconds": 7.986823098035529
+    },
+    {
+      "id": "sym6_145_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 935,
+      "seconds": 3.9768924538511783
+    },
+    {
+      "id": "sym6_145_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 226,
+      "seconds": 3.97948789014481
+    },
+    {
+      "id": "sym6_145_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 781,
+      "seconds": 3.947400856995955
+    },
+    {
+      "id": "sym9_193_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 9714,
+      "seconds": 38.15162680018693
+    },
+    {
+      "id": "sym9_193_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 3110,
+      "seconds": 33.908377076964825
+    },
+    {
+      "id": "sym9_193_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 7480,
+      "seconds": 36.13176447316073
+    },
+    {
+      "id": "z4_268_heron_fez",
+      "valid": true,
+      "error": null,
+      "swaps": 829,
+      "seconds": 3.0491372330579907
+    },
+    {
+      "id": "z4_268_q20",
+      "valid": true,
+      "error": null,
+      "swaps": 208,
+      "seconds": 2.5818831820506603
+    },
+    {
+      "id": "z4_268_willow",
+      "valid": true,
+      "error": null,
+      "swaps": 630,
+      "seconds": 2.890858370112255
+    }
+  ],
+  "topologies": {
+    "q20": {
+      "exported_cases": 16,
+      "missing_cases": 8,
+      "exported_swaps": 12622,
+      "missing_baseline_swaps": 1,
+      "baseline_completed_swaps": 12623
+    },
+    "heron_fez": {
+      "exported_cases": 22,
+      "missing_cases": 2,
+      "exported_swaps": 41534,
+      "missing_baseline_swaps": 0,
+      "baseline_completed_swaps": 41534
+    },
+    "willow": {
+      "exported_cases": 23,
+      "missing_cases": 1,
+      "exported_swaps": 31966,
+      "missing_baseline_swaps": 0,
+      "baseline_completed_swaps": 31966
+    }
+  },
+  "note": "Missing cases use cached SABRE counts for accounting only; Hyra does not export their circuits.",
+  "baseline_completed_weighted_reward": 0.5558786131831626,
+  "reported_totals_reconciled": true
+}

@@ -209,7 +209,7 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
                    TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}",
                    ALLOW_MULTIPLE_LIBTPU_LOAD="1")
     if v.native_thinking_budget:
-        env["SKYRL_THINKING_FORMAT"] = config.model_preset
+        env["SKYRL_THINKING_FORMAT"] = config.native_thinking_format
     else:
         env.pop("SKYRL_TPU_THINKING_BUDGET", None)
         env.pop("SKYRL_THINKING_FORMAT", None)
@@ -287,6 +287,8 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults["SCIENCE_PLACEMENT_BACKEND"] = config.science_placement_backend
         defaults["SCIENCE_PLACEMENT_RUNTIME"] = config.science_placement_runtime
         defaults["SCIENCE_PLACEMENT_SLOTS_PER_HOST"] = str(config.science_placement_slots_per_host)
+        defaults["SCIENCE_PLACEMENT_CPUS_PER_CASE"] = str(config.science_placement_cpus_per_case)
+        defaults["SCIENCE_PLACEMENT_MEMORY_GIB"] = str(config.science_placement_memory_gib)
         if config.science_task == 'placement':
             defaults['SCIENCE_PLACEMENT_SUITE'] = 'ibm17-proxy-v1'
     if config.arena_grader_rank is not None:

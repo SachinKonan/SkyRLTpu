@@ -1,0 +1,19 @@
+{
+  "commit": "bcda2e29200fbeaeb1620acca0670cc445e8688f",
+  "files": {
+    "README.md": {
+      "url": "https://raw.githubusercontent.com/Tencent-Hunyuan/Hyra-results/bcda2e29200fbeaeb1620acca0670cc445e8688f/AI4Science/qubit_routing/README.md",
+      "sha256": "8d9cf8533e812fa4eb92c84171b503a2a72a829723f726626a1bec0ad6799465",
+      "bytes": 1030
+    },
+    "solution.json": {
+      "url": "https://raw.githubusercontent.com/Tencent-Hunyuan/Hyra-results/bcda2e29200fbeaeb1620acca0670cc445e8688f/AI4Science/qubit_routing/solution.json",
+      "sha256": "83611e50181452c6f2eba8d674d487b997197585f9f6ab51d4997ff40ce87961",
+      "bytes": 7921998
+    }
+  },
+  "slurm_job": 14322527,
+  "qiskit": "1.2.0",
+  "qiskit_qasm3_import": "0.6.0",
+  "cached_suite_sha256": "84bc454b7505875a01a72e7f9ffe033185d273a2e7dddf3544dc89d7bc27f7cf"
+}

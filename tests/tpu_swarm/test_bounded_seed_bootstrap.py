@@ -130,7 +130,8 @@ def test_actual_environment_prompt_and_state(task,tmp_path):
         if task=='q20':assert 'Q20 ONLY' in question
 
 @pytest.mark.parametrize('valid',(True,False))
-def test_full_bootstrap_publication_resume_and_no_training(tmp_path,valid):
+@pytest.mark.parametrize('fixed',(False,True))
+def test_full_bootstrap_publication_resume_and_no_training(tmp_path,valid,fixed):
     from dataclasses import replace
     import httpx,ray,tinker,transformers
     from ttt_discover.tinker_utils import renderers
@@ -138,7 +139,8 @@ def test_full_bootstrap_publication_resume_and_no_training(tmp_path,valid):
     from ttt_discover.tinker_utils.sampler import get_or_create_sampler_with_default
     from tpu.swarm.ray_train.commands import client_environment
     c=replace(Config.load(next(p for p in PROFILES if 'qwen-cp26-' in p.name)),
-        bootstrap_max_drafts=32,bootstrap_target_valid=16,bootstrap_max_groups=1)
+        bootstrap_max_drafts=32,bootstrap_target_valid=16,bootstrap_max_groups=1,
+        bootstrap_fixed_budget=fixed,bootstrap_require_full_pool=fixed,bootstrap_seed=0 if fixed else None)
     calls=[]
     class Renderer:
         def build_generation_prompt(self,messages):return SimpleNamespace(to_ints=lambda:[1,2])
@@ -164,15 +166,19 @@ def test_full_bootstrap_publication_resume_and_no_training(tmp_path,valid):
          patch.object(httpx,'AsyncClient',return_value=HTTP()), \
          patch.object(tinker,'ServiceClient',side_effect=AssertionError('bootstrap must not train')):
         if not valid:
-            with pytest.raises(RuntimeError,match='no valid seeds'):asyncio.run(b.run(c,'snapshot','head'))
+            with pytest.raises(RuntimeError,match='unique valid seeds' if fixed else 'no valid seeds'):
+                asyncio.run(b.run(c,'snapshot','head'))
             assert not (tmp_path/'bootstrap/complete.json').exists()
             return
         result=asyncio.run(b.run(c,'snapshot','head'))
-        assert result['retained']==16 and result['optimizer_steps']==0 and len(calls)==1
+        assert result['retained']==16 and result['optimizer_steps']==0 and len(calls)==(2 if fixed else 1)
+        if fixed:
+            assert [request['seed'] for request in calls]==[0,1000003]
+            assert result['drafted']==32 and result['stop_reason']=='fixed_budget'
         log=tmp_path/'tinker_log'/c.run_id
         sampler=get_or_create_sampler_with_default(str(log),cls,'26',16)
         assert len(sampler._states)==16 and sampler._current_step==0
         assert all(s.code.startswith('```python') and s.value==3.2 for s in sampler._states)
         assert asyncio.run(b.run(c,'snapshot','head'))==result
         (tmp_path/'bootstrap/complete.json').unlink()
-        assert asyncio.run(b.run(c,'snapshot','head'))==result and len(calls)==1
+        assert asyncio.run(b.run(c,'snapshot','head'))==result and len(calls)==(2 if fixed else 1)

@@ -4,8 +4,8 @@
   "hosts": 8,
   "zone": "asia-northeast1-b",
   "bucket": "gs://sk7524-tinker-tpu-asia-northeast1",
-  "base_bundle": "gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss-v9.tar.gz",
-  "base_bundle_sha256": "edce1e9b16faa3b2a2efb712fadd9f270509939623cd8466e351e50c744d6fd1",
+  "base_bundle": "gs://sk7524-tinker-tpu-asia-northeast1/code-bundles/tpuswarm-skyrl-gptoss-v10.tar.gz",
+  "base_bundle_sha256": "cb461426b387c3b6b1994dd7e0d77a6b549cfaec9c663531b960cb69d95d582d",
   "model_preset": "gpt-oss-120b",
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-asia-northeast1/hf-cache-gptoss120b",

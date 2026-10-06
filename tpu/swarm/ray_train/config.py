@@ -289,6 +289,15 @@ ACCELERATOR_RUNTIME = {
 # and tpu/launch_cell.sh (member spec, context, phase-1 budget). Single-trainer
 # v5p-32 shapes; multi-host profiles override tp/fsdp/bounds.
 PRESETS = {
+    "qwen3.8-27b": ModelPreset(
+        # Qwen3.8 uses Qwen3.5's architecture, but requires its own HF/Orbax weights.
+        hf_model="Qwen/Qwen3.8-27B", maxtext_model="qwen3.5-27b", maxtext_spec=_QWEN_SPEC,
+        member_spec="Qwen/Qwen3.8-27B:qwen3:qwen", learning_rate="1.5e-4",
+        trainer=dict(sequence_length=18432, max_target_length=22528, token_budget=73728,
+                     flce_tile=512, num_vocab_tiling=64),
+        inference=dict(max_sequences=128, max_model_length=22528, chunk_tokens=8192,
+                       limit_mm_per_prompt='{"image":0,"video":0}'),
+        client_context_window=18432, client_phase1_max_tokens=13824),
     "qwen3.5-27b": ModelPreset(
         hf_model="Qwen/Qwen3.5-27B", maxtext_model="qwen3.5-27b", maxtext_spec=_QWEN_SPEC,
         member_spec="Qwen/Qwen3.5-27B:qwen3:qwen", learning_rate="1.5e-4",
@@ -372,6 +381,9 @@ class Config:
     bootstrap_all_hosts: bool = False
     bootstrap_only: bool = False
     bootstrap_max_drafts: int = 0
+    bootstrap_fixed_budget: bool = False
+    bootstrap_require_full_pool: bool = False
+    bootstrap_seed: int | None = None
     bootstrap_target_valid: int = 512
     bootstrap_group_size: int = 16
     bootstrap_max_groups: int = 32
@@ -399,6 +411,8 @@ class Config:
     # must be in the job's own region: no cross-region reads or writes.
     single_bucket: bool = False
     resume_min_checkpoint_step: int = 0
+    # Explicit host scheduler capacity; zero preserves workload-specific defaults.
+    ray_cpu_capacity: int = 0
     cache: Cache = field(default_factory=Cache)
     trainer: Trainer = field(default_factory=Trainer)
     inference: Inference = field(default_factory=Inference)
@@ -424,6 +438,8 @@ class Config:
     # Opt-in CPU placement keeps historical TPU profiles reproducible.
     science_placement_backend: str = "tpu"
     science_placement_slots_per_host: int = 2
+    science_placement_cpus_per_case: int = 4
+    science_placement_memory_gib: int = 4
     science_placement_runtime: str = "legacy"
     # Extra environment for the trainer (Tinker API server) process only,
     # e.g. TUNIX_LORA_MIX_GAMMA. Applied after the launcher's own settings.
@@ -509,6 +525,8 @@ class Config:
 
     @property
     def ray_cpus_per_host(self):
+        if self.ray_cpu_capacity:
+            return self.ray_cpu_capacity
         # Leave scheduler capacity for controller/Serve actors as well as graders.
         if self.inference_only and self.grading_families:
             # Every engine on the host takes 8, plus ingress (1) and host/service
@@ -519,7 +537,7 @@ class Config:
         if self.science_routing_evaluator == 'parallel-v2':
             return 10 * self.science_routing_slots_per_host + 8
         if self.science_task == 'placement' and self.science_placement_backend == 'cpu':
-            return max(32, 4 * self.science_placement_slots_per_host + 8)
+            return max(32, self.science_placement_cpus_per_case * self.science_placement_slots_per_host + 8)
         return max(32, 4 * self.science_routing_slots_per_host + 8) if self.science_task == 'routing' else 32
 
     @property
@@ -549,6 +567,16 @@ class Config:
         env = self.client_env.get("TTD_ENV")
         return (env == "circle_packing" or
                 env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") == "ac2")
+
+    @property
+    def has_math_environment(self):
+        env = self.client_env.get("TTD_ENV")
+        return (env in ("erdos_min_overlap", "circle_packing") or
+                env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") in ("ac1", "ac2"))
+
+    @property
+    def native_thinking_format(self):
+        return 'qwen3.5-27b' if self.model_preset == 'qwen3.8-27b' else self.model_preset
 
     @classmethod
     def from_dict(cls, raw):
@@ -647,6 +675,8 @@ class Config:
 
     def validate(self):
         from urllib.parse import urlsplit
+        if type(self.ray_cpu_capacity) is not int or self.ray_cpu_capacity < 0:
+            raise ValueError('ray_cpu_capacity must be a nonnegative integer')
         if type(self.inference.external_pool_updates) is not bool:
             raise ValueError('external_pool_updates must be boolean')
         pool = self.inference.external_pool_urls
@@ -727,11 +757,16 @@ class Config:
         modern = self.science_placement_runtime == 'cpu300-4g-v1'
         if modern and (self.science_task != 'placement' or self.science_placement_backend != 'cpu' or not self.systemd_runtime):
             raise ValueError('five-minute placement requires CPU placement and systemd')
-        if modern and self.cache.reserve_gib < 4 * placement_slots + 64:
-            raise ValueError('expanded grading requires 4 GiB per slot plus 64 GiB runtime reserve')
+        if modern:
+            from tpu.science.placement_resources import contract
+            contract(placement_slots, cpus=self.science_placement_cpus_per_case, memory_gib=self.science_placement_memory_gib)
+        elif (self.science_placement_cpus_per_case, self.science_placement_memory_gib) != (4, 4):
+            raise ValueError('custom placement resources require modern CPU runtime')
+        if modern and self.cache.reserve_gib < self.science_placement_memory_gib * placement_slots + 64:
+            raise ValueError('expanded grading requires per-case memory per slot plus 64 GiB runtime reserve')
         if self.client_env.get('SCIENCE_PLACEMENT_RUNTIME', self.science_placement_runtime) != self.science_placement_runtime:
             raise ValueError('conflicting placement runtime override')
-        if type(placement_slots) is not int or not 1 <= placement_slots <= (48 if modern else 16):
+        if type(placement_slots) is not int or not 1 <= placement_slots <= (192 // self.science_placement_cpus_per_case if modern else 16):
             raise ValueError('placement CPU slot count exceeds runtime contract')
         if self.science_placement_backend == 'cpu':
             if self.science_task != 'placement':
@@ -793,6 +828,12 @@ class Config:
                     or self.inference_only_ranks is not None or self.frozen_benchmark
                     or self.arena_samples or self.arena_service_only):
                 raise ValueError('bootstrap-only requires v4-32 routing seeds or all-host v4-64 CPU helper circuit drafts')
+        if any(type(value) is not bool for value in (self.bootstrap_fixed_budget, self.bootstrap_require_full_pool)):
+            raise ValueError('bootstrap fixed budget and full pool flags must be boolean')
+        if self.bootstrap_seed is not None and (type(self.bootstrap_seed) is not int or not 0 <= self.bootstrap_seed < 2**31):
+            raise ValueError('bootstrap_seed must be a nonnegative 31-bit integer')
+        if (self.bootstrap_fixed_budget or self.bootstrap_require_full_pool or self.bootstrap_seed is not None) and not self.bootstrap_max_drafts:
+            raise ValueError('bootstrap sampling options require a bounded bootstrap')
         if self.bootstrap_max_drafts:
             if (type(self.bootstrap_max_drafts) is not int or self.bootstrap_max_drafts < 1
                     or type(self.bootstrap_target_valid) is not int or not 1 <= self.bootstrap_target_valid <= min(1000, self.bootstrap_max_drafts)
@@ -808,7 +849,7 @@ class Config:
             if (not bootstrap_shape
                     or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
                     or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
-                    or not (self.science_task or self.has_problem_prompt_overlay or self.is_recurrent_gemma)
+                    or not (self.science_task or self.has_math_environment or self.is_recurrent_gemma)
                     or (self.is_recurrent_gemma != (self.arena_grader_rank is not None))
                     or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
                     or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
@@ -822,16 +863,16 @@ class Config:
                 or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
             raise ValueError('bootstrap requires single-model v4-64/v6e-32 science training or v4-32 routing seeds with native TP4 ingress')
         if self.has_answer_only_overlay:
-            if not (self.has_problem_prompt_overlay or self.is_recurrent_gemma or self.science_task):
+            if not (self.has_math_environment or self.is_recurrent_gemma or self.science_task):
                 raise ValueError("answer-only extraction requires a supported math, RG-LRU or science environment")
             if self.client_env.get("TTD_ANSWER_MODEL_FAMILY") not in ("qwen", "gemma", "muse"):
                 raise ValueError("answer-only extraction requires an explicit model family")
-        if self.has_adaptive_pwc_overlay and not (self.has_problem_prompt_overlay or self.is_recurrent_gemma
+        if self.has_adaptive_pwc_overlay and not (self.has_math_environment or self.is_recurrent_gemma
                 or (self.science_task == 'routing' and (routing_suite == 'q20'
                     or routing_suite == 'full' and self.science_routing_evaluator == 'parallel-v2'))
                 or (self.science_task == 'placement' and self.science_placement_backend == 'cpu'
                     and self.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1')):
-            raise ValueError("adaptive PWC is enabled only for AC2, circle packing, RG-LRU, Q20 or parallel-v2 full-suite qubit, or helper-enabled CPU circuit")
+            raise ValueError("adaptive PWC is enabled only for Erdos, AC1/AC2, circle packing, RG-LRU, Q20 or parallel-v2 full-suite qubit, or helper-enabled CPU circuit")
         if self.training_smoke and (self.inference_only or self.adapter_count != 1 or self.client_env.get('NUM_EPOCHS') != '1'):
             raise ValueError('training smoke requires one adapter and exactly one training step')
         if self.arena_grader_rank is not None:
@@ -873,7 +914,7 @@ class Config:
         if type(self.inference.native_thinking_budget) is not bool:
             raise ValueError("native_thinking_budget must be a boolean")
         if self.inference.native_thinking_budget:
-            if self.model_preset not in ("qwen3.5-27b", "gemma4-31b", "muse-glimmer-30b"):
+            if self.model_preset not in ("qwen3.5-27b", "qwen3.8-27b", "gemma4-31b", "muse-glimmer-30b"):
                 raise ValueError("unsupported native thinking model")
             if not self.inference_only and (self.adapter_count != 1 or self.client_env.get("TTD_MIN_THINK_TOKENS", "0") != "0"):
                 raise ValueError("native training currently requires one adapter and min_think_tokens=0")
@@ -941,7 +982,7 @@ class Config:
             if (self.model_preset == "muse-glimmer-30b" and self.trainer.tp not in (1, 2)
                     and not (self.trainer.tp == 8 and self.trainer.logical_kv_heads == 8)):
                 raise ValueError("Muse has two KV heads: use TP1/TP2 or TP8 with eight tied logical KV heads")
-            if (self.accelerator == "tpu-v4-64" and self.model_preset == "qwen3.5-27b"
+            if (self.accelerator == "tpu-v4-64" and self.model_preset in ("qwen3.5-27b", "qwen3.8-27b")
                     and not self.inference.ragged_conv1d):
                 raise ValueError("v4 Qwen science requires ragged_conv1d: true; the pinned Pallas convolution uses unsupported v4 unpacking")
             if self.client_env.get("TTD_EVAL_BACKEND") != "local" or self.client_env.get("NUM_CPUS_PER_TASK") != "4":
@@ -1008,7 +1049,7 @@ class Config:
         if self.inference.tp == 8 and (self.accelerator != "tpu-v6e-8"
                 or self.inference.hosts_per_engine != 1 or not self.inference_only):
             raise ValueError("TP8 inference requires a single-host inference-only v6e-8 profile")
-        if self.inference.tp == 8 and self.model_preset == "qwen3.5-27b":
+        if self.inference.tp == 8 and self.model_preset in ("qwen3.5-27b", "qwen3.8-27b"):
             # Reproduced 2026-10-05: mixed prefill+decode batches halt the TP8
             # engine in a SparseCore program (RuntimeUnexpectedCoreHalt in
             # jit_step_fun_impl), independent of conv1d and collective offload.

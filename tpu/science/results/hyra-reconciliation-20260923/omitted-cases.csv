@@ -1,0 +1,12 @@
+case,topology,SABRE,LightSABRE
+4gt13_92_q20,Q20,0,0
+4mod5-v1_22_q20,Q20,0,0
+alu-v0_27_q20,Q20,1,1
+decod24-v2_43_q20,Q20,0,0
+ising_model_10_q20,Q20,0,0
+ising_model_10_willow,Willow,0,0
+ising_model_10_heron_fez,Heron,0,0
+ising_model_13_q20,Q20,0,0
+ising_model_16_q20,Q20,0,0
+ising_model_16_heron_fez,Heron,0,0
+mod5mils_65_q20,Q20,0,1

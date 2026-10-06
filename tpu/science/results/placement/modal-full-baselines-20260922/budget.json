@@ -1,0 +1,11 @@
+{
+  "approved_total_cap_usd": 100,
+  "metered_before_usd": 2.74,
+  "tasks": 34,
+  "task_envelope_seconds": 3540,
+  "resource_hourly_usd": 1.6064000000000003,
+  "task_cost_bound_usd": 53.70730666666667,
+  "setup_and_billing_lag_reserve_usd": 15,
+  "reserved_total_usd": 71.44730666666666,
+  "automatic_retries": 0
+}

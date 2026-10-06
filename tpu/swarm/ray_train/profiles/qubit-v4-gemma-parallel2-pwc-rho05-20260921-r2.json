@@ -59,8 +59,8 @@
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-gemma4-v1",
     "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
-    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/reallocation-10step-20260921/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/trainer",
-    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/reallocation-10step-20260921/science-v6e-gemma-qubit-grpo-lr4e5-s1-20260920/inference",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/qubit-v4-continue25-20260923/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/trainer",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/qubit-v4-continue25-20260923/qubit-v4-gemma-parallel2-pwc-rho05-20260921-r2/inference",
     "trainer_gib": 96,
     "inference_gib": 128,
     "reserve_gib": 240,

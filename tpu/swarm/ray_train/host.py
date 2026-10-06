@@ -101,7 +101,8 @@ class Host:
                 _, service_cpus = host_partition()
             elif self.config.science_placement_runtime == 'cpu300-4g-v1':
                 from tpu.science.placement_resources import partition
-                _, service_cpus = partition(self.config.science_placement_slots_per_host)
+                _, service_cpus = partition(self.config.science_placement_slots_per_host,
+                                            cpus_per_case=self.config.science_placement_cpus_per_case)
             elif self.config.grading_families:
                 from tpu.science.farm_resources import partition
                 _, service_cpus = partition(self.config.grading_families)
@@ -172,7 +173,7 @@ class Host:
         if marker.exists() and marker.read_text() == self.source_identity:
             if self.config.inference.native_thinking_budget:
                 from .thinking_budget.contract import check
-                check(self.source, model=self.config.model_preset,
+                check(self.source, model=self.config.native_thinking_format,
                       require_client=not self.config.inference_only)
             return str(self.source)
         archive = self.root / "base-download.tar.gz"
@@ -192,7 +193,7 @@ class Host:
             install(Path(__file__).with_name("source_overlay"), staging)
         if self.config.inference.native_thinking_budget:
             from .thinking_budget.install import install as install_thinking
-            install_thinking(staging, model=self.config.model_preset,
+            install_thinking(staging, model=self.config.native_thinking_format,
                              require_client=not self.config.inference_only)
         for path in ("tpu/probe_topology.py", "skyrl/backends/tunix_backend.py",
                      "skyrl/utils/checkpoint_mirror.py", "tpu/vllm_tpu_server.py"):

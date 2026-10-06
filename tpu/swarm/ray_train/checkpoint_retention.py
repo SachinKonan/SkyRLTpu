@@ -54,6 +54,20 @@ def acquire_run_lease(config, root):
         raise
 
 
+def process_matches_run(env, args, task_id, run_id, run):
+    """A reused Ray namespace does not identify a retired managed-job attempt."""
+    process_task = env.get("SKYPILOT_TASK_ID")
+    return bool(
+        (task_id and process_task == task_id)
+        or env.get("TTD_RUN_DIR") == str(run) + "/client"
+        or any(str(run) in arg for arg in args)
+        # Preserve namespace-only orphans when attempt identity is unavailable.
+        # Explicit paths above still protect users of the old root, even when
+        # their managed-job identity differs (for example, a transfer process).
+        or (env.get("RAY_NAMESPACE") == run_id and not process_task)
+    )
+
+
 def run_is_active(record, run):
     """An orphan can outlive bootstrap's lock. Unknown process access is unsafe."""
     import psutil
@@ -62,10 +76,8 @@ def run_is_active(record, run):
             if process.uids().real != os.getuid() or process.status() == psutil.STATUS_ZOMBIE:
                 continue
             env = process.environ()
-            if (env.get("SKYPILOT_TASK_ID") == record["task_id"]
-                    or env.get("RAY_NAMESPACE") == record["run_id"]
-                    or env.get("TTD_RUN_DIR") == str(run / "client")
-                    or any(str(run) in arg for arg in process.cmdline())):
+            if process_matches_run(env, process.cmdline(), record["task_id"],
+                                   record["run_id"], run):
                 return True
         except psutil.NoSuchProcess:
             continue

@@ -48,7 +48,8 @@ def build(profile, output, *, _executor_only=False):
                 or path.parent == package / "client_env" and path.name in ("pyproject.toml", "uv.lock")
             ):
                 bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
-        for name in ("select_v4_32_topology.py", "select_v4_64_topology.py", "select_v6e_32_topology.py"):
+        for name in ("select_v4_32_topology.py", "select_v4_64_topology.py", "select_v6e_32_topology.py",
+                     "select_v5p_32_topology.py"):
             selector = repo / "tpu/swarm" / name
             bundle.add(selector, arcname=str(selector.relative_to(repo)))
         if config.grading_families:
