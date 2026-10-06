@@ -1014,7 +1014,10 @@ class Config:
                 or (self.accelerator == "tpu-v5p-32" and self.trainer.hosts == 1
                     and (self.science_task == 'routing' or self.science_placement_backend == 'cpu'))
                 or (self.accelerator == "tpu-v5p-64" and self.trainer.hosts == 1
-                    and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
+                    and self.science_task == 'placement' and self.science_placement_backend == 'cpu')
+                # Remote-only trainers grade CPU science on their own pool and leased farms.
+                or (self.inference.remote_only and self.trainer.hosts == self.hosts
+                    and (self.science_task == 'routing' or self.science_placement_backend == 'cpu')))
             if ((not self.bootstrap_only and (self.inference_only
                     or not science_shape))
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):

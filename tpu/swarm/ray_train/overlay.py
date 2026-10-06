@@ -89,7 +89,9 @@ GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.
                  'tpu/science/routing_resources.py', 'tpu/science/placement_resources.py',
                  'third_party/discover/ttt_discover/environments/sandbox_reward_evaluator.py',
                  'third_party/discover/ttt_discover/tinker_utils/dataset_builder.py',
-                 'third_party/discover/examples/ac_inequalities/env.py'}
+                 'third_party/discover/examples/ac_inequalities/env.py',
+                 # Erdős returns its triple through the flat sandbox wrapper.
+                 'third_party/discover/examples/erdos_min_overlap/env.py'}
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 CHECKPOINT_FILES = {"skyrl/utils/checkpoint_mirror.py"}
 # The updated backend also returns per-datum trainer/sampler logprob summaries.

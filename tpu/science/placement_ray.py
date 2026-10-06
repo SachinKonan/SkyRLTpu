@@ -115,7 +115,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
          f'--property=CPUQuota={100 * len(cpus)}%','--property=AllowedCPUs='+','.join(map(str,cpus)),
          '--property=TasksMax=1024',f'--property=RuntimeMaxSec={envelope_seconds}','--property=KillMode=control-group',
          '--property=TimeoutStopSec=2','--property=OOMPolicy=stop','--working-directory='+str(root),
-         str(root/'.science/venv/bin/python'),'-m','tpu.science.placement_task',
+         str(__import__('tpu.science.placement_resources', fromlist=['grader_python']).grader_python(root)),'-m','tpu.science.placement_task',
          '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
          '--owner-pid',str(os.getpid()),'--owner-start',process_identity(os.getpid())]
     started=time.monotonic()

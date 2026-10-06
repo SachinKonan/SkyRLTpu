@@ -343,13 +343,17 @@ class GradingTransport:
     def from_environment(cls):
         env = os.environ
         families = json.loads(env.get('SKYRL_GRADING_FAMILIES') or '{}')
-        return cls(families=families, local_capacity=int(env.get('SKYRL_GRADING_LOCAL_SLOTS') or 0),
+        transport = cls(families=families, local_capacity=int(env.get('SKYRL_GRADING_LOCAL_SLOTS') or 0),
                    farm_url=env.get('SKYRL_GRADING_URL') or None, root=env.get('SCIENCE_WORKER_ROOT') or None,
                    local_systemd=env.get('SKYRL_GRADING_LOCAL_SYSTEMD', '1') == '1',
                    max_infra_retries=int(env.get('SKYRL_GRADING_MAX_INFRA_RETRIES') or 3),
                    events=env.get('SKYRL_GRADING_EVENTS') or None,
                    refresh_seconds=float(env.get('SKYRL_GRADING_FARM_REFRESH_SECONDS') or 10),
                    long_poll_seconds=int(env.get('SKYRL_GRADING_LONG_POLL_SECONDS') or 20))
+        hosts = int(env.get('SKYRL_GRADING_LOCAL_HOSTS') or 0)
+        if transport.local and hosts:
+            transport.local.capacities = {name: spec['slots_per_host'] * hosts for name, spec in families.items()}
+        return transport
 
     def report(self, event, **fields):
         if not self.events:

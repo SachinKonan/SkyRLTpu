@@ -297,15 +297,17 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         defaults["ARENA_RAY_TASKS"] = "1"
         defaults["ARENA_RAY_ROOT"] = str(root)
     defaults["TTD_NATIVE_THINKING_BUDGET"] = _flag(config.inference.native_thinking_budget)
-    grading_keys = ('SKYRL_GRADING_URL', 'SKYRL_GRADING_EVENTS', 'SKYRL_GRADING_LOCAL_SLOTS',
+    grading_keys = ('SKYRL_GRADING_URL', 'SKYRL_GRADING_EVENTS', 'SKYRL_GRADING_LOCAL_SLOTS', 'SKYRL_GRADING_LOCAL_HOSTS',
                     'SKYRL_GRADING_MAX_INFRA_RETRIES', 'SKYRL_GRADING_LOCAL_SYSTEMD', 'SKYRL_GRADING_FAMILIES',
                     'SKYRL_GRADING_FARM_REFRESH_SECONDS', 'SKYRL_GRADING_LONG_POLL_SECONDS')
     families = config.grading_families
     if families:
-        # Every host of the slice (trainer and inference ranks) grades from its pool.
-        local_slots = families.get('ac2', {}).get('slots_per_host', 0) * config.hosts
+        # Every host of the slice (trainer and inference ranks) grades from its
+        # pool; each family's local capacity is its slot cap times the hosts.
+        local_slots = max(spec['slots_per_host'] for spec in families.values()) * config.hosts
         defaults.update(SKYRL_GRADING_FAMILIES=json.dumps(families, sort_keys=True),
                         SKYRL_GRADING_LOCAL_SLOTS=str(local_slots),
+                        SKYRL_GRADING_LOCAL_HOSTS=str(config.hosts),
                         SKYRL_GRADING_MAX_INFRA_RETRIES=str(config.grading.max_infra_retries),
                         SKYRL_GRADING_LOCAL_SYSTEMD=_flag(config.grading.local_systemd),
                         SKYRL_GRADING_EVENTS=str(root / "runs" / config.run_id / "inference-events.jsonl"),

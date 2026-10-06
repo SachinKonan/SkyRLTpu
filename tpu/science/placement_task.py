@@ -93,7 +93,8 @@ def evaluate(request):
     candidate_finished_unix = time.time()
     candidate_seconds = time.monotonic()-started
     if code: raise RuntimeError(f'candidate exited {code}: '+(work/'candidate.log').read_text(errors='replace')[-2000:])
-    cmd = [str(root/'.science/venv/bin/python'),'-m','tpu.science.challenge_score_child',
+    from .placement_resources import grader_python
+    cmd = [str(grader_python(root)),'-m','tpu.science.challenge_score_child',
            '--root',str(root),'--case',case,'--positions',str(work/'positions.npy'),
            '--result',str(work/'score.json')]
     with (work/'grader.log').open('wb') as log:
