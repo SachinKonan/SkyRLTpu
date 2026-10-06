@@ -45,3 +45,24 @@ def summarize(train_logprobs, sampler_logprobs):
     out[len(FIELDS):] = np.bincount(np.searchsorted(ABS_EDGES, a, side='right'),
                                     minlength=len(ABS_EDGES) + 1)
     return out.astype(np.float32).tolist()
+
+
+def dump(directory, input_ids, targets, sampler_logprobs, train_logprobs):
+    """Diagnostic only (SKYRL_MISMATCH_DUMP_DIR): save the per-token arrays of one
+    training pass so individual gap positions can be inspected offline. Rows are
+    concatenated; `offsets[i]:offsets[i+1]` selects datum i. Never raises."""
+    import os
+    import time
+    try:
+        rows = [(np.asarray(x, np.int32).reshape(-1), np.asarray(t, np.int32).reshape(-1),
+                 np.asarray(s, np.float32).reshape(-1), np.asarray(lp if lp is not None else [], np.float32).reshape(-1))
+                for x, t, s, lp in zip(input_ids, targets, sampler_logprobs, train_logprobs)]
+        n = [min(len(x), len(t), len(s), len(lp)) for x, t, s, lp in rows]
+        offsets = np.concatenate([[0], np.cumsum(n)]).astype(np.int64)
+        cat = [np.concatenate([r[k][:m] for r, m in zip(rows, n)]) if rows else np.zeros(0) for k in range(4)]
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"fb-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.npz")
+        np.savez_compressed(path, offsets=offsets, input_ids=cat[0], targets=cat[1], sampler=cat[2], train=cat[3])
+    except Exception:  # diagnostic only; never fail training
+        import logging
+        logging.getLogger(__name__).exception("sampler_mismatch dump failed")

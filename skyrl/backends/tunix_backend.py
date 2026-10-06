@@ -1983,6 +1983,12 @@ class TunixBackend(AbstractBackend):
         # survives minimal output); the client aggregates it per farm.
         from skyrl.backends.sampler_mismatch import summarize as _mismatch_summary
 
+        if with_grads and os.environ.get("SKYRL_MISMATCH_DUMP_DIR") and jax.process_index() == 0:
+            from skyrl.backends.sampler_mismatch import dump as _mismatch_dump
+
+            _mismatch_dump(os.environ["SKYRL_MISMATCH_DUMP_DIR"], all_input_ids, prepared_batch.all_targets,
+                           prepared_batch.all_sampling_logprobs, logprobs_out[:n_examples])
+
         def _mismatch(i):
             data = _mismatch_summary(logprobs_out[i], prepared_batch.all_sampling_logprobs[i % n_examples])
             return {"data": data, "dtype": "float32", "shape": [len(data)]}
