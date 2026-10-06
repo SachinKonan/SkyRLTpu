@@ -5,6 +5,7 @@ checkout for --checkout, and an explicit environment file for SkyPilot paths.
 """
 import argparse
 from pathlib import Path
+import re
 
 
 def quote(value):
@@ -15,16 +16,21 @@ def quote(value):
 
 
 def unit(checkout, python, environment, ssh_dir, farm_pool, trainer_pools, lock_file,
-         *, farm_name_contains='inference-farm', farm_pool_max_job_id=None):
+         *, farm_name_contains='inference-farm', farm_pool_max_job_id=None,
+         discovery_group=''):
     if farm_pool_max_job_id is not None and (not farm_pool or farm_pool_max_job_id < 1):
         raise ValueError('farm_pool_max_job_id requires farm_pool and a positive job ID')
     if not trainer_pools:
         raise ValueError('at least one explicit trainer pool is required')
     if not farm_pool and not farm_name_contains.strip():
         raise ValueError('a farm pool or nonempty farm name selector is required')
+    if discovery_group and not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', discovery_group):
+        raise ValueError('discovery_group must be empty or a short lowercase slug')
     command = [python, '-u', '-m', 'tpu.swarm.ray_train.borrowing_supervisor',
                '--farm-name-contains', farm_name_contains,
                '--ssh-config-dir', ssh_dir, '--lock-file', lock_file, '--run-scoped-only']
+    if discovery_group:
+        command += ['--discovery-group', discovery_group]
     if farm_pool:
         command += ['--farm-pool', farm_pool]
     if farm_pool_max_job_id is not None:
@@ -54,13 +60,15 @@ def main():
     parser.add_argument('--farm-pool')
     parser.add_argument('--farm-pool-max-job-id', type=int)
     parser.add_argument('--farm-name-contains', default='inference-farm')
+    parser.add_argument('--discovery-group', default='')
     parser.add_argument('--trainer-pool', action='append', required=True)
     args = parser.parse_args()
     # Do not resolve the virtualenv Python symlink to the global interpreter.
     text = unit(args.checkout.resolve(), args.python.absolute(), args.environment.resolve(),
                 args.ssh_dir.resolve(), args.farm_pool, args.trainer_pool, args.lock_file.resolve(),
                 farm_name_contains=args.farm_name_contains,
-                farm_pool_max_job_id=args.farm_pool_max_job_id)
+                farm_pool_max_job_id=args.farm_pool_max_job_id,
+                discovery_group=args.discovery_group)
     # Refuse to silently replace an existing service definition.
     with args.output.open('x') as stream:
         stream.write(text)
