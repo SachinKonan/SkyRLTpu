@@ -59,15 +59,26 @@ class Cache:
     sync_seconds: int = 60
 
 
-GRADING_FAMILIES = ('ac2', 'routing', 'placement')
+GRADING_FAMILIES = ('math', 'routing', 'placement')
+# Older profiles and bundles call the math sandbox family 'ac2'.
+FAMILY_ALIASES = {'ac2': 'math'}
+# Sandbox tasks whose programs run through the math executor (flat numeric results).
+SANDBOX_ENVS = ('ac_inequalities', 'erdos_min_overlap')
+# Math programs reserve 4 GiB in the core pool but are killed only above 8 GiB.
+# The legacy grader enforced no memory limit at all (its Ray 1 GiB was only
+# bookkeeping), so the headroom preserves that unbounded behaviour for the rare
+# program that spikes, while admission still packs hosts by the 4 GiB norm.
+# Science contracts (routing, placement) keep kill limit == reservation.
+MATH_RESERVED_GIB, MATH_KILL_GIB = 4, 8
 
 
 @dataclass(frozen=True)
 class Grading:
     """CPU grading capacity on this profile's hosts (trainer or farm).
 
-    ``families`` maps 'ac2' | 'routing' | 'placement' to
-    ``{slots_per_host, cpus, memory_gib}``; unspecified keys take the family
+    ``families`` maps 'math' | 'routing' | 'placement' to
+    ``{slots_per_host, cpus, memory_gib[, memory_max_gib]}``; memory_gib is
+    reserved at admission, memory_max_gib is the kill limit. Unspecified keys take the family
     defaults (see ``Config.grading_families``). On an inference-only farm the
     families are served through the lease-fenced grading endpoints; on a
     trainer they bound the local Ray pool. ``farm_transport`` lets the
@@ -85,6 +96,9 @@ class Grading:
     long_poll_seconds: int = 20
     farm_refresh_seconds: int = 10
     stdout_limit_bytes: int = 16384
+    # Host CPUs kept for engines/trainer/ingress/Ray; every other core forms
+    # the shared grading pool (tpu.science.core_pool). 0 selects the default.
+    service_cpus: int = 0
 
 
 @dataclass(frozen=True)
@@ -467,16 +481,31 @@ class Config:
         parallel = self.science_routing_evaluator == 'parallel-v2'
         modern = self.science_placement_runtime == 'cpu300-4g-v1'
         defaults = {
-            'ac2': dict(slots_per_host=16, cpus=2, memory_gib=4),
+            'math': dict(slots_per_host=16, cpus=2, memory_gib=MATH_RESERVED_GIB, memory_max_gib=MATH_KILL_GIB),
             'routing': dict(slots_per_host=self.science_routing_slots_per_host,
                             cpus=10 if parallel else 4, memory_gib=20 if parallel else 8),
             'placement': dict(slots_per_host=self.science_placement_slots_per_host,
                               cpus=4, memory_gib=4 if modern else 8),
         }
+        declared = self.grading.families or {}
+        if not declared and self.default_sandbox_grading:
+            # Trainers grade sandbox programs through the shared core pool by
+            # default, with the legacy local capacity (16 per host).
+            declared = {'math': {}}
         result = {}
-        for name, raw in (self.grading.families or {}).items():
-            result[name] = dict(defaults.get(name, {}), **(raw or {}))
+        for name, raw in declared.items():
+            name = FAMILY_ALIASES.get(name, name)
+            spec = dict(defaults.get(name, {}), **(raw or {}))
+            spec.setdefault('memory_max_gib', spec.get('memory_gib'))
+            result[name] = spec
         return result
+
+    @property
+    def default_sandbox_grading(self):
+        """Erdős/AC trainers use the pooled sandbox grader unless a profile opts out."""
+        return (not self.inference_only and self.systemd_runtime and not self.science_task
+                and not self.is_recurrent_gemma and 'TTD_EVAL_BACKEND' not in self.client_env
+                and self.client_env.get('TTD_ENV') in SANDBOX_ENVS)
 
     @property
     def grading_science_task(self):
@@ -491,18 +520,23 @@ class Config:
     def _validate_grading(self):
         g = self.grading
         families = self.grading_families
-        if not isinstance(g.families, dict) or not set(g.families) <= set(GRADING_FAMILIES):
+        if not isinstance(g.families, dict) or not set(g.families) <= set(GRADING_FAMILIES) | set(FAMILY_ALIASES):
             raise ValueError(f'grading.families keys must be a subset of {GRADING_FAMILIES}')
+        if len({FAMILY_ALIASES.get(name, name) for name in g.families}) != len(g.families):
+            raise ValueError('grading.families declares a family twice (math and its alias ac2)')
+        keys = ('slots_per_host', 'cpus', 'memory_gib', 'memory_max_gib')
         for name, spec in families.items():
-            if set(spec) != {'slots_per_host', 'cpus', 'memory_gib'}:
-                raise ValueError(f'grading family {name} accepts slots_per_host, cpus, memory_gib only')
-            if any(type(spec[k]) is not int or spec[k] < 1 for k in ('slots_per_host', 'cpus', 'memory_gib')):
+            if not set(spec) <= set(keys) or set(keys[:3]) - set(spec):
+                raise ValueError(f'grading family {name} accepts slots_per_host, cpus, memory_gib, memory_max_gib only')
+            if any(type(spec[k]) is not int or spec[k] < 1 for k in keys):
                 raise ValueError(f'grading family {name} limits must be positive integers')
-        if 'ac2' in families and not (families['ac2']['slots_per_host'] <= 64 and families['ac2']['cpus'] <= 8
-                                      and families['ac2']['memory_gib'] <= 64):
-            raise ValueError('ac2 grading: at most 64 slots, 8 CPUs and 64 GiB per host')
-        if 'routing' in families and 'placement' in families:
-            raise ValueError('routing and placement grading cannot share one host partition')
+            if spec['memory_max_gib'] < spec['memory_gib']:
+                raise ValueError(f'grading family {name}: memory_max_gib must be at least memory_gib')
+            if name != 'math' and spec['memory_max_gib'] != spec['memory_gib']:
+                raise ValueError(f'grading family {name}: science contracts kill at their reservation')
+        if 'math' in families and not (families['math']['slots_per_host'] <= 64 and families['math']['cpus'] <= 8
+                                       and families['math']['memory_max_gib'] <= 64):
+            raise ValueError('math grading: at most 64 slots, 8 CPUs and 64 GiB per host')
         for key in ('max_infra_retries', 'queue_factor', 'max_requests', 'result_retention_seconds',
                     'long_poll_seconds', 'farm_refresh_seconds', 'stdout_limit_bytes'):
             if type(getattr(g, key)) is not int or getattr(g, key) < 1:
@@ -519,9 +553,60 @@ class Config:
             v = self.inference
             if not v.require_lease or not self.systemd_runtime or v.routing != 'ingress':
                 raise ValueError('farm grading requires a lease-fenced systemd farm through ingress')
-            needed = 64 + sum(f['slots_per_host'] * f['memory_gib'] for f in families.values())
+            # The pool admits by GiB, so the reserve must hold the largest program.
+            needed = 64 + max(f['memory_max_gib'] for f in families.values())
             if self.cache.reserve_gib < needed:
-                raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for slot memory plus services')
+                raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for one program plus services')
+        if type(g.service_cpus) is not int or g.service_cpus < 0 or 0 < g.service_cpus < 24:
+            raise ValueError('grading.service_cpus must be 0 (default) or at least 24')
+
+    @property
+    def grading_pool(self):
+        """Every grading family on this profile's hosts draws from one core pool."""
+        return bool(self.grading_families or self.science_routing_evaluator == 'parallel-v2'
+                    or self.science_placement_runtime == 'cpu300-4g-v1')
+
+    @property
+    def grading_service_cpus(self):
+        if self.grading.service_cpus:
+            return self.grading.service_cpus
+        # A farm needs CPUs for its engines and ingress; a trainer host also
+        # runs the trainer and client (the v4-64 placement layout left 48).
+        return 24 + 12 * self.engines_per_host if self.inference_only else 48
+
+    @property
+    def grading_memory_gib(self):
+        """GiB of the cache reserve available to grades (64 stay for services).
+
+        A farm grades with its whole reserve. A trainer host keeps the grading
+        memory its declared families always had (slots x reservation, e.g. the
+        legacy 16 x 4 = 64 GiB math cap), so host-RAM offload keeps its headroom.
+        """
+        available = self.cache.reserve_gib - 64
+        if self.inference_only:
+            return available
+        caps = [f['slots_per_host'] * f['memory_gib'] for f in self.grading_families.values()]
+        if self.science_routing_evaluator == 'parallel-v2':
+            caps.append(self.science_routing_slots_per_host * 20)
+        if self.science_placement_runtime == 'cpu300-4g-v1':
+            caps.append(self.science_placement_slots_per_host * self.science_placement_memory_gib)
+        # Families grade side by side on one host, so their caps add up.
+        return max(1, min(available, sum(caps))) if caps else available
+
+    def ray_service_cpus(self, rank):
+        """Ray CPUs for this host's non-grading actors.
+
+        Engines take 8 each (on a group's head host), a TrainerRank 8 and the
+        ingress 1 (head only). Roles of train+infer ranks are chosen after the
+        topology probe, so such a host budgets for the larger of the two.
+        """
+        ingress = 1 if rank == 0 else 0
+        engines = 8 * self.engines_per_host if self.inference.hosts_per_engine == 1 else 8
+        if self.inference_only:
+            return engines + ingress
+        if self.inference.remote_only:
+            return 8 + ingress
+        return max(8, engines) + ingress
 
     @property
     def ray_cpus_per_host(self):
@@ -548,7 +633,7 @@ class Config:
     @property
     def requires_source_overlay(self):
         return (not self.inference_only or self.adapter_count > 1 or self.inference.require_lease or self.is_recurrent_gemma or self.training_smoke
-                or bool(self.grading.families) or self.grading.farm_transport
+                or bool(self.grading_families) or self.grading.farm_transport
                 or self.has_problem_prompt_overlay or self.has_adaptive_pwc_overlay
                 or self.has_answer_only_overlay or self.trainer.backward_warmup
                 or self.inference.hosts_per_engine > 1
@@ -660,8 +745,12 @@ class Config:
             raise ValueError('remote_only requires TP x FSDP over every chip of the slice')
         if self.accelerator == 'tpu-v6e-8' and (self.trainer.process_bounds, self.trainer.chip_bounds) != ('1,1,1', '2,4,1'):
             raise ValueError('a v6e-8 trainer is one process over the 2x4 chips (process_bounds 1,1,1, chip_bounds 2,4,1)')
-        if self.bootstrap_layers or self.bootstrap_max_drafts or self.bootstrap_only:
-            raise ValueError('remote_only cannot bootstrap: bootstrap deploys and retires local engines')
+        if ((self.bootstrap_layers or self.bootstrap_max_drafts or self.bootstrap_only)
+                and (self.bootstrap_layers != 1 or self.bootstrap_all_hosts or self.bootstrap_only
+                     or not self.bootstrap_max_drafts)):
+            # No local engines exist to deploy and retire: only a bounded
+            # single-layer bootstrap sampled through the leased farms.
+            raise ValueError('remote_only bootstraps only a bounded single layer through its farms')
         if self.arena_grader_rank is not None or self.placement_ranks or self.frozen_benchmark or self.arena_samples:
             raise ValueError('remote_only excludes arena, placement and frozen-benchmark roles')
         if v.request_timeout < 86400:
@@ -845,13 +934,15 @@ class Config:
                                or (self.accelerator == 'tpu-v6e-32' and self.hosts == 8 and self.trainer.hosts == 4)
                                or (self.accelerator == 'tpu-v5p-32' and self.hosts == 4 and self.trainer.hosts == 1)
                                or (self.accelerator == 'tpu-v5p-64' and self.hosts == 8 and self.trainer.hosts == 1
-                                   and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
+                                   and self.science_task == 'placement' and self.science_placement_backend == 'cpu')
+                               or (self.inference.remote_only and self.trainer.hosts == self.hosts))
+            remote = self.inference.remote_only
             if (not bootstrap_shape
-                    or self.bootstrap_layers != 1 or not self.bootstrap_all_hosts or self.bootstrap_only
+                    or self.bootstrap_layers != 1 or self.bootstrap_all_hosts == remote or self.bootstrap_only
                     or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
                     or not (self.science_task or self.has_math_environment or self.is_recurrent_gemma)
                     or (self.is_recurrent_gemma != (self.arena_grader_rank is not None))
-                    or self.inference.hosts_per_engine != 1 or self.inference.tp != 4
+                    or (not remote and (self.inference.hosts_per_engine != 1 or self.inference.tp != 4))
                     or not self.inference.native_thinking_budget or self.inference.routing != 'ingress'
                     or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
                 raise ValueError('bounded bootstrap requires native v4-64/v5p-32/v6e-32 math, CPU science, or dedicated-grader RG training')
@@ -972,7 +1063,10 @@ class Config:
                 or (self.accelerator == "tpu-v5p-32" and self.trainer.hosts == 1
                     and (self.science_task == 'routing' or self.science_placement_backend == 'cpu'))
                 or (self.accelerator == "tpu-v5p-64" and self.trainer.hosts == 1
-                    and self.science_task == 'placement' and self.science_placement_backend == 'cpu'))
+                    and self.science_task == 'placement' and self.science_placement_backend == 'cpu')
+                # Remote-only trainers grade CPU science on their own pool and leased farms.
+                or (self.inference.remote_only and self.trainer.hosts == self.hosts
+                    and (self.science_task == 'routing' or self.science_placement_backend == 'cpu')))
             if ((not self.bootstrap_only and (self.inference_only
                     or not science_shape))
                     or self.arena_grader_rank is not None or placement_ranks or self.adapter_count != 1):

@@ -173,7 +173,8 @@ def test_full_bootstrap_publication_resume_and_no_training(tmp_path,valid,fixed)
         result=asyncio.run(b.run(c,'snapshot','head'))
         assert result['retained']==16 and result['optimizer_steps']==0 and len(calls)==(2 if fixed else 1)
         if fixed:
-            assert [request['seed'] for request in calls]==[0,1000003]
+            # TPU serving rejects per-request seeds; the bootstrap never sends one.
+            assert all('seed' not in request for request in calls)
             assert result['drafted']==32 and result['stop_reason']=='fixed_budget'
         log=tmp_path/'tinker_log'/c.run_id
         sampler=get_or_create_sampler_with_default(str(log),cls,'26',16)

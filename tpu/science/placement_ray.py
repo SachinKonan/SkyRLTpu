@@ -23,11 +23,19 @@ def grade_cpu_case(source, case, root, *, slots_per_host=16, admission_timeout_s
         validate(resource_contract)
         if resource_contract['slots'] != slots_per_host:
             raise ValueError('placement admission differs from resource contract')
-        slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s, cpus_per_case=resource_contract["cpus"])
+        from . import core_pool
+        try:
+            # Same per-case contract (pinned cores, GiB) from the shared pool.
+            cpus, lock = core_pool.acquire(resource_contract['cpus'], resource_contract['memory_gib'],
+                                           deadline_seconds=admission_timeout_s)
+            slot, admission = None, core_pool.VERSION
+        except core_pool.PoolUnavailable:
+            slot, cpus, lock = acquire(slots_per_host, deadline_seconds=admission_timeout_s, cpus_per_case=resource_contract["cpus"])
+            admission = 'cpu300-4g-v1'
         with lock:
             return _grade_case(source, case, root, 'cpu-jax', None, None,
                 cpu_slot=slot, slots_per_host=slots_per_host, helper=helper,
-                resource_contract=resource_contract, reserved_cpus=cpus)
+                resource_contract=resource_contract, reserved_cpus=cpus, admission=admission)
     slot, lock = acquire_slot(slots=slots_per_host, deadline_seconds=admission_timeout_s)
     with lock:
         return _grade_case(source, case, root, 'cpu-jax', None, None,
@@ -80,7 +88,7 @@ class PlacementPool:
             self.pending.clear()
 
 
-def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None, slots_per_host=None, helper='none', resource_contract=None, reserved_cpus=None):
+def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None, slots_per_host=None, helper='none', resource_contract=None, reserved_cpus=None, admission=None):
     if helper not in ('none', 'fast_proxy_v1') or (helper != 'none' and backend != 'cpu-jax'):
         raise ValueError('fast proxy requires CPU placement')
     from .worker import process_identity
@@ -108,7 +116,7 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
          f'--property=CPUQuota={100 * len(cpus)}%','--property=AllowedCPUs='+','.join(map(str,cpus)),
          '--property=TasksMax=1024',f'--property=RuntimeMaxSec={envelope_seconds}','--property=KillMode=control-group',
          '--property=TimeoutStopSec=2','--property=OOMPolicy=stop','--working-directory='+str(root),
-         str(root/'.science/venv/bin/python'),'-m','tpu.science.placement_task',
+         str(__import__('tpu.science.placement_resources', fromlist=['grader_python']).grader_python(root)),'-m','tpu.science.placement_task',
          '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
          '--owner-pid',str(os.getpid()),'--owner-start',process_identity(os.getpid())]
     started=time.monotonic()
@@ -132,7 +140,8 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
         accelerator=accelerator,physical_tpu_chips=1 if backend=='tpu' else 0,ray_executor=True)
     if cpu:
         result['metrics'].update(grading_slots_per_host=slots_per_host,
-                                 grading_memory_cap_gib=memory_gib*slots_per_host,resource_contract=resource_contract, cpu_slot=cpu_slot)
+                                 grading_memory_cap_gib=memory_gib*slots_per_host,resource_contract=resource_contract, cpu_slot=cpu_slot,
+                                 admission=admission)
     (folder/'verdict.json').write_text(json.dumps(result,allow_nan=False,indent=2))
     return result
 

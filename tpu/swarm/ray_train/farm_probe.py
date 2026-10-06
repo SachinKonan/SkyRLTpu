@@ -53,13 +53,13 @@ if a == 'status':
         out['ray_status'] = subprocess.run([ray, 'status'], capture_output=True, text=True, timeout=30).stdout[-1500:]
     except Exception as e:
         out['ray_status'] = repr(e)
-    out['units'] = subprocess.run(['systemctl', 'list-units', '--no-legend', 'ac2-grade-*'], capture_output=True, text=True).stdout
+    out['units'] = subprocess.run(['systemctl', 'list-units', '--no-legend', 'math-grade-*'], capture_output=True, text=True).stdout
 elif a == 'lease':
     out['acquire'] = call('POST', '/acquire_lease', {'owner_run': P['owner'], 'ttl_seconds': P.get('ttl', 300),
                                                     'compatibility_sha256': P.get('sha')})
 elif a == 'renew':
     out['renew'] = call('POST', '/acquire_lease', {'owner_run': P['owner'], 'ttl_seconds': P.get('ttl', 300),
-                                                  'lease_id': P['lease_id']})
+                                                  'lease_id': P['lease_id'], 'compatibility_sha256': P.get('sha')})
 elif a == 'capacity':
     out['capacity'] = call('GET', '/skyrl/v1/grading/capacity', headers=H)
 elif a == 'submit':
@@ -70,12 +70,20 @@ elif a == 'result':
 elif a == 'cancel':
     out['cancel'] = call('POST', '/skyrl/v1/grading/cancel/' + P['id'], headers=H)
     time.sleep(2)
-    out['units'] = subprocess.run(['systemctl', 'list-units', '--no-legend', 'ac2-grade-*'], capture_output=True, text=True).stdout
+    out['units'] = subprocess.run(['systemctl', 'list-units', '--no-legend', 'math-grade-*'], capture_output=True, text=True).stdout
 elif a == 'units':
-    out['units'] = subprocess.run(['systemctl', 'list-units', '--no-legend', 'ac2-grade-*'], capture_output=True, text=True).stdout
+    out['units'] = subprocess.run(['systemctl', 'list-units', '--no-legend', 'math-grade-*'], capture_output=True, text=True).stdout
     out['status'] = call('GET', '/status')[1].get('state'), call('GET', '/status')[1].get('grading')
 elif a == 'release':
     out['release'] = call('POST', '/release_lease', {'lease_id': P['lease_id']}, headers=H)
+elif a == 'generate':
+    s, r = call('POST', '/v1/completions', {'model': P['model'], 'prompt': P.get('prompt', 'Name three prime numbers.'),
+                                            'max_tokens': P.get('max_tokens', 64), 'temperature': 0,
+                                            **({'logprobs': 1} if P.get('logprobs') else {})}, headers=H, timeout=900)
+    choice = (r.get('choices') or [{}])[0] if isinstance(r, dict) else {}
+    out['generate'] = (s, dict(text=str(choice.get('text', ''))[:200], finish=choice.get('finish_reason'),
+                               logprobs=(choice.get('logprobs') or {}).get('token_logprobs', [])[:8] if P.get('logprobs') else None,
+                               usage=r.get('usage') if isinstance(r, dict) else None, detail=r if s != 200 else None))
 elif a == 'events':
     import glob, os
     paths = glob.glob(os.path.expanduser('~/.cache/*/runs/*/inference-events.jsonl'))
@@ -106,7 +114,7 @@ def rpc(args, params):
 
 def body(kind, timeout=60, sleep=30):
     code = CANDIDATES[kind] % sleep if kind == 'slow' else CANDIDATES[kind]
-    return dict(request_id=uuid.uuid4().hex, task='ac2', owner_run='probe', scope={'kind': kind},
+    return dict(request_id=uuid.uuid4().hex, task='math', owner_run='probe', scope={'kind': kind},
                 spec=dict(program_code=code, function_name='construct_function', eval_timeout_seconds=timeout,
                           admission_timeout_s=timeout))
 

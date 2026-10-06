@@ -80,16 +80,18 @@ ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
 BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
                    'tpu/swarm/ray_train/borrowing_phase.py'}
-# Client-side grading transport (local Ray pool + leased farms) and the AC2
+# Client-side grading transport (local Ray pool + leased farms) and the math
 # executor it dispatches; shipped whenever a profile declares grading families.
 GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.py',
                  'tpu/science/__init__.py', 'tpu/science/grading_transport.py', 'tpu/science/grading_dedup.py',
-                 'tpu/science/ac2_grade.py', 'tpu/science/ac2_runner.py', 'tpu/science/farm_resources.py',
+                 'tpu/science/math_grade.py', 'tpu/science/math_runner.py', 'tpu/science/farm_resources.py', 'tpu/science/core_pool.py',
                  'tpu/science/cgroup_limits.py', 'tpu/science/cpu_slots.py', 'tpu/science/worker.py',
                  'tpu/science/routing_resources.py', 'tpu/science/placement_resources.py',
                  'third_party/discover/ttt_discover/environments/sandbox_reward_evaluator.py',
                  'third_party/discover/ttt_discover/tinker_utils/dataset_builder.py',
-                 'third_party/discover/examples/ac_inequalities/env.py'}
+                 'third_party/discover/examples/ac_inequalities/env.py',
+                 # Erdős returns its triple through the flat sandbox wrapper.
+                 'third_party/discover/examples/erdos_min_overlap/env.py'}
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
 CHECKPOINT_FILES = {"skyrl/utils/checkpoint_mirror.py"}
 # The updated backend also returns per-datum trainer/sampler logprob summaries.
@@ -100,7 +102,7 @@ WARMUP_FILES = REPEATED_KV_FILES | {"skyrl/backends/backward_warmup.py", "tpu/sw
 SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/rl/resume.py'} | {
     'tpu/science/' + name for name in (
         '__init__.py', 'bootstrap.py', 'seed_pool.py', 'training_env.py', 'feedback.py', 'training_setup.py', 'ray_cpu.py', 'worker.py',
-        'routing.py', 'routing_suite.py', 'routing_parallel.py', 'routing_resources.py', 'manifests/routing-v1.json', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',
+        'routing.py', 'routing_suite.py', 'routing_parallel.py', 'routing_resources.py', 'core_pool.py', 'manifests/routing-v1.json', 'contracts.py', 'rewards.py', 'isolation.py', 'cgroup_limits.py', 'cpu_slots.py',
         'placement_ray.py', 'placement_resources.py', 'grading_dedup.py', 'placement_slots.py', 'placement_task.py', 'fast_proxy_deployment.py', 'challenge_seed_fast_proxy.py', 'challenge_contract.py',
         'seed_routing.py', 'challenge_seed.py', 'challenge_seed_jax.py', 'requirements-cpu.lock',
         'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt',

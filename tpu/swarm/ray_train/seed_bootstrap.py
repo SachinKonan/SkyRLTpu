@@ -208,11 +208,9 @@ async def run(config, snapshot, head):
     family = config.client_env['TTD_ANSWER_MODEL_FAMILY']
     async with httpx.AsyncClient(timeout=config.inference.request_timeout) as http:
         async def generate(index):
-            group_request = dict(request)
-            if config.bootstrap_seed is not None:
-                # Independent, stable seeds across groups and journal retries.
-                group_request['seed'] = (config.bootstrap_seed + index * 1000003) % (2**31)
-            response = await http.post(f'http://{head}:{config.ports.inference}/v1/completions', json=group_request)
+            # TPU serving rejects per-request seeds (ingress and tpu-inference);
+            # bootstrap_seed fixes the root state, sampling stays unseeded.
+            response = await http.post(f'http://{head}:{config.ports.inference}/v1/completions', json=request)
             response.raise_for_status()
             choices = response.json()['choices']
             for choice in choices: check_choice(choice, request)

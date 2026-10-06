@@ -1,5 +1,6 @@
 """AC2 through the grading transport: verifier injection, re-verification, error classes, dedup."""
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -39,7 +40,7 @@ def test_hybrid_backend_keeps_verifier_injection_and_driver_reverification(tmp_p
     task = evaluator(tmp_path, transport)
     out = task.get_reward(CODE, state)
     request = transport.requests[0]
-    assert request.task == 'ac2' and request.spec['function_name'] == 'construct_function'
+    assert request.task == 'math' and request.spec['function_name'] == 'construct_function'
     assert request.spec['eval_timeout_seconds'] == 1105 and request.admission_timeout_s == 1100
     assert 'def evaluate_sequence' in request.spec['program_code'] and 'height_sequence_1' in request.spec['program_code']
     assert 'return list(height_sequence_1)' in request.spec['program_code']
@@ -99,3 +100,51 @@ def test_ac2_env_dedups_exact_source_within_a_step(monkeypatch):
     asyncio.run(env._safe_grade('same source', 3))
     asyncio.run(env._safe_grade('same source', 3))
     assert len(calls) == 5  # No dedup outside the transport backends.
+
+
+class RunnerTransport:
+    """Runs each request through the real sandbox runner (no systemd)."""
+    def __init__(self, tmp_path):
+        self.tmp_path, self.requests = tmp_path, []
+
+    def grade_sync(self, request, timeout=None):
+        import json, os, subprocess, sys
+        from tpu.science.worker import process_identity
+        self.requests.append(request)
+        folder = self.tmp_path / f'job-{len(self.requests)}'
+        folder.mkdir()
+        spec = dict(request.spec, cpus=sorted(os.sched_getaffinity(0))[:2], stdout_limit_bytes=16384,
+                    memory_gib=4, systemd=False)
+        (folder / 'request.json').write_text(json.dumps(spec))
+        subprocess.run([sys.executable, '-m', 'tpu.science.math_runner', '--request', str(folder / 'request.json'),
+                        '--result', str(folder / 'result.json'), '--owner-pid', str(os.getpid()),
+                        '--owner-start', process_identity(os.getpid())], check=True, timeout=120,
+                       cwd=str(Path(__file__).resolve().parents[2]))
+        return json.loads((folder / 'result.json').read_text())
+
+
+ERDOS = '''```python
+import numpy as np
+
+def run():
+    n = 50
+    h = np.full(n, 0.5)
+    c5 = verify_c5_solution(h, 0.0, n) if False else float(np.max(np.correlate(h, 1 - h, mode="full") * (2.0 / n)))
+    return h, c5, n
+```'''
+
+
+def test_erdos_tuple_round_trips_through_the_flat_sandbox(tmp_path):
+    erdos = pytest.importorskip('examples.erdos_min_overlap.env')
+    state = erdos.ErdosMinOverlapEnv.create_initial_state('')
+    task = erdos.ErdosMinOverlapRewardEvaluator(problem_type='', log_dir=str(tmp_path / 'log'),
+                                                num_cpus_per_task=2, eval_timeout=120, eval_backend='hybrid')
+    task.transport = RunnerTransport(tmp_path)
+    out = task.get_reward(ERDOS, state)
+    request = task.transport.requests[0]
+    assert request.spec['function_name'] == '_skyrl_flat_run' and 'def run()' in request.spec['program_code']
+    assert out['correctness'] == 1.0 and out['raw_score'] == pytest.approx(0.5, abs=1e-9)
+    assert len(out['result_construction']) == 50
+    # A run() that does not return the triple is a candidate failure, not a crash.
+    bad = task.get_reward('```python\ndef run():\n    return 1.0\n```', state)
+    assert bad['correctness'] == 0.0 and 'Program execution failed' in bad['msg']

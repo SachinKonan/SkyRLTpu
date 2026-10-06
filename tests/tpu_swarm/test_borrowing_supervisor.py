@@ -156,3 +156,19 @@ def test_render_bounded_legacy_pool_exception():
     assert '"--farm-pool" "farm"' in text
     assert '"--farm-pool-max-job-id" "1373"' in text
     assert '"--farm-name-contains" "inference-farm"' in text
+
+
+def test_render_discovery_group_for_isolated_campaign():
+    from tpu.swarm.ray_train.borrowing_service import unit
+    text = unit('/code', '/python', '/env', '/ssh', None, ['train'], '/lock',
+                farm_name_contains='rq4-qwen-asia', discovery_group='rq4-qwen-asia')
+    assert '"--farm-name-contains" "rq4-qwen-asia"' in text
+    assert '"--discovery-group" "rq4-qwen-asia"' in text
+
+
+def test_render_rejects_invalid_discovery_group():
+    import pytest
+    from tpu.swarm.ray_train.borrowing_service import unit
+    with pytest.raises(ValueError, match='discovery_group'):
+        unit('/code', '/python', '/env', '/ssh', None, ['train'], '/lock',
+             discovery_group='RQ4/other')

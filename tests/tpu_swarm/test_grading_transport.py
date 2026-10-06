@@ -9,7 +9,7 @@ import pytest
 
 from tpu.science import grading_transport as gt
 
-FAMILIES = {'ac2': {'slots_per_host': 2, 'cpus': 2, 'memory_gib': 4}}
+FAMILIES = {'math': {'slots_per_host': 2, 'cpus': 2, 'memory_gib': 4}}
 
 
 class GradingFarm:
@@ -32,7 +32,7 @@ class GradingFarm:
         assert request.headers['X-Lease-ID'] == f'token-{host}'
         if path == '/skyrl/v1/grading/capacity':
             return httpx.Response(200, json={'ready': True, 'hosts': 1, 'families': {
-                'ac2': dict(FAMILIES['ac2'], total=self.capacity, running=0, queued=0)}})
+                'math': dict(FAMILIES['math'], total=self.capacity, running=0, queued=0)}})
         if path == '/skyrl/v1/grading/submit':
             body = json.loads(request.content)
             if host in self.busy:
@@ -100,7 +100,7 @@ def transport(farm, farms, **kwargs):
 
 
 def request(**spec):
-    return gt.GradingRequest(task='ac2', spec=dict(program_code='x', function_name='construct_function',
+    return gt.GradingRequest(task='math', spec=dict(program_code='x', function_name='construct_function',
                                                    eval_timeout_seconds=1105, **spec), admission_timeout_s=1100)
 
 
@@ -113,7 +113,7 @@ def test_local_and_farm_pools_share_candidates_by_predicted_admission():
         t = transport(farm, ['a', 'b'], local=local)
         try:
             await t._ensure_started()
-            assert t.directory.pools['a'].capacity_for('ac2') == 4
+            assert t.directory.pools['a'].capacity_for('math') == 4
             results = await asyncio.gather(*(t.grade(request()) for _ in range(12)))
             assert len(results) == 12 and all('result' in r for r in results)
             pools = {f['pool'] for e, f in t.reports if e == 'grading_dispatched'}
@@ -162,7 +162,7 @@ def test_first_result_wins_for_duplicate_ids_and_cancel_reaches_the_farm():
         try:
             req = request()
             first = await t.grade(req)
-            again = await t.grade(gt.GradingRequest(task='ac2', spec=req.spec, request_id=req.request_id))
+            again = await t.grade(gt.GradingRequest(task='math', spec=req.spec, request_id=req.request_id))
             assert first is again and len(farm.submits) == 1
             assert any(e == 'grading_duplicate_request' for e, _ in t.reports)
             # A cancelled in-flight grade is cancelled on the farm too.
@@ -191,7 +191,7 @@ def test_candidate_failure_is_not_retried_and_infra_failure_escalates():
             assert 'timed out' in result['error'] and not any(e == 'grading_retry' for e, _ in t.reports)
             farm.outcomes['a'] = failed('WorkerCrashedError: node lost')
             with pytest.raises(gt.GradingInfrastructureError) as info:
-                await t.grade(gt.GradingRequest(task='ac2', spec=request().spec, deadline_s=2))
+                await t.grade(gt.GradingRequest(task='math', spec=request().spec, deadline_s=2))
             assert getattr(info.value, 'abort_training_step') is True
             failures = [f for e, f in t.reports if e == 'grading_infra_failure']
             assert failures and failures[0]['attempts'] >= 1

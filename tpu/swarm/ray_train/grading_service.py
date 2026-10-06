@@ -4,7 +4,7 @@ The ingress owns the lease, so it also owns grading admission: every request
 carries the lease token, results are retained briefly for the owning trainer
 to fetch, and lease release/expiry cancels everything in flight. The ingress
 never executes candidates; it dispatches the same Ray tasks trainer hosts use
-(``tpu.science.ac2_grade.grade_ac2``, ``tpu.science.ray_cpu.grade``,
+(``tpu.science.math_grade.grade_math``, ``tpu.science.ray_cpu.grade``,
 ``tpu.science.placement_ray.grade_cpu_case``) with per-family Ray slot tokens
 declared by ``bootstrap.workload_resources``.
 
@@ -24,7 +24,7 @@ REQUEST_ID = re.compile(r'[0-9a-f]{32}')
 IDENTIFIER = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 TERMINAL = ('done', 'failed', 'cancelled')
 MAX_PROGRAM_BYTES = 1024 * 1024
-REFERENCE_AC2 = 'def construct_function():\n    return [1.0] * 1000\n'
+REFERENCE_MATH = 'def construct_function():\n    return [1.0] * 1000\n'
 
 
 @dataclass
@@ -122,6 +122,8 @@ class GradingService:
         if not isinstance(body, dict):
             raise ValueError('grading request must be a JSON object')
         request_id, task, spec = body.get('request_id'), body.get('task'), body.get('spec')
+        if task == 'ac2':  # older trainers name the math family 'ac2'
+            task = body['task'] = 'math'
         if not isinstance(request_id, str) or not REQUEST_ID.fullmatch(request_id):
             raise ValueError('request_id must be a 32-character hex id')
         if task not in self.families:
@@ -129,7 +131,7 @@ class GradingService:
         if not isinstance(spec, dict):
             raise ValueError('spec must be an object')
         limit = self.settings.stdout_limit_bytes
-        if task == 'ac2':
+        if task == 'math':
             code, name = spec.get('program_code'), spec.get('function_name')
             if not isinstance(code, str) or not code or len(code.encode()) > MAX_PROGRAM_BYTES:
                 raise ValueError('program_code must be a nonempty string of at most 1 MiB')
@@ -176,11 +178,11 @@ class GradingService:
     def dispatch(self, task, spec):
         """Return a Ray ObjectRef (or any awaitable) for one candidate."""
         root = self.worker_root
-        if task == 'ac2':
-            from tpu.science.ac2_grade import grade_ac2
-            family = self.families['ac2']
-            return grade_ac2.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
-                                     resources={'grading_ac2': 1}, scheduling_strategy='SPREAD'
+        if task == 'math':
+            from tpu.science.math_grade import grade_math
+            family = self.families['math']
+            return grade_math.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
+                                     resources={'grading_math': 1}, scheduling_strategy='SPREAD'
                                      ).remote(spec, self.families, root)
         if task == 'routing':
             from tpu.science.ray_cpu import grade
@@ -351,14 +353,14 @@ class GradingService:
                         self.readiness[f'{name}@{ip}'] = 'node missing'
                         continue
                     strategy = NodeAffinitySchedulingStrategy(node, soft=False)
-                    if name == 'ac2':
-                        from tpu.science.ac2_grade import grade_ac2
-                        family = self.families['ac2']
-                        spec = dict(program_code=REFERENCE_AC2, function_name='construct_function',
+                    if name == 'math':
+                        from tpu.science.math_grade import grade_math
+                        family = self.families['math']
+                        spec = dict(program_code=REFERENCE_MATH, function_name='construct_function',
                                     eval_timeout_seconds=60, admission_timeout_s=600, stdout_limit_bytes=1024,
                                     systemd=bool(self.settings.local_systemd))
-                        ref = grade_ac2.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
-                                                resources={'grading_ac2': 1}, scheduling_strategy=strategy
+                        ref = grade_math.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
+                                                resources={'grading_math': 1}, scheduling_strategy=strategy
                                                 ).remote(spec, self.families, self.worker_root)
                         result = await self.awaitable(ref)
                         ok = isinstance(result, dict) and result.get('result') == [1.0] * 1000

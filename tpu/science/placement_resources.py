@@ -8,6 +8,15 @@ import stat
 import time
 
 VERSION='cpu300-4g-v1'
+# A host that also grades routing keeps the placement pins in their own venv
+# (the two locks disagree on matplotlib/sympy); single-family hosts use venv.
+SHARED_HOST_VENV = 'venv-placement'
+
+
+def grader_python(root):
+    root = Path(root)
+    shared = root / '.science' / SHARED_HOST_VENV / 'bin/python'
+    return shared if shared.exists() else root / '.science/venv/bin/python'
 
 def contract(slots=32, *, cpus=4, memory_gib=4):
     if type(cpus) is not int or cpus not in (2, 4):

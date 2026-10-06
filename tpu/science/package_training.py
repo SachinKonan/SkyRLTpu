@@ -11,13 +11,43 @@ from tpu.swarm.ray_train.build import build
 from tpu.swarm.ray_train.config import Config
 
 
+CPU_BUNDLE_SHA256 = '2445286f0b92ee4977d839f69359baf7b8d483523e4b3e172bb493c6163f9c50'
+# A farm grades placement for whichever trainer leases it, so it carries the
+# campaign's circuit grader exactly: CPU five-minute runtime, fast proxy
+# helper and the three-start ibm17 inputs.
+FARM_PLACEMENT_HELPER = 'fast_proxy_v1'
+FARM_PLACEMENT_STARTS = 'abuplace-xplace-three-starts-v1'
+
+
+def science_tasks(config):
+    """Science grader environments this profile's hosts must prepare."""
+    if config.inference_only:
+        return sorted({'routing', 'placement'} & set(config.grading_families))
+    return [config.science_task] if config.science_task else []
+
+
+def placement_settings(config):
+    if config.inference_only and 'placement' in config.grading_families:
+        family = config.grading_families['placement']
+        return dict(backend='cpu', runtime='cpu300-4g-v1', helper=FARM_PLACEMENT_HELPER,
+                    starts=FARM_PLACEMENT_STARTS, slots=family['slots_per_host'],
+                    cpus=family['cpus'], memory_gib=family['memory_gib'])
+    return dict(backend=config.science_placement_backend, runtime=config.science_placement_runtime,
+                helper=config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none'),
+                starts=config.client_env.get('SCIENCE_PLACEMENT_STARTS', ''),
+                slots=config.science_placement_slots_per_host, cpus=config.science_placement_cpus_per_case,
+                memory_gib=config.science_placement_memory_gib)
+
+
 def package(profile, output):
     config = Config.load(profile)
     # Inference farms that grade a science family need the same grader
     # environment as a science trainer; AC2-only farms use the generic bundle.
-    task_name = config.grading_science_task
-    if not task_name or (config.inference_only and not (config.bootstrap_only or config.grading_families)):
+    tasks = science_tasks(config)
+    task_name = '+'.join(tasks)
+    if not tasks or (config.inference_only and not (config.bootstrap_only or config.grading_families)):
         raise ValueError('expected a science training profile or a farm with a science grading family')
+    placement = placement_settings(config)
     root = Path(__file__).resolve().parents[2]
     out = Path(output).resolve()
     native, _, task = build(profile, out, _executor_only=True)
@@ -27,17 +57,17 @@ def package(profile, output):
                  'prompts/placement-jax-v6e.txt', 'prompts/placement-jax-cpu.txt', 'prompts/placement-fast-proxy-cpu-v1.txt',
                  'prompts/placement-fast-proxy-cpu-ibm17-v2.txt', 'manifests/routing-v1.json'):
         files['tpu/science/' + name] = root / 'tpu/science' / name
-    if config.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1':
+    if 'placement' in tasks and placement['helper'] == 'fast_proxy_v1':
         for name in ('__init__.py', 'build.py', 'congestion.c', 'LICENSE-AbuPlace', 'README.md'):
             files['tpu/science/fast_proxy/' + name] = root / 'tpu/science/fast_proxy' / name
-    if task_name == 'placement':
+    if 'placement' in tasks:
         from .challenge_contract import CASES
         from .placement_warm_start import verified_inputs, DESTINATION
         folder = root / DESTINATION
-        if config.client_env.get('SCIENCE_PLACEMENT_STARTS') == 'abuplace-xplace-three-starts-v1':
+        if placement['starts'] == 'abuplace-xplace-three-starts-v1':
             from .placement_start_portfolio import DESTINATION as PORTFOLIO
             folder = root / PORTFOLIO
-        elif config.client_env.get('SCIENCE_PLACEMENT_STARTS'):
+        elif placement['starts']:
             raise ValueError('unknown placement starting layouts')
         starts = verified_inputs(root, folder=folder)
         files['.science/placement-inputs/manifest.json'] = folder / 'manifest.json'
@@ -62,29 +92,35 @@ def package(profile, output):
     doc = yaml.safe_load(task.read_text())
     doc['envs'].update(RAY_TRAIN_CODE=config.bucket + '/code-bundles/science-training-' + digest + '.tar.gz',
                        RAY_TRAIN_CODE_SHA256=digest, SCIENCE_ACCELERATOR=config.accelerator,
-                       SCIENCE_PLACEMENT_BACKEND=config.science_placement_backend,
-                       SCIENCE_PLACEMENT_RUNTIME=config.science_placement_runtime,
-                       SCIENCE_PLACEMENT_HELPER=config.client_env.get('SCIENCE_PLACEMENT_HELPER', 'none'),
-                       SCIENCE_PLACEMENT_SLOTS_PER_HOST=str(config.science_placement_slots_per_host),
-                       SCIENCE_PLACEMENT_CPUS_PER_CASE=str(config.science_placement_cpus_per_case),
-                       SCIENCE_PLACEMENT_MEMORY_GIB=str(config.science_placement_memory_gib),
+                       SCIENCE_PLACEMENT_BACKEND=placement['backend'],
+                       SCIENCE_PLACEMENT_RUNTIME=placement['runtime'],
+                       SCIENCE_PLACEMENT_HELPER=placement['helper'],
+                       SCIENCE_PLACEMENT_SLOTS_PER_HOST=str(placement['slots']),
+                       SCIENCE_PLACEMENT_CPUS_PER_CASE=str(placement['cpus']),
+                       SCIENCE_PLACEMENT_MEMORY_GIB=str(placement['memory_gib']),
                        PLACEMENT_TPU_RANKS=','.join(map(str, range(config.hosts))))
     prep = '''cd "$code"
 export SCIENCE_WORKER_ROOT="$code"
 '''
-    if task_name == 'routing':
+    if 'routing' in tasks:
+        # The runtime bundle lives in every region's bucket; never read another region.
         doc['envs'].update(
-            SCIENCE_CPU_BUNDLE='gs://sk7524-tinker-tpu-us-central2/code-bundles/science-cpu-2445286f0b92ee4977d839f69359baf7b8d483523e4b3e172bb493c6163f9c50.tar.gz',
-            SCIENCE_CPU_SHA256='2445286f0b92ee4977d839f69359baf7b8d483523e4b3e172bb493c6163f9c50')
-        prep += '''if [ ! -f "$code/.science/ready.json" ]; then
-  gcloud storage cp "$SCIENCE_CPU_BUNDLE" "$code/cpu-runtime.tar.gz"
+            SCIENCE_CPU_BUNDLE=f'{config.bucket}/code-bundles/science-cpu-{CPU_BUNDLE_SHA256}.tar.gz',
+            SCIENCE_CPU_SHA256=CPU_BUNDLE_SHA256)
+        prep += '''if [ ! -f "$code/.science/routing-prepared" ]; then
+  # TPU images lack gcloud-crc32c for sliced downloads; the SHA-256 check below verifies the bundle.
+  CLOUDSDK_STORAGE_CHECK_HASHES=never gcloud storage cp "$SCIENCE_CPU_BUNDLE" "$code/cpu-runtime.tar.gz"
   printf '%s  %s\\n' "$SCIENCE_CPU_SHA256" "$code/cpu-runtime.tar.gz" | sha256sum -c -
   tar -xzf "$code/cpu-runtime.tar.gz" -C "$code" .science/routing-task .science/rustup .science/cargo
   rm "$code/cpu-runtime.tar.gz"
   bash "$code/tpu/science/prepare_cpu_host.sh"
+  touch "$code/.science/routing-prepared"
 fi
 '''
-    else:
+    if 'placement' in tasks:
+        if 'routing' in tasks:
+            # Placement pins differ from routing's; keep them in their own venv.
+            doc['envs']['SCIENCE_PLACEMENT_VENV'] = 'venv-placement'
         # The physical grader rank is selected after topology probing. Prepare
         # dependencies on all hosts; CPU profiles grade on every host.
         prep += '''sudo -n apt-get -o DPkg::Lock::Timeout=600 update -qq

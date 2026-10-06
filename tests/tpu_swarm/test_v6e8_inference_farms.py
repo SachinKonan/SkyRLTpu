@@ -78,7 +78,7 @@ def test_single_engine_hosts_keep_the_libtpu_lock():
 def test_grading_farm_cpu_budget_covers_every_engine_and_slot():
     farm = v6e8_config()
     farm = Config.from_dict(dict(farm.to_dict(), grading={
-        "families": {"ac2": {"slots_per_host": 16, "cpus": 2, "memory_gib": 4}}},
+        "families": {"math": {"slots_per_host": 16, "cpus": 2, "memory_gib": 4}}},
         systemd_runtime=True, cache=dict(farm.to_dict()["cache"], reserve_gib=192)))
     # Two TP4 engines (2 x 8) + ingress (1) + overhead (8) + 16 slots x 2 CPUs.
     assert farm.ray_cpus_per_host == 16 + 9 + 32
@@ -92,7 +92,7 @@ def test_v6e8_grading_farm_profiles(run):
     assert config.inference.tp == 4 and config.engines_per_host == 2
     assert config.inference.max_sequences == 32
     assert config.inference.require_lease and config.inference.external_pool_attestation
-    assert set(config.grading_families) == {"ac2"}
+    assert set(config.grading_families) == {"math"}
     assert run in config.cache.inference_compile
 
 

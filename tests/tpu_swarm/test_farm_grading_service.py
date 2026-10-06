@@ -23,7 +23,7 @@ async def grading_farm(tmp_path, monkeypatch, slots_per_host=16):
     cfg['root'] = str(tmp_path)
     cfg['inference']['external_pool_attestation'] = False
     cfg['cache']['reserve_gib'] = 192
-    cfg['grading'] = {'families': {'ac2': {'slots_per_host': slots_per_host, 'cpus': 2, 'memory_gib': 4}},
+    cfg['grading'] = {'families': {'math': {'slots_per_host': slots_per_host, 'cpus': 2, 'memory_gib': 4}},
                       'result_retention_seconds': 60, 'long_poll_seconds': 2}
     ips = [f'10.0.0.{i}' for i in range(1, 5)]
     catalog = serving.Catalog.__ray_metadata__.modified_class(ips, 0)
@@ -73,7 +73,7 @@ async def grading_farm(tmp_path, monkeypatch, slots_per_host=16):
         await gateway.http.aclose()
 
 
-def body(task='ac2', **spec):
+def body(task='math', **spec):
     default = dict(program_code='def construct_function():\n    return [1.0]\n', function_name='construct_function',
                    eval_timeout_seconds=1105, admission_timeout_s=1100)
     return dict(request_id=uuid.uuid4().hex, task=task, owner_run='pilot', scope={'step': 1},
@@ -201,14 +201,14 @@ def test_capacity_status_and_backpressure(tmp_path, monkeypatch):
             headers = await lease_for(client)
             capacity = (await client.get('/skyrl/v1/grading/capacity', headers=headers)).json()
             assert capacity['ready'] and capacity['hosts'] == 4
-            assert capacity['families']['ac2'] == dict(slots_per_host=1, cpus=2, memory_gib=4, total=4, running=0, queued=0)
+            assert capacity['families']['math'] == dict(slots_per_host=1, cpus=2, memory_gib=4, memory_max_gib=8, total=4, running=0, queued=0)
             statuses = [(await client.post('/skyrl/v1/grading/submit', json=body(), headers=headers)).status_code
                         for _ in range(9)]
             assert statuses == [202] * 8 + [429]
             status = (await client.get('/status')).json()['grading']
-            assert status['queue_depth'] == 8 and status['ready'] and status['families'] == ['ac2']
+            assert status['queue_depth'] == 8 and status['ready'] and status['families'] == ['math']
             capacity = (await client.get('/skyrl/v1/grading/capacity', headers=headers)).json()
-            assert capacity['families']['ac2']['running'] == 8
+            assert capacity['families']['math']['running'] == 8
             for future in futures:
                 future.set_result(dict(result=[1.0], error=None, stdout='', metrics={'host': '10.0.0.1'}))
             await asyncio.sleep(.05)

@@ -35,7 +35,7 @@ if int(mem['MemAvailable'].split()[0]) < required_gib*1024**2:
     raise RuntimeError('insufficient available host RAM for grading slots plus 8 GiB headroom')
 uv=str(Path.home()/'.local/bin/uv')
 for name,version,lock,extras in [
-    ('venv','3.11.13','requirements-challenge-pilot.lock',['--extra-index-url','https://download.pytorch.org/whl/cpu','--index-strategy','unsafe-best-match']),
+    (os.environ.get('SCIENCE_PLACEMENT_VENV', 'venv'),'3.11.13','requirements-challenge-pilot.lock',['--extra-index-url','https://download.pytorch.org/whl/cpu','--index-strategy','unsafe-best-match']),
     ('candidate-venv','3.12.12','requirements-placement-candidate.lock',[])]:
     target=root/'.science'/name; req=root/'tpu/science'/lock
     digest=hashlib.sha256(req.read_bytes()).hexdigest();marker=target/'.placement-lock'
@@ -44,7 +44,7 @@ for name,version,lock,extras in [
         subprocess.run([uv,'--no-config','pip','sync','--python',str(target/'bin/python'),str(req),*extras],check=True)
         marker.write_text(digest)
     elif marker.read_text()!=digest:raise RuntimeError('environment lock mismatch; use a new runtime directory')
-subprocess.run([str(root/'.science/venv/bin/python'), '-c',
+subprocess.run([str(root/'.science'/os.environ.get('SCIENCE_PLACEMENT_VENV', 'venv')/'bin/python'), '-c',
     "from pathlib import Path; from tpu.science.placement_warm_start import verified_inputs; "
     "verified_inputs(Path.cwd(), folder=Path('.science/placement-inputs'))"], check=True)
 subprocess.run(['bwrap','--version'],check=True)

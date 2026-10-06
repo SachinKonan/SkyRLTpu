@@ -6,8 +6,13 @@ from ray.util.placement_group import placement_group
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy, PlacementGroupSchedulingStrategy
 
 
-def split_roles(task, train_ranks, inference_ranks, *, placement_backend='tpu', accelerator=None):
+def split_roles(task, train_ranks, inference_ranks, *, placement_backend='tpu', accelerator=None, remote_only=False):
     train, inference = list(train_ranks), list(inference_ranks)
+    if remote_only:
+        # Every host trains; CPU science grades on each host's pool and on farms.
+        if inference or not train or not (task == 'routing' or placement_backend == 'cpu'):
+            raise ValueError('remote-only science requires all-trainer hosts and CPU grading')
+        return train, inference, None
     v5p_cpu = accelerator == 'tpu-v5p-32' and (task == 'routing' or
                                              (task == 'placement' and placement_backend == 'cpu'))
     v5p64_placement = accelerator == 'tpu-v5p-64' and task == 'placement' and placement_backend == 'cpu'
