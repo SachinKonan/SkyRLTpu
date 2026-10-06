@@ -208,3 +208,14 @@ def test_ray_service_cpus_follow_each_host_role(tmp_path):
     assert mixed.ray_service_cpus(0) == 9 and mixed.ray_service_cpus(2) == 8
     # Trainer hosts keep their declared grading memory (legacy 16 x 4 = 64 GiB for math).
     assert remote.grading_memory_gib == min(remote.cache.reserve_gib - 64, 16 * 4)
+
+
+def test_trainer_grading_memory_sums_its_families(tmp_path):
+    from pathlib import Path
+    from tpu.swarm.ray_train.config import Config
+    profile = Path(__file__).parents[2] / 'tpu/swarm/ray_train/profiles/remote-only-v5p32-qwen-ac2-pilot-20260924.json'
+    raw = Config.load(profile).to_dict()
+    raw['root'] = str(tmp_path)
+    raw['cache'] = dict(raw['cache'], reserve_gib=400)
+    raw['grading'] = dict(raw['grading'], families={'math': {'slots_per_host': 16}, 'routing': {'slots_per_host': 4, 'cpus': 10, 'memory_gib': 20}})
+    assert Config.from_dict(raw).grading_memory_gib == 16 * 4 + 4 * 20

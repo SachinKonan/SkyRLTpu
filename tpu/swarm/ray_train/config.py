@@ -590,7 +590,8 @@ class Config:
             caps.append(self.science_routing_slots_per_host * 20)
         if self.science_placement_runtime == 'cpu300-4g-v1':
             caps.append(self.science_placement_slots_per_host * self.science_placement_memory_gib)
-        return max(1, min([available, *caps])) if caps else available
+        # Families grade side by side on one host, so their caps add up.
+        return max(1, min(available, sum(caps))) if caps else available
 
     def ray_service_cpus(self, rank):
         """Ray CPUs for this host's non-grading actors.
