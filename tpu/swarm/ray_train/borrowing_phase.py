@@ -17,6 +17,8 @@ async def sampling_phase(url=None, *, bootstrap=False, expected_n=None):
     if not url:
         yield
         return
+    # A no-LoRA client samples the base model: own the farms without an adapter.
+    bootstrap = bootstrap or os.environ.get('SKYRL_BORROWING_BASE_MODEL') == '1'
     phase = uuid.uuid4().hex
     prepare = float(os.environ.get('SKYRL_BORROWING_PREPARE_TIMEOUT', '130'))
     release = float(os.environ.get('SKYRL_BORROWING_RELEASE_TIMEOUT', '20'))
