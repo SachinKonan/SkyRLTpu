@@ -50,6 +50,10 @@ def child_environment(config, root, args, gcs):
                SKYRL_GRADING_LOCAL_SLOTS='0', SKYRL_GRADING_LOCAL_HOSTS='0',
                PYTHONPATH=f'{args.package}:{args.source}:{args.source / "tpu"}:{args.source / "third_party/discover"}')
     env.pop('TINKER_BASE_URL', None)
+    if args.num_epochs:
+        # Client-only: the frozen client resumes at its global step, and the
+        # bootstrap contract (profile config) is unaffected.
+        env['NUM_EPOCHS'] = str(args.num_epochs)
     return env
 
 
@@ -231,6 +235,7 @@ def main():
     parser.add_argument('--python', type=Path, required=True, help='Client environment interpreter')
     parser.add_argument('--hf-home', type=Path, required=True)
     parser.add_argument('--snapshot', type=Path, required=True, help='Tokenizer snapshot of the served model')
+    parser.add_argument('--num-epochs', type=int, help='Total client steps (overrides the profile NUM_EPOCHS)')
     sys.exit(Run(parser.parse_args()).main())
 
 
