@@ -30,6 +30,10 @@ class Tunnel:
         self.starts = 0
 
     def ensure(self):
+        if self.process is None and self.starts == 0 and self.healthy():
+            # Adopt a tunnel a previous daemon left serving this port, so a
+            # daemon restart never cuts the runs' in-flight requests.
+            return
         if self.process is None or self.process.poll() is not None:
             self.starts += 1
             self.process = subprocess.Popen(self.args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
@@ -65,12 +69,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', type=Path, required=True)
     parser.add_argument('--ssh-config-dir', type=Path, required=True)
-    parser.add_argument('--name-contains', action='append', required=True,
-                        help='Farm job-name substring (repeatable), e.g. inference-farm-rq4-gemma-')
+    parser.add_argument('--name-contains', action='append',
+                        help='Farm job-name substring (repeatable); default: every inference-farm job. '
+                             'Runs pick farms by served model, never by name.')
     parser.add_argument('--farm-port', type=int, default=24800)
     parser.add_argument('--port-base', type=int, default=27000)
     parser.add_argument('--interval', type=int, default=20)
     args = parser.parse_args()
+    args.name_contains = args.name_contains or ['inference-farm']
     tunnels = {}
     try:
         while True:
