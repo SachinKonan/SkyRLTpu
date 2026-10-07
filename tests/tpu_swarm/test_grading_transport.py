@@ -307,3 +307,11 @@ def test_is_infrastructure_classification():
     assert gt.is_infrastructure(RuntimeError('Routing grader infrastructure failed: y'))
     assert gt.is_infrastructure(TimeoutError('admission timed out'))
     assert not gt.is_infrastructure(ValueError('bad candidate'))
+
+
+def test_farm_requests_queue_for_a_connection_instead_of_failing():
+    # ~1000 grades in flight each hold a long poll; a full pool must queue.
+    from tpu.science import grading_transport as gt
+    timeout = gt.wait_for_connection(50)
+    assert timeout.pool is None and timeout.read == 50 and timeout.connect == 50
+    assert gt.FARM_CONNECTIONS >= 256

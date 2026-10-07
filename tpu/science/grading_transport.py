@@ -29,6 +29,16 @@ INFRA_MARKERS = ('infrastructure', 'admission timed out', 'before the candidate 
                  'RaySystemError', 'cpu_scheduler')
 
 
+# Every grade in flight on a farm holds a long poll. A remote-only client can
+# have ~1000 in flight, so a full connection pool must queue a request rather
+# than fail it as infrastructure (httpx's default 5 s pool timeout did).
+FARM_CONNECTIONS = 256
+
+
+def wait_for_connection(seconds):
+    return httpx.Timeout(seconds, pool=None)
+
+
 class GradingInfrastructureError(RuntimeError):
     """No pool could run the candidate; the training step must not use a fake zero."""
     abort_training_step = True
@@ -189,7 +199,8 @@ class FarmPool(Pool):
     async def probe_capacity(self):
         """Learn per-family slot totals and readiness from the farm itself."""
         try:
-            response = await self.http.get(self.url + '/skyrl/v1/grading/capacity', headers=self.headers, timeout=10)
+            response = await self.http.get(self.url + '/skyrl/v1/grading/capacity', headers=self.headers,
+                                           timeout=wait_for_connection(10))
             response.raise_for_status()
             capacity = response.json()
         except Exception:
@@ -203,7 +214,7 @@ class FarmPool(Pool):
                     scope=request.scope, spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
         while True:
             response = await self.http.post(self.url + '/skyrl/v1/grading/submit', json=body, headers=self.headers,
-                                            timeout=30)
+                                            timeout=wait_for_connection(30))
             if response.status_code == 429:
                 # Farm backpressure is a wait, never a retry: the request keeps
                 # its queued slot in this pool's accounting.
@@ -217,7 +228,7 @@ class FarmPool(Pool):
                 raise GradingInfrastructureError(f'farm {self.name}: lease no longer eligible')
             response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{request.request_id}',
                                            params={'wait': self.long_poll_seconds}, headers=self.headers,
-                                           timeout=self.long_poll_seconds + 30)
+                                           timeout=wait_for_connection(self.long_poll_seconds + 30))
             response.raise_for_status()
             view = response.json()
             state = view.get('state')
@@ -233,7 +244,7 @@ class FarmPool(Pool):
 
     async def cancel(self, request_id):
         try:
-            await self.http.post(f'{self.url}/skyrl/v1/grading/cancel/{request_id}', headers=self.headers, timeout=10)
+            await self.http.post(f'{self.url}/skyrl/v1/grading/cancel/{request_id}', headers=self.headers, timeout=wait_for_connection(10))
         except Exception:
             pass
 
@@ -256,7 +267,7 @@ class FarmDirectory:
         if not self.url:
             return
         try:
-            response = await self.http.get(self.url + '/skyrl/v1/grading/farms', timeout=10)
+            response = await self.http.get(self.url + '/skyrl/v1/grading/farms', timeout=wait_for_connection(10))
             response.raise_for_status()
             farms = response.json().get('farms', [])
         except Exception as exc:
@@ -369,7 +380,8 @@ class GradingTransport:
             return
         self._started = True
         if self.http is None:
-            self.http = httpx.AsyncClient()
+            self.http = httpx.AsyncClient(limits=httpx.Limits(max_connections=FARM_CONNECTIONS,
+                                                              max_keepalive_connections=FARM_CONNECTIONS))
         self.directory = FarmDirectory(self.farm_url, self.http, refresh_seconds=self.refresh_seconds,
                                        long_poll_seconds=self.long_poll_seconds, poll_seconds=self.poll_seconds,
                                        report=self.report)
