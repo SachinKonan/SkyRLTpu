@@ -43,3 +43,10 @@ child (`run_with_timeout`, 2 pinned cores, no memory limit) and by the pooled ma
   - Two more programs (#15, #76) were valid in the original hardware run and invalid under both graders on re-run.
 - Edge cases: all 14 agree on validity. A 6 GiB program passes both (the old 4 GiB cap killed such programs: 3/16 ac1
   smoke programs were OOM-killed at 4 GiB); a 12 GiB program is killed by the pooled grader.
+| Qwen3.8 remote-only v5p-32 erdos (1983) | PASS: 16 rollouts on farms, 13 graded via pooled math (3 format), 5 valid, best C5 0.3814, train 131 s |
+| Qwen3.8 remote-only v5p-32 qubit (1985) | PASS: survived a trainer preemption (restarted on a new worker, re-leased a farm); 14 graded, 5 valid, best 0.537, train 128 s |
+| Qwen3.8 remote-only v5p-32 ac1 (1984) | PASS: 16 graded via pooled math, 7 valid, best ac1 1.5859, train 155 s |
+
+## Production rollout (2026-10-06, from merged main 60ff7041, branch agent/rq4-rollout)
+41 farms in 5 discovery groups; every farm with a worker passed /health, model, grading-ready (math/routing/placement),
+attestation and supervisor visibility (11/11 at 20:26); one farm per group leased + generated correctly.
