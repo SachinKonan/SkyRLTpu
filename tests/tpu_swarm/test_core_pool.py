@@ -250,3 +250,8 @@ def test_every_engine_launch_draws_its_own_sampling_seed(tmp_path):
         seeds.add(seed)
     # Identical concurrent requests on different engines must not share a sampling stream.
     assert len(seeds) == 4
+    import dataclasses
+    for explicit in (['--seed', '7'], ['--seed=7']):
+        pinned = dataclasses.replace(config, inference=dataclasses.replace(config.inference, extra_args=explicit))
+        command = inference_command(pinned, tmp_path, tmp_path, tmp_path, tmp_path)
+        assert sum(a == '--seed' or a.startswith('--seed=') for a in command) == 1  # an explicit seed wins

@@ -241,7 +241,7 @@ def inference_command(config, root, source, snapshot, run, group=None, slot=0):
         command += ["--pipeline-parallel-size", str(len(group)), "--distributed-executor-backend", "ray",
                     "--skyrl-ray-placement-hosts", ",".join(group)]
     command += list(v.extra_args)
-    if '--seed' not in command:
+    if not any(arg == '--seed' or arg.startswith('--seed=') for arg in command):
         # tpu-inference samples from one engine-global key seeded by vLLM's
         # seed (default 0). Engines that start together then draw identical
         # streams, so identical concurrent requests (a bootstrap's groups, or
