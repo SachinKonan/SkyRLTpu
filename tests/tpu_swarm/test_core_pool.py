@@ -219,3 +219,39 @@ def test_trainer_grading_memory_sums_its_families(tmp_path):
     raw['cache'] = dict(raw['cache'], reserve_gib=400)
     raw['grading'] = dict(raw['grading'], families={'math': {'slots_per_host': 16}, 'routing': {'slots_per_host': 4, 'cpus': 10, 'memory_gib': 20}})
     assert Config.from_dict(raw).grading_memory_gib == 16 * 4 + 4 * 20
+
+
+def test_every_engine_launch_draws_its_own_sampling_seed(tmp_path):
+    from pathlib import Path
+    from tpu.swarm.ray_train.commands import inference_command
+    from tpu.swarm.ray_train.config import Config
+    config = Config.load(Path(__file__).parents[2] / 'tpu/swarm/ray_train/profiles/farm-v6e8-east5b-qwen-grading-ac2-20260924.json')
+    seeds = set()
+    for slot in (0, 1, 0, 1):
+        command = inference_command(config, tmp_path, tmp_path, tmp_path, tmp_path, slot=slot)
+        assert command.count('--seed') == 1
+        seed = int(command[command.index('--seed') + 1])
+        assert 1 <= seed < 2 ** 31
+        seeds.add(seed)
+    assert len(seeds) == 4  # identical concurrent requests must not share a sampling stream
+
+
+def test_every_engine_launch_draws_its_own_sampling_seed(tmp_path):
+    from pathlib import Path
+    from tpu.swarm.ray_train.commands import inference_command
+    from tpu.swarm.ray_train.config import Config
+    config = Config.load(Path(__file__).parents[2] / 'tpu/swarm/ray_train/profiles/farm-v6e8-east5b-qwen-grading-ac2-20260924.json')
+    seeds = set()
+    for slot in (0, 1, 0, 1):
+        command = inference_command(config, tmp_path, tmp_path, tmp_path, tmp_path, slot=slot)
+        assert command.count('--seed') == 1
+        seed = int(command[command.index('--seed') + 1])
+        assert 1 <= seed < 2 ** 31
+        seeds.add(seed)
+    # Identical concurrent requests on different engines must not share a sampling stream.
+    assert len(seeds) == 4
+    import dataclasses
+    for explicit in (['--seed', '7'], ['--seed=7']):
+        pinned = dataclasses.replace(config, inference=dataclasses.replace(config.inference, extra_args=explicit))
+        command = inference_command(pinned, tmp_path, tmp_path, tmp_path, tmp_path)
+        assert sum(a == '--seed' or a.startswith('--seed=') for a in command) == 1  # an explicit seed wins
