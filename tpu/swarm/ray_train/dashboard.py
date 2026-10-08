@@ -11,6 +11,7 @@ blocks a page load. It never leases, cancels or changes anything.
 
 Endpoints: `/` (HTML, auto-refresh) and `/api/status.json`.
 """
+import base64
 from concurrent.futures import ThreadPoolExecutor
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,6 +26,9 @@ import traceback
 from . import farm_status
 
 REFRESH = 30
+# Barn icon (flaticon 1813580, 64 px) inlined as a data URI, so there is no extra route to serve.
+FAVICON = ('<link rel="icon" type="image/png" href="data:image/png;base64,'
+           + base64.b64encode((Path(__file__).with_name('dashboard_favicon.png')).read_bytes()).decode() + '">')
 NOISY = {'writeback_complete', 'inference_status', 'hosts', 'remote_leases', 'transfer_progress',
          'transfer_complete', 'host_heartbeat', 'heartbeat'}
 
@@ -266,7 +270,7 @@ def render(snap):
              'th{color:var(--muted);font-weight:600}td.num{text-align:right;font-variant-numeric:tabular-nums}'
              '.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.free{color:var(--free)}</style>')
     return (f'<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="{REFRESH}">'
-            f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>Farm status</title>{style}'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>Farm status</title>{FAVICON}{style}'
             f'</head><body>{"".join(parts)}</body></html>')
 
 
