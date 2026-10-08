@@ -195,6 +195,10 @@ def main():
     parser.add_argument('--run-scoped-only', action='store_true')
     parser.add_argument('--discovery-group', default='',
                         help='Present this group to trainers that require one (inference.external_pool_discovery_group)')
+    parser.add_argument('--dashboard-port', type=int, default=0,
+                        help='Serve the read-only farm/trainer status page on 127.0.0.1:<port> (0 = off)')
+    parser.add_argument('--dashboard-local-runs', type=Path,
+                        help='Directory of local no-train runs shown on the status page')
     args = parser.parse_args()
     if args.farm_pool_max_job_id is not None and (not args.farm_pool or args.farm_pool_max_job_id < 1):
         parser.error('--farm-pool-max-job-id requires --farm-pool and a positive job ID')
@@ -213,6 +217,10 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         parser.error('another borrowing supervisor is already running under this login')
+    if args.dashboard_port:
+        # Read-only; its own threads, so a slow probe never delays discovery ticks.
+        from .dashboard import serve
+        serve(args.dashboard_port, args.dashboard_local_runs)
     def call(cluster, action, body=None):
         return rpc(args.ssh_config_dir, cluster, action, args.port, body, group=args.discovery_group)
     while True:
