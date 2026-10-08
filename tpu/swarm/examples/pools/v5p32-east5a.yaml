@@ -1,4 +1,6 @@
-# Pool tpuswarm-v5p32-east5a-erdos. Live target 35 workers (2026-10-05). Resize with
+# Pool tpuswarm-v5p32-east5a-erdos. Live target 44 workers (2026-10-08): 35 -> 44 fills the
+# free us-east5-a queued-resource slots (cap 50); 44 x 32 = 1408 of the 1536 v5p spot
+# quota (others held 112). Resize with
 # `sky jobs pool apply -p tpuswarm-v5p32-east5a-erdos --workers N` and update this file to match;
 # re-applying a stale file resets the pool to the count written here.
 # v5p-32 east5a pool, target 48 -> 35 (2026-09-23) to cut launch pressure on the API executors.
@@ -14,9 +16,9 @@ resources:
   disk_size: 150
 service:
   pool:
-    workers: 35
-    min_workers: 35
-    max_workers: 35
+    workers: 44
+    min_workers: 44
+    max_workers: 44
     queue_length_threshold: 1
     upscale_delay_seconds: 60
     downscale_delay_seconds: 1200

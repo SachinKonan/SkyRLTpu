@@ -34,7 +34,9 @@ log, audit, load_state, save_state = base.log, base.audit, base.load_state, base
 REQ_DB = base.REQ_DB
 OK_STALE = ('sky.jobs.queue_v2', 'sky.jobs.logs', 'sky.jobs.pool_status', 'sky.down',
             'sky.status', 'sky.jobs.queue', 'sky.check', 'sky.api_status',
-            'sky.jobs.pool_status_v2', 'sky.serve.status')
+            'sky.jobs.pool_status_v2', 'sky.serve.status',
+            # Read-only lookups issued by newer clients (seen 2026-10-08).
+            'sky.workspaces.get', 'sky.slurm_cluster_names')
 
 
 def prep():
