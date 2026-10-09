@@ -62,6 +62,17 @@ def test_runner_candidate_failures_are_encoded_not_raised(tmp_path, code, messag
     assert result['result'] is None and message in result['error']
 
 
+def test_runaway_output_is_capped_and_a_candidate_failure(tmp_path):
+    code = ('import sys\ndef construct_function():\n'
+            '    while True:\n        sys.stdout.write("x" * 65536)\n')
+    work = request(tmp_path, code, timeout=60, cpus=sorted(os.sched_getaffinity(0))[:1])
+    spec = json.loads((work / 'request.json').read_text())
+    (work / 'request.json').write_text(json.dumps(dict(spec, output_limit_bytes=1 << 20)))
+    result = run_runner(work)
+    assert result['result'] is None and 'output exceeded 1048576 bytes' in result['error']
+    assert max(p.stat().st_size for p in tmp_path.rglob('candidate.stdout')) <= 1 << 20
+
+
 def test_json_safe_accepts_numeric_sequences_only():
     assert math_runner.json_safe([1, 2.5]) == ([1.0, 2.5], None)
     assert math_runner.json_safe(3) == (3.0, None)

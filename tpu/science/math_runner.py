@@ -23,6 +23,7 @@ import math
 import os
 from pathlib import Path
 import pickle
+import resource
 import signal
 import shutil
 import subprocess
@@ -229,6 +230,9 @@ def kill_tree(process, pgid, hard):
             pass
 
 
+OUTPUT_LIMIT_BYTES = 256 * 1024 * 1024
+
+
 def run_candidate(request, work):
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
@@ -251,10 +255,15 @@ def run_candidate(request, work):
         env.setdefault(key, threads)
     timeout = float(request['eval_timeout_seconds'])
     limit = int(request.get('stdout_limit_bytes') or 16384)
+    # Cap every file the candidate writes, its captured stdout included: one
+    # program printing in a loop wrote 72 GB and filled a farm host's disk.
+    file_limit = int(request.get('output_limit_bytes') or OUTPUT_LIMIT_BYTES)
     started = time.monotonic()
     with stdout_path.open('wb') as out:
         process = subprocess.Popen([sys.executable, str(script)], stdout=out, stderr=subprocess.STDOUT,
-                                   env=env, start_new_session=True, cwd=str(work))
+                                   env=env, start_new_session=True, cwd=str(work),
+                                   preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_FSIZE,
+                                                                         (file_limit, file_limit)))
         try:
             pgid = os.getpgid(process.pid)
         except Exception:
@@ -278,6 +287,11 @@ def run_candidate(request, work):
         kill_tree(process, pgid, hard=True)
     elapsed = time.monotonic() - started
     stdout = tail(stdout_path, limit)
+    # Python ignores SIGXFSZ, so an over-limit write fails with EFBIG and the
+    # child exits nonzero; a stdout file at the cap is the reliable sign.
+    if code != 0 and stdout_path.stat().st_size >= file_limit:
+        return dict(result=None, error=f'Program output exceeded {file_limit} bytes', stdout=stdout,
+                    candidate_seconds=elapsed)
     if code != 0:
         return dict(result=None, error=f'Process exited with code {code}', stdout=stdout, candidate_seconds=elapsed)
     if not results_path.exists():
