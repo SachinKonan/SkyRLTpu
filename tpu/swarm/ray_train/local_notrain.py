@@ -204,11 +204,52 @@ class Run:
         if child is not None and child.poll() is None:
             os.killpg(child.pid, signal.SIGTERM)
 
+    def reap_child(self, grace=60):
+        """Never exit while our child runs: a surviving client keeps driving
+        the next instance's ingress on the same fixed port."""
+        child = self.child
+        if child is None or child.poll() is not None:
+            return
+        try:
+            os.killpg(child.pid, signal.SIGTERM)
+            child.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            os.killpg(child.pid, signal.SIGKILL)
+            child.wait(timeout=10)
+        except ProcessLookupError:
+            pass
+        self.report('child_reaped', pid=child.pid, returncode=child.returncode)
+
+    def reap_strays(self):
+        """Stop clients or bootstraps of this run left by an earlier runner."""
+        mine = {os.getpid()}
+        for proc in Path('/proc').iterdir():
+            if not proc.name.isdigit() or int(proc.name) in mine:
+                continue
+            try:
+                if proc.stat().st_uid != os.getuid():
+                    continue
+                args = (proc / 'cmdline').read_bytes().split(b'\0')
+                env = (proc / 'environ').read_bytes().split(b'\0')
+            except OSError:
+                continue
+            if not any(a.endswith((b'run_ttd_ensemble.py', b'seed_bootstrap')) for a in args):
+                continue
+            if f'EXPERIMENT_NAME={self.config.run_id}'.encode() not in env:
+                continue
+            pid = int(proc.name)
+            try:
+                os.killpg(os.getpgid(pid), signal.SIGKILL)
+            except ProcessLookupError:
+                continue
+            self.report('stray_child_killed', pid=pid)
+
     def main(self):
         signal.signal(signal.SIGTERM, self.stop)
         signal.signal(signal.SIGINT, self.stop)
         code = 1
         try:
+            self.reap_strays()
             self.start_ingress()
             threading.Thread(target=self.push_farms, name='farms', daemon=True).start()
             self.admit()
@@ -223,6 +264,7 @@ class Run:
             self.report('run_failed', reason=f'{type(exc).__name__}: {exc}'[:500])
         finally:
             self.stopping.set()
+            self.reap_child()
             if self.instance:
                 try:
                     self.reservation('close', self.config.inference.external_pool_release_timeout + 5)
