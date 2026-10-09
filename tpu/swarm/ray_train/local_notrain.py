@@ -91,7 +91,14 @@ class Run:
         self.gcs = ray.get_runtime_context().gcs_address
         catalog = Catalog.options(name='inference-catalog').remote([], self.config.inference.restart_limit)
         serve.start(proxy_location='HeadOnly', http_options={'host': '127.0.0.1', 'port': self.config.ports.inference})
-        serve.run_many([serve.RunTarget(target=Ingress.bind(self.config.to_dict(), [], catalog, []),
+        raw = self.config.to_dict()
+        if self.args.farm_group_cap:
+            # Ingress-only: groups in flight per leased farm. The bootstrap
+            # contract hashes the profile config, so the profile keeps its value.
+            raw['inference']['external_pool_max_concurrent_requests'] = self.args.farm_group_cap
+            self.report('farm_group_cap', groups_per_farm=self.args.farm_group_cap,
+                        profile=self.config.inference.external_pool_max_concurrent_requests)
+        serve.run_many([serve.RunTarget(target=Ingress.bind(raw, [], catalog, []),
                                         name='skyrl-training')],
                        wait_for_ingress_deployment_creation=False, wait_for_applications_running=False)
         deadline = time.monotonic() + 300
@@ -236,6 +243,9 @@ def main():
     parser.add_argument('--hf-home', type=Path, required=True)
     parser.add_argument('--snapshot', type=Path, required=True, help='Tokenizer snapshot of the served model')
     parser.add_argument('--num-epochs', type=int, help='Total client steps (overrides the profile NUM_EPOCHS)')
+    parser.add_argument('--farm-group-cap', type=int,
+                        help='Groups in flight per leased farm (overrides external_pool_max_concurrent_requests '
+                             'for the local ingress only)')
     sys.exit(Run(parser.parse_args()).main())
 
 
