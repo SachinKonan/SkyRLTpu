@@ -177,6 +177,22 @@ def test_split_catalog_restart_and_request_routing():
     assert [ingress.select_engine('muse') for _ in range(16)]==list(range(6))*2+[0,1,2,3]
 
 
+def test_groups_go_to_the_least_loaded_engine_and_rotate_on_ties():
+    ns=serving_namespace()
+    ingress=object.__new__(ns['Ingress']);ingress.engines=list(range(4));ingress.engine_models=None;ingress.next_engine=0
+    # Four n=32 groups fill the four engines in rotation.
+    assert [ingress.acquire_engine('qwen',32) for _ in range(4)]==[0,1,2,3]
+    # Engine 2 finishes first: the next group goes there, not to engine 0 by rotation.
+    ingress.release_engine(2,32)
+    assert ingress.acquire_engine('qwen',32)==2
+    # A busier engine is skipped even when rotation points at it.
+    ingress.release_engine(0,32);ingress.release_engine(1,32);ingress.acquire_engine('qwen',32)
+    assert ingress.engine_load==[32,0,32,32] and ingress.acquire_engine('qwen',32)==1
+    # Unweighted calls (tokenize) keep plain rotation.
+    ingress.engine_load=[0]*4;ingress.next_engine=0
+    assert [ingress.select_engine('qwen') for _ in range(6)]==[0,1,2,3,0,1]
+
+
 def test_split_deploy_reserves_disjoint_two_chip_slots():
     ns=serving_namespace();c=muse_config();records=[]
     class Engine:

@@ -933,19 +933,42 @@ class Ingress:
                  bytes=size, sha256=identity, hosts=loaded, load_seconds=time.monotonic()-started)
             return {"lora_name": version, "loaded": loaded, "sha256": identity}
 
-    def select_engine(self, model):
+    def select_engine(self, model, weight=0):
+        return self.engines[self.acquire_engine(model, weight)]
+
+    def acquire_engine(self, model, weight=0):
+        """Index of the engine with the fewest in-flight sequences, rotating on ties.
+
+        ``weight`` (the request's ``n``) is added to that engine's load; the
+        caller releases it with ``release_engine``. A whole n=32 group goes to
+        one engine, so round-robin alone can stack groups on a busy engine
+        while another sits idle.
+        """
         if not self.engines:
             raise HTTPException(503, 'no local inference engines: remote-only ingress')
+        load = getattr(self, 'engine_load', None)
+        if load is None or len(load) != len(self.engines):
+            load = self.engine_load = [0] * len(self.engines)
         if self.engine_models:
             if model not in self.engine_models:
                 raise HTTPException(400, "unknown base model")
             indices = [i for i, name in enumerate(self.engine_models) if name == model]
             cursor = self.next_model_engine.get(model, 0)
-            self.next_model_engine[model] = cursor + 1
-            return self.engines[indices[cursor % len(indices)]]
-        handle = self.engines[self.next_engine % len(self.engines)]
-        self.next_engine += 1
-        return handle
+            order = [indices[(cursor + k) % len(indices)] for k in range(len(indices))]
+            index = min(order, key=lambda i: load[i])
+            self.next_model_engine[model] = cursor + 1 + order.index(index)
+        else:
+            cursor = self.next_engine
+            order = [(cursor + k) % len(self.engines) for k in range(len(self.engines))]
+            index = min(order, key=lambda i: load[i])
+            self.next_engine = cursor + 1 + order.index(index)
+        load[index] += weight
+        return index
+
+    def release_engine(self, index, weight):
+        load = getattr(self, 'engine_load', None)
+        if load is not None and index < len(load):
+            load[index] = max(0, load[index] - weight)
 
     async def restrict_engines(self, remaining_ips):
         """Close admission, drain ALL requests, remove retired targets, then stop them.
@@ -972,6 +995,7 @@ class Ingress:
             self.engine_urls = [self.engine_urls[i] for i in keep]
             self.ips = list(remaining_ips)
             self.next_engine = 0
+            self.engine_load = [0] * len(self.engines)
             if self.scheduler:
                 self.scheduler.local = [None] * len(self.engines)
             return await asyncio.gather(*(e.retire.remote() for e in retired))
@@ -1023,14 +1047,18 @@ class Ingress:
                         local_active=max(0, self.active - external_active - 1), local_engines=len(self.engines))
                     if result is not None:
                         return result
+                weight = max(1, int(payload.get('n') or 1)) if method == 'generate' else 0
+                index = self.acquire_engine(payload["model"], weight)
                 try:
-                    return await getattr(self.select_engine(payload["model"]), method).remote(payload)
+                    return await getattr(self.engines[index], method).remote(payload)
                 except Exception as exc:
                     if rejected := request_error(exc):
                         raise HTTPException(rejected.status_code, rejected.detail) from exc
                     if method == "generate" and self.config.inference.restart_limit == 0:
                         await self.catalog.fail.remote('local generation failed')
                     raise
+                finally:
+                    self.release_engine(index, weight)
             finally:
                 async with self.condition:
                     self.active -= 1

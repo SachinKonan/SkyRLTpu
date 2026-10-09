@@ -81,10 +81,14 @@ class HybridScheduler:
             bound = min([local_finish] + [d for d, _ in local_candidates])
             for key, slots in self._remote_pools():
                 remote_seconds = self._seconds(key, work)
+                free = [i for i, job in enumerate(slots) if job is None]
                 # Avoid a slow remote tail if a busy local engine can finish sooner.
-                if remote_seconds <= bound:
-                    candidates += [('remote', key, i, remote_seconds)
-                                   for i, job in enumerate(slots) if job is None]
+                if remote_seconds <= bound and free:
+                    # Spread groups: each group already running on a farm shares its
+                    # throughput, so equally fast farms alternate instead of the first
+                    # farm in order taking every group while the others idle.
+                    busy = len(slots) - len(free)
+                    candidates.append(('remote', key, free[0], remote_seconds * (1 + busy / len(slots))))
         return min(candidates, key=lambda x: x[3]) if candidates else None
 
     def _pool(self, route, key):

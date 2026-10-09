@@ -148,6 +148,35 @@ def test_slow_remote_tail_is_not_dispatched():
     assert router._choose(100, False) is None  # Wait ~0.1s, then finish locally in 1s.
 
 
+def test_equal_farms_split_groups_instead_of_filling_the_first():
+    async def run():
+        release = asyncio.Event()
+        calls = []
+        router = HybridScheduler(0, 0, lambda: True, farms=lambda: [('a', 16), ('b', 16)])
+        async def remote(key):
+            calls.append(key)
+            await release.wait()
+            return {'choices': [{'token_ids': [1]} for _ in range(32)]}
+        payload = {'prompt': [1], 'max_tokens': 10, 'n': 32}
+        tasks = [asyncio.create_task(router.run(payload, None, remote)) for _ in range(16)]
+        for _ in range(50):
+            await asyncio.sleep(0)
+        # Before the fix all 16 groups went to farm 'a' (muse-erdos-s2: 64/0).
+        assert calls.count('a') == calls.count('b') == 8
+        release.set()
+        await asyncio.gather(*tasks)
+        # A modestly faster farm takes more groups but never all of them.
+        router.rates.update(a=1.5, b=1.0)
+        release.clear(); calls.clear()
+        tasks = [asyncio.create_task(router.run(payload, None, remote)) for _ in range(16)]
+        for _ in range(50):
+            await asyncio.sleep(0)
+        assert calls.count('a') > calls.count('b') > 0
+        release.set()
+        await asyncio.gather(*tasks)
+    asyncio.run(run())
+
+
 def test_free_farms_are_shared_candidates_but_live_owners_are_preserved():
     rows = [dict(job_id=i, run_id=name, status='RUNNING', priority=0) for i, name in
             [(10, 'qwen-qubit'), (11, 'qwen-ac2'), (12, 'gemma-ac2')]]
