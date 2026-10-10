@@ -112,6 +112,16 @@ SHIFTS = {
     # single effective lensing distance; grid from the public phase-2 toolkit)
     'bary9.0': dict(kind='baryon', logT=9.0), 'bary6.5': dict(kind='baryon', logT=6.5),
     'baryDMO': dict(kind='baryon', logT=None),
+    # Systematics planned in the organizers' first README but absent from training (appended
+    # at the end so earlier shift seeds 300+i are unchanged):
+    # source clustering: noise level anti-correlated with local foreground structure
+    'srcclust0.15': dict(kind='srcclust', a=0.15),
+    # Poisson galaxy counts per pixel (n_g=30/arcmin^2, 4 arcmin^2 -> mean 120 galaxies)
+    'poisson120': dict(kind='poisson', n=120.0),
+    # intrinsic-alignment-like: part of the signal replaced by a Gaussianized (phase-randomized) copy
+    'ia0.2': dict(kind='ia', a=0.2),
+    # PSF-residual-like additive coherent anisotropic pattern
+    'psfpat': dict(kind='psfpat', rms=0.003),
 }
 
 TK_GRID = ROOT / 'tk_grid.npz'
@@ -165,6 +175,28 @@ def apply_shift(name, clean, mask_t, gen, labels=None):
         sd = sm[:, mask_t > 0].std(1, keepdim=True)[:, :, None]
         excess = torch.relu(sm - s['t'] * sd)
         return clean - s['a'] * _smooth(excess, mask_t, 1.0, 1.0) * mask_t, None, 'gauss'
+    if kind == 'srcclust':
+        g = _smooth(clean, mask_t, 2.0, 2.0)
+        g = g / g[:, mask_t > 0].std(1)[:, None, None]
+        return clean, NOISE_SIGMA * (1 - s['a'] * g).clamp(0.3, 2.0), 'gauss'
+    if kind == 'poisson':
+        lam = torch.full(clean.shape, s['n'], device=clean.device)
+        counts = torch.poisson(lam, generator=gen).clamp(min=1.0)
+        return clean, NOISE_SIGMA * torch.sqrt(s['n'] / counts), 'gauss'
+    if kind == 'ia':
+        f = torch.fft.rfft2(clean * mask_t)
+        phase = torch.exp(2j * math.pi * torch.rand(f.shape, generator=gen, device=clean.device))
+        grf = torch.fft.irfft2(f.abs() * phase, s=clean.shape[-2:]) * mask_t
+        return (1 - s['a']) * clean + s['a'] * grf, None, 'gauss'
+    if kind == 'psfpat':
+        H, W = clean.shape[-2:]
+        fy = torch.fft.fftfreq(H, device=clean.device)[:, None]
+        fx = torch.fft.rfftfreq(W, device=clean.device)[None, :]
+        filt = torch.exp(-((fy / 0.01) ** 2 + (fx / 0.04) ** 2))
+        white = torch.randn(clean.shape, generator=gen, device=clean.device)
+        pat = torch.fft.irfft2(torch.fft.rfft2(white) * filt, s=(H, W))
+        pat = pat / pat.flatten(1).std(1)[:, None, None] * s['rms']
+        return clean + pat * mask_t, None, 'gauss'
     if kind == 'gradient':
         H = clean.shape[-2]
         ramp = torch.linspace(-1, 1, H, device=clean.device)[:, None]
