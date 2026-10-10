@@ -53,6 +53,10 @@ def child_environment(config, root, args, gcs):
                SKYRL_GRADING_LOCAL_SLOTS='0', SKYRL_GRADING_LOCAL_HOSTS='0',
                PYTHONPATH=f'{args.package}:{args.source}:{args.source / "tpu"}:{args.source / "third_party/discover"}')
     env.pop('TINKER_BASE_URL', None)
+    # workload_environment drops ambient TTD_* settings; eager steps are a per-run choice of the
+    # launcher (client-only, outside the bootstrap contract), so pass it through explicitly.
+    if os.environ.get('TTD_EAGER_STEP_FRACTION'):
+        env['TTD_EAGER_STEP_FRACTION'] = os.environ['TTD_EAGER_STEP_FRACTION']
     if args.num_epochs:
         # Client-only: the frozen client resumes at its global step, and the
         # bootstrap contract (profile config) is unaffected.
