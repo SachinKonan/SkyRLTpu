@@ -37,7 +37,8 @@ def cons(TH, fs, names):
     return standardize({n: np.log(m2[n] + 1.0) for n in names}, cen)
 
 
-MEMBERS = {'Sd': 'dog', 'C': 'cnn', 'C1': 'cnn1', 'Dr': 'den_r', 'N2': 'N2', 'K': 'stx_pkcl', 'PsBh': 'PsBh'}
+MEMBERS = {'Sd': 'dog', 'C': 'cnn', 'C1': 'cnn1', 'Dr': 'den_r', 'N2': 'N2', 'K': 'stx_pkcl', 'PsBh': 'PsBh',
+           'De': 'den_e', 'Dw': 'den_w', 'SS': 'dn_SS', 'Oh': 'oe_head'}
 
 
 def components(k, variant='std', std_dir=None):

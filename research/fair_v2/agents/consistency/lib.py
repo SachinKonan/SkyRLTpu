@@ -49,6 +49,16 @@ FAMILIES = {
     # statistics-agent members used by the coordinator (x = drop columns, k = keep columns)
     'N2': ('stx_nois', np.setdiff1d(np.arange(54), [6, 8, 26, 28, 53])),
     'PsBh': [('stats', PS), ('stx_bisp', np.arange(62, 92))],
+    # round-4 latent sources as direct likelihood members
+    'dif': ('dif', np.arange(56)),
+    'difa': ('difa', np.arange(216)),
+    'difk': ('difk', np.arange(160)),
+    'oe': ('oe', np.arange(279)),
+    'oe_head': ('oe_head', np.arange(23)),
+    'den_b': ('den_b', np.arange(512)),
+    # TPU-trained denoiser ensembles (coordinator): residual block of mean_k D_k(x)
+    'den_e': ('den_e', np.arange(112)),
+    'den_w': ('den_w', np.arange(112)),
     # four scale bands (PS quarter + one smoothing scale + one DoG band)
     'b0': ('stats', np.concatenate([PS[21:], G['s0'], G['dog'][0:14]])),
     'b1': ('stats', np.concatenate([PS[14:21], G['s1'], G['dog'][14:28]])),

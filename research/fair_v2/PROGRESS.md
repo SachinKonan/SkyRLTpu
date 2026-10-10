@@ -16,6 +16,8 @@ The competition deadline is **2026-10-11 23:59 UTC**. Limits: 5 submissions per 
 | `v3-05-den-consRbands.zip` | (Sd + C + Dr + 1 xSL + 1 consRbands) / 5 | not submitted |
 | `v3-06-den-noise-consR.zip` | v3-05 + N2 (noise battery) + K (peak clustering) + PsBh (spectrum + bispectrum) | not submitted |
 | `v3-09-STACK_D.zip` | v3-04 members kept + consRbands 1.5 + N2 .5 + PsBh .5, Dr 2.5, Sd/consP8 .5; never below v3-04 on any LCO set (.464/.453/.366, mean .4277) | pending |
+| `v3-10-STACKDp3_denb.zip` | STACK_D with consRplus 3 (adds denoiser-bottleneck probe view); above STACK_D on all 3 LCO sets (.4316) | not submitted |
+| `v3-12-STACKDp3+SS+Oh1.5.zip` | v3-10 + diffusion SS 1 + outlier-exposure Oh 1.5 (Oh tests whether hidden OoD include shear/PSF/noise systematics) | pending |
 | `v3-07-BIG_RE2.zip` | Dr 1 + N2 1 + PsBh 0.5 + xSL 1 + consRbands 2 (Sd and C dropped); chosen by leave-cosmology-out metric 0.4292 | pending |
 
 The leader is at 0.7835 (others 0.7823, 0.7729, ...). User dkn20, at 0.7358, is very likely the first author of the
@@ -75,6 +77,22 @@ Its ordering matches the leaderboard where audit3 did not:
 That is roughly 3.2 LB per LCO point. BIG_RE2 scores 0.4292 on LCO, which would be about 0.70 on the LB if the
 relation stays linear. Cosmology input jitter and smaller nets did not help.
 Details: `agents/consistency/` (`holdout3.py`, `lco3_*.py`, `export3.py`).
+
+## TPU sprint (v5p-32, SkyPilot job 2365)
+
+- **Training:** JAX ports of the denoiser U-Net and the CNN in `tpu/` (`jax_unet.py`, `jax_cnn.py`). One model trains per
+  chip, 16 in parallel. A U-Net epoch takes 89 s per chip and a CNN epoch 73 s.
+- **Conversion:** weights convert to the torch models with `to_torch.py` / `cnn_to_torch.py`, which check the converted
+  outputs against TPU reference outputs to about 1e-3 (bf16).
+- **Feature extraction:** `extract_ens.py` reads the bit-exact noisy-map dumps. It reproduces the original den_r
+  features to 2e-5.
+- **Negative result:** the 13-model denoiser ensemble (den_e) is no better than the single denoiser. LCO alone is
+  .379 vs .380, and in STACK_D .4271 vs .4277. The residual features are limited by shape noise, not by the
+  denoiser's own variance.
+- **Infrastructure gotchas:**
+  - TPU host-to-host SSH corrupts bulk transfers, so `fetch.sh` uses md5-verified retries.
+  - A bare `jax.devices()` on one host grabs every chip.
+  - `pgrep` patterns can match their own command line.
 
 ## Code map (`research/fair_v2/`)
 

@@ -11,7 +11,8 @@ import numpy as np
 import lib
 from analyze import standardize, ev, mean_of, fam, mahal
 
-MEMBERS = {'Sd': 'dog', 'C': 'cnn', 'C1': 'cnn1', 'Dr': 'den_r', 'N2': 'N2', 'K': 'stx_pkcl', 'PsBh': 'PsBh'}
+MEMBERS = {'Sd': 'dog', 'C': 'cnn', 'C1': 'cnn1', 'Dr': 'den_r', 'N2': 'N2', 'K': 'stx_pkcl', 'PsBh': 'PsBh',
+           'De': 'den_e', 'Dw': 'den_w'}
 
 
 def cons(TH, fs, sets):
