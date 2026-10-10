@@ -15,6 +15,7 @@ The competition deadline is **2026-10-11 23:59 UTC**. Limits: 5 submissions per 
 | `v3-03-stats-cnn-den-cons.zip` | (Sd + C + Dr + 0.5 xSL + 0.5 consP8) / 4 (attribution test) | not submitted |
 | `v3-05-den-consRbands.zip` | (Sd + C + Dr + 1 xSL + 1 consRbands) / 5 | not submitted |
 | `v3-06-den-noise-consR.zip` | v3-05 + N2 (noise battery) + K (peak clustering) + PsBh (spectrum + bispectrum) | not submitted |
+| `v3-07-BIG_RE2.zip` | Dr 1 + N2 1 + PsBh 0.5 + xSL 1 + consRbands 2 (Sd and C dropped); chosen by leave-cosmology-out metric 0.4292 | pending |
 
 The leader is at 0.7835 (others 0.7823, 0.7729, ...). User dkn20, at 0.7358, is very likely the first author of the
 organizers' flow-matching OoD paper.
@@ -55,6 +56,24 @@ Both 0.525 pipelines caught about 52% of OoD maps.
 7. **Web research.** The organizers originally planned 6 systematics for the test: baryons, IA, photo-z, shear bias,
    PSF, and source clustering. Training contains only baryons and photo-z. No public source names the OoD categories.
    Final ranking runs our packaged `model.py` on a private holdout.
+
+## Leave-cosmology-out (LCO) proxy
+
+The proxy holds out 20 of the 101 cosmologies, in 3 disjoint sets, and refits every member without them.
+- Normal maps: maps from the held-out cosmologies.
+- Anomalous maps: the synthetic shifts of those maps.
+
+Its ordering matches the leaderboard where audit3 did not:
+
+| Recipe | LCO metric | LB |
+|---|---|---|
+| BASE | 0.3757 | 0.527 |
+| REC1 | 0.3929 | 0.567 |
+| v3-04 | 0.4126 | 0.646 |
+
+That is roughly 3.2 LB per LCO point. BIG_RE2 scores 0.4292 on LCO, which would be about 0.70 on the LB if the
+relation stays linear. Cosmology input jitter and smaller nets did not help.
+Details: `agents/consistency/` (`holdout3.py`, `lco3_*.py`, `export3.py`).
 
 ## Code map (`research/fair_v2/`)
 
