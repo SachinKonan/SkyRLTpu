@@ -77,13 +77,15 @@ class FakeLocal(gt.LocalRayPool):
         return future
 
 
-def make_transport(farm, farms, *, local=None, loop=None, refresh_seconds=.05, **kwargs):
-    """``farms`` is a live list: mutate it to change what the fake ingress lists."""
+def make_transport(farm, farms, *, local=None, loop=None, refresh_seconds=.05, paused=(), **kwargs):
+    """``farms`` is a live list: mutate it to change what the fake ingress lists.
+
+    ``paused`` is a live set of hosts the ingress lists as ineligible (a health pause)."""
     async def route(request):
         if request.url.host == 'head':
             assert request.url.path == '/skyrl/v1/grading/farms'
             return httpx.Response(200, json={'instance': 'x', 'farms': [
-                dict(farm_id=host, url=f'http://{host}', token=f'token-{host}', eligible=True, capacity=4)
+                dict(farm_id=host, url=f'http://{host}', token=f'token-{host}', eligible=host not in paused, capacity=4)
                 for host in farms]})
         return await farm(request)
     http = httpx.AsyncClient(transport=httpx.MockTransport(route))
@@ -126,7 +128,7 @@ def test_local_and_farm_pools_share_candidates_by_predicted_admission():
     asyncio.run(run())
 
 
-def test_farm_loss_mid_grade_retries_elsewhere_with_same_request_id():
+def test_farm_loss_mid_grade_retries_elsewhere_under_an_attempt_id():
     async def run():
         farm = GradingFarm()
         farm.outcomes['b'] = done({'result': [2.0], 'error': None, 'metrics': {}})
@@ -144,7 +146,7 @@ def test_farm_loss_mid_grade_retries_elsewhere_with_same_request_id():
             result = await asyncio.wait_for(task, 10)
             assert result['result'] == [2.0]
             assert [h for h, _ in farm.submits] == ['a', 'b']
-            assert farm.submits[0][1] == farm.submits[1][1] == req.request_id
+            assert farm.submits[0][1] == req.request_id and farm.submits[1][1] == f'{req.request_id}-a1'
             retries = [f for e, f in t.reports if e == 'grading_retry']
             assert retries and retries[0]['from_pool'] == 'a' and retries[0]['attempt'] == 1
             assert not any(e == 'grading_infra_failure' for e, _ in t.reports)
@@ -315,3 +317,44 @@ def test_farm_requests_queue_for_a_connection_instead_of_failing():
     timeout = gt.wait_for_connection(50)
     assert timeout.pool is None and timeout.read == 50 and timeout.connect == 50
     assert gt.FARM_CONNECTIONS >= 256
+
+
+def test_health_pause_keeps_in_flight_grades_and_a_retry_is_not_answered_by_a_cancelled_id():
+    async def run():
+        farm = GradingFarm()
+        paused = set()
+        t = transport(farm, ['a'], paused=paused, refresh_seconds=.02)
+        try:
+            # A brief ineligibility (health pause) must not fail grades the farm is running.
+            farm.outcomes['a'] = None
+            task = asyncio.create_task(t.grade(request()))
+            for _ in range(50):
+                if farm.submits:
+                    break
+                await asyncio.sleep(.01)
+            paused.add('a')
+            await asyncio.sleep(.2)
+            paused.discard('a')
+            farm.outcomes['a'] = done({'result': [1.0], 'error': None, 'metrics': {}})
+            assert (await asyncio.wait_for(task, 5))['result'] == [1.0]
+            assert not any(e == 'grading_retry' for e, _ in t.reports) and not farm.cancels
+
+            # The farm keeps a cancelled id as cancelled; the retry submits a fresh id and succeeds.
+            farm.outcomes['a'] = lambda rid: ({'request_id': rid, 'state': 'cancelled', 'result': None,
+                                               'error': {'class': 'cancelled', 'detail': 'cancelled'}}
+                                              if '-a' not in rid else
+                                              {'request_id': rid, 'state': 'done', 'error': None,
+                                               'result': {'result': [2.0], 'error': None, 'metrics': {}}})
+            req = request()
+            task = asyncio.create_task(t.grade(req))
+            for _ in range(200):
+                if any(e == 'grading_retry' for e, _ in t.reports):
+                    break
+                await asyncio.sleep(.01)
+            t.directory.pools['a'].unhealthy_until = 0
+            assert (await asyncio.wait_for(task, 10))['result'] == [2.0]
+            assert [rid for _, rid in farm.submits[-2:]] == [req.request_id, f'{req.request_id}-a1']
+            assert farm.cancels == [('a', req.request_id)]
+        finally:
+            await t.close()
+    asyncio.run(run())

@@ -5,7 +5,8 @@ The training client grades candidates through one transport: a local pool
 one pool per farm lease the trainer's ingress currently holds (fetched from
 ``GET $SKYRL_GRADING_URL/skyrl/v1/grading/farms``). Every request keeps one
 ``request_id`` across retries so a farm's late result can never enter the
-batch twice (first result wins). Infrastructure failures retry on another
+batch twice (first result wins); a retry on a farm submits under an
+attempt-suffixed id, because the farm keeps a cancelled id as cancelled. Infrastructure failures retry on another
 pool up to ``max_infra_retries`` and then raise ``GradingInfrastructureError``
 (``abort_training_step``), exactly like the science graders; candidate
 failures are returned as results and stay reward zero.
@@ -91,7 +92,7 @@ class Pool:
     def healthy(self, now):
         return self.eligible and now >= self.unhealthy_until
 
-    async def run(self, request, on_started):
+    async def run(self, request, on_started, attempt=0):
         raise NotImplementedError
 
     async def cancel(self, request_id):
@@ -142,7 +143,7 @@ class LocalRayPool(Pool):
     def awaitable(ref):
         return asyncio.wrap_future(ref.future()) if hasattr(ref, 'future') else ref
 
-    async def run(self, request, on_started):
+    async def run(self, request, on_started, attempt=0):
         ref = self.dispatch(request)
         self.refs[request.request_id] = ref
         on_started(self)
@@ -183,8 +184,12 @@ class FarmPool(Pool):
         self.long_poll_seconds = long_poll_seconds
         self.poll_seconds = poll_seconds
         self.eligible = bool(farm.get('eligible', True))
+        # Retired: the lease token changed or the farm left the directory. A
+        # brief ineligibility (health pause) leaves in-flight grades running.
+        self.retired = False
         self.capacities = {}
         self.ready = None
+        self.wire_ids = {}
 
     @property
     def headers(self):
@@ -209,8 +214,10 @@ class FarmPool(Pool):
         self.ready = bool(capacity.get('ready', True))
         return True
 
-    async def run(self, request, on_started):
-        body = dict(request_id=request.request_id, task=request.task, owner_run=os.environ.get('SKYRL_RUN_ID', ''),
+    async def run(self, request, on_started, attempt=0):
+        wire_id = request.request_id if not attempt else f'{request.request_id}-a{attempt}'
+        self.wire_ids[request.request_id] = wire_id
+        body = dict(request_id=wire_id, task=request.task, owner_run=os.environ.get('SKYRL_RUN_ID', ''),
                     scope=request.scope, spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
         while True:
             response = await self.http.post(self.url + '/skyrl/v1/grading/submit', json=body, headers=self.headers,
@@ -224,9 +231,9 @@ class FarmPool(Pool):
             break
         on_started(self)
         while True:
-            if not self.eligible:
+            if self.retired:
                 raise GradingInfrastructureError(f'farm {self.name}: lease no longer eligible')
-            response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{request.request_id}',
+            response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{wire_id}',
                                            params={'wait': self.long_poll_seconds}, headers=self.headers,
                                            timeout=wait_for_connection(self.long_poll_seconds + 30))
             response.raise_for_status()
@@ -236,6 +243,7 @@ class FarmPool(Pool):
                 result = view.get('result')
                 if not isinstance(result, dict):
                     raise GradingInfrastructureError(f'farm {self.name}: done without a result')
+                self.wire_ids.pop(request.request_id, None)
                 return result
             if state in ('failed', 'cancelled'):
                 error = view.get('error') or {}
@@ -243,6 +251,7 @@ class FarmPool(Pool):
             await asyncio.sleep(0 if self.long_poll_seconds else self.poll_seconds)
 
     async def cancel(self, request_id):
+        request_id = self.wire_ids.pop(request_id, request_id)
         try:
             await self.http.post(f'{self.url}/skyrl/v1/grading/cancel/{request_id}', headers=self.headers, timeout=wait_for_connection(10))
         except Exception:
@@ -282,6 +291,7 @@ class FarmDirectory:
             if pool is None or pool.token != farm['token']:
                 if pool is not None:
                     pool.eligible = False
+                    pool.retired = True
                 pool = self.pools[farm_id] = FarmPool(farm, self.http, long_poll_seconds=self.long_poll_seconds,
                                                       poll_seconds=self.poll_seconds)
                 await pool.probe_capacity()
@@ -293,6 +303,7 @@ class FarmDirectory:
         for farm_id in list(self.pools):
             if farm_id not in seen:
                 self.pools[farm_id].eligible = False
+                self.pools[farm_id].retired = True
                 if self.pools[farm_id].running == 0:
                     del self.pools[farm_id]
                 removed.append(farm_id)
@@ -440,7 +451,7 @@ class GradingTransport:
             self.report('grading_dispatched', request_id=request.request_id, task=request.task, pool=pool.name,
                         attempt=attempts, predicted_wait_s=round(pool.predicted_wait(request.task), 1))
             try:
-                result = await pool.run(request, on_started)
+                result = await pool.run(request, on_started, attempts)
             except asyncio.CancelledError:
                 await pool.cancel(request.request_id)
                 raise
