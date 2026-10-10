@@ -59,6 +59,8 @@ FAMILIES = {
     # TPU-trained denoiser ensembles (coordinator): residual block of mean_k D_k(x)
     'den_e': ('den_e', np.arange(112)),
     'den_w': ('den_w', np.arange(112)),
+    # feature-factory family (factory/examples/dirpower.py): power-spectrum anisotropy, 12 bands x 3
+    'dirpower': ('dirpower', np.arange(36)),
     # four scale bands (PS quarter + one smoothing scale + one DoG band)
     'b0': ('stats', np.concatenate([PS[21:], G['s0'], G['dog'][0:14]])),
     'b1': ('stats', np.concatenate([PS[14:21], G['s1'], G['dog'][14:28]])),
