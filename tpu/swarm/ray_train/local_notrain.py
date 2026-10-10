@@ -25,6 +25,9 @@ from .commands import client_environment
 from .config import Config
 from .events import emit
 
+# Events that show the client is doing work: generation on a farm or grading.
+WORK_EVENTS = (b'"borrow_generated"', b'"grading_dispatched"', b'"grading_completed"')
+
 
 def candidates(registry, config, limit):
     """Farms serving this model: the ones this run holds first, then free ones."""
@@ -172,6 +175,40 @@ class Run:
             except (httpx.HTTPError, ValueError) as exc:
                 self.report('reservation_heartbeat_failed', reason=type(exc).__name__)
 
+    def watch_progress(self, interval=300):
+        """Stop a client that holds a ready farm but does no work for stall_seconds.
+
+        A client can hang, or outlive its own crash, while its leases stay
+        ready. Once this runner exits the scheduler restarts it from its last
+        step. Waiting without a ready farm is not a stall."""
+        events = self.run / 'inference-events.jsonl'
+        offset = events.stat().st_size if events.exists() else 0
+        last_work = time.monotonic()
+        while not self.stopping.wait(interval):
+            try:
+                with open(events, 'rb') as stream:
+                    stream.seek(offset)
+                    chunk = stream.read()
+                offset += len(chunk)
+            except OSError:
+                chunk = b''
+            if any(marker in chunk for marker in WORK_EVENTS):
+                last_work = time.monotonic()
+            try:
+                leases = httpx.get(self.url + '/status', timeout=10).json().get('leases', [])
+            except (httpx.HTTPError, ValueError):
+                continue
+            if not any(lease.get('ready') and not lease.get('lost') for lease in leases):
+                last_work = time.monotonic()
+                continue
+            idle = time.monotonic() - last_work
+            child = self.child
+            if idle >= self.args.stall_seconds and child is not None and child.poll() is None:
+                self.report('client_stalled', child_pid=child.pid, idle_seconds=round(idle),
+                            ready_farms=[lease.get('url') for lease in leases if lease.get('ready')])
+                self.reap_child()
+                last_work = time.monotonic()
+
     def execute(self, name, command, cwd):
         env = child_environment(self.config, self.root, self.args, self.gcs)
         with open(self.run / f'{name}.log', 'a') as output:
@@ -218,7 +255,7 @@ class Run:
             child.wait(timeout=10)
         except ProcessLookupError:
             pass
-        self.report('child_reaped', pid=child.pid, returncode=child.returncode)
+        self.report('child_reaped', child_pid=child.pid, returncode=child.returncode)
 
     def reap_strays(self):
         """Stop clients or bootstraps of this run left by an earlier runner."""
@@ -242,7 +279,7 @@ class Run:
                 os.killpg(os.getpgid(pid), signal.SIGKILL)
             except ProcessLookupError:
                 continue
-            self.report('stray_child_killed', pid=pid)
+            self.report('stray_child_killed', child_pid=pid)
 
     def main(self):
         signal.signal(signal.SIGTERM, self.stop)
@@ -256,6 +293,7 @@ class Run:
             threading.Thread(target=self.heartbeat, name='heartbeat', daemon=True).start()
             self.bootstrap()
             if not self.stopping.is_set():
+                threading.Thread(target=self.watch_progress, name='progress', daemon=True).start()
                 self.execute('client', [str(self.args.python), str(self.args.source / 'tpu/run_ttd_ensemble.py')],
                              self.args.source)
             code = 0
@@ -296,6 +334,8 @@ def main():
                              'for the local ingress only)')
     parser.add_argument('--farm-target', type=int,
                         help='Farms this run leases (overrides external_pool_target_leases for the local ingress only)')
+    parser.add_argument('--stall-seconds', type=float, default=3 * 3600,
+                        help='Stop the client after this long holding a ready farm with no generation or grading')
     sys.exit(Run(parser.parse_args()).main())
 
 

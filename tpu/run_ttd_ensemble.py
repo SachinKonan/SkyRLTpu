@@ -221,4 +221,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Grading threads can wait on farms forever and block interpreter
+        # exit; a failed client must exit so its runner can restart it.
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(1)
