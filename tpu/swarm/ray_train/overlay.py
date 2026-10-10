@@ -67,6 +67,7 @@ PROBLEM_PROMPT_FILES = {
     "erdos_min_overlap": "third_party/discover/examples/erdos_min_overlap/env.py",
     "ac_inequalities": "third_party/discover/examples/ac_inequalities/env.py",
     "circle_packing": "third_party/discover/examples/circle_packing/env.py",
+    "fair_features": "third_party/discover/examples/fair_features/env.py",
 }
 
 NATIVE_FILES = {"skyrl/tinker/dispatch.py", "skyrl/tinker/extra/external_inference.py",

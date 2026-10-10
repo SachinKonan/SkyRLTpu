@@ -82,6 +82,8 @@ def main() -> None:
         "erdos_min_overlap": ("examples.erdos_min_overlap.env", "ErdosMinOverlapEnv"),
         "ac_inequalities": ("examples.ac_inequalities.env", "AutoCorrInequalityEnv"),
         "circle_packing": ("examples.circle_packing.env", "CirclePackingEnv"),
+        # FAIR Universe feature families, graded remotely on TPU grader hosts (FAIR_GRADER_URLS)
+        "fair_features": ("examples.fair_features.env", "FairFeaturesEnv"),
         "frontier_erdos_ud": ("examples.frontier_erdos_ud.env", "FrontierErdosUDEnv"),
         # Frontier-CS algorithmic track (ported from the frontiercs worktree);
         # problem id via TTD_PROBLEM_TYPE (46=JSSP), knobs TTD_FCALGO_*
