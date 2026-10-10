@@ -650,7 +650,7 @@ class Config:
     @property
     def has_problem_prompt_overlay(self):
         env = self.client_env.get("TTD_ENV")
-        return (env == "circle_packing" or
+        return (env in ("circle_packing", "fair_features") or
                 env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") == "ac2")
 
     @property
@@ -658,6 +658,11 @@ class Config:
         env = self.client_env.get("TTD_ENV")
         return (env in ("erdos_min_overlap", "circle_packing") or
                 env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") in ("ac1", "ac2"))
+
+    @property
+    def is_fair_features(self):
+        """FAIR Universe feature-function problem: graded remotely by the env itself (FAIR_GRADER_URLS)."""
+        return self.client_env.get("TTD_ENV") == "fair_features"
 
     @property
     def native_thinking_format(self):
@@ -954,11 +959,11 @@ class Config:
                 or self.client_env.get('TTD_MIN_VALID_PER_GROUP', '0') != '0'):
             raise ValueError('bootstrap requires single-model v4-64/v6e-32 science training or v4-32 routing seeds with native TP4 ingress')
         if self.has_answer_only_overlay:
-            if not (self.has_math_environment or self.is_recurrent_gemma or self.science_task):
-                raise ValueError("answer-only extraction requires a supported math, RG-LRU or science environment")
+            if not (self.has_math_environment or self.is_recurrent_gemma or self.science_task or self.is_fair_features):
+                raise ValueError("answer-only extraction requires a supported math, RG-LRU, science or FAIR environment")
             if self.client_env.get("TTD_ANSWER_MODEL_FAMILY") not in ("qwen", "gemma", "muse"):
                 raise ValueError("answer-only extraction requires an explicit model family")
-        if self.has_adaptive_pwc_overlay and not (self.has_math_environment or self.is_recurrent_gemma
+        if self.has_adaptive_pwc_overlay and not (self.has_math_environment or self.is_recurrent_gemma or self.is_fair_features
                 or (self.science_task == 'routing' and (routing_suite == 'q20'
                     or routing_suite == 'full' and self.science_routing_evaluator == 'parallel-v2'))
                 or (self.science_task == 'placement' and self.science_placement_backend == 'cpu'
