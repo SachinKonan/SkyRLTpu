@@ -1,6 +1,8 @@
 """Client-side grading transport: local + farm pools, retries, first-result-wins."""
 import asyncio
+import hashlib
 import json
+import re
 import threading
 import time
 
@@ -35,6 +37,8 @@ class GradingFarm:
                 'math': dict(FAMILIES['math'], total=self.capacity, running=0, queued=0)}})
         if path == '/skyrl/v1/grading/submit':
             body = json.loads(request.content)
+            if not re.fullmatch(r'[0-9a-f]{32}', body['request_id']):
+                return httpx.Response(400, json={'detail': 'request_id must be a 32-character hex id'})
             if host in self.busy:
                 return httpx.Response(429, json={'detail': 'busy', 'retry_after': 0.01})
             self.submits.append((host, body['request_id']))
@@ -51,6 +55,10 @@ class GradingFarm:
             self.cancels.append((host, path.rsplit('/', 1)[1]))
             return httpx.Response(200, json={'state': 'cancelled'})
         raise AssertionError(path)
+
+
+def retry_id(request_id, attempt):
+    return hashlib.sha256(f'{request_id}:{attempt}'.encode()).hexdigest()[:32]
 
 
 def done(result):
@@ -146,7 +154,7 @@ def test_farm_loss_mid_grade_retries_elsewhere_under_an_attempt_id():
             result = await asyncio.wait_for(task, 10)
             assert result['result'] == [2.0]
             assert [h for h, _ in farm.submits] == ['a', 'b']
-            assert farm.submits[0][1] == req.request_id and farm.submits[1][1] == f'{req.request_id}-a1'
+            assert farm.submits[0][1] == req.request_id and farm.submits[1][1] == retry_id(req.request_id, 1)
             retries = [f for e, f in t.reports if e == 'grading_retry']
             assert retries and retries[0]['from_pool'] == 'a' and retries[0]['attempt'] == 1
             assert not any(e == 'grading_infra_failure' for e, _ in t.reports)
@@ -340,12 +348,12 @@ def test_health_pause_keeps_in_flight_grades_and_a_retry_is_not_answered_by_a_ca
             assert not any(e == 'grading_retry' for e, _ in t.reports) and not farm.cancels
 
             # The farm keeps a cancelled id as cancelled; the retry submits a fresh id and succeeds.
+            req = request()
             farm.outcomes['a'] = lambda rid: ({'request_id': rid, 'state': 'cancelled', 'result': None,
                                                'error': {'class': 'cancelled', 'detail': 'cancelled'}}
-                                              if '-a' not in rid else
+                                              if rid == req.request_id else
                                               {'request_id': rid, 'state': 'done', 'error': None,
                                                'result': {'result': [2.0], 'error': None, 'metrics': {}}})
-            req = request()
             task = asyncio.create_task(t.grade(req))
             for _ in range(200):
                 if any(e == 'grading_retry' for e, _ in t.reports):
@@ -353,7 +361,7 @@ def test_health_pause_keeps_in_flight_grades_and_a_retry_is_not_answered_by_a_ca
                 await asyncio.sleep(.01)
             t.directory.pools['a'].unhealthy_until = 0
             assert (await asyncio.wait_for(task, 10))['result'] == [2.0]
-            assert [rid for _, rid in farm.submits[-2:]] == [req.request_id, f'{req.request_id}-a1']
+            assert [rid for _, rid in farm.submits[-2:]] == [req.request_id, retry_id(req.request_id, 1)]
             assert farm.cancels == [('a', req.request_id)]
         finally:
             await t.close()

@@ -5,8 +5,9 @@ The training client grades candidates through one transport: a local pool
 one pool per farm lease the trainer's ingress currently holds (fetched from
 ``GET $SKYRL_GRADING_URL/skyrl/v1/grading/farms``). Every request keeps one
 ``request_id`` across retries so a farm's late result can never enter the
-batch twice (first result wins); a retry on a farm submits under an
-attempt-suffixed id, because the farm keeps a cancelled id as cancelled. Infrastructure failures retry on another
+batch twice (first result wins); a retry on a farm submits under an id
+derived from the request id and attempt, because the farm keeps a cancelled
+id as cancelled. Infrastructure failures retry on another
 pool up to ``max_infra_retries`` and then raise ``GradingInfrastructureError``
 (``abort_training_step``), exactly like the science graders; candidate
 failures are returned as results and stay reward zero.
@@ -17,6 +18,7 @@ client's loop) share one scheduler.
 """
 import asyncio
 from dataclasses import dataclass, field
+import hashlib
 import json
 import os
 import threading
@@ -215,7 +217,9 @@ class FarmPool(Pool):
         return True
 
     async def run(self, request, on_started, attempt=0):
-        wire_id = request.request_id if not attempt else f'{request.request_id}-a{attempt}'
+        # Farms accept only 32-hex ids.
+        wire_id = (request.request_id if not attempt else
+                   hashlib.sha256(f'{request.request_id}:{attempt}'.encode()).hexdigest()[:32])
         self.wire_ids[request.request_id] = wire_id
         body = dict(request_id=wire_id, task=request.task, owner_run=os.environ.get('SKYRL_RUN_ID', ''),
                     scope=request.scope, spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
