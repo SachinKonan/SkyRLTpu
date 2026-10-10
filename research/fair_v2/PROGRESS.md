@@ -15,6 +15,7 @@ The competition deadline is **2026-10-11 23:59 UTC**. Limits: 5 submissions per 
 | `v3-03-stats-cnn-den-cons.zip` | (Sd + C + Dr + 0.5 xSL + 0.5 consP8) / 4 (attribution test) | not submitted |
 | `v3-05-den-consRbands.zip` | (Sd + C + Dr + 1 xSL + 1 consRbands) / 5 | not submitted |
 | `v3-06-den-noise-consR.zip` | v3-05 + N2 (noise battery) + K (peak clustering) + PsBh (spectrum + bispectrum) | not submitted |
+| `v3-09-STACK_D.zip` | v3-04 members kept + consRbands 1.5 + N2 .5 + PsBh .5, Dr 2.5, Sd/consP8 .5; never below v3-04 on any LCO set (.464/.453/.366, mean .4277) | pending |
 | `v3-07-BIG_RE2.zip` | Dr 1 + N2 1 + PsBh 0.5 + xSL 1 + consRbands 2 (Sd and C dropped); chosen by leave-cosmology-out metric 0.4292 | pending |
 
 The leader is at 0.7835 (others 0.7823, 0.7729, ...). User dkn20, at 0.7358, is very likely the first author of the
