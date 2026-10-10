@@ -89,6 +89,11 @@ Details: `agents/consistency/` (`holdout3.py`, `lco3_*.py`, `export3.py`).
 - **Negative result:** the 13-model denoiser ensemble (den_e) is no better than the single denoiser. LCO alone is
   .379 vs .380, and in STACK_D .4271 vs .4277. The residual features are limited by shape noise, not by the
   denoiser's own variance.
+- **Wide-denoiser ensemble (den_w) is worse:** LCO alone .350 vs .380.
+- **12-CNN ensemble** (TPU-trained, converted, accurate):
+  - Averaging the 12 predictions barely lowers error, because the seeds' errors are correlated.
+  - As an extra consistency view it lifts consR alone (.399 -> .407), but in the full stack only +0.001-0.002, inside
+    the ±0.004 proxy noise. Not adopted, since each CNN adds an inference pass.
 - **Infrastructure gotchas:**
   - TPU host-to-host SSH corrupts bulk transfers, so `fetch.sh` uses md5-verified retries.
   - A bare `jax.devices()` on one host grabs every chip.
