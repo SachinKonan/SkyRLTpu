@@ -1,0 +1,132 @@
+{
+  "date": "2026-10-09",
+  "round": "R3",
+  "goal_status": "Active. Official competition performance and SOTA are not established.",
+  "scope": "Standalone research on the authorized erdos-3242 lab host. No production farm, SkyPilot holder job, or controller changes. No GCS transfers.",
+  "literature": [
+    {
+      "url": "https://arxiv.org/abs/2604.14451",
+      "lesson": "The organizer benchmark distinguishes parameter inference from OOD detection and supplies physical-summary, CNN and autoencoder baselines. Predicting cosmology accurately does not by itself establish OOD sensitivity.",
+      "application": "Retain complementary representations and use the specified low-FPR metric; do not compare our synthetic scores directly with its public-test results."
+    },
+    {
+      "url": "https://arxiv.org/abs/2505.00632",
+      "lesson": "Continuous field-level flows outperform several feature methods in a simplified weak-lensing bias-detection study. The field models are unconditional across cosmologies; the main test uses fiducial cosmology, and compressed methods receive idealized true-cosmology conditioning.",
+      "application": "Keep the existing masked field-flow branch as an independent source of information. Our model and data setting are not a reproduction."
+    },
+    {
+      "url": "https://journals.aps.org/prd/abstract/10.1103/lbb5-2kbt",
+      "lesson": "Flow models can reproduce summary means and variances while misestimating correlations; noisy training and augmentation can improve covariance recovery.",
+      "application": "Controlled four-view noise ablation: preserve normalization, architecture and validation inputs, change only training-noise coverage; then separately examine a longer training budget."
+    },
+    {
+      "url": "https://arxiv.org/abs/2410.00401",
+      "lesson": "Minkowski functionals contain information beyond two-point summaries in HSC weak-lensing parameter inference.",
+      "application": "Test fixed-mask digital morphology at three scales. These descriptors are not an unbiased continuum Minkowski estimator, and the paper does not establish their OOD performance here."
+    },
+    {
+      "url": "https://arxiv.org/abs/2508.05744",
+      "lesson": "Scale-conditioned learned summaries and density models expose simulator mismatch, while degeneracies can hide misspecification in a limited representation.",
+      "application": "Test information absent from global summaries, including regional consistency at multiple smoothing scales."
+    },
+    {
+      "url": "https://arxiv.org/abs/2608.13633",
+      "lesson": "Goodness-of-fit, physical data splits and closure tests diagnose different aspects of model misspecification; passing one does not establish the mechanism is correct.",
+      "application": "Separate normal false-positive checks, synthetic sensitivity and new-pattern closure checks; retain explicit unknowns about hidden competition physics."
+    }
+  ],
+  "training": {
+    "normal_realizations": {
+      "train": 16160,
+      "validation": 3232,
+      "calibration": 3232,
+      "audit": 3232
+    },
+    "spatial_features": "45 digital morphology and 48 regional descriptors; original 72 summaries retained unchanged.",
+    "first_round": "Three 88-dimensional variants, each with three initialization seeds and 10000 updates: 16 morphology PCs, 16 regional PCs, or 8 of each; PCA uses training data only.",
+    "noise_ablation": "Three 72-dimensional models trained for 10000 updates on four noise views of the same 16160 clean training realizations. Three additional noise seeds are 9301, 9302 and 9303. Normalization is bit-for-bit identical to the original one-view flow for all three seeds.",
+    "longer_training": "Three further four-view models, 30000 updates. All three beat their 10000-update counterparts on normal validation NLL; selected checkpoints are 27500, 25000 and 26750. Selection uses normal validation NLL, not synthetic OOD scores.",
+    "normal_validation_nll": {
+      "one_view": [
+        -252.0844660092152,
+        -252.29296973235972,
+        -252.0843973446644
+      ],
+      "four_views_10000": [
+        -255.9127245236195,
+        -256.04829504974253,
+        -255.884526281432
+      ],
+      "four_views_30000": [
+        -256.71728232391246,
+        -256.90533926971324,
+        -256.85079672820933
+      ]
+    },
+    "caveat": "Repeated noise views are not new independent cosmological simulations. Likelihoods of different feature spaces must not be compared numerically."
+  },
+  "findings": [
+    "Appending morphology did not improve the general detector in this implementation. Regional PCs helped spatial modulation but weakened other families.",
+    "Noise augmentation improved normal likelihood in every seed, and improved peak/IAAFT diagnostics, but reduced sensitivity to mild low-frequency smoothing. Better normal likelihood is not a universal OOD improvement.",
+    "Predicting regional descriptors from the original 72 summaries exposes additional spatial information. Its residual Mahalanobis statistic improved the strong spatial-modulation score from 0.104 for the appended-feature model to 0.307.",
+    "Centering log regional-residual scores using a normal-only regression on global summaries improved that spatial score to 0.703. Extra conditional variance scaling did not improve it. The regression is a heuristic score correction, not an exact likelihood ratio or guaranteed conditional p-value.",
+    "A frozen fresh-noise/new-pattern check supported the regional finding: 0.710 on the original sine with fresh noise, 0.675 with random phase, 0.399 at twice the spatial frequency and 0.525 for a linear gradient. It flagged 10/1024 normal maps at the nominal 1% threshold.",
+    "The corrected specialist remains weak on spectral/peak shifts. A maximum with the normal-scaled hybrid preserves much of the hybrid's sensitivity while improving the spatial-modulation diagnostic, at a measurable cost on some other families."
+  ],
+  "regional_fitting": {
+    "features": "48 regional descriptors conditioned on the original 72 summaries via robust-transform ridge regression.",
+    "mean_fit": "16160 training maps; alpha selected by five folds grouped by cosmology.",
+    "residual_covariance": "3232 normal validation maps; fixed 10% diagonal shrinkage.",
+    "score_centering": "Regress log residual Mahalanobis score on the original summaries using the 3232 normal validation maps. Alpha selected by five cosmology-grouped folds. This CV is conditional on the already fitted residual model/covariance, not a cross-validation of the entire pipeline.",
+    "calibration": "Normal calibration medians and 90th percentiles define fixed ensemble scales. No public test samples fit any transform or model."
+  },
+  "proposed_candidates": {
+    "06": "Noise-trained three-seed summary ensemble plus the unchanged two-model field branch, equal normal-scaled average.",
+    "07": "Maximum of normal-scaled candidate 06 and the normal-centered regional specialist.",
+    "reason_to_keep_both": "Their difference isolates the additional spatial specialist. Neither has an official leaderboard score recorded.",
+    "originals": "Candidates 04 and 05 remain frozen and unchanged."
+  },
+  "evidence": {
+    "initial_models_and_features": ".fair/r3-evidence/checkpoint-001",
+    "initial_comparison": ".fair/r3-evidence/comparison-001/report.json",
+    "longer_training": ".fair/r3-evidence/long-training-001",
+    "followup_comparison": ".fair/r3-evidence/final-comparison-001/report.json",
+    "regional_calibration": ".fair/r3-evidence/regional-calibration-001/report.json",
+    "new_patterns": ".fair/r3-evidence/spatial-generalization-001/report.json",
+    "figures": ".fair/r3-evidence/figures-001"
+  },
+  "remaining_uncertainties": [
+    "Official public/private OOD performance remains unknown; no official submission was made in this round.",
+    "Synthetic diagnostics and clean audit realizations have been reused. New modulation patterns use fresh noise, but do not create independent simulator realizations or recover unknown physical alternatives.",
+    "Global normal thresholds are not uniform across all physical-parameter bins; the low-Omega_m tail merits investigation.",
+    "The minimum-energy summary score profiles over a discrete nonuniform 101-cosmology grid. Whether continuous supported profiling improves conditional coverage is an untested hypothesis.",
+    "A normal-only float16 roundtrip audit on 128 maps showed median/max absolute original-summary score changes of 0.1502/0.8990. This is not a full tail-equivalence proof.",
+    "Exact private-evaluation interface, clean-environment installation and CPU numerical equivalence are not validated by the TPU checks."
+  ],
+  "next_research": [
+    "Use actual leaderboard feedback to compare the frozen complementary hypotheses; do not infer real performance from the synthetic metric.",
+    "Audit the discrete cosmology profiling hypothesis using normal coverage and constrained continuous inference, with all network weights frozen.",
+    "Explore multiscale regional consistency and noise-invariant learned representations only with frozen closure tests and reported regressions.",
+    "Preserve the normal-only pointwise inference contract and avoid fitting or ranking across public test samples."
+  ],
+  "packaged_artifacts": {
+    "path": ".fair/deliverables/fair-r3-2026-10-09",
+    "manifest_sha256": "65a3461852b28e4d12a2ca85da56b35fdba99b9fdbdf908e4d00055f9fb59551",
+    "06": {
+      "name": "06-noise-trained-hybrid.zip",
+      "sha256": "13f7f66da5b835bdb13f1dc71444073061d73702c79eda7e81fe3ed297c53531",
+      "count": 10000
+    },
+    "07": {
+      "name": "07-noise-hybrid-spatial.zip",
+      "sha256": "b990603c235545a82fe837aeecc416c90dc00840d513d2fb0e53cde05962d533",
+      "count": 10000
+    },
+    "checked": "Finite scores and ZIP schema; staged frozen-bundle raw API; singleton/reverse/chunk/unobserved-NaN invariance; empty/nonfinite guards; standalone CLI.",
+    "api_check_count": 8,
+    "maximum_raw_vs_cached_export_difference": 1.7704324584144615e-06,
+    "public_test_usage": "Frozen independent inference only. Existing verified field scores reused to avoid repeated field inference.",
+    "submitted": false,
+    "official_score": null
+  }
+}

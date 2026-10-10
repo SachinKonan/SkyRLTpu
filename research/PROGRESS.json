@@ -1,0 +1,48 @@
+{
+  "as_of_date": "2026-10-10",
+  "worktree": "SkyRLTpu-fair-universe",
+  "branch": "agent/fair-universe-momo",
+  "autonomous_research_status": "Paused by the user. This checkpoint does not resume experiments or submit predictions.",
+  "competition": "https://www.codabench.org/competitions/10902/",
+  "official_results": [
+    {
+      "candidate": "09-cosmology-corrected-spatial",
+      "reported_label": "cosmology corrected spatial",
+      "score": 0.525304,
+      "reported_best_leaderboard_score": 0.7835,
+      "absolute_gap_to_reported_best": 0.258196,
+      "evidence": "User reported the Codabench response {\"Score\": 0.525304} and the best score in the conversation on 2026-10-10.",
+      "submission_id": null,
+      "independently_verified_on_codabench": false,
+      "local_candidate_archive": ".fair/deliverables/fair-r4-2026-10-09/09-cosmology-corrected-spatial.zip",
+      "local_archive_sha256": "7e8ceacb9a4f21e526116f0c9f22892ca69c432e9ef35a805d6362024a31d329",
+      "uploaded_file_hash_verified": false
+    }
+  ],
+  "other_candidate": {
+    "candidate": "08-cosmology-corrected-hybrid",
+    "official_score": null,
+    "local_candidate_archive": ".fair/deliverables/fair-r4-2026-10-09/08-cosmology-corrected-hybrid.zip",
+    "local_archive_sha256": "dcd7b69f969b7969fdf47fb17e2997878b9b5dc39e912e90e89fad84c299269f"
+  },
+  "interpretation": "Candidate 09 is below the best reported competition score. The official result does not isolate whether the regional specialist helps or hurts; candidate 08 supplies that comparison. Synthetic improvements do not establish competitive leaderboard performance.",
+  "history": [
+    {"stage": "Infrastructure", "result": "Added opt-in TPU grading hosts, isolated candidate fitting/prediction, per-map independence checks and submission export. Recorded lab evidence includes real TPU evaluations, HTTP grading, Qwen inference and cancellation cleanup; a full MOMO search campaign is not established.", "evidence": ".fair/live-evidence.json"},
+    {"stage": "Original package and R1", "result": "Audited the supplied starter; corrected a feature-axis bug. Tested reconstruction-only, parameter-only and joint representations. Physical-summary clusters remained competitive.", "report": "research/fair_ae/REPORT.md"},
+    {"stage": "R2", "result": "Conditional summary flows improved internal diagnostics. Correcting image likelihood for normal power statistics made the image branch useful in the hybrid.", "report": "research/fair_r2/RESEARCH.json"},
+    {"stage": "R3", "result": "Noise augmentation and longer summary-model training improved some diagnostics. A normal-conditioned regional residual detector improved spatial-modulation sensitivity with tradeoffs elsewhere.", "report": "research/fair_r3/RESEARCH.json"},
+    {"stage": "R4", "result": "Continuous cosmology profiling and normal score correction produced frozen candidates 08 and 09. Their prediction archives contain 10000 scores each.", "report": "research/fair_r4/RESEARCH.json"},
+    {"stage": "R5", "result": "Sparse latent-coordinate scores did not establish an improvement; no new candidate.", "report": "research/fair_r5/RESEARCH.json"},
+    {"stage": "R6", "result": "Terminal-noise diagnostics weakened the tested hybrid combinations; no new candidate.", "report": "research/fair_r6/RESEARCH.json"},
+    {"stage": "R7", "result": "Joint modeling of likelihood components did not improve the frozen detector; no new candidate.", "report": "research/fair_r7/RESEARCH.json"},
+    {"stage": "R8", "result": "Four longer-trained field models completed and passed normal-only numerical checks. The larger pair improved normal modeling loss; its full anomaly comparison was still running at the last verified snapshot.", "report": "research/fair_r8/RESEARCH.json"}
+  ],
+  "evidence_policy": "Round reports are historical snapshots. Statements in older reports that no official score had been reported are superseded by the user-reported result above, not silently rewritten as though that result were known earlier.",
+  "artifact_policy": "Large data, environments, fitted weights, score arrays, archives and detailed runtime evidence remain in ignored .fair/. Git preserves source, plans and compact research reports; the commit alone does not contain everything needed to reproduce trained predictions.",
+  "remaining_work": [
+    "Obtain the official candidate-08 score and submission IDs before attributing candidate-09 performance to the regional component.",
+    "When research resumes, inspect the existing R8 evaluation before launching anything; retrieve and verify its outputs if complete. A missing local SSH configuration does not establish that the remote job failed.",
+    "Analyze the matched original-versus-new field comparison and preserve regressions. No R8 anomaly-performance improvement or new submission is claimed.",
+    "Select a defensible search reward before claiming a completed MOMO experiment on this problem."
+  ]
+}

@@ -297,7 +297,7 @@ app = FastAPI()
 @serve.deployment(num_replicas=1, max_ongoing_requests=1024, ray_actor_options={"num_cpus": 1})
 @serve.ingress(app)
 class Ingress:
-    def __init__(self, raw_config, engines, catalog, inference_ips, engine_models=None):
+    def __init__(self, raw_config, engines, catalog, inference_ips, engine_models=None, grading_ips=None):
         self.config = Config.from_dict(raw_config)
         self.engines = list(engines) if isinstance(engines, (list, tuple)) else [engines]
         self.next_engine = 0
@@ -343,7 +343,7 @@ class Ingress:
         self.grading = None
         if self.config.inference_only and self.config.grading_families:
             from .grading_service import GradingService
-            self.grading = GradingService(self.config, inference_ips, report)
+            self.grading = GradingService(self.config, inference_ips, report, tpu_ips=grading_ips)
         self.scheduler = None
         if self.config.inference.external_pool_scheduler:
             from .hybrid_scheduler import HybridScheduler
@@ -1167,5 +1167,6 @@ def deploy(config, prepared, catalog, head):
     ingress = Ingress.options(ray_actor_options={"num_cpus": 1, "resources": {f"node:{head}": 0.01}})
     serve.start(proxy_location="HeadOnly", http_options={"host": "0.0.0.0", "port": config.ports.inference})
     return serve.run_many([serve.RunTarget(
-        target=ingress.bind(config.to_dict(), engines, catalog, heads, engine_models=engine_models), name="skyrl-training")],
+        target=ingress.bind(config.to_dict(), engines, catalog, heads, engine_models=engine_models,
+                           grading_ips=[ip for ip, info in prepared.items() if info['role'] == 'grading']), name="skyrl-training")],
         wait_for_ingress_deployment_creation=False, wait_for_applications_running=False)[0]

@@ -1,0 +1,29 @@
+{
+  "round": "R4, 2026-10-09",
+  "registered_before_results": true,
+  "hypothesis": "The nonuniform discrete 101-cosmology search may contribute to cosmology-dependent normal false alarms. Check this separately from conditional-flow modeling error.",
+  "models": "Frozen R3 four-noise-view, 30000-update summary flows, initialization seeds 0, 1 and 2; best checkpoints already selected on normal validation.",
+  "controls": [
+    "Energy at the known true cosmology for NORMAL diagnostic maps only; never available to a deployed detector.",
+    "Minimum energy over the original 101 training cosmologies, matching the deployed summary component.",
+    "Bounded continuous per-map minimization of the same energy, initialized from the four best grid points and constrained to the training cosmology convex hull."
+  ],
+  "optimization": {
+    "network_weights": "Frozen; only each map's two physical conditioning coordinates are optimized.",
+    "coordinates": "The model's fixed standardized Omega_m and S8 coordinates.",
+    "initial_starts": 4,
+    "steps": 128,
+    "step_size": 0.04,
+    "method": "Projected Adam with deterministic cosine-decayed step size; retain the best energy along each path including its original grid start.",
+    "limitation": "This is approximate constrained minimization, not a proof of the global optimum or a likelihood-ratio test. Allowing interpolated cosmologies enlarges the accepted family."
+  },
+  "validation": {
+    "pilot": "Two normal validation maps from every cosmology: numerical checks, comparison to the original predictor, 64/128-step convergence, supported-hull constraints, and singleton/order independence.",
+    "reference": "A fixed dense grid within the same convex hull on a subset of normal pilot maps; it is a numerical diagnostic, not ground truth for the optimum.",
+    "evaluation": "Normal validation/calibration/audit sets, followed by all previously used synthetic families. Report normal coverage by known parameters, energy reduction and regressions in detection power.",
+    "public_test": "No public test inputs or leaderboard feedback used in this experiment.",
+    "existing_artifacts": "Candidates 04, 05, 06 and 07 remain frozen and unchanged."
+  },
+  "scope": "Authorized erdos-3242 lab only; RAM-backed research directories; no production changes.",
+  "source": "https://arxiv.org/abs/2604.14451"
+}

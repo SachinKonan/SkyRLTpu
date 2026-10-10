@@ -1,0 +1,14 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.egg-info/
+data/
+raw/
+results/
+*.npy
+*.npz
+*.zip
+experiments/
+evidence/*_raw.npy
+__pycache__/
+.pytest_cache/

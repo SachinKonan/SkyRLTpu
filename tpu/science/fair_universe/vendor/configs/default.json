@@ -1,0 +1,27 @@
+{
+  "seed": 31415,
+  "batch_size": 16,
+  "steps": 250,
+  "learning_rate": 0.001,
+  "latent_dim": 24,
+  "hidden_dim": 128,
+  "grid_height": 32,
+  "grid_width": 16,
+  "physics_weight": 0.05,
+  "weight_decay": 0.0001,
+  "reward_max_ind": 2048,
+  "reward_families": [
+    "amplitude",
+    "spectral_tilt",
+    "nonlinear_peak",
+    "smoothing"
+  ],
+  "reward_shift_strength": 1.0,
+  "infer_batch_size": 32,
+  "noise_sigma_e": 0.4,
+  "noise_ng": 30.0,
+  "noise_pixel_arcmin": 2.0,
+  "ensemble_mode": "physics_first",
+  "hybrid_mode": "hybrid_robust",
+  "calibration_max": 2048
+}

@@ -1,0 +1,79 @@
+{
+  "round": "R8",
+  "checkpoint_date": "2026-10-10",
+  "question": "Can longer training or a wider image model improve the frozen anomaly detector after score-only changes failed to help?",
+  "scope": "Research on the authorized erdos-3242 v5p-32 only. Training and likelihood inputs use normal training data and explicitly synthetic probes, without reading the public test for fitting or selection.",
+  "training": {
+    "steps_per_run": 16000,
+    "previous_steps": 4000,
+    "widths": [16, 32],
+    "seeds_per_width": [0, 1],
+    "completed_runs": 4,
+    "best_checkpoint_step_all_runs": 16000,
+    "batch_size": 8,
+    "training_maps": 16160,
+    "caveat": "The cosine learning-rate schedule spans the new training budget, so this changes both training duration and schedule."
+  },
+  "normal_audit": {
+    "maps": 1024,
+    "excludes_checkpoint_selection_maps": 128,
+    "uniform_time_mse": {
+      "old-s0": 1.5187451839447021,
+      "old-s1": 1.5195338726043701,
+      "w16-s0": 1.5160846710205078,
+      "w16-s1": 1.5160441398620605,
+      "w32-s0": 1.5153663158416748,
+      "w32-s1": 1.5154380798339844
+    },
+    "selected_width": 32,
+    "selection_rule": "Lower mean normal-audit MSE across the two seeds, registered before anomaly evaluation.",
+    "width32_minus_original_mean_mse": -0.003737393766641617,
+    "paired_percentile95": [-0.0038694798888172953, -0.003610460855998099],
+    "bootstrap_replicates": 1000,
+    "interpretation": "Approximately 0.25 percent lower normal squared error; not evidence of improved anomaly detection."
+  },
+  "numerical_checks": {
+    "all_four_models_passed": true,
+    "normal_pilot_maps": 32,
+    "integration_steps_compared": [32, 64, 128],
+    "selected_evaluation_steps": 64,
+    "singleton_reversal_and_chunk_max_absolute_score_errors": 0.0,
+    "gate": "Median absolute 64-versus-128-step NLL difference below 0.3 percent of normal-pilot NLL standard deviation.",
+    "limitation": "Finite normal-data checks do not prove exact integration for all possible inputs."
+  },
+  "normal_noise_diagnostic": {
+    "observed_completed_utc": "2026-10-10T00:41:19Z",
+    "training_noise_variance_fraction_by_valid_pixels_in_2x2_cell": {
+      "3": 0.7133402049564593,
+      "4": 0.6697238703827916
+    },
+    "coverage_gaussian_mse": 1.5678416115336757,
+    "privileged_clean_image_oracle_mse": 1.2817980852000015,
+    "limitation": "The clean-image oracle uses information unavailable at inference. It is a diagnostic reference, not a deployable detector or an achievable-model performance claim.",
+    "remote_report": "/dev/shm/fair-r8-20261009/noise-diagnostic-001/report.json",
+    "durable_report_download_verified": false
+  },
+  "likelihood_comparison": {
+    "models": ["old-s0", "old-s1", "new-w32-s0", "new-w32-s1"],
+    "observations_per_model": 13440,
+    "total_model_observation_evaluations": 53760,
+    "shards": 16,
+    "last_observed_progress_utc": "2026-10-10T00:43:02Z",
+    "last_observed_completed_model_observation_evaluations": 16640,
+    "last_observed_running_shards": 16,
+    "last_observed_completed_shards": 0,
+    "current_completion_verified": false,
+    "collector_unit": "fair-r8-finish-evaluation",
+    "remote_root": "/dev/shm/fair-r8-20261009",
+    "launch_recovery": "An initial SSH exit 255 interrupted six launches. Missing units and free assigned chips were verified before starting the remaining six. Existing work was not restarted.",
+    "next_action": "Inspect this existing evaluation and retrieve its receipt/archive if complete before running analyze.py. Do not infer remote termination from a local observation failure."
+  },
+  "durable_artifacts": {
+    "training_archive": ".fair/r8-evidence/training-001.tar.gz",
+    "training_archive_sha256": "c1fcb47c437660ff0eeee203a2860cc03f1d548a9c565814889616cf5f26086c",
+    "normal_study_archive": ".fair/r8-evidence/normal-study-001.tar.gz",
+    "normal_study_archive_sha256": "e709128f7c89080bb0ff57c88b2aa10163af21c962697428fa1a63661da93ab4",
+    "last_durable_status": ".fair/r8-evidence/status-009.json"
+  },
+  "promotion": "No new candidate or prediction archive promoted by this round. Candidates 08 and 09 remain frozen; the later user-reported official score for 09 is recorded in research/PROGRESS.json."
+}

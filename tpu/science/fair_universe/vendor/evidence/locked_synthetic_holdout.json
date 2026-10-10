@@ -1,0 +1,36 @@
+{
+  "kind": "One-shot synthetic holdout, NOT FAIR",
+  "seed": 779153,
+  "frozen_selected": "diverse_v3/physics_first",
+  "n_ind": 1024,
+  "results": {
+    "multiscale": {
+      "development_shift_mean": 0.0987548828125,
+      "unseen_shift_mean": 0.10541666666666667,
+      "all_shift_mean": 0.10160993303571429,
+      "per_family": {
+        "amplitude": 0.01150390625,
+        "spectral_tilt": 0.01890625,
+        "nonlinear_peak": 0.100771484375,
+        "smoothing": 0.263837890625,
+        "anisotropic_smoothing": 0.113251953125,
+        "localized_peak": 0.027099609375,
+        "phase_randomization": 0.1758984375
+      }
+    },
+    "diverse_v3": {
+      "development_shift_mean": 0.18025390624999998,
+      "unseen_shift_mean": 0.12900716145833332,
+      "all_shift_mean": 0.158291015625,
+      "per_family": {
+        "amplitude": 0.01546875,
+        "spectral_tilt": 0.033896484375,
+        "nonlinear_peak": 0.084833984375,
+        "smoothing": 0.58681640625,
+        "anisotropic_smoothing": 0.254111328125,
+        "localized_peak": 0.01337890625,
+        "phase_randomization": 0.11953125
+      }
+    }
+  }
+}

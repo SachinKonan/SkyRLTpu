@@ -396,14 +396,15 @@ class Controller:
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
                     trainer_leader=self.trainer_leader,
                     grader_rank=science_grading_rank if self.config.science_task else self.config.arena_grader_rank)
-        prepared_ranks = sorted(train_ranks + inference_ranks)
+        prepared_ranks = sorted(train_ranks + inference_ranks + self.config.grading.tpu_ranks)
         shared_frozen_head = bool(self.config.frozen_benchmark and 0 in inference_ranks)
         arena_start = (self.hosts[self.config.arena_grader_rank].prepare_arena.remote()
                        if self.config.arena_grader_rank is not None else
                        None if shared_frozen_head else
                        self.hosts[0].prepare_frozen.remote() if self.config.frozen_benchmark else
                        self.hosts[0].prepare_arena.remote() if self.config.arena_samples else None)
-        preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks and not bootstrap_expanded else "inference")
+        preparation_refs = [self.hosts[rank].prepare.remote('grading' if rank in self.config.grading.tpu_ranks
+                            else "trainer" if rank in train_ranks and not bootstrap_expanded else "inference")
                             for rank in prepared_ranks]
         # Observe judge failure while cache/model preparation is still running,
         # and require its readiness before starting any serving deployment.

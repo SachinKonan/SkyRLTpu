@@ -1,0 +1,63 @@
+{
+  "round": "R3, 2026-10-09",
+  "registered_before_results": true,
+  "objective": "Find information missing from the R2 detector, especially morphology and spatial modulation, without using public test inputs for development.",
+  "representations": {
+    "digital_morphology": "Area, grid-edge perimeter and four-connected Euler characteristic at thresholds -1,0,1,2,3 after smoothing by 1,3,6 pixels: 45 features.",
+    "regional": "Mean offset, log-standard-deviation ratio, skewness and kurtosis in four longitudinal regions, at smoothing scales 0,3,6 pixels: 48 features.",
+    "mask": "Fixed survey mask, nonperiodic padded smoothing, fixed eroded supports. These are masked digital descriptors, not a reproduction of a continuum/unbiased Minkowski estimator.",
+    "compact_models": "Preserve the original 72 features; add train-only PCA coordinates: 16 morphology, 16 regional, or 8 from each. Fit three initialization seeds for each 88-dimensional conditional flow."
+  },
+  "protocol": {
+    "inputs": "Official normal independent-realization training maps only; fixed R1 train/validation/calibration/audit splits.",
+    "pairing": "Reproduce original normal and synthetic noise draws exactly; use original 72-feature caches as untouched leading coordinates.",
+    "density": "Same R2 affine-coupling architecture, optimizer and 10000 updates; normal validation chooses checkpoints.",
+    "selection": "Compare all previously used synthetic families and normal conditional false positives, report regressions as well as gains. These are reused development diagnostics, not an independent final OOD holdout.",
+    "public_test": "No public test reads during this experiment. Candidates 04 and 05 remain frozen.",
+    "research_scope": "Standalone JAX experiments on the authorized erdos-3242 lab machine; no production farm/job changes."
+  },
+  "sources": [
+    "https://arxiv.org/abs/2410.00401",
+    "https://arxiv.org/abs/2010.05669",
+    "https://scikit-image.org/docs/stable/api/skimage.measure.html#skimage.measure.euler_number"
+  ],
+  "official_performance": "Unknown; no leaderboard score received.",
+  "additional_ablation": {
+    "name": "Four shape-noise views for the original 72-feature flow",
+    "registered_before_training_results": true,
+    "noise_view_count": 4,
+    "additional_noise_seeds": [
+      9301,
+      9302,
+      9303
+    ],
+    "distinct_fitting_realizations": 16160,
+    "training_feature_rows": 64640,
+    "initialization_seeds": [
+      0,
+      1,
+      2
+    ],
+    "updates": 10000,
+    "control": "Keep baseline normalization, architecture, optimizer schedule and all held-out inputs fixed; only the fitting examples receive extra noise draws.",
+    "limitation": "Repeated noise views are not independent simulator realizations."
+  },
+  "followups_registered_after_initial_comparison": {
+    "reason": "The four-view models still improved normal validation at 9750-10000 updates; regional features helped spatial modulation but diluted other shifts.",
+    "longer_noise_training": {
+      "steps": 30000,
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "changes": "Same four-view dataset and model; cosine schedule extended to 30000. Checkpoint selected on the same normal validation loss only.",
+      "selection": "If a longer fit lowers normal validation NLL, select it per seed for the proposed noise-trained detector; do not select the budget on OOD diagnostic scores."
+    },
+    "spatial_residual_control": {
+      "hypothesis": "Condition morphology/regional summaries on the original 72 normal summaries to separate additional information from global-scale variation.",
+      "fitting": "Ridge regression chosen by grouped-cosmology normal training CV; fixed 10% covariance shrinkage fitted on normal validation residuals. Compare per-map residual Mahalanobis distance.",
+      "selection": "Exploratory diagnostics only; no change to frozen candidates."
+    }
+  }
+}

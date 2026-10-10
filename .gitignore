@@ -138,3 +138,5 @@ tx/tinker/alembic/__pycache__/
 /results/ac1-records/
 /tpu/results/storage-region-audit-20260924/
 /tpu/results/v4-inference-diagnosis-20260907/
+
+.fair/

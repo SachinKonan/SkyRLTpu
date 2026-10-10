@@ -59,6 +59,13 @@ def build(profile, output, *, _executor_only=False):
                 path = repo / "tpu/science" / name
                 if path.is_file():
                     bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
+        if 'fair_universe' in config.grading_families:
+            for path in sorted((repo / 'tpu/science/fair_universe').rglob('*')):
+                if path.is_file() and path.suffix in ('.py', '.json', '.toml', '.md') and '__pycache__' not in path.parts:
+                    bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
+            for name in ('isolation.py', 'placement_slots.py', 'worker.py'):
+                path = repo / 'tpu/science' / name
+                bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
         if config.placement_ranks:
             # Bootstrap/configuration must know chip resources before the
             # placement payload prepares candidate and grader dependencies.

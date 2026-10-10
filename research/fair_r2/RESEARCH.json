@@ -1,0 +1,801 @@
+{
+  "round": "R2, 2026-10-09",
+  "objective": "Improve robust per-map anomaly detection without fitting to the public test data.",
+  "official_performance": "Unknown. No R1 or R2 leaderboard score has been reported in this session; no automatic submission was made.",
+  "research_basis": [
+    {
+      "source": "https://arxiv.org/abs/2604.14451",
+      "finding": "The organizer's paper compares physical power-spectrum, CNN and autoencoder baselines; parameter-inference success does not ensure strong OOD detection.",
+      "decision": "Keep physical summaries and a nearest-cluster control. Preserve the official shape-noise, mask, nuisance distributions and low-FPR metric. Do not compare our synthetic probe scores numerically with the paper's official scores."
+    },
+    {
+      "source": "https://arxiv.org/abs/2505.00632",
+      "finding": "The authors found field-level continuous-time flow density models more effective than compressed scattering/CNN feature models for their weak-lensing mismatch examples, under simplified forward models and noise settings.",
+      "decision": "Implement a separate masked JAX field-flow pilot and check its ODE/Jacobian numerics before treating it as an anomaly detector. Our 2x2-pooled, small-UNet implementation is inspired by the paper, not a faithful reproduction."
+    },
+    {
+      "source": "https://arxiv.org/abs/2006.08561",
+      "finding": "Scattering summaries can retain non-Gaussian cosmological information with fixed, interpretable filters.",
+      "decision": "Test custom masked Morlet summaries as complementary features. Distinguish this implementation from standard Kymatio scattering. Adding all 144 coefficients degraded our early probes; 16 train-fitted principal components largely restored performance without a clear gain."
+    },
+    {
+      "source": "https://arxiv.org/abs/1810.01392",
+      "finding": "Generative ensembles and likelihood disagreement can help detect failures of individual density models.",
+      "decision": "Compare three initialization seeds, averaged latent energy, average likelihood and a WAIC-style mean-NLL plus variance score. Here, average latent energy performed better on the engineered probes; WAIC did not dominate. Initialization seeds are not posterior draws."
+    },
+    {
+      "source": "https://arxiv.org/abs/1906.02845",
+      "finding": "Background statistics can confound likelihood-based OOD detection; likelihood-ratio controls can reduce those effects.",
+      "decision": "Test conditional shape models given the 20 observed power-spectrum summaries. They trade sensitivity across shift families and should not automatically replace a joint model."
+    },
+    {
+      "source": "https://ml4astro.github.io/icml2025/assets/camera_ready/34_Detecting_Model_Misspecific.pdf",
+      "finding": "Scale-dependent summaries and evidence can expose simulation mismatch; a shift may bias parameters without looking unusual in a limited representation.",
+      "decision": "Audit multiple spatial scales and retain diverse diagnostics instead of optimizing a single reconstruction metric."
+    },
+    {
+      "source": "https://arxiv.org/abs/2504.07793",
+      "finding": "Ding et al. report that diffusion likelihood in learned representation space can avoid some failures of pixel-space likelihood on their image benchmarks.",
+      "decision": "Representation and score choice deserve separate ablations. Their pretrained natural-image encoders and image OOD benchmarks do not establish effectiveness on masked cosmological fields."
+    },
+    {
+      "source": "https://arxiv.org/abs/2508.15737",
+      "finding": "Jarve et al. evaluate diffusion density on pretrained encoder representations; likelihood optimality requires assumptions about the alternative distribution.",
+      "decision": "Do not assume fitting the normal distribution alone determines the best detector for unknown physical alternatives."
+    },
+    {
+      "source": "https://proceedings.mlr.press/v235/kamkari24a.html",
+      "finding": "Kamkari et al. pair likelihood with local intrinsic dimensionality to distinguish density from probability mass in generative OOD detection.",
+      "decision": "Check two-sided and geometric diagnostics; do not treat high likelihood as sufficient evidence that a map is physically normal. LID itself has not been implemented here."
+    },
+    {
+      "source": "https://journals.aps.org/prd/abstract/10.1103/lbb5-2kbt",
+      "finding": "Armijo et al. report that weak-lensing flows can recover marginal moments while misestimating cross-statistic covariances, and examine noise/data augmentation as mitigations.",
+      "decision": "Audit the Gaussianized latent covariance on normal validation data. Test a separately fitted shrinkage covariance using normal-only CV before increasing model size."
+    },
+    {
+      "source": "https://arxiv.org/abs/2410.00401",
+      "finding": "Armijo et al. combine power spectra and Minkowski functionals in HSC-Y1 cosmological inference; the morphology summaries add non-Gaussian information.",
+      "decision": "A targeted next representation is multiscale area, boundary length and Euler characteristic, with fixed survey-mask handling. This is a proposed anomaly-detection experiment, not evidence of OOD improvement from that paper."
+    }
+  ],
+  "protocol": {
+    "splits": "Per cosmology: 160 fitting, 32 normal validation, 32 calibration, 32 audit realizations; fixed seed 2026.",
+    "audit_status": "The audit set and R1 synthetic families have now been reused during development. They are not a pristine final holdout.",
+    "selection": "Normal validation selects density checkpoints. Engineered probes inform the choice of score and representation. Equal-weight ensemble averaging is fixed before public-test inference.",
+    "uncertainty": "Paired bootstraps resample the same positives and calibration maps for both methods, preserving normal cosmology proportions. They quantify conditional sampling uncertainty, not unknown OOD physics or selection bias.",
+    "new_morphology_probe": "Masked IAAFT on 256 reused normal audit maps preserves the valid-pixel histogram exactly, but leaves a median relative Fourier-amplitude error of 0.1067. It is not a pure higher-order-only intervention.",
+    "public_test": "Only frozen, pointwise inference on the current v2 file; no public-test calibration, normalization, adaptation, pooled ranks or model selection.",
+    "rules": "https://github.com/FAIR-Universe/Cosmology_Challenge/blob/master/pages/Phase2/overview.md"
+  },
+  "completed_main_comparison": {
+    "order": [
+      "mild smoothing",
+      "mild sharpening",
+      "enhanced peaks",
+      "mild anisotropy",
+      "IAAFT structure",
+      "reduced peaks"
+    ],
+    "r1_cluster_distance": [
+      0.109902,
+      0.178613,
+      0.36,
+      0.20959,
+      0.016211,
+      0.383203
+    ],
+    "three_conditional_flow_energy_average": [
+      0.143086,
+      0.224648,
+      0.476621,
+      0.356055,
+      0.15207,
+      0.564766
+    ],
+    "meaning": "Mean TPR across the competition's 100 log-spaced FPRs, evaluated on engineered synthetic probes. These are not official competition scores.",
+    "normal_audit": "At the calibration 1% threshold: R1 distance flagged 32/3232 normal audit maps, worst cosmology 8/32; the flow ensemble flagged 34/3232, worst cosmology 2/32. Small group counts and repeated audit use limit interpretation."
+  },
+  "candidate": {
+    "path": ".fair/deliverables/fair-r2-2026-10-09/04-conditional-flow-ensemble.zip",
+    "sha256": "6555464da211c03203cfb9090d559b2d69f85a43ec19881e8ef52ab1715dcdaa",
+    "format": "result.json, ood_scores, 10000 finite entries",
+    "checks": "Singleton, reversed-batch and split-batch predictions were identical for fixed verification maps.",
+    "submitted": false
+  },
+  "open_questions": [
+    "Do candidates 04 and 05 improve official performance? No official scores have been reported.",
+    "Would averaging trace probes improve final-score stability enough to justify extra inference cost? The measured normal-data median score change across probes was 0.0514.",
+    "Does normal-only covariance calibration improve flow goodness of fit without erasing genuine anomaly directions?",
+    "Would fresh-noise feature augmentation improve covariance and low-FPR tails? Independent noise views do not add independent simulator realizations.",
+    "How robust are choices made on reused synthetic families to genuinely new physical misspecification?",
+    "Can a new learned representation retain non-Gaussian morphology while ignoring permitted nuisance variation?"
+  ],
+  "field_study": {
+    "models": "Two independent masked field flow-matching models, seeds 0 and 1; each 4000 updates on fresh shape noise, 2x2 pooled inputs, width-16 UNet, EMA checkpoints.",
+    "paper_scope": "The Diao et al. field model was trained unconditionally across cosmologies. Its main OOD comparison fixed test cosmology; its compressed-feature models had idealized true-cosmology conditioning. It is not the same nuisance-marginalized experiment as ours.",
+    "numerics": "32-step Heun integration; one fixed Rademacher trace probe (seed 451). On 32 normal maps, seed-0 median NLL difference from 64 steps was 0.684 versus normal NLL std about 864. Additional trace-seed audit is running. Completed four-probe audit on 128 normal calibration maps: median single-probe NLL SD about 16; two-seed ensemble median 15.65 versus conditional normal SD 115.98. Holding regressors fixed, changing the probe caused median absolute final-score difference 0.0514 and 95th percentile 0.1691.",
+    "discovery": "Raw field likelihood was a poor anomaly score. A normal-only ridge fit to 20 log powers and their exponentials predicts about 98 percent of its normal variance in grouped cross-validation. The absolute, heteroskedastic residual is much better on peak shifts. This is a residual score, not an exact likelihood ratio.",
+    "regression_fit": "512 normal validation maps. Five-fold CV grouped by cosmology chooses ridge strength and input basis; calibration/audit maps do not fit the regressors. Development positives reuse the 512 fitting maps.",
+    "ensemble": "Candidate 05 averages candidate 04 and the corrected two-model field score, each scaled using normal-calibration median and q90-minus-median; weights 1/2,1/2.",
+    "comparison": {
+      "kind": "REUSED_SYNTHETIC_PROBES_NOT_OFFICIAL_OOD",
+      "labels": [
+        "R1 cluster distance",
+        "04: summary-flow ensemble",
+        "Raw field likelihood",
+        "Power-conditioned field residual",
+        "05: equal summary + field ensemble"
+      ],
+      "families": [
+        "development/spectral_low:0.2",
+        "development/spectral_high:0.2",
+        "development/quadratic_peak:0.2",
+        "reused/anisotropic:0.2",
+        "morphology/phase_iaaft:1.0",
+        "morphology/negative_peak:0.2"
+      ],
+      "matrix": [
+        [
+          0.10990234375,
+          0.17861328125,
+          0.36,
+          0.20958984375,
+          0.0162109375,
+          0.383203125
+        ],
+        [
+          0.1430859375,
+          0.2246484375,
+          0.47662109375,
+          0.3560546875,
+          0.1520703125,
+          0.564765625
+        ],
+        [
+          0.0,
+          0.15806640625,
+          0.0016015625,
+          0.01201171875,
+          0.015234375,
+          0.035390625
+        ],
+        [
+          0.10853515625,
+          0.31458984375,
+          0.66904296875,
+          0.11314453125,
+          0.015078125,
+          0.53484375
+        ],
+        [
+          0.22384765625,
+          0.403984375,
+          0.75107421875,
+          0.3912109375,
+          0.1087890625,
+          0.740078125
+        ]
+      ],
+      "resamples": 400,
+      "paired_intervals": [
+        {
+          "family": "development/spectral_low:0.2",
+          "summary": 0.1430859375,
+          "hybrid": 0.22384765625,
+          "delta_95pct_interval": [
+            0.05729638671875001,
+            0.11194775390624993
+          ]
+        },
+        {
+          "family": "development/spectral_high:0.2",
+          "summary": 0.2246484375,
+          "hybrid": 0.403984375,
+          "delta_95pct_interval": [
+            0.14564697265625,
+            0.22533642578125002
+          ]
+        },
+        {
+          "family": "development/quadratic_peak:0.2",
+          "summary": 0.47662109375,
+          "hybrid": 0.75107421875,
+          "delta_95pct_interval": [
+            0.2174204101562501,
+            0.31281298828125
+          ]
+        },
+        {
+          "family": "reused/anisotropic:0.2",
+          "summary": 0.3560546875,
+          "hybrid": 0.3912109375,
+          "delta_95pct_interval": [
+            0.004794921875,
+            0.07225976562499994
+          ]
+        },
+        {
+          "family": "morphology/phase_iaaft:1.0",
+          "summary": 0.1520703125,
+          "hybrid": 0.1087890625,
+          "delta_95pct_interval": [
+            -0.07028320312500001,
+            -0.01911132812500002
+          ]
+        },
+        {
+          "family": "morphology/negative_peak:0.2",
+          "summary": 0.564765625,
+          "hybrid": 0.740078125,
+          "delta_95pct_interval": [
+            0.1267333984375,
+            0.22414453124999997
+          ]
+        }
+      ],
+      "limitations": "Sampling intervals condition on the fitted models, observed cosmologies and chosen artificial shifts. They exclude selection bias and unknown OOD physics."
+    },
+    "normal_audit": {
+      "thresholds": [
+        0.9555574314855916,
+        1.5077778508815596,
+        2.713539965250194
+      ],
+      "normal_audit_count": 3232,
+      "exceedances": [
+        190,
+        28,
+        4
+      ],
+      "max_cosmology_count_at_1pct": 2,
+      "per_cosmology_counts_at_1pct": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        1,
+        2,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "status": "Candidate 05 exported, full TPU API and packaged CLI passed exact equivalence on eight fixed reference inputs; 10000 finite scores; not submitted.",
+    "trace_audit": {
+      "kind": "NORMAL_ONLY_TRACE_EFFECT_ON_FROZEN_HYBRID",
+      "count": 128,
+      "median_single_probe_ensemble_nll_sd": 15.645904712745402,
+      "median_normal_conditional_sd": 115.97541484775095,
+      "median_absolute_hybrid_difference": 0.051391310401617665,
+      "q95_absolute_hybrid_difference": 0.1690826170716179,
+      "maximum_absolute_hybrid_difference": 0.2970992697426405,
+      "interpretation": "Changing the fixed probe while holding the normal-trained regression/calibration fixed. Not an official score uncertainty interval; no public data used."
+    }
+  },
+  "submission_strategy": "Prefer the two complementary R2 hypotheses (04 and 05 once verified) over spending all five daily slots on minor variants. Do not average or tune using pooled public-test inputs. Daily/account remaining quota is not known here; no automatic uploads were made.",
+  "latent_covariance_audit": {
+    "fit_source": "3232 NORMAL validation maps at their known cosmology",
+    "models": [
+      {
+        "seed": 0,
+        "model_sha256": "b59653ac0b128abda412c803543ff6484c388a0331bf67d7267c5c0027d2420f",
+        "selected_alpha": 0.5,
+        "cv": [
+          {
+            "alpha": 0.0,
+            "normal_cv_nll": 41.054963876760915
+          },
+          {
+            "alpha": 0.01,
+            "normal_cv_nll": 41.04564409023935
+          },
+          {
+            "alpha": 0.05,
+            "normal_cv_nll": 41.01025859745346
+          },
+          {
+            "alpha": 0.1,
+            "normal_cv_nll": 40.97033692798365
+          },
+          {
+            "alpha": 0.25,
+            "normal_cv_nll": 40.88039363580167
+          },
+          {
+            "alpha": 0.5,
+            "normal_cv_nll": 40.840739573938045
+          },
+          {
+            "alpha": 1.0,
+            "normal_cv_nll": 41.34165591891448
+          }
+        ],
+        "latent_mean_norm": 0.4536080062389374,
+        "covariance_eigenvalue_range": [
+          0.6927799876018349,
+          1.8890839919048261
+        ],
+        "offdiagonal_correlation_rms": 0.02569397611483723,
+        "expected_covariance": "Identity for a correctly estimated conditional Gaussianizing flow",
+        "seconds": 7.870376603998011
+      },
+      {
+        "seed": 1,
+        "model_sha256": "3993bce9f5131ad124c0b2c5a1843dc11fc9ba0d617d8fd53d38e11948f401e2",
+        "selected_alpha": 0.5,
+        "cv": [
+          {
+            "alpha": 0.0,
+            "normal_cv_nll": 41.00757885999894
+          },
+          {
+            "alpha": 0.01,
+            "normal_cv_nll": 40.99812317234073
+          },
+          {
+            "alpha": 0.05,
+            "normal_cv_nll": 40.962195901899136
+          },
+          {
+            "alpha": 0.1,
+            "normal_cv_nll": 40.92159423187632
+          },
+          {
+            "alpha": 0.25,
+            "normal_cv_nll": 40.82947598955377
+          },
+          {
+            "alpha": 0.5,
+            "normal_cv_nll": 40.78488159618307
+          },
+          {
+            "alpha": 1.0,
+            "normal_cv_nll": 41.25909078621924
+          }
+        ],
+        "latent_mean_norm": 0.42732319235801697,
+        "covariance_eigenvalue_range": [
+          0.7014889854451133,
+          1.8127251793401922
+        ],
+        "offdiagonal_correlation_rms": 0.025205624255621346,
+        "expected_covariance": "Identity for a correctly estimated conditional Gaussianizing flow",
+        "seconds": 12.56530782399932
+      },
+      {
+        "seed": 2,
+        "model_sha256": "c2b6b44f348b75486b5bf247a3da6ceda4a8c5fca767f3a893e0180116f0e14b",
+        "selected_alpha": 0.5,
+        "cv": [
+          {
+            "alpha": 0.0,
+            "normal_cv_nll": 41.006409795516205
+          },
+          {
+            "alpha": 0.01,
+            "normal_cv_nll": 40.99675564973084
+          },
+          {
+            "alpha": 0.05,
+            "normal_cv_nll": 40.95989286239591
+          },
+          {
+            "alpha": 0.1,
+            "normal_cv_nll": 40.91781623746998
+          },
+          {
+            "alpha": 0.25,
+            "normal_cv_nll": 40.819411472158095
+          },
+          {
+            "alpha": 0.5,
+            "normal_cv_nll": 40.75887408562011
+          },
+          {
+            "alpha": 1.0,
+            "normal_cv_nll": 41.18315661605651
+          }
+        ],
+        "latent_mean_norm": 0.4075343608856201,
+        "covariance_eigenvalue_range": [
+          0.750762506590065,
+          1.813182431804632
+        ],
+        "offdiagonal_correlation_rms": 0.024650173800608445,
+        "expected_covariance": "Identity for a correctly estimated conditional Gaussianizing flow",
+        "seconds": 17.179241823003395
+      }
+    ],
+    "normal": {
+      "thresholds": [
+        99.60129933814517,
+        115.92419796003593,
+        159.9384596563243
+      ],
+      "normal_audit_count": 3232,
+      "exceedances": [
+        174,
+        36,
+        5
+      ],
+      "max_cosmology_count_at_1pct": 2,
+      "per_cosmology_counts_at_1pct": [
+        1,
+        2,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        2,
+        1,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+      ]
+    },
+    "probes": {
+      "development/normal": 0.01388671875,
+      "development/second": 0.01400390625,
+      "development/spectral_low:0.2": 0.14265625,
+      "development/spectral_low:0.5": 0.87140625,
+      "development/spectral_high:0.2": 0.22,
+      "development/spectral_high:0.5": 0.90552734375,
+      "development/quadratic_peak:0.2": 0.464453125,
+      "development/quadratic_peak:0.5": 0.981015625,
+      "development/gaussian_mixture:0.2": 0.0169140625,
+      "development/gaussian_mixture:0.5": 0.0431640625,
+      "reused/normal": 0.01283203125,
+      "reused/second": 0.01486328125,
+      "reused/anisotropic:0.2": 0.3578125,
+      "reused/anisotropic:0.5": 0.99306640625,
+      "reused/spatial_modulation:0.2": 0.01546875,
+      "reused/spatial_modulation:0.5": 0.046484375,
+      "morphology/normal": 0.0140625,
+      "morphology/second": 0.0097265625,
+      "morphology/phase_iaaft:1.0": 0.148515625,
+      "morphology/negative_peak:0.2": 0.5743359375,
+      "morphology/negative_peak:0.5": 1.0,
+      "morphology/sign_reflection:1.0": 1.0
+    },
+    "decision": "The normal-only shrinkage covariance did not yield a broad improvement over candidate 04; keep the simpler frozen summary score."
+  },
+  "candidates": [
+    {
+      "path": ".fair/deliverables/fair-r2-2026-10-09/04-conditional-flow-ensemble.zip",
+      "sha256": "6555464da211c03203cfb9090d559b2d69f85a43ec19881e8ef52ab1715dcdaa",
+      "format": "result.json, ood_scores, 10000 finite entries",
+      "checks": "Singleton, reversed-batch and split-batch predictions were identical for fixed verification maps.",
+      "submitted": false
+    },
+    {
+      "path": ".fair/deliverables/fair-r2-hybrid-2026-10-09/05-summary-field-ensemble.zip",
+      "sha256": "af64c3957b99ed0fd8e80ca475019e7e75e7aade17dbb84ef6863f72b3002b59",
+      "count": 10000,
+      "submitted": false,
+      "api_check": {
+        "kind": "FROZEN_HYBRID_API_EQUIVALENCE",
+        "count": 8,
+        "reference_archive_sha256": "af64c3957b99ed0fd8e80ca475019e7e75e7aade17dbb84ef6863f72b3002b59",
+        "reference_match": true,
+        "max_absolute_difference": 0.0,
+        "form_errors": {
+          "full": 0.0,
+          "reversed": 0.0,
+          "chunked": 0.0
+        },
+        "invalid_observed_pixels_rejected": true,
+        "empty_input_supported": true,
+        "source_sha256": "db004611c6828c77a041073f1da69cf39e480c356ff7ccb7d341dd5f10418b0b",
+        "model_or_test_fitting": false
+      },
+      "packaged_cli_check": {
+        "kind": "PACKAGED_CLI_TPU_EQUIVALENCE",
+        "count": 8,
+        "exact": true,
+        "max_difference": 0.0,
+        "archive_sha256": "911600ad31888759b77d0b2a80a0c5a44560d19e5d57c364414cd73f05d07558",
+        "model_or_test_fitting": false
+      }
+    }
+  ],
+  "additional_family_check": {
+    "kind": "ADDITIONAL_FAMILY_CHECK_AFTER_FREEZE_NOT_OFFICIAL_OOD",
+    "results": [
+      {
+        "family": "development/gaussian_mixture:0.2",
+        "count": 512,
+        "summary": 0.01767578125,
+        "hybrid": 0.02189453125,
+        "conditional_paired_delta_95pct_interval": [
+          -0.002543945312500001,
+          0.011875488281249999
+        ]
+      },
+      {
+        "family": "development/gaussian_mixture:0.5",
+        "count": 512,
+        "summary": 0.04251953125,
+        "hybrid": 0.1003515625,
+        "conditional_paired_delta_95pct_interval": [
+          0.042245605468749996,
+          0.08030419921874998
+        ]
+      },
+      {
+        "family": "development/spectral_low:0.5",
+        "count": 512,
+        "summary": 0.8723828125,
+        "hybrid": 0.90849609375,
+        "conditional_paired_delta_95pct_interval": [
+          0.01883105468749993,
+          0.054749999999999945
+        ]
+      },
+      {
+        "family": "development/spectral_high:0.5",
+        "count": 512,
+        "summary": 0.9070703125,
+        "hybrid": 0.971796875,
+        "conditional_paired_delta_95pct_interval": [
+          0.04614355468749999,
+          0.08314160156249999
+        ]
+      },
+      {
+        "family": "development/quadratic_peak:0.5",
+        "count": 512,
+        "summary": 0.98244140625,
+        "hybrid": 0.9983203125,
+        "conditional_paired_delta_95pct_interval": [
+          0.00642285156250004,
+          0.06819042968750004
+        ]
+      },
+      {
+        "family": "reused/spatial_modulation:0.2",
+        "count": 512,
+        "summary": 0.01544921875,
+        "hybrid": 0.01869140625,
+        "conditional_paired_delta_95pct_interval": [
+          -0.0024638671874999993,
+          0.009551269531249998
+        ]
+      },
+      {
+        "family": "reused/spatial_modulation:0.5",
+        "count": 512,
+        "summary": 0.04615234375,
+        "hybrid": 0.0393359375,
+        "conditional_paired_delta_95pct_interval": [
+          -0.017190917968749993,
+          0.0025009765624999804
+        ]
+      },
+      {
+        "family": "reused/anisotropic:0.5",
+        "count": 512,
+        "summary": 0.9929296875,
+        "hybrid": 0.9902734375,
+        "conditional_paired_delta_95pct_interval": [
+          -0.007036132812499937,
+          0.0009379882812500346
+        ]
+      }
+    ],
+    "frozen_manifest_sha256": "e026372129def4c090bc32ec01f931d19497ed0653ac9d107c342f9b23f08db5",
+    "interpretation": "These shifts were not part of field/hybrid score selection. Normal maps and earlier summary-model research are reused; this is not a new official OOD validation set. The candidate is unchanged.",
+    "uncertainty": "400 paired resamples, preserving normal cosmology proportions. Does not cover selection bias or unknown official OOD physics."
+  },
+  "next_experiments": [
+    {
+      "priority": 1,
+      "test": "Official comparison of frozen candidates 04 and 05, when user supplies submission results.",
+      "reason": "Current proxy measurements cannot establish closeness to the real leaderboard. Preserve slots for genuinely different hypotheses."
+    },
+    {
+      "priority": 2,
+      "test": "Fresh shape-noise views for the physical-summary flows, keeping simulator-realization splits fixed.",
+      "reason": "The current summary flows use one cached noise view per training realization. Noise augmentation could improve density estimation; it does not increase independent cosmological simulations."
+    },
+    {
+      "priority": 3,
+      "test": "Small multiscale morphology and regional-summary descriptors with a regularized conditional flow.",
+      "reason": "Targets morphology and spatial-modulation weaknesses. Fixed-mask topology and regional statistics may complement pooled global summaries; this is not yet implemented."
+    },
+    {
+      "priority": 4,
+      "test": "Average several fixed trace probes, then refit normal-only field residual regressors before evaluating new proxies.",
+      "reason": "Probe noise is small relative to raw NLL but material after subtraction of its expected power dependence."
+    },
+    {
+      "priority": 5,
+      "test": "Noise-view self-supervision with an anti-collapse objective and separate physical-parameter heads.",
+      "reason": "The R1 reconstruction/parameter models did not dominate physical summaries; representation diversity needs a different objective, not just another global autoencoder size."
+    }
+  ],
+  "additional_family_interpretation": "The frozen hybrid improves stronger blending from 0.0425 to 0.1004 and strong spectral/peak shifts, but both models remain weak on spatial modulation (0.0462 versus 0.0393 at strength 0.5). It is not a universally stronger detector.",
+  "operational_note": "An intermittent SSH packet-authentication failure interrupted a large derived-cache transfer within the assigned machine. The cache was regenerated from already resident training files, then observed maps, features and source IDs matched SHA256 before scoring. No failed partial cache was scored."
+}

@@ -1,0 +1,29 @@
+{
+  "round": "R8, 2026-10-09",
+  "registered_before_results": true,
+  "question": "Does a better-trained or wider field flow recover information that cannot be recovered by changing scores on the old representation?",
+  "motivation": "R5 sparse summary latents, R6 terminal-noise diagnostics and R7 joint likelihood components did not establish an improvement over the frozen hybrid. The two R2 field networks only received 4000 updates (32000 map exposures with fresh noise) and their normal validation losses were still decreasing at the end.",
+  "literature": [
+    {"url": "https://arxiv.org/abs/2505.00632", "lesson": "Field-level continuous flows performed well in a simplified weak-lensing physical-mismatch study. Model architecture, noise, resolution and survey size matter; its AUROC is not comparable to this challenge's low-FPR score."},
+    {"url": "https://arxiv.org/abs/2604.14451", "lesson": "The actual challenge includes nuisance variation and survey masking; better cosmological parameter prediction alone does not establish anomaly-detection performance."}
+  ],
+  "training": {
+    "models": "Width 16 and width 32, initialization seeds 0 and 1 for each; four runs.",
+    "steps": 16000,
+    "batch": 8,
+    "data": "Same 16160 training maps, same 2x2 pooling, mask, global normalization and fresh specified shape noise as R2.",
+    "validation": "Same fixed 128 normal validation maps, same noise/random-time keys, same batch size. Evaluate every 500 updates; save EMA checkpoint by minimum normal flow-matching MSE.",
+    "optimizer": "Unchanged AdamW, clipping, EMA and warmup/cosine implementation. The cosine schedule now spans 16000 rather than 4000 updates, so this is a training-budget-plus-schedule ablation, not an isolated additional-step intervention.",
+    "implementation": "Call the existing R2 field_flow.py fit entrypoint; do not modify existing model files."
+  },
+  "gates": [
+    "Record exact authorized host, free storage/RAM, TPU owner checks, code hashes and runtime versions before launch.",
+    "Verify finite losses and actual training progress for all four runs.",
+    "After training, evaluate normal loss using common random numbers on a larger validation set, with the old models included.",
+    "Before full likelihood evaluation, check numerical integration and pointwise batch invariance on normal maps.",
+    "Report the normal-only choice and every architecture/seed result. Better normal loss does not establish better OoD detection."
+  ],
+  "followup": "Freeze trained checkpoints before diagnostic anomaly evaluation. Use the established normal-only field conditioning and equal-weight hybrid as a matched comparison, and report regressions. Do not promote using a single favorable proxy.",
+  "public_test": "Not read during training or model selection. Candidates 04 through 09 remain unchanged; no competition submission is implied.",
+  "resources": "Only reserved lab erdos-3242, four independent single-chip jobs on host 0. Existing data in RAM; no GCS, production-path, farm, SkyPilot or controller mutation."
+}

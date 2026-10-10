@@ -1,0 +1,31 @@
+{
+  "round": "R6, 2026-10-09",
+  "registered_before_results": true,
+  "question": "Does the frozen field flow leave anomalous non-Gaussian or spatial structure in its inferred noise that its scalar likelihood and energy miss?",
+  "motivation": "R5 sparse statistics on 72 arbitrary latent axes did not clearly improve detection. The field model has 32651 observed latent pixels with a natural spatial geometry; whiteness tests have a different and physically motivated representation here.",
+  "sources": [
+    "https://arxiv.org/abs/2605.22496",
+    "https://github.com/bomatter/signal-in-the-noise-paper",
+    "https://arxiv.org/abs/2505.00632",
+    "https://arxiv.org/abs/2604.14451"
+  ],
+  "models": "The two existing unconditional R2 field flow-matching networks. No neural retraining, no per-map weight adaptation.",
+  "numerical_pilot": [
+    "Extract terminal latent fields using the same deterministic masked Heun ODE, omitting the divergence computation only.",
+    "Verify an analytic Gaussian flow and agreement with the existing 32-step energy implementation.",
+    "Compare 16, 32 and 64 steps on fixed normal validation maps before looking at synthetic performance.",
+    "Verify singleton/order/chunk invariance, finite observed-pixel checks and insensitivity to missing-pixel content."
+  ],
+  "statistics": [
+    "Raw terminal energy, as an existing-score control",
+    "Anderson-Darling normality statistic over observed latent pixels",
+    "Shape-only Anderson-Darling after within-map centering and scaling",
+    "Coefficient of variation of the mean-centered, masked field's Fourier power, excluding DC",
+    "Sum of squared nonperiodic correlations at spatial offsets (0,1), (1,0), (0,4), (4,0), weighted by valid pair counts"
+  ],
+  "mask": "Use exactly the existing pooled support. Holes and geometry affect the Fourier statistic; compare to the same masked Gaussian control and empirical normal maps, not an unqualified theoretical CV=1 threshold.",
+  "scope_of_claim": "An adaptation inspired by SITN, not a reproduction of its image experiments or theoretical false-positive guarantees. Prior approximation, mask geometry, sample dependence and empirical calibration matter.",
+  "selection": "If numerical checks pass, freeze the statistic definitions before normal-only calibration and reused synthetic diagnostics. Any subsequent change is recorded separately.",
+  "public_test": "No reads for development or selection. Candidates 04 through 09 remain unchanged.",
+  "resources": "Authorized erdos-3242 lab only; RAM-backed caches, no GCS or production mutations."
+}

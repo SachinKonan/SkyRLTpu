@@ -59,7 +59,7 @@ class Cache:
     sync_seconds: int = 60
 
 
-GRADING_FAMILIES = ('math', 'routing', 'placement')
+GRADING_FAMILIES = ('math', 'routing', 'placement', 'fair_universe')
 # Older profiles and bundles call the math sandbox family 'ac2'.
 FAMILY_ALIASES = {'ac2': 'math'}
 # Sandbox tasks whose programs run through the math executor (flat numeric results).
@@ -85,6 +85,10 @@ class Grading:
     trainer's client dispatch candidates to its leased farms as well.
     """
     families: dict = field(default_factory=dict)
+    # Opt-in accelerator grading. Existing CPU families retain their host set.
+    tpu_ranks: list[int] = field(default_factory=list)
+    dataset_root: str = ''
+    candidate_python: str = ''
     farm_transport: bool = False
     # Local AC2 grading also runs in a systemd-limited unit (parity with farms).
     local_systemd: bool = True
@@ -481,6 +485,7 @@ class Config:
         parallel = self.science_routing_evaluator == 'parallel-v2'
         modern = self.science_placement_runtime == 'cpu300-4g-v1'
         defaults = {
+            'fair_universe': dict(slots_per_host=4, cpus=4, memory_gib=16),
             'math': dict(slots_per_host=16, cpus=2, memory_gib=MATH_RESERVED_GIB, memory_max_gib=MATH_KILL_GIB),
             'routing': dict(slots_per_host=self.science_routing_slots_per_host,
                             cpus=10 if parallel else 4, memory_gib=20 if parallel else 8),
@@ -520,6 +525,24 @@ class Config:
     def _validate_grading(self):
         g = self.grading
         families = self.grading_families
+        if 'fair_universe' in families:
+            ranks = g.tpu_ranks
+            inference = self.inference_only_ranks or list(range(self.hosts))
+            if (not self.inference_only or self.accelerator != 'tpu-v5p-32'
+                    or not ranks or any(type(r) is not int or not 0 <= r < self.hosts for r in ranks)
+                    or len(set(ranks)) != len(ranks) or set(ranks) & set(inference)):
+                raise ValueError('fair_universe requires disjoint explicit v5p-32 grading and inference ranks')
+            if families['fair_universe']['slots_per_host'] > self.chips_per_host:
+                raise ValueError('fair_universe permits at most one trial per physical chip')
+            spec = families['fair_universe']
+            if spec['cpus'] != 4 or spec['memory_gib'] != 16 or spec['memory_max_gib'] != 16:
+                raise ValueError('fair_universe uses a fixed 4-CPU, 16-GiB trial contract')
+            if self.bootstrap_all_hosts:
+                raise ValueError('fair_universe grading hosts cannot join inference bootstrap')
+            if not all(isinstance(p, str) and p.startswith('/') for p in (g.dataset_root, g.candidate_python)):
+                raise ValueError('fair_universe requires absolute staged dataset and candidate Python paths')
+        elif g.tpu_ranks or g.dataset_root or g.candidate_python:
+            raise ValueError('TPU grading paths/ranks require fair_universe')
         if not isinstance(g.families, dict) or not set(g.families) <= set(GRADING_FAMILIES) | set(FAMILY_ALIASES):
             raise ValueError(f'grading.families keys must be a subset of {GRADING_FAMILIES}')
         if len({FAMILY_ALIASES.get(name, name) for name in g.families}) != len(g.families):

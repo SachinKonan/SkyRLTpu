@@ -1,0 +1,28 @@
+{
+  "round": "R7, 2026-10-09",
+  "previous_goal_turn": "Progress: completed R5/R6 experiments, retained negative results, and found paired likelihood-component cancellation that motivates this distinct test.",
+  "registered_before_results": true,
+  "question": "Does the joint normal-dependent relationship between field NLL and latent energy add information beyond either conditioned scalar?",
+  "prior_work": "R2 already tested power-conditioned scalar NLL and scalar energy. R6 tested terminal-noise normality and spatial statistics; none was promoted. This experiment changes the low-dimensional joint detector, not the neural networks.",
+  "sources": ["https://proceedings.mlr.press/v130/morningstar21a.html", "https://arxiv.org/abs/2006.09273"],
+  "representation": "The existing two signed, heteroskedastically scaled normal-power residuals: field NLL and field base energy. Same frozen two-model, 32-step field ensemble and normal-only regressors as R2.",
+  "fit": "512 existing normal validation maps supply the joint reference. Also construct outer five-fold cosmology-grouped residuals, with inner grouped mean-prediction residuals for each outer variance model, to reduce in-sample residual shrinkage. Existing scalar-regressor hyperparameters remain fixed; they had previously been chosen using this validation pool, so this is not fully nested end-to-end validation.",
+  "joint_models": [
+    "Diagonal Gaussian Mahalanobis score, as an independence control",
+    "Full Gaussian Mahalanobis score with fixed 10 percent diagonal covariance shrinkage",
+    "Product of two marginal Gaussian KDE densities, as a density-shape independence control",
+    "Two-dimensional Gaussian KDE with fixed 10 percent covariance shrinkage"
+  ],
+  "bandwidth": "For each KDE, select factor 0.5, 1 or 2 times the dimension-appropriate Scott bandwidth by five-fold normal cosmology-grouped log density. No anomaly or public data selects it. Report every choice and score.",
+  "comparison": "Use cross-fitted normal residuals as the primary joint reference, and report the in-sample reference as a sensitivity check. Evaluate all four joint models plus both original scalar controls. Combine each with candidate 08's unchanged summary component using the same equal weighting and normal-calibration median/q90 scales. Replacing the field component avoids the confound of adding duplicate components to an already combined score.",
+  "data": "Original R2 paired normal/proxy scores and the eight R4 closure families. Calibration/audit maps do not fit joint models or choose bandwidth. All synthetic families and clean audit maps are reused diagnostic evidence.",
+  "verification": [
+    "Reproduce original conditioned scalar scores from their frozen regressors and feature caches",
+    "Verify the old scalar-NLL combination reproduces candidate 08",
+    "Analytic/cross-library KDE checks and a same-marginals/different-correlation Gaussian control",
+    "Pointwise singleton/order/chunk checks",
+    "Report all normal false alarms, synthetic regressions, joint correlations and covariance conditioning"
+  ],
+  "public_test": "Not read. Candidates 04 through 09 remain frozen. No competition submission is implied.",
+  "resources": "CPU analysis of existing local artifacts first; no cloud mutation or neural retraining is required."
+}

@@ -1,0 +1,260 @@
+{
+  "kind": "development proxy / synthetic anomalies, not FAIR evaluation",
+  "steps": 160,
+  "batch_size": 32,
+  "in_distribution_count": 1024,
+  "fits": {
+    "autoencoder": {
+      "fit": {
+        "loss": 0.7340795993804932,
+        "steps": 160
+      },
+      "seconds": 2.9433870380000826
+    },
+    "spectral": {
+      "fit": {
+        "feature_train_examples": 5120,
+        "num_features": 24
+      },
+      "seconds": 2.3705555699998513
+    },
+    "multiscale": {
+      "fit": {
+        "train_examples": 5120,
+        "features": 54,
+        "centers": 16,
+        "calibration_examples": 1024,
+        "uses_proxy_labels": false
+      },
+      "seconds": 1.6740906779998568
+    },
+    "hybrid": {
+      "fit": {
+        "train_examples": 5120,
+        "calibration_examples": 1024,
+        "num_features": 104,
+        "pca_dim": 32,
+        "cosmology_centers": 16,
+        "jax_neural_train_steps": 160,
+        "neural_loss_trace": [
+          1.2696391344070435,
+          0.27454134821891785,
+          0.2617480754852295,
+          0.22810712456703186,
+          0.2046946883201599
+        ]
+      },
+      "seconds": 4.738574639000035
+    }
+  },
+  "ranked": [
+    [
+      "hybrid/hybrid_robust",
+      {
+        "mean": 0.17691162109375,
+        "minimum": 0.02095703125,
+        "per_family": {
+          "amplitude": 0.02095703125,
+          "spectral_tilt": 0.03943359375,
+          "nonlinear_peak": 0.0543359375,
+          "smoothing": 0.592919921875
+        }
+      }
+    ],
+    [
+      "hybrid/hybrid",
+      {
+        "mean": 0.15073486328125002,
+        "minimum": 0.019677734375,
+        "per_family": {
+          "amplitude": 0.019677734375,
+          "spectral_tilt": 0.03376953125,
+          "nonlinear_peak": 0.088095703125,
+          "smoothing": 0.461396484375
+        }
+      }
+    ],
+    [
+      "hybrid/spectral",
+      {
+        "mean": 0.1435952709412957,
+        "minimum": 0.01432554731590516,
+        "per_family": {
+          "amplitude": 0.01432554731590516,
+          "spectral_tilt": 0.024908506409671193,
+          "nonlinear_peak": 0.024989496399002137,
+          "smoothing": 0.5101575336406043
+        }
+      }
+    ],
+    [
+      "multiscale/conditional",
+      {
+        "mean": 0.1192431640625,
+        "minimum": 0.019248046875,
+        "per_family": {
+          "amplitude": 0.019248046875,
+          "spectral_tilt": 0.02625,
+          "nonlinear_peak": 0.12802734375,
+          "smoothing": 0.303447265625
+        }
+      }
+    ],
+    [
+      "spectral",
+      {
+        "mean": 0.11634521484375,
+        "minimum": 0.022958984375,
+        "per_family": {
+          "amplitude": 0.022958984375,
+          "spectral_tilt": 0.034111328125,
+          "nonlinear_peak": 0.131884765625,
+          "smoothing": 0.27642578125
+        }
+      }
+    ],
+    [
+      "multiscale/neighbor",
+      {
+        "mean": 0.11555175781249999,
+        "minimum": 0.017255859375,
+        "per_family": {
+          "amplitude": 0.017255859375,
+          "spectral_tilt": 0.027119140625,
+          "nonlinear_peak": 0.133701171875,
+          "smoothing": 0.284130859375
+        }
+      }
+    ],
+    [
+      "multiscale/ensemble",
+      {
+        "mean": 0.1134173273436571,
+        "minimum": 0.01842892534452932,
+        "per_family": {
+          "amplitude": 0.01842892534452932,
+          "spectral_tilt": 0.026038917817470707,
+          "nonlinear_peak": 0.129520337914253,
+          "smoothing": 0.2796811282983754
+        }
+      }
+    ],
+    [
+      "multiscale/max_ensemble",
+      {
+        "mean": 0.11227419112920337,
+        "minimum": 0.017221487993608217,
+        "per_family": {
+          "amplitude": 0.017221487993608217,
+          "spectral_tilt": 0.025363027991061445,
+          "nonlinear_peak": 0.12485457858285358,
+          "smoothing": 0.28165766994929026
+        }
+      }
+    ],
+    [
+      "hybrid/hybrid_max",
+      {
+        "mean": 0.11222763772573287,
+        "minimum": 0.014176788731504323,
+        "per_family": {
+          "amplitude": 0.014176788731504323,
+          "spectral_tilt": 0.020136029426753813,
+          "nonlinear_peak": 0.08038100252210575,
+          "smoothing": 0.3342167302225676
+        }
+      }
+    ],
+    [
+      "hybrid/hybrid_top2",
+      {
+        "mean": 0.10482016121504203,
+        "minimum": 0.01941894896481728,
+        "per_family": {
+          "amplitude": 0.01941894896481728,
+          "spectral_tilt": 0.02443692940492774,
+          "nonlinear_peak": 0.10258380504100001,
+          "smoothing": 0.2728409614494231
+        }
+      }
+    ],
+    [
+      "multiscale/global_score",
+      {
+        "mean": 0.10225585937500001,
+        "minimum": 0.0174609375,
+        "per_family": {
+          "amplitude": 0.0174609375,
+          "spectral_tilt": 0.0257421875,
+          "nonlinear_peak": 0.122294921875,
+          "smoothing": 0.243525390625
+        }
+      }
+    ],
+    [
+      "hybrid/neighbor",
+      {
+        "mean": 0.08261818867211021,
+        "minimum": 0.01658236720823092,
+        "per_family": {
+          "amplitude": 0.01658236720823092,
+          "spectral_tilt": 0.023118692553875622,
+          "nonlinear_peak": 0.12520066538011643,
+          "smoothing": 0.16557102954621786
+        }
+      }
+    ],
+    [
+      "hybrid/conditional",
+      {
+        "mean": 0.07853331077788239,
+        "minimum": 0.018940297988470106,
+        "per_family": {
+          "amplitude": 0.018940297988470106,
+          "spectral_tilt": 0.020518806443879548,
+          "nonlinear_peak": 0.10313823513052114,
+          "smoothing": 0.1715359035486588
+        }
+      }
+    ],
+    [
+      "hybrid/global",
+      {
+        "mean": 0.062366788053483016,
+        "minimum": 0.01693172749797178,
+        "per_family": {
+          "amplitude": 0.01693172749797178,
+          "spectral_tilt": 0.020086643599291593,
+          "nonlinear_peak": 0.09759059770457572,
+          "smoothing": 0.11485818341209296
+        }
+      }
+    ],
+    [
+      "hybrid/neural",
+      {
+        "mean": 0.045856980806463554,
+        "minimum": 0.016179310512799045,
+        "per_family": {
+          "amplitude": 0.016179310512799045,
+          "spectral_tilt": 0.01753658578598644,
+          "nonlinear_peak": 0.05965208145502045,
+          "smoothing": 0.09005994547204828
+        }
+      }
+    ],
+    [
+      "autoencoder",
+      {
+        "mean": 0.04048095703125,
+        "minimum": 0.009775390625,
+        "per_family": {
+          "amplitude": 0.03009765625,
+          "spectral_tilt": 0.016259765625,
+          "nonlinear_peak": 0.009775390625,
+          "smoothing": 0.105791015625
+        }
+      }
+    ]
+  ]
+}

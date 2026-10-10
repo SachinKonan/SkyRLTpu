@@ -1,0 +1,481 @@
+{
+  "date": "2026-10-09",
+  "round": "R4",
+  "goal_status": "Active; no official score or SOTA claim established.",
+  "question": "Does nonuniform discrete physical profiling explain cosmology-dependent false alarms, and can normal-only score correction help?",
+  "scope": "Authorized erdos-3242 lab only; all four hosts used for the frozen field closure study. RAM-backed folders; no GCS or production changes.",
+  "literature": [
+    {
+      "url": "https://arxiv.org/abs/2604.14451",
+      "application": "Best-fit physical-model goodness-of-fit is a useful inference control. We compare discrete and continuous per-map fits, keeping every neural weight fixed; our energy score is not an exact chi-squared test or likelihood ratio."
+    },
+    {
+      "url": "https://arxiv.org/abs/2505.00632",
+      "application": "Retain the existing independent field-level model as a complementary detector; its simplified research setting does not establish our competition performance."
+    },
+    {
+      "url": "https://arxiv.org/abs/2006.08545",
+      "application": "Architecture and local image correlations can make generative likelihood unreliable for OOD; better normal fit does not guarantee better anomaly detection."
+    },
+    {
+      "url": "https://arxiv.org/abs/2404.16085",
+      "application": "Scattering is effective in real weak-lensing parameter inference, but our prior R2 scattering ablation did not clearly improve OOD probes. This round does not duplicate that completed experiment."
+    }
+  ],
+  "fixed_models": "Three R3 four-noise-view 30000-update summary flows; unchanged two field networks and regional specialist.",
+  "physical_profile": {
+    "inputs": "Two standardized physical conditioning coordinates per individual map, no true labels at deployment.",
+    "algorithm": "Four best original-grid starts, 128 projected Adam steps, convex hull of the 101 training cosmologies, best iterate retained.",
+    "numerics": "202 normal pilot maps: exact singleton/order/chunk agreement; independent projection check; dense 1964-point reference on 16 maps; 64-vs-128 iteration check.",
+    "audit_rank_correlation_grid_continuous": 0.9993311859564525,
+    "audit_energy_reduction_quantiles": [
+      0.00354766845703125,
+      0.3255805969238281,
+      1.0131980895996093,
+      2.5447360992431656,
+      7.7884979248046875
+    ],
+    "true_cosmology_audit_mean_energy": 80.00957489013672,
+    "finding": "Continuous profiling changes scores only slightly. False-alarm variation persists when using known true cosmology as a normal-only diagnostic; grid discretization is not its main explanation."
+  },
+  "normal_score_correction": {
+    "fit": "3232 normal validation maps; no calibration or audit maps fit the regression.",
+    "input": "Mean inferred standardized cosmology from the three frozen networks; target is log mean profile energy.",
+    "location": [
+      2,
+      0.01
+    ],
+    "variance": [
+      2,
+      1.0
+    ],
+    "location_cv_rmse_over_target_sd": 0.9874336163748711,
+    "variance_cv_improvement_over_constant": 0.00038767333413813887,
+    "selection": "Five folds grouped by cosmology. Checkpoint selection had already used these validation maps; the scale CV is conditional on cross-fitted location residuals, not fully nested whole-pipeline CV.",
+    "finding": "Location correction explains a small part of normal log-score variance. Additional variance-model NLL improvement is small. Two-sided typicality reduced sensitivity in these tests and was not promoted."
+  },
+  "fresh_noise_closure": {
+    "normal_maps": 3232,
+    "synthetic_maps_per_family": 404,
+    "families": 8,
+    "cached_observations": 9696,
+    "field_evaluations": 19392,
+    "cache_sha256": "140f06810177c7e7be2a61cf953badaf2cea7d67180a124e1b025bef6d6f7ce3",
+    "reproducibility": "All four independently prepared observation caches had identical hashes. Every observation was scored once by each of the two field models, checked by shard coverage and file hashes.",
+    "fit_after_freezing": false,
+    "public_data_read": false,
+    "results": {
+      "06-grid-hybrid": {
+        "normal": {
+          "normal_float32": {
+            "count": 3232,
+            "exceedances": [
+              190,
+              37,
+              2
+            ]
+          },
+          "normal_float16": {
+            "count": 3232,
+            "exceedances": [
+              189,
+              36,
+              2
+            ]
+          }
+        },
+        "probes": {
+          "spectral_low:0.2": 0.13868811881188123,
+          "spectral_high:0.2": 0.4531435643564356,
+          "quadratic_peak:0.2": 0.8332178217821782,
+          "quadratic_peak:-0.2": 0.7326485148514851,
+          "gaussian_mixture:0.5": 0.0548019801980198,
+          "anisotropic:0.2": 0.3256683168316832,
+          "spatial_modulation:0.5": 0.034801980198019805,
+          "phase_iaaft:1.0": 0.1405940594059406
+        }
+      },
+      "scaled-hybrid": {
+        "normal": {
+          "normal_float32": {
+            "count": 3232,
+            "exceedances": [
+              171,
+              39,
+              2
+            ]
+          },
+          "normal_float16": {
+            "count": 3232,
+            "exceedances": [
+              172,
+              40,
+              2
+            ]
+          }
+        },
+        "probes": {
+          "spectral_low:0.2": 0.15997524752475248,
+          "spectral_high:0.2": 0.4892821782178218,
+          "quadratic_peak:0.2": 0.8494306930693071,
+          "quadratic_peak:-0.2": 0.7707673267326731,
+          "gaussian_mixture:0.5": 0.06158415841584158,
+          "anisotropic:0.2": 0.3311138613861387,
+          "spatial_modulation:0.5": 0.03621287128712871,
+          "phase_iaaft:1.0": 0.125470297029703
+        }
+      },
+      "07-grid-spatial": {
+        "normal": {
+          "normal_float32": {
+            "count": 3232,
+            "exceedances": [
+              175,
+              36,
+              2
+            ]
+          },
+          "normal_float16": {
+            "count": 3232,
+            "exceedances": [
+              176,
+              37,
+              2
+            ]
+          }
+        },
+        "probes": {
+          "spectral_low:0.2": 0.12037128712871288,
+          "spectral_high:0.2": 0.427549504950495,
+          "quadratic_peak:0.2": 0.8207178217821781,
+          "quadratic_peak:-0.2": 0.7120792079207923,
+          "gaussian_mixture:0.5": 0.04698019801980198,
+          "anisotropic:0.2": 0.30019801980198024,
+          "spatial_modulation:0.5": 0.540990099009901,
+          "phase_iaaft:1.0": 0.11415841584158416
+        }
+      },
+      "scaled-spatial": {
+        "normal": {
+          "normal_float32": {
+            "count": 3232,
+            "exceedances": [
+              181,
+              43,
+              3
+            ]
+          },
+          "normal_float16": {
+            "count": 3232,
+            "exceedances": [
+              180,
+              43,
+              3
+            ]
+          }
+        },
+        "probes": {
+          "spectral_low:0.2": 0.13368811881188117,
+          "spectral_high:0.2": 0.45180693069306926,
+          "quadratic_peak:0.2": 0.8279455445544553,
+          "quadratic_peak:-0.2": 0.7401732673267325,
+          "gaussian_mixture:0.5": 0.05014851485148515,
+          "anisotropic:0.2": 0.29522277227722776,
+          "spatial_modulation:0.5": 0.5903465346534653,
+          "phase_iaaft:1.0": 0.09202970297029701
+        }
+      }
+    },
+    "paired_differences": {
+      "scaled-hybrid": {
+        "spectral_low:0.2": {
+          "delta": 0.02128712871287125,
+          "percentile95": [
+            0.011446163366336658,
+            0.03171534653465346
+          ],
+          "replicates": 500
+        },
+        "spectral_high:0.2": {
+          "delta": 0.03613861386138617,
+          "percentile95": [
+            0.019192450495049463,
+            0.049912128712871276
+          ],
+          "replicates": 500
+        },
+        "quadratic_peak:0.2": {
+          "delta": 0.016212871287128894,
+          "percentile95": [
+            -0.0017079207920789956,
+            0.03891460396039635
+          ],
+          "replicates": 500
+        },
+        "quadratic_peak:-0.2": {
+          "delta": 0.03811881188118804,
+          "percentile95": [
+            0.023084158415841393,
+            0.05215717821782155
+          ],
+          "replicates": 500
+        },
+        "gaussian_mixture:0.5": {
+          "delta": 0.006782178217821781,
+          "percentile95": [
+            0.0008898514851485266,
+            0.012899752475247533
+          ],
+          "replicates": 500
+        },
+        "anisotropic:0.2": {
+          "delta": 0.005445544554455506,
+          "percentile95": [
+            -0.008037747524752406,
+            0.017570544554455416
+          ],
+          "replicates": 500
+        },
+        "spatial_modulation:0.5": {
+          "delta": 0.0014108910891089052,
+          "percentile95": [
+            -0.0027499999999999985,
+            0.005954826732673264
+          ],
+          "replicates": 500
+        },
+        "phase_iaaft:1.0": {
+          "delta": -0.01512376237623761,
+          "percentile95": [
+            -0.0259535891089109,
+            -0.0044047029702970475
+          ],
+          "replicates": 500
+        }
+      },
+      "scaled-spatial": {
+        "spectral_low:0.2": {
+          "delta": 0.013316831683168287,
+          "percentile95": [
+            0.00514108910891089,
+            0.0225767326732673
+          ],
+          "replicates": 500
+        },
+        "spectral_high:0.2": {
+          "delta": 0.02425742574257428,
+          "percentile95": [
+            0.008709158415841642,
+            0.039947400990098955
+          ],
+          "replicates": 500
+        },
+        "quadratic_peak:0.2": {
+          "delta": 0.007227722772277234,
+          "percentile95": [
+            -0.0105439356435645,
+            0.03248391089108871
+          ],
+          "replicates": 500
+        },
+        "quadratic_peak:-0.2": {
+          "delta": 0.02809405940594023,
+          "percentile95": [
+            0.013836633663365955,
+            0.0441893564356437
+          ],
+          "replicates": 500
+        },
+        "gaussian_mixture:0.5": {
+          "delta": 0.003168316831683171,
+          "percentile95": [
+            -0.0018601485148515037,
+            0.008639851485148524
+          ],
+          "replicates": 500
+        },
+        "anisotropic:0.2": {
+          "delta": -0.00497524752475248,
+          "percentile95": [
+            -0.01690717821782171,
+            0.00649814356435647
+          ],
+          "replicates": 500
+        },
+        "spatial_modulation:0.5": {
+          "delta": 0.04935643564356429,
+          "percentile95": [
+            0.021396658415841516,
+            0.07438490099009898
+          ],
+          "replicates": 500
+        },
+        "phase_iaaft:1.0": {
+          "delta": -0.02212871287128715,
+          "percentile95": [
+            -0.03178589108910891,
+            -0.011113861386138615
+          ],
+          "replicates": 500
+        }
+      }
+    },
+    "float16_effects": {
+      "scaled-hybrid": {
+        "absolute_error_quantiles": [
+          0.003157945495080916,
+          0.010218331427295092,
+          0.02048769207152844,
+          0.044719459968834974
+        ],
+        "spearman": 0.9999078111067566,
+        "flag_changes_at_1pct": 1
+      },
+      "scaled-spatial": {
+        "absolute_error_quantiles": [
+          0.0032015563348524317,
+          0.010563127612585162,
+          0.024868723057113615,
+          0.06206577068970498
+        ],
+        "spearman": 0.9999248555576182,
+        "flag_changes_at_1pct": 0
+      }
+    },
+    "iaaft_amplitude_error_quantiles": [
+      0.0819886103272438,
+      0.10770948231220245,
+      0.1332846328616142,
+      0.17009122669696808
+    ],
+    "finding": "Corrected hybrid improves seven of eight point estimates, with a real IAAFT regression. The spatial variant improves spatial modulation from 0.5410 to 0.5903 but also loses IAAFT sensitivity. Neither dominates every shift."
+  },
+  "candidates": {
+    "08": "Continuous-profile, normal-score-corrected summary + unchanged field residual; equal normal-scaled average.",
+    "09": "Maximum of normal-scaled 08 and the unchanged regional specialist.",
+    "prior_candidates": "04/05/06/07 unchanged; each expresses different inductive assumptions.",
+    "submitted": false,
+    "official_score": null
+  },
+  "implementation_audit": {
+    "resolved_issue": "A duplicate compare.py module name caused an import failure in the initial R4 wrapper. Fixed R3 runtime import precedence; closure then passed. No model or score settings changed.",
+    "frozen_runtime": ".fair/r4-evidence/frozen-candidates-v2",
+    "manifest_sha256": "bd43217ffdc5e9587d83b71e7a7b8e107d0e167f2a4abca62c148fc8cbd8fe06"
+  },
+  "limitations": [
+    "Synthetic diagnostics and clean audit maps are reused; fresh measurement noise is not a fresh cosmological simulation.",
+    "Bootstrap intervals are conditional empirical IID intervals, excluding model-selection uncertainty and unseen physical alternatives.",
+    "Normal correction does not make false alarms uniform across every cosmology.",
+    "Continuous inferred physical coordinates can absorb anomaly signals. Scores are heuristic, not exact conditional p-values.",
+    "IAAFT preserves valid-pixel histograms but not masked Fourier amplitudes exactly.",
+    "Private-evaluation interface and clean installation remain unverified."
+  ],
+  "evidence": {
+    "profile": "comparison-001/report.json",
+    "correction": "score-calibration-001/report.json",
+    "closure": "closure-comparison-001/report.json",
+    "figures": "figures-001"
+  },
+  "next_questions": [
+    "Test sparse coordinate violations or local geometry of the normal latent representation; aggregate energy may hide changes in a small number of informative directions. Keep noise and nuisance effects controlled.",
+    "Test whether a better field representation improves morphology sensitivity without removing the useful normal score correction.",
+    "Characterize score corrections on independently simulated normal/alternative physics if such permissible data become available.",
+    "Validate actual competition performance of frozen candidates; no official performance has been observed."
+  ],
+  "turn_audit": "Progress: completed profiling experiment, normal-only correction, independent numerical checks, and frozen four-host fresh-noise/precision comparison.",
+  "packaged_predictions": {
+    "kind": "FROZEN_POINTWISE_PUBLIC_INFERENCE_NOT_LEADERBOARD_SCORE",
+    "public_test_use": "Independent frozen inference and numerical verification only; no fitting, normalization, ranking or selection.",
+    "manifest_sha256": "bd43217ffdc5e9587d83b71e7a7b8e107d0e167f2a4abca62c148fc8cbd8fe06",
+    "field_cache_reused": true,
+    "legacy_reproduction_errors": {
+      "06": 8.133181222547137e-05,
+      "07": 0.00011230168820475228
+    },
+    "raw_api_errors": {
+      "08": 2.799450797397185e-06,
+      "09": 3.885334738384927e-06
+    },
+    "pointwise_errors": {
+      "08": {
+        "single": 0.0,
+        "reverse": 0.0,
+        "chunks": 0.0,
+        "outside_mask_nan": 0.0
+      },
+      "09": {
+        "single": 0.0,
+        "reverse": 0.0,
+        "chunks": 0.0,
+        "outside_mask_nan": 0.0
+      }
+    },
+    "api_check_indices": [
+      0,
+      1,
+      17,
+      101,
+      1007,
+      4095,
+      7001,
+      9999
+    ],
+    "empty_and_nonfinite_guards_checked": true,
+    "seconds": 191.3670515929989,
+    "receipts": {
+      "08": {
+        "filename": "08-cosmology-corrected-hybrid.zip",
+        "count": 10000,
+        "sha256": "dcd7b69f969b7969fdf47fb17e2997878b9b5dc39e912e90e89fad84c299269f",
+        "submitted": false
+      },
+      "09": {
+        "filename": "09-cosmology-corrected-spatial.zip",
+        "count": 10000,
+        "sha256": "7e8ceacb9a4f21e526116f0c9f22892ca69c432e9ef35a805d6362024a31d329",
+        "submitted": false
+      }
+    },
+    "timing_limit": "Reuses prior field inference; timing is not the full cost of fresh inference on 10000 maps.",
+    "submitted": false,
+    "official_score": null
+  },
+  "standalone_cli_check": {
+    "kind": "STANDALONE_FROZEN_CLI_CHECK",
+    "variant": "08",
+    "count": 8,
+    "max_absolute_error": 0.0,
+    "working_directory": "/dev/shm",
+    "external_cwd_verified": true
+  },
+  "verified_bundle": {
+    "archive": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-fair-universe/.fair/deliverables/fair-r4-2026-10-09.tar.gz",
+    "bytes": 6561915,
+    "sha256": "85acd758ce7705bf6564ca6fdc8d465877e551911ce3e1f9c233614d65c602de",
+    "files_verified": 100,
+    "candidates": {
+      "08": {
+        "filename": "08-cosmology-corrected-hybrid.zip",
+        "count": 10000,
+        "sha256": "dcd7b69f969b7969fdf47fb17e2997878b9b5dc39e912e90e89fad84c299269f",
+        "submitted": false
+      },
+      "09": {
+        "filename": "09-cosmology-corrected-spatial.zip",
+        "count": 10000,
+        "sha256": "7e8ceacb9a4f21e526116f0c9f22892ca69c432e9ef35a805d6362024a31d329",
+        "submitted": false
+      }
+    },
+    "submitted": false,
+    "official_score": null
+  },
+  "final_lab_state": {
+    "time": "2026-10-09T23:18:58.069140+00:00",
+    "machine": "erdos-3242",
+    "running_r4_services": 0,
+    "observed_tpu_process_owners": 0,
+    "holder_2306_untouched": true,
+    "source": ".fair/r4-evidence/final-host-check.json"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "round": "R5, 2026-10-09",
+  "registered_before_results": true,
+  "hypothesis": "Aggregate latent energy can dilute abnormalities confined to a few coordinates. Test sparse departures and their concentration, retaining the same frozen normal density models and physical inference.",
+  "models": "Three frozen R3 four-noise-view summary flows; R4 continuous per-map physical coordinates. No neural retraining.",
+  "inputs": "The existing 72 physical summaries of each map. Extract all 72 Gaussianized latent coordinates at that map's frozen R4 energy-minimizing physical coordinates. Known true cosmology is used for NORMAL diagnostics only.",
+  "normal_fit": "Per-seed coordinate means and standard deviations from the 3232 normal validation latents at inferred cosmology. No calibration/audit/proxy or public inputs fit these moments. Retain raw-energy/raw-maximum controls.",
+  "scores": [
+    "Raw sum of squared coordinates, reproducing R4 continuous energy",
+    "Sum of squares after normal-validation coordinate standardization",
+    "Maximum raw squared coordinate",
+    "Maximum standardized squared coordinate",
+    "Mean of the four largest standardized squared coordinates",
+    "One-sided Berk-Jones-style tail aggregation over the smallest 1..36 two-sided Gaussian tail values; numerical tails clipped to [1e-300,1-1e-12]",
+    "Angular concentration: 72 times largest standardized square divided by sum of standardized squares"
+  ],
+  "ensemble": "Compute each statistic per seed, then average its three scalar outputs. Examine standalone diagnostics and fixed equal-mean / maximum combinations with normal-scaled candidate 08; these are exploratory diagnostic comparisons. Normal calibration medians and q90-minus-median supply all scales.",
+  "checks": [
+    "Sum of extracted raw squares reproduces recorded profile energies",
+    "Singleton, reversed and chunked inputs give identical latents",
+    "Compare learned-coordinate normal tails against a fixed seeded 72-dimensional Gaussian simulation as a numerical control",
+    "Report every prior synthetic family and normal parameter-dependent false positives, including regressions",
+    "Retain per-seed results; latent axes are not averaged across seeds",
+    "If a sparse statistic appears useful, check whether profiling that statistic separately over physical coordinates changes the conclusion"
+  ],
+  "data": "Existing normal validation/calibration/audit sets and prior synthetic probes. These maps/families are reused. R4 fresh-noise closure is also now a reused diagnostic, not a new blind test for R5.",
+  "public_test": "Not read or used for model selection in this experiment. Candidates 04 through 09 stay frozen.",
+  "limitations": [
+    "The flow coordinates need not be independent or exactly Gaussian, especially after estimating cosmology from the same map.",
+    "Named sparse-testing asymptotic optimality does not apply automatically to this learned representation.",
+    "Empirical normal calibration, not the Gaussian tail transform, defines final thresholds.",
+    "Synthetic performance and repeated diagnostic selection do not establish competition performance."
+  ],
+  "sources": [
+    "https://arxiv.org/abs/math/0410072",
+    "https://proceedings.mlr.press/v235/kamkari24a.html",
+    "https://arxiv.org/abs/2006.08545"
+  ],
+  "scope": "Authorized erdos-3242 lab only, RAM-backed directories, no production or GCS changes."
+}

@@ -1,0 +1,13 @@
+{
+  "question": "How much of the field flow-matching error is irreducible observation noise, and how much normal-data structure has each network learned beyond an analytic Gaussian predictor?",
+  "timing": "Specified after the R8 normal audit and architecture selection, while the frozen likelihood study runs. Does not change that study or use its anomaly results.",
+  "inputs": "The exact 1024 normal validation maps, shape-noise draws, interpolation noise and times from audit_normal.py. No public test or synthetic anomalies.",
+  "baselines": [
+    "Unit-variance independent Gaussian velocity using the existing global training normalization.",
+    "Independent Gaussian velocity with mean and variance fitted on all 16160 clean training maps separately for each mask-coverage count, plus the known shape-noise variance.",
+    "Privileged oracle velocity given each clean validation image and the known observation-noise variance. This uses information unavailable at deployment and is only a diagnostic lower bound on expected squared error."
+  ],
+  "comparison": "Use the same realized velocity targets for all references and all six saved normal model audits. Report per-time and uniform-time paired errors, reference-to-oracle gap and fraction of that gap explained by each network; do not interpret the latter as anomaly-detection performance.",
+  "numerical_checks": "Check Gaussian conditional mean and variance algebra by simulation and a direct conditional-Gaussian covariance calculation before evaluating real normal maps.",
+  "resources": "CPU-only on the already authorized erdos-3242 head, with a 2-CPU quota and bounded memory; no TPU ownership changes, bucket access or production mutation."
+}

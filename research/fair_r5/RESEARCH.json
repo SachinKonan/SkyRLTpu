@@ -1,0 +1,231 @@
+{
+  "round": "R5",
+  "date": "2026-10-09",
+  "goal_status": "Active; official performance unmeasured.",
+  "finding": "No R5 method is promoted. Sparse coordinate scores usually reduce sensitivity. The IAAFT ensemble improvement is matched by adding more of the existing dense summary score.",
+  "sources": [
+    {
+      "url": "https://arxiv.org/abs/math/0410072",
+      "role": "Rare/weak sparse signal motivation; its guarantees do not apply automatically to learned dependent coordinates."
+    },
+    {
+      "url": "https://arxiv.org/abs/math/0603238",
+      "role": "Berk-Jones/phi-divergence statistic family."
+    },
+    {
+      "url": "https://arxiv.org/abs/1311.3190",
+      "role": "Distinguish the KL-supremum statistic from exact Berk-Jones M statistics and exact p-values."
+    }
+  ],
+  "measurements": {
+    "latent_diagnostics": {
+      "0": {
+        "validation_mean_norm": 0.3928130499837948,
+        "validation_std_range": [
+          0.9544446879704573,
+          1.073533984037543
+        ],
+        "audit_coordinate_3sigma_fraction": 0.0031628162816281628,
+        "gaussian_reference_3sigma_fraction": 0.0026997960632601866,
+        "audit_offdiagonal_correlation_rms": 0.022032715726309278,
+        "true_cosmology_audit_energy_mean": 80.52564225841284
+      },
+      "1": {
+        "validation_mean_norm": 0.24601789289424855,
+        "validation_std_range": [
+          0.9483011476552743,
+          1.0669641163288448
+        ],
+        "audit_coordinate_3sigma_fraction": 0.003339005775577558,
+        "gaussian_reference_3sigma_fraction": 0.0026997960632601866,
+        "audit_offdiagonal_correlation_rms": 0.021826583608852174,
+        "true_cosmology_audit_energy_mean": 79.74564699564112
+      },
+      "2": {
+        "validation_mean_norm": 0.2504731972376664,
+        "validation_std_range": [
+          0.978261608068205,
+          1.074719604064982
+        ],
+        "audit_coordinate_3sigma_fraction": 0.00315851897689769,
+        "gaussian_reference_3sigma_fraction": 0.0026997960632601866,
+        "audit_offdiagonal_correlation_rms": 0.021311054286248507,
+        "true_cosmology_audit_energy_mean": 79.75744374160101
+      }
+    },
+    "gaussian_control": {
+      "kind": "GAUSSIAN_NUMERICAL_CONTROL_NOT_COSMOLOGICAL_OOD",
+      "count": 50000,
+      "analytical_1pct_thresholds": {
+        "raw_energy": 102.81631418914067,
+        "raw_max": 14.507829023067591
+      },
+      "observed_fractions": {
+        "raw_energy": 0.00954,
+        "raw_max": 0.01034
+      },
+      "energy_mean": 71.94738863281201,
+      "energy_std": 11.974557104123654,
+      "order_invariance": true,
+      "angular_scale_invariance": true,
+      "tail_statistic_monotonicity": true
+    },
+    "IAAFT_sparse_minus_matched_dense": {
+      "delta": -0.0027734375000000033,
+      "percentile95": [
+        -0.01527734375,
+        0.010591796874999998
+      ],
+      "replicates": 500
+    },
+    "rotation_audit_rank_correlations": {
+      "rotated_max_0": 0.5367506433285855,
+      "rotated_max_1": 0.5189674418991768,
+      "rotated_max_2": 0.5177407354998063,
+      "rotated_max_3": 0.5325850698910707
+    },
+    "selected_results": {
+      "08": {
+        "development/spectral_low:0.2": 0.22046875,
+        "development/spectral_high:0.2": 0.4394921875,
+        "development/quadratic_peak:0.2": 0.79416015625,
+        "morphology_r2/negative_peak:0.2": 0.8205859375,
+        "morphology_r2/phase_iaaft:1.0": 0.1316796875
+      },
+      "raw_energy": {
+        "development/spectral_low:0.2": 0.11759765625,
+        "development/spectral_high:0.2": 0.24373046875,
+        "development/quadratic_peak:0.2": 0.5694921875,
+        "morphology_r2/negative_peak:0.2": 0.6252734375,
+        "morphology_r2/phase_iaaft:1.0": 0.206875
+      },
+      "diagonal_energy": {
+        "development/spectral_low:0.2": 0.1180078125,
+        "development/spectral_high:0.2": 0.2421484375,
+        "development/quadratic_peak:0.2": 0.5670703125,
+        "morphology_r2/negative_peak:0.2": 0.6250390625,
+        "morphology_r2/phase_iaaft:1.0": 0.2071875
+      },
+      "diagonal_max": {
+        "development/spectral_low:0.2": 0.06529296875,
+        "development/spectral_high:0.2": 0.1486328125,
+        "development/quadratic_peak:0.2": 0.40458984375,
+        "morphology_r2/negative_peak:0.2": 0.489296875,
+        "morphology_r2/phase_iaaft:1.0": 0.099296875
+      },
+      "08+diagonal_bj-mean": {
+        "development/spectral_low:0.2": 0.167109375,
+        "development/spectral_high:0.2": 0.33537109375,
+        "development/quadratic_peak:0.2": 0.69177734375,
+        "morphology_r2/negative_peak:0.2": 0.731328125,
+        "morphology_r2/phase_iaaft:1.0": 0.206015625
+      },
+      "08+diagonal_top4-mean": {
+        "development/spectral_low:0.2": 0.16064453125,
+        "development/spectral_high:0.2": 0.33095703125,
+        "development/quadratic_peak:0.2": 0.69830078125,
+        "morphology_r2/negative_peak:0.2": 0.7379296875,
+        "morphology_r2/phase_iaaft:1.0": 0.1748828125
+      },
+      "08+raw_energy-mean": {
+        "development/spectral_low:0.2": 0.18556640625,
+        "development/spectral_high:0.2": 0.36404296875,
+        "development/quadratic_peak:0.2": 0.72666015625,
+        "morphology_r2/negative_peak:0.2": 0.7628125,
+        "morphology_r2/phase_iaaft:1.0": 0.2087890625
+      },
+      "08+raw_energy-max": {
+        "development/spectral_low:0.2": 0.16853515625,
+        "development/spectral_high:0.2": 0.3712890625,
+        "development/quadratic_peak:0.2": 0.73552734375,
+        "morphology_r2/negative_peak:0.2": 0.748046875,
+        "morphology_r2/phase_iaaft:1.0": 0.198125
+      },
+      "08+diagonal_energy-mean": {
+        "development/spectral_low:0.2": 0.18576171875,
+        "development/spectral_high:0.2": 0.3637109375,
+        "development/quadratic_peak:0.2": 0.72552734375,
+        "morphology_r2/negative_peak:0.2": 0.7634765625,
+        "morphology_r2/phase_iaaft:1.0": 0.207890625
+      },
+      "08+diagonal_energy-max": {
+        "development/spectral_low:0.2": 0.16986328125,
+        "development/spectral_high:0.2": 0.3723046875,
+        "development/quadratic_peak:0.2": 0.73677734375,
+        "morphology_r2/negative_peak:0.2": 0.749921875,
+        "morphology_r2/phase_iaaft:1.0": 0.1975390625
+      },
+      "rotated_max_0": {
+        "development/spectral_low:0.2": 0.06708984375,
+        "development/spectral_high:0.2": 0.13115234375,
+        "development/quadratic_peak:0.2": 0.347265625,
+        "morphology_r2/negative_peak:0.2": 0.4405078125,
+        "morphology_r2/phase_iaaft:1.0": 0.1037890625
+      },
+      "rotated_max_1": {
+        "development/spectral_low:0.2": 0.06380859375,
+        "development/spectral_high:0.2": 0.1348828125,
+        "development/quadratic_peak:0.2": 0.3396875,
+        "morphology_r2/negative_peak:0.2": 0.420546875,
+        "morphology_r2/phase_iaaft:1.0": 0.0810546875
+      },
+      "rotated_max_2": {
+        "development/spectral_low:0.2": 0.05265625,
+        "development/spectral_high:0.2": 0.12396484375,
+        "development/quadratic_peak:0.2": 0.36267578125,
+        "morphology_r2/negative_peak:0.2": 0.4251171875,
+        "morphology_r2/phase_iaaft:1.0": 0.0973828125
+      },
+      "rotated_max_3": {
+        "development/spectral_low:0.2": 0.062578125,
+        "development/spectral_high:0.2": 0.14697265625,
+        "development/quadratic_peak:0.2": 0.4050390625,
+        "morphology_r2/negative_peak:0.2": 0.4729296875,
+        "morphology_r2/phase_iaaft:1.0": 0.113828125
+      }
+    },
+    "normal_audit_1pct_counts": {
+      "raw_energy": 41,
+      "diagonal_energy": 43,
+      "raw_max": 30,
+      "diagonal_max": 26,
+      "diagonal_top4": 29,
+      "diagonal_bj": 40,
+      "angular_max": 36,
+      "08": 36,
+      "08+diagonal_max-mean": 41,
+      "08+diagonal_max-max": 30,
+      "08+diagonal_top4-mean": 32,
+      "08+diagonal_top4-max": 29,
+      "08+diagonal_bj-mean": 42,
+      "08+diagonal_bj-max": 39,
+      "08+angular_max-mean": 37,
+      "08+angular_max-max": 30
+    }
+  },
+  "evidence": {
+    "latent_archive": {
+      "sha256": "fa98b52b58caf6bd1972b8f1a53054e39d4d7b9774ca88eb5b1e02fb54b6bf40",
+      "bytes": 23716889,
+      "verified": true
+    },
+    "initial_report": ".fair/r5-evidence/comparison-001/report.json",
+    "matched_control_report": ".fair/r5-evidence/matched-controls-001/report.json",
+    "all_initial_scores": ".fair/r5-evidence/comparison-001/comparison.csv",
+    "all_control_scores": ".fair/r5-evidence/matched-controls-001/comparison.csv"
+  },
+  "verification": {
+    "extraction": "Three frozen checkpoints; squared extracted latents reproduce their recorded energies.",
+    "pointwise": "All three extraction checks have zero singleton/order/chunk error.",
+    "rotations": "Four fixed orthogonal rotations preserve energy within numerical tolerance; none is selected.",
+    "normal_reference": "Coordinate moments fit normal validation only. Calibration supplies score scales and thresholds."
+  },
+  "limitations": [
+    "All diagnostic families and clean maps were previously examined.",
+    "The follow-up dense and rotation controls were added after seeing the initial R5 results.",
+    "Bootstrap intervals condition on the fixed models and empirical IID samples; they do not correct model selection or shared simulation dependence.",
+    "Latent-axis failure does not rule out sparse anomalies in physically meaningful coordinates.",
+    "Candidates 04 through 09 remain unchanged; no public test reads and no competition submissions in R5."
+  ],
+  "next_hypothesis": "R6: test the field flow terminal noise for non-Gaussianity and spatial dependence, inspired by arXiv:2605.22496; numerical/normal-data pilot first."
+}

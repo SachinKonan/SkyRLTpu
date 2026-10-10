@@ -362,6 +362,18 @@ class Host:
         return self.heartbeat()
 
     def prepare(self, role):
+        if role == 'grading':
+            if self.rank not in self.config.grading.tpu_ranks:
+                raise ValueError('grading host is outside its explicit assignment')
+            from tpu.science.fair_universe.ray_grade import readiness
+            # Data staging and hardware qualification are explicit lab steps.
+            status = readiness._function(self.config.grading.dataset_root,
+                                          self.config.grading.candidate_python)
+            if not status['ready']:
+                raise RuntimeError('FAIR grading host is not qualified: ' + str(status))
+            self.role, self.phase = role, 'prepared'
+            return dict(rank=self.rank, role=role, root=str(self.root), source=str(self.source),
+                        config=self.config.to_dict(), qualification=status)
         if role not in ("trainer", "inference"):
             raise ValueError("invalid host role")
         self.role, self.phase = role, "cache_setup"

@@ -22,7 +22,8 @@ def workload_resources(config, rank):
     if config.inference_only and families:
         # Farm hosts: one token per declared grading slot so Ray never packs
         # more candidates onto a host than its partition can isolate.
-        tokens = {f"grading_{name}": spec["slots_per_host"] for name, spec in families.items()}
+        tokens = {f"grading_{name}": spec["slots_per_host"] for name, spec in families.items()
+                  if name != 'fair_universe' or rank in config.grading.tpu_ranks}
         if "placement" in families:
             tokens["placement_cpu_host"] = families["placement"]["slots_per_host"]
         return {"TPU": config.chips_per_host, **tokens}

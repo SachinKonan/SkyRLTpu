@@ -1,0 +1,540 @@
+{
+  "round": "R7",
+  "date": "2026-10-09",
+  "goal_status": "Active; no official OOD performance established.",
+  "finding": "No R7 candidate promoted. All four registered joint-or-independent replacements weaken the hybrid on all eight reused closure families. Modeling dependence helps some comparisons against independence but does not establish a better detector.",
+  "literature": [
+    {
+      "url": "https://proceedings.mlr.press/v130/morningstar21a.html",
+      "application": "Adapted normal-reference density estimation over paired conditional residuals, with matched independent controls; not a reproduction of DoSE."
+    }
+  ],
+  "normal_reference_count": 512,
+  "registered_models": [
+    "hybrid/oof/diagonal",
+    "hybrid/oof/gaussian_joint",
+    "hybrid/oof/kde_independent",
+    "hybrid/oof/kde_joint"
+  ],
+  "normal_residual_correlation": 0.7226930722481841,
+  "joint_minus_independence": {
+    "hybrid/oof/gaussian_joint": {
+      "closure/spectral_low:0.2": {
+        "delta": 0.012103960396039587,
+        "percentile95": [
+          -0.005798267326732691,
+          0.03023514851485146
+        ],
+        "replicates": 500
+      },
+      "closure/spectral_high:0.2": {
+        "delta": 0.023737623762376203,
+        "percentile95": [
+          0.000649133663366364,
+          0.04906683168316827
+        ],
+        "replicates": 500
+      },
+      "closure/quadratic_peak:0.2": {
+        "delta": -0.004356435643564471,
+        "percentile95": [
+          -0.024322400990098716,
+          0.015683787128712635
+        ],
+        "replicates": 500
+      },
+      "closure/quadratic_peak:-0.2": {
+        "delta": -0.007153465346534604,
+        "percentile95": [
+          -0.03479641089108918,
+          0.0202029702970296
+        ],
+        "replicates": 500
+      },
+      "closure/gaussian_mixture:0.5": {
+        "delta": -0.010297029702970313,
+        "percentile95": [
+          -0.019819925742574265,
+          -0.0014356435643564365
+        ],
+        "replicates": 500
+      },
+      "closure/anisotropic:0.2": {
+        "delta": 0.0014851485148514587,
+        "percentile95": [
+          -0.023453589108910898,
+          0.02596163366336634
+        ],
+        "replicates": 500
+      },
+      "closure/spatial_modulation:0.5": {
+        "delta": 0.007821782178217825,
+        "percentile95": [
+          0.0008155940594059397,
+          0.016084777227722762
+        ],
+        "replicates": 500
+      },
+      "closure/phase_iaaft:1.0": {
+        "delta": 0.009158415841584153,
+        "percentile95": [
+          -0.005942450495049513,
+          0.023213490099009894
+        ],
+        "replicates": 500
+      }
+    },
+    "hybrid/oof/kde_joint": {
+      "closure/spectral_low:0.2": {
+        "delta": 0.01247524752475243,
+        "percentile95": [
+          -0.011394183168316826,
+          0.03616522277227716
+        ],
+        "replicates": 500
+      },
+      "closure/spectral_high:0.2": {
+        "delta": 0.010222772277227676,
+        "percentile95": [
+          -0.02273948019801985,
+          0.04526980198019793
+        ],
+        "replicates": 500
+      },
+      "closure/quadratic_peak:0.2": {
+        "delta": -0.027599009900990068,
+        "percentile95": [
+          -0.06240655940594063,
+          0.0020569306930694146
+        ],
+        "replicates": 500
+      },
+      "closure/quadratic_peak:-0.2": {
+        "delta": -0.03745049504950493,
+        "percentile95": [
+          -0.07340408415841576,
+          0.0007382425742572178
+        ],
+        "replicates": 500
+      },
+      "closure/gaussian_mixture:0.5": {
+        "delta": -0.01032178217821781,
+        "percentile95": [
+          -0.025561262376237622,
+          0.004171410891089105
+        ],
+        "replicates": 500
+      },
+      "closure/anisotropic:0.2": {
+        "delta": -0.010965346534653475,
+        "percentile95": [
+          -0.04217636138613861,
+          0.02113056930693071
+        ],
+        "replicates": 500
+      },
+      "closure/spatial_modulation:0.5": {
+        "delta": 0.009554455445544556,
+        "percentile95": [
+          0.0016936881188118846,
+          0.01857858910891089
+        ],
+        "replicates": 500
+      },
+      "closure/phase_iaaft:1.0": {
+        "delta": 0.015198019801980198,
+        "percentile95": [
+          -0.0035061881188118834,
+          0.033374999999999995
+        ],
+        "replicates": 500
+      }
+    }
+  },
+  "radial_control": {
+    "registered_before_results": false,
+    "rationale": "Use Gaussian radius rather than squared radius before averaging with the summary score. This preserves standalone rankings but controls one source of unequal tail weighting.",
+    "results": {
+      "08": {
+        "probes": {
+          "legacy/development/spectral_low:0.2": 0.22046875,
+          "legacy/development/spectral_high:0.2": 0.4394921875,
+          "legacy/development/quadratic_peak:0.2": 0.79416015625,
+          "legacy/reused/anisotropic:0.2": 0.38619140625,
+          "legacy/morphology/phase_iaaft:1.0": 0.1316796875,
+          "legacy/morphology/negative_peak:0.2": 0.8205859375,
+          "closure/spectral_low:0.2": 0.15997524752475248,
+          "closure/spectral_high:0.2": 0.4892821782178218,
+          "closure/quadratic_peak:0.2": 0.8494306930693071,
+          "closure/quadratic_peak:-0.2": 0.7707673267326731,
+          "closure/gaussian_mixture:0.5": 0.06158415841584158,
+          "closure/anisotropic:0.2": 0.3311138613861387,
+          "closure/spatial_modulation:0.5": 0.03621287128712871,
+          "closure/phase_iaaft:1.0": 0.125470297029703
+        },
+        "normal": {
+          "audit": [
+            189,
+            36,
+            4
+          ],
+          "normal_float32": [
+            171,
+            39,
+            2
+          ],
+          "normal_float16": [
+            172,
+            40,
+            2
+          ]
+        }
+      },
+      "hybrid/oof/diagonal": {
+        "probes": {
+          "legacy/development/spectral_low:0.2": 0.20599609375,
+          "legacy/development/spectral_high:0.2": 0.39580078125,
+          "legacy/development/quadratic_peak:0.2": 0.77564453125,
+          "legacy/reused/anisotropic:0.2": 0.3783203125,
+          "legacy/morphology/phase_iaaft:1.0": 0.1417578125,
+          "legacy/morphology/negative_peak:0.2": 0.8041015625,
+          "closure/spectral_low:0.2": 0.13821782178217823,
+          "closure/spectral_high:0.2": 0.4473762376237624,
+          "closure/quadratic_peak:0.2": 0.8407673267326734,
+          "closure/quadratic_peak:-0.2": 0.7641336633663366,
+          "closure/gaussian_mixture:0.5": 0.05891089108910892,
+          "closure/anisotropic:0.2": 0.31900990099009907,
+          "closure/spatial_modulation:0.5": 0.031955445544554456,
+          "closure/phase_iaaft:1.0": 0.12118811881188117
+        },
+        "normal": {
+          "audit": [
+            199,
+            41,
+            5
+          ],
+          "normal_float32": [
+            175,
+            34,
+            2
+          ],
+          "normal_float16": [
+            174,
+            34,
+            2
+          ]
+        }
+      },
+      "hybrid/oof/gaussian_joint": {
+        "probes": {
+          "legacy/development/spectral_low:0.2": 0.20564453125,
+          "legacy/development/spectral_high:0.2": 0.41572265625,
+          "legacy/development/quadratic_peak:0.2": 0.76935546875,
+          "legacy/reused/anisotropic:0.2": 0.3721875,
+          "legacy/morphology/phase_iaaft:1.0": 0.1464453125,
+          "legacy/morphology/negative_peak:0.2": 0.797890625,
+          "closure/spectral_low:0.2": 0.14707920792079207,
+          "closure/spectral_high:0.2": 0.46386138613861383,
+          "closure/quadratic_peak:0.2": 0.836707920792079,
+          "closure/quadratic_peak:-0.2": 0.7563366336633663,
+          "closure/gaussian_mixture:0.5": 0.04784653465346536,
+          "closure/anisotropic:0.2": 0.3179950495049505,
+          "closure/spatial_modulation:0.5": 0.03871287128712872,
+          "closure/phase_iaaft:1.0": 0.1245792079207921
+        },
+        "normal": {
+          "audit": [
+            212,
+            44,
+            10
+          ],
+          "normal_float32": [
+            194,
+            43,
+            5
+          ],
+          "normal_float16": [
+            195,
+            43,
+            5
+          ]
+        }
+      },
+      "hybrid/in-sample/diagonal": {
+        "probes": {
+          "legacy/development/spectral_low:0.2": 0.20498046875,
+          "legacy/development/spectral_high:0.2": 0.39833984375,
+          "legacy/development/quadratic_peak:0.2": 0.77814453125,
+          "legacy/reused/anisotropic:0.2": 0.37728515625,
+          "legacy/morphology/phase_iaaft:1.0": 0.1415625,
+          "legacy/morphology/negative_peak:0.2": 0.8033984375,
+          "closure/spectral_low:0.2": 0.13730198019801979,
+          "closure/spectral_high:0.2": 0.45049504950495056,
+          "closure/quadratic_peak:0.2": 0.8420792079207922,
+          "closure/quadratic_peak:-0.2": 0.7633910891089108,
+          "closure/gaussian_mixture:0.5": 0.05816831683168317,
+          "closure/anisotropic:0.2": 0.31777227722772283,
+          "closure/spatial_modulation:0.5": 0.032425742574257434,
+          "closure/phase_iaaft:1.0": 0.12099009900990099
+        },
+        "normal": {
+          "audit": [
+            201,
+            39,
+            5
+          ],
+          "normal_float32": [
+            174,
+            34,
+            2
+          ],
+          "normal_float16": [
+            172,
+            35,
+            2
+          ]
+        }
+      },
+      "hybrid/in-sample/gaussian_joint": {
+        "probes": {
+          "legacy/development/spectral_low:0.2": 0.2041015625,
+          "legacy/development/spectral_high:0.2": 0.4196484375,
+          "legacy/development/quadratic_peak:0.2": 0.7713671875,
+          "legacy/reused/anisotropic:0.2": 0.3713671875,
+          "legacy/morphology/phase_iaaft:1.0": 0.146484375,
+          "legacy/morphology/negative_peak:0.2": 0.7969921875,
+          "closure/spectral_low:0.2": 0.14601485148514853,
+          "closure/spectral_high:0.2": 0.46797029702970294,
+          "closure/quadratic_peak:0.2": 0.8385396039603958,
+          "closure/quadratic_peak:-0.2": 0.7543564356435644,
+          "closure/gaussian_mixture:0.5": 0.04700495049504951,
+          "closure/anisotropic:0.2": 0.31700495049504945,
+          "closure/spatial_modulation:0.5": 0.03987623762376238,
+          "closure/phase_iaaft:1.0": 0.1258910891089109
+        },
+        "normal": {
+          "audit": [
+            208,
+            44,
+            10
+          ],
+          "normal_float32": [
+            193,
+            43,
+            5
+          ],
+          "normal_float16": [
+            193,
+            43,
+            5
+          ]
+        }
+      }
+    },
+    "paired_differences_from08": {
+      "hybrid/oof/diagonal": {
+        "closure/spectral_low:0.2": {
+          "delta": -0.02175742574257425,
+          "percentile95": [
+            -0.03522524752475248,
+            -0.009911509900990108
+          ],
+          "replicates": 500
+        },
+        "closure/spectral_high:0.2": {
+          "delta": -0.04190594059405939,
+          "percentile95": [
+            -0.06161138613861386,
+            -0.020327970297029686
+          ],
+          "replicates": 500
+        },
+        "closure/quadratic_peak:0.2": {
+          "delta": -0.008663366336633671,
+          "percentile95": [
+            -0.022131188118811995,
+            0.0052196782178219325
+          ],
+          "replicates": 500
+        },
+        "closure/quadratic_peak:-0.2": {
+          "delta": -0.0066336633663365285,
+          "percentile95": [
+            -0.02553403465346523,
+            0.007464727722772364
+          ],
+          "replicates": 500
+        },
+        "closure/gaussian_mixture:0.5": {
+          "delta": -0.0026732673267326618,
+          "percentile95": [
+            -0.011527846534653476,
+            0.007290222772277226
+          ],
+          "replicates": 500
+        },
+        "closure/anisotropic:0.2": {
+          "delta": -0.012103960396039615,
+          "percentile95": [
+            -0.028970297029702975,
+            0.00553527227722767
+          ],
+          "replicates": 500
+        },
+        "closure/spatial_modulation:0.5": {
+          "delta": -0.004257425742574254,
+          "percentile95": [
+            -0.011883663366336642,
+            0.0050389851485148456
+          ],
+          "replicates": 500
+        },
+        "closure/phase_iaaft:1.0": {
+          "delta": -0.004282178217821828,
+          "percentile95": [
+            -0.018905321782178214,
+            0.009286509900990093
+          ],
+          "replicates": 500
+        }
+      },
+      "hybrid/oof/gaussian_joint": {
+        "closure/spectral_low:0.2": {
+          "delta": -0.012896039603960407,
+          "percentile95": [
+            -0.029336014851485147,
+            0.0032345297029703107
+          ],
+          "replicates": 500
+        },
+        "closure/spectral_high:0.2": {
+          "delta": -0.025420792079207943,
+          "percentile95": [
+            -0.04693997524752471,
+            -0.006540222772277353
+          ],
+          "replicates": 500
+        },
+        "closure/quadratic_peak:0.2": {
+          "delta": -0.012722772277228067,
+          "percentile95": [
+            -0.026342821782178255,
+            0.0019721534653463924
+          ],
+          "replicates": 500
+        },
+        "closure/quadratic_peak:-0.2": {
+          "delta": -0.014430693069306777,
+          "percentile95": [
+            -0.036178836633663204,
+            0.0009170792079208084
+          ],
+          "replicates": 500
+        },
+        "closure/gaussian_mixture:0.5": {
+          "delta": -0.013737623762376222,
+          "percentile95": [
+            -0.024679455445544545,
+            -0.005728341584158423
+          ],
+          "replicates": 500
+        },
+        "closure/anisotropic:0.2": {
+          "delta": -0.013118811881188186,
+          "percentile95": [
+            -0.03400061881188116,
+            0.004430693069306882
+          ],
+          "replicates": 500
+        },
+        "closure/spatial_modulation:0.5": {
+          "delta": 0.002500000000000009,
+          "percentile95": [
+            -0.0064746287128713016,
+            0.013488242574257417
+          ],
+          "replicates": 500
+        },
+        "closure/phase_iaaft:1.0": {
+          "delta": -0.0008910891089108919,
+          "percentile95": [
+            -0.01743193069306931,
+            0.01339356435643566
+          ],
+          "replicates": 500
+        }
+      }
+    },
+    "interpretation": "Taking a square root before averaging recovers much of the lost performance. The primary joint-radius hybrid still loses seven of eight closure point estimates; its small spatial gain is far below candidate 09. Score scale matters even when standalone ranks are identical."
+  },
+  "verification": {
+    "numerical": {
+      "kind": "GAUSSIAN_NUMERICAL_CONTROL_NOT_COSMOLOGICAL_OOD",
+      "scipy_log_density_errors": {
+        "joint": 1.0658141036401503e-14,
+        "independent": 2.220446049250313e-14
+      },
+      "pointwise_tolerance": 1e-10,
+      "same_marginals_opposite_correlation_metric": {
+        "diagonal": 0.014765000000000002,
+        "joint": 0.3824525000000001
+      }
+    },
+    "original_scalar_max_error": {
+      "nll": 0.0,
+      "base_energy": 0.0
+    },
+    "candidate08_max_error": 5.1514348342607263e-14,
+    "pointwise": {
+      "oof/diagonal": [
+        0.0,
+        0.0
+      ],
+      "oof/gaussian_joint": [
+        0.0,
+        0.0
+      ],
+      "oof/kde_independent": [
+        0.0,
+        0.0
+      ],
+      "oof/kde_joint": [
+        0.0,
+        0.0
+      ],
+      "in-sample/diagonal": [
+        0.0,
+        0.0
+      ],
+      "in-sample/gaussian_joint": [
+        0.0,
+        0.0
+      ],
+      "in-sample/kde_independent": [
+        0.0,
+        0.0
+      ],
+      "in-sample/kde_joint": [
+        0.0,
+        0.0
+      ]
+    },
+    "parameter_bin_source_ids_verified": true
+  },
+  "evidence": {
+    "registered": "comparison-001/report.json",
+    "radial_control": "radial-controls-001/report.json",
+    "figures": "figures-001"
+  },
+  "public_test_read": false,
+  "competition_submissions": 0,
+  "new_prediction_archives": 0,
+  "limitations": [
+    "All diagnostic families and clean maps are reused.",
+    "Outer/inner residual cross-fitting uses fixed scalar hyperparameters previously selected on this validation pool; it is not fully nested whole-pipeline validation.",
+    "KDE bandwidth CV operates on cross-fitted residuals whose prediction models share training observations; its log-density is an approximate selection diagnostic.",
+    "Paired IID bootstrap excludes repeated selection and simulator dependence.",
+    "This is a conditional-residual adaptation motivated by DoSE, not a reproduction of its models or performance."
+  ],
+  "next_experiment": "R8 compares longer training and wider field models, rather than additional scores on the same frozen representation."
+}

@@ -1,0 +1,14 @@
+{
+  "registered_before_closure_results": true,
+  "purpose": "Test the already fitted R4 score correction with a new measurement-noise draw, and explicitly test float16 observation storage used by the official test file.",
+  "frozen_methods": ["06 and 07", "R4 continuous-profile hybrid and spatial variant", "R4 normal-centered and normal-scaled variants"],
+  "normal": "All 3232 reused normal audit realizations; paired float32 and float16-roundtrip observations.",
+  "noise": "Per-map NumPy default_rng(991000 + flat training-map ID), sigma=0.4/sqrt(240), added before float16 roundtrip. Noise is paired across synthetic variants.",
+  "probe_maps": "The same four audit positions 4, 9, 18 and 27 within each of the 101 cosmologies: 404 maps per family.",
+  "synthetic_families": ["spectral_low:0.2", "spectral_high:0.2", "quadratic_peak:0.2", "quadratic_peak:-0.2", "gaussian_mixture:0.5", "anisotropic:0.2", "spatial_modulation:0.5", "phase_iaaft:1.0"],
+  "iaaft": "Existing 60-iteration transform with per-map seed 861004+ID. Histogram matching is exact, power-spectrum matching is approximate; report mismatch.",
+  "fit_or_selection": "No fitting of network weights, score regressors, ensemble weights or thresholds on these new observations. Existing normal calibration score arrays define thresholds and reference ROC curves.",
+  "field": "Recompute both frozen field-model likelihoods with 32 Heun steps and trace probe seed 451 on each new observation.",
+  "limitations": ["Clean realizations, proxy families and audit set are reused; only measurement noise, IAAFT initialization and storage-roundtrip checks are new.", "These synthetic scores do not estimate the hidden leaderboard score.", "No public test inputs or scores are read."],
+  "scope": "Four hosts of authorized erdos-3242 only. CPU preparation and TPU scoring use RAM-backed folders; no GCS or production changes."
+}

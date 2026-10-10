@@ -1,0 +1,8 @@
+# Exact versions imported on the authorized v5p-32; fresh installation not tested.
+jax==0.10.1
+jaxlib==0.10.1
+libtpu==0.0.41
+flax==0.12.4
+optax==0.2.6
+numpy==2.3.5
+scipy==1.18.1

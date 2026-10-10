@@ -1,0 +1,15 @@
+{
+  "registered_before_results": true,
+  "motivation": "Continuous physical profiling changes the score little. Energy at the known true cosmology also has excessive variation with Omega_m, suggesting learned null-score misspecification rather than mainly a discrete-grid artifact.",
+  "inputs": "Per-map mean fitted standardized cosmology from the three frozen R3 summary networks. No true physical labels are used as prediction inputs.",
+  "target": "Mean three-network continuous-profile energy, log transformed.",
+  "fit_data": "3232 normal validation realizations, which were previously used to select network checkpoints. Calibration and audit sets are not used to fit these regressors.",
+  "selection": "Five folds grouped by known cosmology, fixed seed 4242. The frozen networks were trained using other maps from those same cosmologies; this validates the new calibrator, not the complete density pipeline on unseen cosmologies.",
+  "location": "Polynomial degrees 0, 1, 2, 3 in two inferred physical coordinates. Ridge strengths 0.0001, 0.001, 0.01, 0.1, 1, 10. Fit location by least squares; choose on normal held-out mean squared log-energy error.",
+  "scale": "Optional polynomial predictor of log squared out-of-fold residual. Select the same degree/ridge grid on held-out Gaussian NLL of cross-fitted location residuals, with a fixed minimum SD of half the overall out-of-fold SD. Report constant scale as an explicit control. Scale uses out-of-fold location residuals; its CV is conditional on these already cross-fitted targets, not fully nested pipeline CV.",
+  "scores": ["Original continuous energy", "Location-centered log energy", "Location-and-scale standardized log energy", "Absolute standardized log energy, an exploratory two-sided typicality score"],
+  "ensembles": "Replace only the summary component in the existing equal-weight field hybrid and regional-max ensemble. Preserve field/regional networks and fit corrections. Recompute robust score scales on normal calibration data only.",
+  "checks": "Pointwise singleton/order/chunk invariance; calibration-vs-audit false alarms by true physical parameters; all reused synthetic families including regressions; paired bootstrap is descriptive conditional on this search.",
+  "public_test": "Not read. Existing 04/05/06/07 predictions are unchanged.",
+  "interpretation": "Normal-trained heuristic score correction. It is not an exact conditional p-value, likelihood ratio, or proof of power for unknown physical anomalies. Conditioning may hide shifts that the inferred cosmology explains away."
+}

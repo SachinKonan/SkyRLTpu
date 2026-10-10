@@ -1,0 +1,28 @@
+{
+  "timing": "Written after the model-0 numerical pilot and before any R6 synthetic-anomaly scores.",
+  "data": {
+    "normal_reference": "3232 normal validation realizations, with independently drawn pooled shape noise seeded by 978000 plus source ID. Used to fit empirical statistic CDFs only; these clean realizations previously selected neural checkpoints.",
+    "normal_calibration": "The same 3232 observed calibration maps used by the existing field/summary ensemble, copied exactly from the R2 field benchmark cache.",
+    "diagnostics": "The existing R4 closure cache: 3232 normal maps in float32, the same maps after float16 roundtrip, and eight synthetic families with 404 examples each. This is reused diagnostic evidence, not blind validation."
+  },
+  "predefined_statistics": "The five definitions in PLAN.json. Average the two frozen models' scalar statistics for each individual map; no latent-axis or pixel averaging between models.",
+  "normal_reference_transform": "For a statistic s and sorted normal-validation reference v of size n, q(s)=(searchsorted(v,s,side=right)+0.5)/(n+1). This is a frozen pointwise transform. It saturates at finite tails, creates ties and is not an exact p-value.",
+  "combinations": [
+    "SITN-inspired: -log(1-max(q_AD,q_PSD_CV))",
+    "Shape and spatial specialist: -log(1-max(q_AD_shape,q_PSD_CV,q_correlation_energy))",
+    "Report every standalone statistic, both combinations, and fixed equal-mean/max combinations with candidate 08, using normal-calibration medians and q90-minus-median scales.",
+    "Candidate 09 is an unchanged contextual baseline. Do not optimize mixture weights against these synthetic families."
+  ],
+  "verification": [
+    "Run the numerical pilot on both frozen field models and resolve 64-vs-128-step accuracy before large evaluation.",
+    "Check identical normal and closure cache hashes across all lab hosts.",
+    "Verify every requested row is covered exactly once per model, all scores are finite, and per-model source/config/weight hashes match.",
+    "Use the official low-FPR metric and report normal false-positive counts at 5%, 1% and 0.1%, plus paired float16 sensitivity and every synthetic regression."
+  ],
+  "limitations": [
+    "Neither the reference CDFs nor a reused synthetic benchmark identify the hidden competition alternatives.",
+    "The small-FPR tail uses few independent normal observations. Empirical quantile ties are retained, not broken using public-test ranks.",
+    "Empirical model-selection diagnostics do not establish the paper's theoretical error-control assumptions or a SOTA result."
+  ],
+  "public_test": "Not read. Candidates 04 through 09 stay frozen."
+}

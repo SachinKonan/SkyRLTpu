@@ -1,0 +1,1193 @@
+{
+  "round": "R6",
+  "date": "2026-10-09",
+  "goal_status": "Active; no official performance or SOTA result established.",
+  "finding": "No R6 candidate promoted. All four registered combinations with candidate 08 reduce the measured metric on every one of the eight reused synthetic families.",
+  "literature": [
+    {
+      "url": "https://arxiv.org/abs/2605.22496",
+      "application": "Adapted per-map latent normality and spatial independence diagnostics to the existing masked field models; this is not a reproduction or transfer of their performance/guarantees."
+    },
+    {
+      "url": "https://arxiv.org/abs/2505.00632",
+      "application": "Our frozen field model remains inspired by field-level flow anomaly detection; it is not that paper's experiment."
+    },
+    {
+      "url": "https://arxiv.org/abs/2006.08545",
+      "application": "Generic transformations and local correlations can limit how diagnostic a learned latent representation is."
+    }
+  ],
+  "data": {
+    "normal_reference": 3232,
+    "normal_calibration": 3232,
+    "normal_float32": 3232,
+    "paired_normal_float16": 3232,
+    "synthetic_families": 8,
+    "per_family": 404,
+    "unique_cached_observations": 16160,
+    "field_models": 2,
+    "completed_evaluations": 32320
+  },
+  "numerics": {
+    "steps": 64,
+    "pilots": {
+      "0": {
+        "pilot": {
+          "kind": "R6_NORMAL_ONLY_NUMERICAL_PILOT",
+          "public_test_read": false,
+          "synthetic_anomalies_read": false,
+          "count": 16,
+          "checkpoint_sha256": "96dfa69ca5f5a137b2bd0f182a50aba6ccb9a28eec36098b59543a6330265013",
+          "source_sha256": "7c5a99dfa9eb3969c1947f96b4a29facaf6adafd424dcddbefa8efd34b1d3e50",
+          "gaussian_solver_max_error": 5.960464477539062e-07,
+          "original_energy_max_error": 0.0030010641676199157,
+          "pointwise_errors": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "numerical": {
+            "16": {
+              "compile_and_first_seconds": 15.365005076004309,
+              "warm_seconds": 0.9028574489930179,
+              "maps_per_second": 17.72151297842782,
+              "statistic_error_vs64": {
+                "energy": {
+                  "median_absolute": 109.64903215518825,
+                  "maximum_absolute": 135.7613120143651,
+                  "median_over_normal_sd": 0.08476678578428566
+                },
+                "ad": {
+                  "median_absolute": 0.3224222787284816,
+                  "maximum_absolute": 1.192270937928697,
+                  "median_over_normal_sd": 0.06975721025952346
+                },
+                "ad_shape": {
+                  "median_absolute": 0.03659526742012531,
+                  "maximum_absolute": 0.11772815006042947,
+                  "median_over_normal_sd": 0.04946557443308751
+                },
+                "psd_cv": {
+                  "median_absolute": 6.375234179062383e-05,
+                  "maximum_absolute": 0.00020684604585463617,
+                  "median_over_normal_sd": 0.013189849915735834
+                },
+                "correlation_energy": {
+                  "median_absolute": 0.3959033845376838,
+                  "maximum_absolute": 1.5676735465184564,
+                  "median_over_normal_sd": 0.019547466044748513
+                },
+                "mean": {
+                  "median_absolute": 0.00045754745318742226,
+                  "maximum_absolute": 0.0006937709632713965,
+                  "median_over_normal_sd": 0.04735352921667934
+                },
+                "variance": {
+                  "median_absolute": 0.003363347588268284,
+                  "maximum_absolute": 0.004184166086879104,
+                  "median_over_normal_sd": 0.0848937471010413
+                },
+                "correlation_0": {
+                  "median_absolute": 0.00017872645395659436,
+                  "maximum_absolute": 0.0003075131074496938,
+                  "median_over_normal_sd": 0.009908567737221752
+                },
+                "correlation_1": {
+                  "median_absolute": 0.0008214884190799283,
+                  "maximum_absolute": 0.0008774023810904016,
+                  "median_over_normal_sd": 0.044005169563564636
+                },
+                "correlation_2": {
+                  "median_absolute": 2.2734581057134865e-05,
+                  "maximum_absolute": 4.459939547766037e-05,
+                  "median_over_normal_sd": 0.004030201483637076
+                },
+                "correlation_3": {
+                  "median_absolute": 0.00013178170090843565,
+                  "maximum_absolute": 0.00018235135337788325,
+                  "median_over_normal_sd": 0.022799841094512194
+                }
+              }
+            },
+            "32": {
+              "compile_and_first_seconds": 15.626429418000043,
+              "warm_seconds": 1.792428476997884,
+              "maps_per_second": 8.926437068662398,
+              "statistic_error_vs64": {
+                "energy": {
+                  "median_absolute": 53.93983812981787,
+                  "maximum_absolute": 57.99322085834865,
+                  "median_over_normal_sd": 0.041699471615199
+                },
+                "ad": {
+                  "median_absolute": 0.19241984729887918,
+                  "maximum_absolute": 0.6583898112694442,
+                  "median_over_normal_sd": 0.04163072042995149
+                },
+                "ad_shape": {
+                  "median_absolute": 0.001565961532833171,
+                  "maximum_absolute": 0.006192943659698358,
+                  "median_over_normal_sd": 0.0021166995686199524
+                },
+                "psd_cv": {
+                  "median_absolute": 3.302901907353828e-05,
+                  "maximum_absolute": 0.0001322218659414176,
+                  "median_over_normal_sd": 0.006833440030716136
+                },
+                "correlation_energy": {
+                  "median_absolute": 0.3615473645938976,
+                  "maximum_absolute": 1.0991577057586142,
+                  "median_over_normal_sd": 0.017851160432034205
+                },
+                "mean": {
+                  "median_absolute": 0.00044923325396537743,
+                  "maximum_absolute": 0.000483666707552172,
+                  "median_over_normal_sd": 0.04649305742729071
+                },
+                "variance": {
+                  "median_absolute": 0.0016461915293719542,
+                  "maximum_absolute": 0.0017695624688176537,
+                  "median_over_normal_sd": 0.04155127107939923
+                },
+                "correlation_0": {
+                  "median_absolute": 0.00025240882164957127,
+                  "maximum_absolute": 0.0002987401755815029,
+                  "median_over_normal_sd": 0.013993507124549668
+                },
+                "correlation_1": {
+                  "median_absolute": 0.00022567450490013118,
+                  "maximum_absolute": 0.0002940518591373273,
+                  "median_over_normal_sd": 0.012088843401379138
+                },
+                "correlation_2": {
+                  "median_absolute": 3.5292744095127555e-05,
+                  "maximum_absolute": 4.223863973229665e-05,
+                  "median_over_normal_sd": 0.006256410410921915
+                },
+                "correlation_3": {
+                  "median_absolute": 5.1116378721359317e-05,
+                  "maximum_absolute": 6.839592870677876e-05,
+                  "median_over_normal_sd": 0.008843756789750875
+                }
+              }
+            },
+            "64": {
+              "compile_and_first_seconds": 17.334861775001627,
+              "warm_seconds": 3.5794602620007936,
+              "maps_per_second": 4.469947653799782
+            }
+          },
+          "normal_medians": {
+            "energy": 31897.609937105546,
+            "ad": 4.367875269905198,
+            "ad_shape": 0.8288869114967383,
+            "psd_cv": 1.0021241966800276,
+            "correlation_energy": 14.696832636953015,
+            "mean": -0.0015963273595470226,
+            "variance": 0.9768973539576007,
+            "correlation_0": -0.0013688547771221239,
+            "correlation_1": -0.00647944070220571,
+            "correlation_2": 1.7211750063274452e-05,
+            "correlation_3": -0.001308030380756768
+          },
+          "gaussian_medians": {
+            "energy": 32741.31982188847,
+            "ad": 0.7174831786123832,
+            "ad_shape": 0.3444936283467541,
+            "psd_cv": 0.9993819216490779,
+            "correlation_energy": 3.1969786129413404,
+            "mean": 0.0002276647717290618,
+            "variance": 1.0027603515173666,
+            "correlation_0": 0.0011026406098998253,
+            "correlation_1": -0.0008677010892241886,
+            "correlation_2": 0.0007731183248118348,
+            "correlation_3": -0.0004129904850097859
+          },
+          "interpretation": "Comparison to masked Gaussian fields is a numerical and model-fit diagnostic, not an OOD result or a theoretical false-positive guarantee."
+        },
+        "refinement": {
+          "kind": "R6_NORMAL_ONLY_NUMERICAL_REFINEMENT",
+          "public_test_read": false,
+          "count": 16,
+          "seconds": 22.230816764000338,
+          "checkpoint_sha256": "96dfa69ca5f5a137b2bd0f182a50aba6ccb9a28eec36098b59543a6330265013",
+          "source_sha256": "d2b4d133237db25a7d034057b37048a4b71c0a3573bee3d3f2ce41ab8a6ffca2",
+          "difference64_128": {
+            "energy": {
+              "median_absolute": 1.224648608615098,
+              "maximum_absolute": 1.563472346198978,
+              "median_over_normal_sd": 0.0009468173202399759
+            },
+            "ad": {
+              "median_absolute": 0.01012384589012072,
+              "maximum_absolute": 0.030085534239333356,
+              "median_over_normal_sd": 0.0021904854162851234
+            },
+            "ad_shape": {
+              "median_absolute": 0.0001447702325094724,
+              "maximum_absolute": 0.00038838645559735596,
+              "median_over_normal_sd": 0.00019566943785297907
+            },
+            "psd_cv": {
+              "median_absolute": 8.06051808743824e-07,
+              "maximum_absolute": 1.9649107672048416e-06,
+              "median_over_normal_sd": 0.00016675926690348347
+            },
+            "correlation_energy": {
+              "median_absolute": 0.02013780572689816,
+              "maximum_absolute": 0.03972937423083778,
+              "median_over_normal_sd": 0.0009948195766398143
+            },
+            "mean": {
+              "median_absolute": 4.2786736544686956e-05,
+              "maximum_absolute": 5.119356802171446e-05,
+              "median_over_normal_sd": 0.004427178715910972
+            },
+            "variance": {
+              "median_absolute": 3.809450506281342e-05,
+              "maximum_absolute": 4.716955029038239e-05,
+              "median_over_normal_sd": 0.0009616159143134982
+            },
+            "correlation_0": {
+              "median_absolute": 1.1801906104455631e-05,
+              "maximum_absolute": 1.3227662955490188e-05,
+              "median_over_normal_sd": 0.0006542320958685013
+            },
+            "correlation_1": {
+              "median_absolute": 1.1776431871356402e-05,
+              "maximum_absolute": 1.2815489250892625e-05,
+              "median_over_normal_sd": 0.0006308081902523638
+            },
+            "correlation_2": {
+              "median_absolute": 1.980137001454836e-06,
+              "maximum_absolute": 3.2370490036692963e-06,
+              "median_over_normal_sd": 0.00035102656288680915
+            },
+            "correlation_3": {
+              "median_absolute": 4.197687933915617e-07,
+              "maximum_absolute": 2.246625013401296e-06,
+              "median_over_normal_sd": 7.262389010590806e-05
+            }
+          }
+        }
+      },
+      "1": {
+        "pilot": {
+          "kind": "R6_NORMAL_ONLY_NUMERICAL_PILOT",
+          "public_test_read": false,
+          "synthetic_anomalies_read": false,
+          "count": 16,
+          "checkpoint_sha256": "4a1c30c1342b1839025b4130e60509f44844349e10f7777d9a550caad6de2009",
+          "source_sha256": "7c5a99dfa9eb3969c1947f96b4a29facaf6adafd424dcddbefa8efd34b1d3e50",
+          "gaussian_solver_max_error": 5.960464477539062e-07,
+          "original_energy_max_error": 0.0031062755006132647,
+          "pointwise_errors": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "numerical": {
+            "16": {
+              "compile_and_first_seconds": 16.156183803992462,
+              "warm_seconds": 0.9031277070025681,
+              "maps_per_second": 17.71620987368789,
+              "statistic_error_vs64": {
+                "energy": {
+                  "median_absolute": 64.85545011733848,
+                  "maximum_absolute": 76.43717179704254,
+                  "median_over_normal_sd": 0.04002984943747624
+                },
+                "ad": {
+                  "median_absolute": 0.4261343236412358,
+                  "maximum_absolute": 1.359414163078327,
+                  "median_over_normal_sd": 0.06713288052759955
+                },
+                "ad_shape": {
+                  "median_absolute": 0.04599541425159259,
+                  "maximum_absolute": 0.12290162845238228,
+                  "median_over_normal_sd": 0.06027249093943314
+                },
+                "psd_cv": {
+                  "median_absolute": 6.497730091981069e-05,
+                  "maximum_absolute": 0.00025618819936368276,
+                  "median_over_normal_sd": 0.013869277606706051
+                },
+                "correlation_energy": {
+                  "median_absolute": 1.0112343539629378,
+                  "maximum_absolute": 2.869020130143383,
+                  "median_over_normal_sd": 0.05399720535661129
+                },
+                "mean": {
+                  "median_absolute": 0.0005654090491615902,
+                  "maximum_absolute": 0.0007571493524609696,
+                  "median_over_normal_sd": 0.057540354020841976
+                },
+                "variance": {
+                  "median_absolute": 0.0019833137042795657,
+                  "maximum_absolute": 0.0023306607451891725,
+                  "median_over_normal_sd": 0.039973884566482855
+                },
+                "correlation_0": {
+                  "median_absolute": 0.0004810040014811653,
+                  "maximum_absolute": 0.0005417863972791859,
+                  "median_over_normal_sd": 0.02822250749357613
+                },
+                "correlation_1": {
+                  "median_absolute": 0.0010148279832176577,
+                  "maximum_absolute": 0.0011399003403274955,
+                  "median_over_normal_sd": 0.05481548033782333
+                },
+                "correlation_2": {
+                  "median_absolute": 0.0002593186302637463,
+                  "maximum_absolute": 0.0002920319113116044,
+                  "median_over_normal_sd": 0.0460726185926659
+                },
+                "correlation_3": {
+                  "median_absolute": 0.0002110564989064611,
+                  "maximum_absolute": 0.00026831762400168855,
+                  "median_over_normal_sd": 0.036326186486884016
+                }
+              }
+            },
+            "32": {
+              "compile_and_first_seconds": 16.201333435994457,
+              "warm_seconds": 1.7913845049915835,
+              "maps_per_second": 8.931639162567823,
+              "statistic_error_vs64": {
+                "energy": {
+                  "median_absolute": 13.763172670174754,
+                  "maximum_absolute": 16.74833738336747,
+                  "median_over_normal_sd": 0.0084948563115715
+                },
+                "ad": {
+                  "median_absolute": 0.07477260225823557,
+                  "maximum_absolute": 0.19613958896661643,
+                  "median_over_normal_sd": 0.011779619466574475
+                },
+                "ad_shape": {
+                  "median_absolute": 0.004657930057874182,
+                  "maximum_absolute": 0.01297712883388158,
+                  "median_over_normal_sd": 0.006103761685329622
+                },
+                "psd_cv": {
+                  "median_absolute": 3.155243434438404e-05,
+                  "maximum_absolute": 9.826682266100839e-05,
+                  "median_over_normal_sd": 0.0067348053073132096
+                },
+                "correlation_energy": {
+                  "median_absolute": 0.322576603922736,
+                  "maximum_absolute": 0.9154559857022875,
+                  "median_over_normal_sd": 0.017224726451384606
+                },
+                "mean": {
+                  "median_absolute": 2.990390014694132e-05,
+                  "maximum_absolute": 9.444518270459567e-05,
+                  "median_over_normal_sd": 0.0030432498447104848
+                },
+                "variance": {
+                  "median_absolute": 0.0004214942737680305,
+                  "maximum_absolute": 0.0005122846290486205,
+                  "median_over_normal_sd": 0.008495258923830736
+                },
+                "correlation_0": {
+                  "median_absolute": 3.8886659409281214e-05,
+                  "maximum_absolute": 5.6161085678685385e-05,
+                  "median_over_normal_sd": 0.00228164221752645
+                },
+                "correlation_1": {
+                  "median_absolute": 0.00043635127819422154,
+                  "maximum_absolute": 0.00046086107327901905,
+                  "median_over_normal_sd": 0.023569319437173407
+                },
+                "correlation_2": {
+                  "median_absolute": 5.841325674452299e-05,
+                  "maximum_absolute": 7.534348164039533e-05,
+                  "median_over_normal_sd": 0.010378165641275654
+                },
+                "correlation_3": {
+                  "median_absolute": 3.618934073020019e-05,
+                  "maximum_absolute": 4.745473904438184e-05,
+                  "median_over_normal_sd": 0.006228762189338082
+                }
+              }
+            },
+            "64": {
+              "compile_and_first_seconds": 17.484079197995015,
+              "warm_seconds": 3.5740452940081013,
+              "maps_per_second": 4.476719986404216
+            }
+          },
+          "normal_medians": {
+            "energy": 31695.853676209936,
+            "ad": 5.695361625435908,
+            "ad_shape": 0.5787295101217751,
+            "psd_cv": 1.0021121980124454,
+            "correlation_energy": 13.075688014773421,
+            "mean": -0.0023887896548258534,
+            "variance": 0.970745445310761,
+            "correlation_0": -0.0015433104596169994,
+            "correlation_1": -0.005897133087057057,
+            "correlation_2": 0.0007309490523135385,
+            "correlation_3": -0.001463954104347004
+          },
+          "gaussian_medians": {
+            "energy": 32741.31982188847,
+            "ad": 0.7174831786123832,
+            "ad_shape": 0.3444936283467541,
+            "psd_cv": 0.9993819216490779,
+            "correlation_energy": 3.1969786129413404,
+            "mean": 0.0002276647717290618,
+            "variance": 1.0027603515173666,
+            "correlation_0": 0.0011026406098998253,
+            "correlation_1": -0.0008677010892241886,
+            "correlation_2": 0.0007731183248118348,
+            "correlation_3": -0.0004129904850097859
+          },
+          "interpretation": "Comparison to masked Gaussian fields is a numerical and model-fit diagnostic, not an OOD result or a theoretical false-positive guarantee."
+        },
+        "refinement": {
+          "kind": "R6_NORMAL_ONLY_NUMERICAL_REFINEMENT",
+          "public_test_read": false,
+          "count": 16,
+          "seconds": 21.64250103199447,
+          "checkpoint_sha256": "4a1c30c1342b1839025b4130e60509f44844349e10f7777d9a550caad6de2009",
+          "source_sha256": "d2b4d133237db25a7d034057b37048a4b71c0a3573bee3d3f2ce41ab8a6ffca2",
+          "difference64_128": {
+            "energy": {
+              "median_absolute": 0.17492412247884204,
+              "maximum_absolute": 0.5243309319012042,
+              "median_over_normal_sd": 0.00010796788731159946
+            },
+            "ad": {
+              "median_absolute": 0.010401436156826094,
+              "maximum_absolute": 0.034435936802765355,
+              "median_over_normal_sd": 0.0016388425830650825
+            },
+            "ad_shape": {
+              "median_absolute": 0.0007393479281745385,
+              "maximum_absolute": 0.0020263419901311863,
+              "median_over_normal_sd": 0.000969043286548306
+            },
+            "psd_cv": {
+              "median_absolute": 8.608187143099855e-07,
+              "maximum_absolute": 4.070114375753775e-06,
+              "median_over_normal_sd": 0.00018372838583644892
+            },
+            "correlation_energy": {
+              "median_absolute": 0.014555353505952162,
+              "maximum_absolute": 0.035545943805267655,
+              "median_over_normal_sd": 0.0007767141501682486
+            },
+            "mean": {
+              "median_absolute": 3.511796257596304e-05,
+              "maximum_absolute": 3.9381108698742506e-05,
+              "median_over_normal_sd": 0.0035736927110333275
+            },
+            "variance": {
+              "median_absolute": 5.213008225091187e-06,
+              "maximum_absolute": 1.7223809113620092e-05,
+              "median_over_normal_sd": 0.00010507084497786079
+            },
+            "correlation_0": {
+              "median_absolute": 1.1374825316181909e-06,
+              "maximum_absolute": 1.8070100630609987e-06,
+              "median_over_normal_sd": 6.67420016319938e-05
+            },
+            "correlation_1": {
+              "median_absolute": 1.803945325295174e-05,
+              "maximum_absolute": 1.9269896648214588e-05,
+              "median_over_normal_sd": 0.0009744222531452478
+            },
+            "correlation_2": {
+              "median_absolute": 2.6912898060458927e-06,
+              "maximum_absolute": 3.557376475693102e-06,
+              "median_over_normal_sd": 0.00047813658218715676
+            },
+            "correlation_3": {
+              "median_absolute": 1.2743698947917728e-06,
+              "maximum_absolute": 2.086949157282386e-06,
+              "median_over_normal_sd": 0.00021934123114353775
+            }
+          }
+        }
+      }
+    },
+    "cpu_statistics_check": {
+      "kind": "MASKED_GAUSSIAN_NUMERICAL_CONTROLS_NOT_COSMOLOGICAL_OOD",
+      "count": 32,
+      "observed_dimensions": 32651,
+      "white_medians": {
+        "energy": 32648.302284775964,
+        "ad": 0.8318808866042673,
+        "ad_shape": 0.36483742345444625,
+        "psd_cv": 1.0009204136610097,
+        "correlation_energy": 3.6534920807969753,
+        "mean": 0.00039408694273079554,
+        "variance": 0.9999048961638712,
+        "correlation_0": -0.00011552411169556617,
+        "correlation_1": 0.0010978902923585885,
+        "correlation_2": 0.0014653466418799665,
+        "correlation_3": 0.0016454311680584855
+      },
+      "same_histogram_structured_medians": {
+        "energy": 32648.30228477593,
+        "ad": 0.8318808866042673,
+        "ad_shape": 0.3648374234435323,
+        "psd_cv": 49.84874004980519,
+        "correlation_energy": 113299.72700112652,
+        "mean": 0.00039408694273287596,
+        "variance": 0.9999048961638677,
+        "correlation_0": 0.9892525075287057,
+        "correlation_1": 0.9855964169831286,
+        "correlation_2": 0.9626811426352042,
+        "correlation_3": 0.9569242599288498
+      },
+      "missing_pixels_ignored": true,
+      "pointwise_absolute_errors": {
+        "energy": {
+          "reversal": 0.0,
+          "singleton": 1.709850039333105e-10
+        },
+        "ad": {
+          "reversal": 0.0,
+          "singleton": 1.1641532182693481e-10
+        },
+        "ad_shape": {
+          "reversal": 0.0,
+          "singleton": 7.275957614183426e-11
+        },
+        "psd_cv": {
+          "reversal": 0.0,
+          "singleton": 0.0
+        },
+        "correlation_energy": {
+          "reversal": 0.0,
+          "singleton": 5.3290705182007514e-14
+        },
+        "mean": {
+          "reversal": 0.0,
+          "singleton": 4.0115480381963664e-18
+        },
+        "variance": {
+          "reversal": 0.0,
+          "singleton": 3.885780586188048e-15
+        },
+        "correlation_0": {
+          "reversal": 0.0,
+          "singleton": 8.673617379884035e-18
+        },
+        "correlation_1": {
+          "reversal": 0.0,
+          "singleton": 6.591949208711867e-17
+        },
+        "correlation_2": {
+          "reversal": 0.0,
+          "singleton": 2.6020852139652106e-17
+        },
+        "correlation_3": {
+          "reversal": 0.0,
+          "singleton": 1.9949319973733282e-17
+        }
+      },
+      "pointwise_tolerance": 1e-08,
+      "spatial_statistics_respond_to_structure_without_changing_histogram": true,
+      "shape_statistics_invariant_to_per_map_affine_transform": true,
+      "zero_field_ad_analytic_error": 0.0
+    },
+    "note": "The CPU statistics control initially demanded bitwise singleton equality. Measured float64 summation differences were at most 1.71e-10; an explicit 1e-8 bound passed. The deployed statistic implementation did not change. TPU latent extraction pointwise errors were exactly zero in both pilots."
+  },
+  "source_verification": {
+    "prelaunch_host_audits": [
+      {
+        "host": "t1v-n-51b3bdd2-w-0",
+        "hashes": {
+          "/dev/shm/fair-r6-20261009/normals/observed.npy": "d987e724e122e120f18993fee38572c47fc3e7722bbc668eecefb5690727537b",
+          "/dev/shm/fair-r4-20261009/closure-cache/observed.npy": "140f06810177c7e7be2a61cf953badaf2cea7d67180a124e1b025bef6d6f7ce3",
+          "/dev/shm/fair-r4-20261009/field-s0/best.msgpack": "96dfa69ca5f5a137b2bd0f182a50aba6ccb9a28eec36098b59543a6330265013",
+          "/dev/shm/fair-r4-20261009/field-s1/best.msgpack": "4a1c30c1342b1839025b4130e60509f44844349e10f7777d9a550caad6de2009",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/noise_statistics.py": "e882a86cf913d629f3613d9e029a922712da9db172d4a20b2ffd1998b96348ba",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/field_latents.py": "9a3c1b774dfe16c1a297c8011ca1b3289fcc6a6c8cafef9b7a8c695ec3d3d629"
+        },
+        "vfio_pids": ""
+      },
+      {
+        "host": "t1v-n-51b3bdd2-w-1",
+        "hashes": {
+          "/dev/shm/fair-r6-20261009/normals/observed.npy": "d987e724e122e120f18993fee38572c47fc3e7722bbc668eecefb5690727537b",
+          "/dev/shm/fair-r4-20261009/closure-cache/observed.npy": "140f06810177c7e7be2a61cf953badaf2cea7d67180a124e1b025bef6d6f7ce3",
+          "/dev/shm/fair-r4-20261009/field-s0/best.msgpack": "96dfa69ca5f5a137b2bd0f182a50aba6ccb9a28eec36098b59543a6330265013",
+          "/dev/shm/fair-r4-20261009/field-s1/best.msgpack": "4a1c30c1342b1839025b4130e60509f44844349e10f7777d9a550caad6de2009",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/noise_statistics.py": "e882a86cf913d629f3613d9e029a922712da9db172d4a20b2ffd1998b96348ba",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/field_latents.py": "9a3c1b774dfe16c1a297c8011ca1b3289fcc6a6c8cafef9b7a8c695ec3d3d629"
+        },
+        "vfio_pids": ""
+      },
+      {
+        "host": "t1v-n-51b3bdd2-w-2",
+        "hashes": {
+          "/dev/shm/fair-r6-20261009/normals/observed.npy": "d987e724e122e120f18993fee38572c47fc3e7722bbc668eecefb5690727537b",
+          "/dev/shm/fair-r4-20261009/closure-cache/observed.npy": "140f06810177c7e7be2a61cf953badaf2cea7d67180a124e1b025bef6d6f7ce3",
+          "/dev/shm/fair-r4-20261009/field-s0/best.msgpack": "96dfa69ca5f5a137b2bd0f182a50aba6ccb9a28eec36098b59543a6330265013",
+          "/dev/shm/fair-r4-20261009/field-s1/best.msgpack": "4a1c30c1342b1839025b4130e60509f44844349e10f7777d9a550caad6de2009",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/noise_statistics.py": "e882a86cf913d629f3613d9e029a922712da9db172d4a20b2ffd1998b96348ba",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/field_latents.py": "9a3c1b774dfe16c1a297c8011ca1b3289fcc6a6c8cafef9b7a8c695ec3d3d629"
+        },
+        "vfio_pids": ""
+      },
+      {
+        "host": "t1v-n-51b3bdd2-w-3",
+        "hashes": {
+          "/dev/shm/fair-r6-20261009/normals/observed.npy": "d987e724e122e120f18993fee38572c47fc3e7722bbc668eecefb5690727537b",
+          "/dev/shm/fair-r4-20261009/closure-cache/observed.npy": "140f06810177c7e7be2a61cf953badaf2cea7d67180a124e1b025bef6d6f7ce3",
+          "/dev/shm/fair-r4-20261009/field-s0/best.msgpack": "96dfa69ca5f5a137b2bd0f182a50aba6ccb9a28eec36098b59543a6330265013",
+          "/dev/shm/fair-r4-20261009/field-s1/best.msgpack": "4a1c30c1342b1839025b4130e60509f44844349e10f7777d9a550caad6de2009",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/noise_statistics.py": "e882a86cf913d629f3613d9e029a922712da9db172d4a20b2ffd1998b96348ba",
+          "/dev/shm/fair-r6-20261009/code/fair_r6/field_latents.py": "9a3c1b774dfe16c1a297c8011ca1b3289fcc6a6c8cafef9b7a8c695ec3d3d629"
+        },
+        "vfio_pids": ""
+      }
+    ],
+    "study_archive": {
+      "stage": "harvested",
+      "sha256": "565429217547c63d215d58e55123b295dd219db31c3d244c95d8c2578bc80274",
+      "bytes": 4833846,
+      "completed_shards": 16
+    },
+    "complete_shards": 16,
+    "exactly_once_rows_per_model": 16160,
+    "all_scores_finite": true
+  },
+  "results": {
+    "energy": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            186,
+            45,
+            4
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            186,
+            45,
+            4
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.0,
+        "spectral_high:0.2": 0.2233168316831683,
+        "quadratic_peak:0.2": 0.011881188118811885,
+        "quadratic_peak:-0.2": 0.03245049504950495,
+        "gaussian_mixture:0.5": 0.03571782178217822,
+        "anisotropic:0.2": 0.004752475247524753,
+        "spatial_modulation:0.5": 0.018094059405940596,
+        "phase_iaaft:1.0": 0.031311881188118805
+      }
+    },
+    "ad": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            181,
+            36,
+            6
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            181,
+            36,
+            6
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.029480198019801982,
+        "spectral_high:0.2": 0.15561881188118812,
+        "quadratic_peak:0.2": 0.013094059405940597,
+        "quadratic_peak:-0.2": 0.037500000000000006,
+        "gaussian_mixture:0.5": 0.023019801980198023,
+        "anisotropic:0.2": 0.01836633663366337,
+        "spatial_modulation:0.5": 0.012871287128712874,
+        "phase_iaaft:1.0": 0.01571782178217822
+      }
+    },
+    "ad_shape": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            195,
+            45,
+            5
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            195,
+            45,
+            5
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.04477722772277227,
+        "spectral_high:0.2": 0.190470297029703,
+        "quadratic_peak:0.2": 0.20519801980198024,
+        "quadratic_peak:-0.2": 0.14356435643564358,
+        "gaussian_mixture:0.5": 0.018193069306930695,
+        "anisotropic:0.2": 0.017574257425742576,
+        "spatial_modulation:0.5": 0.02183168316831683,
+        "phase_iaaft:1.0": 0.011237623762376239
+      }
+    },
+    "psd_cv": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            192,
+            39,
+            2
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            192,
+            39,
+            2
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.018539603960396042,
+        "spectral_high:0.2": 0.01873762376237624,
+        "quadratic_peak:0.2": 0.031509900990099,
+        "quadratic_peak:-0.2": 0.027301980198019802,
+        "gaussian_mixture:0.5": 0.019232673267326736,
+        "anisotropic:0.2": 0.04532178217821783,
+        "spatial_modulation:0.5": 0.017945544554455448,
+        "phase_iaaft:1.0": 0.007846534653465348
+      }
+    },
+    "correlation_energy": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            150,
+            33,
+            4
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            150,
+            33,
+            4
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.017871287128712873,
+        "spectral_high:0.2": 0.00972772277227723,
+        "quadratic_peak:0.2": 0.059084158415841595,
+        "quadratic_peak:-0.2": 0.0375,
+        "gaussian_mixture:0.5": 0.01811881188118812,
+        "anisotropic:0.2": 0.07584158415841585,
+        "spatial_modulation:0.5": 0.013193069306930696,
+        "phase_iaaft:1.0": 0.010915841584158417
+      }
+    },
+    "sitn-inspired": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            182,
+            34,
+            0
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            182,
+            34,
+            0
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.024358454375423035,
+        "spectral_high:0.2": 0.13435796287993976,
+        "quadratic_peak:0.2": 0.02493391603377376,
+        "quadratic_peak:-0.2": 0.03580988582243737,
+        "gaussian_mixture:0.5": 0.020343616497672933,
+        "anisotropic:0.2": 0.032862980343734645,
+        "spatial_modulation:0.5": 0.01632588051028281,
+        "phase_iaaft:1.0": 0.013323606886044734
+      }
+    },
+    "shape-spatial": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            192,
+            34,
+            6
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            192,
+            34,
+            6
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.021633466527975317,
+        "spectral_high:0.2": 0.1184671197094516,
+        "quadratic_peak:0.2": 0.1534626344413714,
+        "quadratic_peak:-0.2": 0.07299735379421243,
+        "gaussian_mixture:0.5": 0.016089700577446117,
+        "anisotropic:0.2": 0.06597378215621132,
+        "spatial_modulation:0.5": 0.020334179863231796,
+        "phase_iaaft:1.0": 0.009385081581638739
+      }
+    },
+    "08": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            171,
+            39,
+            2
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            172,
+            40,
+            2
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.15997524752475248,
+        "spectral_high:0.2": 0.4892821782178218,
+        "quadratic_peak:0.2": 0.8494306930693071,
+        "quadratic_peak:-0.2": 0.7707673267326731,
+        "gaussian_mixture:0.5": 0.06158415841584158,
+        "anisotropic:0.2": 0.3311138613861387,
+        "spatial_modulation:0.5": 0.03621287128712871,
+        "phase_iaaft:1.0": 0.125470297029703
+      }
+    },
+    "09": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            181,
+            43,
+            3
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            180,
+            43,
+            3
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.13368811881188117,
+        "spectral_high:0.2": 0.45180693069306926,
+        "quadratic_peak:0.2": 0.8279455445544553,
+        "quadratic_peak:-0.2": 0.7401732673267325,
+        "gaussian_mixture:0.5": 0.05014851485148515,
+        "anisotropic:0.2": 0.29522277227722776,
+        "spatial_modulation:0.5": 0.5903465346534653,
+        "phase_iaaft:1.0": 0.09202970297029701
+      }
+    },
+    "08+sitn-inspired-mean": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            158,
+            29,
+            5
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            158,
+            29,
+            5
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.07245049504950496,
+        "spectral_high:0.2": 0.37150990099009895,
+        "quadratic_peak:0.2": 0.6637871287128714,
+        "quadratic_peak:-0.2": 0.5594059405940593,
+        "gaussian_mixture:0.5": 0.04811881188118812,
+        "anisotropic:0.2": 0.19631188118811885,
+        "spatial_modulation:0.5": 0.017351485148514853,
+        "phase_iaaft:1.0": 0.04839108910891089
+      }
+    },
+    "08+sitn-inspired-max": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            192,
+            32,
+            0
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            192,
+            32,
+            0
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.08760936614321009,
+        "spectral_high:0.2": 0.359662775484863,
+        "quadratic_peak:0.2": 0.7148713955855952,
+        "quadratic_peak:-0.2": 0.6033892946190352,
+        "gaussian_mixture:0.5": 0.02972996103714172,
+        "anisotropic:0.2": 0.19629883620860272,
+        "spatial_modulation:0.5": 0.02220305125965473,
+        "phase_iaaft:1.0": 0.050911349066579695
+      }
+    },
+    "08+shape-spatial-mean": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            195,
+            31,
+            5
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            194,
+            31,
+            5
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.0736881188118812,
+        "spectral_high:0.2": 0.3638861386138613,
+        "quadratic_peak:0.2": 0.7329207920792077,
+        "quadratic_peak:-0.2": 0.6643069306930695,
+        "gaussian_mixture:0.5": 0.04170792079207921,
+        "anisotropic:0.2": 0.24368811881188124,
+        "spatial_modulation:0.5": 0.024876237623762374,
+        "phase_iaaft:1.0": 0.03705445544554456
+      }
+    },
+    "08+shape-spatial-max": {
+      "normal": {
+        "normal_float32": {
+          "count": 3232,
+          "exceedances": [
+            180,
+            30,
+            6
+          ]
+        },
+        "normal_float16": {
+          "count": 3232,
+          "exceedances": [
+            180,
+            30,
+            6
+          ]
+        }
+      },
+      "probes": {
+        "spectral_low:0.2": 0.081950311741637,
+        "spectral_high:0.2": 0.3433471399517866,
+        "quadratic_peak:0.2": 0.7199797881440149,
+        "quadratic_peak:-0.2": 0.6127485002628451,
+        "gaussian_mixture:0.5": 0.025502114657767656,
+        "anisotropic:0.2": 0.20146002650940947,
+        "spatial_modulation:0.5": 0.025564564105359802,
+        "phase_iaaft:1.0": 0.04635215090456166
+      }
+    }
+  },
+  "exploratory_followup": {
+    "likelihood_decomposition": {
+      "kind": "POST_RESULT_PAIRED_MECHANISM_DIAGNOSTIC",
+      "public_test_read": false,
+      "likelihood_resolution": 32,
+      "new_terminal_statistic_resolution": 64,
+      "paired_decomposition": {
+        "spectral_low:0.2": {
+          "count": 404,
+          "max_decomposition_error": 0.00482177734375,
+          "median_absolute_nll_change": 876.482421875,
+          "median_absolute_energy_contribution": 678.00244140625,
+          "median_absolute_volume_contribution": 198.28277587890625,
+          "spearman_nll_with_energy_change": 0.9996800672623093,
+          "spearman_nll_with_volume_change": 0.9928999682433091
+        },
+        "spectral_high:0.2": {
+          "count": 404,
+          "max_decomposition_error": 0.00439453125,
+          "median_absolute_nll_change": 1002.45703125,
+          "median_absolute_energy_contribution": 789.84033203125,
+          "median_absolute_volume_contribution": 211.47357177734375,
+          "spearman_nll_with_energy_change": 0.9997060913700964,
+          "spearman_nll_with_volume_change": 0.9904584337672806
+        },
+        "quadratic_peak:0.2": {
+          "count": 404,
+          "max_decomposition_error": 0.00543212890625,
+          "median_absolute_nll_change": 382.6796875,
+          "median_absolute_energy_contribution": 67.994384765625,
+          "median_absolute_volume_contribution": 315.620849609375,
+          "spearman_nll_with_energy_change": 0.7518057182062291,
+          "spearman_nll_with_volume_change": 0.8823659371727082
+        },
+        "quadratic_peak:-0.2": {
+          "count": 404,
+          "max_decomposition_error": 0.0050048828125,
+          "median_absolute_nll_change": 266.61328125,
+          "median_absolute_energy_contribution": 52.69921875,
+          "median_absolute_volume_contribution": 229.457275390625,
+          "spearman_nll_with_energy_change": 0.8125443848685466,
+          "spearman_nll_with_volume_change": 0.8031481346423711
+        },
+        "gaussian_mixture:0.5": {
+          "count": 404,
+          "max_decomposition_error": 0.0050048828125,
+          "median_absolute_nll_change": 205.359375,
+          "median_absolute_energy_contribution": 140.28369140625,
+          "median_absolute_volume_contribution": 102.88287353515625,
+          "spearman_nll_with_energy_change": 0.5692586650050083,
+          "spearman_nll_with_volume_change": 0.3599149903333184
+        },
+        "anisotropic:0.2": {
+          "count": 404,
+          "max_decomposition_error": 0.0045166015625,
+          "median_absolute_nll_change": 13.9130859375,
+          "median_absolute_energy_contribution": 325.692626953125,
+          "median_absolute_volume_contribution": 319.9741516113281,
+          "spearman_nll_with_energy_change": 0.17033468646586072,
+          "spearman_nll_with_volume_change": 0.29970713320437115
+        },
+        "spatial_modulation:0.5": {
+          "count": 404,
+          "max_decomposition_error": 0.005859375,
+          "median_absolute_nll_change": 37.3017578125,
+          "median_absolute_energy_contribution": 25.71533203125,
+          "median_absolute_volume_contribution": 32.45849609375,
+          "spearman_nll_with_energy_change": 0.429730378856886,
+          "spearman_nll_with_volume_change": 0.5485861492224297
+        },
+        "phase_iaaft:1.0": {
+          "count": 404,
+          "max_decomposition_error": 0.0052490234375,
+          "median_absolute_nll_change": 95.375,
+          "median_absolute_energy_contribution": 138.14208984375,
+          "median_absolute_volume_contribution": 65.92660522460938,
+          "spearman_nll_with_energy_change": 0.7076499047754238,
+          "spearman_nll_with_volume_change": 0.3229599055852649
+        }
+      },
+      "energy32_64": {
+        "spearman": 0.9999989772357497,
+        "absolute_difference_quantiles": [
+          19.76543701859555,
+          21.986608294027974,
+          23.891071230936355,
+          28.132493085337046
+        ]
+      },
+      "limitations": [
+        "This analysis was added after seeing R6 underperformance.",
+        "Likelihood shifts include ordinary input-complexity changes, so a large volume contribution alone is not evidence of useful OOD discrimination.",
+        "The algebraic decomposition uses paired, same-resolution 32-step scores; the separate 64-step comparison is numerical only.",
+        "Weak AD/spectrum/correlation tests do not establish that the full latent distributions are identical or that all latent-space methods fail."
+      ]
+    },
+    "conclusion": "The likelihood components move differently across perturbations. Peak changes have larger volume-change than energy contributions; anisotropy produces large terms that largely cancel. Large raw changes alone do not prove OOD discrimination."
+  },
+  "prior_work_guard": "R2 already tested normal-power-conditioned scalar NLL and scalar latent energy. Do not repeat that as a new experiment.",
+  "next_question": "Check whether their JOINT normal-dependent relationship contains information discarded by either scalar score. Start from existing cached components; no new TPU training is implied by this question.",
+  "resource_status": {
+    "utc": "2026-10-09T23:51:05Z",
+    "hosts": [
+      {
+        "host": "t1v-n-51b3bdd2-w-0",
+        "vfio_pids": "",
+        "units": "  UNIT LOAD ACTIVE SUB DESCRIPTION\n0 loaded units listed.\nTo show all installed unit files use 'systemctl list-unit-files'.\n",
+        "tmpfs_free_bytes": 204086759424,
+        "root_free_bytes": 71707725824
+      },
+      {
+        "host": "t1v-n-51b3bdd2-w-1",
+        "vfio_pids": "",
+        "units": "  UNIT LOAD ACTIVE SUB DESCRIPTION\n0 loaded units listed.\nTo show all installed unit files use 'systemctl list-unit-files'.\n",
+        "tmpfs_free_bytes": 219365478400,
+        "root_free_bytes": 74368880640
+      },
+      {
+        "host": "t1v-n-51b3bdd2-w-2",
+        "vfio_pids": "",
+        "units": "  UNIT LOAD ACTIVE SUB DESCRIPTION\n0 loaded units listed.\nTo show all installed unit files use 'systemctl list-unit-files'.\n",
+        "tmpfs_free_bytes": 225689858048,
+        "root_free_bytes": 74692734976
+      },
+      {
+        "host": "t1v-n-51b3bdd2-w-3",
+        "vfio_pids": "",
+        "units": "  UNIT LOAD ACTIVE SUB DESCRIPTION\n0 loaded units listed.\nTo show all installed unit files use 'systemctl list-unit-files'.\n",
+        "tmpfs_free_bytes": 225754382336,
+        "root_free_bytes": 74555289600
+      }
+    ]
+  },
+  "submission_status": "No public-test data read and no new competition submissions. Candidates 04 through 09 remain unchanged.",
+  "limitations": [
+    "The R4 observations/families are reused for exploration; these are not a blind test.",
+    "Validation realizations previously selected neural checkpoints; statistic CDFs use only these normal maps.",
+    "Finite normal-reference CDFs saturate and create score ties. No public ranks or public adaptation are used.",
+    "Paired IID bootstrap excludes repeated selection, simulation dependence and unknown physical alternatives.",
+    "SITN-inspired statistics on masked pooled cosmological fields are an adaptation, not a reproduction of the cited experiments or theoretical guarantees."
+  ]
+}

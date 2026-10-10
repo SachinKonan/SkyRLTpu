@@ -76,11 +76,12 @@ def infrastructure_error(exc):
 
 
 class GradingService:
-    def __init__(self, config, ips, report=lambda *a, **k: None, *, warmup=True):
+    def __init__(self, config, ips, report=lambda *a, **k: None, *, warmup=True, tpu_ips=None):
         self.config = config
         self.settings = config.grading
         self.families = config.grading_families
         self.ips = list(ips)
+        self.tpu_ips = list(tpu_ips or [])
         self.report = report
         self.entries = {}
         self.ready = False
@@ -92,7 +93,8 @@ class GradingService:
 
     # -- capacity ---------------------------------------------------------
     def slots_total(self, task):
-        return self.families[task]['slots_per_host'] * max(1, len(self.ips))
+        hosts = self.tpu_ips if task == 'fair_universe' else self.ips
+        return self.families[task]['slots_per_host'] * len(hosts)
 
     def running(self, task=None):
         return sum(1 for e in self.entries.values() if e.state in ('queued', 'running')
@@ -130,6 +132,9 @@ class GradingService:
             raise ValueError(f'grading family {task!r} is not served by this farm')
         if not isinstance(spec, dict):
             raise ValueError('spec must be an object')
+        if task == 'fair_universe':
+            from tpu.science.fair_universe.ray_grade import validate_spec
+            return validate_spec(spec)
         limit = self.settings.stdout_limit_bytes
         if task == 'math':
             code, name = spec.get('program_code'), spec.get('function_name')
@@ -178,6 +183,12 @@ class GradingService:
     def dispatch(self, task, spec):
         """Return a Ray ObjectRef (or any awaitable) for one candidate."""
         root = self.worker_root
+        if task == 'fair_universe':
+            from tpu.science.fair_universe.ray_grade import grade
+            family = self.families[task]
+            return grade.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024**3).remote(
+                spec, self.config.grading.dataset_root, self.config.grading.candidate_python,
+                self.config.root, family['memory_gib'])
         if task == 'math':
             from tpu.science.math_grade import grade_math
             family = self.families['math']
@@ -347,13 +358,19 @@ class GradingService:
                 return
             nodes = {n['NodeManagerAddress']: n['NodeID'] for n in ray.nodes() if n['Alive']}
             for name in self.families:
-                for ip in self.ips:
+                for ip in (self.tpu_ips if name == 'fair_universe' else self.ips):
                     node = nodes.get(ip)
                     if node is None:
                         self.readiness[f'{name}@{ip}'] = 'node missing'
                         continue
                     strategy = NodeAffinitySchedulingStrategy(node, soft=False)
-                    if name == 'math':
+                    if name == 'fair_universe':
+                        from tpu.science.fair_universe.ray_grade import readiness
+                        ref = readiness.options(scheduling_strategy=strategy).remote(
+                            self.config.grading.dataset_root, self.config.grading.candidate_python)
+                        result = await self.awaitable(ref)
+                        self.readiness[f'{name}@{ip}'] = 'ok' if result.get('ready') else str(result)
+                    elif name == 'math':
                         from tpu.science.math_grade import grade_math
                         family = self.families['math']
                         spec = dict(program_code=REFERENCE_MATH, function_name='construct_function',

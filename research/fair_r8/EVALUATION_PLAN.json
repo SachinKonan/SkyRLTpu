@@ -1,0 +1,16 @@
+{
+  "registered_before_anomaly_evaluation": true,
+  "selection": "Choose width 16 or 32 using the lower two-seed mean MSE on the common 1024-map normal audit. This selects the next experiment, not a competition candidate. Report both widths and all seeds even if only one width receives the full expensive likelihood evaluation.",
+  "numerics": "Require all new field models to pass the normal-only 64-versus-128-step gate. Use 64-step Heun, one fixed Rademacher trace probe (seed 451), and identical batch size for both the selected new pair and the original pair. Re-evaluating the original pair controls the change from the old 32-step baseline.",
+  "inputs": {
+    "fit_normal": "512 normal development maps from the original R2 field benchmark cache, matching the original summary-feature cache and conditioning fit.",
+    "calibration": "3232 original R2 calibration observations.",
+    "closure": "All 9696 rows of the R4 closure cache: 3232 float32 normals, their paired float16 versions, and eight families of 404 synthetic maps each.",
+    "total": 13440,
+    "public_test": "Not read."
+  },
+  "conditioning": "Apply the same R2 normal-only ridge selection procedure to each two-seed mean field NLL: log/power/both bases, five fixed cosmology-grouped folds, alphas 0.0001 through 1. Fixed heteroskedastic variance ridge (both, 0.1). Fit uses only the 512 normal maps. Report raw NLL, absolute centered NLL and the conditioned absolute residual; the last is the preselected hybrid component.",
+  "hybrids": "Replace only candidate 08's field component by the matched original-64 or selected-new-64 field residual. Keep the corrected summary component, 0.5/0.5 weighting and normal-calibration median/q90 scales unchanged. Also report each hybrid with the unchanged regional specialist through the existing candidate-09 maximum rule. No anomaly-tuned ensemble weights.",
+  "comparison": "Report original candidate 08/09, matched original-64 variants, selected-new-64 variants, all eight families, normal false-alarm counts, physical-parameter bins, and paired bootstrap differences. Disclose reused maps/families and conditional bootstrap limitations. A normal-loss improvement alone does not promote a candidate.",
+  "execution": "Four frozen models (old seeds 0/1 and selected-new seeds 0/1), four shards each on the 16 chips of the single authorized erdos-3242 lab. Verify all chips are free before launch, model/cache hashes match across hosts, every input appears exactly once per model, and output hashes match before analysis. All copying stays within this machine's us-east5-a hosts."
+}

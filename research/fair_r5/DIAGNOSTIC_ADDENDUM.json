@@ -1,0 +1,13 @@
+{
+  "round": "R5",
+  "timing": "Added after comparison-001 results were inspected; this is an explanatory control, not a preregistered discovery or a new blind validation.",
+  "observation": "Sparse latent statistics generally lose sensitivity. Mixing candidate 08 with the Berk-Jones-style statistic improves IAAFT but reduces several other diagnostic scores.",
+  "confound": "Adding another summary-derived component also increases the ensemble's weight on summaries relative to its field component. Improvement need not come from the sparse statistic itself.",
+  "controls": [
+    "Mix candidate 08 with its existing raw summary energy, using exactly the same normal scaling and mean/max rules.",
+    "Compare the Berk-Jones mean ensemble against this matched dense-energy mean ensemble with paired bootstrap intervals.",
+    "Apply four fixed seeded orthogonal rotations to each model's standardized latent coordinates. Verify exact energy invariance and report maximum-coordinate score sensitivity to this arbitrary representation change. No rotation is selected for deployment."
+  ],
+  "public_test": "Not read. No new submission candidate is chosen by these controls.",
+  "interpretation": "These experiments assess mechanisms in the frozen learned representation. They cannot exclude sparse physical anomalies expressed in a different representation."
+}
