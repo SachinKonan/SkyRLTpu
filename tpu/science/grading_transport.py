@@ -279,6 +279,10 @@ class FarmDirectory:
     async def refresh(self):
         if not self.url:
             return
+        # Stamp before the request: every waiting grade calls refresh when the
+        # stamp is stale, and a failed refresh must not let them all retry at
+        # once (1024 bootstrap waiters kept the ingress from ever answering).
+        self.last_refresh = time.monotonic()
         try:
             response = await self.http.get(self.url + '/skyrl/v1/grading/farms', timeout=wait_for_connection(10))
             response.raise_for_status()

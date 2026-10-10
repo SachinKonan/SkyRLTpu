@@ -366,3 +366,29 @@ def test_health_pause_keeps_in_flight_grades_and_a_retry_is_not_answered_by_a_ca
         finally:
             await t.close()
     asyncio.run(run())
+
+
+def test_waiting_grades_do_not_flood_a_failing_farm_directory():
+    async def run():
+        calls = []
+
+        async def route(request):
+            calls.append(request.url.path)
+            raise httpx.ConnectTimeout('ingress busy', request=request)
+        http = httpx.AsyncClient(transport=httpx.MockTransport(route))
+        t = gt.GradingTransport(families=FAMILIES, local_capacity=0, farm_url='http://head', http=http,
+                                loop=asyncio.get_running_loop(), long_poll_seconds=0, poll_seconds=.01,
+                                refresh_seconds=3600)
+        t.report = lambda event, **fields: None
+        try:
+            waiters = [asyncio.create_task(t.grade(request())) for _ in range(200)]
+            await asyncio.sleep(2.5)
+            # One refresh at start plus at most one per 5 s window, not one per waiter per second.
+            assert len(calls) <= 3, len(calls)
+            for task in waiters:
+                task.cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
+        finally:
+            await t.close()
+    asyncio.run(run())
+
