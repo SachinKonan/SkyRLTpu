@@ -106,7 +106,7 @@ def grade(spec):
     env.update(PYTHONPATH=str(CODE), FAIR_FACTORY_ROOT=str(FACTORY), JAX_PLATFORMS='tpu',
                TPU_VISIBLE_CHIPS=str(chip), TPU_PROCESS_BOUNDS='1,1,1', TPU_CHIPS_PER_PROCESS_BOUNDS='1,1,1',
                TPU_PROCESS_PORT=str(8476 + chip), TPU_PROCESS_ADDRESSES=f'localhost:{8476 + chip}',
-               CLOUD_TPU_TASK_ID='0', OMP_NUM_THREADS='8', OPENBLAS_NUM_THREADS='8')
+               CLOUD_TPU_TASK_ID='0', OMP_NUM_THREADS='16', OPENBLAS_NUM_THREADS='16')
     child = [str(SHM / 'venv/bin/python'), '-m', 'tpu_grader.grade', str(cand), '--out', str(out),
              '--mode', spec['mode'], '--stack', spec.get('stack', 'v2')]
     locks = SHM / 'chip-locks'

@@ -487,7 +487,8 @@ class Config:
             'placement': dict(slots_per_host=self.science_placement_slots_per_host,
                               cpus=4, memory_gib=4 if modern else 8),
             # FAIR feature grading: one TPU chip per slot on a farm's non-engine hosts
-            'fair': dict(slots_per_host=4, cpus=48, memory_gib=48),
+            # 4 x 40 CPUs fits the ~172-core grading pool of a v5p host next to the farm's service CPUs
+            'fair': dict(slots_per_host=4, cpus=40, memory_gib=48),
         }
         declared = self.grading.families or {}
         if not declared and self.default_sandbox_grading:
