@@ -314,9 +314,11 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
         # Every host of the slice (trainer and inference ranks) grades from its
         # pool; each family's local capacity is its slot cap times the hosts.
         local_slots = max(spec['slots_per_host'] for spec in families.values()) * config.hosts
+        if 'fair' in families:
+            local_slots = 0          # FAIR grades run only on leased farms' TPU grading hosts
         defaults.update(SKYRL_GRADING_FAMILIES=json.dumps(families, sort_keys=True),
                         SKYRL_GRADING_LOCAL_SLOTS=str(local_slots),
-                        SKYRL_GRADING_LOCAL_HOSTS=str(config.hosts),
+                        SKYRL_GRADING_LOCAL_HOSTS=str(config.hosts if local_slots else 0),
                         SKYRL_GRADING_MAX_INFRA_RETRIES=str(config.grading.max_infra_retries),
                         SKYRL_GRADING_LOCAL_SYSTEMD=_flag(config.grading.local_systemd),
                         SKYRL_GRADING_EVENTS=str(root / "runs" / config.run_id / "inference-events.jsonl"),

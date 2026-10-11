@@ -85,12 +85,11 @@
     "TTD_ANSWER_MODEL_FAMILY": "qwen",
     "TTD_ADV_PIECEWISE_RHO": "0.5",
     "TTD_ADV_PIECEWISE_INVALID_REWARD": "0",
-    "FAIR_GRADER_URLS": "http://HOST2_IP:24900,http://HOST3_IP:24900",
     "FAIR_GRADE_MODE": "rl",
     "FAIR_GRADE_TIMEOUT": "1500",
-    "FAIR_GRADER_DOWN_S": "300",
     "EVAL_TIMEOUT": "1800",
-    "TTD_SAFE_GRADE_MAX_WORKERS": "256"
+    "TTD_SAFE_GRADE_MAX_WORKERS": "256",
+    "FAIR_GRADE_STACK": "v2"
   },
   "trainer_env": {
     "TUNIX_UNIFORM_SEQ_LEN": "0",
@@ -100,5 +99,12 @@
   "client_learning_rate": "4e-5",
   "bootstrap_max_drafts": 0,
   "bootstrap_layers": 0,
-  "bootstrap_all_hosts": false
+  "bootstrap_all_hosts": false,
+  "grading": {
+    "families": {
+      "fair": {}
+    },
+    "farm_transport": true,
+    "local_systemd": false
+  }
 }

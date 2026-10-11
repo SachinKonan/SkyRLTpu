@@ -69,5 +69,10 @@
   ],
   "adapter_count": 1,
   "pooled_group_size": 32,
-  "single_bucket": true
+  "single_bucket": true,
+  "grading": {
+    "families": {
+      "fair": {}
+    }
+  }
 }

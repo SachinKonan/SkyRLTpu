@@ -92,7 +92,18 @@ class GradingService:
 
     # -- capacity ---------------------------------------------------------
     def slots_total(self, task):
+        if task == 'fair':
+            return max(1, int(self.fair_slots()))
         return self.families[task]['slots_per_host'] * max(1, len(self.ips))
+
+    @staticmethod
+    def fair_slots():
+        """FAIR graders run on the farm's non-engine hosts: count their per-chip Ray tokens."""
+        try:
+            import ray
+            return ray.cluster_resources().get('grading_fair', 0) if ray.is_initialized() else 0
+        except Exception:
+            return 0
 
     def running(self, task=None):
         return sum(1 for e in self.entries.values() if e.state in ('queued', 'running')
@@ -150,6 +161,14 @@ class GradingService:
         source = spec.get('source')
         if not isinstance(source, str) or not source or len(source.encode()) > MAX_PROGRAM_BYTES:
             raise ValueError('source must be a nonempty string of at most 1 MiB')
+        if task == 'fair':
+            mode = spec.get('mode', 'rl')
+            if mode not in ('rl', 'screen', 'full'):
+                raise ValueError('fair mode must be rl, screen or full')
+            stack = spec.get('stack', 'v2')
+            if stack not in ('v1', 'v2'):
+                raise ValueError('fair stack must be v1 or v2')
+            return dict(source=source, mode=mode, stack=stack)
         admission = spec.get('admission_timeout_s', 2400)
         if type(admission) is not int or admission < 1:
             raise ValueError('admission_timeout_s must be a positive integer')
@@ -184,6 +203,12 @@ class GradingService:
             return grade_math.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
                                      resources={'grading_math': 1}, scheduling_strategy='SPREAD'
                                      ).remote(spec, self.families, root)
+        if task == 'fair':
+            from tpu.fair.ray_task import grade_fair
+            family = self.families['fair']
+            return grade_fair.options(num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
+                                      resources={'TPU': 1, 'grading_fair': 1}, scheduling_strategy='SPREAD'
+                                      ).remote(spec)
         if task == 'routing':
             from tpu.science.ray_cpu import grade
             family = self.families['routing']
@@ -346,7 +371,20 @@ class GradingService:
                 self.readiness = dict(error='ray not initialized')
                 return
             nodes = {n['NodeManagerAddress']: n['NodeID'] for n in ray.nodes() if n['Alive']}
+            if 'fair' in self.families:
+                from tpu.fair.ray_task import prepare_host
+                fair_nodes = {n['NodeManagerAddress']: n['NodeID'] for n in ray.nodes()
+                              if n['Alive'] and n.get('Resources', {}).get('grading_fair', 0) > 0}
+                if not fair_nodes:
+                    self.readiness['fair'] = 'no node with grading_fair resources'
+                for ip, node in fair_nodes.items():
+                    ref = prepare_host.options(scheduling_strategy=NodeAffinitySchedulingStrategy(node, soft=False)
+                                               ).remote()
+                    res = await self.awaitable(ref)
+                    self.readiness[f'fair@{ip}'] = 'ok' if res.get('ok') else f"not prepared: {res.get('detail')}"
             for name in self.families:
+                if name == 'fair':
+                    continue
                 for ip in self.ips:
                     node = nodes.get(ip)
                     if node is None:

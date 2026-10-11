@@ -59,7 +59,7 @@ class Cache:
     sync_seconds: int = 60
 
 
-GRADING_FAMILIES = ('math', 'routing', 'placement')
+GRADING_FAMILIES = ('math', 'routing', 'placement', 'fair')
 # Older profiles and bundles call the math sandbox family 'ac2'.
 FAMILY_ALIASES = {'ac2': 'math'}
 # Sandbox tasks whose programs run through the math executor (flat numeric results).
@@ -486,6 +486,8 @@ class Config:
                             cpus=10 if parallel else 4, memory_gib=20 if parallel else 8),
             'placement': dict(slots_per_host=self.science_placement_slots_per_host,
                               cpus=4, memory_gib=4 if modern else 8),
+            # FAIR feature grading: one TPU chip per slot on a farm's non-engine hosts
+            'fair': dict(slots_per_host=4, cpus=48, memory_gib=48),
         }
         declared = self.grading.families or {}
         if not declared and self.default_sandbox_grading:
@@ -534,6 +536,15 @@ class Config:
                 raise ValueError(f'grading family {name}: memory_max_gib must be at least memory_gib')
             if name != 'math' and spec['memory_max_gib'] != spec['memory_gib']:
                 raise ValueError(f'grading family {name}: science contracts kill at their reservation')
+        if 'fair' in families:
+            if len(families) != 1 or families['fair']['slots_per_host'] > self.chips_per_host:
+                raise ValueError('fair grading is the only family of its profile and takes at most one slot per chip')
+            if self.inference_only:
+                ranks = self.inference_only_ranks
+                if not ranks or len(ranks) >= self.hosts:
+                    raise ValueError('fair grading needs inference_only_ranks that leave non-engine grading hosts')
+            elif not (g.farm_transport and self.is_fair_features):
+                raise ValueError('a fair_features trainer grades only through leased farms (grading.farm_transport)')
         if 'math' in families and not (families['math']['slots_per_host'] <= 64 and families['math']['cpus'] <= 8
                                        and families['math']['memory_max_gib'] <= 64):
             raise ValueError('math grading: at most 64 slots, 8 CPUs and 64 GiB per host')

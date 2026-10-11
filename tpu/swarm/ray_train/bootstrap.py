@@ -19,6 +19,11 @@ from .config import Config
 
 def workload_resources(config, rank):
     families = config.grading_families
+    if config.inference_only and 'fair' in families:
+        # FAIR farm: engines on inference_only_ranks, one fair grading token per chip everywhere else.
+        if rank in config.inference_only_ranks:
+            return {"TPU": config.chips_per_host}
+        return {"TPU": config.chips_per_host, "grading_fair": families['fair']['slots_per_host']}
     if config.inference_only and families:
         # Farm hosts: one token per declared grading slot so Ray never packs
         # more candidates onto a host than its partition can isolate.
