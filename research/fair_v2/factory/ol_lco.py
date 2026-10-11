@@ -75,6 +75,9 @@ def main():
         'v3-15d': recipe('v3-15d'), 'v3-15h (Oh 3)': recipe('v3-15h'),
         'v3-16a (15d + Ol 1.5)': recipe('v3-15d', {'Ol': 1.5}), 'v3-16b (15d + Ol 3)': recipe('v3-15d', {'Ol': 3.0}),
         '15d + Of 1.5': recipe('v3-15d', {'Of': 1.5}), '15d + Of 3': recipe('v3-15d', {'Of': 3.0}),
+        # after v3-16b (Ol 3) scored 0.7037 on the LB: how far to push Ol
+        '15d + Ol 4.5': recipe('v3-15d', {'Ol': 4.5}), '15d + Ol 6': recipe('v3-15d', {'Ol': 6.0}),
+        '15d + Ol 9': recipe('v3-15d', {'Ol': 9.0}), '15d + Ol 12': recipe('v3-15d', {'Ol': 12.0}),
     }
     res = {}
     base = None
@@ -89,7 +92,7 @@ def main():
         s['d_fold_vs_15d'] = d
         print(f'{name:24s} {s["all19"]:.4f} {s["visible"]:.4f} {s["hidden"]:.4f}  '
               f'{" ".join(f"{v:.4f}" for v in s["per_fold_all19"])}  {" ".join(f"{v:+.4f}" for v in d)}  {s["exc_pct"]}')
-    out = DATA / 'ol_lco.json'
+    out = DATA / 'ol_lco_push.json'
     out.write_text(json.dumps(res, indent=1))
     print('wrote', out)
 
