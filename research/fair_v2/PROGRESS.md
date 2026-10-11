@@ -138,7 +138,27 @@ Every score is per map. Batches are fixed-shape and run in eval mode; scoring a 
 ≤ 0.003. Nothing was fitted, calibrated or selected on test data. Only frozen per-map test scores were produced.
 Leaderboard feedback is used for choosing among submissions.
 
-## Next
+## Where we are (2026-10-11, 21:20 UTC)
+
+- **Final code submission: `fair-data/packages/v3-16b.zip`** (sha256 b11071313e46a61e…), LB **0.7037**. Recipe:
+  Sd .5, Dr 2.5, xSL 1, consP8 .5, consRplus 3 (13 views incl. den_b and dirpower votes), N2 .5, PsBh .5, X (dirpower) 2,
+  Oh 1.5, Ol 3; C 0, SS 0. All 5 submissions of 2026-10-11 are used.
+- **LB lessons today:** dropping SS and adding dirpower 0.6461 -> 0.6667; dropping C +0.0009; removing Oh -0.0197;
+  adding Ol (the OE classifier's own logit) at 3 +0.0361; Ol 6 -0.0044 although the proxy preferred it on every fold.
+  The proxy overrates members tied to our synthetic shifts (Oh, Ol, dirpower, consistency views).
+- **Last-hour levers** (all on the proxy, none beat v3-16b/16c beyond noise): learned linear combiner (v3-18, tie with
+  16c; `factory/lever1_*`), top-normal diagnosis (Ol drives 68% of top-tail normals; edge low-Omega_m universes; fits
+  at the T_AGN/f0 box edge; `factory/lever3_tail.py`), OE head re-fit with a low-FPR ranking loss (the ranking loss hurt;
+  plain re-fit +0.005 mostly from the gradient shift; v3-19a/b built, `agents/outlier/ft/`), 3-net OE ensemble (v3-17,
+  dropped; `factory/build_v317.py`).
+- **MOMO feature factory:** TPU grader (`factory/tpu_grader`) and farm grading family `fair` on branch `agent/fair-momo`
+  (SkyRL-Main-infer-fair); control replay matched the della grader exactly; the train+infer smoke and both FAIR farms
+  were spot-preempted (jobs 2381/2382/2398 RECOVERING), so MOMO produced no candidates before the deadline.
+- **Next round, in order:** honest validation (retrain the learned networks per held-out fold; a fresh untouched set of
+  distortion types; grouped bootstrap of the 0.1-5% tail), OE diversity and per-fold OE training, a small regularized
+  combiner over OE family logits, a fit fix for boundary solutions on edge universes, finer consistency tests.
+
+## Next (earlier plan, kept for history)
 
 - Outlier-exposure and diffusion agents report about 20:30 UTC.
 - Consistency agent: leave-cosmology-out weighting and cosmology jitter.
