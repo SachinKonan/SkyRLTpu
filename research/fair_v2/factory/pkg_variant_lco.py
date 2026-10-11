@@ -19,7 +19,7 @@ import grade as G  # noqa: E402
 from stack_levers import DATA, V2, load_fold, summarize, wmean  # noqa: E402
 
 PKG = Path('/scratch/gpfs/ZHUANGL/sk7524/fair-data/packages')
-NAMES = ('v3-15b', 'v3-15c', 'v3-15d', 'v3-15e', 'v3-15f')
+NAMES = ('v3-15b', 'v3-15c', 'v3-15d', 'v3-15e', 'v3-15f', 'v3-15g')
 RENAME = {'X': 'Xdp'}
 
 
