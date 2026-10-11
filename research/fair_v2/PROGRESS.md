@@ -20,6 +20,7 @@ The competition deadline is **2026-10-11 23:59 UTC**. Limits: 5 submissions per 
 | `v3-12-STACKDp3+SS+Oh1.5.zip` | v3-10 + diffusion SS 1 + outlier-exposure Oh 1.5 (Oh tests whether hidden OoD include shear/PSF/noise systematics) | crashed on Codabench's side (2026-10-10, zip valid); no score |
 | **`v3-15b-pkg-v313a-noSS.zip`** | **v3-12 without SS + anisotropy family (dirpower misfit 2 + vote in consRplus), scored by the code package itself (`packages/v3-15b.zip`)** | **0.6667** (2026-10-11) |
 | **`v3-15d-pkg-v315b-noC.zip`** | **v3-15b without the CNN-embedding likelihood C (package `packages/v3-15d.zip`)** | **0.6676** (2026-10-11) |
+| `v3-15g-pkg-v315d-noOh.zip` | v3-15d without Oh: Oh carries real-test signal (-0.020 without it) | 0.6479 (2026-10-11) |
 | `v3-07-BIG_RE2.zip` | Dr 1 + N2 1 + PsBh 0.5 + xSL 1 + consRbands 2 (Sd and C dropped); chosen by leave-cosmology-out metric 0.4292 | pending |
 
 The leader is at 0.7835 (others 0.7823, 0.7729, ...). User dkn20, at 0.7358, is very likely the first author of the

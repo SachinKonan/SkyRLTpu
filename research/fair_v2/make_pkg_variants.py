@@ -31,6 +31,8 @@ VARIANTS = {
     'v3-15f': ('pkg-v315b-noC-cons4.5', {'SS': 0.0, 'C': 0.0, 'consRplus': 4.5}),
     # after v3-15d (C 0) scored 0.6676: does Oh help on the real test? (its LCO gain is generator-overlap inflated)
     'v3-15g': ('pkg-v315d-noOh', {'SS': 0.0, 'C': 0.0, 'Oh': 0.0}),
+    # v3-15g (no Oh) scored 0.6479 vs v3-15d 0.6676: Oh carries real-test signal -> weight it up
+    'v3-15h': ('pkg-v315d-Oh3', {'SS': 0.0, 'C': 0.0, 'Oh': 3.0}),
 }
 
 
