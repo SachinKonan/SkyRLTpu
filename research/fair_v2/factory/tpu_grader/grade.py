@@ -941,6 +941,9 @@ def main():
         out = args.out / c.stem if len(args.candidates) > 1 else args.out
         out.mkdir(parents=True, exist_ok=True)
         src = c.read_text()
+        # Marker for the farm task: the grader (imports, TPU, data, stack) is up before the candidate runs, so a
+        # missing result.json after this point is the candidate's failure, not the infrastructure's.
+        (out / 'started.json').write_text(json.dumps(dict(t=time.time(), stack=args.stack, mode=args.mode)))
         (out / 'candidate.py').write_text(src)
         r = grade_source(src, args.mode, budget=args.budget, timeout=args.timeout)
         r['candidate'] = str(c)
