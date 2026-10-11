@@ -1,6 +1,6 @@
 """Leaderboard files and ready-to-submit packages for config-only variants of a built package.
 
-  python make_pkg_variants.py
+  python make_pkg_variants.py [variant ...]      (default: all; existing records are kept for the rest)
 
 The member outputs come from ONE run of the package's own Model().predict on the public test file (verify_full.py
 --mode full, stored per component in _verify/<base>/full_a100.npz); each variant combines them exactly as
@@ -25,6 +25,10 @@ VARIANTS = {
     'v3-15a': ('pkg-v313a', {}),                          # as packaged, including the package's own SS
     'v3-15b': ('pkg-v313a-noSS', {'SS': 0.0}),
     'v3-15c': ('pkg-v313b-noSS', {'SS': 0.0, 'Oh': 0.0}),
+    # after v3-15b scored 0.6667: lower base-likelihood share / heavier consistency (earlier LB pattern)
+    'v3-15d': ('pkg-v315b-noC', {'SS': 0.0, 'C': 0.0}),
+    'v3-15e': ('pkg-v315b-cons4.5', {'SS': 0.0, 'consRplus': 4.5}),
+    'v3-15f': ('pkg-v315b-noC-cons4.5', {'SS': 0.0, 'C': 0.0, 'consRplus': 4.5}),
 }
 
 
@@ -55,15 +59,22 @@ def top_overlap(a, b, k=100):
     return len(set(np.argsort(-a)[:k]) & set(np.argsort(-b)[:k]))
 
 
-def main():
+def main(only=None):
     run = np.load(RUN)
     z = {k[2:]: run[k] for k in run.files if k.startswith('z/')}
     base_cfg = json.loads((PKG / BASE / 'config.json').read_text())
     s_base, _ = combine(z, base_cfg['weights'])
     assert np.array_equal(s_base, run['scores']), 'combination does not reproduce the package run'
     refs = {n: np.load(DATA / 'merged' / f'{n}.npy') for n in ('v3-13a', 'v3-13b')}
+    if (DATA / 'merged' / 'v3-15b.npy').exists():
+        refs['v3-15b'] = np.load(DATA / 'merged' / 'v3-15b.npy')                 # LB 0.6667
     report = dict(source_run=str(RUN), run_seconds=float(run['seconds']), variants={})
+    out_json = PKG / '_verify' / 'v3-15_variants.json'
+    if only and out_json.exists():
+        report['variants'] = json.loads(out_json.read_text())['variants']      # keep the earlier variants' records
     for name, (label, override) in VARIANTS.items():
+        if only and name not in only:
+            continue
         weights = dict(base_cfg['weights'], **override)
         s, used = combine(z, weights)
         np.save(DATA / 'merged' / f'{name}.npy', s)
@@ -92,8 +103,9 @@ def main():
         r['quantiles'] = np.quantile(s, [0, .5, .9, .99, 1]).round(3).tolist()
         report['variants'][name] = r
         print(json.dumps({name: r}), flush=True)
-    (PKG / '_verify' / 'v3-15_variants.json').write_text(json.dumps(report, indent=1))
+    out_json.write_text(json.dumps(report, indent=1))
 
 
 if __name__ == '__main__':
-    main()
+    import sys
+    main(set(sys.argv[1:]) or None)       # e.g. `python make_pkg_variants.py v3-15d v3-15e v3-15f`
