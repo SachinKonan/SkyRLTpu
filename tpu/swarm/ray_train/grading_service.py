@@ -377,11 +377,24 @@ class GradingService:
                               if n['Alive'] and n.get('Resources', {}).get('grading_fair', 0) > 0}
                 if not fair_nodes:
                     self.readiness['fair'] = 'no node with grading_fair resources'
+                from tpu.fair.ray_task import grade_fair, reference_source
                 for ip, node in fair_nodes.items():
-                    ref = prepare_host.options(scheduling_strategy=NodeAffinitySchedulingStrategy(node, soft=False)
-                                               ).remote()
-                    res = await self.awaitable(ref)
-                    self.readiness[f'fair@{ip}'] = 'ok' if res.get('ok') else f"not prepared: {res.get('detail')}"
+                    pin = NodeAffinitySchedulingStrategy(node, soft=False)
+                    res = await self.awaitable(prepare_host.options(scheduling_strategy=pin).remote())
+                    if not res.get('ok'):
+                        self.readiness[f'fair@{ip}'] = f"not prepared: {res.get('detail')}"
+                        continue
+                    # Ready only after a real reference grade on this host's chips succeeds end to end.
+                    family = self.families['fair']
+                    try:
+                        ref = await self.awaitable(grade_fair.options(
+                            num_cpus=family['cpus'], memory=family['memory_gib'] * 1024 ** 3,
+                            resources={'TPU': 1, 'grading_fair': 1}, scheduling_strategy=pin
+                        ).remote(dict(source=reference_source(), mode='rl', stack='v2')))
+                        ok = bool(ref.get('ok'))
+                        self.readiness[f'fair@{ip}'] = 'ok' if ok else f"reference grade failed: {str(ref)[:300]}"
+                    except Exception as exc:  # noqa: BLE001
+                        self.readiness[f'fair@{ip}'] = f'reference grade error: {type(exc).__name__}: {exc}'[:400]
             for name in self.families:
                 if name == 'fair':
                     continue

@@ -59,6 +59,11 @@ def build(profile, output, *, _executor_only=False):
                 path = repo / "tpu/science" / name
                 if path.is_file():
                     bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
+        if 'fair' in config.grading_families:
+            # Farm Ray workers import the FAIR task and its vendored JAX grader from $code.
+            for path in sorted((repo / "tpu/fair").rglob("*")):
+                if path.is_file() and "__pycache__" not in path.parts and path.suffix == ".py":
+                    bundle.add(path, arcname=str(path.relative_to(repo)), recursive=False)
         if config.placement_ranks:
             # Bootstrap/configuration must know chip resources before the
             # placement payload prepares candidate and grader dependencies.
