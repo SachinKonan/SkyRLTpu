@@ -1,10 +1,10 @@
 # FAIR Universe Phase 2 (out-of-distribution detection): full report
 
-Status as of **2026-10-11, 20:35 UTC**, about 3.5 hours before the 23:59 UTC deadline.
+Status as of **2026-10-11, ~21:45 UTC** (deadline 23:59 UTC). All 5 of today's submissions are used.
 
 **Best leaderboard score: 0.7037** (`v3-16b`). We started this effort at 0.5253; the leader is at 0.7835. We have
-closed 0.178 of the original 0.258 gap (69%). One submission is left today (`v3-16c`, prepared). The final code
-package is `packages/v3-16b.zip`, or `packages/v3-16c.zip` if v3-16c scores higher.
+closed 0.178 of the original 0.258 gap (69%). The last submission, `v3-16c` (Ol 6), scored 0.6993, below v3-16b.
+**The final code submission is `packages/v3-16b.zip`.**
 
 ---
 
@@ -193,12 +193,14 @@ log-uniform random strengths. Loss = normal-vs-distorted + which-family + parame
 | v3-15d | 0.4720 | 0.6676 | 0.09 |
 | v3-15g | 0.4421 | 0.6479 | 0.66 (vs v3-15d) |
 | **v3-16b** | **0.5166** | **0.7037** | 0.81 (vs v3-15d) |
+| v3-16c | 0.5258 | 0.6993 | **−0.48 (vs v3-16b): wrong sign** |
 
 - **Early on, LB moved ~3.2x the LCO change.** That predicted v3-15b at about 0.80; it scored 0.667. The members added
   after v3-04 (Oh, anisotropy, more consistency views) were partly tuned to the kinds of shifts we generated, so the
   proxy flattered them.
-- **The proxy still got the direction right on every recent pair** (b→d up/up, d→g down/down, d→16b up/up). The
-  slope is now 0.1-0.8, not 3.2.
+- **The proxy got the direction right on the recent pairs up to v3-16b** (b→d up/up, d→g down/down, d→16b up/up),
+  with a slope of 0.1-0.8, not 3.2. **It got the last step wrong:** Ol 3 → 6 was better on every proxy fold but
+  lost 0.0044 on the LB. The proxy's OE gains are largely generator overlap, and the LB optimum is near Ol 3.
 - **Oh's proxy gain is inflated:** +0.03-0.05 LCO on visible shifts vs about +0.005 when graded on generator families
   it never trained on. On the real LB, though, Oh is worth +0.020 (Section 6).
 
@@ -221,7 +223,7 @@ Codabench times in the submission list are UTC−4; UTC is given here.
 | 6 | 10-11 13:00 | `v3-15d-pkg-v315b-noC.zip` | − C (CNN embedding) | 0.6676 | +0.0009 |
 | 7 | 10-11 19:09 | `v3-15g-pkg-v315d-noOh.zip` | − Oh (test) | 0.6479 | −0.0197 vs v3-15d |
 | 8 | 10-11 20:25 | **`v3-16b-pkg-v315d-Ol3.zip`** | + Ol (OE network's own logit) at 3 | **0.7037** | **+0.0361** |
-| 9 | (last slot) | `v3-16c-pkg-v315d-Ol6.zip` | Ol at 6 | pending | |
+| 9 | 10-11 (last slot) | `v3-16c-pkg-v315d-Ol6.zip` | Ol at 6 | 0.6993 | −0.0044 vs v3-16b |
 
 The submission list shows v3-02 with status "Failed" but a score of 0.5669.
 
@@ -311,7 +313,7 @@ Oh 0.99645, X 0.99992; final 0.99805.
 | v3-15d | The CNN's held-out tail is 2.5x heavier; drop C | .4720 / .3669 / 0.63% | **0.6676** | Keep C out |
 | v3-15g | Is Oh's gain real or proxy overlap? Drop Oh | .4421 / .3514 / 0.65% | 0.6479 | **Oh is real (+0.020)**; keep it |
 | v3-16b | Use the OE network's own logit directly (Ol 3) | .5166 / .3843 / 0.16% | **0.7037** | New best (+0.036) |
-| v3-16c | More Ol (6) | .5258 / .3866 / 0.09% | pending | Last slot |
+| v3-16c | More Ol (6) | .5258 / .3866 / 0.09% | 0.6993 | **Proxy said better on every fold; LB disagreed (−0.0044).** Final stays v3-16b |
 
 Ol weight sweep on the proxy (v3-15d + Ol):
 
@@ -380,8 +382,9 @@ TPU chips.
    +0.056 combined, the largest effect after the denoiser. The real OoD categories overlap its generator families.
 2. **The normal-map tail decides the score.** Every reduction of the flexible base likelihoods (Sd, C) helped. The
    members that help most also lighten the false-alarm tail at 0.1% (0.63% → 0.16% from v3-15d to v3-16b).
-3. **Our proxy is direction-correct but biased.** It overrates members tuned to our own shifts by a factor of
-   1.5-10, and its LB slope fell from 3.2 to 0.1-0.8.
+3. **Our proxy is biased toward our own shifts.** It overrates members tuned to them by a factor of 1.5-10, its LB
+   slope fell from 3.2 to 0.1-0.8, and on the final step (Ol 3 → 6) it got the sign wrong. The leaderboard optimum
+   for the OE weight is around Ol 3.
 
 ## 7. What did not help
 
@@ -405,17 +408,17 @@ TPU chips.
 | Day | Used | Left |
 |---|---|---|
 | 2026-10-10 | 5 (09, v3-01, v3-02, v3-04, v3-12) | 0 |
-| 2026-10-11 | 4 (v3-15b, v3-15d, v3-15g, v3-16b) | **1** → `v3-16c` |
+| 2026-10-11 | 5 (v3-15b, v3-15d, v3-15g, v3-16b, v3-16c) | 0 |
 
 ### 8.2 Final code submission
 
 | Candidate | Leaderboard file | Code package | sha256 (package) | Runtime |
 |---|---|---|---|---|
 | **v3-16b (LB 0.7037)** | `submissions/v3-16b-pkg-v315d-Ol3.zip` (`84e91078…`) | `packages/v3-16b.zip` (140.6 MB, 43 files) | `b11071313e46a61e…` | ~104 s on GH200 |
-| v3-16c (pending) | `submissions/v3-16c-pkg-v315d-Ol6.zip` (`3eaa1fa2…`) | `packages/v3-16c.zip` (same files, Ol weight 6) | `eefabf4ef3168209…` | same |
+| v3-16c (LB 0.6993, not used) | `submissions/v3-16c-pkg-v315d-Ol6.zip` (`3eaa1fa2…`) | `packages/v3-16c.zip` (same files, Ol weight 6) | `eefabf4ef3168209…` | same |
 
-Decision rule: if v3-16c scores above 0.7037, the final code submission is `packages/v3-16c.zip`; otherwise
-`packages/v3-16b.zip`. Upload the package with margin before 23:59 UTC.
+**Decision: v3-16c scored 0.6993 < 0.7037, so the final code submission is `packages/v3-16b.zip`** (43 files, no
+`__pycache__`; weights Ol 3, Oh 1.5, C 0, SS 0). Upload it before 23:59 UTC.
 
 All paths are under `/scratch/gpfs/ZHUANGL/sk7524/fair-data/`.
 
