@@ -22,7 +22,7 @@ The competition deadline is **2026-10-11 23:59 UTC**. Limits: 5 submissions per 
 | **`v3-15d-pkg-v315b-noC.zip`** | **v3-15b without the CNN-embedding likelihood C (package `packages/v3-15d.zip`)** | **0.6676** (2026-10-11) |
 | `v3-15g-pkg-v315d-noOh.zip` | v3-15d without Oh: Oh carries real-test signal (-0.020 without it) | 0.6479 (2026-10-11) |
 | **`v3-16b-pkg-v315d-Ol3.zip`** | **v3-15d + Ol 3: the OE classifier's own OoD logit as a direct member (calib3 robust z)** | **0.7037** (2026-10-11) |
-| `v3-16c-pkg-v315d-Ol6.zip` | v3-16b with Ol 6 (proxy: better than 16b on every fold, tail lighter) | last slot |
+| `v3-16c-pkg-v315d-Ol6.zip` | v3-16b with Ol 6 (proxy said better on every fold; the LB disagreed) | 0.6993 (2026-10-11) |
 | `v3-07-BIG_RE2.zip` | Dr 1 + N2 1 + PsBh 0.5 + xSL 1 + consRbands 2 (Sd and C dropped); chosen by leave-cosmology-out metric 0.4292 | pending |
 
 The leader is at 0.7835 (others 0.7823, 0.7729, ...). User dkn20, at 0.7358, is very likely the first author of the
@@ -39,6 +39,8 @@ with 10000 finite scores, written by `export.py`. sha256 prefixes:
 
 Score reading: if a fraction q of OoD maps is caught cleanly and the rest look normal, score ≈ q + 0.0125 (1 - q).
 Both 0.525 pipelines caught about 52% of OoD maps.
+
+**Final code submission: `fair-data/packages/v3-16b.zip` (sha256 b11071313e46a61e…), LB 0.7037.**
 
 ## Key findings
 
