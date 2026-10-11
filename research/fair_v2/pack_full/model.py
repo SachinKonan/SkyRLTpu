@@ -52,7 +52,8 @@ class Model:
         self.comps = {}
         for name in self.weights:
             c = dict(meta[name])
-            c['std'] = _np(c['std'])
+            if 'std' in c:
+                c['std'] = _np(c['std'])
             for k in ('mu', 'Ci'):
                 if k in c:
                     c[k] = c[k].numpy()
@@ -63,6 +64,8 @@ class Model:
         fams = sorted({f for c in self.comps.values() for f in c['families']})
         self.fams = {f: Family(_load(f'fam_{f}.pt'), self.dev) for f in fams}
         srcs = {s for f in self.fams.values() for s, _ in f.sources}
+        # feat_z components read one raw feature column (e.g. the OE classifier's own OoD logit)
+        srcs |= {c['src'] for c in self.comps.values() if c.get('kind') == 'feat_z'}
         for c in self.comps.values():
             for p in c.get('preds', []):
                 srcs.add({'pred0': 'cnn0', 'pred1': 'cnn1'}.get(p) or c['ridge'][p]['src'])
@@ -303,7 +306,12 @@ class Model:
         self.last_components = {}
         for name, w in self.weights.items():
             try:
-                z = component_z(name, self.comps[name], thn, cop, preds, cross)
+                c = self.comps[name]
+                if c.get('kind') == 'feat_z':
+                    # per-map robust z of one raw feature, constants frozen on calib3 (median, 1.4826 MAD)
+                    z = (feats[c['src']][:, int(c['col'])].astype(np.float64) - float(c['med'])) / float(c['scale'])
+                else:
+                    z = component_z(name, c, thn, cop, preds, cross)
                 z = np.asarray(z, dtype=np.float64)
                 if z.shape != (n_total,):
                     raise ValueError(f'bad shape {z.shape}')
