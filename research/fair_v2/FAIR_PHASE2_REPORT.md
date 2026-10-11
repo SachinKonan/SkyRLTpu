@@ -326,6 +326,18 @@ Ol weight sweep on the proxy (v3-15d + Ol):
 | 12 | 0.5290 | 0.5949 | 0.3863 | .5300 / .5319 / .5252 | 1.06 / 0.57 / 0.05 |
 | Ol alone | 0.5289 | 0.5959 | 0.3837 | .5277 / .5339 / .5250 | 1.10 / 0.57 / 0.05 |
 
+**Final hours (20:38-22:35 UTC): levers tested against v3-16c.** None beat it outside the ±0.003 proxy tie band.
+
+| Lever | Result (proxy, all 19 shifts) | Verdict |
+|---|---|---|
+| Average of 3 OE networks (Ol3) | Single nets alone: 0.5289 (the one in v3-16b) vs 0.4801 / 0.5009 (siblings). 15d + Ol3 6 = 0.5174, worse on fold 0 | Dropped: dilutes the best net |
+| OE embedding Mahalanobis (Oe3) | Alone 0.409-0.424 with heavy tails (2.3-2.9% at the 1% threshold); 15d + Ol 6 + Oe3 1.5 = 0.5242 | Dropped |
+| Honest overlap check (7-family OE net) | Adds only ~+0.003 on shift kinds it never trained on | Ol's proxy gain is mostly generator overlap; its +0.036 LB gain implies the real distortions resemble the 14 OE families |
+| Config neighbours of v3-16c | +Oh 3: 0.5256; −Sd: 0.5260; −Sd −consP8: 0.5265; consRplus 4.5: 0.5238; Oh 3 + Ol 9: 0.5281 | Ties |
+| Lever 3: tail diagnosis | Top held-out normals come from edge / sparse low-Omega_m universes; their fits hit the T_AGN/f0 box edge 2-2.5x more often. Ol is the largest contributor for 68% of them. Dr 1.25 on top of Ol 6: 0.5271 | Tie; the boundary issue needs a model change |
+| Lever 1: learned non-negative combiner (leave-fold x leave-family-out, shrunk toward v3-16b) | v3-18: 0.5275 in-sample; mostly "more Ol" (~37% of the weight) | Tie; not submitted |
+| Lever 2: OE head re-fit (low-FPR ranking loss, or plain re-fit on 330k fresh normals + 222k synthetic positives) | Ranking loss worse in every setting. v3-19a (16c + re-fit head): +0.0047 overall, hidden +0.0013, only +0.0018 without the gradient shift. v3-19b: 0.5237 | Weak; adds a code-path change; not submitted |
+
 Other weight variants checked on the proxy and not submitted:
 
 | Variant | Change | All-19 | Per fold vs v3-15b |
