@@ -36,11 +36,12 @@
     "native_thinking_budget": true,
     "external_pool_urls": {
       "Qwen/Qwen3.5-27B": [
-        "http://FARM_HOST0_IP:24800"
+        "http://10.202.0.157:24800",
+        "http://10.202.0.155:24800"
       ]
     },
     "external_pool_lease_scope": "run",
-    "external_pool_target_leases": 1,
+    "external_pool_target_leases": 2,
     "external_pool_max_concurrent_requests": 8,
     "external_pool_engines": 2,
     "external_pool_scheduler": true,
