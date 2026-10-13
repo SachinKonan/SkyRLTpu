@@ -392,3 +392,30 @@ def test_waiting_grades_do_not_flood_a_failing_farm_directory():
             await t.close()
     asyncio.run(run())
 
+
+def test_a_farm_never_sees_more_than_the_http_concurrency_cap(monkeypatch):
+    monkeypatch.setattr(gt, 'FARM_HTTP_CONCURRENCY', 3)
+    async def run():
+        farm = GradingFarm(capacity=64)
+        open_now = [0]
+        peak = [0]
+        inner = farm.__call__
+
+        async def counting(request):
+            open_now[0] += 1
+            peak[0] = max(peak[0], open_now[0])
+            try:
+                await asyncio.sleep(0.01)
+                return await inner(request)
+            finally:
+                open_now[0] -= 1
+        farm.outcomes['a'] = done({'result': [1.0], 'error': None, 'metrics': {}})
+        t = transport(counting, ['a'])
+        try:
+            results = await asyncio.wait_for(asyncio.gather(*(t.grade(request()) for _ in range(20))), 20)
+            assert len(results) == 20
+            assert peak[0] <= 3 + 1  # +1: the directory's own farm-list request is not a farm call
+        finally:
+            await t.close()
+    asyncio.run(run())
+

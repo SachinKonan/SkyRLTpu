@@ -36,6 +36,11 @@ INFRA_MARKERS = ('infrastructure', 'admission timed out', 'before the candidate 
 # have ~1000 in flight, so a full connection pool must queue a request rather
 # than fail it as infrastructure (httpx's default 5 s pool timeout did).
 FARM_CONNECTIONS = 256
+# Concurrent HTTP requests per leased farm. A local run reaches each farm through
+# one SSH tunnel, and circuit's thousands of in-flight grades (one long-poll each)
+# made it refuse connections (ConnectTimeout loops). Grades take minutes, so
+# polling them through a smaller window costs nothing.
+FARM_HTTP_CONCURRENCY = int(os.environ.get('SKYRL_GRADING_FARM_HTTP_CONCURRENCY') or 64)
 
 
 def wait_for_connection(seconds):
@@ -189,6 +194,7 @@ class FarmPool(Pool):
         # Retired: the lease token changed or the farm left the directory. A
         # brief ineligibility (health pause) leaves in-flight grades running.
         self.retired = False
+        self.gate = asyncio.Semaphore(FARM_HTTP_CONCURRENCY)
         self.capacities = {}
         self.ready = None
         self.wire_ids = {}
@@ -206,8 +212,9 @@ class FarmPool(Pool):
     async def probe_capacity(self):
         """Learn per-family slot totals and readiness from the farm itself."""
         try:
-            response = await self.http.get(self.url + '/skyrl/v1/grading/capacity', headers=self.headers,
-                                           timeout=wait_for_connection(10))
+            async with self.gate:
+                response = await self.http.get(self.url + '/skyrl/v1/grading/capacity', headers=self.headers,
+                                               timeout=wait_for_connection(10))
             response.raise_for_status()
             capacity = response.json()
         except Exception:
@@ -224,8 +231,9 @@ class FarmPool(Pool):
         body = dict(request_id=wire_id, task=request.task, owner_run=os.environ.get('SKYRL_RUN_ID', ''),
                     scope=request.scope, spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
         while True:
-            response = await self.http.post(self.url + '/skyrl/v1/grading/submit', json=body, headers=self.headers,
-                                            timeout=wait_for_connection(30))
+            async with self.gate:
+                response = await self.http.post(self.url + '/skyrl/v1/grading/submit', json=body,
+                                                headers=self.headers, timeout=wait_for_connection(30))
             if response.status_code == 429:
                 # Farm backpressure is a wait, never a retry: the request keeps
                 # its queued slot in this pool's accounting.
@@ -237,9 +245,10 @@ class FarmPool(Pool):
         while True:
             if self.retired:
                 raise GradingInfrastructureError(f'farm {self.name}: lease no longer eligible')
-            response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{wire_id}',
-                                           params={'wait': self.long_poll_seconds}, headers=self.headers,
-                                           timeout=wait_for_connection(self.long_poll_seconds + 30))
+            async with self.gate:
+                response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{wire_id}',
+                                               params={'wait': self.long_poll_seconds}, headers=self.headers,
+                                               timeout=wait_for_connection(self.long_poll_seconds + 30))
             response.raise_for_status()
             view = response.json()
             state = view.get('state')
@@ -257,7 +266,9 @@ class FarmPool(Pool):
     async def cancel(self, request_id):
         request_id = self.wire_ids.pop(request_id, request_id)
         try:
-            await self.http.post(f'{self.url}/skyrl/v1/grading/cancel/{request_id}', headers=self.headers, timeout=wait_for_connection(10))
+            async with self.gate:
+                await self.http.post(f'{self.url}/skyrl/v1/grading/cancel/{request_id}', headers=self.headers,
+                                     timeout=wait_for_connection(10))
         except Exception:
             pass
 
