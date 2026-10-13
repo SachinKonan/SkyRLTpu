@@ -79,6 +79,7 @@ NATIVE_FILES = {"skyrl/tinker/dispatch.py", "skyrl/tinker/extra/external_inferen
 ADAPTIVE_PWC_FILE = "third_party/discover/ttt_discover/rl/train.py"
 ANSWER_ONLY_FILE = "third_party/discover/ttt_discover/tinker_utils/dataset_builder.py"
 BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
+                   'third_party/discover/ttt_discover/tinker_utils/renderers.py',
                    'tpu/swarm/ray_train/borrowing_phase.py'}
 # Client-side grading transport (local Ray pool + leased farms) and the math
 # executor it dispatches; shipped whenever a profile declares grading families.
