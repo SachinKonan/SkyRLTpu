@@ -1,0 +1,326 @@
+{
+  "schema": 1,
+  "base_commit": "60ff704121600b63138874bf07def4ed5a927553",
+  "discover_commit": "07df4a6c44e63985d22d95abbc7f3e2722ad18ab",
+  "seeds": [
+    0,
+    1
+  ],
+  "models": [
+    "Qwen/Qwen3.8-27B"
+  ],
+  "problems": [
+    "erdos",
+    "ac1",
+    "circuit",
+    "qubit"
+  ],
+  "status": "shared_pool_gated_six_v464_two_v6e8",
+  "pool": "tpuswarm-v6e8-east5b",
+  "region": "us-east5",
+  "description": "Two-seed Qwen3.8 adaptive PWC campaign against historical Qwen3.5 results; fresh 1024-to-512 bootstraps.",
+  "bootstrap": {
+    "drafts": 1024,
+    "retain": "up to 512",
+    "unique_valid": true,
+    "shortfall": "Retain up to 512 unique valid programs after all 1024 drafts are graded; require at least one valid program.",
+    "sampling_seed": "unsupported by TPU; seed controls initial state and LoRA only",
+    "sharing": "One immutable Qwen3.8 pool per problem, reused by both training seeds.",
+    "seed": 0,
+    "require_full_pool": false
+  },
+  "steps": 10,
+  "groups_per_batch": 16,
+  "rollouts_per_group": 32,
+  "budget_sources": {
+    "erdos": {
+      "profile": "gradetest-ro-v5p32-qwen35-erdos-001.json",
+      "sha256": "b9b9eb85690738405dc99e20b17cf4d8ed12adeae4633e95eed6a80d40e481b4",
+      "context": 22528,
+      "prompt_plus_thinking": 16384
+    },
+    "ac1": {
+      "profile": "gradetest-ro-v5p32-qwen35-ac1-001.json",
+      "sha256": "2d0bf5df0cadb90dffe4e95bdb9cac0d474a5e85de851b1f1e9266e7d8566ed0",
+      "context": 22528,
+      "prompt_plus_thinking": 16384
+    },
+    "circuit": {
+      "profile": "circuit300-v5p32-qwen-pwc05-three-starts-10step-20260921.json",
+      "sha256": "2db3c9ca6627d5506cebe7c9102896da4a735a90ff7294621bd94e13b6eeb03d",
+      "context": 22528,
+      "prompt_plus_thinking": 16384
+    },
+    "qubit": {
+      "profile": "qubit-v4-qwen-parallel2-pwc-rho05-20260921.json",
+      "sha256": "089c36abfebaec8879f72d098268d141ca086745612d41605f20aa0dbcfa34bd",
+      "context": 22528,
+      "prompt_plus_thinking": 16384
+    }
+  },
+  "runs": [
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "erdos",
+      "seed": 0,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-erdos-pwc05-s0-cap512-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-erdos-001.json",
+      "run_id": "qcmp-qwen38-erdos-pwc05-s0-cap512-20261007",
+      "pool": "tpuswarm-v6e8-east5b",
+      "bootstrap_pool_source": "qcmp-qwen38-erdos-pwc05-s0-cap512-20261007"
+    },
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "erdos",
+      "seed": 1,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-erdos-pwc05-s1-shared-v464-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-erdos-001.json",
+      "run_id": "qcmp-qwen38-erdos-pwc05-s1-shared-v464-20261007",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "bootstrap_pool_source": "qcmp-qwen38-erdos-pwc05-s0-cap512-20261007",
+      "requires_shared_pool": true
+    },
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "ac1",
+      "seed": 0,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-ac1-pwc05-s0-cap512-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-ac1-001.json",
+      "run_id": "qcmp-qwen38-ac1-pwc05-s0-cap512-20261007",
+      "pool": "tpuswarm-v6e8-east5b",
+      "bootstrap_pool_source": "qcmp-qwen38-ac1-pwc05-s0-cap512-20261007"
+    },
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "ac1",
+      "seed": 1,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-ac1-pwc05-s1-shared-v464-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-ac1-001.json",
+      "run_id": "qcmp-qwen38-ac1-pwc05-s1-shared-v464-20261007",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "bootstrap_pool_source": "qcmp-qwen38-ac1-pwc05-s0-cap512-20261007",
+      "requires_shared_pool": true
+    },
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "circuit",
+      "seed": 0,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-circuit-pwc05-s0-shared-v464-ram96-wd-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-circuit-001.json",
+      "run_id": "qcmp-qwen38-circuit-pwc05-s0-shared-v464-ram96-wd-20261007",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "previous_unsubmitted_profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-circuit-pwc05-s0-20261006.json",
+      "bootstrap_pool_source": "qcmp-qwen38-circuit-bootstrap-v464-20261007",
+      "requires_shared_pool": true,
+      "supersedes_run": "qcmp-qwen38-circuit-pwc05-s0-shared-v464-ram96-20261007"
+    },
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "circuit",
+      "seed": 1,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-circuit-pwc05-s1-shared-v464-ram96-wd-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-circuit-001.json",
+      "run_id": "qcmp-qwen38-circuit-pwc05-s1-shared-v464-ram96-wd-20261007",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "previous_unsubmitted_profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-circuit-pwc05-s1-20261006.json",
+      "bootstrap_pool_source": "qcmp-qwen38-circuit-bootstrap-v464-20261007",
+      "requires_shared_pool": true,
+      "supersedes_run": "qcmp-qwen38-circuit-pwc05-s1-shared-v464-ram96-20261007"
+    },
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "qubit",
+      "seed": 0,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-qubit-pwc05-s0-shared-v464-wd-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-qubit-001.json",
+      "run_id": "qcmp-qwen38-qubit-pwc05-s0-shared-v464-wd-20261007",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "previous_unsubmitted_profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-qubit-pwc05-s0-20261006.json",
+      "bootstrap_pool_source": "qcmp-qwen38-qubit-bootstrap-v464-20261007",
+      "requires_shared_pool": true,
+      "supersedes_run": "qcmp-qwen38-qubit-pwc05-s0-shared-v464-20261007"
+    },
+    {
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "qubit",
+      "seed": 1,
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-qubit-pwc05-s1-shared-v464-wd-20261007.json",
+      "template": "gradetest-ro-v5p32-qwen38-qubit-001.json",
+      "run_id": "qcmp-qwen38-qubit-pwc05-s1-shared-v464-wd-20261007",
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "previous_unsubmitted_profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-qubit-pwc05-s1-20261006.json",
+      "bootstrap_pool_source": "qcmp-qwen38-qubit-bootstrap-v464-20261007",
+      "requires_shared_pool": true,
+      "supersedes_run": "qcmp-qwen38-qubit-pwc05-s1-shared-v464-20261007"
+    }
+  ],
+  "historical_caveats": [
+    "Erdos older qwen_v5p_32_budget.json used 18432/13824; selected current native baseline uses 22528/16384. This campaign is not asserted identical to the older budget profile.",
+    "AC1 budget source is the latest completed Qwen3.5 grading-matrix smoke, not AC2.",
+    "Historical qubit imported a pool; historical bootstrap could stop early. Both fresh arms now exhaust 1024 and select 512 unique valid programs.",
+    "Seed equality does not imply identical programs, deterministic TPU sampling, or identical training trajectories.",
+    "Runtime smoke evidence is 2x8, not proof of this full 16x32 campaign or achieving 512 valid seeds."
+  ],
+  "artifact_readiness": {
+    "qwen35": "Existing East5 checkpoint used by completed smoke runs; legacy prefix has no CHECKPOINT_COMPLETE marker, so preserve its existing loader setting.",
+    "qwen38": "Separate Qwen3.8 converted checkpoint in East5; CHECKPOINT_COMPLETE verified and required."
+  },
+  "layout": {
+    "trainer": "single-host v6e-8, TP8/FSDP1",
+    "local_inference_engines": 0,
+    "maximum_farm_workers_per_run": 2,
+    "farm_engines_per_worker": "discovered: Asia v6e-8 has 2; v5p-32 has 4",
+    "v4_64": {
+      "train_hosts": 4,
+      "local_inference_hosts": 4,
+      "trainer_tp": 8,
+      "trainer_fsdp": 2,
+      "bootstrap": "all eight hosts infer before the four-host trainer starts",
+      "farm_requirement": "optional one compatible farm; dynamic engine count"
+    },
+    "training_workers": {
+      "v4_64": 6,
+      "v6e_8_east5b": 2
+    }
+  },
+  "runtime_template": "gradetest-ro-v6e8-asia-qwen35-erdos-001.json",
+  "inference_discovery": {
+    "group": "qcmp-cross-region-20261006",
+    "farm_pools": [
+      "tpuswarm-v6e8-asia-ne1b",
+      "tpuswarm-v5p32-east5a-erdos"
+    ],
+    "cross_region_http": true,
+    "scope": "only the eight Qwen3.8 campaign trainers; preserve other owners leases",
+    "trainer_storage_regions": [
+      "us-east5",
+      "us-central2"
+    ]
+  },
+  "superseded_jobs": [
+    {
+      "job_id": 2118,
+      "run_id": "qcmp-qwen38-erdos-pwc05-s0-20261006",
+      "status": "CANCELLED",
+      "saved_steps": 0,
+      "reason": "Replaced with cross-region farm discovery; no bootstrap or training completed."
+    },
+    {
+      "job_id": 2124,
+      "run_id": "qcmp-qwen35-erdos-pwc05-s0-20261006",
+      "status": "CANCELLED",
+      "reason": "User requested historical Qwen3.5 controls only."
+    },
+    {
+      "job_id": 2170,
+      "run_id": "qcmp-qwen38-circuit-pwc05-s0-v464-20261007",
+      "status": "CANCELLED",
+      "reason": "Replaced separate per-seed bootstrap with shared bootstrap-only producer."
+    },
+    {
+      "job_id": 2171,
+      "run_id": "qcmp-qwen38-qubit-pwc05-s0-v464-20261007",
+      "status": "CANCELLED",
+      "reason": "Replaced separate per-seed bootstrap with shared bootstrap-only producer."
+    },
+    {
+      "job_id": 2172,
+      "run_id": "qcmp-qwen38-circuit-pwc05-s1-v464-20261007",
+      "status": "CANCELLED",
+      "reason": "Replaced separate per-seed bootstrap with shared bootstrap-only producer."
+    },
+    {
+      "job_id": 2173,
+      "run_id": "qcmp-qwen38-qubit-pwc05-s1-v464-20261007",
+      "status": "CANCELLED",
+      "reason": "Replaced separate per-seed bootstrap with shared bootstrap-only producer."
+    },
+    {
+      "job_id": 2125,
+      "run_id": "qcmp-qwen38-erdos-pwc05-s0-20261006-r2",
+      "status": "CANCELLED",
+      "reason": "Resume saved partial bootstrap with up-to-512 retention, without regeneration."
+    },
+    {
+      "job_id": 2145,
+      "run_id": "qcmp-qwen38-ac1-pwc05-s0-20261006",
+      "status": "CANCELLED",
+      "reason": "Resume saved partial bootstrap with up-to-512 retention, without regeneration."
+    },
+    {
+      "job_id": 2218,
+      "run_id": "qcmp-qwen38-circuit-pwc05-s0-shared-v464-20261007",
+      "status": "CANCELLED",
+      "saved_steps": 0,
+      "reason": "Head host had about 380 GiB available, below 128 GiB trainer cache plus 256 GiB runtime reserve. Replaced with 96 GiB trainer cache; shared pool unchanged.",
+      "replacement_run_id": "qcmp-qwen38-circuit-pwc05-s0-shared-v464-ram96-20261007"
+    },
+    {
+      "job_id": 2220,
+      "run_id": "qcmp-qwen38-circuit-pwc05-s1-shared-v464-20261007",
+      "status": "CANCELLED",
+      "saved_steps": 0,
+      "reason": "Head host had about 380 GiB available, below 128 GiB trainer cache plus 256 GiB runtime reserve. Replaced with 96 GiB trainer cache; shared pool unchanged.",
+      "replacement_run_id": "qcmp-qwen38-circuit-pwc05-s1-shared-v464-ram96-20261007"
+    }
+  ],
+  "historical_baseline": {
+    "model": "Qwen/Qwen3.5-27B",
+    "policy": "reuse existing results; no fresh controls",
+    "prepared_profiles": "Retained for configuration comparison only; not admitted."
+  },
+  "admission": {
+    "start_order": "seed 0: erdos, ac1, circuit, qubit; then seed 1 in the same order",
+    "minimum_free_matching_farms": 1,
+    "maximum_leased_farms_per_run": 2,
+    "wait_for_erdos_optimizer_step": false,
+    "bootstrap_then_training": true,
+    "v4_launches": [
+      "erdos seed 1",
+      "ac1 seed 1",
+      "circuit seed 0",
+      "circuit seed 1",
+      "qubit seed 0",
+      "qubit seed 1"
+    ],
+    "shared_pool_gate": "Verify completed source contract and pool SHA256, stage only step-zero state in destination region, then launch fresh training."
+  },
+  "training_admission": true,
+  "bootstrap_runs": [
+    {
+      "run_id": "qcmp-qwen38-circuit-bootstrap-v464-20261007",
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-circuit-bootstrap-v464-20261007.json",
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "circuit",
+      "seed": 0,
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "purpose": "bootstrap_only"
+    },
+    {
+      "run_id": "qcmp-qwen38-qubit-bootstrap-v464-20261007",
+      "profile": "tpu/swarm/ray_train/profiles/qcmp-qwen38-qubit-bootstrap-v464-20261007.json",
+      "model": "Qwen/Qwen3.8-27B",
+      "problem": "qubit",
+      "seed": 0,
+      "pool": "tpuswarm-v4-64-central2-qwen35-erdos",
+      "purpose": "bootstrap_only"
+    }
+  ],
+  "bootstrap_sources": {
+    "erdos": "qcmp-qwen38-erdos-pwc05-s0-cap512-20261007",
+    "ac1": "qcmp-qwen38-ac1-pwc05-s0-cap512-20261007",
+    "circuit": "qcmp-qwen38-circuit-bootstrap-v464-20261007",
+    "qubit": "qcmp-qwen38-qubit-bootstrap-v464-20261007"
+  },
+  "storage_policy": {
+    "same_region_buckets": true,
+    "pre_submit_live_bucket_metadata_check": true,
+    "cross_region_farm_http": true,
+    "regions": [
+      "us-central2",
+      "us-east5",
+      "asia-northeast1"
+    ],
+    "shared_bootstrap_transfer": "Controller stages step-zero pool once into destination bucket; TPU jobs read only the destination copy."
+  }
+}

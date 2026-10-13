@@ -230,6 +230,8 @@ class Inference:
     # Raise only after accepting the farm's batching/concurrency validation.
     external_pool_max_n: int = 1
     external_pool_max_concurrent_requests: int = 1
+    # Optional per-engine bound for a mixture of one- and four-engine farms.
+    external_pool_requests_per_engine: int = 0
     external_pool_rpc_timeout: int = 3
     external_pool_prepare_timeout: int = 120
     external_pool_release_timeout: int = 15
@@ -249,6 +251,8 @@ class Inference:
     # single-lease borrower and the two-URL candidate cap.
     remote_only: bool = False
     external_pool_target_leases: int = 1
+    # Hybrid jobs may borrow attested farms with different engine counts.
+    external_pool_dynamic_engines: bool = False
     external_pool_candidate_limit: int = 2
     # Accepted farm serving-identity hashes. Empty means the first attested
     # farm's hash is learned and required from every later farm.
@@ -385,6 +389,10 @@ class Config:
     # Reviewed inventory files relative to ray_train/runtime_baselines. Empty
     # means record/reuse verification only, never a claim of legacy parity.
     runtime_baselines: dict[str, str] = field(default_factory=dict)
+    # Explicit single-host partition of an existing on-demand v5p-64.
+    # Never render this as a SkyPilot provisioning request.
+    assigned_host_ips: list[str] = field(default_factory=list)
+    physical_node: str = ""
     inference_only: bool = False
     inference_only_ranks: list[int] | None = None
     arena_samples: int = 0
@@ -404,6 +412,7 @@ class Config:
     # Explicit migration of a completed bootstrap; never permits regeneration.
     bootstrap_reuse_contract_sha256: str = ""
     bootstrap_reuse_pool_sha256: str = ""
+    bootstrap_reuse_source_run_id: str = ""
     seed_pool_sha256: str = ""
     arena_service_only: bool = False
     arena_grader_rank: int | None = None
@@ -739,7 +748,7 @@ class Config:
         # v4-32 and v5p-32 are both four hosts of 2x2 chips stacked along z
         # (2x2x4), so the same 1,1,4 process grid and z-row ordering apply.
         # v6e-8 is one host of 2x4 chips: a single 1,1,1 process owns all eight.
-        if (self.accelerator, self.hosts) not in (('tpu-v4-32', 4), ('tpu-v5p-32', 4), ('tpu-v6e-8', 1)):
+        if not self.assigned_host_ips and (self.accelerator, self.hosts) not in (('tpu-v4-32', 4), ('tpu-v5p-32', 4), ('tpu-v6e-8', 1)):
             raise ValueError('remote_only is validated for v4-32, v5p-32 (2x2x4) and single-host v6e-8 only')
         if self.trainer.tp * self.trainer.fsdp != self.hosts * self.chips_per_host:
             raise ValueError('remote_only requires TP x FSDP over every chip of the slice')
@@ -763,6 +772,8 @@ class Config:
             raise ValueError('remote_only disables the sampling progress timeout; do not set TTD_SAMPLING_PROGRESS_TIMEOUT')
 
     def validate(self):
+        if type(self.inference.external_pool_requests_per_engine) is not int or self.inference.external_pool_requests_per_engine < 0:
+            raise ValueError('external_pool_requests_per_engine must be a nonnegative integer')
         from urllib.parse import urlsplit
         if type(self.ray_cpu_capacity) is not int or self.ray_cpu_capacity < 0:
             raise ValueError('ray_cpu_capacity must be a nonnegative integer')
@@ -801,6 +812,11 @@ class Config:
                 raise ValueError('external pool limits must be positive integers')
         if self.inference.external_pool_target_leases > candidate_limit:
             raise ValueError('external_pool_target_leases cannot exceed external_pool_candidate_limit')
+        if (self.inference.external_pool_target_leases > 1 and self.borrows_inference
+                and (self.inference.external_pool_lease_scope != 'run'
+                     or not self.inference.external_pool_scheduler
+                     or not self.inference.external_pool_attestation)):
+            raise ValueError('multiple farms require run-scoped borrowing, the hybrid scheduler and attestation')
         accepted = self.inference.external_pool_required_compatibility
         if (not isinstance(accepted, list) or len(set(accepted)) != len(accepted)
                 or any(not isinstance(v, str) or not re.fullmatch(r'[0-9a-f]{64}', v) for v in accepted)):
@@ -810,6 +826,10 @@ class Config:
             raise ValueError('farm_cancel_grace_seconds must be a positive integer below farm_drain_timeout')
         if type(self.inference.remote_only) is not bool:
             raise ValueError('remote_only must be boolean')
+        if type(self.inference.external_pool_dynamic_engines) is not bool:
+            raise ValueError('external_pool_dynamic_engines must be boolean')
+        if self.inference.external_pool_dynamic_engines and not self.inference.external_pool_attestation:
+            raise ValueError('dynamic farm engine counts require attestation')
         if self.inference.remote_only:
             self._validate_remote_only()
         self._validate_grading()
@@ -898,6 +918,11 @@ class Config:
                         for value in (self.bootstrap_reuse_contract_sha256, self.bootstrap_reuse_pool_sha256))
                     or not self.bootstrap_layers or not self.checkpoint_resume or self.bootstrap_only):
                 raise ValueError('bootstrap reuse requires both SHA256 pins, bootstrap layers, and checkpoint resume')
+        if self.bootstrap_reuse_source_run_id:
+            if (not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}', self.bootstrap_reuse_source_run_id)
+                    or self.bootstrap_reuse_source_run_id == self.run_id
+                    or not self.bootstrap_reuse_contract_sha256):
+                raise ValueError('shared bootstrap requires a distinct source and pinned pool')
         if self.seed_pool_sha256 and (not re.fullmatch(r'[0-9a-f]{64}', self.seed_pool_sha256)
                 or not self.science_task or self.inference_only or self.bootstrap_layers):
             raise ValueError('imported seed checksum requires science training without local bootstrap')
@@ -913,10 +938,15 @@ class Config:
                              and self.science_placement_backend == 'cpu'
                              and self.client_env.get('SCIENCE_PLACEMENT_HELPER') == 'fast_proxy_v1'
                              and self.bootstrap_layers == 1 and self.bootstrap_all_hosts)
-            if (not self.bootstrap_layers or not (routing_seeds or circuit_seeds)
+            bounded_seeds = (self.accelerator == 'tpu-v4-64' and self.hosts == 8
+                             and self.trainer.hosts == 4 and not self.inference_only
+                             and self.bootstrap_max_drafts > 0 and self.bootstrap_all_hosts
+                             and (self.science_task == 'routing' or
+                                  (self.science_task == 'placement' and self.science_placement_backend == 'cpu')))
+            if (not self.bootstrap_layers or not (routing_seeds or circuit_seeds or bounded_seeds)
                     or self.inference_only_ranks is not None or self.frozen_benchmark
                     or self.arena_samples or self.arena_service_only):
-                raise ValueError('bootstrap-only requires v4-32 routing seeds or all-host v4-64 CPU helper circuit drafts')
+                raise ValueError('bootstrap-only requires v4-32 routing seeds or all-host v4-64 CPU science drafts')
         if any(type(value) is not bool for value in (self.bootstrap_fixed_budget, self.bootstrap_require_full_pool)):
             raise ValueError('bootstrap fixed budget and full pool flags must be boolean')
         if self.bootstrap_seed is not None and (type(self.bootstrap_seed) is not int or not 0 <= self.bootstrap_seed < 2**31):
@@ -938,7 +968,7 @@ class Config:
                                or (self.inference.remote_only and self.trainer.hosts == self.hosts))
             remote = self.inference.remote_only
             if (not bootstrap_shape
-                    or self.bootstrap_layers != 1 or self.bootstrap_all_hosts == remote or self.bootstrap_only
+                    or self.bootstrap_layers != 1 or self.bootstrap_all_hosts == remote
                     or self.inference_only or self.adapter_count != 1 or self.seed_pool_sha256
                     or not (self.science_task or self.has_math_environment or self.is_recurrent_gemma)
                     or (self.is_recurrent_gemma != (self.arena_grader_rank is not None))
@@ -1101,7 +1131,26 @@ class Config:
             raise ValueError("run_id must be a safe unique name")
         expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4, "tpu-v5p-64": 8, "tpu-v6e-32": 8,
                     "tpu-v6e-8": 1}
-        if expected.get(self.accelerator) != self.hosts:
+        if self.assigned_host_ips:
+            import ipaddress
+            if (self.accelerator != "tpu-v5p-64" or self.hosts not in (1, 2)
+                    or len(self.assigned_host_ips) != self.hosts
+                    or len(set(self.assigned_host_ips)) != self.hosts or not self.physical_node
+                    or not self.single_bucket or not self.zone
+                    or not (self.inference_only or self.inference.remote_only)):
+                raise ValueError("assigned hosts require a single-host v5p-64 farm or one/two-host remote-only trainer")
+            for ip in self.assigned_host_ips:
+                if ipaddress.ip_address(ip).version != 4:
+                    raise ValueError("assigned hosts require IPv4 addresses")
+            if self.inference_only and self.hosts != 1:
+                raise ValueError("assigned inference farms require one host")
+            bounds = ("1,1,1",) if self.hosts == 1 else ("2,1,1", "1,2,1", "1,1,2")
+            if not self.inference_only and (self.trainer.process_bounds not in bounds
+                    or self.trainer.chip_bounds != "2,2,1"):
+                raise ValueError("assigned v5p trainer requires four local chips per process and matching host bounds")
+        elif self.physical_node:
+            raise ValueError("physical_node requires assigned_host_ips")
+        if not self.assigned_host_ips and expected.get(self.accelerator) != self.hosts:
             raise ValueError("accelerator/host count mismatch")
         if self.zone and self.zone not in ACCELERATOR_ZONES.get(self.accelerator, ()):
             raise ValueError(f"zone {self.zone!r} is not a known zone for {self.accelerator}")
@@ -1112,7 +1161,7 @@ class Config:
             raise ValueError("require disjoint nonempty trainer and inference roles")
         if not self.inference_only and self.accelerator == "tpu-v4-64" and self.trainer.hosts != 4:
             raise ValueError("v4-64 currently requires the validated four-host row")
-        if self.accelerator == "tpu-v5p-64" and (
+        if self.accelerator == "tpu-v5p-64" and not self.assigned_host_ips and (
                 self.inference_only or self.trainer.hosts != 1
                 or self.inference.hosts_per_engine != 1 or self.inference.tp != 4):
             raise ValueError("v5p-64 requires one trainer host and seven TP4 inference hosts")

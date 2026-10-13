@@ -192,6 +192,12 @@ def main():
     rank = int(os.environ["SKYPILOT_NODE_RANK"])
     if len(ips) != config.hosts or len(set(ips)) != len(ips) or not 0 <= rank < config.hosts:
         raise SystemExit("invalid SkyPilot host inventory")
+    if config.assigned_host_ips and ips != config.assigned_host_ips:
+        raise SystemExit("assigned host inventory does not match this partition")
+    if config.assigned_host_ips:
+        local_ips = subprocess.check_output(["hostname", "-I"], text=True).split()
+        if ips[rank] not in local_ips:
+            raise SystemExit("assigned host is not a local interface")
     root = Path(config.root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     if config.systemd_runtime and os.environ.get("SKYRL_SYSTEMD_OWNED") != "1":

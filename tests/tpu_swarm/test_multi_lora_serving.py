@@ -213,12 +213,21 @@ def test_http_two_adapters_replace_one_preserve_other_and_retry_failed_fanout(tm
                     assert (await client.post("/v1/completions", json={"model": name})).status_code == 200
                 assert routed == [(0, "A-0"), (1, "B-0")]
                 fail.add(ips[-1])
+                exported = gateway.run / "loras" / "A-0"
+                exported.mkdir(parents=True)
+                (exported / "weights").write_bytes(b"old derived export")
                 assert (await upload("A-1", "A-0")).status_code == 503
+                assert (gateway.archives / "A-0.tar").exists()
+                assert exported.exists()
                 assert gateway.updating
                 assert (await client.post("/v1/completions", json={"model": "B-0"})).status_code == 409
                 assert set(catalog.snapshot()["versions"]) == {"A-0", "B-0"}
                 fail.clear()
                 assert (await upload("A-1", "A-0")).status_code == 200
+                assert not (gateway.archives / "A-0.tar").exists()
+                assert not exported.exists()
+                assert (gateway.archives / "B-0.tar").exists()
+                assert (gateway.archives / "A-1.tar").exists()
                 assert all(names == {"A-1", "B-0"} for names in engines.values())
                 assert set(catalog.snapshot()["versions"]) == {"A-1", "B-0"}
                 assert (await upload("A-1", "A-0")).status_code == 200

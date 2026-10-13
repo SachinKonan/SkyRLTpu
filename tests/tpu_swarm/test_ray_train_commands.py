@@ -46,6 +46,23 @@ IPS = ["10.0.0.1", "10.0.0.3", "10.0.0.5", "10.0.0.7"]
 ENGINE_IPS = IPS[1:]
 
 
+def test_hybrid_queued_generation_does_not_inherit_legacy_live_task_deadline():
+    cfg = Config.load('tpu/swarm/ray_train/profiles/qcmp-qwen38-qubit-pwc05-s0-shared-v464-20261007.json')
+    assert not cfg.inference.remote_only
+    env = trainer_environment(cfg, ROOT, ROOT / 'run', IPS, 0)
+    for key in ('SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC',
+                'SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC',
+                'SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH'):
+        assert env[key] == '0'
+    assert 'SKYRL_EXTERNAL_WATCHDOG_ENABLED' not in env
+    assert cfg.inference.request_timeout > 0
+
+
+def test_direct_legacy_generation_keeps_existing_watchdog_policy():
+    env = trainer_environment(config(), ROOT, ROOT / 'run', IPS, 0)
+    assert not any(key.startswith('SKYRL_EXTERNAL_WATCHDOG_') for key in env)
+
+
 @pytest.mark.parametrize("profile,zone,hosts", [
     ("qwen_v5p_32", "us-east5-a", 4),
 ])

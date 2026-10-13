@@ -1600,6 +1600,10 @@ class TunixBackend(AbstractBackend):
         if "ppo_critic" in prepared_batch.all_loss_fns:
             raise ValueError("ppo_critic is only supported by the SkyRL-Train backend")
 
+        if with_grads and not cohort and os.environ.get("TUNIX_PACKING_PROBE_REPORT"):
+            from skyrl.backends.packing_probe import verify_once
+            verify_once(self, prepared_batch)
+
         # Packed training loads large-arena programs (up to ~57G for the
         # longest bucket). Arena reservation needs CONTIGUOUS memory at the
         # bottom of HBM, and programs loaded earlier in the step (KL scoring
@@ -1905,7 +1909,7 @@ class TunixBackend(AbstractBackend):
                     _mem = ""
                 logger.info(
                     f"{'fb' if with_grads else 'fwd'} tile {_mb_n}/{_mb_total} "
-                    f"adapters={population} shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
+                    f"adapters={population} examples={len(mb_idx)} shape=[{input_ids.shape[0]},{max_len}] {_mb_dt:.2f}s "
                     f"(elapsed {_mb_el:.1f}s, eta {(_mb_el / _mb_n) * (_mb_total - _mb_n):.0f}s){_mem}"
                 )
                 if template.kind == "maxtext":

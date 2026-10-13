@@ -153,13 +153,13 @@ def test_native_response_uses_json_when_protobuf_cannot_preserve_mask():
 
 def serving_namespace():
     tree=ast.parse((ROOT/'tpu/swarm/ray_train/serving.py').read_text())
-    nodes=[n for n in tree.body if isinstance(n,(ast.ClassDef,ast.FunctionDef)) and n.name in ('Catalog','Ingress','deploy')]
+    nodes=[n for n in tree.body if isinstance(n,(ast.ClassDef,ast.FunctionDef)) and n.name in ('Catalog','Ingress','engine_version','pin_deployment_version','versioned_engine','deploy')]
     for n in nodes:
         n.decorator_list=[]
         if isinstance(n,ast.ClassDef):
             for f in n.body:
                 if isinstance(f,(ast.FunctionDef,ast.AsyncFunctionDef)):f.decorator_list=[]
-    ns={'asyncio':asyncio,'Config':Config,'Path':Path,'time':SimpleNamespace(time=lambda:0)}
+    ns={'asyncio':asyncio,'Config':Config,'Path':Path,'time':SimpleNamespace(time=lambda:0), 'json':json, 'hashlib':__import__('hashlib'), '__file__':str(ROOT/'tpu/swarm/ray_train/serving.py')}
     future=ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0)
     exec(compile(ast.fix_missing_locations(ast.Module(body=[future,*nodes],type_ignores=[])),'serving','exec'),ns)
     return ns
@@ -199,7 +199,7 @@ def test_split_deploy_reserves_disjoint_two_chip_slots():
         @staticmethod
         def options(**kw):
             def bind(*args,**kwargs):records.append((kw,args,kwargs));return len(records)
-            return SimpleNamespace(bind=bind)
+            return SimpleNamespace(bind=bind, _version=None)
     ns.update(Engine=Engine,serve=SimpleNamespace(start=lambda **kw:None,RunTarget=lambda **kw:kw,run_many=lambda *a,**kw:['handle']))
     class Ingress:
         @staticmethod

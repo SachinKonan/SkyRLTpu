@@ -611,7 +611,18 @@ class Host:
                 restore_snapshot(downloaded, db, self.run / "future-blobs")
                 downloaded.unlink()
         if self.rank == self.trainer_leader and db.exists() and getattr(self.config, 'checkpoint_resume', False):
-            from .database_snapshot import abandon_pending_for_checkpoint_resume
+            from .database_snapshot import abandon_pending_for_checkpoint_resume, reconcile_checkpoint_manifest
+            # On a trainer-only worker the client and database snapshots are
+            # restored together here, before either API or trainer can write.
+            if self.rank == 0:
+                def archive_available(relative):
+                    uri = self.config.run_gcs + '/' + relative
+                    listing = json.loads(self.gcs.metadata('ls', '--json', uri, allow_empty=True))
+                    return any(item.get('type') == 'cloud_object'
+                               and 'gs://' + item['metadata']['bucket'] + '/' + item['metadata']['name'] == uri
+                               and int(item['metadata']['size']) > 0 for item in listing)
+                repaired = reconcile_checkpoint_manifest(db, local / 'tinker_log' / self.config.run_id, archive_available)
+                emit(self.log, 'checkpoint_resume_status_reconciled', count=repaired, rank=self.rank)
             count = abandon_pending_for_checkpoint_resume(db)
             emit(self.log, 'checkpoint_resume_pending_retired', count=count, rank=self.rank)
 
@@ -628,6 +639,8 @@ class Host:
         client = self.run / "client"
         if self.rank == 0 and client.exists() and any(client.iterdir()):
             gcs.transfer(["cp", "--recursive", str(client), self.config.run_gcs + "/"], "client-writeback", timeout=300)
+            from .checkpoint_retention import reclaim_completed_checkpoints
+            reclaim_completed_checkpoints(self.run, self.config.run_gcs, gcs, self.log)
         db = self.run / "tinker.db"
         if self.rank == self.trainer_leader and db.exists():
             backup = self.run / "tinker-backup.db"

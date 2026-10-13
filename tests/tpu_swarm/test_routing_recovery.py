@@ -107,7 +107,7 @@ def test_required_resume_never_silently_starts_fresh(tmp_path):
 
 def test_interrupted_client_restore_is_not_published(tmp_path):
     from tpu.swarm.ray_train.host import Host
-    cfg=SimpleNamespace(run_gcs='gs://test/run', checkpoint_resume=True, seed_pool_sha256='',resume_min_checkpoint_step=0)
+    cfg=SimpleNamespace(run_gcs='gs://test/run', checkpoint_resume=True, seed_pool_sha256='',resume_min_checkpoint_step=0,science_task='routing')
     def transfer(command,*args,**kwargs):
         stage=Path(command[-1])/'client';stage.mkdir(exist_ok=True)
         (stage/'partial').write_text('partial')

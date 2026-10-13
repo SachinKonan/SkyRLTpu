@@ -328,11 +328,12 @@ class Ingress:
         self.borrower = None
         self.borrowing_instance = uuid.uuid4().hex
         self.remote_only = self.config.inference.remote_only
+        self.multi_farm = self.remote_only or self.config.inference.external_pool_target_leases > 1
         report = lambda event, **fields: emit(self.run / 'inference-events.jsonl', event, **fields)
         if self.config.borrows_inference:
             from .borrowing import Borrower
             from .run_borrowing import RunBorrower
-            if self.remote_only:
+            if self.multi_farm:
                 from .multi_borrowing import MultiRunBorrower
                 borrower_type = MultiRunBorrower
             else:
@@ -347,9 +348,9 @@ class Ingress:
         self.scheduler = None
         if self.config.inference.external_pool_scheduler:
             from .hybrid_scheduler import HybridScheduler
-            if self.remote_only:
-                # Zero local engines: one pool per eligible farm, groups wait
-                # indefinitely and are re-queued (never retried locally).
+            if self.multi_farm:
+                # One pool per eligible farm, alongside any local engines.
+                # Hybrid requests retain local fallback on farm failure.
                 self.scheduler = HybridScheduler(len(self.engines), 0, lambda: True, report,
                     farms=self.borrower.eligible_pools,
                     alert_seconds=self.config.inference.external_pool_queue_alert_seconds,
@@ -735,7 +736,7 @@ class Ingress:
     async def borrowing_services(self, group: str | None = None):
         if self.config.inference.external_pool_attestation:
             await self.capabilities()
-        accepted = sorted(self.borrower.accepted) if self.remote_only and self.borrower else []
+        accepted = sorted(self.borrower.accepted) if self.multi_farm and self.borrower else []
         # Another supervisor watching the same pool sees this trainer as not
         # opted in and never offers it farms.
         return dict(enabled=self.config.inference.external_pool_updates and self.discovery_admitted(group),
@@ -931,6 +932,18 @@ class Ingress:
                 self.condition.notify_all()
             emit(self.run / "inference-events.jsonl", "adapter_committed", version=version,
                  bytes=size, sha256=identity, hosts=loaded, load_seconds=time.monotonic()-started)
+            # The old generation is drained and permanently retired only after
+            # successful fanout/catalog commit. Preserve it on a failed update.
+            if previous and previous in self.retired:
+                try:
+                    (self.archives / (previous + ".tar")).unlink(missing_ok=True)
+                    import shutil
+                    exported = self.run / "loras" / previous
+                    if exported.is_dir() and not exported.is_symlink():
+                        shutil.rmtree(exported)
+                except OSError as exc:
+                    emit(self.run / "inference-events.jsonl", "retired_archive_cleanup_error",
+                         version=previous, error=str(exc))
             return {"lora_name": version, "loaded": loaded, "sha256": identity}
 
     def select_engine(self, model, weight=0):
@@ -1030,7 +1043,7 @@ class Ingress:
         async def remote(key=None):
             from .borrowing import RemoteRequestRejected
             try:
-                kwargs = {'farm': key} if self.remote_only else {}
+                kwargs = {'farm': key} if self.multi_farm else {}
                 return await self.borrower.generate(payload, local_active=0,
                                                    local_engines=len(self.engines), prefer_remote=True, **kwargs)
             except RemoteRequestRejected as exc:

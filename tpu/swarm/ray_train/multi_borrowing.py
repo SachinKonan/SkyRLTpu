@@ -1,4 +1,4 @@
-"""Run-scoped leases on several farms at once for remote-only trainers.
+"""Run-scoped leases on several farms for hybrid and remote-only trainers.
 
 One ``FarmBorrower`` (a ``RunBorrower`` pinned to a single URL) per candidate
 farm keeps the existing acquire, heartbeat, adapter publication, health-grace
@@ -206,7 +206,7 @@ class MultiRunBorrower:
                     engines=sum(m.lease.engines for m in eligible), active=sum(m.lease.active for m in held),
                     scope='run', owner_run=self.owner, reserved=bool(held),
                     preparing=any(m.preparing is not None for m in self.members.values()),
-                    remote_only=True, target=self.target, held=[m.url for m in held],
+                    remote_only=self.settings.remote_only, target=self.target, held=[m.url for m in held],
                     candidates=list(self.order), accepted_compatibility=sorted(self.accepted),
                     leases=leases)
 

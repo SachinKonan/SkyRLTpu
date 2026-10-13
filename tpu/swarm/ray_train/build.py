@@ -17,11 +17,36 @@ from .config import ACCELERATOR_RUNTIME, Config
 
 GRADING_BUNDLE_FILES = ("__init__.py", "math_grade.py", "math_runner.py", "farm_resources.py", "cgroup_limits.py",
                         "cpu_slots.py", "worker.py", "grading_dedup.py", "grading_transport.py",
-                        "routing_resources.py", "placement_resources.py", "rewards.py", "core_pool.py")
+                        "routing_resources.py", "placement_resources.py", "placement_runtime.py", "rewards.py", "core_pool.py")
+
+
+def runtime_start(config, source):
+    """Pinned extraction and bootstrap shared by managed and direct hosts."""
+    worker_root = 'export SCIENCE_WORKER_ROOT="$code"\n' if config.grading_families else ''
+    return f'''set -euo pipefail
+export PATH="$HOME/.local/bin:$PATH"
+# Snap's dispatcher moves gcloud into a login-session scope, which may die
+# after SSH disconnects. Invoke the SDK script inside the workload cgroup.
+if [ -x /snap/google-cloud-cli/current/bin/gcloud ]; then
+  export PATH="/snap/google-cloud-cli/current/bin:$PATH"
+fi
+code="$HOME/.cache/skyrl-ray-code/$RAY_TRAIN_CODE_SHA256"
+if [ ! -f "$code/.complete" ]; then
+  mkdir -p "$code"
+  gcloud storage cp "$RAY_TRAIN_CODE" "$code/code.tar.gz"
+  printf '%s  %s\\n' "$RAY_TRAIN_CODE_SHA256" "$code/code.tar.gz" | sha256sum -c -
+  tar -xzf "$code/code.tar.gz" -C "$code"
+  touch "$code/.complete"
+fi
+export PYTHONPATH="$code:$code/tpu${{PYTHONPATH:+:$PYTHONPATH}}"
+{worker_root}exec python3 -m tpu.swarm.ray_train.bootstrap "$code/{source}"
+'''
 
 
 def build(profile, output, *, _executor_only=False):
     config = Config.load(profile)
+    if config.assigned_host_ips:
+        raise ValueError("assigned-host profiles must use direct deployment; never provision or attach them through SkyPilot")
     if (config.science_task or config.grading_science_task) and not _executor_only:
         # A science launch also needs its grader code, inputs, environment and
         # host preparation. Never return an executable generic-only science job.
@@ -101,19 +126,7 @@ def build(profile, output, *, _executor_only=False):
         use_spot=True, disk_size=300 if is_v4 else 150,
         job_recovery=dict(strategy="FAILOVER", max_restarts_on_errors=config.max_restarts_on_errors)),
         envs=dict(RAY_TRAIN_CODE=uri, RAY_TRAIN_CODE_SHA256=digest),
-        run=f'''set -euo pipefail
-export PATH="$HOME/.local/bin:$PATH"
-code="$HOME/.cache/skyrl-ray-code/$RAY_TRAIN_CODE_SHA256"
-if [ ! -f "$code/.complete" ]; then
-  mkdir -p "$code"
-  gcloud storage cp "$RAY_TRAIN_CODE" "$code/code.tar.gz"
-  printf '%s  %s\\n' "$RAY_TRAIN_CODE_SHA256" "$code/code.tar.gz" | sha256sum -c -
-  tar -xzf "$code/code.tar.gz" -C "$code"
-  touch "$code/.complete"
-fi
-export PYTHONPATH="$code:$code/tpu${{PYTHONPATH:+:$PYTHONPATH}}"
-{worker_root}exec python3 -m tpu.swarm.ray_train.bootstrap "$code/{source}"
-''')
+        run=runtime_start(config, source))
     path = output / (config.run_id + ".yaml")
     path.write_text(yaml.safe_dump(task, sort_keys=False))
     return archive, uri, path

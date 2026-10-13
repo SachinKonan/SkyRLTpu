@@ -54,7 +54,8 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         SKYRL_DATABASE_URL="sqlite:///" + str(run / "tinker.db"),
         SKYRL_FUTURE_BLOB_DIR=str(run / "future-blobs"),
         TPUSWARM_BUNDLE_ID=config.base_bundle_sha256,
-        # No SKYRL_EXTERNAL_WATCHDOG_* overrides: the legacy v5p-32 cell runs the
+        # Direct legacy cells retain the watchdog defaults; queued ingress
+        # requests receive a separate policy below. The legacy v5p-32 cell runs
         # dispatch defaults (stale 300 s, inflight 3600 s, 2 redispatches,
         # abandon 7200 s); the 0/28800/30/4 set belonged to the v4-64 launcher.
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
@@ -65,6 +66,17 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         # rejects trainer_env overrides of these keys).
         env.update(SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC="0", SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC="0",
                    SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH="0")
+    elif config.inference.routing == 'ingress' and config.inference.external_pool_scheduler:
+        # A hybrid request's lifetime includes waiting behind other groups.
+        # Four waves of long native-thinking groups can exceed an hour while
+        # every engine is making progress. Cancelling the API's waiter leaves
+        # shielded ingress work alive; redispatch then generates duplicate work.
+        # Keep orphan recovery, but do not mistake queue age for a dead engine.
+        # The inference HTTP timeout still bounds each live attempt.
+        for key in ('SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC',
+                    'SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC',
+                    'SKYRL_EXTERNAL_WATCHDOG_MAX_REDISPATCH'):
+            env.setdefault(key, '0')
     env.update(TUNIX_BACKWARD_WARMUP=_flag(t.backward_warmup),
                TUNIX_WARMUP_MAX_LENGTH=str(t.sequence_length),
                TUNIX_WARMUP_LOSS_FN=config.client_env.get("TTD_LOSS_FN", "importance_sampling"))

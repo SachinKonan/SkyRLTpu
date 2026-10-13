@@ -430,7 +430,7 @@ class MultiFarm(Farm):
 
     def __init__(self):
         super().__init__()
-        self.capabilities = {}
+        self.capabilities = {f'farm{i}': 'c' * 64 for i in range(1, 10)}
         self.generate_status = {}
         self.acquires = {}
         self.engines = {}  # host -> engine count (default 4)
@@ -477,6 +477,7 @@ def multi_case(tmp_path, operation, urls=('http://farm1', 'http://farm2'), **inf
             external_pool_urls={raw['model']: list(urls)}, external_pool_updates=True,
             external_pool_lease_scope='run', external_pool_require_initial=True,
             external_pool_target_leases=2, external_pool_candidate_limit=8,
+            external_pool_scheduler=True, external_pool_attestation=True,
             external_pool_heartbeat_seconds=1, external_pool_rpc_timeout=1,
             external_pool_health_grace_seconds=1, external_pool_lease_seconds=30,
             external_pool_prepare_timeout=20)
@@ -1136,3 +1137,36 @@ def test_v6e8_remote_only_trainer_rejects_partial_chip_layouts(change):
     config = replace(config, trainer=replace(config.trainer, **change))
     with pytest.raises(ValueError):
         config.validate()
+
+@pytest.mark.parametrize('engines', [2, 4, 8])
+def test_hybrid_borrower_attests_dynamic_farm_size(tmp_path, engines):
+    from tpu.swarm.ray_train.run_borrowing import RunBorrower
+    from tpu.swarm.ray_train.borrowing import BorrowingProtocolError
+    async def run():
+        raw = borrowing_config(tmp_path).to_dict()
+        raw['inference'].update(external_pool_dynamic_engines=True,
+                                external_pool_attestation=True, external_pool_lease_scope='run')
+        cfg = Config.from_dict(raw)
+        farm = MultiFarm()
+        farm.engines = {'farm1': engines, 'farm2': engines}
+        farm.capabilities = {'farm1': 'a'*64, 'farm2': 'a'*64}
+        archive = tmp_path/'hybrid-adapter.tar'
+        archive.write_bytes(b'adapter')
+        async with httpx.AsyncClient(transport=httpx.MockTransport(farm)) as client:
+            borrower = RunBorrower(cfg, client)
+            borrower.required_contract = 'a'*64
+            try:
+                assert (await borrower.reserve())['reserved']
+                await borrower.begin('phase', 'adapter', archive)
+                await until(lambda: borrower.preparing is None)
+                assert borrower.snapshot()['ready']
+                assert borrower.lease.engines == engines
+                result = await borrower.generate({'model':'adapter', 'n':1}, 0, 1)
+                assert len(result['choices']) == 1
+                lease = next(iter(farm.owners.values()))
+                with pytest.raises(BorrowingProtocolError, match='unexpected farm size'):
+                    borrower._attestation(borrower.lease, farm.status(lease) | {'expected_engines':engines+1})
+            finally:
+                await borrower.close()
+            assert not farm.owners
+    asyncio.run(run())

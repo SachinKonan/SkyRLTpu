@@ -318,6 +318,18 @@ class Controller:
             self.checked_get([host.topology_ready.remote() for host in self.hosts], self.config.setup_timeout)
         if self.config.inference_only:
             train_ranks = []
+        elif self.config.assigned_host_ips and self.config.hosts > 1:
+            # This is a partition of an occupied physical slice. Never perform
+            # a full-slice probe: the other hosts may serve unrelated farms.
+            from .assigned_topology import verify_partition
+            train_ranks = list(range(self.config.hosts))
+            inference_ranks = []
+            subset = self.checked_get([
+                self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                for r in train_ranks], 300)
+            verify_partition(subset, self.config.trainer.process_bounds,
+                             self.config.trainer.chip_bounds)
+            self.report('assigned_topology_verified', train_ranks=train_ranks, records=subset)
         elif self.config.accelerator == "tpu-v4-64":
             full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
                                      for host in self.hosts], 300)
@@ -653,8 +665,11 @@ class Controller:
             # hosts. Host-local locks serialize final and periodic writeback.
             self.drain_phase({host.sync_compile.remote(): rank for rank, host in enumerate(self.hosts)},
                              "final_compile_writeback", timeout=360)
+            # This includes waiting behind an in-flight periodic writeback
+            # and then rebuilding/uploading the final payload snapshot.
+            # A 2.5-GB snapshot exceeded the old six-minute combined budget.
             self.drain_phase({host.sync_run.remote(): rank for rank, host in enumerate(self.hosts)},
-                             "final_run_writeback", timeout=360)
+                             "final_run_writeback", timeout=600)
 
     def close_serve(self, timeout=60):
         # A failed replica must not leave the job RUNNING forever while Serve

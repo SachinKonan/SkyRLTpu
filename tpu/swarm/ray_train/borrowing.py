@@ -135,11 +135,11 @@ class Borrower:
     def _accept_engines(self, body):
         """Engine count this lease must attest on every later status.
 
-        The legacy borrower serves one farm of the configured size. Multi-farm
-        members ('probe' policy) may mix v6e-32 (8 engines) with v4-32/v5p-32
-        (4) farms, so they pin the size the farm advertised at acquire time.
+        Legacy profiles retain their configured size. Multi-farm members and
+        opted-in hybrid jobs pin the advertised size for the whole lease,
+        allowing two-engine v6e-8 and four-engine v5p-32 farms.
         """
-        if self.request_failure_policy != 'probe':
+        if self.request_failure_policy != 'probe' and not self.settings.external_pool_dynamic_engines:
             return self.settings.external_pool_engines
         count = body.get('expected_engines')
         if type(count) is not int or not 1 <= count <= 64:
@@ -177,6 +177,9 @@ class Borrower:
         # max_num_sequences or from having a single resident adapter.
         lease.engines = self._farm_engines(lease)
         lease.max_requests = self.settings.external_pool_max_concurrent_requests
+        if self.settings.external_pool_requests_per_engine:
+            lease.max_requests = min(lease.max_requests,
+                                     lease.engines * self.settings.external_pool_requests_per_engine)
         lease.max_n = self.settings.external_pool_max_n
 
     def _pause(self, lease, reason, **fields):
