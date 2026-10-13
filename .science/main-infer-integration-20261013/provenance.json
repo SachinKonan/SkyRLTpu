@@ -1,0 +1,14 @@
+{
+  "source": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-qwen-comparison",
+  "source_head": "8b62c372bf9dbebfe97af14e981340b35345c706",
+  "main_infer_base": "1b8f4158150fb133b30740780625d26694c84b8d",
+  "snapshot": "b2c3e2670c5b02ceb5a1649107a119f5a3a5de17",
+  "common_base": "52992aa8",
+  "discover_source_head": "07df4a6c44e63985d22d95abbc7f3e2722ad18ab",
+  "integration_worktree": "/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-qwen-main-infer",
+  "integration_branch": "agent/qwen-training-on-main-infer-20261013",
+  "discover_integration": "06134b5ed164c7df0496571a52049ce3bbb64988",
+  "upstream_profiles_unchanged": 666,
+  "transport_resolution": "Main-infer implementation plus typed placement infrastructure rejection; comparison concurrency implementation excluded",
+  "live_deployment_changed": false
+}
