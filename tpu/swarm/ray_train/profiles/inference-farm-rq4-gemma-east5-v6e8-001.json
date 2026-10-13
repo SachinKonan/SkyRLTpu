@@ -30,7 +30,23 @@
   "adapter_count": 1,
   "pooled_group_size": 32,
   "grading": {
-    "families": {}
+    "families": {
+      "math": {
+        "slots_per_host": 64,
+        "cpus": 2,
+        "memory_gib": 4
+      },
+      "routing": {
+        "slots_per_host": 13,
+        "cpus": 10,
+        "memory_gib": 20
+      },
+      "placement": {
+        "slots_per_host": 32,
+        "cpus": 4,
+        "memory_gib": 4
+      }
+    }
   },
   "single_bucket": true,
   "run_id": "inference-farm-rq4-gemma-east5-v6e8-001",
@@ -66,7 +82,7 @@
     "trainer_compile_seed": "",
     "trainer_gib": 128,
     "inference_gib": 128,
-    "reserve_gib": 192,
+    "reserve_gib": 512,
     "sync_seconds": 60,
     "process_count": 4,
     "thread_count": 8
