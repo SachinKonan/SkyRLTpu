@@ -17,6 +17,62 @@ MANIFEST = ".checkpoint-owner.json"
 LEASE = ".checkpoint-owner.lock"
 
 
+def reclaim_completed_checkpoints(run, run_gcs, gcs, log, keep=2):
+    """Bound the current run's acknowledged checkpoint replicas after writeback.
+
+    Keep the newest two batch numbers for every member, including aliases such
+    as final. Unacknowledged/in-progress files are never candidates. Only exact
+    immutable GCS replicas can be evicted; recovery can fetch them on demand.
+    The caller serializes this with run-state writeback.
+    """
+    run = Path(run).resolve()
+    if keep < 2:
+        raise ValueError("retain at least two acknowledged checkpoint batches")
+    removed = total = 0
+    try:
+        eligible, protected = set(), set()
+        for ledger in (run / "client" / "tinker_log").glob("*/member_*/checkpoints.jsonl"):
+            private_path(run, ledger)
+            records = [json.loads(line) for line in ledger.read_text().splitlines() if line.strip()]
+            if any(type(r.get("batch")) is not int or r["batch"] < 0 for r in records):
+                raise ValueError("invalid checkpoint ledger")
+            recent = set(sorted({r["batch"] for r in records})[-keep:])
+            for record in records:
+                for key, pattern, family in (
+                    ("state_path", r"tinker://([A-Za-z0-9_-]+)/weights/([A-Za-z0-9_-]+)", ""),
+                    ("sampler_path", r"tinker://([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)", "sampler_weights/"),
+                ):
+                    match = re.fullmatch(pattern, record.get(key, ""))
+                    if not match:
+                        raise ValueError("invalid checkpoint ledger path")
+                    relative = f"{match[1]}/{family}{match[2]}.tar.gz"
+                    (protected if record["batch"] in recent else eligible).add(relative)
+        directory = private_path(run, run / "checkpoints")
+        candidates = []
+        for relative in sorted(eligible - protected):
+            path = private_path(run, directory / relative)
+            if path.is_file():
+                candidates.append((path, relative, file_identity(run, path)))
+        if not candidates:
+            return dict(files=0, bytes=0)
+        prefix = run_gcs.rstrip("/") + "/checkpoints"
+        objects = {obj.relative: obj for obj in gcs.list(prefix, allow_empty=True)}
+        verified = [(p, objects[rel], identity) for p, rel, identity in candidates
+                    if rel in objects and valid_file(p, objects[rel])]
+        latest = {obj.relative: obj for obj in gcs.list(prefix, allow_empty=True)}
+        for path, obj, identity in verified:
+            if latest.get(obj.relative) != obj or file_identity(run, path) != identity:
+                continue
+            path.unlink()
+            removed += 1
+            total += obj.size
+            emit(log, "completed_checkpoint_replica_reclaimed", local_path=str(path),
+                 gcs=obj.uri, generation=obj.generation, bytes=obj.size)
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:
+        emit(log, "completed_checkpoint_cleanup_skipped", reason=str(exc))
+    return dict(files=removed, bytes=total)
+
+
 def private_path(root, path):
     relative = path.relative_to(root)
     current = root

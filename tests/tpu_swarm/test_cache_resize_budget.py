@@ -35,3 +35,23 @@ def test_resize_accounts_for_occupied_pages(tmp_path, monkeypatch, used, availab
         with pytest.raises(RuntimeError, match='not enough available memory to grow'):
             cache.mount_cache(tmp_path, 128, 240)
         assert capacity[0] == 64
+
+
+@pytest.mark.parametrize('used,available,allowed', [(39,355,True),(97,355,False),(39,255,False)])
+def test_reused_cache_can_shrink_without_losing_data(tmp_path, monkeypatch, used, available, allowed):
+    original_read=Path.read_text
+    monkeypatch.setattr(Path,'read_text',lambda p,*a,**k: f'MemAvailable: {available*1024**2} kB\nSwapTotal: 0 kB\n' if str(p)=='/proc/meminfo' else original_read(p,*a,**k))
+    monkeypatch.setattr(cache.os.path,'ismount',lambda _:True)
+    monkeypatch.setattr(cache.subprocess,'check_output',lambda *a,**k:b'{"filesystems":[{"fstype":"tmpfs"}]}')
+    capacity=[128]
+    monkeypatch.setattr(cache.os,'statvfs',lambda _:SimpleNamespace(f_blocks=capacity[0],f_bfree=capacity[0]-used,f_frsize=cache.GIB))
+    def resize(args,**kwargs):
+        assert 'remount,size=96G' in args
+        capacity[0]=96
+    monkeypatch.setattr(cache.subprocess,'run',resize)
+    if allowed:
+        assert cache.mount_cache(tmp_path,96,256)==tmp_path
+        assert capacity[0]==96
+    else:
+        with pytest.raises(RuntimeError):cache.mount_cache(tmp_path,96,256)
+        assert capacity[0]==128

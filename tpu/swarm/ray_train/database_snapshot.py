@@ -11,6 +11,7 @@ from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
+import re
 import sqlite3
 
 
@@ -48,6 +49,74 @@ def abandon_pending_for_checkpoint_resume(path: Path) -> int:
         count = cursor.rowcount
         db.commit()
         return count
+
+
+def reconcile_checkpoint_manifest(path: Path, logs: Path, archive_available) -> int:
+    """Repair a stale DB snapshot using client-acknowledged, durable checkpoints.
+
+    Call before the API starts. A client checkpoint line is written only after
+    both save requests succeed; its snapshot can be newer than the DB backup.
+    Require the matching search snapshot and each exact remote archive before
+    promoting PENDING rows or registering missing rows for existing models.
+    Never revive FAILED rows or guess from an archive alone. Futures remain
+    retired rather than replayed.
+    """
+    with closing(sqlite3.connect(path)) as db:
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='checkpoints'").fetchone():
+            return 0
+        repairs = []
+        for manifest in sorted(logs.glob('member_*/checkpoints.jsonl')):
+            lines = [line for line in manifest.read_text().splitlines() if line.strip()]
+            if not lines:
+                continue
+            record = json.loads(lines[-1])
+            step = record.get('batch')
+            if type(step) is not int or step < 0:
+                raise RuntimeError('Invalid checkpoint manifest batch')
+            for field, kind, pattern, directory in (
+                ('state_path', 'TRAINING', r'tinker://([A-Za-z0-9_-]+)/weights/([A-Za-z0-9_-]+)', ''),
+                ('sampler_path', 'SAMPLER', r'tinker://([A-Za-z0-9_-]+)/([A-Za-z0-9_-]+)', 'sampler_weights/'),
+            ):
+                if not record.get(field):
+                    continue
+                match = re.fullmatch(pattern, record[field])
+                if not match:
+                    raise RuntimeError(f'Invalid checkpoint manifest {field}')
+                model, checkpoint = match.groups()
+                key = (model, checkpoint, kind)
+                row = db.execute('SELECT status FROM checkpoints WHERE model_id=? AND checkpoint_id=? AND checkpoint_type=?', key).fetchone()
+                if row and row[0] == 'FAILED':
+                    raise RuntimeError(f'Checkpoint manifest conflicts with database: {key}')
+                if row and row[0] == 'COMPLETED':
+                    continue
+                if row and row[0] != 'PENDING':
+                    raise RuntimeError(f'Unknown checkpoint status: {row[0]}')
+                if not row:
+                    # The backup can predate checkpoint registration itself.
+                    # Preserve the registered model's exact LoRA configuration;
+                    # never synthesize a model identity from the manifest.
+                    registered = db.execute(
+                        "SELECT 1 FROM sqlite_master WHERE name='models'").fetchone()
+                    if not registered or not db.execute(
+                            'SELECT 1 FROM models WHERE model_id=?', (model,)).fetchone():
+                        raise RuntimeError(f'Checkpoint model is not registered: {model}')
+                if not (logs / f'puct_sampler_step_{step:06d}.json').is_file():
+                    raise RuntimeError(f'Checkpoint {step} has no matching search snapshot')
+                archive = f'checkpoints/{model}/{directory}{checkpoint}.tar.gz'
+                if not archive_available(archive):
+                    raise RuntimeError(f'Client-acknowledged checkpoint archive is missing: {archive}')
+                repairs.append((key, row is None))
+        # Validate every row first so a missing sampler archive leaves no repair.
+        for key, missing in repairs:
+            if missing:
+                db.execute("INSERT INTO checkpoints "
+                           "(model_id,checkpoint_id,checkpoint_type,status,created_at,completed_at) "
+                           "VALUES (?,?,?,'COMPLETED',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)", key)
+            else:
+                db.execute("UPDATE checkpoints SET status='COMPLETED', completed_at=CURRENT_TIMESTAMP, error_message=NULL "
+                           "WHERE model_id=? AND checkpoint_id=? AND checkpoint_type=? AND status='PENDING'", key)
+        db.commit()
+        return len(repairs)
 
 
 class IncompleteDatabaseSnapshot(RuntimeError):

@@ -215,3 +215,57 @@ def test_preflight_reclaims_before_disk_check_without_touching_live_trainers(tmp
     with pytest.raises(RuntimeError, match="existing trainer"):
         Host.preflight(host)
     assert calls == []
+
+
+@pytest.fixture
+def current(tmp_path):
+    run = tmp_path / 'runs/current'
+    ledger = run / 'client/tinker_log/current/member_qwen/checkpoints.jsonl'
+    ledger.parent.mkdir(parents=True)
+    records, objects, paths = [], [], []
+    for step in range(1, 5):
+        name = f'{step:06d}'
+        records.append(dict(batch=step, state_path=f'tinker://model_a/weights/{name}',
+                            sampler_path=f'tinker://model_a/{name}'))
+        for family in ['', 'sampler_weights/']:
+            relative = f'model_a/{family}{name}.tar.gz'
+            path = run / 'checkpoints' / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(relative.encode())
+            paths.append(path)
+            objects.append(Object('gs://bucket/run/checkpoints/' + relative, relative,
+                                  path.stat().st_size, '1',
+                                  base64.b64encode(hashlib.md5(path.read_bytes()).digest()).decode(), None))
+    # Step 4 is in flight and has not been acknowledged by the client.
+    ledger.write_text('\n'.join(json.dumps(r) for r in records[:3]))
+    return SimpleNamespace(run=run, ledger=ledger, objects=objects, paths=paths,
+                           gcs=SimpleNamespace(list=lambda *a, **kw: objects), log=run/'cleanup.jsonl')
+
+
+def test_current_retention_keeps_two_batches_and_unacknowledged_files(current):
+    result = retention.reclaim_completed_checkpoints(current.run, 'gs://bucket/run', current.gcs, current.log)
+    assert result['files'] == 2
+    assert all(not p.exists() for p in current.paths[:2])
+    assert all(p.exists() for p in current.paths[2:])
+    assert current.ledger.exists()
+
+
+@pytest.mark.parametrize('failure', ['checksum', 'generation', 'malformed', 'symlink'])
+def test_current_retention_fails_closed(current, failure, tmp_path):
+    if failure == 'checksum':
+        current.objects[:2] = [replace(o, md5='wrong') for o in current.objects[:2]]
+    elif failure == 'generation':
+        calls = []
+        def listing(*args, **kwargs):
+            calls.append(1)
+            return current.objects if len(calls) == 1 else [replace(o, generation='2') for o in current.objects]
+        current.gcs.list = listing
+    elif failure == 'malformed':
+        with current.ledger.open('a') as stream:
+            stream.write('\n{"batch":')
+    else:
+        outside = tmp_path/'protected';outside.write_bytes(current.paths[0].read_bytes())
+        current.paths[0].unlink();current.paths[0].symlink_to(outside)
+    result = retention.reclaim_completed_checkpoints(current.run, 'gs://bucket/run', current.gcs, current.log)
+    assert result['files'] == 0
+    assert all(p.exists() for p in current.paths)

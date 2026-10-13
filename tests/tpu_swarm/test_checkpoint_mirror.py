@@ -64,6 +64,35 @@ def test_checkpoint_mirror_rejects_size_mismatch(monkeypatch, tmp_path):
         )
 
 
+@pytest.mark.parametrize('failure', ['interrupted', 'timeout', 'empty', 'persistent'])
+def test_checkpoint_mirror_retries_metadata_without_reupload(monkeypatch, tmp_path, failure):
+    checkpoint = tmp_path / 'step.tar.gz'
+    checkpoint.write_bytes(b'checkpoint')
+    calls = []
+    monkeypatch.setattr('skyrl.utils.checkpoint_mirror.time.sleep', lambda _: None)
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if 'describe' not in command:
+            return subprocess.CompletedProcess(command, 0, stdout='', stderr='')
+        assert kwargs['env']['CLOUDSDK_STORAGE_PROCESS_COUNT'] == '1'
+        if failure == 'persistent' or len(calls) == 2:
+            if failure == 'timeout':
+                raise subprocess.TimeoutExpired(command, 120)
+            return subprocess.CompletedProcess(command, 0 if failure == 'empty' else -15, stdout='', stderr='')
+        return subprocess.CompletedProcess(command, 0, stdout='10', stderr='')
+
+    monkeypatch.setattr('skyrl.utils.checkpoint_mirror.subprocess.run', run)
+    if failure == 'persistent':
+        with pytest.raises(RuntimeError, match='verification failed'):
+            mirror_checkpoint_to_gcs(checkpoint, 'gs://bucket/checkpoints', 'model')
+        assert len(calls) == 4
+    else:
+        mirror_checkpoint_to_gcs(checkpoint, 'gs://bucket/checkpoints', 'model')
+        assert len(calls) == 3
+    assert sum('cp' in command for command in calls) == 1
+
+
 @pytest.mark.parametrize('always_fail', [False, True])
 def test_checkpoint_mirror_retries_interrupted_uploads(monkeypatch, tmp_path, always_fail):
     checkpoint = tmp_path / 'step.tar.gz'

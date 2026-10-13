@@ -132,7 +132,9 @@ def mount_cache(root, cap_gib, reserve_gib):
         if any(root.iterdir()):
             raise RuntimeError("refusing to mount over existing files")
         if mem["MemAvailable"] < (cap_gib + reserve_gib) * GIB:
-            raise RuntimeError("not enough available memory for RAM cache plus runtime reserve")
+            raise RuntimeError("not enough available memory for RAM cache plus runtime reserve: "
+                               f"available={mem['MemAvailable'] / GIB:.2f} GiB, "
+                               f"cache={cap_gib} GiB, reserve={reserve_gib} GiB")
         options = f"size={cap_gib}G,mode=0700,uid={os.getuid()},gid={os.getgid()},nosuid,nodev"
         subprocess.run(["sudo", "-n", "mount", "-t", "tmpfs", "-o", options,
                         "tmpfs", str(root)], check=True, timeout=30)
@@ -153,7 +155,18 @@ def mount_cache(root, cap_gib, reserve_gib):
                        check=True, timeout=30)
         stat = os.statvfs(root)
     if stat.f_blocks * stat.f_frsize > cap_gib * GIB:
-        raise RuntimeError("unexpected filesystem type or cache capacity")
+        # An idle cache reused from a larger reservation can shrink without
+        # discarding its model or compilation files. Never truncate live data.
+        used = (stat.f_blocks - stat.f_bfree) * stat.f_frsize
+        if used > cap_gib * GIB:
+            raise RuntimeError("occupied RAM cache exceeds requested smaller capacity")
+        if mem["MemAvailable"] < reserve_gib * GIB:
+            raise RuntimeError("runtime memory reserve is unavailable")
+        subprocess.run(["sudo", "-n", "mount", "-o", f"remount,size={cap_gib}G", str(root)],
+                       check=True, timeout=30)
+        stat = os.statvfs(root)
+        if stat.f_blocks * stat.f_frsize != cap_gib * GIB:
+            raise RuntimeError("unexpected cache capacity after shrinking")
     if mem["MemAvailable"] < reserve_gib * GIB:
         raise RuntimeError("runtime memory reserve is unavailable")
     return root

@@ -6,6 +6,22 @@ import time
 from pathlib import Path
 
 
+def _describe_checkpoint_size(uri: str):
+    """Retry interrupted metadata reads without re-uploading an archive."""
+    command = ["gcloud", "storage", "objects", "describe", uri, "--format=value(size)"]
+    env = dict(os.environ, CLOUDSDK_STORAGE_PROCESS_COUNT="1", CLOUDSDK_STORAGE_THREAD_COUNT="1")
+    for attempt in range(3):
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=120, env=env)
+        except subprocess.TimeoutExpired:
+            result = subprocess.CompletedProcess(command, 124, stdout="", stderr="metadata request timed out")
+        if result.returncode == 0 and result.stdout.strip().isdigit():
+            return result
+        if attempt < 2:
+            time.sleep(attempt + 1)
+    return result
+
+
 def _checkpoint_uri(
     mirror_base: str,
     model_id: str,
@@ -53,19 +69,7 @@ def mirror_checkpoint_to_gcs(
             )
         time.sleep(attempt + 1)
 
-    described = subprocess.run(
-        [
-            "gcloud",
-            "storage",
-            "objects",
-            "describe",
-            destination,
-            "--format=value(size)",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    described = _describe_checkpoint_size(destination)
     remote_size = described.stdout.strip()
     local_size = local_path.stat().st_size
     if described.returncode != 0 or remote_size != str(local_size):
@@ -88,19 +92,7 @@ def restore_checkpoint_from_gcs(
     if local_path.is_file():
         return source
 
-    described = subprocess.run(
-        [
-            "gcloud",
-            "storage",
-            "objects",
-            "describe",
-            source,
-            "--format=value(size)",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    described = _describe_checkpoint_size(source)
     remote_size = described.stdout.strip()
     if described.returncode != 0 or not remote_size.isdigit():
         detail = (described.stderr or described.stdout).strip()[-2000:]

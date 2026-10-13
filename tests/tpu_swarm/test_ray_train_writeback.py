@@ -106,3 +106,24 @@ def test_api_leader_database_and_head_client_both_get_writeback(tmp_path, monkey
     control.calls.clear()
     control.close()
     assert {r for r, kind, _ in control.calls if kind == 'run'} == set(range(8))
+
+
+def test_final_snapshot_can_finish_after_waiting_for_periodic_flush(tmp_path, monkeypatch):
+    control = controller(tmp_path)
+    now = [0.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(module.serve, 'shutdown', lambda: None)
+    monkeypatch.setattr(module.ray, 'get', lambda ref: None)
+
+    def wait(refs, **kwargs):
+        # A periodic snapshot owns the host lock for 150 seconds, followed
+        # by the final snapshot/upload taking 240 seconds (observed on TPU).
+        if refs[0][1] == 'run' and now[0] < 390:
+            now[0] += kwargs['timeout']
+            return [], refs
+        return refs[:1], refs[1:]
+
+    monkeypatch.setattr(module.ray, 'wait', wait)
+    control.close()
+    assert not control.shutdown_errors
+    assert len([e for e, _ in control.events if e == 'final_run_writeback_complete']) == 8
