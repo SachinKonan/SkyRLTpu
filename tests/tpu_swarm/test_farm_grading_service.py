@@ -270,3 +270,18 @@ def test_science_specs_validate_and_dispatch_signatures(tmp_path, monkeypatch):
         finally:
             await service.close()
     asyncio.run(run())
+
+
+def test_infrastructure_zero_becomes_failed_request(tmp_path, monkeypatch):
+    async def run():
+        async with grading_farm(tmp_path,monkeypatch) as (client,gateway,service,futures,cancelled,_):
+            headers=await lease_for(client);request=body()
+            await client.post('/skyrl/v1/grading/submit',json=request,headers=headers)
+            await asyncio.sleep(0)
+            futures[0].set_result({'reward':0,'correctness':0,'msg':'trusted runtime missing','metrics':{'failure_phase':'infrastructure'}})
+            response=await client.get('/skyrl/v1/grading/result/'+request['request_id'],params={'wait':1},headers=headers)
+            result=response.json()
+            assert result['state']=='failed' and result['result'] is None
+            assert service.counters['infra_failures']==1
+            assert service.counters['candidate_failures']==0
+    asyncio.run(run())

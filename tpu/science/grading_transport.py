@@ -471,6 +471,8 @@ class GradingTransport:
                         attempt=attempts, predicted_wait_s=round(pool.predicted_wait(request.task), 1))
             try:
                 result = await pool.run(request, on_started, attempts)
+                from .placement_runtime import reject_infrastructure_result
+                reject_infrastructure_result(result)
             except asyncio.CancelledError:
                 await pool.cancel(request.request_id)
                 raise

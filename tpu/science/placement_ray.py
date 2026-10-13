@@ -93,7 +93,10 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
         raise ValueError('fast proxy requires CPU placement')
     from .worker import process_identity
     from .rewards import invalid
-    root=Path(root).resolve(); jobs=root/'.science/placement-jobs';jobs.mkdir(exist_ok=True)
+    from .placement_runtime import validate_runtime, PlacementInfrastructureError
+    root = Path(root).resolve()
+    validate_runtime(root, case)
+    jobs=root/'.science/placement-jobs';jobs.mkdir(exist_ok=True)
     folder=jobs/uuid.uuid4().hex;folder.mkdir();unit='placement-grade-'+folder.name
     (folder/'candidate.py').write_text(source)
     cpu = backend == 'cpu-jax'
@@ -127,9 +130,13 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
             finally:
                 if proc.poll() is None: proc.terminate();proc.wait(timeout=5)
         if code or not (folder/'result.json').exists():
-            result=invalid(f'placement worker exited {code}',phase='worker')
-            result['stdout']=(folder/'worker.log').read_text(errors='replace')[-4000:]
+            # Candidate errors/timeouts are returned by placement_task. Without
+            # its verdict we cannot attribute an envelope failure to the program.
+            detail = (folder/'worker.log').read_text(errors='replace')[-4000:]
+            raise PlacementInfrastructureError(f'placement worker exited {code} without a verdict: {detail}')
         else:result=json.loads((folder/'result.json').read_text())
+        if result.get('metrics', {}).get('failure_phase') == 'infrastructure':
+            raise PlacementInfrastructureError(result.get('msg', 'placement infrastructure failure'))
     finally:
         subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL,timeout=10)

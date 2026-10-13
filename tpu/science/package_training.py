@@ -39,6 +39,49 @@ def placement_settings(config):
                 memory_gib=config.science_placement_memory_gib)
 
 
+def science_preparation(config):
+    """The same family-derived preparation for managed and assigned hosts."""
+    tasks = science_tasks(config)
+    placement = placement_settings(config)
+    env = dict(SCIENCE_ACCELERATOR=config.accelerator,
+                       SCIENCE_PLACEMENT_BACKEND=placement['backend'],
+                       SCIENCE_PLACEMENT_RUNTIME=placement['runtime'],
+                       SCIENCE_PLACEMENT_HELPER=placement['helper'],
+                       SCIENCE_PLACEMENT_SLOTS_PER_HOST=str(placement['slots']),
+                       SCIENCE_PLACEMENT_CPUS_PER_CASE=str(placement['cpus']),
+                       SCIENCE_PLACEMENT_MEMORY_GIB=str(placement['memory_gib']),
+                       PLACEMENT_TPU_RANKS=','.join(map(str, range(config.hosts))))
+    prep = '''cd "$code"
+export SCIENCE_WORKER_ROOT="$code"
+'''
+    if 'routing' in tasks:
+        # The runtime bundle lives in every region's bucket; never read another region.
+        env.update(
+            SCIENCE_CPU_BUNDLE=f'{config.bucket}/code-bundles/science-cpu-{CPU_BUNDLE_SHA256}.tar.gz',
+            SCIENCE_CPU_SHA256=CPU_BUNDLE_SHA256)
+        prep += '''if [ ! -f "$code/.science/routing-prepared" ]; then
+  # TPU images lack gcloud-crc32c for sliced downloads; the SHA-256 check below verifies the bundle.
+  CLOUDSDK_STORAGE_CHECK_HASHES=never gcloud storage cp "$SCIENCE_CPU_BUNDLE" "$code/cpu-runtime.tar.gz"
+  printf '%s  %s\\n' "$SCIENCE_CPU_SHA256" "$code/cpu-runtime.tar.gz" | sha256sum -c -
+  tar -xzf "$code/cpu-runtime.tar.gz" -C "$code" .science/routing-task .science/rustup .science/cargo
+  rm "$code/cpu-runtime.tar.gz"
+  bash "$code/tpu/science/prepare_cpu_host.sh"
+  touch "$code/.science/routing-prepared"
+fi
+'''
+    if 'placement' in tasks:
+        if 'routing' in tasks:
+            # Placement pins differ from routing's; keep them in their own venv.
+            env['SCIENCE_PLACEMENT_VENV'] = 'venv-placement'
+        # The physical grader rank is selected after topology probing. Prepare
+        # dependencies on all hosts; CPU profiles grade on every host.
+        prep += '''sudo -n apt-get -o DPkg::Lock::Timeout=600 update -qq
+sudo -n apt-get -o DPkg::Lock::Timeout=600 install -y -qq bubblewrap build-essential pkg-config libssl-dev
+PLACEMENT_TPU_CHIPS=0,1,2,3 python3 -m tpu.science.prepare_placement_host
+'''
+    return env, prep
+
+
 def package(profile, output):
     config = Config.load(profile)
     # Inference farms that grade a science family need the same grader
@@ -90,43 +133,9 @@ def package(profile, output):
             bundle.add(path, arcname=name, recursive=False)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     doc = yaml.safe_load(task.read_text())
-    doc['envs'].update(RAY_TRAIN_CODE=config.bucket + '/code-bundles/science-training-' + digest + '.tar.gz',
-                       RAY_TRAIN_CODE_SHA256=digest, SCIENCE_ACCELERATOR=config.accelerator,
-                       SCIENCE_PLACEMENT_BACKEND=placement['backend'],
-                       SCIENCE_PLACEMENT_RUNTIME=placement['runtime'],
-                       SCIENCE_PLACEMENT_HELPER=placement['helper'],
-                       SCIENCE_PLACEMENT_SLOTS_PER_HOST=str(placement['slots']),
-                       SCIENCE_PLACEMENT_CPUS_PER_CASE=str(placement['cpus']),
-                       SCIENCE_PLACEMENT_MEMORY_GIB=str(placement['memory_gib']),
-                       PLACEMENT_TPU_RANKS=','.join(map(str, range(config.hosts))))
-    prep = '''cd "$code"
-export SCIENCE_WORKER_ROOT="$code"
-'''
-    if 'routing' in tasks:
-        # The runtime bundle lives in every region's bucket; never read another region.
-        doc['envs'].update(
-            SCIENCE_CPU_BUNDLE=f'{config.bucket}/code-bundles/science-cpu-{CPU_BUNDLE_SHA256}.tar.gz',
-            SCIENCE_CPU_SHA256=CPU_BUNDLE_SHA256)
-        prep += '''if [ ! -f "$code/.science/routing-prepared" ]; then
-  # TPU images lack gcloud-crc32c for sliced downloads; the SHA-256 check below verifies the bundle.
-  CLOUDSDK_STORAGE_CHECK_HASHES=never gcloud storage cp "$SCIENCE_CPU_BUNDLE" "$code/cpu-runtime.tar.gz"
-  printf '%s  %s\\n' "$SCIENCE_CPU_SHA256" "$code/cpu-runtime.tar.gz" | sha256sum -c -
-  tar -xzf "$code/cpu-runtime.tar.gz" -C "$code" .science/routing-task .science/rustup .science/cargo
-  rm "$code/cpu-runtime.tar.gz"
-  bash "$code/tpu/science/prepare_cpu_host.sh"
-  touch "$code/.science/routing-prepared"
-fi
-'''
-    if 'placement' in tasks:
-        if 'routing' in tasks:
-            # Placement pins differ from routing's; keep them in their own venv.
-            doc['envs']['SCIENCE_PLACEMENT_VENV'] = 'venv-placement'
-        # The physical grader rank is selected after topology probing. Prepare
-        # dependencies on all hosts; CPU profiles grade on every host.
-        prep += '''sudo -n apt-get -o DPkg::Lock::Timeout=600 update -qq
-sudo -n apt-get -o DPkg::Lock::Timeout=600 install -y -qq bubblewrap build-essential pkg-config libssl-dev
-PLACEMENT_TPU_CHIPS=0,1,2,3 python3 -m tpu.science.prepare_placement_host
-'''
+    env, prep = science_preparation(config)
+    doc['envs'].update(env, RAY_TRAIN_CODE=config.bucket + '/code-bundles/science-training-' + digest + '.tar.gz',
+                       RAY_TRAIN_CODE_SHA256=digest)
     audit = (root / 'tpu/results/native-training-recovery-20260913/clean_host_audit.py').read_text()
     # Full training is bounded by NUM_EPOCHS; the old one-day smoke wrapper can
     # otherwise kill a valid bootstrap/optimizer run while grading is queued.

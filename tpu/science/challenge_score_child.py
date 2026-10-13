@@ -21,18 +21,22 @@ def main():
     from macro_place.utils import validate_placement
     folder = root/'.science/challenge-probe/external/MacroPlacement/Testcases/ICCAD04'/args.case
     b, plc = load_benchmark_from_dir(str(folder))
-    f = Path(args.positions)
-    if f.stat().st_size > 2*1024**2: raise ValueError('oversized candidate output')
-    positions = np.load(f, allow_pickle=False)
-    if positions.dtype.kind not in 'fiu': raise ValueError('nonnumeric output')
-    if positions.shape != tuple(b.macro_positions.shape): raise ValueError('wrong placement shape')
-    if not np.isfinite(positions).all(): raise ValueError('nonfinite placement')
-    fixed = b.macro_fixed.numpy()
-    if not np.array_equal(positions[fixed], b.macro_positions.numpy()[fixed]):
-        raise ValueError('fixed positions changed')
-    tensor = torch.from_numpy(positions.astype(np.float32))
-    valid, errors = validate_placement(tensor, b)
-    if not valid: raise ValueError('illegal placement: '+str(errors))
+    try:
+        f = Path(args.positions)
+        if f.stat().st_size > 2*1024**2: raise ValueError('oversized candidate output')
+        positions = np.load(f, allow_pickle=False)
+        if positions.dtype.kind not in 'fiu': raise ValueError('nonnumeric output')
+        if positions.shape != tuple(b.macro_positions.shape): raise ValueError('wrong placement shape')
+        if not np.isfinite(positions).all(): raise ValueError('nonfinite placement')
+        fixed = b.macro_fixed.numpy()
+        if not np.array_equal(positions[fixed], b.macro_positions.numpy()[fixed]):
+            raise ValueError('fixed positions changed')
+        tensor = torch.from_numpy(positions.astype(np.float32))
+        valid, errors = validate_placement(tensor, b)
+        if not valid: raise ValueError('illegal placement: '+str(errors))
+    except (ValueError, FileNotFoundError) as exc:
+        Path(args.result).write_text(json.dumps({'candidate_error': str(exc)}))
+        return
     metrics = {k:float(v) for k,v in compute_proxy_cost(tensor,b,plc).items()}
     if not all(np.isfinite(v) for v in metrics.values()) or metrics['overlap_count'] != 0:
         raise ValueError('nonfinite proxy or hard overlap')

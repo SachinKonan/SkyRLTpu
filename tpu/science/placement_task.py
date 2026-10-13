@@ -20,7 +20,10 @@ from .placement_slots import device_paths, tpu_environment, assigned_chip
 
 
 def evaluate(request):
-    root = Path(request['root']); work = Path(request['work']); work.mkdir()
+    root = Path(request['root'])
+    from .placement_runtime import validate_runtime
+    validate_runtime(root, request['case'])
+    work = Path(request['work']); work.mkdir()
     runtime=request.get('resource_contract')
     if runtime:
         from .placement_resources import validate
@@ -97,10 +100,18 @@ def evaluate(request):
     cmd = [str(grader_python(root)),'-m','tpu.science.challenge_score_child',
            '--root',str(root),'--case',case,'--positions',str(work/'positions.npy'),
            '--result',str(work/'score.json')]
-    with (work/'grader.log').open('wb') as log:
-        subprocess.run(cmd,check=True,timeout=grading_limit,stdout=log,stderr=subprocess.STDOUT,
-                       env=dict(os.environ, **{k: str(runtime['cpus'] if runtime else 4) for k in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS')}))
-    scores = json.loads((work/'score.json').read_text())
+    from .placement_runtime import PlacementInfrastructureError
+    try:
+        with (work/'grader.log').open('wb') as log:
+            subprocess.run(cmd,check=True,timeout=grading_limit,stdout=log,stderr=subprocess.STDOUT,
+                           env=dict(os.environ, **{k: str(runtime['cpus'] if runtime else 4) for k in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS')}))
+        scores = json.loads((work/'score.json').read_text())
+    except Exception as exc:
+        raise PlacementInfrastructureError(f'placement infrastructure: trusted grader failed: {exc}') from exc
+    if 'candidate_error' in scores:
+        raise ValueError(scores['candidate_error'])
+    if 'proxy_cost' not in scores:
+        raise PlacementInfrastructureError('placement infrastructure: grader omitted proxy_cost')
     cost = scores['proxy_cost']
     return valid(max(1e-6,1/(1+cost)), dict(**scores,
                  candidate_wall_seconds=candidate_seconds,candidate_started_unix=candidate_started_unix,
@@ -117,7 +128,10 @@ def main():
     runtime=request.get('resource_contract')
     memory_gib = runtime['memory_gib'] if runtime else (8 if request.get('backend') == 'cpu-jax' else 16)
     group,_=envelope(memory_gib)
+    from .placement_runtime import PlacementInfrastructureError
     try: result=evaluate(request)
+    except (PlacementInfrastructureError, FileNotFoundError, PermissionError) as exc:
+        result=invalid(f'placement infrastructure: {type(exc).__name__}: {exc}', phase='infrastructure')
     except Exception as exc: result=invalid(f'{type(exc).__name__}: {exc}')
     result['metrics'].update(allocation_memory=metrics(group),worker_seconds=time.monotonic()-started,
                              cpu_affinity=sorted(os.sched_getaffinity(0)),case=request['case'],

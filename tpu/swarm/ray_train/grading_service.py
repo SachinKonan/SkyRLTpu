@@ -244,6 +244,8 @@ class GradingService:
             result = await self.awaitable(entry.ref)
             if not isinstance(result, dict):
                 raise RuntimeError('executor returned a non-dict result')
+            from tpu.science.placement_runtime import reject_infrastructure_result
+            reject_infrastructure_result(result)
             entry.result = result
             entry.host = (result.get('metrics') or {}).get('host')
             entry.state = 'done'
@@ -365,6 +367,25 @@ class GradingService:
                         result = await self.awaitable(ref)
                         ok = isinstance(result, dict) and result.get('result') == [1.0] * 1000
                         self.readiness[f'{name}@{ip}'] = 'ok' if ok else f'reference mismatch: {str(result)[:200]}'
+                    elif name == 'placement':
+                        from tpu.science.placement_runtime import validate_runtime, REFERENCE_SOURCE, check_reference
+                        from tpu.science.placement_resources import contract
+                        from tpu.science.placement_ray import grade_cpu_case
+                        family = self.families[name]
+                        manifest = await self.awaitable(ray.remote(num_cpus=1, scheduling_strategy=strategy)(
+                            validate_runtime).remote(self.worker_root, imports=True))
+                        case = 'ibm01'
+                        runtime = contract(family['slots_per_host'], cpus=family['cpus'],
+                                           memory_gib=family['memory_gib'])
+                        result = await self.awaitable(grade_cpu_case.options(
+                            memory=family['memory_gib'] * 1024 ** 3,
+                            resources={'placement_cpu_host': 1, 'grading_placement': 1},
+                            scheduling_strategy=strategy).remote(
+                                REFERENCE_SOURCE, case, self.worker_root,
+                                slots_per_host=family['slots_per_host'], resource_contract=runtime,
+                                helper=os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')))
+                        check_reference(result, manifest, case)
+                        self.readiness[f'{name}@{ip}'] = 'ok'
                     else:
                         root = self.worker_root
 

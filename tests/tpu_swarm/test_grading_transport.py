@@ -419,3 +419,19 @@ def test_a_farm_never_sees_more_than_the_http_concurrency_cap(monkeypatch):
             await t.close()
     asyncio.run(run())
 
+
+
+def test_legacy_infrastructure_zero_retried_not_published():
+    async def run():
+        farm=GradingFarm()
+        farm.outcomes['good']=done({'reward':0.5,'correctness':1,'metrics':{}})
+        local=FakeLocal(2,{'reward':0,'correctness':0,'msg':"FileNotFoundError: '/bad/.science/candidate-venv/bin/python'",'metrics':{}})
+        t=transport(farm,['good'],local=local)
+        try:
+            r=request();result=await t.grade(r)
+            assert result['reward']==0.5
+            assert t.results[r.request_id]['correctness']==1
+            assert any(e=='grading_retry' for e,_ in t.reports)
+            assert local.calls==[r.request_id]
+        finally:await t.close()
+    asyncio.run(run())
