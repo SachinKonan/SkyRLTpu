@@ -1,0 +1,37 @@
+{
+  "base_commit": "1b8f4158150fb133b30740780625d26694c84b8d",
+  "changed_modules_passed": 424,
+  "focused_contracts_passed": 25,
+  "integration_fixture_modules_passed": 41,
+  "database_snapshot_passed": 9,
+  "pool_and_task_tests_passed": 21,
+  "ops_dependency_recheck_passed": 14,
+  "ops_dependency_recheck_subtests_passed": 6,
+  "initial_broad_suite": {
+    "passed": 1664,
+    "failed": 22,
+    "skipped": 3,
+    "errors": 5,
+    "subtests_passed": 30
+  },
+  "baseline_comparison": {
+    "passed": 91,
+    "failed": 12,
+    "failure_nodes": [
+      "tests/tpu_swarm/test_cache_setup_recovery.py::test_failed_orbax_copy_is_cleaned_before_retry_and_success_is_reused",
+      "tests/tpu_swarm/test_gradient_conflict.py::test_probe_drain_never_accesses_optimizer_or_changes_parameters",
+      "tests/tpu_swarm/test_gradient_conflict.py::test_export_writer_follows_api_host_with_permuted_jax_ranks[2-1-True]",
+      "tests/tpu_swarm/test_gradient_conflict.py::test_export_writer_follows_api_host_with_permuted_jax_ranks[0-0-False]",
+      "tests/tpu_swarm/test_native_pipeline_failure.py::test_parity_failure_aborts_pipeline_and_cancels_sibling[native]",
+      "tests/tpu_swarm/test_native_pipeline_failure.py::test_parity_failure_aborts_pipeline_and_cancels_sibling[grader]",
+      "tests/tpu_swarm/test_ray_train_inference_ranks.py::test_lora_slot_ablation_changes_only_the_requested_cli_argument",
+      "tests/tpu_swarm/test_ray_train_inference_ranks.py::test_population_serving_does_not_require_a_backward_output_mode",
+      "tests/tpu_swarm/test_ray_train_lifecycle.py::test_adapter_commit_waits_for_every_engine_and_is_immutable",
+      "tests/tpu_swarm/test_ray_train_lifecycle.py::test_failed_adapter_fanout_stays_closed_and_retry_recovers",
+      "tests/tpu_swarm/test_recurrent_gemma_runner.py::test_multi_adapter_arena_combines_both_overlays",
+      "tests/tpu_swarm/test_runtime_parity.py::test_all_profiles_preserve_legacy_chunked_prefill_emission"
+    ]
+  },
+  "live_deployment_changed": false,
+  "limitations": "No TPU end-to-end run; no claim that the full suite is green. Test sets overlap."
+}

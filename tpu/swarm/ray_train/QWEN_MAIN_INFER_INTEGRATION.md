@@ -55,3 +55,33 @@ that the CPU grader itself failed.
 Submodule commits are local until published; publishing the superproject alone
 is insufficient. Publish the discover commit first when a remote release is
 requested.
+
+## Validation
+
+- Changed/new test modules: 424 passed.
+- Focused Main-infer eager-step, failed-training and grading-transport contracts:
+  25 passed (overlaps the changed-module run).
+- Updated integration fixtures for API leader recovery, placement device routing
+  and checkpoint metadata commands: 41 passed.
+- Database snapshot tests with isolated SQL dependencies: 9 passed.
+- SkyPilot pool/task tests: 21 passed; existing-worker recovery and nested
+  SkyPilot source tests: another 14 passed, 6 subtests passed.
+- Python compilation of the 63 added/modified Python files and `git diff --check`
+  passed. All 666 pre-existing Main-infer profiles remain byte-identical.
+
+The initial broad suite reported 1,664 passed, 22 failed, 3 skipped and 5
+setup errors. Six failures were stale fixtures affected by this integration;
+those fixtures were updated and their 41-test set passed. Four failures and
+five setup errors needed the SkyPilot environment or initialized nested source;
+those passed on the separate dependency-correct run above.
+
+The remaining **12 failures reproduced on unmodified Main-infer** at the base
+commit (91 other tests in that baseline comparison passed). They concern the
+Orbax-copy shell fixture, gradient-probe mock attributes, native pipeline eager
+function extraction, LoRA defaults, lifecycle request mocks, recurrent overlay
+expectations, and a non-profile JSON picked up by the profile glob. They were
+left unchanged. Therefore this is not a completely green broad suite.
+
+Machine-readable counts and exact inherited failure node IDs are recorded in
+`.science/main-infer-integration-20261013/validation.json`. These are local
+source/unit checks; no new TPU end-to-end validation or deployment was performed.

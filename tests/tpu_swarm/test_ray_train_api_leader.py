@@ -27,7 +27,7 @@ def test_only_api_leader_backs_up_database_and_logs_do_not_collide(tmp_path, mon
     (tmp_path / 'client').mkdir()
     (tmp_path / 'client/cohort.json').write_text('{}')
     (tmp_path / 'trainer.log').write_text('trainer')
-    host = SimpleNamespace(rank=rank, trainer_leader=7, run=tmp_path,
+    host = SimpleNamespace(rank=rank, trainer_leader=7, run=tmp_path, log=tmp_path / 'host.jsonl',
                            config=SimpleNamespace(run_gcs='gs://test/run', cache=None))
     host.run_sync_lock = threading.Lock()
     host._sync_run = lambda: module.Host._sync_run(host)
@@ -49,7 +49,7 @@ def test_restore_routes_client_to_head_and_database_to_api_leader(tmp_path, rank
     gcs = SimpleNamespace(list=lambda *a, **kw: ['client'], metadata=lambda *a, **kw: json.dumps(['db']),
                           transfer=transfer)
     host = SimpleNamespace(rank=rank, trainer_leader=7, run=tmp_path, gcs=gcs,
-                           config=SimpleNamespace(run_gcs='gs://test/run', seed_pool_sha256=''))
+                           config=SimpleNamespace(run_gcs='gs://test/run', seed_pool_sha256='', science_task=''))
     module.Host.restore_run(host)
     assert calls == (['restore-run'] if rank == 0 else ['restore-database'])
 

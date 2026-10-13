@@ -158,6 +158,9 @@ def test_ray_id_reaches_subprocess_device_and_environment(tmp_path, monkeypatch,
     source = tmp_path/'candidate.py'
     source.write_text('def place(*args, **kwargs): pass')
     captured = {}
+    # Runtime validation has dedicated coverage; this test inspects device routing.
+    from tpu.science import placement_runtime
+    monkeypatch.setattr(placement_runtime, 'validate_runtime', lambda *args: None)
     monkeypatch.setenv('TPU_VISIBLE_CHIPS', '0')  # Must not override Ray chip 3.
     monkeypatch.setattr(placement_task, 'python_mounts', lambda _: [])
     monkeypatch.setattr(placement_task, 'device_paths',
