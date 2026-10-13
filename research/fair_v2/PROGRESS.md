@@ -152,8 +152,13 @@ Leaderboard feedback is used for choosing among submissions.
   plain re-fit +0.005 mostly from the gradient shift; v3-19a/b built, `agents/outlier/ft/`), 3-net OE ensemble (v3-17,
   dropped; `factory/build_v317.py`).
 - **MOMO feature factory:** TPU grader (`factory/tpu_grader`) and farm grading family `fair` on branch `agent/fair-momo`
-  (SkyRL-Main-infer-fair); control replay matched the della grader exactly; the train+infer smoke and both FAIR farms
-  were spot-preempted (jobs 2381/2382/2398 RECOVERING), so MOMO produced no candidates before the deadline.
+  (SkyRL-Main-infer-fair); control replay matched the della grader exactly. The train+infer smoke (job 2398) never
+  finished a step: the run's LoRA adapter was never published to the leased farm, and a run with an adapter only
+  treats a leased farm as usable for generation AND grading after that publish, so every FAIR grade waited
+  (~6,900 grading_no_pool events) until the preemption wave ended the job. Fix to try first: grading eligibility in
+  multi_borrowing.farm_leases independent of the adapter (lease held + phase active), and find why _prepare never
+  published. Logs: gs://sk7524-tinker-tpu-us-east5/ray-training/fair-momo-qwen35-v5p32-s1-smoke/logs/. FAIR MOMO
+  is tabled (2026-10-12); farm 001 (2381) failed, farm 002 (2382) pending release.
 - **Next round, in order:** honest validation (retrain the learned networks per held-out fold; a fresh untouched set of
   distortion types; grouped bootstrap of the 0.1-5% tail), OE diversity and per-fold OE training, a small regularized
   combiner over OE family logits, a fit fix for boundary solutions on edge universes, finer consistency tests.
