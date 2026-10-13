@@ -37,12 +37,12 @@
         "memory_gib": 4
       },
       "routing": {
-        "slots_per_host": 13,
+        "slots_per_host": 14,
         "cpus": 10,
         "memory_gib": 20
       },
       "placement": {
-        "slots_per_host": 32,
+        "slots_per_host": 36,
         "cpus": 4,
         "memory_gib": 4
       }
