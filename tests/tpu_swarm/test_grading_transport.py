@@ -136,7 +136,7 @@ def test_local_and_farm_pools_share_candidates_by_predicted_admission():
     asyncio.run(run())
 
 
-def test_farm_loss_mid_grade_retries_elsewhere_under_an_attempt_id():
+def test_farm_loss_mid_grade_reroutes_elsewhere_under_a_new_id_uncharged():
     async def run():
         farm = GradingFarm()
         farm.outcomes['b'] = done({'result': [2.0], 'error': None, 'metrics': {}})
@@ -155,9 +155,10 @@ def test_farm_loss_mid_grade_retries_elsewhere_under_an_attempt_id():
             assert result['result'] == [2.0]
             assert [h for h, _ in farm.submits] == ['a', 'b']
             assert farm.submits[0][1] == req.request_id and farm.submits[1][1] == retry_id(req.request_id, 1)
-            retries = [f for e, f in t.reports if e == 'grading_retry']
-            assert retries and retries[0]['from_pool'] == 'a' and retries[0]['attempt'] == 1
-            assert not any(e == 'grading_infra_failure' for e, _ in t.reports)
+            # Request protocol: consecutive failed polls -> resubmitted elsewhere, not a charged retry.
+            reroutes = [f for e, f in t.reports if e == 'grading_reroute']
+            assert reroutes and reroutes[0]['pool'] == 'a' and reroutes[0]['kind'] == 'poll_miss'
+            assert not any(e in ('grading_retry', 'grading_infra_failure') for e, _ in t.reports)
             assert not t.directory.pools['a'].healthy(time.monotonic())
         finally:
             await t.close()
@@ -220,7 +221,9 @@ def test_429_reschedules_without_counting_a_retry():
         try:
             task = asyncio.create_task(t.grade(request()))
             await asyncio.sleep(.05)
-            assert not task.done() and t.directory.pools['a'].queued == 1
+            # A refusal is not an ACK: the client waits and tries again; nothing was accepted on 'a'.
+            assert not task.done() and not farm.submits
+            assert any(e == 'grading_farm_busy' for e, _ in t.reports)
             farm.busy.discard('a')
             result = await asyncio.wait_for(task, 5)
             assert result['result'] == [1.0] and not any(e == 'grading_retry' for e, _ in t.reports)

@@ -38,6 +38,8 @@ import uuid
 
 import httpx
 
+from tpu.swarm.ray_train.request_protocol import Limits, Lost, Refused, drive
+
 INFRA_MARKERS = ('infrastructure', 'admission timed out', 'before the candidate started', 'without a result file',
                  'WorkerCrashedError', 'RayActorError', 'NodeDiedError', 'OwnerDiedError', 'ObjectLostError',
                  'RaySystemError', 'cpu_scheduler')
@@ -66,12 +68,22 @@ class GradingInfrastructureError(RuntimeError):
     abort_training_step = True
 
 
-class FarmBusy(Exception):
-    """An open farm declined the request (full, or another grader version): try another pool."""
+# A farm that did not ACK (full, another grader version, unreachable): try another pool, uncharged.
+FarmBusy = Refused
+# Request protocol thresholds (tpu/swarm/ray_train/request_protocol.py): consecutive failed polls before an ACKed grade
+# is resubmitted elsewhere, and how long it may sit queued on a farm (x its own time cap) before it moves.
+POLL_MISS_LIMIT = int(os.environ.get('SKYRL_GRADING_POLL_MISS_LIMIT') or 3)
+QUEUE_LIMIT_FACTOR = float(os.environ.get('SKYRL_GRADING_QUEUE_LIMIT_FACTOR') or 2.0)
+# Each family's own wall-clock cap for one grade: routing outer envelope, placement case envelope.
+DEFAULT_TIME_CAPS = {'routing': 2100, 'placement': 510, 'math': 600}
 
-    def __init__(self, reason, retry_after=5.0):
-        super().__init__(reason)
-        self.retry_after = float(retry_after)
+
+def time_cap(request):
+    if request.time_cap_s:
+        return float(request.time_cap_s)
+    if request.task == 'math' and request.spec.get('eval_timeout_seconds'):
+        return float(request.spec['eval_timeout_seconds'])
+    return float(DEFAULT_TIME_CAPS.get(request.task, 600))
 
 
 def local_grader_sha256():
@@ -90,6 +102,8 @@ class GradingRequest:
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     admission_timeout_s: int = 1100
     deadline_s: float | None = None
+    # The grade's own wall-clock cap; None = the family default (DEFAULT_TIME_CAPS).
+    time_cap_s: float | None = None
 
 
 def is_infrastructure(exc):
@@ -134,7 +148,7 @@ class Pool:
     def serves(self, task):
         return True
 
-    async def run(self, request, on_started, attempt=0):
+    async def run(self, request, on_started, attempt=0, alternative=lambda: True):
         raise NotImplementedError
 
     async def cancel(self, request_id):
@@ -185,7 +199,7 @@ class LocalRayPool(Pool):
     def awaitable(ref):
         return asyncio.wrap_future(ref.future()) if hasattr(ref, 'future') else ref
 
-    async def run(self, request, on_started, attempt=0):
+    async def run(self, request, on_started, attempt=0, alternative=lambda: True):
         ref = self.dispatch(request)
         self.refs[request.request_id] = ref
         on_started(self)
@@ -261,8 +275,9 @@ class FarmPool(Pool):
         self.advertised = capacity
         return True
 
-    async def run(self, request, on_started, attempt=0):
-        # Farms accept only 32-hex ids.
+    async def run(self, request, on_started, attempt=0, alternative=lambda: True):
+        """Submit, then poll to a verdict (request_protocol.drive): Refused before an ACK, Lost after one."""
+        # Farms accept only 32-hex ids; every submission gets its own, so a late result is never confused.
         wire_id = (request.request_id if not attempt else
                    hashlib.sha256(f'{request.request_id}:{attempt}'.encode()).hexdigest()[:32])
         self.wire_ids[request.request_id] = wire_id
@@ -270,43 +285,47 @@ class FarmPool(Pool):
                     scope=request.scope, spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
         if self.open:
             body['grader_sha256'] = self.grader_sha256
-        while True:
-            async with self.gate:
-                response = await self.http.post(self.url + '/skyrl/v1/grading/submit', json=body,
-                                                headers=self.headers, timeout=wait_for_connection(30))
-            if self.open and response.status_code == 429:
-                raise FarmBusy(f'farm {self.name} full', response.json().get('retry_after', 5))
+
+        async def submit():
+            try:
+                async with self.gate:
+                    response = await self.http.post(self.url + '/skyrl/v1/grading/submit', json=body,
+                                                    headers=self.headers, timeout=wait_for_connection(30))
+            except httpx.TransportError as exc:
+                # No ACK: it may still have been accepted, so cancel that id once and go elsewhere.
+                await self.cancel(request.request_id)
+                self.unhealthy_until = time.monotonic() + 30
+                raise Refused(f'farm {self.name} unreachable: {type(exc).__name__}', 30) from exc
+            if response.status_code == 429:
+                raise Refused(f'farm {self.name} full', response.json().get('retry_after', 5))
             if self.open and response.status_code == 409 and 'grader version' in response.text:
                 self.eligible = False
-                raise FarmBusy(f'farm {self.name}: {response.json().get("detail")}', 3600)
-            if response.status_code == 429:
-                # Farm backpressure is a wait, never a retry: the request keeps
-                # its queued slot in this pool's accounting.
-                await asyncio.sleep(float(response.json().get('retry_after', 5)))
-                continue
+                raise Refused(f'farm {self.name}: {response.json().get("detail")}', 3600)
             response.raise_for_status()
-            break
-        on_started(self)
-        while True:
-            if self.retired:
-                raise GradingInfrastructureError(f'farm {self.name}: lease no longer eligible')
+
+        async def poll():
             async with self.gate:
                 response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{wire_id}',
                                                params={'wait': self.long_poll_seconds}, headers=self.headers,
                                                timeout=wait_for_connection(self.long_poll_seconds + 30))
+            if response.status_code == 404:
+                return None
             response.raise_for_status()
-            view = response.json()
-            state = view.get('state')
-            if state == 'done':
-                result = view.get('result')
-                if not isinstance(result, dict):
-                    raise GradingInfrastructureError(f'farm {self.name}: done without a result')
-                self.wire_ids.pop(request.request_id, None)
-                return result
-            if state in ('failed', 'cancelled'):
-                error = view.get('error') or {}
-                raise GradingInfrastructureError(f'farm {self.name}: {error.get("class")}: {error.get("detail")}')
-            await asyncio.sleep(0 if self.long_poll_seconds else self.poll_seconds)
+            return response.json()
+
+        limits = Limits(poll_miss_limit=POLL_MISS_LIMIT, queue_limit_s=QUEUE_LIMIT_FACTOR * time_cap(request),
+                        poll_interval_s=self.poll_seconds,
+                        between_polls_s=0 if self.long_poll_seconds else self.poll_seconds)
+        view = await drive(submit, poll, lambda: self.cancel(request.request_id), limits=limits,
+                           alternative=alternative, retired=lambda: self.retired, on_ack=lambda: on_started(self))
+        if view.get('state') == 'done':
+            result = view.get('result')
+            if not isinstance(result, dict):
+                raise GradingInfrastructureError(f'farm {self.name}: done without a result')
+            self.wire_ids.pop(request.request_id, None)
+            return result
+        error = view.get('error') or {}
+        raise GradingInfrastructureError(f'farm {self.name}: {error.get("class")}: {error.get("detail")}')
 
     async def cancel(self, request_id):
         request_id = self.wire_ids.pop(request_id, request_id)
@@ -489,10 +508,16 @@ class GradingScheduler:
     def __init__(self, rng=None):
         self.rng = rng or random.Random()
 
-    def choose(self, pools, now, task=None):
-        candidates = [p for p in pools if p.healthy(now) and p.serves(task)]
+    def choose(self, pools, now, task=None, exclude=None):
+        candidates = [p for p in pools if p is not exclude and p.healthy(now) and p.serves(task)]
         if not candidates:
             return None
+        local = [p for p in candidates if p.kind == 'local']
+        # Local grading capacity first: a free local slot always wins. Once every local slot is busy,
+        # spread over the farms; queue locally only when no farm can take it.
+        if local and local[0].running + local[0].queued < local[0].capacity_for(task):
+            return local[0]
+        candidates = [p for p in candidates if p.kind != 'local'] or local
         key = lambda p: (p.predicted_wait(task), p.kind != 'local', p.name)
         if any(getattr(p, 'open', False) for p in candidates) and len(candidates) > 2:
             # Power of two choices: the less loaded of two random pools.
@@ -631,6 +656,7 @@ class GradingTransport:
         if request.task not in self.families and self.local:
             raise GradingInfrastructureError(f'grading family {request.task!r} is not configured')
         attempts = 0
+        tries = 0
         while True:
             pool = await self._choose(request, attempts)
             pool.queued += 1
@@ -643,17 +669,31 @@ class GradingTransport:
                 p.running += 1
             self.report('grading_dispatched', request_id=request.request_id, task=request.task, pool=pool.name,
                         attempt=attempts, predicted_wait_s=round(pool.predicted_wait(request.task), 1))
+            submission = tries
+            tries += 1
+            alternative = lambda pool=pool: self.scheduler.choose(self.pools(), time.monotonic(), request.task,
+                                                                  exclude=pool) is not None
             try:
-                result = await pool.run(request, on_started, attempts)
+                result = await pool.run(request, on_started, submission, alternative=alternative)
                 from .placement_runtime import reject_infrastructure_result
                 reject_infrastructure_result(result)
             except asyncio.CancelledError:
                 await pool.cancel(request.request_id)
                 raise
-            except FarmBusy as exc:
-                # Full or wrong grader version: another pool, not an infrastructure attempt.
+            except Refused as exc:
+                # No ACK (full, wrong grader version, unreachable): another pool, not a charged attempt.
                 pool.full_until = time.monotonic() + exc.retry_after
                 self.report('grading_farm_busy', request_id=request.request_id, pool=pool.name, reason=str(exc)[:200])
+                continue
+            except Lost as exc:
+                # ACKed but must move (server dead, left the directory, or queued too long): resubmit
+                # elsewhere. An infrastructure reroute, never a candidate failure, and not charged.
+                if exc.kind == 'poll_miss':
+                    pool.unhealthy_until = time.monotonic() + 30
+                elif exc.kind == 'queued_too_long':
+                    pool.full_until = time.monotonic() + 30
+                self.report('grading_reroute', request_id=request.request_id, pool=pool.name, kind=exc.kind,
+                            reason=str(exc)[:200])
                 continue
             except Exception as exc:
                 if not isinstance(exc, GradingInfrastructureError) and not is_infrastructure(exc):
