@@ -13,9 +13,9 @@ Two modes share one queue:
 """
 import asyncio
 from collections import deque
-import hashlib
-import json
 import time
+
+from .generation_journal import group_key
 
 
 class Refused:
@@ -35,11 +35,6 @@ class GroupDropped(Exception):
         super().__init__(f'generation_group_dropped: group {group} failed on farms {attempts} times')
         self.group = group
         self.attempts = attempts
-
-
-def _group_id(payload):
-    body = json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)
-    return hashlib.sha256(body.encode()).hexdigest()[:32]
 
 
 class HybridScheduler:
@@ -142,7 +137,7 @@ class HybridScheduler:
         prompt = payload.get('prompt', [])
         n = payload.get('n', 1)
         work = max(1, n * (len(prompt) + payload.get('max_tokens', 1)))
-        group = _group_id(payload) if self.farms is not None else None
+        group = group_key(payload) if self.farms is not None else None
         ticket = object()
         force_local = local_only
         started_waiting = time.monotonic()

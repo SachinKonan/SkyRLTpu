@@ -329,16 +329,10 @@ class MultiRunBorrower:
             self.reconcile_task = None
 
     def outstanding(self):
-        try:
-            return max(0, int(self.demand())) if self.demand else None
-        except Exception:
-            return None
+        return self.demand() if self.demand else None
 
     def generated_this_phase(self):
-        try:
-            return int(self.completed()) - self.phase_completed_at_begin if self.completed else 0
-        except Exception:
-            return 0
+        return self.completed() - self.phase_completed_at_begin if self.completed else 0
 
     def wanted(self):
         """Leases to hold now: one for admission before the first phase, none between phases,
@@ -427,10 +421,7 @@ class MultiRunBorrower:
             self.phase, self.model = phase, model
             self.phase_archive, self.phase_expected_n = archive, expected_n
             self.phases_begun += 1
-            try:
-                self.phase_completed_at_begin = int(self.completed()) if self.completed else 0
-            except Exception:
-                self.phase_completed_at_begin = 0
+            self.phase_completed_at_begin = self.completed() if self.completed else 0
             for member in self.held():
                 try:
                     await member.begin(phase, model, archive, expected_n=expected_n)

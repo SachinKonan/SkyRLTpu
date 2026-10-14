@@ -659,20 +659,21 @@ class Ingress:
         return sum(1 for name, (seen, _) in self.lease_waiters.items() if name != owner and seen < first)
 
     def check_generation_payload(self, payload, lease_id):
+        """Admission checks shared by /v1/completions and /skyrl/v1/generation/submit (call under condition)."""
         if not isinstance(payload, dict):
             raise HTTPException(400, 'payload is required')
         if payload.get("stream"):
             raise HTTPException(400, "training endpoint expects complete generation responses")
         if payload.get("seed") is not None:
             raise HTTPException(400, "TPU backend does not support per-request seeds")
-        if not payload.get("model"):
-            raise HTTPException(400, "model is required")
         self.require_lease(lease_id)
         if (self.config.inference.require_lease and payload.get("model") not in self.config.served_models
                 and payload.get("model") != self.lease["adapter_name"]):
             raise HTTPException(409, "adapter has not been verified for this lease")
         if self.updating or payload.get("model") not in self.versions | set(self.config.served_models):
             raise HTTPException(409, "adapter update in progress or uncommitted model")
+        if not payload.get("model"):
+            raise HTTPException(400, "model is required")
 
     @staticmethod
     def generation_identity(request):
@@ -1259,19 +1260,8 @@ class Ingress:
     @app.post("/v1/completions")
     async def generate(self, request: Request):
         payload = await request.json()
-        if payload.get("stream"):
-            raise HTTPException(400, "training endpoint expects complete generation responses")
-        if payload.get("seed") is not None:
-            raise HTTPException(400, "TPU backend does not support per-request seeds")
         async with self.condition:
-            self.require_lease(request.headers.get("x-lease-id"))
-            if (self.config.inference.require_lease and payload.get("model") not in self.config.served_models
-                    and payload.get("model") != self.lease["adapter_name"]):
-                raise HTTPException(409, "adapter has not been verified for this lease")
-            if self.updating or payload.get("model") not in self.versions | set(self.config.served_models):
-                raise HTTPException(409, "adapter update in progress or uncommitted model")
-            if not payload.get("model"):
-                raise HTTPException(400, "model is required")
+            self.check_generation_payload(payload, request.headers.get("x-lease-id"))
             self.active += 1
         return await self.finish_admitted("generate", payload,
             local_only=request.headers.get('x-skyrl-local-only') == '1',

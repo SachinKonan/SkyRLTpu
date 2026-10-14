@@ -26,7 +26,6 @@ States: ``queued`` (acknowledged, waiting for a farm admission slot), ``running`
 import asyncio
 import time
 
-STATES = ('queued', 'running', 'done', 'failed', 'cancelled')
 FINAL = ('done', 'failed', 'cancelled')
 
 
@@ -161,10 +160,3 @@ class GenerationJobs:
                 entry['task'].cancel()
                 count += 1
         return count
-
-    def snapshot(self):
-        counts = {state: 0 for state in STATES}
-        for entry in self.entries.values():
-            counts[entry['state']] += 1
-        counts['duplicates'] = self.duplicates
-        return counts

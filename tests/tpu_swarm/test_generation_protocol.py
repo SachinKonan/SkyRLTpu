@@ -320,7 +320,7 @@ def test_run_identity_reclaims_a_group_after_the_lease_is_gone():
         view = await jobs.result('g1', dict(lease_id='new-lease', run='run-a', token='t'))
         assert view['state'] == 'done' and view['result'] == {'choices': ['x']}
         assert jobs.submit('g2', owner, work)[0] == 202 and jobs.submit('g2', owner, work)[1]['duplicate']
-        assert jobs.snapshot()['duplicates'] == 1
+        assert jobs.duplicates == 1
     asyncio.run(run())
 
 

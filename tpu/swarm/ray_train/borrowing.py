@@ -550,6 +550,7 @@ class Borrower:
                 self.changed.notify_all()
 
     async def _direct_generation(self, lease, body):
+        # REMOVE once every farm advertises generation_protocol 1 (rollout fallback for old farms).
         response = await self.http.post(lease.url + '/v1/completions', json=body, headers=lease.headers,
                                         timeout=self.settings.request_timeout)
         response.raise_for_status()
@@ -582,7 +583,7 @@ class Borrower:
         round (resubmitting a known id is idempotent on the farm). Request ids are fresh per attempt, so
         a late result from an abandoned farm is never taken.
         """
-        from .request_protocol import Limits, Lost, Refused, drive
+        from .request_protocol import _CANCELS, Limits, Lost, Refused, drive
         settings = self.settings
         rpc = settings.external_pool_rpc_timeout
         key = key or request_id
@@ -610,8 +611,11 @@ class Borrower:
             return response.json()
 
         async def cancel():
-            await self.http.post(lease.url + f'/skyrl/v1/generation/cancel/{request_id}', headers=headers,
-                                 timeout=rpc)
+            try:
+                await self.http.post(lease.url + f'/skyrl/v1/generation/cancel/{request_id}', headers=headers,
+                                     timeout=rpc)
+            except Exception:
+                pass  # best effort: the farm's request TTL cancels it anyway
 
         limits = Limits(poll_miss_limit=settings.external_pool_generation_poll_failures,
                         queue_limit_s=settings.external_pool_generation_queue_timeout,
@@ -637,27 +641,15 @@ class Borrower:
                 raise FarmBusy(str(exc)) from None  # the farm is slow, not dead: keep the lease
             raise GenerationFailed(str(exc), dead=True) from None
         except asyncio.CancelledError:
-            self._cancel_once(lease, request_id)
+            task = asyncio.ensure_future(cancel())  # once, never awaited
+            _CANCELS.add(task)
+            task.add_done_callback(_CANCELS.discard)
             log('abandoned', reason='caller cancelled')
             raise
         if view.get('state') == 'done':
             return view.get('result')
         log('lost', reason=f"farm {view.get('state')} the group: {view.get('error')}")
         raise GenerationFailed(f"farm {view.get('state')} the group: {view.get('error')}", view.get('status'))
-
-    def _cancel_once(self, lease, request_id):
-        """Ask the farm to drop an abandoned group; never wait for the answer."""
-        async def cancel():
-            try:
-                await self.http.post(lease.url + f'/skyrl/v1/generation/cancel/{request_id}',
-                                     headers=self._generation_headers(lease),
-                                     timeout=self.settings.external_pool_rpc_timeout)
-            except Exception:
-                pass
-        task = asyncio.get_running_loop().create_task(cancel())
-        self._pending_cancels = getattr(self, '_pending_cancels', set())
-        self._pending_cancels.add(task)
-        task.add_done_callback(self._pending_cancels.discard)
 
     async def _release(self, lease):
         lease.draining = True
