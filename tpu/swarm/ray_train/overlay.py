@@ -84,6 +84,7 @@ BORROWING_FILES = {'tpu/run_ttd_ensemble.py', 'tpu/swarm/ray_train/__init__.py',
 # Client-side grading transport (local Ray pool + leased farms) and the math
 # executor it dispatches; shipped whenever a profile declares grading families.
 GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.py',
+                 'tpu/swarm/ray_train/request_protocol.py',
                  'tpu/science/__init__.py', 'tpu/science/grading_transport.py', 'tpu/science/grading_dedup.py',
                  'tpu/science/math_grade.py', 'tpu/science/math_runner.py', 'tpu/science/farm_resources.py', 'tpu/science/core_pool.py',
                  'tpu/science/cgroup_limits.py', 'tpu/science/cpu_slots.py', 'tpu/science/worker.py',
