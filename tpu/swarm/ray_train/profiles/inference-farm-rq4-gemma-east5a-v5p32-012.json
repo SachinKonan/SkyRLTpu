@@ -13,7 +13,7 @@
   },
   "inference": {
     "tp": 2,
-    "max_sequences": 12,
+    "max_sequences": 16,
     "memory_utilization": 0.85,
     "routing": "ingress",
     "restart_limit": 0,
