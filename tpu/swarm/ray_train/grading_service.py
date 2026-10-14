@@ -1,8 +1,13 @@
-"""Lease-fenced candidate grading on an inference farm's own Ray cluster.
+"""Candidate grading on an inference farm's own Ray cluster, leased or open.
 
-The ingress owns the lease, so it also owns grading admission: every request
-carries the lease token, results are retained briefly for the owning trainer
-to fetch, and lease release/expiry cancels everything in flight. The ingress
+Leased: a request carries the farm's lease token, results are retained briefly
+for the owning trainer to fetch, and lease release/expiry cancels its work.
+Open: any run may grade here without a lease (grading does not depend on the
+served model); a request carries ``X-Grading-Run`` and a per-process
+``X-Grading-Token`` instead, is admitted only below ``slots * OPEN_QUEUE_FACTOR``
+(otherwise 429 with the farm's load), and survives lease changes. Every run has
+its own FIFO queue and the queues are dispatched round-robin, at most one Ray
+task per family slot, so one run cannot take every slot. The ingress
 never executes candidates; it dispatches the same Ray tasks trainer hosts use
 (``tpu.science.math_grade.grade_math``, ``tpu.science.ray_cpu.grade``,
 ``tpu.science.placement_ray.grade_cpu_case``) with per-family Ray slot tokens
@@ -15,9 +20,11 @@ result and stays a reward-zero grade.
 """
 import asyncio
 from dataclasses import dataclass, field
+import hashlib
 import os
 from pathlib import Path
 import re
+import socket
 import time
 
 REQUEST_ID = re.compile(r'[0-9a-f]{32}')
@@ -25,15 +32,45 @@ IDENTIFIER = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 TERMINAL = ('done', 'failed', 'cancelled')
 MAX_PROGRAM_BYTES = 1024 * 1024
 REFERENCE_MATH = 'def construct_function():\n    return [1.0] * 1000\n'
+# Open (lease-free) requests are admitted only below this many per family slot.
+OPEN_QUEUE_FACTOR = 1.5
+# tpu/science files that run on the trainer/client, not in the graders.
+CLIENT_ONLY = frozenset({'grading_transport.py', 'training_env.py', 'feedback.py', 'grading_dedup.py'})
+
+
+def grader_sha256(root=None):
+    """Hash of the grading code a farm runs: every tpu/science module but the client-side ones.
+
+    A client and a farm built from the same tree agree on it; a request that names a
+    different hash is refused, so a candidate is never scored by another grader version."""
+    root = Path(root) if root else Path(__file__).resolve().parents[2] / 'science'
+    digest = hashlib.sha256()
+    for path in sorted(root.glob('*.py')):
+        if path.name not in CLIENT_ONLY:
+            digest.update(path.name.encode() + b'\0' + path.read_bytes() + b'\0')
+    return digest.hexdigest()
+
+
+def cpu_model():
+    try:
+        for line in Path('/proc/cpuinfo').read_text().splitlines():
+            if line.startswith('model name'):
+                return line.split(':', 1)[1].strip()
+    except OSError:
+        pass
+    return 'unknown'
 
 
 @dataclass
 class Entry:
     request_id: str
     task: str
-    lease_id: str
+    lease_id: str | None
     owner_run: str
     scope: dict
+    # Open requests: the submitting process's token; result/cancel must present it.
+    token: str | None = None
+    spec: dict | None = field(default=None, repr=False)
     state: str = 'queued'
     ref: object = None
     waiter: asyncio.Task | None = field(default=None, repr=False)
@@ -87,6 +124,13 @@ class GradingService:
         self.readiness = {}
         self.counters = dict(completed=0, infra_failures=0, candidate_failures=0, cancelled=0)
         self.worker_root = os.environ.get('SCIENCE_WORKER_ROOT')
+        # Per-run FIFO queues of admitted, not yet dispatched entries (round-robin by run).
+        self.queues = {}
+        self.turn = {}
+        self.grader_sha256 = grader_sha256()
+        self.metadata = dict(grading_host_class=getattr(config, 'accelerator', '') or '',
+                             grading_cpu_model=cpu_model(), grading_farm=getattr(config, 'run_id', '') or '',
+                             grading_ingress_host=socket.gethostname())
         self.reaper = asyncio.create_task(self._reap_loop())
         self.warmup_task = asyncio.create_task(self._warmup()) if warmup else None
 
@@ -94,9 +138,20 @@ class GradingService:
     def slots_total(self, task):
         return self.families[task]['slots_per_host'] * max(1, len(self.ips))
 
-    def running(self, task=None):
+    def running(self, task=None, *, leased_only=False):
+        """Admitted and unfinished (queued here or dispatched)."""
         return sum(1 for e in self.entries.values() if e.state in ('queued', 'running')
-                   and (task is None or e.task == task))
+                   and (task is None or e.task == task) and not (leased_only and e.lease_id is None))
+
+    def dispatched(self, task):
+        return sum(1 for e in self.entries.values() if e.state == 'running' and e.task == task)
+
+    @staticmethod
+    def owner_key(identity):
+        return ('lease', identity['lease_id']) if identity.get('lease_id') else ('open', identity.get('token'))
+
+    def owns(self, entry, identity):
+        return self.owner_key(identity) == (('lease', entry.lease_id) if entry.lease_id else ('open', entry.token))
 
     def running_by_host(self):
         result = {}
@@ -109,9 +164,11 @@ class GradingService:
         families = {}
         for name, spec in self.families.items():
             families[name] = dict(spec, total=self.slots_total(name), running=self.running(name),
-                                  queued=sum(1 for e in self.entries.values() if e.state == 'queued' and e.task == name))
+                                  queued=sum(1 for e in self.entries.values() if e.state == 'queued' and e.task == name),
+                                  open_limit=int(self.slots_total(name) * OPEN_QUEUE_FACTOR))
         return dict(ready=self.ready, hosts=len(self.ips), families=families,
-                    lease_id=lease['lease_id'] if lease else None, readiness=self.readiness)
+                    lease_id=lease['lease_id'] if lease else None, readiness=self.readiness,
+                    open=True, grader_sha256=self.grader_sha256, **self.metadata)
 
     def snapshot(self):
         return dict(ready=self.ready, families=sorted(self.families), queue_depth=self.running(),
@@ -213,28 +270,67 @@ class GradingService:
         return asyncio.wrap_future(ref.future()) if hasattr(ref, 'future') else ref
 
     # -- lifecycle --------------------------------------------------------
+    def load(self, task):
+        return dict(task=task, total=self.slots_total(task), running=self.dispatched(task),
+                    queued=self.running(task) - self.dispatched(task))
+
     async def submit(self, lease, body):
-        """Idempotent by request_id; returns (http_status, view)."""
+        """Idempotent by request_id; returns (http_status, view).
+
+        ``lease`` is the farm lease, or for an open request an identity
+        ``dict(lease_id=None, owner_run=..., token=...)``."""
         try:
             spec = self.validate(body)
         except ValueError as exc:
             return 400, dict(detail=str(exc))
         request_id, task = body['request_id'], body['task']
+        wanted = body.get('grader_sha256')
+        if wanted is not None and wanted != self.grader_sha256:
+            return 409, dict(detail=f'grader version mismatch: request {str(wanted)[:16]}, farm {self.grader_sha256[:16]}',
+                             grader_sha256=self.grader_sha256)
         existing = self.entries.get(request_id)
         if existing is not None:
-            if existing.lease_id != lease['lease_id']:
-                return 409, dict(detail='request belongs to another lease')
+            if not self.owns(existing, lease):
+                return 409, dict(detail='request belongs to another lease or client')
             return 200, existing.view()
         if len(self.entries) >= self.settings.max_requests:
-            return 429, dict(detail='grading registry full', retry_after=5)
-        if self.running(task) >= self.slots_total(task) * self.settings.queue_factor:
-            return 429, dict(detail='grading queue full', retry_after=5)
-        entry = Entry(request_id=request_id, task=task, lease_id=lease['lease_id'],
-                      owner_run=lease['owner_run'], scope=body.get('scope') or {})
+            return 429, dict(detail='grading registry full', retry_after=5, **self.load(task))
+        limit = OPEN_QUEUE_FACTOR if lease.get('lease_id') is None else self.settings.queue_factor
+        if self.running(task) >= self.slots_total(task) * limit:
+            return 429, dict(detail='grading queue full', retry_after=5, **self.load(task))
+        entry = Entry(request_id=request_id, task=task, lease_id=lease.get('lease_id'),
+                      owner_run=lease.get('owner_run') or '', scope=body.get('scope') or {},
+                      token=None if lease.get('lease_id') else lease.get('token'), spec=spec)
         self.entries[request_id] = entry
-        entry.waiter = asyncio.create_task(self._run(entry, spec))
-        self._event('grading_submitted', request_id=request_id, task=task, owner_run=entry.owner_run)
+        self.queues.setdefault(task, {}).setdefault(entry.owner_run, []).append(entry)
+        self._event('grading_submitted', request_id=request_id, task=task, owner_run=entry.owner_run,
+                    open=entry.lease_id is None)
+        self._pump(task)
         return 202, entry.view()
+
+    def _pump(self, task):
+        """Dispatch queued entries round-robin across runs while family slots are free."""
+        queues = self.queues.get(task) or {}
+        while queues and self.dispatched(task) < self.slots_total(task):
+            runs = sorted(queues)
+            last = self.turn.get(task)
+            run = next((r for r in runs if last is None or r > last), runs[0])
+            self.turn[task] = run
+            entry = queues[run].pop(0)
+            if not queues[run]:
+                del queues[run]
+            if entry.state != 'queued':
+                continue
+            entry.state = 'running'
+            entry.waiter = asyncio.create_task(self._run(entry, entry.spec))
+
+    def _unqueue(self, entry):
+        runs = self.queues.get(entry.task) or {}
+        queue = runs.get(entry.owner_run)
+        if queue and entry in queue:
+            queue.remove(entry)
+            if not queue:
+                del runs[entry.owner_run]
 
     async def _run(self, entry, spec):
         try:
@@ -246,6 +342,8 @@ class GradingService:
                 raise RuntimeError('executor returned a non-dict result')
             from tpu.science.placement_runtime import reject_infrastructure_result
             reject_infrastructure_result(result)
+            # Where it was graded (recorded only; the reward is untouched).
+            result['metrics'] = dict(result.get('metrics') or {}, grader_sha256=self.grader_sha256, **self.metadata)
             entry.result = result
             entry.host = (result.get('metrics') or {}).get('host')
             entry.state = 'done'
@@ -267,12 +365,13 @@ class GradingService:
             entry.done.set()
             self._event('grading_finished', request_id=entry.request_id, task=entry.task, state=entry.state,
                         error=(entry.error or {}).get('class'))
+            self._pump(entry.task)
 
     async def result(self, lease, request_id, wait=0):
         entry = self.entries.get(request_id)
         if entry is None:
             return None
-        if entry.lease_id != lease['lease_id']:
+        if not self.owns(entry, lease):
             return None
         if wait > 0 and not entry.done.is_set():
             try:
@@ -288,6 +387,14 @@ class GradingService:
         if entry is None:
             return None
         if entry.state not in TERMINAL:
+            if entry.waiter is None:
+                # Still in its run's queue here: never dispatched.
+                self._unqueue(entry)
+                entry.state = 'cancelled'
+                entry.error = dict(**{'class': 'cancelled'}, detail='cancelled')
+                entry.finished = time.monotonic()
+                entry.done.set()
+                self.counters['cancelled'] += 1
             if entry.ref is not None:
                 try:
                     self.cancel_ref(entry.ref)
@@ -299,8 +406,10 @@ class GradingService:
             self._event('grading_cancelled', request_id=request_id, reason=reason)
         return entry.view()
 
-    async def cancel_all(self, reason):
-        active = [e.request_id for e in self.entries.values() if e.state not in TERMINAL]
+    async def cancel_all(self, reason, *, include_open=False):
+        """Cancel leased work (lease release/expiry/takeover); open requests survive unless closing."""
+        active = [e.request_id for e in self.entries.values() if e.state not in TERMINAL
+                  and (include_open or e.lease_id is not None)]
         for request_id in active:
             await self.cancel(request_id, reason)
         if active:
@@ -309,9 +418,9 @@ class GradingService:
 
     async def drain(self, timeout):
         deadline = time.monotonic() + timeout
-        while self.running() and time.monotonic() < deadline:
+        while self.running(leased_only=True) and time.monotonic() < deadline:
             await asyncio.sleep(.05)
-        return self.running() == 0
+        return self.running(leased_only=True) == 0
 
     def _event(self, event, **fields):
         try:
@@ -402,7 +511,7 @@ class GradingService:
         self._event('grading_readiness', ready=self.ready, readiness=self.readiness)
 
     async def close(self):
-        await self.cancel_all('service closing')
+        await self.cancel_all('service closing', include_open=True)
         for task in (self.reaper, self.warmup_task):
             if task is not None and not task.done():
                 task.cancel()

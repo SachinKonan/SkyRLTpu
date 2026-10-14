@@ -58,6 +58,12 @@ def child_environment(config, root, args, gcs):
     for key in ('TTD_EAGER_STEP_FRACTION', 'TTD_RENDERER_DATE'):
         if os.environ.get(key):
             env[key] = os.environ[key]
+    # Open grading (a per-run launcher choice, like eager steps): grade on up to K farms of any
+    # model from the same registry this runner offers farms from, besides the leased ones.
+    env['SKYRL_RUN_ID'] = config.run_id
+    if os.environ.get('SKYRL_OPEN_GRADING') == '1':
+        env.update(SKYRL_OPEN_GRADING='1', SKYRL_GRADING_REGISTRY=str(args.registry),
+                   SKYRL_OPEN_GRADING_K=os.environ.get('SKYRL_OPEN_GRADING_K') or '4')
     if args.num_epochs:
         # Client-only: the frozen client resumes at its global step, and the
         # bootstrap contract (profile config) is unaffected.

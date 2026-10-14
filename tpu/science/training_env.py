@@ -181,6 +181,12 @@ async def evaluate_via_transport(task, source, timeout):
         else:
             from .challenge_contract import aggregate
             result = aggregate(results)
+            # Where the cases were graded, as scalars so they reach the trajectory row's metrics.
+            for key in ('grading_cpu_model', 'grading_host_class', 'grading_farm', 'grading_pool'):
+                seen = sorted({str((r.get('metrics') or {}).get(key)) for r in results
+                               if (r.get('metrics') or {}).get(key) is not None})
+                if seen:
+                    result['metrics'][key] = ';'.join(seen)
         if result['reward'] != result['raw_score']:
             raise ValueError('science state ranking must match reward direction')
         return result

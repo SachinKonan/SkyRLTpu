@@ -405,7 +405,7 @@ class Ingress:
             lease = self.lease
             expired = lease and (lease['releasing'] or time.monotonic() >= lease['deadline'])
             busy = (self.active or self.inflight or self.upload_lock.locked()
-                    or (self.grading is not None and self.grading.running()))
+                    or (self.grading is not None and self.grading.running(leased_only=True)))
             if not expired or not busy:
                 orphan, started, cancelled = None, None, False
                 continue
@@ -612,8 +612,13 @@ class Ingress:
         return result
 
     def grading_lease(self, request, *, allow_expired=False):
+        """The lease, or for an open (lease-free) request the run + client token identity."""
         if self.grading is None:
             raise HTTPException(409, 'this farm serves no grading families')
+        if not request.headers.get('x-lease-id'):
+            run, token = request.headers.get('x-grading-run'), request.headers.get('x-grading-token')
+            if run and token:
+                return dict(lease_id=None, owner_run=run, token=token)
         self.require_lease(request.headers.get('x-lease-id'), allow_expired=allow_expired)
         return self.lease
 
@@ -635,7 +640,7 @@ class Ingress:
     async def grading_cancel(self, request: Request, request_id: str):
         lease = self.grading_lease(request, allow_expired=True)
         entry = self.grading.entries.get(request_id)
-        if entry is None or entry.lease_id != lease['lease_id']:
+        if entry is None or not self.grading.owns(entry, lease):
             raise HTTPException(404, 'unknown or expired grading request')
         return await self.grading.cancel(request_id, 'cancelled by owner')
 

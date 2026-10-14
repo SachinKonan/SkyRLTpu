@@ -201,7 +201,8 @@ def test_capacity_status_and_backpressure(tmp_path, monkeypatch):
             headers = await lease_for(client)
             capacity = (await client.get('/skyrl/v1/grading/capacity', headers=headers)).json()
             assert capacity['ready'] and capacity['hosts'] == 4
-            assert capacity['families']['math'] == dict(slots_per_host=1, cpus=2, memory_gib=4, memory_max_gib=8, total=4, running=0, queued=0)
+            assert capacity['families']['math'] == dict(slots_per_host=1, cpus=2, memory_gib=4, memory_max_gib=8, total=4, running=0, queued=0,
+                                                         open_limit=6)
             statuses = [(await client.post('/skyrl/v1/grading/submit', json=body(), headers=headers)).status_code
                         for _ in range(9)]
             assert statuses == [202] * 8 + [429]
@@ -209,9 +210,13 @@ def test_capacity_status_and_backpressure(tmp_path, monkeypatch):
             assert status['queue_depth'] == 8 and status['ready'] and status['families'] == ['math']
             capacity = (await client.get('/skyrl/v1/grading/capacity', headers=headers)).json()
             assert capacity['families']['math']['running'] == 8
-            for future in futures:
-                future.set_result(dict(result=[1.0], error=None, stdout='', metrics={'host': '10.0.0.1'}))
-            await asyncio.sleep(.05)
+            # 4 slots: the first 4 are dispatched, the rest wait in the run's queue until a slot frees.
+            assert len(futures) == 4
+            for _ in range(2):
+                for future in [f for f in futures if not f.done()]:
+                    future.set_result(dict(result=[1.0], error=None, stdout='', metrics={'host': '10.0.0.1'}))
+                await asyncio.sleep(.05)
+            assert len(futures) == 8
             assert (await client.post('/skyrl/v1/grading/submit', json=body(), headers=headers)).status_code == 202
             await asyncio.sleep(0)
             assert service.running_by_host() == {'pending': 1}
