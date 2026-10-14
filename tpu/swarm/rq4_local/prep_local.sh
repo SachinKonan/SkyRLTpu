@@ -14,7 +14,7 @@ out="$W/.rq4/builds/$run"; bundle="$out/ray-training.tar.gz"
 [ -f "$out/science-training.tar.gz" ] && [ ! "$out/science-training.tar.gz" -ot "$bundle" ] && bundle="$out/science-training.tar.gz"
 tar -xzf "$bundle" -C "$root/pkg"
 profile="$root/pkg/tpu/swarm/ray_train/profiles/$run.json"
-key=$(cd "$root/pkg/tpu/swarm/ray_train" && { find source_overlay thinking_budget -type f | sort | xargs sha256sum; \
+key=$(cd "$root/pkg/tpu/swarm/ray_train" && { find source_overlay thinking_budget swa_kv -type f | sort | xargs sha256sum; \
       python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['model_preset'])" "$profile"; } | sha256sum | cut -c1-16)
 src=$L/sources/$key
 if [ ! -f "$src/.source-complete" ]; then
@@ -31,6 +31,9 @@ if config.requires_source_overlay:
     install(package / 'tpu/swarm/ray_train/source_overlay', staging)
 if config.inference.native_thinking_budget:
     install_thinking(staging, model=config.native_thinking_format, require_client=True)
+from tpu.swarm.ray_train.swa_kv.install import enabled as swa_kv_enabled, install as install_swa_kv
+if swa_kv_enabled(config):
+    install_swa_kv(staging)
 for path in ('tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/rl/ensemble.py'):
     assert (staging / path).is_file(), path
 print('source ready', staging)

@@ -48,7 +48,9 @@ def identity(config, root, source, snapshot):
                     packages=packages, native_thinking=config.inference.native_thinking_budget,
                     model_impl=config.inference.model_impl,
                     max_model_length=config.inference.max_model_length,
-                    max_lora_rank=config.inference.max_lora_rank)
+                    max_lora_rank=config.inference.max_lora_rank,
+                    # TP width changes reduction order, so TP2 and TP4 farms of one model never share a hash.
+                    tensor_parallel=config.inference.tp)
     # Sliding-window KV allocation is chosen by an engine env flag, not by the
     # installed code, so it must be named here: farms with it on and off never
     # share a hash. Absent when off, so flag-off contracts are unchanged.

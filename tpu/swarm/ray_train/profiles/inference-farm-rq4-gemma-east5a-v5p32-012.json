@@ -25,7 +25,10 @@
     "max_loras": 1,
     "require_lease": true,
     "external_pool_attestation": true,
-    "farm_drain_timeout": 120
+    "farm_drain_timeout": 120,
+    "engine_env": {
+      "SKYRL_SWA_KV": "1"
+    }
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4-v1",

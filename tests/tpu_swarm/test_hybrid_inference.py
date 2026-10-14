@@ -400,6 +400,8 @@ def test_runtime_identity_detects_installed_patch_but_allows_hardware_flags(tmp_
     assert identity(swa, tmp_path, source, snapshot)['sha256'] != initial['sha256']
     swa_off = replace(cfg, inference=replace(cfg.inference, engine_env={'SKYRL_SWA_KV': '0'}))
     assert identity(swa_off, tmp_path, source, snapshot) == initial
+    wider = replace(cfg, inference=replace(cfg.inference, tp=cfg.inference.tp * 2))
+    assert identity(wider, tmp_path, source, snapshot)['sha256'] != initial['sha256']
     (site / 'tpu_inference.py').write_text('modified = True\n')
     assert identity(cfg, tmp_path, source, snapshot)['sha256'] != initial['sha256']
     (site / 'tpu_inference-1.0.dist-info/direct_url.json').write_text(

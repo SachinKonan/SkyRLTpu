@@ -51,6 +51,9 @@ class Host:
             from .thinking_budget.install import identity as thinking_identity
             self.source_identity += "-thinking-" + thinking_identity()
             self.source_identity += "-sdk-" + hashlib.sha256(Path(__file__).with_name("native_sdk.py").read_bytes()).hexdigest()
+        from .swa_kv.install import enabled as swa_kv_enabled, identity as swa_kv_identity
+        if swa_kv_enabled(self.config):
+            self.source_identity += "-swa-" + swa_kv_identity()
         # Multiple full digests can exceed NAME_MAX when concatenated. Keep
         # the full identity in the marker but bound the directory component.
         source_name = ("native-" + hashlib.sha256(self.source_identity.encode()).hexdigest()
@@ -223,6 +226,9 @@ class Host:
             from .thinking_budget.install import install as install_thinking
             install_thinking(staging, model=self.config.native_thinking_format,
                              require_client=not self.config.inference_only)
+        from .swa_kv.install import enabled as swa_kv_enabled, install as install_swa_kv
+        if swa_kv_enabled(self.config):
+            install_swa_kv(staging)
         for path in ("tpu/probe_topology.py", "skyrl/backends/tunix_backend.py",
                      "skyrl/utils/checkpoint_mirror.py", "tpu/vllm_tpu_server.py"):
             if not (staging / path).is_file():
