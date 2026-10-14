@@ -49,4 +49,9 @@ def identity(config, root, source, snapshot):
                     model_impl=config.inference.model_impl,
                     max_model_length=config.inference.max_model_length,
                     max_lora_rank=config.inference.max_lora_rank)
+    # Sliding-window KV allocation is chosen by an engine env flag, not by the
+    # installed code, so it must be named here: farms with it on and off never
+    # share a hash. Absent when off, so flag-off contracts are unchanged.
+    if (config.inference.engine_env or {}).get('SKYRL_SWA_KV') == '1':
+        contract['sliding_window_kv'] = True
     return dict(contract=contract, sha256=digest(contract))

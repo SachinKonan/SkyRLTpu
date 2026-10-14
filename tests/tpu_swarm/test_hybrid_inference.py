@@ -396,6 +396,10 @@ def test_runtime_identity_detects_installed_patch_but_allows_hardware_flags(tmp_
     hardware = replace(cfg, inference=replace(cfg.inference, prefix_caching=not cfg.inference.prefix_caching,
                                               memory_utilization=.9))
     assert identity(hardware, tmp_path, source, snapshot) == initial
+    swa = replace(cfg, inference=replace(cfg.inference, engine_env={'SKYRL_SWA_KV': '1'}))
+    assert identity(swa, tmp_path, source, snapshot)['sha256'] != initial['sha256']
+    swa_off = replace(cfg, inference=replace(cfg.inference, engine_env={'SKYRL_SWA_KV': '0'}))
+    assert identity(swa_off, tmp_path, source, snapshot) == initial
     (site / 'tpu_inference.py').write_text('modified = True\n')
     assert identity(cfg, tmp_path, source, snapshot)['sha256'] != initial['sha256']
     (site / 'tpu_inference-1.0.dist-info/direct_url.json').write_text(
