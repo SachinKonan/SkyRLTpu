@@ -190,7 +190,7 @@ def test_process_guard_detects_orphans_and_fails_closed(monkeypatch, tmp_path):
     assert retention.run_is_active(record, tmp_path)
 
 
-def test_preflight_reclaims_before_disk_check_without_touching_live_trainers(tmp_path, monkeypatch):
+def test_preflight_reclaims_storage_before_disk_check(tmp_path, monkeypatch):
     from tpu.swarm.ray_train.host import Host
     import psutil
     import shutil
@@ -200,21 +200,17 @@ def test_preflight_reclaims_before_disk_check_without_touching_live_trainers(tmp
     host = SimpleNamespace(config=config, root=tmp_path, gcs=None, rank=0,
                            log=tmp_path / "host.jsonl", stopping=SimpleNamespace(is_set=lambda: False),
                            clear_previous_adapter_exports=lambda: calls.append("adapters"),
+                           reconcile_storage=lambda startup: calls.append(("storage", startup)),
                            heartbeat=lambda: {})
-    monkeypatch.setattr(psutil, "process_iter", lambda *args: [])
-    monkeypatch.setattr(retention, "reclaim_checkpoints", lambda *args, **kwargs: calls.append("checkpoints"))
     def disk(root):
         calls.append("disk")
         return SimpleNamespace(free=11 * 1024**3)
     monkeypatch.setattr(shutil, "disk_usage", disk)
     Host.preflight(host)
-    assert calls == ["adapters", "checkpoints", "disk"]
-    calls.clear()
-    monkeypatch.setattr(psutil, "process_iter", lambda *args: [
-        SimpleNamespace(pid=123, info={"cmdline": ["python", "-m", "skyrl.tinker.api"]})])
-    with pytest.raises(RuntimeError, match="existing trainer"):
-        Host.preflight(host)
-    assert calls == []
+    # Storage (verified checkpoints, then other tasks' leftovers) is reclaimed before the free-disk check.
+    # Leftover trainers/engines no longer reach preflight: lifecycle.prepare stops them (or refuses on a
+    # shared host) before the runtime unit starts; see test_lifecycle_wiring.py.
+    assert calls == ["adapters", ("storage", True), "disk"]
 
 
 @pytest.fixture

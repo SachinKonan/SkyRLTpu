@@ -200,6 +200,14 @@ def main():
             raise SystemExit("assigned host is not a local interface")
     root = Path(config.root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
+    shared_host = bool(config.assigned_host_ips)
+    if os.environ.get("SKYRL_SYSTEMD_OWNED") != "1" and not args.runtime_ready:
+        # The one start path, for a fresh launch and a preemption recovery alike: stop what earlier tasks left
+        # on a pool worker (a shared private host refuses instead) before any port check or Ray start.
+        from .lifecycle import prepare
+        run_dir = root / "runs" / config.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        prepare(os.environ.get("SKYPILOT_TASK_ID", ""), shared=shared_host, log=run_dir / f"lifecycle-{rank}.jsonl")
     if config.systemd_runtime and os.environ.get("SKYRL_SYSTEMD_OWNED") != "1":
         from .runtime_service import launch
         token = os.environ.get("SKYPILOT_TASK_ID", "")
@@ -207,7 +215,8 @@ def main():
         return launch([sys.executable, "-m", __package__ + ".bootstrap", args.config],
                       root / "runs" / config.run_id, ips, rank, token,
                       port=config.systemd_port, peer_timeout=config.systemd_peer_timeout,
-                      shutdown_grace=config.systemd_shutdown_grace, setup_timeout=config.setup_timeout)
+                      shutdown_grace=config.systemd_shutdown_grace, setup_timeout=config.setup_timeout,
+                      shared=shared_host)
 
     if args.runtime_ready:
         lock_fd = int(os.environ["SKYRL_RAY_LOCK_FD"])

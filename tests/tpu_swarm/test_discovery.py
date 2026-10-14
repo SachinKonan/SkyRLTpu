@@ -78,7 +78,10 @@ def test_private_farm_and_shadow_direct_trainer_do_not_post(tmp_path, monkeypatc
     doc = service.tick([ROW])
     by_source = {f['source']: f for f in doc['farms']}
     assert by_source['private']['ok'] and by_source['private']['job_id'] == str(discovery.PRIVATE_ID_BASE)
-    assert not by_source['pool']['ok'] and by_source['pool']['health'] == 'suspect'
+    # Ready-only contract: the unreachable pool farm is listed under `unready`, never under `farms`.
+    assert 'pool' not in by_source
+    unready, = doc['unready']
+    assert unready['job_id'] == str(ROW['job_id']) and unready['health'] == 'suspect'
     assert doc['trainers']['direct'] == [dict(run_id='od-run', state='would_update',
                                               urls=['http://10.128.0.9:24800'])]
     assert posted == []

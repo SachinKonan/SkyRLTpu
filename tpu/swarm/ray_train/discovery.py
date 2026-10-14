@@ -12,6 +12,11 @@ SSH tunnels for della clients) and the v5p-64's od_watch (direct-SSH trainers an
   A farm whose job is no longer RUNNING is `gone` and leaves the published list.
 - Publishes the same farms.json document local_notrain reads (each farm: models, url (tunnel),
   internal_url, owner_run, state, ok, tunnel_ok, ...), plus the directory fields above.
+- Output contract (READY_ONLY): `farms` lists only farms that are fully ready (every expected engine up,
+  not updating; the probe's ok), attested (they report a compatibility hash) and healthy (no missed
+  probe). Loading, suspect and unreachable farms go to `unready` for diagnostics, never to `farms`.
+  `updated` is the publish time; clients and the monitor treat a registry older than a few intervals as
+  stale (registry_is_fresh), and the systemd unit's watchdog restarts a hung service (sd_notify).
 - Pushes candidate lists to trainers only with --push. Without it (shadow mode) it computes what it
   would push, so it can run next to the old services, writing its own registry, and be diffed.
 It never acquires leases or cancels jobs; farms arbitrate.
@@ -28,6 +33,7 @@ from .direct_discovery import candidates, tick as direct_tick
 from .local_farms import Tunnel, local_port, write
 
 MISSES_UNHEALTHY = 3
+READY_ONLY = 'ready-only-v1'
 PRIVATE_ID_BASE = 10_000_000  # synthetic job IDs for private farms: sortable and tunnel-port-stable
 
 
@@ -171,7 +177,11 @@ class Service:
             if farm['cluster']:
                 probes[farm['cluster']] = probe
         trainers = self.push(rows, probes, [f for f, p, _ in observed if p.get('ok')])
-        document = dict(time=now, farms=published, trainers=trainers, shadow=not self.args.push)
+        ready = [f for f in published if is_ready(f)]
+        unready = [dict(name=f['name'], job_id=f['job_id'], health=f['health'], state=f.get('state'),
+                        error=f.get('error')) for f in published if not is_ready(f)]
+        document = dict(time=now, updated=now, contract=READY_ONLY, farms=ready, unready=unready,
+                        trainers=trainers, shadow=not self.args.push)
         write(self.args.registry, document)
         return document
 
@@ -214,6 +224,47 @@ class Service:
             tunnel.close()
 
 
+def is_ready(record):
+    """Fully ready (probe ok: every expected engine up, not updating), attested and healthy."""
+    capabilities = record.get('capabilities') or {}
+    return bool(record.get('ok') and record.get('health') == 'healthy'
+                and capabilities.get('compatibility_sha256'))
+
+
+def registry_is_fresh(path, max_age, now=time.time):
+    """(fresh, age_seconds): a registry that stopped updating must not be trusted as the current fleet."""
+    try:
+        document = json.loads(Path(path).read_text())
+        age = now() - float(document.get('updated', document.get('time')))
+    except (OSError, ValueError, TypeError):
+        return False, None
+    return age <= max_age, round(age, 1)
+
+
+def sd_notify(message):
+    """Tell systemd we are alive (Type=notify + WatchdogSec); a no-op outside a notify unit."""
+    import os
+    import socket
+    address = os.environ.get('NOTIFY_SOCKET')
+    if not address:
+        return False
+    if address.startswith('@'):
+        address = '\0' + address[1:]
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+        sock.connect(address)
+        sock.sendall(message.encode())
+    return True
+
+
+def unit_argv(name, args, cwd, log, interval):
+    """The discovery service as a user unit that systemd restarts when it exits or stops reporting."""
+    from .lifecycle import user_unit_argv
+    watchdog = max(3 * interval, 60)
+    return user_unit_argv(name, args, cwd, log, restart='always',
+                          properties=('Type=notify', 'NotifyAccess=main', 'WatchdogSec=%d' % watchdog,
+                                      'RestartSec=10'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', type=Path, required=True, help='farms.json to publish')
@@ -230,7 +281,14 @@ def main():
     parser.add_argument('--interval', type=int, default=30)
     parser.add_argument('--push', action='store_true', help='push candidate lists (off = shadow mode)')
     parser.add_argument('--once', action='store_true')
+    parser.add_argument('--check-fresh', type=float, metavar='MAX_AGE',
+                        help='exit 0 if the registry was published within MAX_AGE seconds, else alert and exit 1')
     args = parser.parse_args()
+    if args.check_fresh is not None:
+        fresh, age = registry_is_fresh(args.registry, args.check_fresh)
+        print(json.dumps(dict(event='discovery_registry_fresh' if fresh else 'discovery_registry_stale',
+                              registry=str(args.registry), age_seconds=age, max_age=args.check_fresh)))
+        raise SystemExit(0 if fresh else 1)
     args.name_contains = args.name_contains or ['inference-farm']
     if args.interval < 10:
         parser.error('interval must be >= 10 seconds')
@@ -249,8 +307,10 @@ def main():
         while True:
             try:
                 document = service.tick(inventory())
-                service.emit(farms=len(document['farms']),
+                service.emit(farms=len(document['farms']), unready=len(document['unready']),
                              usable=sum(f['ok'] and (f['tunnel_ok'] or not args.tunnels) for f in document['farms']))
+                # Only a completed publish feeds the watchdog: a hung or failing loop gets restarted.
+                sd_notify('READY=1\nWATCHDOG=1')
             except Exception as exc:
                 # An inventory outage must not look like an empty farm list: keep the last registry.
                 service.emit(error=type(exc).__name__ + ': ' + str(exc)[:300])
