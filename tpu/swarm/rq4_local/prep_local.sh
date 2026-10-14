@@ -19,7 +19,7 @@ key=$(cd "$root/pkg/tpu/swarm/ray_train" && { find source_overlay thinking_budge
 src=$L/sources/$key
 if [ ! -f "$src/.source-complete" ]; then
   rm -rf "$src-partial"; mkdir -p "$src-partial"
-  tar -xzf $L/base-v22.tar.gz -C "$src-partial"
+  tar -xzf $L/base-v23.tar.gz -C "$src-partial"
   PYTHONPATH="$root/pkg" $L/envs/controller/bin/python - "$profile" "$root/pkg" "$src-partial" <<'EOF'
 import sys
 from pathlib import Path
