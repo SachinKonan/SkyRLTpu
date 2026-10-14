@@ -25,6 +25,8 @@ class GradingFarm:
         self.busy = set()
         self.cancels = []
         self.outcomes = {}  # host -> callable(request_id) -> view dict
+        self.batch_polls = 0
+        self.mismatch = set()  # hosts whose graders differ from the client's
 
     async def __call__(self, request):
         await asyncio.sleep(0)  # A real HTTP round trip yields to the loop.
@@ -39,11 +41,23 @@ class GradingFarm:
             body = json.loads(request.content)
             if not re.fullmatch(r'[0-9a-f]{32}', body['request_id']):
                 return httpx.Response(400, json={'detail': 'request_id must be a 32-character hex id'})
+            if host in self.mismatch:
+                return httpx.Response(409, json={'detail': 'grader version mismatch: request x, farm y'})
             if host in self.busy:
                 return httpx.Response(429, json={'detail': 'busy', 'retry_after': 0.01})
             self.submits.append((host, body['request_id']))
             self.entries[(host, body['request_id'])] = body
             return httpx.Response(202, json={'request_id': body['request_id'], 'state': 'queued'})
+        if path == '/skyrl/v1/grading/results':
+            self.batch_polls += 1
+            views = {}
+            for request_id in json.loads(request.content)['ids']:
+                if (host, request_id) not in self.entries:
+                    views[request_id] = None
+                    continue
+                outcome = self.outcomes.get(host)
+                views[request_id] = outcome(request_id) if outcome else {'request_id': request_id, 'state': 'running'}
+            return httpx.Response(200, json={'views': views})
         if path.startswith('/skyrl/v1/grading/result/'):
             request_id = path.rsplit('/', 1)[1]
             if (host, request_id) not in self.entries:
@@ -97,6 +111,7 @@ def make_transport(farm, farms, *, local=None, loop=None, refresh_seconds=.05, p
                 for host in farms]})
         return await farm(request)
     http = httpx.AsyncClient(transport=httpx.MockTransport(route))
+    kwargs.setdefault('retry_jitter_s', 0)
     t = gt.GradingTransport(families=FAMILIES, local_capacity=0, farm_url='http://head', http=http,
                             loop=loop, long_poll_seconds=0, poll_seconds=.01, refresh_seconds=refresh_seconds, **kwargs)
     t.local = local

@@ -123,6 +123,9 @@ class OpenFarms:
                 return httpx.Response(429, json={'detail': 'grading queue full', 'retry_after': 30})
             self.submits.append(host)
             return httpx.Response(202, json={'request_id': payload['request_id'], 'state': 'queued'})
+        if path == '/skyrl/v1/grading/results':
+            # A farm built before batch polling: the client falls back to one poll per id.
+            return httpx.Response(404, json={'detail': 'Not Found'})
         if path.startswith('/skyrl/v1/grading/result/'):
             if kind == 'flaky':
                 raise httpx.ConnectError('farm went away', request=request)

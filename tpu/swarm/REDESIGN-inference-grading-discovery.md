@@ -74,39 +74,44 @@ Code: `serving.py` `acquire_lease` / `release_lease` already exist. The client c
 generation end (`external_pool_target_leases` becomes "farms per generation phase"). Renewals stop counting time
 spent grading.
 
-### (b) Grading is open: admission with an ACK, no lease
+### (b) One request protocol (grading now, generation next): `tpu/swarm/ray_train/request_protocol.py`
 
-Any client can submit to any farm's grading service, whatever model the farm serves.
+Grading needs no lease: any farm of any model with room takes grades from any run. Every request a client
+sends to a farm follows one state machine; each submission is a `Ticket`, changed only by `transition()`,
+which rejects illegal moves and logs every change (`request_state`: request id, server, attempt, from, to,
+reason) to the run's events jsonl.
 
-1. **Admit or reject.** `POST /skyrl/v1/grading/submit` returns 202 plus a view (the ACK) only when the family's
-   queue is under its threshold (`slots * queue_factor`, a per-farm setting). Otherwise it returns 429 with
-   `retry_after` and current load, and the client tries another server. Nothing runs before the ACK.
-2. **Identity without a lease.** The entry stores `owner_run` and a client token, issued in the 202 and sent with
-   result and cancel calls. This replaces `lease_id` in `grading_service.py:225,232,275`. Request IDs stay 32-hex
-   and idempotent. A resubmit with the same ID and token returns the existing entry.
-3. **Choosing a server.** The client holds up to K servers at a time (K a client setting). Each grade goes to the
-   less loaded of two random servers from the directory (`/grading/capacity` already reports
-   running/queued/total per family).
-4. **Fairness.** Each server keeps one FIFO queue per `owner_run` and serves the queues round-robin, so one run
-   cannot take a whole farm. The farm's own inference-lease holder gets no priority.
-5. **Failure and rerouting.** The client long-polls `result`. If the server stops answering for longer than the
-   grade's time cap plus a margin, the client resubmits the same request ID elsewhere. That counts as an
-   infrastructure retry, never as a candidate failure.
-   - The existing `abort_training_step` after N infrastructure retries stays as the last resort.
-   - A dead server's late results are ignored.
-6. **Version check.** Requests carry `grader_sha256`, a hash of the grading code and inputs (the `tpu/science`
-   grader files, case inputs, family contracts). A farm with a different hash rejects with 409. This is separate
-   from the serving `compatibility_sha256`, which covers model and vLLM files and no grader file.
-7. **Host metadata.** Every result records `host` (already in metrics), `host_class` (TPU type, e.g. v5p / v6e),
-   `cpu_model` (e.g. Xeon 8481C / EPYC 9B14), the per-grade core and memory reservation, and `grader_sha256`. The
-   client stores these with the trajectory record, in the same JSONL and cache entry as the reward. Routing ignores
-   them for now. They are what later lets us check whether a score depends on the CPU it ran on.
-8. **Results are cached with the trajectory.** A grade result is written once, next to its trajectory, keyed by
-   request ID. A restarted client reloads finished grades instead of regrading them. This also covers "save
-   finished grades so a restart resumes the step".
+```
+SUBMITTED --ACK--> ACCEPTED --started--> RUNNING --+--> DONE              (result; final)
+    |                 |                     |      +--> FAILED_CANDIDATE  (the candidate failed; final)
+    |                 |                     |      +--> FAILED_INFRA      (server says infrastructure)
+    |                 +---------------------+--------> LOST              (resubmit elsewhere)
+    |                 +----------------------------> CANCELLED         (server cancelled it)
+    +--no ACK (full / contract mismatch / unreachable)--> REFUSED       (try another server)
+```
 
-Why this is safe for time-capped graders: the per-grade core pinning and memory cap stay exactly as they are, so a
-grade's own budget does not change with who sent it. The open question is CPU model (Xeon vs EPYC); see (f).
+Rules (one place each):
+
+| # | Rule | Where |
+|---|---|---|
+| 1 | ACK or refuse. Admission below slots x 1.5; else 429 with the farm's load. | farm `grading_service.submit` |
+| 2 | One `Contract` (kind, grader hash; generation adds serving hash incl. `SKYRL_SWA_KV`, LoRA id, renderer date) on every request; mismatch = 409 = REFUSED and the client never asks that farm again. | `Contract`, farm `submit` |
+| 3 | Polls renew a server-side TTL (`request_ttl_s`, 300 s); an unpolled request is cancelled by the farm (dead client, moved request, lost cancel). | farm `expire()` |
+| 4 | One batch long-poll per client per farm (`POST /skyrl/v1/grading/results`), inside the per-farm HTTP cap; farms without it get per-id polls. | `FarmPool.poll_one` |
+| 5 | `poll_miss_limit` (3) failed polls ask `confirm_lost`: a direct probe answering, or discovery still listing the farm healthy (it may be reconnecting the tunnel), earns one more round. Only a confirmed server failure is LOST(poll_miss). | `drive` |
+| 6 | ACCEPTED but still queued after `queue_limit_factor` (2) x the grade's own time cap (routing 2100 s, placement 510 s, math its eval timeout) moves only if another pool has a free slot now: one cancel, not awaited, then LOST(queued_too_long). A RUNNING request is never cancelled to move it. The resubmission keeps its original age (`submitted_at`) and farms queue oldest first. | `drive`, farm `submit` |
+| 7 | Farm left the directory: LOST(retired). Resumed id the farm forgot: LOST(resume_unknown). | `drive` |
+| 8 | Error taxonomy: FAILED_CANDIDATE is final (returned, never retried). REFUSED, LOST(queued_too_long/resume_unknown) are free retries. LOST(poll_miss/retired), FAILED_INFRA and CANCELLED are infrastructure retries, capped at `max_infra_retries` (5); past the cap the candidate is dropped from its step (`grading_infra_failure dropped=true`), never scored 0, never aborts the step. | `GradingTransport._grade`, discover `drop_failed_candidates` |
+| 9 | Exactly once: concurrent callers of one id share one grade; the first result per id wins, later ones are dropped (logged); late results after an eager step still reach the late archive. | `GradingTransport.grade` |
+| 10 | Placement: local slots first (all busy, nothing queued locally), then up to K = 4 farms by power-of-two-choices on advertised load; queue locally only if no farm can take it. Random jitter (`retry_jitter_s`, 1 s) before every resubmission. If nothing takes it, wait (no deadline) while the directory changes. | `GradingScheduler.choose`, `_grade` |
+| 11 | Live directory: the registry is re-read during a step; new or returned farms are used at once, vanished ones retired. A registry older than `registry_stale_s` (120 s) is reported and its farms probed directly; otherwise only ok, tunnelled, healthy, ready, attested farms are listed. | `OpenFarmDirectory.refresh` |
+| 12 | Client journal (`SKYRL_GRADING_JOURNAL`, default `runs/<run>/grading-journal.jsonl`): every ACKed id (farm url, wire id, attempt, contract) and every result. A restarted client re-polls journaled ids, reuses finished results, and resubmits only what is missing. Science grades get stable ids (run, task, case, source hash) when journaling. | `Journal`, `training_env.transport_requests` |
+
+All thresholds: `request_protocol.Config` (env `SKYRL_REQ_*`). Grading results carry `grader_sha256`,
+`grading_cpu_model`, `grading_host_class`, `grading_farm` and `grading_pool`, cached with the trajectory.
+
+Still lease-based on purpose: the trainer ingress's leased-farm list (`/skyrl/v1/grading/farms`), which
+trainer hosts use until the unified discovery registry reaches them; both feed the same protocol.
 
 ### (c) One discovery service
 

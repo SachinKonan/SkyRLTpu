@@ -88,7 +88,8 @@ class Grading:
     farm_transport: bool = False
     # Local AC2 grading also runs in a systemd-limited unit (parity with farms).
     local_systemd: bool = True
-    max_infra_retries: int = 3
+    # Infrastructure retries per grade before the candidate is dropped from its step (request protocol).
+    max_infra_retries: int = 5
     queue_factor: int = 2
     max_requests: int = 4096
     result_retention_seconds: int = 900

@@ -320,7 +320,7 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
     defaults["TTD_NATIVE_THINKING_BUDGET"] = _flag(config.inference.native_thinking_budget)
     grading_keys = ('SKYRL_GRADING_URL', 'SKYRL_GRADING_EVENTS', 'SKYRL_GRADING_LOCAL_SLOTS', 'SKYRL_GRADING_LOCAL_HOSTS',
                     'SKYRL_GRADING_MAX_INFRA_RETRIES', 'SKYRL_GRADING_LOCAL_SYSTEMD', 'SKYRL_GRADING_FAMILIES',
-                    'SKYRL_GRADING_FARM_REFRESH_SECONDS', 'SKYRL_GRADING_LONG_POLL_SECONDS')
+                    'SKYRL_GRADING_FARM_REFRESH_SECONDS', 'SKYRL_GRADING_LONG_POLL_SECONDS', 'SKYRL_GRADING_JOURNAL')
     families = config.grading_families
     if families:
         # Every host of the slice (trainer and inference ranks) grades from its
@@ -332,6 +332,8 @@ def client_environment(config, root, head, inference_ips=None, trainer_head=None
                         SKYRL_GRADING_MAX_INFRA_RETRIES=str(config.grading.max_infra_retries),
                         SKYRL_GRADING_LOCAL_SYSTEMD=_flag(config.grading.local_systemd),
                         SKYRL_GRADING_EVENTS=str(root / "runs" / config.run_id / "inference-events.jsonl"),
+                        # In-flight grade ids and finished results: a restarted client resumes its step.
+                        SKYRL_GRADING_JOURNAL=str(root / "runs" / config.run_id / "grading-journal.jsonl"),
                         SKYRL_GRADING_FARM_REFRESH_SECONDS=str(config.grading.farm_refresh_seconds),
                         SKYRL_GRADING_LONG_POLL_SECONDS=str(config.grading.long_poll_seconds))
         from .config import SANDBOX_ENVS
