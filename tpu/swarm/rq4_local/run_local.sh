@@ -20,8 +20,13 @@ fi
 # Muse prompts carry the date; a run listed here keeps the date its bootstrap contract was written with.
 d=$(awk -v r="$run" '$1==r {print $2}' $L/scripts/renderer_dates.txt 2>/dev/null); [ -n "$d" ] && export TTD_RENDERER_DATE=$d
 cd "$root/pkg"
-PYTHONPATH="$root/pkg" OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 nohup $L/envs/controller/bin/python -u -m tpu.swarm.ray_train.local_notrain \
+# The runner (and the client it starts) live in one systemd user unit: a login-session kill cannot take them
+# down, `systemctl --user stop rq4-run-<run>` stops the whole tree, and the client's exit hooks release its
+# farm leases on that stop. The unit never touches the run directory, so client journals survive restarts.
+export PYTHONPATH="$root/pkg" OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1
+pid=$($L/envs/controller/bin/python -m tpu.swarm.ray_train.lifecycle user-unit --name "rq4-run-$run" \
+  --cwd "$root/pkg" --log "$root/runner.log" -- $L/envs/controller/bin/python -u -m tpu.swarm.ray_train.local_notrain \
   --config "$profile" --registry $L/farms.json --package "$root/pkg" --source "$(readlink -f $root/source)" \
-  --python $L/envs/client/bin/python --hf-home $L/hf --snapshot "$snapshot" --num-epochs ${NUM_EPOCHS:-25} ${FARM_GROUP_CAP:+--farm-group-cap $FARM_GROUP_CAP} ${FARM_TARGET:+--farm-target $FARM_TARGET} > "$root/runner.log" 2>&1 &
-echo $! > "$root/runner.pid"
-echo "$run pid=$(cat $root/runner.pid)"
+  --python $L/envs/client/bin/python --hf-home $L/hf --snapshot "$snapshot" --num-epochs ${NUM_EPOCHS:-25} ${FARM_GROUP_CAP:+--farm-group-cap $FARM_GROUP_CAP} ${FARM_TARGET:+--farm-target $FARM_TARGET})
+echo "$pid" > "$root/runner.pid"
+echo "$run pid=$pid unit=rq4-run-$run"

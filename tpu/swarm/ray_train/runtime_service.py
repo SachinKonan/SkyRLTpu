@@ -212,7 +212,7 @@ def supervise(payload_path):
 
 
 def launch(command, directory, ips, rank, token, *, port=24900,
-           peer_timeout=30, shutdown_grace=90, setup_timeout=1800):
+           peer_timeout=30, shutdown_grace=90, setup_timeout=1800, shared=False):
     if not token:
         raise ValueError('a shared SkyPilot task/attempt identity is required')
     attempt = Path(directory) / ('systemd-' + uuid.uuid4().hex)
@@ -229,7 +229,8 @@ def launch(command, directory, ips, rank, token, *, port=24900,
     log = attempt / 'service.log'
     log.touch(mode=0o600)
     save(attempt / 'unit.json', {'unit': unit, 'parent_pid': os.getpid(), 'rank': rank})
-    args = ['sudo', '-n', 'systemd-run', '--quiet', '--wait', '--unit=' + unit,
+    # The description carries the SkyPilot task ID: lifecycle.reap_leftovers/finish tell this task's units apart.
+    args = ['sudo', '-n', 'systemd-run', '--quiet', '--wait', '--unit=' + unit, '--description=' + token,
             '--uid=' + str(os.getuid()), '--gid=' + str(os.getgid()),
             *inherited_limit_properties(),
             '--property=Type=exec', '--property=KillMode=control-group',
@@ -242,6 +243,7 @@ def launch(command, directory, ips, rank, token, *, port=24900,
     previous = {sig: signal.signal(sig, lambda *_: stopped.set()) for sig in (signal.SIGTERM, signal.SIGINT)}
     process = None
     stop_sent = False
+    reason = 'error'
     try:
         process = subprocess.Popen(args)
         while process.poll() is None:
@@ -254,11 +256,24 @@ def launch(command, directory, ips, rank, token, *, port=24900,
                                          '-p', 'ActiveState', '-p', 'ControlGroup'], text=True, timeout=15)
         if 'ActiveState=active' in state or 'ActiveState=deactivating' in state:
             raise RuntimeError('runtime unit did not finish cleanup')
+        reason = 'cancel' if stopped.is_set() else 'exit' if process.returncode == 0 else 'error'
         return process.returncode
     finally:
         path.unlink(missing_ok=True)
         if process is not None and process.poll() is None:
             subprocess.run(['sudo', '-n', 'systemctl', 'stop', '--no-block', unit], timeout=15)
+            try:
+                process.wait(timeout=shutdown_grace + 30)
+            except subprocess.TimeoutExpired:
+                pass
+        if stopped.is_set():
+            reason = 'cancel'
+        # One end path for normal exit, error and SkyPilot cancel: stop what outlived the unit.
+        try:
+            from .lifecycle import finish
+            finish(token, reason, shared=shared, log=attempt / 'lifecycle.jsonl')
+        except Exception as exc:  # cleanup must not mask the job's own result
+            save(attempt / 'lifecycle-error.json', {'error': repr(exc)[:500]})
         for sig, handler in previous.items():
             signal.signal(sig, handler)
 

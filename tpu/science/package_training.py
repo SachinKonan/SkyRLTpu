@@ -136,15 +136,14 @@ def package(profile, output):
     env, prep = science_preparation(config)
     doc['envs'].update(env, RAY_TRAIN_CODE=config.bucket + '/code-bundles/science-training-' + digest + '.tar.gz',
                        RAY_TRAIN_CODE_SHA256=digest)
-    audit = (root / 'tpu/results/native-training-recovery-20260913/clean_host_audit.py').read_text()
     # Full training is bounded by NUM_EPOCHS; the old one-day smoke wrapper can
     # otherwise kill a valid bootstrap/optimizer run while grading is queued.
     executor = ('exec timeout --signal=TERM --kill-after=120s 24h python3 -m tpu.swarm.ray_train.bootstrap'
                 if config.training_smoke and not config.bootstrap_layers else
                 'exec python3 -m tpu.swarm.ray_train.bootstrap')
-    doc['run'] = ('set -euo pipefail\npython3 - <<\'SCIENCE_CLEAN_HOST\'\n' + audit + '\nSCIENCE_CLEAN_HOST\n' +
-                  doc['run'].replace('exec python3 -m tpu.swarm.ray_train.bootstrap',
-                      prep + executor))
+    # Host cleanup before any workload is bootstrap's lifecycle.prepare (stops what earlier tasks left on a pool
+    # worker, refuses on a shared host), not a refuse-to-start audit here.
+    doc['run'] = doc['run'].replace('exec python3 -m tpu.swarm.ray_train.bootstrap', prep + executor)
     task.write_text(yaml.safe_dump(doc, sort_keys=False))
     manifest = dict(run_id=config.run_id, task=task_name,
                     main_commit=subprocess.check_output(['git','-C',str(root),'rev-parse','HEAD'],text=True).strip(),

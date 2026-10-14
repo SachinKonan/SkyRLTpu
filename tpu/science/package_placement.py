@@ -64,17 +64,17 @@ def package(profile, output, *, probe=False):
         SCIENCE_RESULT_URI=config.bucket+'/science-results/'+run_id+'.tar.gz',
         PLACEMENT_TPU_RANKS=','.join(map(str, config.placement_ranks)),
         PLACEMENT_TPU_CHIPS=config.client_env.get('PLACEMENT_TPU_CHIPS', '0'))
-    audit = (root/'tpu/results/native-training-recovery-20260913/clean_host_audit.py').read_text()
-    prelude = "set -euo pipefail\npython3 - <<'PLACEMENT_CLEAN_HOST'\n"+audit+"\nPLACEMENT_CLEAN_HOST\n"
+    # These launchers bypass bootstrap, so they take the lifecycle start path explicitly.
+    prepare = 'python3 -m tpu.swarm.ray_train.lifecycle prepare\n'
     if probe:
         entry = 'exec timeout --signal=TERM --kill-after=60s 30m python3 -m tpu.science.placement_probe_bootstrap'
         run = doc['run'][:doc['run'].index('exec python3 -m tpu.swarm.ray_train.bootstrap')]
-        run += 'cd "$code"\npython3 -m tpu.science.prepare_placement_host\n'+entry+'\n'
+        run += 'cd "$code"\n'+prepare+'python3 -m tpu.science.prepare_placement_host\n'+entry+'\n'
     else:
         run = doc['run'].replace('exec python3 -m tpu.swarm.ray_train.bootstrap',
-            'cd "$code"\npython3 -m tpu.science.prepare_placement_host\n'
+            'cd "$code"\n'+prepare+'python3 -m tpu.science.prepare_placement_host\n'
             'exec timeout --signal=TERM --kill-after=120s 4h python3 -m tpu.science.placement_model_host')
-    doc['run'] = prelude+run
+    doc['run'] = run
     task = out/(run_id+'.yaml')
     task.write_text(yaml.safe_dump(doc, sort_keys=False))
     main_commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
