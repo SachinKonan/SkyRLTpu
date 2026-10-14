@@ -50,7 +50,8 @@ try:
             raise ValueError('farm head is not in the expected engine set')
         result = dict(models=names, url='http://'+ip+':'+str(PARAMS['port']),
                       owner_run=status.get('owner_run'), state=status.get('state'),
-                      active=status.get('active', 0), capabilities=status.get('capabilities'))
+                      active=status.get('active', 0), capabilities=status.get('capabilities'),
+                      instance=status.get('instance'), grading=status.get('grading'))
     else:
         result = call('/skyrl/v1/borrowing/services' + PARAMS.get('query', ''), PARAMS.get('body'))
     print(json.dumps(dict(ok=True, result=result)))

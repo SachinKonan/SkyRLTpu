@@ -1,0 +1,265 @@
+"""One discovery service for pool farms, pool trainers and private hosts (the shared v5p-64).
+
+It replaces borrowing_supervisor (pushes candidate farms to trainers), local_farms (farms.json and
+SSH tunnels for della clients) and the v5p-64's od_watch (direct-SSH trainers and dedicated farms).
+
+- Sources: SkyPilot managed jobs (farms by job name, trainers in listed pools) and a checked-in
+  private-hosts file (farms and trainers reached by direct SSH to an external IP).
+- Directory: every farm keeps first_seen/last_seen, consecutive probe misses, a health state
+  (healthy, suspect after 1-2 misses, unhealthy after 3) and its incarnation (the ingress's
+  per-process instance ID from /status). A farm that answers with a new incarnation came back:
+  it is reported as `returned` and starts over (its old leases and grading entries are void).
+  A farm whose job is no longer RUNNING is `gone` and leaves the published list.
+- Publishes the same farms.json document local_notrain reads (each farm: models, url (tunnel),
+  internal_url, owner_run, state, ok, tunnel_ok, ...), plus the directory fields above.
+- Pushes candidate lists to trainers only with --push. Without it (shadow mode) it computes what it
+  would push, so it can run next to the old services, writing its own registry, and be diffed.
+It never acquires leases or cancels jobs; farms arbitrate.
+"""
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+import json
+from pathlib import Path
+import subprocess
+import time
+
+from .borrowing_supervisor import REMOTE, inventory, rpc, tick as pool_tick
+from .direct_discovery import candidates, tick as direct_tick
+from .local_farms import Tunnel, local_port, write
+
+MISSES_UNHEALTHY = 3
+PRIVATE_ID_BASE = 10_000_000  # synthetic job IDs for private farms: sortable and tunnel-port-stable
+
+
+def ssh_argv(entry):
+    """Direct SSH to a private host's external IP (the v5p-64 is not a SkyPilot cluster)."""
+    return ['ssh', '-i', str(Path(entry['ssh_key']).expanduser()), '-o', 'BatchMode=yes',
+            '-o', 'ConnectTimeout=8', '-o', 'StrictHostKeyChecking=accept-new',
+            '%s@%s' % (entry.get('ssh_user', 'gcpuser'), entry['external_ip'])]
+
+
+def private_rpc(entry, action, port, body=None, group=''):
+    params = dict(action=action, port=port)
+    if body is not None:
+        params['body'] = body
+    if group and action == 'target':
+        params['query'] = '?group=' + group
+    try:
+        proc = subprocess.run(ssh_argv(entry) + ['python3 -'], input='PARAMS = %r\n' % params + REMOTE,
+                              text=True, capture_output=True, timeout=50)
+        if proc.returncode:
+            return {'ok': False, 'error': 'ssh_failed', 'exit_code': proc.returncode}
+        return json.loads(proc.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        return {'ok': False, 'error': type(exc).__name__}
+
+
+def load_private(path):
+    """{'farms': [{name, external_ip, ssh_key, ...}], 'trainers': [direct registrations]}."""
+    if not path:
+        return dict(farms=[], trainers=[])
+    document = json.loads(Path(path).read_text())
+    for farm in document.get('farms', []):
+        missing = {'name', 'external_ip', 'ssh_key'} - set(farm)
+        if missing:
+            raise ValueError('private farm %r lacks %s' % (farm.get('name'), sorted(missing)))
+    for trainer in document.get('trainers', []):
+        missing = {'run_id', 'model', 'group', 'external_ip', 'ssh_key', 'stable_urls'} - set(trainer)
+        if missing:
+            raise ValueError('private trainer %r lacks %s' % (trainer.get('run_id'), sorted(missing)))
+    return dict(farms=document.get('farms', []), trainers=document.get('trainers', []))
+
+
+class Directory:
+    """Health and incarnation per farm, keyed by job ID (pool) or name (private)."""
+
+    def __init__(self):
+        self.entries = {}
+
+    def observe(self, key, probe, now):
+        """Record one probe. Returns 'returned' when a known farm answers with a new incarnation."""
+        entry = self.entries.setdefault(key, dict(first_seen=now, last_seen=None, misses=0,
+                                                  incarnation=None, returns=0))
+        event = None
+        if probe.get('ok'):
+            incarnation = (probe.get('result') or {}).get('instance')
+            if entry['incarnation'] and incarnation and incarnation != entry['incarnation']:
+                event = 'returned'
+                entry.update(first_seen=now, returns=entry['returns'] + 1)
+            entry.update(last_seen=now, misses=0, incarnation=incarnation or entry['incarnation'])
+        else:
+            entry['misses'] += 1
+        entry['health'] = ('healthy' if entry['misses'] == 0 else
+                           'unhealthy' if entry['misses'] >= MISSES_UNHEALTHY else 'suspect')
+        return event
+
+    def retire(self, live_keys):
+        """Keys no longer RUNNING are gone; returns them."""
+        gone = [k for k in self.entries if k not in live_keys]
+        for key in gone:
+            del self.entries[key]
+        return gone
+
+
+class Service:
+    def __init__(self, args, private, now=time.time):
+        self.args, self.private, self.now = args, private, now
+        self.directory, self.tunnels = Directory(), {}
+
+    def farm_sources(self, rows):
+        pool = [dict(key=str(r['job_id']), job_id=r['job_id'], name=r['run_id'], cluster=r['cluster'],
+                     pool=r.get('pool'), source='pool')
+                for r in rows if r['status'] == 'RUNNING' and r.get('cluster')
+                and any(s.casefold() in (r.get('run_id') or '').casefold() for s in self.args.name_contains)]
+        private = [dict(key='private:' + f['name'], job_id=PRIVATE_ID_BASE + i, name=f['name'], cluster=None,
+                        pool=None, source='private', entry=f) for i, f in enumerate(self.private['farms'])]
+        return pool + private
+
+    def probe(self, farm):
+        if farm['source'] == 'private':
+            return private_rpc(farm['entry'], 'farm', farm['entry'].get('port', self.args.farm_port))
+        return rpc(self.args.ssh_config_dir, farm['cluster'], 'farm', self.args.farm_port)
+
+    def tunnel(self, farm):
+        if not self.args.tunnels:
+            return None
+        tunnel = self.tunnels.get(farm['key'])
+        if tunnel is None or tunnel.cluster != (farm['cluster'] or farm['name']):
+            if tunnel is not None:
+                tunnel.close()
+            port = local_port(farm['job_id'], self.args.port_base)
+            tunnel = Tunnel(self.args.ssh_config_dir, farm['cluster'] or farm['name'], port, self.args.farm_port)
+            if farm['source'] == 'private':
+                remote = farm['entry'].get('port', self.args.farm_port)
+                tunnel.args = (ssh_argv(farm['entry'])[:-1] + ['-o', 'ExitOnForwardFailure=yes',
+                               '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4', '-N',
+                               '-L', '127.0.0.1:%d:127.0.0.1:%d' % (port, remote), ssh_argv(farm['entry'])[-1]])
+            self.tunnels[farm['key']] = tunnel
+        tunnel.ensure()
+        return tunnel
+
+    def tick(self, rows):
+        now = self.now()
+        sources = self.farm_sources(rows)
+        for key in self.directory.retire({f['key'] for f in sources}):
+            if key in self.tunnels:
+                self.tunnels.pop(key).close()
+            self.emit(event='farm_gone', key=key)
+
+        def observe(farm):
+            tunnel = self.tunnel(farm)
+            return farm, self.probe(farm), tunnel
+        with ThreadPoolExecutor(max_workers=8) as workers:
+            observed = list(workers.map(observe, sources))
+        published, probes = [], {}
+        for farm, probe, tunnel in observed:
+            if self.directory.observe(farm['key'], probe, now) == 'returned':
+                self.emit(event='farm_returned', key=farm['key'], name=farm['name'],
+                          incarnation=probe['result'].get('instance'))
+            entry = self.directory.entries[farm['key']]
+            record = dict(probe.get('result') or {})
+            record['internal_url'] = record.pop('url', None)
+            record.update(job_id=str(farm['job_id']), name=farm['name'], cluster=farm['cluster'],
+                          source=farm['source'], pool=farm['pool'],
+                          url=tunnel.url if tunnel else record['internal_url'],
+                          tunnel_ok=tunnel.healthy() if tunnel else False,
+                          tunnel_starts=tunnel.starts if tunnel else 0,
+                          ok=bool(probe.get('ok')), error=None if probe.get('ok') else probe.get('error'),
+                          **{k: entry[k] for k in ('health', 'misses', 'incarnation', 'first_seen',
+                                                   'last_seen', 'returns')})
+            published.append(record)
+            if farm['cluster']:
+                probes[farm['cluster']] = probe
+        trainers = self.push(rows, probes, [f for f, p, _ in observed if p.get('ok')])
+        document = dict(time=now, farms=published, trainers=trainers, shadow=not self.args.push)
+        write(self.args.registry, document)
+        return document
+
+    def push(self, rows, probes, healthy):
+        """Candidate lists for pool trainers (borrowing_supervisor rules) and private trainers (direct)."""
+        pool = {}
+        if self.args.trainer_pool or self.args.trainer_job_id:
+            def call(cluster, action, body=None):
+                if action == 'farm':
+                    return probes.get(cluster, {'ok': False, 'error': 'not_probed'})
+                return rpc(self.args.ssh_config_dir, cluster, action, self.args.farm_port, body,
+                           group=self.args.discovery_group)
+            pool = pool_tick(rows, None, self.args.trainer_job_id, call, dry_run=not self.args.push,
+                             trainer_pools=self.args.trainer_pool, run_scoped_only=self.args.run_scoped_only,
+                             farm_name_contains=self.args.name_contains[0]).get('targets', [])
+        farms = [dict(probes.get(f['cluster'], {}).get('result') or {}, source_pool=f['pool'])
+                 for f in healthy if f['source'] == 'pool']
+
+        def direct_call(row, body=None):
+            return private_rpc(row, 'target', row.get('port', self.args.farm_port), body, group=row['group'])
+        direct = []
+        for row in self.private['trainers']:
+            eligible = [f for f in farms if f['source_pool'] in row.get('farm_pools', [])]
+            if self.args.push:
+                direct += direct_tick([row], eligible, direct_call)
+                continue
+            descriptor = direct_call(row)
+            if not descriptor.get('ok'):
+                direct.append(dict(run_id=row['run_id'], state='unreachable'))
+                continue
+            direct.append(dict(run_id=row['run_id'], state='would_update',
+                               urls=candidates(descriptor['result'], row, eligible)))
+        return dict(pool=pool, direct=direct)
+
+    def emit(self, **fields):
+        print(json.dumps(dict(time=self.now(), **fields)), flush=True)
+
+    def close(self):
+        for tunnel in self.tunnels.values():
+            tunnel.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--registry', type=Path, required=True, help='farms.json to publish')
+    parser.add_argument('--ssh-config-dir', type=Path, required=True)
+    parser.add_argument('--private-hosts', type=Path, help='checked-in private farms/trainers (v5p-64)')
+    parser.add_argument('--name-contains', action='append', help='farm job-name substring (default inference-farm)')
+    parser.add_argument('--trainer-pool', action='append', default=[])
+    parser.add_argument('--trainer-job-id', type=int, action='append', default=[])
+    parser.add_argument('--discovery-group', default='')
+    parser.add_argument('--run-scoped-only', action='store_true')
+    parser.add_argument('--farm-port', type=int, default=24800)
+    parser.add_argument('--tunnels', action='store_true', help='keep della SSH tunnels (local_farms)')
+    parser.add_argument('--port-base', type=int, default=29000, help='tunnel ports; local_farms uses 27000')
+    parser.add_argument('--interval', type=int, default=30)
+    parser.add_argument('--push', action='store_true', help='push candidate lists (off = shadow mode)')
+    parser.add_argument('--once', action='store_true')
+    args = parser.parse_args()
+    args.name_contains = args.name_contains or ['inference-farm']
+    if args.interval < 10:
+        parser.error('interval must be >= 10 seconds')
+    if args.push:
+        # Exclusive with the old supervisor: two pushers would fight over trainers' candidate lists.
+        import fcntl
+        lock_path = Path.home() / '.cache/skyrl/borrowing-supervisor.lock'
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock = lock_path.open('a')
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            parser.error('another discovery pusher (borrowing_supervisor) is running under this login')
+    service = Service(args, load_private(args.private_hosts))
+    try:
+        while True:
+            try:
+                document = service.tick(inventory())
+                service.emit(farms=len(document['farms']),
+                             usable=sum(f['ok'] and (f['tunnel_ok'] or not args.tunnels) for f in document['farms']))
+            except Exception as exc:
+                # An inventory outage must not look like an empty farm list: keep the last registry.
+                service.emit(error=type(exc).__name__ + ': ' + str(exc)[:300])
+            if args.once:
+                break
+            time.sleep(args.interval)
+    finally:
+        service.close()
+
+
+if __name__ == '__main__':
+    main()
