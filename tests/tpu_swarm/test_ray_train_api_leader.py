@@ -1,5 +1,6 @@
 """The API database follows physical trainer rank zero, independently of Ray head."""
 import json
+from pathlib import Path
 import sqlite3
 import threading
 from types import SimpleNamespace
@@ -29,7 +30,7 @@ def test_only_api_leader_backs_up_database_and_logs_do_not_collide(tmp_path, mon
     (tmp_path / 'trainer.log').write_text('trainer')
     host = SimpleNamespace(rank=rank, trainer_leader=7, run=tmp_path, log=tmp_path / 'host.jsonl',
                            config=SimpleNamespace(run_gcs='gs://test/run', cache=None))
-    host.run_sync_lock = threading.Lock()
+    host.run_sync_lock, host.stopping = threading.Lock(), threading.Event()
     host._sync_run = lambda: module.Host._sync_run(host)
     module.Host.sync_run(host)
     assert any(label == 'database-writeback' for label, _ in calls) == (rank == 7)
@@ -62,3 +63,36 @@ def test_readiness_checks_leader_log_instead_of_head_rpc_worker(tmp_path):
     assert module.Host.trainer_ready(leader)
     process.log_offset = log.stat().st_size
     assert not module.Host.trainer_ready(leader)
+
+
+def test_rank_zero_publishes_checkpoint_plan_and_other_ranks_apply_it(tmp_path, monkeypatch):
+    from tpu.swarm.ray_train import checkpoint_retention as retention
+    published, applied = {}, []
+    class GCS:
+        def __init__(self, *args):
+            pass
+        def transfer(self, command, label, **kwargs):
+            if label == 'checkpoint-plan':
+                published[command[-1]] = Path(command[1]).read_text()
+        def metadata(self, *args, **kwargs):
+            assert args[0] == 'cat'
+            return published[args[1]]
+    monkeypatch.setattr(module, 'GCS', GCS)
+    monkeypatch.setattr(retention, 'reclaim_completed_checkpoints',
+                        lambda run, run_gcs, gcs, log, plan=None, **kw: applied.append((run, plan)))
+    plan = dict(version=1, eligible=['model_a/000001.tar.gz'], protected=['model_a/000003.tar.gz'])
+    monkeypatch.setattr(retention, 'checkpoint_plan', lambda run: plan)
+    hosts = []
+    for rank in (0, 3):
+        run = tmp_path / f'host-{rank}'
+        (run / ('client' if rank == 0 else 'checkpoints')).mkdir(parents=True)
+        (run / 'client/cohort.json' if rank == 0 else run / 'checkpoints/x').write_text('{}')
+        host = SimpleNamespace(rank=rank, trainer_leader=3, run=run, log=run / 'host.jsonl',
+                               config=SimpleNamespace(run_gcs='gs://test/run', cache=None))
+        host.run_sync_lock, host.stopping = threading.Lock(), threading.Event()
+        host._sync_run = lambda h=host: module.Host._sync_run(h)
+        hosts.append(host)
+    for host in hosts:
+        module.Host.sync_run(host)
+    assert json.loads(published['gs://test/run/checkpoint-plan.json']) == plan
+    assert [(run.name, p) for run, p in applied] == [('host-0', plan), ('host-3', plan)]

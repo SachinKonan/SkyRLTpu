@@ -639,8 +639,27 @@ class Host:
         client = self.run / "client"
         if self.rank == 0 and client.exists() and any(client.iterdir()):
             gcs.transfer(["cp", "--recursive", str(client), self.config.run_gcs + "/"], "client-writeback", timeout=300)
-            from .checkpoint_retention import reclaim_completed_checkpoints
-            reclaim_completed_checkpoints(self.run, self.config.run_gcs, gcs, self.log)
+            from .checkpoint_retention import PLAN, checkpoint_plan, reclaim_completed_checkpoints
+            plan = None
+            try:
+                # Publish the ledger's verdict for ranks that hold archives but not the ledger.
+                plan = checkpoint_plan(self.run)
+                (self.run / PLAN).write_text(json.dumps(plan))
+                gcs.transfer(["cp", str(self.run / PLAN), self.config.run_gcs + "/" + PLAN], "checkpoint-plan", timeout=60)
+            except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+                emit(self.log, "checkpoint_plan_skipped", reason=str(exc))
+            if plan is not None:
+                reclaim_completed_checkpoints(self.run, self.config.run_gcs, gcs, self.log, plan=plan,
+                                              stopping=self.stopping.is_set)
+        elif self.rank != 0 and (self.run / "checkpoints").is_dir():
+            from .checkpoint_retention import PLAN, reclaim_completed_checkpoints
+            try:
+                plan = json.loads(gcs.metadata("cat", self.config.run_gcs + "/" + PLAN))
+            except (RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+                emit(self.log, "checkpoint_plan_unavailable", reason=str(exc)[-300:])
+            else:
+                reclaim_completed_checkpoints(self.run, self.config.run_gcs, gcs, self.log, plan=plan,
+                                              stopping=self.stopping.is_set)
         db = self.run / "tinker.db"
         if self.rank == self.trainer_leader and db.exists():
             backup = self.run / "tinker-backup.db"

@@ -269,3 +269,44 @@ def test_current_retention_fails_closed(current, failure, tmp_path):
     result = retention.reclaim_completed_checkpoints(current.run, 'gs://bucket/run', current.gcs, current.log)
     assert result['files'] == 0
     assert all(p.exists() for p in current.paths)
+
+
+def test_other_rank_applies_rank_zero_plan_without_a_ledger(current, tmp_path):
+    plan = retention.checkpoint_plan(current.run)
+    # The assigned trainer leader holds the archives but has no client ledger.
+    other = tmp_path / 'leader/runs/current'
+    for path in current.paths:
+        copy = other / path.relative_to(current.run)
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_bytes(path.read_bytes())
+    result = retention.reclaim_completed_checkpoints(other, 'gs://bucket/run', current.gcs, current.log,
+                                                     plan=json.loads(json.dumps(plan)))
+    assert result['files'] == 2
+    left = sorted(p.relative_to(other).as_posix() for p in other.rglob('*.tar.gz'))
+    assert left == sorted(p.relative_to(current.run).as_posix() for p in current.paths[2:])
+
+
+@pytest.mark.parametrize('plan', [None, {'version': 2, 'eligible': [], 'protected': []},
+                                  {'version': 1, 'eligible': ['../escape.tar.gz'], 'protected': []},
+                                  {'version': 1, 'eligible': ['model_a/000001.tar.gz']}])
+def test_malformed_plan_deletes_nothing(current, tmp_path, plan):
+    other = tmp_path / 'leader/runs/current'
+    for path in current.paths:
+        copy = other / path.relative_to(current.run)
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_bytes(path.read_bytes())
+    plan = plan if plan is not None else 'not a plan'
+    result = retention.reclaim_completed_checkpoints(other, 'gs://bucket/run', current.gcs, current.log, plan=plan)
+    assert result['files'] == 0 and len(list(other.rglob('*.tar.gz'))) == len(current.paths)
+
+
+def test_completed_cleanup_stops_at_its_deadline(current, monkeypatch):
+    hashed = []
+    def slow_valid(path, obj):
+        hashed.append(path)
+        return True
+    monkeypatch.setattr(retention, 'valid_file', slow_valid)
+    result = retention.reclaim_completed_checkpoints(current.run, 'gs://bucket/run', current.gcs, current.log,
+                                                     stopping=lambda: len(hashed) >= 1)
+    assert result['files'] == 0 and all(p.exists() for p in current.paths)
+    assert 'time budget' in current.log.read_text()
