@@ -201,13 +201,15 @@ Free wins that need no gate are already done or listed:
 6. **Switch.** Move live runs over at a natural break (a run finishing, or a deliberate restart at a step boundary),
    then retire the old discovery processes and the frozen worktree.
 
-## Open questions
+## Decisions (user, 2026-10-14)
 
-1. **Grade parity across CPUs.** Should a time-capped grade ever run on the other CPU model (EPYC vs Xeon) before we
-   have parity data? The default in this doc is yes, with the CPU recorded.
-2. **K and the queue threshold.** K = 4 and `queue_factor` = 1.5 to start?
-3. **Priority.** Should a farm's own inference-lease holder get grading priority on that farm, or strict fairness?
-4. **v5p-64 sharing.** Other users' keys are on the v5p-64. Does the launcher need a host-claim check before
-   starting?
-5. **Old checkpoint copies.** Should cache reconcile also delete the other ranks' local checkpoint copies, which
-   19ec8c8d leaves?
+1. **Grade parity across CPUs:** yes, time-capped grades may run on either CPU model; the CPU is recorded with the
+   result and cached with the trajectory, so parity can be checked afterwards.
+2. **K and the queue threshold:** K = 4 servers per client, `queue_factor` = 1.5 to start.
+3. **Priority:** none. Every run gets the same round-robin share on every server, including the farm's own
+   inference-lease holder. (Priority would have been enforced in the server's per-run queues, by giving the
+   holder's run a larger round-robin weight or a few reserved slots; not built.)
+4. **v5p-64 sharing:** yes, the launcher checks and claims hosts before starting, and refuses if another
+   user's processes hold them.
+5. **Old checkpoint copies:** yes, cache reconcile also deletes other ranks' local checkpoint copies, under the same
+   rules as the leader (in the ledger, not the newest two, verified in GCS).
