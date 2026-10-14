@@ -201,6 +201,16 @@ def flags(runs, farms, pools, jobs):
         os.kill(int((L / 'scheduler.pid').read_text()), 0)
     except (OSError, ValueError):
         out.append('SCHEDULER DOWN')
+    # Discovery publishes `updated` (older registries: `time`) every interval; a registry that stopped moving
+    # is not the current fleet (same rule as discovery.registry_is_fresh, inlined: this runs outside the package).
+    try:
+        doc = json.loads((L / 'farms.json').read_text())
+        age = time.time() - float(doc.get('updated', doc.get('time')))
+    except (OSError, ValueError, TypeError):
+        age = None
+    if age is None or age > 300:
+        out.append(f'DISCOVERY STALE: farms.json not updated for {age if age is None else round(age)}s '
+                   '(check the discovery unit)')
     return out
 
 

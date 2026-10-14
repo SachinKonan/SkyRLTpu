@@ -135,22 +135,41 @@ One process on della replaces `borrowing_supervisor`, `local_farms` and `od_watc
 - Profiles name the partition (`hosts: ["v5p64-0", ...]`). The launcher registers the job in the discovery file
   and starts it under a systemd unit (see (e)).
 
-### (e) Process and cache lifecycle
+### (e) Process and cache lifecycle (built: agent/lifecycle-wiring)
 
-- **TPU hosts.** Each job runs everything (Ray, engines, ingress, graders) inside one systemd scope created by the
-  job's run script. Cancel or shutdown stops the scope, which kills the whole cgroup. Grading units already run as
-  systemd units; the leftover private Ray clusters and `ray::IDLE` processes are what this fixes.
-- **Startup check on TPU hosts.** A job refuses to start only if a live scope of another job exists. Leftovers of
-  dead jobs are stopped instead of failing the launch. This replaces "existing private executor Ray cluster;
-  refusing to start", which today needs a manual `clean_worker.sh`.
-- **Della.** The scheduler, discovery and each run client run as systemd user units. That isolates them from
-  session-level kills like the 18:37Z mass kill on 10-13, and restart is then a unit restart, not
-  `setsid nohup` plus a pid file.
-- **Caches.** At startup, each host reconciles its caches (model weights, XLA compile cache, adapters, uploads,
-  checkpoints) against a manifest of what the job needs. It deletes anything not listed and not in use, logging
-  what it deleted.
-  - The checkpoint rules from 19ec8c8d stay: keep the newest two, delete only after GCS verification.
-  - Adapter archives of retired versions go after each swap (already in `serving.py`).
+One start path, one end path, one storage pass, one manifest; systemd units are the only process container.
+
+- **Start: `lifecycle.prepare`** (bootstrap calls it on every launch, before ports or Ray; the placement launchers
+  call `python -m tpu.swarm.ray_train.lifecycle prepare`). A fresh launch and a preemption recovery are the same
+  start. On a pool worker it stops what earlier tasks left: their units, workload processes outside any unit, a
+  private executor Ray head, TPU device owners (`fuser -k`) and another user's `/tmp/libtpu_lockfile`. On a shared
+  private host (assigned IPs, the v5p-64) it stops nothing and refuses. It keeps the old space gates (home 30 GiB,
+  /tmp 10 GiB, inodes). This replaces `clean_host_audit.py` (deleted), whose "existing private executor Ray
+  cluster; refusing to start" needed a manual `clean_worker.sh` (deleted from the tree).
+- **End: `lifecycle.finish`**, from the runtime launcher's `finally`, for normal exit, error and SkyPilot cancel
+  (SIGTERM). The runtime unit is tagged with the SkyPilot task ID (`--description`), so finish stops this task's
+  remaining units (graders, a unit stuck deactivating) and kills workload processes that escaped every unit.
+  Preemption has no end path (the VM is gone): farms expire leases by TTL, and the next `prepare` clears the host.
+- **Exit hooks** (`lifecycle.on_exit` + `install_exit_handlers`): the client and ingress register lease release
+  and in-flight cancel; they run once on normal exit, an unhandled error and SIGTERM/SIGINT, which is what both
+  `systemctl stop` (it signals every process in the unit) and a SkyPilot cancel deliver. finish also runs them.
+- **Della.** Runs start as systemd user units (`lifecycle user-unit`, used by `rq4_local/run_local.sh`), with the
+  run's environment passed explicitly; the unit never touches the run directory. Discovery runs as a notify unit
+  with `Restart=always` and a watchdog fed only by a completed publish, so a dead or hung discovery restarts.
+- **Storage: `Host.reconcile_storage`**, at preflight and from the heartbeat when home has less than
+  `storage_min_free_gib` (30) free. It runs the verified checkpoint reclaim (19ec8c8d rules), then
+  `storage_reconcile.reconcile`: partial transfers, other tasks' code bundles and adapter exports always go; idle
+  roots' environments and source trees, finished inference-only runs and the uv cache go only while short. Never
+  the current root, a path a live process uses, a root or run whose lock is held, a tmpfs mount
+  (cache_admission.py owns RAM caches), or anything holding a client journal. Bounded by
+  `storage_reconcile_timeout`; `python -m tpu.swarm.ray_train.storage_reconcile` is a dry run unless `--apply`.
+- **One manifest.** `runs/<run>/.checkpoint-owner.json` (checkpoint_retention.acquire_run_lease) is the record of
+  what a run is; it now also says `inference_only`, which is what lets a finished farm run be removed whole.
+- **Events.** `lifecycle_prepared`, `lifecycle_finished`, `exit_hook`, `storage_item_removed` (or `_planned` in a
+  dry run: path, reason, tier, bytes) and `storage_reconciled` (totals).
+- **Not changed.** `systemd_runtime` stays opt-in per profile: flipping its default would change stored bootstrap
+  contracts and stop legacy runs from resuming. Every farm, RQ4 and recent profile already sets it, and
+  `prepare` runs for every launch either way. Training, serving and grading behavior are untouched.
 
 ### (f) Smaller grading reservations, with a validation gate
 
