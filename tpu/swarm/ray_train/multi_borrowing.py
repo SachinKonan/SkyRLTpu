@@ -1,10 +1,17 @@
-"""Run-scoped leases on several farms for hybrid and remote-only trainers.
+"""Generation-scoped leases on several farms for hybrid and remote-only clients.
 
 One ``FarmBorrower`` (a ``RunBorrower`` pinned to a single URL) per candidate
 farm keeps the existing acquire, heartbeat, adapter publication, health-grace
 and release logic per lease. ``MultiRunBorrower`` presents the ``RunBorrower``
-surface to the ingress and reconciles the set of held leases toward
-``external_pool_target_leases`` as the supervisor changes the candidate list.
+surface to the ingress.
+
+Lease state machine, per farm (farm side, serving.py)::
+
+    FREE --acquire(run)--> LEASED(run, adapter) --release | TTL expiry--> FREE
+
+A run holds farms only while it has groups to generate: the number of leases
+wanted follows outstanding generation work (``demand()``, set by the ingress),
+capped by ``external_pool_target_leases``.
 
 Invariants:
   * one member per URL; at most ``target`` leases held; acquisition is
@@ -15,11 +22,8 @@ Invariants:
   * a member holding a live lease survives candidate-list updates;
   * ``close()`` releases every lease; tokens are never serialized.
 
-Generation-scoped leases (``external_pool_release_after_generation``): the
-number of leases wanted follows the run's outstanding generation work
-(``demand()``: groups queued or running remotely, set by the ingress) up to
-``target``; nothing is acquired outside a sampling phase except the one
-admission lease ``reserve()`` takes at startup. Once a phase has generated at
+Nothing is acquired outside a sampling phase except the one admission lease
+``reserve()`` takes at startup. Once a phase has generated at
 least one group and no generation is outstanding, idle leases are released at
 once (grading never needs a lease), and every lease is released at phase end.
 A farm that returns or appears mid-phase is acquired as soon as demand exceeds
@@ -148,11 +152,11 @@ class MultiRunBorrower:
         self.run_deadline = 0
         self.run_watchdog = None
         self.acquiring = None
-        self.release_after_generation = self.settings.external_pool_release_after_generation
         # Set by the ingress: () -> groups queued or running remotely, and () -> groups completed.
         self.demand = None
         self.completed = None
         self.phase_completed_at_begin = 0
+        self.phases_begun = 0
         # Set by the ingress: GenerationJournal (restart reclaim, transition log) and
         # path_check(url) -> 'farm_ok' | 'farm_down' | 'unknown' from discovery.
         self.journal = None
@@ -337,11 +341,10 @@ class MultiRunBorrower:
             return 0
 
     def wanted(self):
-        """Leases to hold now: ``target`` for run-scoped clients; demand-driven otherwise."""
-        if not self.release_after_generation:
-            return self.target
+        """Leases to hold now: one for admission before the first phase, none between phases,
+        and inside a phase enough for the outstanding groups."""
         if self.phase is None:
-            return 0
+            return 0 if self.phases_begun else 1
         outstanding = self.outstanding()
         if outstanding is None:
             return self.target
@@ -368,10 +371,9 @@ class MultiRunBorrower:
             member.touch_run()
             if self.phase is not None and member.phase == self.phase:
                 member.retry_preparation()
-        if self.release_after_generation:
-            await self._release_surplus()
+        await self._release_surplus()
         order = list(self.order)
-        if self.release_after_generation and order:
+        if order:
             shift = self.rng.randrange(len(order))
             order = order[shift:] + order[:shift]
         for url in order:
@@ -410,19 +412,7 @@ class MultiRunBorrower:
             if self.closed:
                 return self.snapshot()
             self.touch_run()
-        if self.release_after_generation and self.phase is None:
-            # Startup admission proves one compatible farm exists; it serves the first phase.
-            if not self.held():
-                for url in list(self.order):
-                    member = self.members.get(url)
-                    if member is None or member.closed or time.monotonic() < member.uncertain_until:
-                        continue
-                    await member.reserve()
-                    if member in self.held():
-                        self._event('member_acquired', service=url, held=1, target=self.target, reason='admission')
-                        break
-            return self.snapshot()
-        await self._reconcile_once()
+        await self._reconcile_once()  # admission before the first phase; current demand inside one
         return self.snapshot()
 
     # -- sampling phases ----------------------------------------------------
@@ -436,6 +426,7 @@ class MultiRunBorrower:
                 return self.snapshot()
             self.phase, self.model = phase, model
             self.phase_archive, self.phase_expected_n = archive, expected_n
+            self.phases_begun += 1
             try:
                 self.phase_completed_at_begin = int(self.completed()) if self.completed else 0
             except Exception:
@@ -457,9 +448,8 @@ class MultiRunBorrower:
                 return False
             self.phase = self.model = None
             self.phase_archive = None
-        if self.release_after_generation:
-            await asyncio.gather(*(m.release_idle('sampling phase ended') for m in list(self.members.values())),
-                                 return_exceptions=True)
+        await asyncio.gather(*(m.release_idle('sampling phase ended') for m in list(self.members.values())),
+                             return_exceptions=True)
         if self.journal is not None and self.reclaim_task is None:
             self.journal.discard_unused()
         return True
@@ -549,5 +539,4 @@ class MultiRunBorrower:
         except RemoteRequestRejected:
             raise
         finally:
-            if self.release_after_generation:
-                self.wake.set()  # demand changed: release a finished farm or acquire for a rerouted group
+            self.wake.set()  # demand changed: release a finished farm or acquire for a rerouted group

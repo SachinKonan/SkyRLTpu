@@ -258,10 +258,6 @@ class Inference:
     # farm's hash is learned and required from every later farm.
     external_pool_required_compatibility: list[str] = field(default_factory=list)
     external_pool_queue_alert_seconds: int = 60
-    # Generation-scoped leases (redesign section (a)): hold a farm only while this
-    # run still has groups to generate, and release it the moment the last group of
-    # a sampling phase finishes. Off keeps run-scoped retention across steps.
-    external_pool_release_after_generation: bool = False
     # Acknowledged generation (farms advertising generation_protocol 1): a group is
     # submitted, acknowledged and polled. This many consecutive failed polls mark the
     # farm dead and the group is rerouted; a group still queued on the farm after
@@ -839,12 +835,6 @@ class Config:
         if (type(self.inference.farm_cancel_grace_seconds) is not int or self.inference.farm_cancel_grace_seconds <= 0
                 or self.inference.farm_cancel_grace_seconds >= self.inference.farm_drain_timeout):
             raise ValueError('farm_cancel_grace_seconds must be a positive integer below farm_drain_timeout')
-        if type(self.inference.external_pool_release_after_generation) is not bool:
-            raise ValueError('external_pool_release_after_generation must be boolean')
-        if self.inference.external_pool_release_after_generation and not (
-                self.inference.remote_only or self.inference.external_pool_target_leases > 1):
-            raise ValueError('releasing farms after generation requires the multi-farm borrower '
-                             '(remote_only or external_pool_target_leases > 1)')
         if type(self.inference.remote_only) is not bool:
             raise ValueError('remote_only must be boolean')
         if type(self.inference.external_pool_dynamic_engines) is not bool:

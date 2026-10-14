@@ -509,8 +509,8 @@ def eligible(borrower):
 def test_multi_borrower_holds_two_leases_and_shares_generation(tmp_path):
     async def operation(borrower, farm, archive, events):
         snapshot = await borrower.reserve()
-        assert snapshot['reserved'] and held(borrower) == ['http://farm1', 'http://farm2']
-        assert snapshot['held'] == ['http://farm1', 'http://farm2'] and snapshot['target'] == 2
+        # Generation-scoped leases: one admission lease before the first phase, the target inside one.
+        assert snapshot['reserved'] and len(held(borrower)) == 1 and snapshot['target'] == 2
         await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
         await until(lambda: len(eligible(borrower)) == 2)
         assert borrower.eligible_pools() == [('http://farm1', 4), ('http://farm2', 4)]
@@ -522,7 +522,7 @@ def test_multi_borrower_holds_two_leases_and_shares_generation(tmp_path):
         assert borrower.snapshot()['ready'] and borrower.lease is not None
         assert borrower._eligible(borrower.lease)
         await borrower.end('phase-1')
-        assert borrower.phase is None and held(borrower) == ['http://farm1', 'http://farm2']
+        assert borrower.phase is None and held(borrower) == []  # released when the phase ends
     multi_case(tmp_path, operation)
 
 
@@ -580,14 +580,16 @@ def test_multi_borrower_all_farms_lost_then_replacement_serves_after_attestation
 def test_multi_borrower_never_exceeds_target_and_never_double_acquires(tmp_path):
     async def operation(borrower, farm, archive, events):
         await borrower.reserve()
-        assert held(borrower) == ['http://farm1', 'http://farm2']
-        assert farm.acquires == {'farm1': 1, 'farm2': 1}
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: len(held(borrower)) == 2)
+        assert sum(farm.acquires.values()) == 2 and set(farm.acquires.values()) == {1}
         await borrower.reserve()
         await asyncio.sleep(1.5)  # A few reconcile ticks.
-        assert farm.acquires == {'farm1': 1, 'farm2': 1}
-        farm.down.add('farm1')
-        await until(lambda: held(borrower) == ['http://farm2', 'http://farm3'])
-        assert farm.acquires['farm3'] == 1 and farm.acquires['farm2'] == 1
+        assert sum(farm.acquires.values()) == 2
+        lost = held(borrower)[0]
+        farm.down.add(lost.split('//')[1])
+        await until(lambda: len(held(borrower)) == 2 and lost not in held(borrower))
+        assert all(count == 1 for count in farm.acquires.values())
     multi_case(tmp_path, operation, urls=('http://farm1', 'http://farm2', 'http://farm3'))
 
 
@@ -595,9 +597,10 @@ def test_multi_borrower_update_urls_keeps_live_leases_and_adds_candidates(tmp_pa
     async def operation(borrower, farm, archive, events):
         await borrower.reserve()
         assert held(borrower) == ['http://farm1']
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
         borrower.update_urls('Qwen/Qwen3.5-27B', ['http://farm2', 'http://farm3'])
         assert borrower.urls == ['http://farm2', 'http://farm3']
-        await until(lambda: held(borrower) == ['http://farm1', 'http://farm2'])
+        await until(lambda: len(held(borrower)) == 2 and 'http://farm1' in held(borrower))
         assert 'http://farm1' in borrower.members  # Live lease survives its removal from the list.
         with pytest.raises(Exception):
             borrower.update_urls('Qwen/Qwen3.5-27B', ['http://farm%d' % i for i in range(9)])
@@ -609,12 +612,15 @@ def test_multi_borrower_learns_the_first_contract_and_rejects_others(tmp_path):
         farm.capabilities.update(farm1='c' * 64, farm2='d' * 64)
         await borrower.reserve()
         await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
-        await until(lambda: borrower.accepted == {'c' * 64})
-        await until(lambda: held(borrower) == ['http://farm1'])
+        # Whichever farm this run reached first sets the contract (runs start at different farms).
+        await until(lambda: len(borrower.accepted) == 1)
+        learned = next(iter(borrower.accepted))
+        first, other = ('http://farm1', 'http://farm2') if learned == 'c' * 64 else ('http://farm2', 'http://farm1')
+        await until(lambda: held(borrower) == [first])
         await asyncio.sleep(1.5)
-        assert held(borrower) == ['http://farm1'] and borrower.required_contract == 'c' * 64
-        assert any(e == 'borrow_incompatible_runtime' and f['service'] == 'http://farm2' for e, f in events)
-        assert borrower.snapshot()['accepted_compatibility'] == ['c' * 64]
+        assert held(borrower) == [first] and borrower.required_contract == learned
+        assert any(e == 'borrow_incompatible_runtime' and f['service'] == other for e, f in events)
+        assert borrower.snapshot()['accepted_compatibility'] == [learned]
     multi_case(tmp_path, operation, external_pool_attestation=True)
 
 
@@ -690,7 +696,8 @@ def test_legacy_borrower_still_requires_the_configured_farm_size(tmp_path):
 def test_multi_borrower_close_releases_every_lease(tmp_path):
     async def operation(borrower, farm, archive, events):
         await borrower.reserve()
-        assert set(farm.owners) == {'farm1', 'farm2'}
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: set(farm.owners) == {'farm1', 'farm2'})
         await borrower.close()
         assert farm.owners == {} and borrower.closed
         assert any(e == 'borrow_closed' for e, _ in events)
@@ -816,15 +823,16 @@ def test_zero_engine_ingress_serves_control_plane_and_routes_groups_to_farms(tmp
                 await until(lambda: any(e == 'remote_queue_waiting' for e, _ in events), 5)
                 reservation = await http.post('/skyrl/v1/borrowing/reservation',
                     json=dict(run_id=cfg.run_id, instance=gateway.borrowing_instance, action='acquire'))
-                assert reservation.status_code == 200 and sorted(reservation.json()['held']) == ['http://farm1', 'http://farm2']
+                assert reservation.status_code == 200 and len(reservation.json()['held']) == 1  # admission
                 assert reservation.json()['accepted_compatibility'] == ['c' * 64]
                 assert (await http.get('/status')).json()['capabilities']['compatibility_sha256'] == 'c' * 64
-                farms = (await http.get('/skyrl/v1/grading/farms')).json()['farms']
-                assert sorted(f['url'] for f in farms) == ['http://farm1', 'http://farm2']
-                assert all(f['token'].startswith('lease-') and f['capacity'] == 4 for f in farms)
                 begin = await http.post('/skyrl/v1/borrowing/begin',
                     json={'phase_id': 'phase1', 'bootstrap': True, 'expected_n': 2})
                 assert begin.status_code == 200 and begin.json()['remote_only']
+                await until(lambda: len(gateway.borrower.held()) == 2)
+                farms = (await http.get('/skyrl/v1/grading/farms')).json()['farms']
+                assert sorted(f['url'] for f in farms) == ['http://farm1', 'http://farm2']
+                assert all(f['token'].startswith('lease-') and f['capacity'] == 4 for f in farms)
                 response = await asyncio.wait_for(pending, 10)
                 assert response.status_code == 200 and len(response.json()['choices']) == 2
                 responses = await asyncio.gather(*(http.post('/v1/completions', json=payload) for _ in range(6)))

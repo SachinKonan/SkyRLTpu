@@ -574,86 +574,76 @@ class Borrower:
         return {k: v for k, v in contract.items() if v is not None}
 
     async def _polled_generation(self, lease, body, request_id, key=None):
-        """Submit -> acknowledgement -> poll. Dead or slow farms surface quickly.
+        """One group through the shared request protocol (request_protocol.drive): ACK or refuse, poll.
 
-        ``generation_poll_failures`` consecutive failed polls mark the farm dead
-        (the lease is lost and the group rerouted) -- unless discovery still sees
-        the farm healthy, in which case the path (tunnel) is suspected and polling
-        gets one more round before the farm is given up. A group still queued on
-        the farm after ``generation_queue_timeout`` seconds is cancelled once,
-        without waiting for the answer, and rerouted. The request id is fresh per
-        attempt, so a late result from an abandoned farm is never taken.
+        A refused group (farm full) is rerouted uncharged; a lost one (polls failing, or queued too long
+        while another farm is free) is rerouted and charged as an infrastructure failure. Before giving a
+        farm up, discovery is asked whether only our path failed; if so the same id is polled one more
+        round (resubmitting a known id is idempotent on the farm). Request ids are fresh per attempt, so
+        a late result from an abandoned farm is never taken.
         """
+        from .request_protocol import Limits, Lost, Refused, drive
         settings = self.settings
         rpc = settings.external_pool_rpc_timeout
         key = key or request_id
         headers = self._generation_headers(lease)
-        self._generation_log('submitted', key, url=lease.url, request_id=request_id)
-        response = await self.http.post(lease.url + '/skyrl/v1/generation/submit', headers=headers,
-                                        json={'request_id': request_id, 'payload': body,
-                                              'contract': self._generation_contract(lease, body)},
-                                        timeout=max(rpc, 30))
-        if response.status_code in (429, 503):
-            self._generation_log('refused', key, url=lease.url, request_id=request_id,
-                                 http_status=response.status_code)
-            raise FarmBusy(response.text[:256])
-        if response.status_code == 409 and 'contract mismatch' in response.text:
-            self._generation_log('refused', key, url=lease.url, request_id=request_id, reason=response.text[:200])
-            raise GenerationFailed(f'farm refused the group contract: {response.text[:200]}', 409, dead=True)
-        response.raise_for_status()
-        self._generation_log('acknowledged', key, url=lease.url, request_id=request_id)
-        acknowledged = time.monotonic()
-        failures, path_extensions = 0, 0
+        wait = settings.external_pool_generation_poll_wait
+        log = lambda event, **f: self._generation_log(event, key, url=lease.url, request_id=request_id, **f)
+
+        async def submit():
+            response = await self.http.post(lease.url + '/skyrl/v1/generation/submit', headers=headers,
+                                            json={'request_id': request_id, 'payload': body,
+                                                  'contract': self._generation_contract(lease, body)},
+                                            timeout=max(rpc, 30))
+            if response.status_code in (429, 503):
+                raise Refused(f'farm full ({response.status_code})')
+            if response.status_code == 409 and 'contract mismatch' in response.text:
+                raise GenerationFailed(f'farm refused the group contract: {response.text[:200]}', 409, dead=True)
+            response.raise_for_status()
+
+        async def poll():
+            response = await self.http.get(lease.url + f'/skyrl/v1/generation/result/{request_id}',
+                                           headers=headers, params={'wait': wait}, timeout=wait + max(rpc, 10))
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            return response.json()
+
+        async def cancel():
+            await self.http.post(lease.url + f'/skyrl/v1/generation/cancel/{request_id}', headers=headers,
+                                 timeout=rpc)
+
+        limits = Limits(poll_miss_limit=settings.external_pool_generation_poll_failures,
+                        queue_limit_s=settings.external_pool_generation_queue_timeout,
+                        poll_interval_s=min(5, settings.external_pool_heartbeat_seconds))
+        report = lambda event, **f: log(event.replace('request_', ''), **f)
+        log('submitted')
         try:
-            while True:
-                try:
-                    response = await self.http.get(
-                        lease.url + f'/skyrl/v1/generation/result/{request_id}', headers=headers,
-                        params={'wait': settings.external_pool_generation_poll_wait},
-                        timeout=settings.external_pool_generation_poll_wait + max(rpc, 10))
-                    if response.status_code == 404:
-                        raise GenerationFailed('generation request unknown to farm (restarted?)', 404, dead=True)
-                    response.raise_for_status()
-                    view = response.json()
-                except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
-                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (409, 410):
-                        raise  # the lease itself was rejected
-                    failures += 1
-                    self._generation_log('poll_miss', key, url=lease.url, request_id=request_id, misses=failures,
-                                         reason=type(exc).__name__)
-                    if failures >= settings.external_pool_generation_poll_failures:
-                        check = getattr(self, 'path_check', None)
-                        verdict = check(lease.url) if check else 'unknown'
-                        if verdict == 'farm_ok' and path_extensions == 0:
-                            # Discovery still reaches the farm: suspect our path (tunnel), not the farm.
-                            path_extensions += 1
-                            failures = 0
-                            self._generation_log('path_suspect', key, url=lease.url, request_id=request_id)
-                            await asyncio.sleep(min(10, settings.external_pool_heartbeat_seconds))
-                            continue
-                        raise GenerationFailed(f'farm stopped answering generation polls ({failures} in a row, '
-                                               f'discovery says {verdict})', dead=True) from None
-                    await asyncio.sleep(min(5, settings.external_pool_heartbeat_seconds))
-                    continue
-                failures = 0
-                state = view.get('state')
-                if state == 'done':
-                    return view.get('result')
-                if state in ('failed', 'cancelled'):
-                    raise GenerationFailed(f"farm {state} the group: {view.get('error')}", view.get('status'))
-                if (state == 'queued'
-                        and time.monotonic() - acknowledged > settings.external_pool_generation_queue_timeout):
-                    self._cancel_once(lease, request_id)
-                    self._event('generation_queue_timeout', service=lease.url, request_id=request_id)
-                    raise FarmBusy('queued too long on the farm')
+            try:
+                view = await drive(submit, poll, cancel, limits=limits, on_ack=lambda: log('acknowledged'),
+                                   report=report)
+            except Lost as exc:
+                check = getattr(self, 'path_check', None)
+                if exc.kind != 'poll_miss' or not check or check(lease.url) != 'farm_ok':
+                    raise
+                log('path_suspect', reason=str(exc))  # discovery still reaches the farm: re-poll once
+                view = await drive(submit, poll, cancel, limits=limits, report=report)
+        except Refused as exc:
+            log('refused', reason=str(exc))
+            raise FarmBusy(str(exc)) from None
+        except Lost as exc:
+            log('lost', reason=str(exc), kind=exc.kind)
+            if exc.kind == 'queued_too_long':
+                raise FarmBusy(str(exc)) from None  # the farm is slow, not dead: keep the lease
+            raise GenerationFailed(str(exc), dead=True) from None
         except asyncio.CancelledError:
             self._cancel_once(lease, request_id)
-            self._generation_log('abandoned', key, url=lease.url, request_id=request_id, reason='caller cancelled')
+            log('abandoned', reason='caller cancelled')
             raise
-        except BaseException as exc:
-            self._generation_log('lost', key, url=lease.url, request_id=request_id,
-                                 reason=f'{type(exc).__name__}: {exc}'[:200])
-            raise
+        if view.get('state') == 'done':
+            return view.get('result')
+        log('lost', reason=f"farm {view.get('state')} the group: {view.get('error')}")
+        raise GenerationFailed(f"farm {view.get('state')} the group: {view.get('error')}", view.get('status'))
 
     def _cancel_once(self, lease, request_id):
         """Ask the farm to drop an abandoned group; never wait for the answer."""

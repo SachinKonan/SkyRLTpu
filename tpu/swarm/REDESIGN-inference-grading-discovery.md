@@ -59,20 +59,55 @@ farm's inference lease can grade there.
 
 ## Design
 
-### (a) Inference lease covers generation only
+### (a) Inference lease covers generation only (built: agent/req-protocol-inference)
 
-- A trainer acquires a farm, uploads its LoRA, generates its groups, then releases the farm.
-- The lease no longer spans the grading phase or the gap between steps.
-- No-train runs serve the base model, so they take no lease. Any farm with the same model and serving hash will do,
-  and the farm's ingress shares engines between callers.
-- On acquire, the farm checks whether the adapter is already loaded (by hash) and skips the upload if it is.
-- The cost is an adapter reload when another run used the farm in between: seconds for a LoRA. Measure it in phase 2.
-- Fairness: acquire requests queue per model, oldest waiting run first. A run that just released does not jump the
-  queue.
+**Lease** (farm side, one per farm; `serving.py`):
 
-Code: `serving.py` `acquire_lease` / `release_lease` already exist. The client changes so it releases at
-generation end (`external_pool_target_leases` becomes "farms per generation phase"). Renewals stop counting time
-spent grading.
+```
+FREE --acquire(run)--> LEASED(run, adapter) --release | TTL expiry--> FREE
+```
+
+- One run, one adapter per farm. TTL (`external_pool_lease_seconds`) is renewed by the heartbeat; expiry is the
+  only other transition. Release/expiry cancels the lease's unfinished groups.
+- Fair queue: a run refused while the farm is leased is recorded; the next free lease goes to the run that has
+  waited longest (a waiter silent for three heartbeats is dropped). Each run starts its farm walk at a different
+  farm and retries with jitter.
+- Client (`multi_borrowing.MultiRunBorrower`, the only multi-farm borrower): one admission lease before the first
+  phase; inside a phase, leases follow outstanding groups (`demand()` = queued + running remotely, per-farm cap
+  `external_pool_max_concurrent_requests`), capped by `external_pool_target_leases`; idle farms are released as
+  soon as the phase has generated and nothing is outstanding (grading never needs a lease); all released at phase
+  end and on every exit (runner `finally` closes the reservation on SIGTERM, error, or normal end). A farm that
+  returns mid-phase is acquired as soon as demand needs it. Removed: run-scoped retention across steps, the fixed
+  per-run `--farm-target` / `FARM_TARGET`.
+
+**Generation group** (same request state machine as grading, `request_protocol.drive`):
+
+```
+submit --ACK(202, id)--> queued --> running --> done | failed | cancelled
+   |  \--refused(429/503: full)--> reroute, not charged
+   |   \--409 contract mismatch--> farm dropped, reroute (charged)
+   poll misses x3 --discovery says farm healthy--> one more round (path, e.g. tunnel)
+                  --otherwise--> lost: lease dropped, group regenerated elsewhere (charged)
+   queued > 10 min while another farm is free --> cancel once (not awaited), reroute (not charged)
+   unpolled for the request TTL (180 s) --> the farm cancels it
+```
+
+- Every group carries its contract: model, serving compatibility hash (includes `SKYRL_SWA_KV`), adapter,
+  renderer date (`TTD_RENDERER_DATE`, recorded). The farm refuses a mismatch.
+- Exactly once per request id: the farm hands a result over once; ids are fresh per attempt and abandoned ids
+  are never polled again; duplicate submits of a known id return the existing view (counted).
+- A group failing on farms 5 times (`external_pool_generation_max_failures`) is dropped and logged; the client
+  counts it as a failed group and the step continues. Every regeneration is logged (group, farm, attempt) and the
+  step metrics get `infra/groups_regenerated` and `infra/groups_dropped`.
+- Journal (`generation-journal.jsonl` in the run dir) records every transition. A restarted client re-polls the
+  groups its previous incarnation left on farms (run identity, not the lost lease), serves finished ones without
+  regenerating them, and regenerates only the missing ones; reclaimed results nobody asks for are dropped and
+  logged at phase end.
+
+**Rollout:** farms must be rebuilt for `/skyrl/v1/generation/*`, the fair lease queue, contract checks and
+generation TTL (older farms keep working: clients fall back to `/v1/completions` when a farm does not advertise
+`generation_protocol`). Clients (local runner / trainers) need the new ingress; generation-scoped leasing is the
+only multi-farm behaviour, so all runs on the new ingress release farms after generation.
 
 ### (b) Grading is open: admission with an ACK, no lease
 

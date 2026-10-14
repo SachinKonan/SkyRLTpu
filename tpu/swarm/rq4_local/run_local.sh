@@ -22,6 +22,6 @@ d=$(awk -v r="$run" '$1==r {print $2}' $L/scripts/renderer_dates.txt 2>/dev/null
 cd "$root/pkg"
 PYTHONPATH="$root/pkg" OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 nohup $L/envs/controller/bin/python -u -m tpu.swarm.ray_train.local_notrain \
   --config "$profile" --registry $L/farms.json --package "$root/pkg" --source "$(readlink -f $root/source)" \
-  --python $L/envs/client/bin/python --hf-home $L/hf --snapshot "$snapshot" --num-epochs ${NUM_EPOCHS:-25} ${FARM_GROUP_CAP:+--farm-group-cap $FARM_GROUP_CAP} ${FARM_TARGET:+--farm-target $FARM_TARGET} > "$root/runner.log" 2>&1 &
+  --python $L/envs/client/bin/python --hf-home $L/hf --snapshot "$snapshot" --num-epochs ${NUM_EPOCHS:-25} ${FARM_GROUP_CAP:+--farm-group-cap $FARM_GROUP_CAP} > "$root/runner.log" 2>&1 &
 echo $! > "$root/runner.pid"
 echo "$run pid=$(cat $root/runner.pid)"

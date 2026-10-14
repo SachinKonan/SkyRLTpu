@@ -19,11 +19,8 @@ MAX_LAUNCHES = 40
 # Gemma farms run 16 seqs/engine with KV already 64-70% used, so raise groups in flight, not seqs: one group
 # per engine (4 per farm) instead of 2, which left half of each farm's engines idle.
 GROUP_CAP = {'qwen35': '16', 'gemma': '4'}
-# Farms leased per run (ingress-only override): 5 Qwen3.5 runs share 6 farms, so one each.
-# Gemma: 2 farms per run (8 groups in flight) since 2026-10-11, when spare v5p capacity allowed 8 Gemma farms.
-# Gemma back to 1 farm per run while Gemma farms are scarce (2026-10-13 07:2xZ: 2 healthy, 4 qubit/circuit runs).
-# Qwen3.5 back to 2 farms per run (2026-10-13 14:2xZ): only the two circuit runs are left and 4 Qwen3.5 farms are up.
-FARM_TARGET = {'qwen35': '2', 'muse': '1', 'gemma': '1'}
+# Farms per run are no longer fixed here: a run leases farms only while it generates, as many as its
+# outstanding groups need (multi_borrowing.MultiRunBorrower), and grades on any farm (open grading).
 MODELS = {'qwen35': 'Qwen/Qwen3.5-27B', 'gemma': 'google/gemma-4-31B-it', 'muse': 'meta-models/Muse-Glimmer-30B'}
 # Priority when farms are scarce (user, 2026-10-13): finish qubit and circuit first.
 ORDER = [(p, s) for p in ('qubit', 'circuit', 'ac1', 'erdos') for s in (1, 2)]
@@ -35,13 +32,6 @@ PROBLEM_TARGET = {}
 # Muse ac1 is paused until every Muse qubit/circuit run reaches its target (user, 2026-10-13): restarting it
 # whenever each qubit/circuit run held a farm let it take the next farm a circuit run lost.
 HOLD_UNTIL_FIRST_DONE = {'muse'}
-
-
-def farm_target(tag, run):
-    # A run still building its 1024-draft seed tree leases 2 farms to grade it faster (user, 2026-10-13).
-    if not (L / 'runs' / run / 'runs' / run / 'client/bootstrap/complete.json').exists():
-        return '2'
-    return FARM_TARGET.get(tag, '')
 
 
 def target(run):
@@ -94,8 +84,8 @@ while not STOP.exists():
         usable = [f for f in farms if f.get('ok') and f.get('tunnel_ok') and model in (f.get('models') or [])
                   and (f.get('state') in ('unleased', 'expired') or (f.get('owner_run') or '').split(':')[0] in ours)]
         running = [r for r in QUEUE[tag] if alive(r)]
-        # A new run waits for as many usable farms as it leases (FARM_TARGET, else 2).
-        slots = max(1, len(usable) // int(FARM_TARGET.get(tag) or 2))
+        # A run needs one usable farm to start; farms are shared by generation-scoped leases.
+        slots = max(1, len(usable))
         resume = [r for r in QUEUE[tag] if counts.get(r) and not alive(r) and step(r) < target(r)
                   and counts[r] < MAX_LAUNCHES]
         fresh = [r for r in QUEUE[tag] if not counts.get(r)]
@@ -117,8 +107,7 @@ while not STOP.exists():
                 log(event='prep_failed', model=tag, run=run, output=(prep.stdout + prep.stderr)[-300:])
                 continue
             out = subprocess.run([str(T / 'run_local.sh'), run], capture_output=True, text=True,
-                                 env=dict(os.environ, NUM_EPOCHS=str(target(run)), FARM_GROUP_CAP=GROUP_CAP.get(tag, ''),
-                                          FARM_TARGET=farm_target(tag, run)))
+                                 env=dict(os.environ, NUM_EPOCHS=str(target(run)), FARM_GROUP_CAP=GROUP_CAP.get(tag, '')))
             log(event='started', model=tag, run=run, resumed_at_step=step(run), usable_farms=len(usable),
                 slots=slots, output=(out.stdout + out.stderr).strip()[-300:])
             running.append(run)

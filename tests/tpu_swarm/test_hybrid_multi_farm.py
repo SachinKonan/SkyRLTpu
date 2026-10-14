@@ -76,8 +76,8 @@ def test_hybrid_ingress_two_farms_and_local_fallback(tmp_path):
                 archive = tmp_path / 'adapter.tar'
                 archive.write_bytes(b'weights')
                 await gateway.borrower.begin('phase1', cfg.model, archive, expected_n=1)
-                await until(lambda: len(gateway.borrower.eligible_pools()) == 2)
-                assert len(gateway.borrower.held()) == 2 and 'farm3' not in farm.owners
+                # Generation-scoped leases: the admission farm first; queued groups pull in a second farm.
+                await until(lambda: len(gateway.borrower.eligible_pools()) == 1)
                 assert not gateway.borrower.snapshot()['remote_only']
                 payload = dict(model=cfg.model, prompt=[1], n=1, max_tokens=4)
                 # Fill one local slot and four slots in each farm. Each request
@@ -86,13 +86,15 @@ def test_hybrid_ingress_two_farms_and_local_fallback(tmp_path):
                 tasks = [asyncio.create_task(gateway.finish_admitted('generate', payload)) for _ in range(9)]
                 await until(lambda: len(local_calls) == 1 and
                     sum(p == '/v1/completions' for h, p in farm.requests) == 8)
-                assert gateway.scheduler.snapshot()['farms'] == {'http://farm1': 4, 'http://farm2': 4}
+                busy = gateway.scheduler.snapshot()['farms']
+                assert sorted(busy.values()) == [4, 4] and len(gateway.borrower.held()) == 2  # never above target
                 gate.set()
                 results = await asyncio.gather(*tasks)
                 assert all(r['choices'] for r in results) and gateway.active == 0
                 # One farm can disappear without preventing local generation.
-                gateway.borrower.update_urls(cfg.model, ['http://farm2'])
-                farm.down.add('farm1')
+                kept, lost = sorted(busy)
+                gateway.borrower.update_urls(cfg.model, [kept])
+                farm.down.add(lost.split('//')[1])
                 await until(lambda: len(gateway.borrower.eligible_pools()) < 2)
                 before = len(local_calls)
                 gateway.active = 1
