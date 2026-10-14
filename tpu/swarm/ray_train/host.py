@@ -71,6 +71,8 @@ class Host:
         self.store = None
         self.last_sync = None
         self.sync_error = None
+        self.last_storage_check = time.monotonic()
+        self.storage_thread = None
         self.watchdog = threading.Thread(target=self._watch_lease, daemon=True)
         self.watchdog.start()
 
@@ -83,11 +85,42 @@ class Host:
 
     def heartbeat(self):
         self.last_heartbeat = time.monotonic()
+        self._maybe_reclaim_storage()
         with self.lock:
             return dict(rank=self.rank, role=self.role, phase=self.phase,
                         processes={k: p.poll() for k, p in self.processes.items()},
                         last_cache_sync=self.last_sync, cache_sync_error=self.sync_error,
                         stopped=self.stopping.is_set())
+
+    def reconcile_storage(self, startup):
+        """The one storage cleanup: verified checkpoint copies, then other tasks' disk leftovers.
+
+        Never the current root, anything a live process holds, a held lock or a client journal (see
+        storage_reconcile.py). Runs at preflight (fresh start and recovery) and from the heartbeat when disk is low.
+        """
+        from .checkpoint_retention import reclaim_checkpoints
+        reclaim_checkpoints(self.root, self.config.run_id, self.gcs, self.log,
+                            timeout=self.config.checkpoint_cleanup_timeout, stopping=self.stopping.is_set)
+        if not self.config.storage_min_free_gib:
+            return None
+        from .storage_reconcile import reconcile
+        return reconcile(Path.home(), self.root, os.environ.get("RAY_TRAIN_CODE_SHA256"),
+                         target_free_bytes=self.config.storage_min_free_gib * 1024**3, startup=startup,
+                         timeout=self.config.storage_reconcile_timeout, log=self.log,
+                         stopping=self.stopping.is_set)
+
+    def _maybe_reclaim_storage(self, interval=300):
+        # Checked from the heartbeat at most every `interval` seconds; the pass runs off the heartbeat thread.
+        now = time.monotonic()
+        if now - self.last_storage_check < interval or not self.config.storage_min_free_gib:
+            return
+        self.last_storage_check = now
+        if self.storage_thread is not None and self.storage_thread.is_alive():
+            return
+        if shutil.disk_usage(Path.home()).free >= self.config.storage_min_free_gib * 1024**3:
+            return
+        self.storage_thread = threading.Thread(target=self.reconcile_storage, args=(False,), daemon=True)
+        self.storage_thread.start()
 
     def start(self, name, command, env=None, cwd=None):
         with self.lock:
@@ -140,19 +173,10 @@ class Host:
                                       self.config.retired_processes.get(self.ips[self.rank]))
             emit(self.log, "retired_workloads_stopped", rank=self.rank, pids=stopped,
                  task_ids=self.config.retired_task_ids)
-        import psutil
-        for process in psutil.process_iter(["pid", "cmdline"]):
-            args = process.info["cmdline"] or []
-            # Do not disturb detached workloads that the pool calls idle.
-            if any(token in args for token in ("skyrl.tinker.api", "skyrl.tinker.engine", "skyrl.backends.rpc")):
-                raise RuntimeError(f"host {self.rank} has an existing trainer PID {process.pid}")
-            if any(arg.endswith("/vllm_tpu_server.py") or arg.startswith("VLLM::") for arg in args):
-                raise RuntimeError(f"host {self.rank} has an existing inference PID {process.pid}")
+        # Leftover trainers/engines of earlier tasks were already stopped by lifecycle.prepare (pool workers) or
+        # made the launch refuse (shared hosts), before this job's runtime unit started.
         self.clear_previous_adapter_exports()
-        from .checkpoint_retention import reclaim_checkpoints
-        reclaim_checkpoints(self.root, self.config.run_id, self.gcs, self.log,
-                            timeout=self.config.checkpoint_cleanup_timeout,
-                            stopping=self.stopping.is_set)
+        self.reconcile_storage(startup=True)
         if shutil.disk_usage(self.root).free < 10 * 1024**3:
             raise RuntimeError("need 10 GiB disk for isolated code/envs; refusing unrelated cache deletion")
         self.phase = "preflight_complete"

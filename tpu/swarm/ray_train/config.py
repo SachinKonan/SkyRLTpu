@@ -428,6 +428,10 @@ class Config:
     systemd_port: int = 24900
     systemd_peer_timeout: int = 30
     systemd_shutdown_grace: int = 90
+    # storage_reconcile.py: free-disk target for reclaiming other tasks' leftovers (at preflight and whenever the
+    # heartbeat sees less), and its time budget per pass. 0 disables reclamation.
+    storage_min_free_gib: int = 30
+    storage_reconcile_timeout: int = 120
     max_restarts_on_errors: int = 0
     checkpoint_resume: bool = False
     # When true, every storage path must live inside `bucket`, and that bucket
@@ -1262,6 +1266,9 @@ class Config:
             raise ValueError("trainer.maxtext_kwargs must be a mapping")
         if type(self.systemd_runtime) is not bool:
             raise ValueError("systemd_runtime must be boolean")
+        if (type(self.storage_min_free_gib) is not int or self.storage_min_free_gib < 0
+                or type(self.storage_reconcile_timeout) is not int or self.storage_reconcile_timeout < 0):
+            raise ValueError("storage_min_free_gib and storage_reconcile_timeout must be nonnegative integers")
         if type(self.systemd_port) is not int or not 1024 <= self.systemd_port <= 65535:
             raise ValueError("invalid systemd coordinator port")
         if (type(self.systemd_peer_timeout) is not int or self.systemd_peer_timeout <= 0

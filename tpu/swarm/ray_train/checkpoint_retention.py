@@ -132,7 +132,9 @@ def acquire_run_lease(config, root):
         manifest = private_path(root, run / MANIFEST)
         record = dict(version=1, root=str(root), run_id=config.run_id,
                       checkpoint_gcs=config.run_gcs + "/checkpoints",
-                      task_id=os.environ.get("SKYPILOT_TASK_ID", ""))
+                      task_id=os.environ.get("SKYPILOT_TASK_ID", ""),
+                      # storage_reconcile.py may remove a finished inference-only run whole (no durable state).
+                      inference_only=bool(config.inference_only))
         if manifest.exists():
             previous = json.loads(manifest.read_text())
             if not isinstance(previous, dict) or any(previous.get(key) != record[key] for key in
