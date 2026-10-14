@@ -463,41 +463,37 @@ class MultiRunBorrower:
         return min(eligible, key=lambda m: m.lease.active / max(1, m.lease.max_requests)) if eligible else None
 
     async def reclaim(self):
-        """After a restart: re-poll groups the previous incarnation left on farms (run identity, no lease)."""
+        """After a restart: re-poll groups the previous incarnation left on farms (drive(resume=True), run identity)."""
         journal = self.journal
         if journal is None or not journal.open:
             return 0
-        headers = journal.headers
-        wait = self.settings.external_pool_generation_poll_wait
+        from .borrowing import LONG_POLL_S, PROTOCOL
+        from .request_protocol import Lost, State, Ticket, drive
 
         async def one(key, entry):
             url, request_id = entry.get('url'), entry.get('request_id')
-            misses = 0
-            while not self.closed:
-                try:
-                    response = await self.http.get(url + f'/skyrl/v1/generation/result/{request_id}',
-                                                   headers=headers, params={'wait': wait},
-                                                   timeout=wait + max(self.settings.external_pool_rpc_timeout, 10))
-                    if response.status_code == 404:
-                        journal.record('reclaim_missing', key, url=url, request_id=request_id)
-                        return
-                    response.raise_for_status()
-                    view = response.json()
-                except Exception as exc:
-                    misses += 1
-                    if misses >= self.settings.external_pool_generation_poll_failures:
-                        journal.record('reclaim_missing', key, url=url, request_id=request_id,
-                                       reason=type(exc).__name__)
-                        return
-                    await asyncio.sleep(2)
-                    continue
-                misses = 0
-                if view.get('state') == 'done':
-                    journal.reclaimed(key, view.get('result'), url=url, request_id=request_id)
-                    return
-                if view.get('state') in ('failed', 'cancelled'):
-                    journal.record('reclaim_missing', key, url=url, request_id=request_id, reason=view.get('state'))
-                    return
+
+            async def poll():
+                response = await self.http.get(url + f'/skyrl/v1/generation/result/{request_id}',
+                                               headers=journal.headers, params={'wait': LONG_POLL_S},
+                                               timeout=LONG_POLL_S + 10)
+                if response.status_code == 404:
+                    return None
+                response.raise_for_status()
+                return response.json()
+
+            async def nothing():
+                pass
+            ticket = Ticket(request_id, url)
+            try:
+                view = await drive(ticket, nothing, poll, nothing, config=PROTOCOL, resume=True, poll_interval_s=2)
+            except Lost as exc:
+                journal.record('reclaim_missing', key, url=url, request_id=request_id, reason=exc.kind)
+                return
+            if ticket.state == State.DONE:
+                journal.reclaimed(key, view.get('result'), url=url, request_id=request_id)
+            else:
+                journal.record('reclaim_missing', key, url=url, request_id=request_id, reason=ticket.state.value)
 
         pending = dict(journal.open)
         await asyncio.gather(*(one(k, e) for k, e in pending.items()), return_exceptions=True)

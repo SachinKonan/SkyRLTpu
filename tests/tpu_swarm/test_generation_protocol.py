@@ -81,7 +81,7 @@ def test_failed_group_reports_the_farm_status():
             raise Rejected()
         jobs.submit('r1', dict(lease_id='lease-a'), bad)
         view = await jobs.result('r1', dict(lease_id='lease-a'), wait=2)
-        assert view['state'] == 'failed' and view['status'] == 422 and 'bad prompt' in view['error']
+        assert view['state'] == 'failed' and view['error']['status'] == 422 and 'bad prompt' in view['error']['detail']
     asyncio.run(run())
 
 
@@ -126,6 +126,8 @@ class PollFarm(MultiFarm):
             body = json.loads(request.content)
             self.jobs[body['request_id']] = (host, body['payload'])
             return httpx.Response(202, json={'request_id': body['request_id'], 'state': 'queued'})
+        if path == '/health' and mode == 'dead':
+            raise httpx.ConnectError('farm gone', request=request)
         if path.startswith('/skyrl/v1/generation/result/'):
             self.requests.append((host, path))
             if mode == 'dead' or host in self.down:
@@ -184,21 +186,6 @@ def test_farm_that_stops_answering_polls_is_dropped_and_the_group_rerouted(tmp_p
         result = await borrower.generate(PAYLOAD)  # rerouted to the live farm
         assert len(result['choices']) == 2
     poll_case(tmp_path, operation)
-
-
-def test_group_queued_too_long_is_cancelled_once_and_rerouted_keeping_the_lease(tmp_path):
-    async def operation(borrower, farm, archive, events):
-        await borrower.reserve()
-        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
-        await until(lambda: len(eligible(borrower)) == 2)
-        farm.mode['farm1'] = 'queued'
-        from tpu.swarm.ray_train.hybrid_scheduler import REFUSED
-        assert await borrower.generate(PAYLOAD, farm='http://farm1') is REFUSED  # slow, not dead: uncharged
-        await until(lambda: len(farm.cancels) == 1)
-        assert farm.cancels[0][0] == 'farm1'
-        assert 'http://farm1' in held(borrower)  # a slow farm is not a dead farm
-        assert any(e == 'borrow_generation_lost' and f.get('kind') == 'queued_too_long' for e, f in events)
-    poll_case(tmp_path, operation, external_pool_generation_queue_timeout=1, external_pool_generation_poll_wait=1)
 
 
 def test_farm_without_capacity_refuses_and_keeps_the_lease(tmp_path):
@@ -349,8 +336,9 @@ def test_restarted_client_reclaims_finished_groups_and_regenerates_only_missing_
         assert len((await borrower.generate(other))['choices']) == 2  # missing: regenerated
         assert sum(p == '/skyrl/v1/generation/submit' for _, p in farm.requests) == before + 1
         rows = [json.loads(line) for line in restarted.path.read_text().splitlines()]
-        assert [r['event'] for r in rows if r['key'] == group_key(other)][-4:] == [
-            'reclaim_missing', 'submitted', 'acknowledged', 'done']
+        trail = [r['event'] for r in rows if r['key'] == group_key(other)]
+        missing = trail.index('reclaim_missing')
+        assert 'acknowledged' in trail[missing:] and trail[-1] == 'done'  # regenerated after the reclaim found nothing
     poll_case(tmp_path, operation)
 
 
@@ -374,7 +362,7 @@ def test_path_failure_gets_one_more_round_before_the_farm_is_given_up(tmp_path):
         assert await borrower.generate(PAYLOAD, farm='http://farm1') is None
         polls = [p for h, p in farm.requests if h == 'farm1' and p.startswith('/skyrl/v1/generation/result/')]
         assert verdicts == ['http://farm1'] and len(polls) == 6  # two rounds of three misses
-        assert any(e == 'borrow_generation_path_suspect' for e, _ in events)
+        assert any(e == 'borrow_generation_path_recovering' for e, _ in events)
     poll_case(tmp_path, operation)
 
 

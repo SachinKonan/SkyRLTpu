@@ -18,6 +18,7 @@ from ray import serve
 from .commands import inference_command, inference_environment
 from .config import Config
 from .events import emit
+from .request_protocol import Config as Config_protocol
 from .process import Process
 
 
@@ -362,7 +363,7 @@ class Ingress:
                     farms=self.borrower.eligible_pools,
                     alert_seconds=self.config.inference.external_pool_queue_alert_seconds,
                     on_remote_failure=lambda key: report('remote_farm_failed', service=key),
-                    max_remote_failures=self.config.inference.external_pool_generation_max_failures)
+                    max_remote_failures=Config_protocol().max_infra_retries)
                 if hasattr(self.borrower, 'journal'):
                     import os
                     from .generation_journal import GenerationJournal, registry_path_check

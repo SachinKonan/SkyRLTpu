@@ -131,13 +131,16 @@ class GenerationJournal:
         self.cache.clear()
 
 
-def registry_path_check(path, max_age=120, clock=time.time):
+def registry_path_check(path, max_age=None, clock=time.time):
     """path_check(url) from the discovery registry: is a farm we cannot reach still healthy to discovery?
 
     'farm_ok': discovery reached it recently (our path, e.g. an SSH tunnel, is the suspect);
     'farm_down': discovery lists it unhealthy or no longer lists it; 'unknown': no fresh registry.
     """
     path = Path(path)
+    if max_age is None:
+        from .request_protocol import Config
+        max_age = Config.from_env().registry_stale_s
 
     def check(url):
         try:

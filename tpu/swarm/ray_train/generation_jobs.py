@@ -30,9 +30,12 @@ FINAL = ('done', 'failed', 'cancelled')
 
 
 class GenerationJobs:
-    def __init__(self, *, retention=600, ttl=180, clock=time.monotonic):
+    def __init__(self, *, retention=600, ttl=None, clock=time.monotonic):
         self.entries = {}
         self.retention = retention
+        if ttl is None:
+            from .request_protocol import Config
+            ttl = Config.from_env().request_ttl_s  # the same request TTL grading uses
         self.ttl = ttl
         self.clock = clock
         self.changed = asyncio.Condition()
@@ -48,9 +51,7 @@ class GenerationJobs:
         if entry['state'] == 'done':
             result['result'] = entry['result']
         elif entry['state'] in ('failed', 'cancelled'):
-            result['error'] = entry['error']
-            if entry.get('status') is not None:
-                result['status'] = entry['status']
+            result['error'] = dict(detail=entry['error'], status=entry.get('status'))
         return result
 
     def expire(self):

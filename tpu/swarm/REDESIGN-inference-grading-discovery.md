@@ -80,18 +80,18 @@ FREE --acquire(run)--> LEASED(run, adapter) --release | TTL expiry--> FREE
   returns mid-phase is acquired as soon as demand needs it. Removed: run-scoped retention across steps, the fixed
   per-run `--farm-target` / `FARM_TARGET`.
 
-**Generation group** (same request state machine as grading, `request_protocol.drive`):
+**Generation group**: the same `Ticket` state machine as grading (`request_protocol.drive`, shared `Config`):
 
 ```
-submit --ACK(202, id)--> queued --> running --> done | failed | cancelled
-   |  \--refused(429/503: full)--> reroute, not charged
-   |   \--409 contract mismatch--> farm dropped, reroute (charged)
-   poll misses x3 --discovery says farm healthy--> one more round (path, e.g. tunnel)
-                  --otherwise--> lost: lease dropped, group regenerated elsewhere (charged)
-   queued > 10 min while another farm is free --> cancel once (not awaited), reroute (not charged)
-   unpolled for the request TTL (180 s) --> the farm cancels it
+SUBMITTED --ACK--> ACCEPTED --started--> RUNNING --> DONE | FAILED_INFRA | CANCELLED
+    +--no ACK: farm full (429/503) ----------------> REFUSED: reroute, not charged
+    +--no ACK: contract mismatch (409) ------------> REFUSED(banned): farm dropped, reroute, charged
+ACCEPTED/RUNNING --3 missed polls, confirm_lost--> LOST: reroute, charged
+    (confirm_lost: the farm answers /health, or discovery still sees it healthy -> one more round of polls)
+unpolled for Config.request_ttl_s (300 s) --> the farm cancels it
 ```
 
+- Generation groups are never moved for being queued (a farm admits at most the client's group cap).
 - Every group carries its contract: model, serving compatibility hash (includes `SKYRL_SWA_KV`), adapter,
   renderer date (`TTD_RENDERER_DATE`, recorded). The farm refuses a mismatch.
 - Exactly once per request id: the farm hands a result over once; ids are fresh per attempt and abandoned ids
