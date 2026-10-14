@@ -14,7 +14,18 @@ Invariants:
     (``request_failure_policy = 'probe'``);
   * a member holding a live lease survives candidate-list updates;
   * ``close()`` releases every lease; tokens are never serialized.
+
+Generation-scoped leases (``external_pool_release_after_generation``): the
+number of leases wanted follows the run's outstanding generation work
+(``demand()``: groups queued or running remotely, set by the ingress) up to
+``target``; nothing is acquired outside a sampling phase except the one
+admission lease ``reserve()`` takes at startup. Once a phase has generated at
+least one group and no generation is outstanding, idle leases are released at
+once (grading never needs a lease), and every lease is released at phase end.
+A farm that returns or appears mid-phase is acquired as soon as demand exceeds
+the held leases; the scheduler reroutes the groups of a farm that dies.
 """
+import math
 import asyncio
 import time
 
@@ -73,6 +84,21 @@ class FarmBorrower(RunBorrower):
         self.preparing = asyncio.create_task(self._prepare(self.phase, self.model, self.phase_archive))
         return self.preparing
 
+    async def release_idle(self, reason):
+        """End this member's phase and hand the farm back (only when no group is running on it)."""
+        lease = self.lease
+        if lease is None or lease.active:
+            return False
+        await self.end()
+        async with self.lock:
+            lease = self.lease
+            if lease is None or lease.active:
+                return False
+            await self._release(lease)
+            self.lease = None
+        self._event('member_released', service=self.url, reason=reason)
+        return True
+
     def _lose(self, lease, reason):
         was_lost = lease.lost.is_set()
         super()._lose(lease, reason)
@@ -112,6 +138,11 @@ class MultiRunBorrower:
         self.run_deadline = 0
         self.run_watchdog = None
         self.acquiring = None
+        self.release_after_generation = self.settings.external_pool_release_after_generation
+        # Set by the ingress: () -> groups queued or running remotely, and () -> groups completed.
+        self.demand = None
+        self.completed = None
+        self.phase_completed_at_begin = 0
 
     # -- surface shared with RunBorrower ----------------------------------
     @property
@@ -274,6 +305,43 @@ class MultiRunBorrower:
         finally:
             self.reconcile_task = None
 
+    def outstanding(self):
+        try:
+            return max(0, int(self.demand())) if self.demand else None
+        except Exception:
+            return None
+
+    def generated_this_phase(self):
+        try:
+            return int(self.completed()) - self.phase_completed_at_begin if self.completed else 0
+        except Exception:
+            return 0
+
+    def wanted(self):
+        """Leases to hold now: ``target`` for run-scoped clients; demand-driven otherwise."""
+        if not self.release_after_generation:
+            return self.target
+        if self.phase is None:
+            return 0
+        outstanding = self.outstanding()
+        if outstanding is None:
+            return self.target
+        if outstanding == 0:
+            # Before the first group of the phase is generated, keep one farm ready.
+            return 0 if self.generated_this_phase() > 0 else 1
+        per_farm = max(1, self.settings.external_pool_max_concurrent_requests)
+        return min(self.target, max(1, math.ceil(outstanding / per_farm)))
+
+    async def _release_surplus(self):
+        held = self.held()
+        surplus = len(held) - self.wanted()
+        if surplus <= 0:
+            return
+        # Release idle farms only; a farm still generating keeps its lease until its groups finish.
+        for member in sorted(held, key=lambda m: m.lease.active)[:surplus]:
+            if member.lease and not member.lease.active:
+                await member.release_idle('generation finished' if self.phase else 'no sampling phase')
+
     async def _reconcile_once(self):
         if self.closed:
             return
@@ -281,8 +349,10 @@ class MultiRunBorrower:
             member.touch_run()
             if self.phase is not None and member.phase == self.phase:
                 member.retry_preparation()
+        if self.release_after_generation:
+            await self._release_surplus()
         for url in list(self.order):
-            if self.closed or len(self.held()) >= self.target:
+            if self.closed or len(self.held()) >= self.wanted():
                 break
             member = self.members.get(url)
             if (member is None or member in self.held() or member.preparing is not None
@@ -308,7 +378,7 @@ class MultiRunBorrower:
                                            expected_n=self.phase_expected_n)
                     except BorrowingProtocolError as exc:
                         self._event('member_begin_failed', service=url, reason=str(exc))
-        self._event('reconcile', held=[m.url for m in self.held()], target=self.target,
+        self._event('reconcile', held=[m.url for m in self.held()], target=self.target, wanted=self.wanted(),
                     candidates=len(self.order), eligible=[m.url for m in self.eligible_members()],
                     preparing=[m.url for m in self.members.values() if m.preparing is not None])
 
@@ -317,6 +387,18 @@ class MultiRunBorrower:
             if self.closed:
                 return self.snapshot()
             self.touch_run()
+        if self.release_after_generation and self.phase is None:
+            # Startup admission proves one compatible farm exists; it serves the first phase.
+            if not self.held():
+                for url in list(self.order):
+                    member = self.members.get(url)
+                    if member is None or member.closed or time.monotonic() < member.uncertain_until:
+                        continue
+                    await member.reserve()
+                    if member in self.held():
+                        self._event('member_acquired', service=url, held=1, target=self.target, reason='admission')
+                        break
+            return self.snapshot()
         await self._reconcile_once()
         return self.snapshot()
 
@@ -331,6 +413,10 @@ class MultiRunBorrower:
                 return self.snapshot()
             self.phase, self.model = phase, model
             self.phase_archive, self.phase_expected_n = archive, expected_n
+            try:
+                self.phase_completed_at_begin = int(self.completed()) if self.completed else 0
+            except Exception:
+                self.phase_completed_at_begin = 0
             for member in self.held():
                 try:
                     await member.begin(phase, model, archive, expected_n=expected_n)
@@ -348,7 +434,10 @@ class MultiRunBorrower:
                 return False
             self.phase = self.model = None
             self.phase_archive = None
-            return True
+        if self.release_after_generation:
+            await asyncio.gather(*(m.release_idle('sampling phase ended') for m in list(self.members.values())),
+                                 return_exceptions=True)
+        return True
 
     async def close(self):
         self.closed = True
@@ -375,3 +464,6 @@ class MultiRunBorrower:
             return await member.generate(payload, 0, 0, prefer_remote=True)
         except RemoteRequestRejected:
             raise
+        finally:
+            if self.release_after_generation:
+                self.wake.set()  # demand changed: release a finished farm or acquire for a rerouted group

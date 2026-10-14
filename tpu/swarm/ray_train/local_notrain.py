@@ -118,6 +118,11 @@ class Run:
             raw['inference']['external_pool_target_leases'] = self.args.farm_target
             self.report('farm_target', leases=self.args.farm_target,
                         profile=self.config.inference.external_pool_target_leases)
+        if self.args.release_after_generation:
+            # Ingress-only: lease farms only while groups are generating, so a
+            # finished run's farms go to whichever run needs them next.
+            raw['inference']['external_pool_release_after_generation'] = True
+            self.report('farm_release_after_generation')
         serve.run_many([serve.RunTarget(target=Ingress.bind(raw, [], catalog, []),
                                         name='skyrl-training')],
                        wait_for_ingress_deployment_creation=False, wait_for_applications_running=False)
@@ -345,6 +350,8 @@ def main():
                              'for the local ingress only)')
     parser.add_argument('--farm-target', type=int,
                         help='Farms this run leases (overrides external_pool_target_leases for the local ingress only)')
+    parser.add_argument('--release-after-generation', action='store_true',
+                        help='Lease farms only while groups are generating (redesign section (a))')
     parser.add_argument('--stall-seconds', type=float, default=3 * 3600,
                         help='Stop the client after this long holding a ready farm with no generation or grading')
     sys.exit(Run(parser.parse_args()).main())

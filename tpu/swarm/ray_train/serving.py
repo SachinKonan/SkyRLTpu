@@ -322,6 +322,12 @@ class Ingress:
         self.acquire_requests = {}
         self.inflight = set()
         self.inflight_leases = {}
+        from .generation_jobs import GenerationJobs
+        # Acknowledged, polled generation (/skyrl/v1/generation/*); same admission as /v1/completions.
+        self.generation_jobs = GenerationJobs()
+        # Runs refused while the farm was leased, oldest first: the next free lease goes
+        # to the run that has waited longest (owner -> [first_seen, last_seen]).
+        self.lease_waiters = {}
         self.quarantined = False
         self.compatibility = None
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
@@ -355,6 +361,11 @@ class Ingress:
                     farms=self.borrower.eligible_pools,
                     alert_seconds=self.config.inference.external_pool_queue_alert_seconds,
                     on_remote_failure=lambda key: report('remote_farm_failed', service=key))
+                if hasattr(self.borrower, 'demand'):
+                    # Generation-scoped leases follow outstanding remote generation work.
+                    scheduler = self.scheduler
+                    self.borrower.demand = lambda: len(scheduler.waiters) + scheduler.snapshot()['remote_active']
+                    self.borrower.completed = lambda: sum(v for k, v in scheduler.completed.items() if k != 'local')
             else:
                 self.scheduler = HybridScheduler(len(self.engines), self.config.inference.external_pool_max_concurrent_requests,
                     lambda: bool(self.borrower and self.borrower.lease and self.borrower._eligible(self.borrower.lease)),
@@ -378,6 +389,7 @@ class Ingress:
         tasks disconnects the engines' HTTP requests so vLLM aborts the work,
         and the admission counters drain through the request's own ``finally``.
         """
+        self.generation_jobs.cancel_lease(lease['lease_id'], reason)
         tasks = [task for task, lease_id in list(self.inflight_leases.items())
                  if lease_id == lease['lease_id'] and not task.done()]
         for task in tasks:
@@ -463,7 +475,7 @@ class Ingress:
             state = "awaiting_adapter"
         else:
             state = "ready" if ready == len(self.engine_urls) else "degraded"
-        return dict(lease_id=lease["lease_id"] if lease else None,
+        return dict(generation_protocol=1, lease_id=lease["lease_id"] if lease else None,
                     owner_run=lease["owner_run"] if lease else None,
                     adapter_name=version, adapter_sha256=identity,
                     expires_at=lease["expires_at"] if lease else None,
@@ -514,14 +526,21 @@ class Ingress:
                     check_cancelled()
                     if self.quarantined:
                         raise HTTPException(503, 'farm quarantined')
+                    # The holder asking again (without its lease id) is not waiting for the farm.
+                    holder = self.lease and self.lease['owner_run'] == owner
+                    queued = 0 if holder else self.lease_queue_position(owner)
                     if self.lease and time.monotonic() < self.lease['deadline']:
-                        raise HTTPException(409, 'farm is already leased; provide the lease ID to renew')
+                        raise HTTPException(409, f'farm is already leased; provide the lease ID to renew '
+                                                 f'(lease queue position {queued})')
+                    if queued:
+                        raise HTTPException(409, f'lease queue: {queued} run(s) waited longer for this farm')
                     if self.lease:
                         self.lease['releasing'] = True
                         if self.grading:
                             await self.grading.cancel_all('lease taken over after expiry')
                     await self.condition.wait_for(lambda: self.active == 0 or record and record['cancelled'])
                     check_cancelled()
+                    self.lease_waiters.pop(owner, None)
                     self.lease = dict(lease_id=uuid.uuid4().hex, owner_run=owner, acquire_id=acquire_id,
                                       adapter_name=None, adapter_sha256=None, releasing=False,
                                       deadline=time.monotonic() + ttl, expires_at=time.time() + ttl)
@@ -581,6 +600,7 @@ class Ingress:
             async with self.condition:
                 self.require_lease(payload.get("lease_id"), allow_expired=True)
                 self.lease["releasing"] = True
+                self.generation_jobs.cancel_lease(self.lease['lease_id'], 'lease released')
                 if self.grading:
                     await self.grading.cancel_all('lease released')
                 await self.condition.wait_for(lambda: self.active == 0)
@@ -610,6 +630,78 @@ class Ingress:
         if self.grading:
             result['grading'] = self.grading.snapshot()
         return result
+
+    def lease_queue_position(self, owner):
+        """Record ``owner`` as waiting; return how many live waiters are ahead of it.
+
+        A waiter stays live while it keeps retrying (every lease heartbeat); one
+        silent for three heartbeats is dropped, so a run that leased elsewhere or
+        exited cannot hold the queue.
+        """
+        now = time.monotonic()
+        stale = 3 * self.config.inference.external_pool_heartbeat_seconds
+        for name, (_, last) in list(self.lease_waiters.items()):
+            if now - last > stale:
+                del self.lease_waiters[name]
+        first = self.lease_waiters.get(owner, [now, now])[0]
+        self.lease_waiters[owner] = [first, now]
+        return sum(1 for name, (seen, _) in self.lease_waiters.items() if name != owner and seen < first)
+
+    def check_generation_payload(self, payload, lease_id):
+        if not isinstance(payload, dict):
+            raise HTTPException(400, 'payload is required')
+        if payload.get("stream"):
+            raise HTTPException(400, "training endpoint expects complete generation responses")
+        if payload.get("seed") is not None:
+            raise HTTPException(400, "TPU backend does not support per-request seeds")
+        if not payload.get("model"):
+            raise HTTPException(400, "model is required")
+        self.require_lease(lease_id)
+        if (self.config.inference.require_lease and payload.get("model") not in self.config.served_models
+                and payload.get("model") != self.lease["adapter_name"]):
+            raise HTTPException(409, "adapter has not been verified for this lease")
+        if self.updating or payload.get("model") not in self.versions | set(self.config.served_models):
+            raise HTTPException(409, "adapter update in progress or uncommitted model")
+
+    @app.post('/skyrl/v1/generation/submit')
+    async def generation_submit(self, request: Request):
+        """Acknowledge one group (202 + id) under the caller's lease; poll for the result."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, 'expected a JSON object')
+        lease_id = request.headers.get("x-lease-id")
+        payload = body.get('payload')
+        async with self.condition:
+            self.check_generation_payload(payload, lease_id)
+
+        async def run(mark_running):
+            async with self.condition:
+                # Re-check at admission: the lease or adapter may have changed while queued.
+                self.check_generation_payload(payload, lease_id)
+                self.active += 1
+            mark_running()
+            return await self.finish_admitted("generate", payload, lease_id=lease_id)
+
+        status, view = self.generation_jobs.submit(body.get('request_id'), lease_id, run)
+        return JSONResponse(view, status_code=status)
+
+    @app.get('/skyrl/v1/generation/result/{request_id}')
+    async def generation_result(self, request: Request, request_id: str, wait: int = 0):
+        lease_id = request.headers.get("x-lease-id")
+        self.require_lease(lease_id, allow_expired=True)
+        view = await self.generation_jobs.result(request_id, lease_id, wait=max(0, int(wait)))
+        if view is None:
+            raise HTTPException(404, 'unknown or expired generation request')
+        return view
+
+    @app.post('/skyrl/v1/generation/cancel/{request_id}')
+    async def generation_cancel(self, request: Request, request_id: str):
+        lease_id = request.headers.get("x-lease-id")
+        self.require_lease(lease_id, allow_expired=True)
+        view = self.generation_jobs.cancel(request_id, lease_id)
+        if view is None:
+            raise HTTPException(404, 'unknown or expired generation request')
+        return view
 
     def grading_lease(self, request, *, allow_expired=False):
         """The lease, or for an open (lease-free) request the run + client token identity."""

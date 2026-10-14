@@ -17,6 +17,19 @@ class BorrowingProtocolError(RuntimeError):
     pass
 
 
+class FarmBusy(Exception):
+    """The farm refused to acknowledge a group (no capacity); the lease stays valid."""
+
+
+class GenerationFailed(Exception):
+    """An acknowledged group ended failed on the farm, or the farm stopped answering polls."""
+
+    def __init__(self, reason, status_code=None, *, dead=False):
+        super().__init__(reason)
+        self.status_code = status_code
+        self.dead = dead
+
+
 class RemoteRequestRejected(Exception):
     """The farm refused one request (4xx) while the lease itself stays valid."""
 
@@ -42,6 +55,8 @@ class Lease:
     max_requests: int = 0
     max_n: int = 0
     active: int = 0
+    # The farm acknowledges groups and is polled for them (/skyrl/v1/generation/*).
+    generation_poll: bool = False
     heartbeat: asyncio.Task | None = field(default=None, repr=False)
     lost: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
     deadline_changed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
@@ -214,12 +229,18 @@ class Borrower:
     def _request_failed(self, lease, exc):
         """Probe policy: classify one failed request without fencing the lease."""
         status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        if isinstance(exc, GenerationFailed):
+            status = exc.status_code
+            if exc.dead:
+                self._lose(lease, str(exc))
+                self._event('generation_failed', service=lease.url, reason=str(exc))
+                return
         if lease.lost.is_set() or time.monotonic() >= self._deadline(lease):
             self._lose(lease, 'lost during request')
         elif status in (409, 410):
             self._lose(lease, 'lease rejected')
         elif status in (400, 404, 413, 422):
-            detail = exc.response.text[:512]
+            detail = exc.response.text[:512] if isinstance(exc, httpx.HTTPStatusError) else str(exc)
             self._event('generation_rejected', service=lease.url, http_status=status)
             raise RemoteRequestRejected(status, detail) from None
         else:
@@ -349,6 +370,7 @@ class Borrower:
                     or not isinstance(token, str) or not token):
                 raise BorrowingProtocolError('malformed reservation acknowledgement')
             lease = Lease(url, lease_id, token, digest=digest)
+            lease.generation_poll = body.get('generation_protocol') == 1
             self.lease = lease
             self._identity(lease, body)
             lease.engines = self._accept_engines(body)
@@ -476,16 +498,14 @@ class Borrower:
         request_id = uuid.uuid4().hex
         request = watcher = None
         try:
-            request = asyncio.create_task(self.http.post(lease.url + '/v1/completions',
-                json=dict(payload, model=lease.adapter), headers=lease.headers,
-                timeout=self.settings.request_timeout))
+            body = dict(payload, model=lease.adapter)
+            request = asyncio.create_task(self._polled_generation(lease, body, request_id) if lease.generation_poll
+                                          else self._direct_generation(lease, body))
             watcher = asyncio.create_task(self._wait_lost(lease))
             done, _ = await asyncio.wait((request, watcher), return_when=asyncio.FIRST_COMPLETED)
             if watcher in done or lease.lost.is_set() or time.monotonic() >= self._deadline(lease):
                 raise BorrowingProtocolError('borrowed service lost or lease expired')
-            response = await request
-            response.raise_for_status()
-            result = response.json()
+            result = await request
             # Admission is token-fenced by the farm and weights cannot change
             # during an admitted request. Preserve the native response verbatim.
             if (not isinstance(result, dict) or not isinstance(result.get('choices'), list)
@@ -503,6 +523,10 @@ class Borrower:
                 lease.ready = False
                 lease.lost.set()
             raise
+        except FarmBusy:
+            # Refused before any work started: reroute the group, keep the lease.
+            self._event('generation_refused', service=lease.url, request_id=request_id)
+            return None
         except Exception as exc:
             if self.request_failure_policy == 'fence':
                 lease.ready = False
@@ -519,6 +543,78 @@ class Borrower:
             async with self.changed:
                 lease.active -= 1
                 self.changed.notify_all()
+
+    async def _direct_generation(self, lease, body):
+        response = await self.http.post(lease.url + '/v1/completions', json=body, headers=lease.headers,
+                                        timeout=self.settings.request_timeout)
+        response.raise_for_status()
+        return response.json()
+
+    async def _polled_generation(self, lease, body, request_id):
+        """Submit -> acknowledgement -> poll. Dead or slow farms surface quickly.
+
+        ``generation_poll_failures`` consecutive failed polls mark the farm dead
+        (the lease is lost and the group rerouted); a group still queued on the
+        farm after ``generation_queue_timeout`` seconds is cancelled once,
+        without waiting for the answer, and rerouted. The request id is fresh
+        per attempt, so a late result from an abandoned farm is never taken.
+        """
+        settings = self.settings
+        rpc = settings.external_pool_rpc_timeout
+        response = await self.http.post(lease.url + '/skyrl/v1/generation/submit', headers=lease.headers,
+                                        json={'request_id': request_id, 'payload': body}, timeout=max(rpc, 30))
+        if response.status_code in (429, 503):
+            raise FarmBusy(response.text[:256])
+        response.raise_for_status()
+        acknowledged = time.monotonic()
+        failures = 0
+        try:
+            while True:
+                try:
+                    response = await self.http.get(
+                        lease.url + f'/skyrl/v1/generation/result/{request_id}', headers=lease.headers,
+                        params={'wait': settings.external_pool_generation_poll_wait},
+                        timeout=settings.external_pool_generation_poll_wait + max(rpc, 10))
+                    if response.status_code == 404:
+                        raise GenerationFailed('generation request unknown to farm (restarted?)', 404, dead=True)
+                    response.raise_for_status()
+                    view = response.json()
+                except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as exc:
+                    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (409, 410):
+                        raise  # the lease itself was rejected
+                    failures += 1
+                    if failures >= settings.external_pool_generation_poll_failures:
+                        raise GenerationFailed(f'farm stopped answering generation polls ({failures} in a row)',
+                                               dead=True) from None
+                    await asyncio.sleep(min(5, settings.external_pool_heartbeat_seconds))
+                    continue
+                failures = 0
+                state = view.get('state')
+                if state == 'done':
+                    return view.get('result')
+                if state in ('failed', 'cancelled'):
+                    raise GenerationFailed(f"farm {state} the group: {view.get('error')}", view.get('status'))
+                if (state == 'queued'
+                        and time.monotonic() - acknowledged > settings.external_pool_generation_queue_timeout):
+                    self._cancel_once(lease, request_id)
+                    self._event('generation_queue_timeout', service=lease.url, request_id=request_id)
+                    raise FarmBusy('queued too long on the farm')
+        except asyncio.CancelledError:
+            self._cancel_once(lease, request_id)
+            raise
+
+    def _cancel_once(self, lease, request_id):
+        """Ask the farm to drop an abandoned group; never wait for the answer."""
+        async def cancel():
+            try:
+                await self.http.post(lease.url + f'/skyrl/v1/generation/cancel/{request_id}', headers=lease.headers,
+                                     timeout=self.settings.external_pool_rpc_timeout)
+            except Exception:
+                pass
+        task = asyncio.get_running_loop().create_task(cancel())
+        self._pending_cancels = getattr(self, '_pending_cancels', set())
+        self._pending_cancels.add(task)
+        task.add_done_callback(self._pending_cancels.discard)
 
     async def _release(self, lease):
         lease.draining = True
