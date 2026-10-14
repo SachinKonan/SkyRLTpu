@@ -269,6 +269,9 @@ class Inference:
     external_pool_generation_poll_failures: int = 3
     external_pool_generation_poll_wait: int = 20
     external_pool_generation_queue_timeout: int = 600
+    # A group that failed on farms this many times (infrastructure) is dropped and logged; the step
+    # continues without it (user decision 2026-10-14). Refusals by a full farm are not counted.
+    external_pool_generation_max_failures: int = 5
     # Non-empty: only a supervisor presenting this group sees the trainer as
     # opted in or may replace its farm list. Every other supervisor watching
     # the same pool reads enabled=false and leaves the trainer alone, so it
@@ -818,7 +821,7 @@ class Config:
         for name in ('engines', 'max_n', 'max_concurrent_requests', 'rpc_timeout', 'prepare_timeout', 'release_timeout',
                      'lease_seconds', 'heartbeat_seconds', 'health_grace_seconds', 'initial_wait_seconds',
                      'target_leases', 'queue_alert_seconds', 'generation_poll_failures',
-                     'generation_poll_wait', 'generation_queue_timeout'):
+                     'generation_poll_wait', 'generation_queue_timeout', 'generation_max_failures'):
             value = getattr(self.inference, 'external_pool_' + name)
             if type(value) is not int or value <= 0:
                 raise ValueError('external pool limits must be positive integers')

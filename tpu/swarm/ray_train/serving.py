@@ -328,6 +328,7 @@ class Ingress:
         # Runs refused while the farm was leased, oldest first: the next free lease goes
         # to the run that has waited longest (owner -> [first_seen, last_seen]).
         self.lease_waiters = {}
+        self.phase_counters = {}
         self.quarantined = False
         self.compatibility = None
         self.http = httpx.AsyncClient(timeout=self.config.inference.request_timeout)
@@ -360,7 +361,16 @@ class Ingress:
                 self.scheduler = HybridScheduler(len(self.engines), 0, lambda: True, report,
                     farms=self.borrower.eligible_pools,
                     alert_seconds=self.config.inference.external_pool_queue_alert_seconds,
-                    on_remote_failure=lambda key: report('remote_farm_failed', service=key))
+                    on_remote_failure=lambda key: report('remote_farm_failed', service=key),
+                    max_remote_failures=self.config.inference.external_pool_generation_max_failures)
+                if hasattr(self.borrower, 'journal'):
+                    import os
+                    from .generation_journal import GenerationJournal, registry_path_check
+                    # Every generation transition is journaled; a restarted client reclaims finished groups.
+                    self.borrower.journal = GenerationJournal(self.run, self.config.run_id, report)
+                    if os.environ.get('SKYRL_FARM_REGISTRY'):
+                        self.borrower.path_check = registry_path_check(os.environ['SKYRL_FARM_REGISTRY'])
+                    self.borrower.start_reclaim()
                 if hasattr(self.borrower, 'demand'):
                     # Generation-scoped leases follow outstanding remote generation work.
                     scheduler = self.scheduler
@@ -414,6 +424,7 @@ class Ingress:
         orphan, started, cancelled = None, None, False
         while True:
             await asyncio.sleep(.5)
+            self.generation_jobs.expire()  # TTL: cancel groups whose client stopped polling
             lease = self.lease
             expired = lease and (lease['releasing'] or time.monotonic() >= lease['deadline'])
             busy = (self.active or self.inflight or self.upload_lock.locked()
@@ -663,16 +674,41 @@ class Ingress:
         if self.updating or payload.get("model") not in self.versions | set(self.config.served_models):
             raise HTTPException(409, "adapter update in progress or uncommitted model")
 
+    @staticmethod
+    def generation_identity(request):
+        return dict(lease_id=request.headers.get("x-lease-id"), run=request.headers.get('x-generation-run'),
+                    token=request.headers.get('x-generation-token'))
+
+    async def check_generation_contract(self, contract, payload):
+        """Every group names what it was generated for; refuse a farm that would serve something else."""
+        if contract is None:
+            return  # older clients
+        if not isinstance(contract, dict):
+            raise HTTPException(400, 'contract must be an object')
+        if contract.get('model') not in (None, payload.get('model')):
+            raise HTTPException(409, 'contract mismatch: model')
+        wanted = contract.get('compatibility_sha256')
+        if wanted:
+            offered = (await self.capabilities()).get('compatibility_sha256')
+            if offered != wanted:
+                raise HTTPException(409, 'contract mismatch: serving compatibility hash')
+        adapter = contract.get('adapter')
+        if adapter and self.lease and adapter not in (self.lease.get('adapter_name'), self.lease.get('adapter_sha256')):
+            raise HTTPException(409, 'contract mismatch: adapter')
+
     @app.post('/skyrl/v1/generation/submit')
     async def generation_submit(self, request: Request):
         """Acknowledge one group (202 + id) under the caller's lease; poll for the result."""
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, 'expected a JSON object')
-        lease_id = request.headers.get("x-lease-id")
+        identity = self.generation_identity(request)
+        lease_id = identity['lease_id']
         payload = body.get('payload')
+        contract = body.get('contract')
         async with self.condition:
             self.check_generation_payload(payload, lease_id)
+        await self.check_generation_contract(contract, payload)
 
         async def run(mark_running):
             async with self.condition:
@@ -682,23 +718,28 @@ class Ingress:
             mark_running()
             return await self.finish_admitted("generate", payload, lease_id=lease_id)
 
-        status, view = self.generation_jobs.submit(body.get('request_id'), lease_id, run)
+        status, view = self.generation_jobs.submit(body.get('request_id'), identity, run, contract=contract)
+        emit(self.run / 'inference-events.jsonl', 'generation_acknowledged' if not view.get('duplicate')
+             else 'generation_duplicate_submit', request_id=body.get('request_id'), http_status=status,
+             owner_run=identity['run'])
         return JSONResponse(view, status_code=status)
 
     @app.get('/skyrl/v1/generation/result/{request_id}')
     async def generation_result(self, request: Request, request_id: str, wait: int = 0):
-        lease_id = request.headers.get("x-lease-id")
-        self.require_lease(lease_id, allow_expired=True)
-        view = await self.generation_jobs.result(request_id, lease_id, wait=max(0, int(wait)))
+        identity = self.generation_identity(request)
+        if not (identity['run'] and identity['token']):
+            self.require_lease(identity['lease_id'], allow_expired=True)
+        view = await self.generation_jobs.result(request_id, identity, wait=max(0, int(wait)))
         if view is None:
             raise HTTPException(404, 'unknown or expired generation request')
         return view
 
     @app.post('/skyrl/v1/generation/cancel/{request_id}')
     async def generation_cancel(self, request: Request, request_id: str):
-        lease_id = request.headers.get("x-lease-id")
-        self.require_lease(lease_id, allow_expired=True)
-        view = self.generation_jobs.cancel(request_id, lease_id)
+        identity = self.generation_identity(request)
+        if not (identity['run'] and identity['token']):
+            self.require_lease(identity['lease_id'], allow_expired=True)
+        view = self.generation_jobs.cancel(request_id, identity)
         if view is None:
             raise HTTPException(404, 'unknown or expired generation request')
         return view
@@ -819,6 +860,8 @@ class Ingress:
                 return {'enabled': True, 'ready': False, 'reason': 'no committed adapter'}
             archive = None if model == self.config.model else self.archives / (adapter_name(model) + '.tar')
             from .borrowing import BorrowingProtocolError
+            if self.scheduler is not None:
+                self.phase_counters[phase] = (self.scheduler.regenerated, self.scheduler.dropped)
             try:
                 return await self.borrower.begin(phase, model, archive, expected_n=expected_n)
             except BorrowingProtocolError as exc:
@@ -889,7 +932,13 @@ class Ingress:
         phase = body.get('phase_id')
         if not isinstance(phase, str) or not phase:
             raise HTTPException(400, 'phase_id is required')
-        return {'ended': await self.borrower.end(phase)}
+        result = {'ended': await self.borrower.end(phase)}
+        if self.scheduler is not None:
+            # Step metrics: groups regenerated after a farm failure, and groups dropped after the cap.
+            start = self.phase_counters.pop(phase, (0, 0))
+            result.update(groups_regenerated=self.scheduler.regenerated - start[0],
+                          groups_dropped=self.scheduler.dropped - start[1])
+        return result
 
     @app.get("/health")
     async def health(self):
@@ -1147,6 +1196,14 @@ class Ingress:
                 raise HTTPException(exc.status_code, exc.detail) from None
 
         async def run():
+            from .hybrid_scheduler import GroupDropped
+            try:
+                return await dispatch()
+            except GroupDropped as exc:
+                # Infrastructure, not the candidate: the client counts the group failed and keeps the step.
+                raise HTTPException(422, str(exc)) from None
+
+        async def dispatch():
             try:
                 if method == 'generate' and self.scheduler:
                     return await self.scheduler.run(payload, local, remote,
@@ -1155,7 +1212,7 @@ class Ingress:
                     external_active = self.borrower.lease.active if self.borrower.lease else 0
                     result = await self.borrower.generate(payload,
                         local_active=max(0, self.active - external_active - 1), local_engines=len(self.engines))
-                    if result is not None:
+                    if isinstance(result, dict):
                         return result
                 weight = max(1, int(payload.get('n') or 1)) if method == 'generate' else 0
                 index = self.acquire_engine(payload["model"], weight)

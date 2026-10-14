@@ -13,12 +13,38 @@ Two modes share one queue:
 """
 import asyncio
 from collections import deque
+import hashlib
+import json
 import time
+
+
+class Refused:
+    """A farm declined a group before starting it (full): requeue without charging an attempt."""
+
+    def __repr__(self):
+        return 'REFUSED'
+
+
+REFUSED = Refused()
+
+
+class GroupDropped(Exception):
+    """A group failed on farms ``attempts`` times (infrastructure); the step continues without it."""
+
+    def __init__(self, group, attempts):
+        super().__init__(f'generation_group_dropped: group {group} failed on farms {attempts} times')
+        self.group = group
+        self.attempts = attempts
+
+
+def _group_id(payload):
+    body = json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)
+    return hashlib.sha256(body.encode()).hexdigest()[:32]
 
 
 class HybridScheduler:
     def __init__(self, local_engines, remote_limit, ready, report=lambda *a, **k: None, *,
-                 farms=None, alert_seconds=60, on_remote_failure=None):
+                 farms=None, alert_seconds=60, on_remote_failure=None, max_remote_failures=None):
         self.local = [None] * local_engines
         self.remote = [None] * remote_limit
         self.ready = ready
@@ -33,6 +59,10 @@ class HybridScheduler:
         self.waiters = deque()
         self.last_alert = 0
         self.retries = 0
+        # Farm-only mode: a group that failed on farms this many times is dropped (None: never).
+        self.max_remote_failures = max_remote_failures
+        self.regenerated = 0  # groups resubmitted after a farm failure (every one is logged)
+        self.dropped = 0
 
     def snapshot(self):
         result = dict(queued=len(self.waiters), local_active=sum(x is not None for x in self.local),
@@ -112,6 +142,7 @@ class HybridScheduler:
         prompt = payload.get('prompt', [])
         n = payload.get('n', 1)
         work = max(1, n * (len(prompt) + payload.get('max_tokens', 1)))
+        group = _group_id(payload) if self.farms is not None else None
         ticket = object()
         force_local = local_only
         started_waiting = time.monotonic()
@@ -143,12 +174,12 @@ class HybridScheduler:
                         result = await local_call(slot)
                     else:
                         result = await (remote_call() if self.farms is None else remote_call(key))
-                    if result is not None:
+                    if result is not None and result is not REFUSED:
                         self.completed[key] = self.completed.get(key, 0) + 1
                         return result
                 finally:
                     elapsed = max(time.monotonic() - started, 1e-6)
-                    if result is not None:
+                    if result is not None and result is not REFUSED:
                         choices = result.get('choices', [])
                         output = sum(len(c.get('token_ids') or []) for c in choices)
                         completed_work = n * len(prompt) + output
@@ -174,6 +205,12 @@ class HybridScheduler:
                 # An unsuccessful remote result must never enter the batch.
                 if self.local or self.farms is None:
                     force_local = True
+                elif result is REFUSED:
+                    # The farm was full and started nothing: try again elsewhere, uncharged.
+                    try:
+                        self.report('remote_group_refused', farm=key, group=group)
+                    except Exception:
+                        pass
                 else:
                     retries += 1
                     self.retries += 1
@@ -182,8 +219,18 @@ class HybridScheduler:
                             self.on_remote_failure(key)
                         except Exception:
                             pass
+                    if self.max_remote_failures is not None and retries >= self.max_remote_failures:
+                        self.dropped += 1
+                        try:
+                            self.report('generation_group_dropped', farm=key, group=group, attempts=retries)
+                        except Exception:
+                            pass
+                        raise GroupDropped(group, retries)
+                    self.regenerated += 1
                     try:
-                        self.report('remote_group_requeued', farm=key, retries=retries)
+                        # Every regeneration is logged: the group is generated again, whole, elsewhere.
+                        self.report('remote_group_requeued', farm=key, group=group, retries=retries,
+                                    attempt=retries + 1)
                     except Exception:
                         pass
                 self.waiters.appendleft(ticket)

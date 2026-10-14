@@ -6,11 +6,14 @@ ineligible: ordinary /v1/models is not evidence of ownership or adapter identity
 import asyncio
 from dataclasses import dataclass, field, replace
 import hashlib
+import os
 from pathlib import Path
 import time
 import uuid
 
 import httpx
+
+from .generation_journal import group_key
 
 
 class BorrowingProtocolError(RuntimeError):
@@ -499,8 +502,9 @@ class Borrower:
         request = watcher = None
         try:
             body = dict(payload, model=lease.adapter)
-            request = asyncio.create_task(self._polled_generation(lease, body, request_id) if lease.generation_poll
-                                          else self._direct_generation(lease, body))
+            request = asyncio.create_task(
+                self._polled_generation(lease, body, request_id, key=group_key(payload)) if lease.generation_poll
+                else self._direct_generation(lease, body))
             watcher = asyncio.create_task(self._wait_lost(lease))
             done, _ = await asyncio.wait((request, watcher), return_when=asyncio.FIRST_COMPLETED)
             if watcher in done or lease.lost.is_set() or time.monotonic() >= self._deadline(lease):
@@ -524,9 +528,10 @@ class Borrower:
                 lease.lost.set()
             raise
         except FarmBusy:
-            # Refused before any work started: reroute the group, keep the lease.
+            # Refused before any work started: reroute the group (uncharged), keep the lease.
+            from .hybrid_scheduler import REFUSED
             self._event('generation_refused', service=lease.url, request_id=request_id)
-            return None
+            return REFUSED
         except Exception as exc:
             if self.request_failure_policy == 'fence':
                 lease.ready = False
@@ -550,29 +555,60 @@ class Borrower:
         response.raise_for_status()
         return response.json()
 
-    async def _polled_generation(self, lease, body, request_id):
+    def _generation_log(self, event, key, **fields):
+        journal = getattr(self, 'journal', None)
+        if journal is not None:
+            journal.record(event, key, **fields)
+        else:
+            self._event('generation_' + event, key=key, **fields)
+
+    def _generation_headers(self, lease):
+        journal = getattr(self, 'journal', None)
+        return {**lease.headers, **(journal.headers if journal is not None else {})}
+
+    def _generation_contract(self, lease, body):
+        """What this group must be generated with; the farm refuses a mismatch."""
+        contract = dict(model=body.get('model'), adapter=lease.adapter if lease.digest else None,
+                        compatibility_sha256=getattr(self, 'offered_contract', None) or self.required_contract,
+                        renderer_date=os.environ.get('TTD_RENDERER_DATE') or None)
+        return {k: v for k, v in contract.items() if v is not None}
+
+    async def _polled_generation(self, lease, body, request_id, key=None):
         """Submit -> acknowledgement -> poll. Dead or slow farms surface quickly.
 
         ``generation_poll_failures`` consecutive failed polls mark the farm dead
-        (the lease is lost and the group rerouted); a group still queued on the
-        farm after ``generation_queue_timeout`` seconds is cancelled once,
-        without waiting for the answer, and rerouted. The request id is fresh
-        per attempt, so a late result from an abandoned farm is never taken.
+        (the lease is lost and the group rerouted) -- unless discovery still sees
+        the farm healthy, in which case the path (tunnel) is suspected and polling
+        gets one more round before the farm is given up. A group still queued on
+        the farm after ``generation_queue_timeout`` seconds is cancelled once,
+        without waiting for the answer, and rerouted. The request id is fresh per
+        attempt, so a late result from an abandoned farm is never taken.
         """
         settings = self.settings
         rpc = settings.external_pool_rpc_timeout
-        response = await self.http.post(lease.url + '/skyrl/v1/generation/submit', headers=lease.headers,
-                                        json={'request_id': request_id, 'payload': body}, timeout=max(rpc, 30))
+        key = key or request_id
+        headers = self._generation_headers(lease)
+        self._generation_log('submitted', key, url=lease.url, request_id=request_id)
+        response = await self.http.post(lease.url + '/skyrl/v1/generation/submit', headers=headers,
+                                        json={'request_id': request_id, 'payload': body,
+                                              'contract': self._generation_contract(lease, body)},
+                                        timeout=max(rpc, 30))
         if response.status_code in (429, 503):
+            self._generation_log('refused', key, url=lease.url, request_id=request_id,
+                                 http_status=response.status_code)
             raise FarmBusy(response.text[:256])
+        if response.status_code == 409 and 'contract mismatch' in response.text:
+            self._generation_log('refused', key, url=lease.url, request_id=request_id, reason=response.text[:200])
+            raise GenerationFailed(f'farm refused the group contract: {response.text[:200]}', 409, dead=True)
         response.raise_for_status()
+        self._generation_log('acknowledged', key, url=lease.url, request_id=request_id)
         acknowledged = time.monotonic()
-        failures = 0
+        failures, path_extensions = 0, 0
         try:
             while True:
                 try:
                     response = await self.http.get(
-                        lease.url + f'/skyrl/v1/generation/result/{request_id}', headers=lease.headers,
+                        lease.url + f'/skyrl/v1/generation/result/{request_id}', headers=headers,
                         params={'wait': settings.external_pool_generation_poll_wait},
                         timeout=settings.external_pool_generation_poll_wait + max(rpc, 10))
                     if response.status_code == 404:
@@ -583,9 +619,20 @@ class Borrower:
                     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (409, 410):
                         raise  # the lease itself was rejected
                     failures += 1
+                    self._generation_log('poll_miss', key, url=lease.url, request_id=request_id, misses=failures,
+                                         reason=type(exc).__name__)
                     if failures >= settings.external_pool_generation_poll_failures:
-                        raise GenerationFailed(f'farm stopped answering generation polls ({failures} in a row)',
-                                               dead=True) from None
+                        check = getattr(self, 'path_check', None)
+                        verdict = check(lease.url) if check else 'unknown'
+                        if verdict == 'farm_ok' and path_extensions == 0:
+                            # Discovery still reaches the farm: suspect our path (tunnel), not the farm.
+                            path_extensions += 1
+                            failures = 0
+                            self._generation_log('path_suspect', key, url=lease.url, request_id=request_id)
+                            await asyncio.sleep(min(10, settings.external_pool_heartbeat_seconds))
+                            continue
+                        raise GenerationFailed(f'farm stopped answering generation polls ({failures} in a row, '
+                                               f'discovery says {verdict})', dead=True) from None
                     await asyncio.sleep(min(5, settings.external_pool_heartbeat_seconds))
                     continue
                 failures = 0
@@ -601,13 +648,19 @@ class Borrower:
                     raise FarmBusy('queued too long on the farm')
         except asyncio.CancelledError:
             self._cancel_once(lease, request_id)
+            self._generation_log('abandoned', key, url=lease.url, request_id=request_id, reason='caller cancelled')
+            raise
+        except BaseException as exc:
+            self._generation_log('lost', key, url=lease.url, request_id=request_id,
+                                 reason=f'{type(exc).__name__}: {exc}'[:200])
             raise
 
     def _cancel_once(self, lease, request_id):
         """Ask the farm to drop an abandoned group; never wait for the answer."""
         async def cancel():
             try:
-                await self.http.post(lease.url + f'/skyrl/v1/generation/cancel/{request_id}', headers=lease.headers,
+                await self.http.post(lease.url + f'/skyrl/v1/generation/cancel/{request_id}',
+                                     headers=self._generation_headers(lease),
                                      timeout=self.settings.external_pool_rpc_timeout)
             except Exception:
                 pass

@@ -26,10 +26,12 @@ A farm that returns or appears mid-phase is acquired as soon as demand exceeds
 the held leases; the scheduler reroutes the groups of a farm that dies.
 """
 import math
+import random
 import asyncio
 import time
 
 from .borrowing import BorrowingProtocolError, RemoteRequestRejected
+from .generation_journal import group_key
 from .run_borrowing import RunBorrower
 
 
@@ -43,6 +45,14 @@ class FarmBorrower(RunBorrower):
         self.urls = [url]
         self.owner = parent.owner
         self.offered_contract = None
+
+    @property
+    def journal(self):
+        return self.parent.journal
+
+    @property
+    def path_check(self):
+        return self.parent.path_check
 
     def update_urls(self, model, urls):
         raise BorrowingProtocolError('farm members are pinned to one URL')
@@ -143,6 +153,14 @@ class MultiRunBorrower:
         self.demand = None
         self.completed = None
         self.phase_completed_at_begin = 0
+        # Set by the ingress: GenerationJournal (restart reclaim, transition log) and
+        # path_check(url) -> 'farm_ok' | 'farm_down' | 'unknown' from discovery.
+        self.journal = None
+        self.path_check = None
+        self.reclaim_task = None
+        # Fair acquisition: each run starts its candidate walk at a different farm and
+        # retries with jitter, so runs released together do not race for the same farm.
+        self.rng = random.Random(self.owner)
 
     # -- surface shared with RunBorrower ----------------------------------
     @property
@@ -299,7 +317,8 @@ class MultiRunBorrower:
                 except Exception as exc:
                     self._event('reconcile_error', reason=type(exc).__name__)
                 try:
-                    await asyncio.wait_for(self.wake.wait(), timeout=self.settings.external_pool_heartbeat_seconds)
+                    await asyncio.wait_for(self.wake.wait(), timeout=self.settings.external_pool_heartbeat_seconds
+                                           * self.rng.uniform(.8, 1.2))
                 except (TimeoutError, asyncio.TimeoutError):
                     pass
         finally:
@@ -351,7 +370,11 @@ class MultiRunBorrower:
                 member.retry_preparation()
         if self.release_after_generation:
             await self._release_surplus()
-        for url in list(self.order):
+        order = list(self.order)
+        if self.release_after_generation and order:
+            shift = self.rng.randrange(len(order))
+            order = order[shift:] + order[:shift]
+        for url in order:
             if self.closed or len(self.held()) >= self.wanted():
                 break
             member = self.members.get(url)
@@ -437,6 +460,8 @@ class MultiRunBorrower:
         if self.release_after_generation:
             await asyncio.gather(*(m.release_idle('sampling phase ended') for m in list(self.members.values())),
                                  return_exceptions=True)
+        if self.journal is not None and self.reclaim_task is None:
+            self.journal.discard_unused()
         return True
 
     async def close(self):
@@ -456,12 +481,71 @@ class MultiRunBorrower:
         eligible = self.eligible_members()
         return min(eligible, key=lambda m: m.lease.active / max(1, m.lease.max_requests)) if eligible else None
 
+    async def reclaim(self):
+        """After a restart: re-poll groups the previous incarnation left on farms (run identity, no lease)."""
+        journal = self.journal
+        if journal is None or not journal.open:
+            return 0
+        headers = journal.headers
+        wait = self.settings.external_pool_generation_poll_wait
+
+        async def one(key, entry):
+            url, request_id = entry.get('url'), entry.get('request_id')
+            misses = 0
+            while not self.closed:
+                try:
+                    response = await self.http.get(url + f'/skyrl/v1/generation/result/{request_id}',
+                                                   headers=headers, params={'wait': wait},
+                                                   timeout=wait + max(self.settings.external_pool_rpc_timeout, 10))
+                    if response.status_code == 404:
+                        journal.record('reclaim_missing', key, url=url, request_id=request_id)
+                        return
+                    response.raise_for_status()
+                    view = response.json()
+                except Exception as exc:
+                    misses += 1
+                    if misses >= self.settings.external_pool_generation_poll_failures:
+                        journal.record('reclaim_missing', key, url=url, request_id=request_id,
+                                       reason=type(exc).__name__)
+                        return
+                    await asyncio.sleep(2)
+                    continue
+                misses = 0
+                if view.get('state') == 'done':
+                    journal.reclaimed(key, view.get('result'), url=url, request_id=request_id)
+                    return
+                if view.get('state') in ('failed', 'cancelled'):
+                    journal.record('reclaim_missing', key, url=url, request_id=request_id, reason=view.get('state'))
+                    return
+
+        pending = dict(journal.open)
+        await asyncio.gather(*(one(k, e) for k, e in pending.items()), return_exceptions=True)
+        return len(pending)
+
+    def start_reclaim(self):
+        if self.journal is not None and self.journal.open and self.reclaim_task is None:
+            async def run():
+                try:
+                    await self.reclaim()
+                finally:
+                    self.reclaim_task = None
+            self.reclaim_task = asyncio.create_task(run())
+        return self.reclaim_task
+
     async def generate(self, payload, local_active=0, local_engines=0, *, prefer_remote=True, farm=None):
+        key = group_key(payload)
+        if self.journal is not None:
+            cached = self.journal.take_cached(key)
+            if cached is not None:
+                return cached  # finished on a farm while the previous client incarnation was down
         member = self._choose(farm)
         if member is None:
             return None
         try:
-            return await member.generate(payload, 0, 0, prefer_remote=True)
+            result = await member.generate(payload, 0, 0, prefer_remote=True)
+            if isinstance(result, dict) and self.journal is not None:
+                self.journal.deliver(key, url=member.url)
+            return result
         except RemoteRequestRejected:
             raise
         finally:

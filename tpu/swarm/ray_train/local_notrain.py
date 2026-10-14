@@ -96,6 +96,8 @@ class Run:
         import secrets
         os.environ.setdefault('RAY_AUTH_TOKEN', secrets.token_hex(32))
         os.environ['RAY_AUTH_MODE'] = 'token'
+        # Discovery's registry tells the ingress whether an unreachable farm is down or only our path is.
+        os.environ['SKYRL_FARM_REGISTRY'] = str(self.args.registry)
         import ray
         from ray import serve
         from .serving import Catalog, Ingress

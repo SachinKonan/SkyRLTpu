@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def sampling_phase(url=None, *, bootstrap=False, expected_n=None):
+async def sampling_phase(url=None, *, bootstrap=False, expected_n=None, metrics=None):
     url = url or os.environ.get('SKYRL_BORROWING_URL', '')
     if not url:
         yield
@@ -52,6 +52,14 @@ async def sampling_phase(url=None, *, bootstrap=False, expected_n=None):
                 response = await client.post(url + '/skyrl/v1/borrowing/end',
                     json={'phase_id': phase}, timeout=release)
                 response.raise_for_status()
+                counts = response.json()
+                if isinstance(metrics, dict) and isinstance(counts, dict):
+                    for name in ('groups_regenerated', 'groups_dropped'):
+                        if isinstance(counts.get(name), int):
+                            metrics['infra/' + name] = counts[name]
+                    if counts.get('groups_regenerated') or counts.get('groups_dropped'):
+                        log.warning('Sampling phase regenerated %s and dropped %s group(s) after farm failures',
+                                    counts.get('groups_regenerated'), counts.get('groups_dropped'))
             except httpx.HTTPError as exc:
                 log.warning('External inference release unconfirmed (%s); server lease expiry will clean up', type(exc).__name__)
 
@@ -67,7 +75,9 @@ def install(ensemble, cfg):
 
     @functools.wraps(original)
     async def wrapped(*args, **kwargs):
-        async with sampling_phase(expected_n=getattr(cfg, 'group_size', 32)):
+        # _pipelined_sampling_phase(cfg, plans, i_batch, metrics, service_client)
+        metrics = kwargs.get('metrics', args[3] if len(args) > 3 else None)
+        async with sampling_phase(expected_n=getattr(cfg, 'group_size', 32), metrics=metrics):
             return await original(*args, **kwargs)
     wrapped._borrowing_hook = True
     ensemble._pipelined_sampling_phase = wrapped
