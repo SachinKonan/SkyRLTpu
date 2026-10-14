@@ -35,7 +35,7 @@
     "inference_compile": "gs://sk7524-tinker-tpu-us-east5/inference-farm-rq4-muse-east5a-v5p32-015/inference-compile",
     "trainer_gib": 128,
     "inference_gib": 128,
-    "reserve_gib": 280,
+    "reserve_gib": 264,
     "sync_seconds": 60,
     "process_count": 4,
     "thread_count": 8,
