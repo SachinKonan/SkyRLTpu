@@ -770,6 +770,14 @@ class Ingress:
             raise HTTPException(404, 'unknown or expired grading request')
         return view
 
+    @app.post('/skyrl/v1/grading/results')
+    async def grading_results(self, request: Request):
+        """Batch long-poll for many request ids (request protocol); renews each id's TTL."""
+        lease = self.grading_lease(request, allow_expired=True)
+        body = await request.json()
+        ids = [i for i in (body.get('ids') or []) if isinstance(i, str)][:4096]
+        return dict(views=await self.grading.results(lease, ids, wait=max(0, int(body.get('wait') or 0))))
+
     @app.post('/skyrl/v1/grading/cancel/{request_id}')
     async def grading_cancel(self, request: Request, request_id: str):
         lease = self.grading_lease(request, allow_expired=True)

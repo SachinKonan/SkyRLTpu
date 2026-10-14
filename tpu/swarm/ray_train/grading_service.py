@@ -27,6 +27,8 @@ import re
 import socket
 import time
 
+from .request_protocol import Config as ProtocolConfig
+
 REQUEST_ID = re.compile(r'[0-9a-f]{32}')
 IDENTIFIER = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 TERMINAL = ('done', 'failed', 'cancelled')
@@ -34,6 +36,9 @@ MAX_PROGRAM_BYTES = 1024 * 1024
 REFERENCE_MATH = 'def construct_function():\n    return [1.0] * 1000\n'
 # Open (lease-free) requests are admitted only below this many per family slot.
 OPEN_QUEUE_FACTOR = 1.5
+# Every accepted request expires unless its client keeps polling it (request protocol TTL): covers dead
+# clients, requests a client moved elsewhere, and cancels that never arrived.
+REQUEST_TTL_S = ProtocolConfig.from_env().request_ttl_s
 # tpu/science files that run on the trainer/client, not in the graders.
 CLIENT_ONLY = frozenset({'grading_transport.py', 'training_env.py', 'feedback.py', 'grading_dedup.py'})
 
@@ -78,6 +83,9 @@ class Entry:
     error: dict | None = None
     host: str | None = None
     created: float = field(default_factory=time.monotonic)
+    # Original submission time (unix) carried across resubmissions: queues serve oldest first.
+    age: float = field(default_factory=time.time)
+    expires: float = field(default_factory=lambda: time.monotonic() + REQUEST_TTL_S)
     started: float | None = None
     finished: float | None = None
     fetched: float | None = None
@@ -284,7 +292,7 @@ class GradingService:
         except ValueError as exc:
             return 400, dict(detail=str(exc))
         request_id, task = body['request_id'], body['task']
-        wanted = body.get('grader_sha256')
+        wanted = body.get('grader_sha256') or (body.get('contract') or {}).get('grader_sha256')
         if wanted is not None and wanted != self.grader_sha256:
             return 409, dict(detail=f'grader version mismatch: request {str(wanted)[:16]}, farm {self.grader_sha256[:16]}',
                              grader_sha256=self.grader_sha256)
@@ -292,6 +300,7 @@ class GradingService:
         if existing is not None:
             if not self.owns(existing, lease):
                 return 409, dict(detail='request belongs to another lease or client')
+            existing.expires = time.monotonic() + REQUEST_TTL_S
             return 200, existing.view()
         if len(self.entries) >= self.settings.max_requests:
             return 429, dict(detail='grading registry full', retry_after=5, **self.load(task))
@@ -301,8 +310,14 @@ class GradingService:
         entry = Entry(request_id=request_id, task=task, lease_id=lease.get('lease_id'),
                       owner_run=lease.get('owner_run') or '', scope=body.get('scope') or {},
                       token=None if lease.get('lease_id') else lease.get('token'), spec=spec)
+        submitted_at = body.get('submitted_at')
+        if isinstance(submitted_at, (int, float)) and 0 < submitted_at <= time.time() + 60:
+            entry.age = float(submitted_at)
         self.entries[request_id] = entry
-        self.queues.setdefault(task, {}).setdefault(entry.owner_run, []).append(entry)
+        queue = self.queues.setdefault(task, {}).setdefault(entry.owner_run, [])
+        # Oldest original submission first, so a request moved here from a full farm keeps its place.
+        position = next((i for i, other in enumerate(queue) if other.age > entry.age), len(queue))
+        queue.insert(position, entry)
         self._event('grading_submitted', request_id=request_id, task=task, owner_run=entry.owner_run,
                     open=entry.lease_id is None)
         self._pump(task)
@@ -373,6 +388,7 @@ class GradingService:
             return None
         if not self.owns(entry, lease):
             return None
+        entry.expires = time.monotonic() + REQUEST_TTL_S
         if wait > 0 and not entry.done.is_set():
             try:
                 await asyncio.wait_for(entry.done.wait(), timeout=min(wait, self.settings.long_poll_seconds))
@@ -381,6 +397,39 @@ class GradingService:
         if entry.state in TERMINAL and entry.fetched is None:
             entry.fetched = time.monotonic()
         return entry.view()
+
+    async def results(self, lease, request_ids, wait=0):
+        """Batch long-poll: views of many owned ids, returned once any is terminal or after ``wait`` s.
+
+        Each poll renews every listed request's TTL. Unknown or foreign ids map to None."""
+        owned = {}
+        for request_id in request_ids:
+            entry = self.entries.get(request_id)
+            if entry is not None and self.owns(entry, lease):
+                entry.expires = time.monotonic() + REQUEST_TTL_S
+                owned[request_id] = entry
+        pending = [e for e in owned.values() if e.state not in TERMINAL]
+        if wait > 0 and pending and len(pending) == len(owned):
+            waiters = [asyncio.ensure_future(e.done.wait()) for e in pending]
+            try:
+                await asyncio.wait(waiters, timeout=min(wait, self.settings.long_poll_seconds),
+                                   return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for waiter in waiters:
+                    waiter.cancel()
+        now = time.monotonic()
+        for entry in owned.values():
+            if entry.state in TERMINAL and entry.fetched is None:
+                entry.fetched = now
+        return {request_id: (owned[request_id].view() if request_id in owned else None) for request_id in request_ids}
+
+    async def expire(self, now=None):
+        """Cancel accepted requests nobody polled within the TTL (their client is gone or moved them)."""
+        now = time.monotonic() if now is None else now
+        stale = [e.request_id for e in self.entries.values() if e.state not in TERMINAL and e.expires < now]
+        for request_id in stale:
+            await self.cancel(request_id, 'request TTL expired: its client stopped polling')
+        return len(stale)
 
     async def cancel(self, request_id, reason):
         entry = self.entries.get(request_id)
@@ -403,6 +452,14 @@ class GradingService:
             if entry.waiter is not None and not entry.waiter.done():
                 entry.waiter.cancel()
                 await asyncio.gather(entry.waiter, return_exceptions=True)
+            if entry.state not in TERMINAL:
+                # Cancelled after the pump picked it but before _run started: _run's cleanup never ran.
+                entry.state = 'cancelled'
+                entry.error = dict(**{'class': 'cancelled'}, detail='cancelled')
+                entry.finished = time.monotonic()
+                entry.done.set()
+                self.counters['cancelled'] += 1
+                self._pump(entry.task)
             self._event('grading_cancelled', request_id=request_id, reason=reason)
         return entry.view()
 
@@ -447,6 +504,10 @@ class GradingService:
         while True:
             await asyncio.sleep(5)
             self.reap()
+            try:
+                await self.expire()
+            except Exception:
+                pass
 
     async def _warmup(self):
         """One reference grade per family per host marks the farm ready."""

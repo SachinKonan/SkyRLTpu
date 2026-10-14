@@ -38,7 +38,7 @@ import uuid
 
 import httpx
 
-from tpu.swarm.ray_train.request_protocol import Limits, Lost, Refused, drive
+from tpu.swarm.ray_train.request_protocol import Config, Contract, Lost, Refused, State, Ticket, drive
 
 INFRA_MARKERS = ('infrastructure', 'admission timed out', 'before the candidate started', 'without a result file',
                  'WorkerCrashedError', 'RayActorError', 'NodeDiedError', 'OwnerDiedError', 'ObjectLostError',
@@ -68,12 +68,20 @@ class GradingInfrastructureError(RuntimeError):
     abort_training_step = True
 
 
-# A farm that did not ACK (full, another grader version, unreachable): try another pool, uncharged.
-FarmBusy = Refused
-# Request protocol thresholds (tpu/swarm/ray_train/request_protocol.py): consecutive failed polls before an ACKed grade
-# is resubmitted elsewhere, and how long it may sit queued on a farm (x its own time cap) before it moves.
-POLL_MISS_LIMIT = int(os.environ.get('SKYRL_GRADING_POLL_MISS_LIMIT') or 3)
-QUEUE_LIMIT_FACTOR = float(os.environ.get('SKYRL_GRADING_QUEUE_LIMIT_FACTOR') or 2.0)
+class GradingInfrastructureFailed(GradingInfrastructureError):
+    """Infrastructure failed past the retry cap: drop this candidate from its step (logged and flagged).
+
+    Never scored 0 and never aborts the step: callers exclude the candidate (``drop_candidate``)."""
+    abort_training_step = False
+    drop_candidate = True
+
+
+class _BatchUnsupported(Exception):
+    """The farm predates the batch result endpoint: poll ids one by one."""
+
+
+# Every protocol threshold (poll misses, queue limit, retry cap, jitter, registry staleness): one config.
+CONFIG = Config.from_env()
 # Each family's own wall-clock cap for one grade: routing outer envelope, placement case envelope.
 DEFAULT_TIME_CAPS = {'routing': 2100, 'placement': 510, 'math': 600}
 
@@ -104,6 +112,8 @@ class GradingRequest:
     deadline_s: float | None = None
     # The grade's own wall-clock cap; None = the family default (DEFAULT_TIME_CAPS).
     time_cap_s: float | None = None
+    # Original creation time (unix), sent with every (re)submission: farms serve the oldest first.
+    created_at: float = field(default_factory=time.time)
 
 
 def is_infrastructure(exc):
@@ -129,6 +139,8 @@ class Pool:
         # An open farm that answered 429 is skipped until then (not an infrastructure failure).
         self.full_until = 0.0
         self.eligible = True
+        # The farm rejected our grader contract: never send it another request.
+        self.contract_mismatch = False
 
     def capacity_for(self, task):
         return max(1, int(getattr(self, 'capacities', {}).get(task) or self.capacity))
@@ -143,12 +155,21 @@ class Pool:
         self.mean_seconds = seconds if self.mean_seconds is None else .75 * self.mean_seconds + .25 * seconds
 
     def healthy(self, now):
-        return self.eligible and now >= self.unhealthy_until and now >= self.full_until
+        return (self.eligible and not self.contract_mismatch and now >= self.unhealthy_until
+                and now >= self.full_until)
 
     def serves(self, task):
         return True
 
-    async def run(self, request, on_started, attempt=0, alternative=lambda: True):
+    def free_slot(self, task):
+        """A slot free right now (not just queue room): the only reason to move a queued request here."""
+        family = (getattr(self, 'advertised', None) or {}).get('families', {}).get(task)
+        if family:
+            if family.get('total', 0) - family.get('running', 0) - family.get('queued', 0) <= 0:
+                return False
+        return self.running + self.queued < self.capacity_for(task)
+
+    async def run(self, request, on_started, attempt=0, alternative=lambda: True, report=None, resume=None):
         raise NotImplementedError
 
     async def cancel(self, request_id):
@@ -199,10 +220,10 @@ class LocalRayPool(Pool):
     def awaitable(ref):
         return asyncio.wrap_future(ref.future()) if hasattr(ref, 'future') else ref
 
-    async def run(self, request, on_started, attempt=0, alternative=lambda: True):
+    async def run(self, request, on_started, attempt=0, alternative=lambda: True, report=None, resume=None):
         ref = self.dispatch(request)
         self.refs[request.request_id] = ref
-        on_started(self)
+        on_started(self, None)
         try:
             result = await self.awaitable(ref)
         except Exception as exc:
@@ -249,6 +270,16 @@ class FarmPool(Pool):
         self.capacities = {}
         self.ready = None
         self.wire_ids = {}
+        # The grader contract travels with every request; a farm with other graders refuses it outright.
+        self.grader_sha256 = local_grader_sha256()
+        self.advertised = {}
+        # Batch long-poll: one request carries every id this client waits on at this farm.
+        self.poll_waiters = {}
+        self.poll_task = None
+        self.batch_supported = True
+        # Discovery's own view of this farm (set by the directory): used to tell a path failure from a
+        # server failure before rerouting.
+        self.directory_healthy = lambda: False
 
     @property
     def headers(self):
@@ -275,15 +306,73 @@ class FarmPool(Pool):
         self.advertised = capacity
         return True
 
-    async def run(self, request, on_started, attempt=0, alternative=lambda: True):
-        """Submit, then poll to a verdict (request_protocol.drive): Refused before an ACK, Lost after one."""
+    def wire_id(self, request, attempt):
         # Farms accept only 32-hex ids; every submission gets its own, so a late result is never confused.
-        wire_id = (request.request_id if not attempt else
-                   hashlib.sha256(f'{request.request_id}:{attempt}'.encode()).hexdigest()[:32])
+        return (request.request_id if not attempt else
+                hashlib.sha256(f'{request.request_id}:{attempt}'.encode()).hexdigest()[:32])
+
+    async def _batch_loop(self):
+        while self.poll_waiters:
+            batch, self.poll_waiters = self.poll_waiters, {}
+            try:
+                async with self.gate:
+                    response = await self.http.post(self.url + '/skyrl/v1/grading/results',
+                                                    json=dict(ids=list(batch), wait=self.long_poll_seconds),
+                                                    headers=self.headers,
+                                                    timeout=wait_for_connection(self.long_poll_seconds + 30))
+                if response.status_code in (404, 405):
+                    self.batch_supported = False
+                    raise _BatchUnsupported()
+                response.raise_for_status()
+                views = response.json().get('views') or {}
+            except BaseException as exc:
+                for futures in batch.values():
+                    for future in futures:
+                        if not future.done():
+                            future.set_exception(exc if isinstance(exc, Exception) else RuntimeError(str(exc)))
+                if not isinstance(exc, Exception):
+                    raise
+                continue
+            for wire_id, futures in batch.items():
+                for future in futures:
+                    if not future.done():
+                        future.set_result(views.get(wire_id))
+
+    async def poll_one(self, wire_id):
+        if self.batch_supported:
+            future = asyncio.get_running_loop().create_future()
+            self.poll_waiters.setdefault(wire_id, []).append(future)
+            if self.poll_task is None or self.poll_task.done():
+                self.poll_task = asyncio.create_task(self._batch_loop())
+            try:
+                return await future
+            except _BatchUnsupported:
+                pass
+        async with self.gate:
+            response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{wire_id}',
+                                           params={'wait': self.long_poll_seconds}, headers=self.headers,
+                                           timeout=wait_for_connection(self.long_poll_seconds + 30))
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    async def confirm_lost(self):
+        """True only for a server failure: a direct probe still fails and discovery does not see it healthy."""
+        if await self.probe_capacity():
+            return False
+        return not self.directory_healthy()
+
+    async def run(self, request, on_started, attempt=0, alternative=lambda: True, report=None, resume=None):
+        """Submit (or resume), then poll to a verdict (request_protocol.drive): Refused before an ACK, Lost after."""
+        wire_id = resume or self.wire_id(request, attempt)
         self.wire_ids[request.request_id] = wire_id
         body = dict(request_id=wire_id, task=request.task, owner_run=os.environ.get('SKYRL_RUN_ID', ''),
-                    scope=request.scope, spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
-        if self.open:
+                    scope=request.scope, submitted_at=request.created_at,
+                    spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
+        if self.grader_sha256:
+            # One contract object with every request; farms still read the bare grader hash too.
+            body['contract'] = Contract(kind='grading', grader_sha256=self.grader_sha256).wire()
             body['grader_sha256'] = self.grader_sha256
 
         async def submit():
@@ -298,34 +387,29 @@ class FarmPool(Pool):
                 raise Refused(f'farm {self.name} unreachable: {type(exc).__name__}', 30) from exc
             if response.status_code == 429:
                 raise Refused(f'farm {self.name} full', response.json().get('retry_after', 5))
-            if self.open and response.status_code == 409 and 'grader version' in response.text:
-                self.eligible = False
-                raise Refused(f'farm {self.name}: {response.json().get("detail")}', 3600)
+            if response.status_code == 409 and 'grader version' in response.text:
+                # Contract mismatch: never retry on this farm.
+                self.contract_mismatch = True
+                raise Refused(f'farm {self.name}: {response.json().get("detail")}', 3600, banned=True)
             response.raise_for_status()
 
-        async def poll():
-            async with self.gate:
-                response = await self.http.get(f'{self.url}/skyrl/v1/grading/result/{wire_id}',
-                                               params={'wait': self.long_poll_seconds}, headers=self.headers,
-                                               timeout=wait_for_connection(self.long_poll_seconds + 30))
-            if response.status_code == 404:
-                return None
-            response.raise_for_status()
-            return response.json()
-
-        limits = Limits(poll_miss_limit=POLL_MISS_LIMIT, queue_limit_s=QUEUE_LIMIT_FACTOR * time_cap(request),
-                        poll_interval_s=self.poll_seconds,
-                        between_polls_s=0 if self.long_poll_seconds else self.poll_seconds)
-        view = await drive(submit, poll, lambda: self.cancel(request.request_id), limits=limits,
-                           alternative=alternative, retired=lambda: self.retired, on_ack=lambda: on_started(self))
-        if view.get('state') == 'done':
+        ticket = Ticket(request.request_id, self.name, attempt)
+        view = await drive(ticket, submit, lambda: self.poll_one(wire_id), lambda: self.cancel(request.request_id),
+                           config=CONFIG, queue_limit_s=CONFIG.queue_limit_factor * time_cap(request),
+                           alternative=alternative, retired=lambda: self.retired, confirm_lost=self.confirm_lost,
+                           resume=bool(resume), on_accept=lambda: on_started(self, wire_id), report=report,
+                           poll_interval_s=self.poll_seconds,
+                           between_polls_s=0 if self.long_poll_seconds else self.poll_seconds)
+        if ticket.state in (State.DONE, State.FAILED_CANDIDATE):
+            # A candidate failure is a final verdict, returned like any result (never retried).
             result = view.get('result')
             if not isinstance(result, dict):
                 raise GradingInfrastructureError(f'farm {self.name}: done without a result')
             self.wire_ids.pop(request.request_id, None)
             return result
         error = view.get('error') or {}
-        raise GradingInfrastructureError(f'farm {self.name}: {error.get("class")}: {error.get("detail")}')
+        raise GradingInfrastructureError(f'farm {self.name}: {ticket.state.value}: {error.get("class")}: '
+                                         f'{error.get("detail")}')
 
     async def cancel(self, request_id):
         request_id = self.wire_ids.pop(request_id, request_id)
@@ -346,7 +430,6 @@ class OpenFarmPool(FarmPool):
                          long_poll_seconds=long_poll_seconds, poll_seconds=poll_seconds)
         self.run_id = run
         self.grader_sha256 = grader
-        self.advertised = {}
         self.gate = asyncio.Semaphore(OPEN_FARM_HTTP_CONCURRENCY)
 
     @property
@@ -401,17 +484,36 @@ class OpenFarmDirectory:
         self.pools = {}
         self.task = None
         self.last_refresh = 0.0
+        self.entries = {}
+        self.stale_reported = 0.0
+
+    @staticmethod
+    def listable(farm):
+        """Only fully ready, attested, healthy farms (fields a registry does not carry are not required)."""
+        return (farm.get('ok') and farm.get('tunnel_ok') and farm.get('url')
+                and farm.get('health', 'healthy') == 'healthy' and farm.get('ready', True) is not False
+                and farm.get('attested', True) is not False)
 
     async def refresh(self):
         self.last_refresh = time.monotonic()
         try:
-            farms = json.loads(Path(self.registry).read_text()).get('farms', [])
+            path = Path(self.registry)
+            registry = json.loads(path.read_text())
+            stamp = registry.get('updated') or registry.get('time') or path.stat().st_mtime
         except (OSError, ValueError) as exc:
             self.report('open_grading_registry_failed', reason=type(exc).__name__)
             return
+        farms = registry.get('farms', [])
+        age = time.time() - float(stamp)
+        stale = age > CONFIG.registry_stale_s
+        if stale and time.monotonic() - self.stale_reported > 60:
+            self.stale_reported = time.monotonic()
+            self.report('grading_registry_stale', age_seconds=round(age), registry=str(self.registry))
         leased = self.exclude()
-        listed = {f['name']: f for f in farms if f.get('ok') and f.get('tunnel_ok') and f.get('url')
-                  and f['url'].rstrip('/') not in leased}
+        # A stale registry is not trusted: every listed farm is probed directly instead.
+        listed = {f['name']: f for f in farms if f.get('url') and f['url'].rstrip('/') not in leased
+                  and (stale or self.listable(f))}
+        self.entries = {name: farm for name, farm in listed.items()}
         for name in list(self.pools):
             pool = self.pools[name]
             if name not in listed or pool.url != listed[name]['url'].rstrip('/'):
@@ -422,6 +524,8 @@ class OpenFarmDirectory:
             if name not in self.pools:
                 self.pools[name] = OpenFarmPool(farm, self.http, run=self.run_id, token=self.token, grader=self.grader,
                                                 long_poll_seconds=self.long_poll_seconds, poll_seconds=self.poll_seconds)
+                self.pools[name].directory_healthy = (
+                    lambda name=name: bool(self.listable(self.entries.get(name) or {})))
         live = [p for p in self.pools.values() if not p.retired]
         await asyncio.gather(*(p.probe_capacity() for p in live), return_exceptions=True)
         usable = sorted((p for p in live if getattr(p, 'supported', False) and p.ready),
@@ -481,6 +585,7 @@ class FarmDirectory:
                     pool.retired = True
                 pool = self.pools[farm_id] = FarmPool(farm, self.http, long_poll_seconds=self.long_poll_seconds,
                                                       poll_seconds=self.poll_seconds)
+                pool.directory_healthy = lambda pool=pool: bool(pool.eligible and not pool.retired)
                 await pool.probe_capacity()
                 added.append(farm_id)
             else:
@@ -525,20 +630,84 @@ class GradingScheduler:
         return min(candidates, key=key)
 
 
+class Journal:
+    """Append-only jsonl of in-flight request ids (with farm url and wire id) and finished results.
+
+    A restarted client re-polls journaled ids, keeps finished results, and resubmits only what is missing,
+    so a step resumes instead of regrading. Useful when callers give requests stable ids (stable_request_id)."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+        self.lock = threading.Lock()
+        self.inflight, self.results = {}, {}
+        try:
+            lines = self.path.read_text().splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            try:
+                record = json.loads(line)
+            except ValueError:
+                continue
+            request_id = record.get('request_id')
+            if record.get('event') == 'submitted':
+                self.inflight[request_id] = record
+            elif record.get('event') == 'result':
+                self.results.setdefault(request_id, record.get('result'))
+                self.inflight.pop(request_id, None)
+            elif record.get('event') == 'failed':
+                self.inflight.pop(request_id, None)
+        # Only recent results matter to a resumed step; older ones are not reloaded.
+        for request_id in list(self.results)[:-self.KEEP]:
+            del self.results[request_id]
+
+    KEEP = 8192
+
+    def append(self, **record):
+        if record.get('event') == 'result' and isinstance(record.get('result'), dict):
+            # Bounded journal: long candidate output is cut (the trajectory keeps the full row).
+            result = dict(record['result'])
+            for key in ('stdout', 'stderr'):
+                if isinstance(result.get(key), str) and len(result[key]) > 2000:
+                    result[key] = result[key][-2000:]
+            record['result'] = result
+        record.setdefault('time', time.time())
+        with self.lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open('a') as out:
+                out.write(json.dumps(record, default=str) + '\n')
+        if record.get('event') == 'submitted':
+            self.inflight[record['request_id']] = record
+        elif record.get('event') in ('result', 'failed'):
+            self.inflight.pop(record['request_id'], None)
+
+
+def stable_request_id(*parts):
+    """A 32-hex id from the request's identity, so a restarted client finds it in its journal."""
+    return hashlib.sha256('\x00'.join(str(p) for p in parts).encode()).hexdigest()[:32]
+
+
 class GradingTransport:
     _instance = None
     _instance_lock = threading.Lock()
 
-    def __init__(self, *, families, local_capacity, farm_url=None, root=None, local_systemd=True, max_infra_retries=3,
+    def __init__(self, *, families, local_capacity, farm_url=None, root=None, local_systemd=True, max_infra_retries=None,
                  events=None, refresh_seconds=10, long_poll_seconds=20, poll_seconds=2.0, http=None, loop=None,
-                 open_registry=None, open_k=4):
+                 open_registry=None, open_k=4, journal=None, retry_jitter_s=None):
         self.families = families
-        self.max_infra_retries = max_infra_retries
+        self.max_infra_retries = CONFIG.max_infra_retries if max_infra_retries is None else max_infra_retries
+        self.retry_jitter_s = CONFIG.retry_jitter_s if retry_jitter_s is None else retry_jitter_s
         self.events = events
+        # Exactly once: one grade in flight per request id; concurrent callers share it.
+        self.inflight = {}
+        # Durable record of in-flight ids and finished results: a restarted client resumes instead of regrading.
+        self.journal = Journal(journal) if journal else None
         # First result wins: a request id graded once returns the same result
         # to every later caller instead of running the candidate again.
         self.results = {}
         self.results_limit = 8192
+        if self.journal:
+            self.results.update(self.journal.results)
         self.local = LocalRayPool(families, local_capacity, root=root, systemd=local_systemd) if local_capacity else None
         self.scheduler = GradingScheduler()
         self.loop = loop
@@ -572,7 +741,8 @@ class GradingTransport:
         transport = cls(families=families, local_capacity=int(env.get('SKYRL_GRADING_LOCAL_SLOTS') or 0),
                    farm_url=env.get('SKYRL_GRADING_URL') or None, root=env.get('SCIENCE_WORKER_ROOT') or None,
                    local_systemd=env.get('SKYRL_GRADING_LOCAL_SYSTEMD', '1') == '1',
-                   max_infra_retries=int(env.get('SKYRL_GRADING_MAX_INFRA_RETRIES') or 3),
+                   max_infra_retries=int(env.get('SKYRL_GRADING_MAX_INFRA_RETRIES') or CONFIG.max_infra_retries),
+                   journal=env.get('SKYRL_GRADING_JOURNAL') or None,
                    events=env.get('SKYRL_GRADING_EVENTS') or None,
                    refresh_seconds=float(env.get('SKYRL_GRADING_FARM_REFRESH_SECONDS') or 10),
                    long_poll_seconds=int(env.get('SKYRL_GRADING_LONG_POLL_SECONDS') or 20),
@@ -649,65 +819,108 @@ class GradingTransport:
         self.results[request_id] = result
 
     async def grade(self, request):
+        """Grade once per request id: concurrent callers share one grade, later callers get its result."""
         await self._ensure_started()
         if request.request_id in self.results:
             self.report('grading_duplicate_request', request_id=request.request_id)
             return self.results[request.request_id]
+        shared = self.inflight.get(request.request_id)
+        if shared is None:
+            shared = self.inflight[request.request_id] = [asyncio.ensure_future(self._grade(request)), 0]
+        else:
+            self.report('grading_duplicate_request', request_id=request.request_id, inflight=True)
+        shared[1] += 1
+        try:
+            return await asyncio.shield(shared[0])
+        except asyncio.CancelledError:
+            # The last caller to give up cancels the grade itself (and so its farm request).
+            if shared[1] == 1:
+                shared[0].cancel()
+            raise
+        finally:
+            shared[1] -= 1
+            if shared[0].done() or shared[1] == 0:
+                self.inflight.pop(request.request_id, None)
+
+    async def _grade(self, request):
         if request.task not in self.families and self.local:
             raise GradingInfrastructureError(f'grading family {request.task!r} is not configured')
-        attempts = 0
-        tries = 0
+        attempts = 0  # charged infrastructure retries (cap: max_infra_retries)
+        tries = 0     # submissions, each under its own wire id
+        resume = self.journal.inflight.get(request.request_id) if self.journal else None
         while True:
-            pool = await self._choose(request, attempts)
+            if tries and self.retry_jitter_s:
+                await asyncio.sleep(random.uniform(0, self.retry_jitter_s))
+            pool = None
+            if resume:
+                pool = next((p for p in self.pools() if getattr(p, 'url', None) == resume.get('url')), None)
+                if pool is None:
+                    self.report('grading_resume_skipped', request_id=request.request_id, url=resume.get('url'))
+                    resume = None
+            if pool is None:
+                pool = await self._choose(request, attempts)
+            submission = tries
+            tries += 1
             pool.queued += 1
             started = time.monotonic()
             dispatched = [False]
 
-            def on_started(p):
+            def on_started(p, wire_id):
                 dispatched[0] = True
                 p.queued -= 1
                 p.running += 1
-            self.report('grading_dispatched', request_id=request.request_id, task=request.task, pool=pool.name,
-                        attempt=attempts, predicted_wait_s=round(pool.predicted_wait(request.task), 1))
-            submission = tries
-            tries += 1
-            alternative = lambda pool=pool: self.scheduler.choose(self.pools(), time.monotonic(), request.task,
-                                                                  exclude=pool) is not None
+                if self.journal and wire_id:
+                    self.journal.append(event='submitted', request_id=request.request_id, wire_id=wire_id,
+                                        url=getattr(p, 'url', None), pool=p.name, attempt=attempts,
+                                        grader_sha256=getattr(p, 'grader_sha256', None))
+            context = dict(request_id=request.request_id, task=request.task, pool=pool.name, attempt=attempts,
+                           submission=submission)
+            report = lambda event, **fields: self.report(event, **{**context, **fields})
+            self.report('grading_dispatched', **context, predicted_wait_s=round(pool.predicted_wait(request.task), 1),
+                        resumed=bool(resume))
+            alternative = lambda pool=pool: any(
+                p is not pool and p.healthy(time.monotonic()) and p.serves(request.task) and p.free_slot(request.task)
+                for p in self.pools())
             try:
-                result = await pool.run(request, on_started, submission, alternative=alternative)
+                result = await pool.run(request, on_started, submission, alternative=alternative, report=report,
+                                        resume=(resume or {}).get('wire_id'))
                 from .placement_runtime import reject_infrastructure_result
                 reject_infrastructure_result(result)
             except asyncio.CancelledError:
                 await pool.cancel(request.request_id)
                 raise
             except Refused as exc:
-                # No ACK (full, wrong grader version, unreachable): another pool, not a charged attempt.
+                # No ACK (full, contract mismatch, unreachable): another pool, not a charged retry.
                 pool.full_until = time.monotonic() + exc.retry_after
-                self.report('grading_farm_busy', request_id=request.request_id, pool=pool.name, reason=str(exc)[:200])
+                pool.contract_mismatch = pool.contract_mismatch or exc.banned
+                self.report('grading_farm_busy', **context, reason=str(exc)[:200])
                 continue
             except Lost as exc:
-                # ACKed but must move (server dead, left the directory, or queued too long): resubmit
-                # elsewhere. An infrastructure reroute, never a candidate failure, and not charged.
+                # ACKed but must move. Moving a long-queued request or a resumed id the farm forgot is free;
+                # a confirmed-dead server or one that left the directory is a charged infrastructure retry.
                 if exc.kind == 'poll_miss':
                     pool.unhealthy_until = time.monotonic() + 30
                 elif exc.kind == 'queued_too_long':
                     pool.full_until = time.monotonic() + 30
-                self.report('grading_reroute', request_id=request.request_id, pool=pool.name, kind=exc.kind,
+                resume = None
+                charged = exc.kind in ('poll_miss', 'retired')
+                attempts += charged
+                self.report('grading_reroute', **{**context, 'attempt': attempts}, kind=exc.kind, charged=charged,
                             reason=str(exc)[:200])
+                if charged and attempts > self.max_infra_retries:
+                    return self._give_up(request, attempts, exc)
                 continue
             except Exception as exc:
                 if not isinstance(exc, GradingInfrastructureError) and not is_infrastructure(exc):
                     raise
                 attempts += 1
+                resume = None
                 pool.unhealthy_until = time.monotonic() + (30 if pool.kind == 'farm' else 5)
-                self.report('grading_retry', request_id=request.request_id, from_pool=pool.name, attempt=attempts,
+                self.report('grading_retry', **{**context, 'attempt': attempts}, from_pool=pool.name,
                             reason=f'{type(exc).__name__}: {exc}'[:300])
                 await pool.cancel(request.request_id)
                 if attempts > self.max_infra_retries:
-                    self.report('grading_infra_failure', request_id=request.request_id, task=request.task,
-                                attempts=attempts, last_reason=str(exc)[:300])
-                    raise GradingInfrastructureError(
-                        f'{request.task} grading failed on every pool after {attempts} attempts: {exc}') from exc
+                    return self._give_up(request, attempts, exc)
                 continue
             finally:
                 if dispatched[0]:
@@ -716,8 +929,7 @@ class GradingTransport:
                     pool.queued -= 1
             elapsed = time.monotonic() - started
             if request.request_id in self.results:
-                # A late duplicate from an abandoned attempt never replaces the
-                # published result.
+                # A late duplicate from an abandoned attempt never replaces the published result.
                 self.report('grading_late_result_dropped', request_id=request.request_id, pool=pool.name)
                 return self.results[request.request_id]
             metrics = result.get('metrics')
@@ -725,12 +937,23 @@ class GradingTransport:
                 metrics.setdefault('grading_pool', pool.name)
                 metrics.setdefault('grading_open', bool(getattr(pool, 'open', False)))
             self._remember(request.request_id, result)
+            if self.journal:
+                self.journal.append(event='result', request_id=request.request_id, result=result)
             pool.observe(elapsed)
-            self.report('grading_completed', request_id=request.request_id, pool=pool.name, seconds=round(elapsed, 2),
+            self.report('grading_completed', **context, seconds=round(elapsed, 2),
                         admission_wait_seconds=(result.get('metrics') or {}).get('admission_wait_seconds'),
                         open=bool(getattr(pool, 'open', False)),
                         cpu_model=(result.get('metrics') or {}).get('grading_cpu_model'))
             return result
+
+    def _give_up(self, request, attempts, exc):
+        """Past the retry cap: flag it and drop the candidate from its step (never a silent zero)."""
+        self.report('grading_infra_failure', request_id=request.request_id, task=request.task, attempts=attempts,
+                    last_reason=str(exc)[:300], dropped=True)
+        if self.journal:
+            self.journal.append(event='failed', request_id=request.request_id, reason=str(exc)[:300])
+        raise GradingInfrastructureFailed(
+            f'{request.task} grading failed on every pool after {attempts} infrastructure attempts: {exc}') from exc
 
     def grade_sync(self, request, timeout=None):
         """Block a worker thread (AC2's SAFE_GRADE_EXECUTOR) on the transport loop."""

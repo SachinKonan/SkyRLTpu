@@ -203,7 +203,7 @@ def test_client_environment_exposes_grading_transport_settings(tmp_path):
     env = client_environment(pilot, Path(tmp_path), '10.0.0.1')
     assert env['SKYRL_GRADING_URL'] == 'http://10.0.0.1:%d' % pilot.ports.inference
     assert json.loads(env['SKYRL_GRADING_FAMILIES']) == AC2 and env['SKYRL_GRADING_LOCAL_SLOTS'] == '64'
-    assert env['SKYRL_GRADING_MAX_INFRA_RETRIES'] == '3' and env['SKYRL_GRADING_LOCAL_SYSTEMD'] == '1'
+    assert env['SKYRL_GRADING_MAX_INFRA_RETRIES'] == '5' and env['SKYRL_GRADING_LOCAL_SYSTEMD'] == '1'
     assert env['TTD_EVAL_BACKEND'] == 'hybrid' and env['TTD_SAFE_GRADE_MAX_WORKERS'] == '256'
     assert env['SKYRL_GRADING_EVENTS'].endswith('inference-events.jsonl')
     legacy = Config.load('tpu/swarm/ray_train/profiles/fresh-v4-qwen-ac2-grpo-lr15e4-s1-20260919.json')

@@ -1,5 +1,6 @@
 """Science rewards in the unchanged native Discover training loop."""
 import asyncio
+import hashlib
 import os
 from pathlib import Path
 import threading
@@ -12,6 +13,12 @@ from ttt_discover.tinker_utils.dataset_builder import VerifyResult
 
 class ScienceInfrastructureError(RuntimeError):
     abort_training_step = True
+
+
+class ScienceCandidateDropped(RuntimeError):
+    """Grading infrastructure failed past its retry cap: drop this candidate from the step, never score it 0."""
+    abort_training_step = False
+    drop_candidate = True
 
 
 _init_lock = threading.Lock()
@@ -166,6 +173,13 @@ def transport_requests(task, source, timeout):
                 helper=os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')), admission_timeout_s=int(timeout)))
     else:
         raise ValueError('unsupported science task')
+    if os.environ.get('SKYRL_GRADING_JOURNAL'):
+        # Stable ids, so a restarted client finds its in-flight and finished grades in the journal.
+        from .grading_transport import stable_request_id
+        digest = hashlib.sha256(source.encode()).hexdigest()
+        for request in requests:
+            request.request_id = stable_request_id(os.environ.get('SKYRL_RUN_ID', ''), request.task,
+                                                   request.spec.get('case', ''), digest)
     return requests
 
 
@@ -193,6 +207,8 @@ async def evaluate_via_transport(task, source, timeout):
     except asyncio.CancelledError:
         raise
     except Exception as exc:
+        if getattr(exc, 'drop_candidate', False):
+            raise ScienceCandidateDropped(f'{task} grading dropped after its infrastructure retries: {exc}') from exc
         raise ScienceInfrastructureError(f'{task} transport grading failed: {type(exc).__name__}: {exc}') from exc
     finally:
         for future in futures:
