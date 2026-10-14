@@ -39,7 +39,10 @@ def main():
         return
     metrics = {k:float(v) for k,v in compute_proxy_cost(tensor,b,plc).items()}
     if not all(np.isfinite(v) for v in metrics.values()) or metrics['overlap_count'] != 0:
-        raise ValueError('nonfinite proxy or hard overlap')
+        # A candidate fault (abutting macros pass validate_placement but overlap here), not infrastructure:
+        # it scores invalid/0 as it did before infrastructure failures were split out.
+        Path(args.result).write_text(json.dumps({'candidate_error': 'nonfinite proxy or hard overlap'}))
+        return
     metrics['grading_seconds'] = time.monotonic()-started
     Path(args.result).write_text(json.dumps(metrics, allow_nan=False))
 

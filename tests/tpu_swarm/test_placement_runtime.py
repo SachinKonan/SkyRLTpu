@@ -109,3 +109,31 @@ def test_runtime_start_avoids_snap_login_scope():
     cfg=Config.load('tpu/swarm/ray_train/profiles/od-qwen38-farm-20261010.json')
     script=runtime_start(cfg,'profile.json')
     assert script.index('/snap/google-cloud-cli/current/bin:$PATH') < script.index('gcloud storage cp')
+
+
+def test_hard_overlap_is_a_candidate_error_not_infrastructure(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType, SimpleNamespace
+    import numpy as np
+    from tpu.science import challenge_score_child
+
+    class Tensor:
+        def __init__(self, a): self.a, self.shape = a, a.shape
+        def numpy(self): return self.a
+    bench = SimpleNamespace(macro_positions=Tensor(np.zeros((3, 2), np.float32)),
+                            macro_fixed=Tensor(np.array([False, False, False])))
+    fakes = {'torch': SimpleNamespace(set_num_threads=lambda n: None, set_num_interop_threads=lambda n: None,
+                                      from_numpy=Tensor),
+             'macro_place': ModuleType('macro_place'),
+             'macro_place.loader': SimpleNamespace(load_benchmark_from_dir=lambda d: (bench, None)),
+             'macro_place.objective': SimpleNamespace(
+                 compute_proxy_cost=lambda t, b, plc: {'proxy_cost': 1.0, 'overlap_count': 2}),
+             'macro_place.utils': SimpleNamespace(validate_placement=lambda t, b: (True, []))}
+    for name, mod in fakes.items():
+        monkeypatch.setitem(sys.modules, name, mod)
+    positions, result = tmp_path / 'positions.npy', tmp_path / 'score.json'
+    np.save(positions, np.ones((3, 2), np.float32))
+    monkeypatch.setattr(sys, 'argv', ['x', '--root', str(tmp_path), '--case', 'ibm01',
+                                      '--positions', str(positions), '--result', str(result)])
+    challenge_score_child.main()  # must not raise: a raise exits 1 and placement_task calls that infrastructure
+    assert json.loads(result.read_text()) == {'candidate_error': 'nonfinite proxy or hard overlap'}
