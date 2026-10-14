@@ -3,7 +3,7 @@
 set -euo pipefail
 run=$1
 L=/scratch/gpfs/ZHUANGL/sk7524/rq4-local
-W=/scratch/gpfs/ZHUANGL/sk7524/SkyRL-Main-infer-rq4-live
+W=/scratch/gpfs/ZHUANGL/sk7524/SkyRL-Main-infer-release
 T=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/scripts
 root=$L/runs/$run
 $T/build.sh "$run" > /dev/null
