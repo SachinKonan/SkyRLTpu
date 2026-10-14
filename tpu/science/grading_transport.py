@@ -15,12 +15,23 @@ failures are returned as results and stay reward zero.
 The transport runs its own asyncio loop in a background thread so the AC2
 grader (a worker-thread call) and the science graders (coroutines on the
 client's loop) share one scheduler.
+
+Open grading (``SKYRL_OPEN_GRADING=1``): grading does not depend on the served
+model, so besides its leased farms the client also grades on up to
+``SKYRL_OPEN_GRADING_K`` (4) farms of any model from the farm registry
+(``SKYRL_GRADING_REGISTRY``, the discovery's farms.json), without a lease. Each
+grade goes to the less loaded of two random healthy farms (by the load the farm
+advertises); a farm that answers 429 (full) or runs another grader version is
+skipped without counting an infrastructure attempt. Farms built before open
+grading refuse lease-free requests and are simply not used.
 """
 import asyncio
 from dataclasses import dataclass, field
 import hashlib
 import json
 import os
+from pathlib import Path
+import random
 import threading
 import time
 import uuid
@@ -50,6 +61,22 @@ def wait_for_connection(seconds):
 class GradingInfrastructureError(RuntimeError):
     """No pool could run the candidate; the training step must not use a fake zero."""
     abort_training_step = True
+
+
+class FarmBusy(Exception):
+    """An open farm declined the request (full, or another grader version): try another pool."""
+
+    def __init__(self, reason, retry_after=5.0):
+        super().__init__(reason)
+        self.retry_after = float(retry_after)
+
+
+def local_grader_sha256():
+    try:
+        from tpu.swarm.ray_train.grading_service import grader_sha256
+        return grader_sha256(Path(__file__).resolve().parent)
+    except Exception:
+        return None
 
 
 @dataclass
@@ -82,6 +109,8 @@ class Pool:
         self.queued = 0
         self.mean_seconds = None
         self.unhealthy_until = 0.0
+        # An open farm that answered 429 is skipped until then (not an infrastructure failure).
+        self.full_until = 0.0
         self.eligible = True
 
     def capacity_for(self, task):
@@ -97,7 +126,10 @@ class Pool:
         self.mean_seconds = seconds if self.mean_seconds is None else .75 * self.mean_seconds + .25 * seconds
 
     def healthy(self, now):
-        return self.eligible and now >= self.unhealthy_until
+        return self.eligible and now >= self.unhealthy_until and now >= self.full_until
+
+    def serves(self, task):
+        return True
 
     async def run(self, request, on_started, attempt=0):
         raise NotImplementedError
@@ -183,6 +215,8 @@ class FarmPool(Pool):
     kind = 'farm'
     rtt_penalty = 2.0
 
+    open = False
+
     def __init__(self, farm, http, *, long_poll_seconds=20, poll_seconds=2.0, capacity=None):
         super().__init__(farm['farm_id'], capacity or farm.get('grading_capacity') or 16)
         self.url = farm['url'].rstrip('/')
@@ -221,6 +255,7 @@ class FarmPool(Pool):
             return False
         self.capacities = {name: spec.get('total', 0) for name, spec in (capacity.get('families') or {}).items()}
         self.ready = bool(capacity.get('ready', True))
+        self.advertised = capacity
         return True
 
     async def run(self, request, on_started, attempt=0):
@@ -230,10 +265,17 @@ class FarmPool(Pool):
         self.wire_ids[request.request_id] = wire_id
         body = dict(request_id=wire_id, task=request.task, owner_run=os.environ.get('SKYRL_RUN_ID', ''),
                     scope=request.scope, spec=dict(request.spec, admission_timeout_s=request.admission_timeout_s))
+        if self.open:
+            body['grader_sha256'] = self.grader_sha256
         while True:
             async with self.gate:
                 response = await self.http.post(self.url + '/skyrl/v1/grading/submit', json=body,
                                                 headers=self.headers, timeout=wait_for_connection(30))
+            if self.open and response.status_code == 429:
+                raise FarmBusy(f'farm {self.name} full', response.json().get('retry_after', 5))
+            if self.open and response.status_code == 409 and 'grader version' in response.text:
+                self.eligible = False
+                raise FarmBusy(f'farm {self.name}: {response.json().get("detail")}', 3600)
             if response.status_code == 429:
                 # Farm backpressure is a wait, never a retry: the request keeps
                 # its queued slot in this pool's accounting.
@@ -271,6 +313,109 @@ class FarmPool(Pool):
                                      timeout=wait_for_connection(10))
         except Exception:
             pass
+
+
+class OpenFarmPool(FarmPool):
+    """A farm of any model graded on without a lease (open grading)."""
+    open = True
+
+    def __init__(self, farm, http, *, run, token, grader, long_poll_seconds=20, poll_seconds=2.0):
+        super().__init__(dict(farm_id=farm['name'], url=farm['url'], token=token, eligible=True), http,
+                         long_poll_seconds=long_poll_seconds, poll_seconds=poll_seconds)
+        self.run_id = run
+        self.grader_sha256 = grader
+        self.advertised = {}
+
+    @property
+    def headers(self):
+        return {'X-Grading-Run': self.run_id, 'X-Grading-Token': self.token}
+
+    async def probe_capacity(self):
+        ok = await super().probe_capacity()
+        advertised = self.advertised if ok else {}
+        # Farms built before open grading answer 409 (no lease) and are not used.
+        self.supported = bool(advertised.get('open'))
+        if self.supported and self.grader_sha256 and advertised.get('grader_sha256') not in (None, self.grader_sha256):
+            self.supported = False
+        if not self.supported:
+            self.ready = False
+        return self.supported
+
+    def serves(self, task):
+        return task in self.capacities
+
+    def reported_backlog(self, task):
+        family = (self.advertised.get('families') or {}).get(task) or {}
+        return int(family.get('running', 0)) + int(family.get('queued', 0))
+
+    def load_ratio(self):
+        families = (self.advertised.get('families') or {}).values()
+        return max([(f.get('running', 0) + f.get('queued', 0)) / max(1, f.get('total', 1)) for f in families] or [0])
+
+    def predicted_wait(self, task=None, penalty=None):
+        mean = self.mean_seconds or 60.0
+        capacity = self.capacity_for(task)
+        backlog = max(0, max(self.running + self.queued, self.reported_backlog(task) + self.queued) + 1 - capacity)
+        return backlog * mean / capacity + (self.rtt_penalty if penalty is None else penalty)
+
+
+class OpenFarmDirectory:
+    """Up to K open farms from the farm registry, re-ranked by advertised load on every refresh."""
+
+    def __init__(self, registry, http, *, k=4, exclude=lambda: set(), refresh_seconds=10, long_poll_seconds=20,
+                 poll_seconds=2.0, report=None):
+        self.registry = registry
+        self.http = http
+        self.k = max(1, int(k))
+        self.exclude = exclude
+        self.refresh_seconds = refresh_seconds
+        self.long_poll_seconds = long_poll_seconds
+        self.poll_seconds = poll_seconds
+        self.report = report or (lambda *a, **k: None)
+        self.run_id = os.environ.get('SKYRL_RUN_ID') or 'open-' + uuid.uuid4().hex[:8]
+        self.token = uuid.uuid4().hex
+        self.grader = local_grader_sha256()
+        self.pools = {}
+        self.task = None
+        self.last_refresh = 0.0
+
+    async def refresh(self):
+        self.last_refresh = time.monotonic()
+        try:
+            farms = json.loads(Path(self.registry).read_text()).get('farms', [])
+        except (OSError, ValueError) as exc:
+            self.report('open_grading_registry_failed', reason=type(exc).__name__)
+            return
+        leased = self.exclude()
+        listed = {f['name']: f for f in farms if f.get('ok') and f.get('tunnel_ok') and f.get('url')
+                  and f['url'].rstrip('/') not in leased}
+        for name in list(self.pools):
+            pool = self.pools[name]
+            if name not in listed or pool.url != listed[name]['url'].rstrip('/'):
+                pool.eligible, pool.retired = False, True
+                if pool.running == 0 and pool.queued == 0:
+                    del self.pools[name]
+        for name, farm in listed.items():
+            if name not in self.pools:
+                self.pools[name] = OpenFarmPool(farm, self.http, run=self.run_id, token=self.token, grader=self.grader,
+                                                long_poll_seconds=self.long_poll_seconds, poll_seconds=self.poll_seconds)
+        live = [p for p in self.pools.values() if not p.retired]
+        await asyncio.gather(*(p.probe_capacity() for p in live), return_exceptions=True)
+        usable = sorted((p for p in live if getattr(p, 'supported', False) and p.ready),
+                        key=lambda p: (p.load_ratio(), p.name))
+        active = {p.name for p in usable[:self.k]}
+        before = {p.name for p in live if p.eligible}
+        for pool in live:
+            # Pools outside the active K keep their in-flight grades; they just take no new ones.
+            pool.eligible = pool.name in active
+        if active != before:
+            self.report('open_grading_farms', active=sorted(active),
+                        load={p.name: round(p.load_ratio(), 2) for p in usable})
+
+    async def loop(self):
+        while True:
+            await self.refresh()
+            await asyncio.sleep(self.refresh_seconds)
 
 
 class FarmDirectory:
@@ -337,11 +482,18 @@ class FarmDirectory:
 
 
 class GradingScheduler:
+    def __init__(self, rng=None):
+        self.rng = rng or random.Random()
+
     def choose(self, pools, now, task=None):
-        candidates = [p for p in pools if p.healthy(now)]
+        candidates = [p for p in pools if p.healthy(now) and p.serves(task)]
         if not candidates:
             return None
-        return min(candidates, key=lambda p: (p.predicted_wait(task), p.kind != 'local', p.name))
+        key = lambda p: (p.predicted_wait(task), p.kind != 'local', p.name)
+        if any(getattr(p, 'open', False) for p in candidates) and len(candidates) > 2:
+            # Power of two choices: the less loaded of two random pools.
+            return min(self.rng.sample(candidates, 2), key=key)
+        return min(candidates, key=key)
 
 
 class GradingTransport:
@@ -349,7 +501,8 @@ class GradingTransport:
     _instance_lock = threading.Lock()
 
     def __init__(self, *, families, local_capacity, farm_url=None, root=None, local_systemd=True, max_infra_retries=3,
-                 events=None, refresh_seconds=10, long_poll_seconds=20, poll_seconds=2.0, http=None, loop=None):
+                 events=None, refresh_seconds=10, long_poll_seconds=20, poll_seconds=2.0, http=None, loop=None,
+                 open_registry=None, open_k=4):
         self.families = families
         self.max_infra_retries = max_infra_retries
         self.events = events
@@ -371,6 +524,9 @@ class GradingTransport:
         self.refresh_seconds = refresh_seconds
         self.long_poll_seconds = long_poll_seconds
         self.poll_seconds = poll_seconds
+        self.open_registry = open_registry
+        self.open_k = open_k
+        self.open_directory = None
         self._started = False
 
     @classmethod
@@ -390,7 +546,9 @@ class GradingTransport:
                    max_infra_retries=int(env.get('SKYRL_GRADING_MAX_INFRA_RETRIES') or 3),
                    events=env.get('SKYRL_GRADING_EVENTS') or None,
                    refresh_seconds=float(env.get('SKYRL_GRADING_FARM_REFRESH_SECONDS') or 10),
-                   long_poll_seconds=int(env.get('SKYRL_GRADING_LONG_POLL_SECONDS') or 20))
+                   long_poll_seconds=int(env.get('SKYRL_GRADING_LONG_POLL_SECONDS') or 20),
+                   open_registry=(env.get('SKYRL_GRADING_REGISTRY') or None) if env.get('SKYRL_OPEN_GRADING') == '1' else None,
+                   open_k=int(env.get('SKYRL_OPEN_GRADING_K') or 4))
         hosts = int(env.get('SKYRL_GRADING_LOCAL_HOSTS') or 0)
         if transport.local and hosts:
             transport.local.capacities = {name: spec['slots_per_host'] * hosts for name, spec in families.items()}
@@ -418,11 +576,21 @@ class GradingTransport:
         if self.farm_url:
             await self.directory.refresh()
             self.directory.task = asyncio.create_task(self.directory.loop())
+        if self.open_registry:
+            leased = lambda: {p.url for p in self.directory.pools.values()} if self.directory else set()
+            self.open_directory = OpenFarmDirectory(self.open_registry, self.http, k=self.open_k, exclude=leased,
+                                                    refresh_seconds=self.refresh_seconds,
+                                                    long_poll_seconds=self.long_poll_seconds,
+                                                    poll_seconds=self.poll_seconds, report=self.report)
+            await self.open_directory.refresh()
+            self.open_directory.task = asyncio.create_task(self.open_directory.loop())
 
     def pools(self):
         pools = [self.local] if self.local else []
         if self.directory:
             pools += list(self.directory.pools.values())
+        if self.open_directory:
+            pools += list(self.open_directory.pools.values())
         return pools
 
     async def _choose(self, request, attempts=0):
@@ -443,6 +611,8 @@ class GradingTransport:
             waited += 1
             if self.directory and self.farm_url and time.monotonic() - self.directory.last_refresh > 5:
                 await self.directory.refresh()
+            if self.open_directory and time.monotonic() - self.open_directory.last_refresh > 5:
+                await self.open_directory.refresh()
 
     def _remember(self, request_id, result):
         if len(self.results) >= self.results_limit:
@@ -474,6 +644,11 @@ class GradingTransport:
             except asyncio.CancelledError:
                 await pool.cancel(request.request_id)
                 raise
+            except FarmBusy as exc:
+                # Full or wrong grader version: another pool, not an infrastructure attempt.
+                pool.full_until = time.monotonic() + exc.retry_after
+                self.report('grading_farm_busy', request_id=request.request_id, pool=pool.name, reason=str(exc)[:200])
+                continue
             except Exception as exc:
                 if not isinstance(exc, GradingInfrastructureError) and not is_infrastructure(exc):
                     raise
@@ -499,10 +674,16 @@ class GradingTransport:
                 # published result.
                 self.report('grading_late_result_dropped', request_id=request.request_id, pool=pool.name)
                 return self.results[request.request_id]
+            metrics = result.get('metrics')
+            if isinstance(metrics, dict):
+                metrics.setdefault('grading_pool', pool.name)
+                metrics.setdefault('grading_open', bool(getattr(pool, 'open', False)))
             self._remember(request.request_id, result)
             pool.observe(elapsed)
             self.report('grading_completed', request_id=request.request_id, pool=pool.name, seconds=round(elapsed, 2),
-                        admission_wait_seconds=(result.get('metrics') or {}).get('admission_wait_seconds'))
+                        admission_wait_seconds=(result.get('metrics') or {}).get('admission_wait_seconds'),
+                        open=bool(getattr(pool, 'open', False)),
+                        cpu_model=(result.get('metrics') or {}).get('grading_cpu_model'))
             return result
 
     def grade_sync(self, request, timeout=None):
@@ -519,8 +700,9 @@ class GradingTransport:
         return asyncio.run_coroutine_threadsafe(self.grade(request), self.loop)
 
     async def close(self):
-        if self.directory and self.directory.task:
-            self.directory.task.cancel()
-            await asyncio.gather(self.directory.task, return_exceptions=True)
+        for directory in (self.directory, self.open_directory):
+            if directory and directory.task:
+                directory.task.cancel()
+                await asyncio.gather(directory.task, return_exceptions=True)
         if self.http is not None:
             await self.http.aclose()
