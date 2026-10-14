@@ -52,6 +52,9 @@ FARM_CONNECTIONS = 256
 # made it refuse connections (ConnectTimeout loops). Grades take minutes, so
 # polling them through a smaller window costs nothing.
 FARM_HTTP_CONCURRENCY = int(os.environ.get('SKYRL_GRADING_FARM_HTTP_CONCURRENCY') or 64)
+# Open farms are shared by every run on this host through the same tunnel, so each run polls
+# an open farm through a smaller window than its leased ones.
+OPEN_FARM_HTTP_CONCURRENCY = int(os.environ.get('SKYRL_OPEN_GRADING_HTTP_CONCURRENCY') or 32)
 
 
 def wait_for_connection(seconds):
@@ -325,6 +328,7 @@ class OpenFarmPool(FarmPool):
         self.run_id = run
         self.grader_sha256 = grader
         self.advertised = {}
+        self.gate = asyncio.Semaphore(OPEN_FARM_HTTP_CONCURRENCY)
 
     @property
     def headers(self):
