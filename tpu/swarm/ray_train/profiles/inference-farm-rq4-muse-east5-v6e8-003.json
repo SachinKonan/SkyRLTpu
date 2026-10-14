@@ -71,10 +71,7 @@
     "external_pool_attestation": true,
     "farm_drain_timeout": 600,
     "farm_cancel_grace_seconds": 5,
-    "batched_rpa_kernel": false,
-    "engine_env": {
-      "SKYRL_SWA_KV": "1"
-    }
+    "batched_rpa_kernel": false
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-muse-glimmer-v1",

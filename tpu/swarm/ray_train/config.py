@@ -1191,9 +1191,12 @@ class Config:
                 raise ValueError("trainer process_bounds must multiply to the trainer host count")
         if self.inference.tp not in (2, 4, 8) or not 0 < self.inference.memory_utilization < 1:
             raise ValueError("require TP2/TP4/TP8 engines and a memory reserve")
-        if self.inference.tp == 2 and (self.model_preset != "muse-glimmer-30b" or self.accelerator != "tpu-v5p-32"
+        # Two TP2 engines per v5p host beat one TP4 engine (less cross-chip traffic): measured 2026-10-14 on
+        # a v5p-32 with a 4x32 RQ4 load, Gemma -26% and Qwen3.5 -14% time to finish.
+        if self.inference.tp == 2 and (self.model_preset not in ("muse-glimmer-30b", "gemma4-31b", "qwen3.5-27b")
+                or self.accelerator != "tpu-v5p-32"
                 or self.inference.hosts_per_engine != 1 or self.inference.routing != "ingress" or self.arena_models):
-            raise ValueError("TP2 requires single-host Muse v5p-32 engines through ingress")
+            raise ValueError("TP2 requires single-host Muse, Gemma or Qwen3.5 v5p-32 engines through ingress")
         if self.inference.tp == 8 and (self.accelerator != "tpu-v6e-8"
                 or self.inference.hosts_per_engine != 1 or not self.inference_only):
             raise ValueError("TP8 inference requires a single-host inference-only v6e-8 profile")

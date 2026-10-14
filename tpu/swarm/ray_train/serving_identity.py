@@ -51,9 +51,7 @@ def identity(config, root, source, snapshot):
                     max_lora_rank=config.inference.max_lora_rank,
                     # TP width changes reduction order, so TP2 and TP4 farms of one model never share a hash.
                     tensor_parallel=config.inference.tp)
-    # Sliding-window KV allocation is chosen by an engine env flag, not by the
-    # installed code, so it must be named here: farms with it on and off never
-    # share a hash. Absent when off, so flag-off contracts are unchanged.
-    if (config.inference.engine_env or {}).get('SKYRL_SWA_KV') == '1':
-        contract['sliding_window_kv'] = True
+    # Sliding-window KV is on by default in the installed tpu-inference; SKYRL_SWA_KV=0 turns it off, so
+    # the engine env decides it and it must be named here: farms with it on and off never share a hash.
+    contract['sliding_window_kv'] = (config.inference.engine_env or {}).get('SKYRL_SWA_KV', '1') != '0'
     return dict(contract=contract, sha256=digest(contract))

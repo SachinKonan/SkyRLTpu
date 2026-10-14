@@ -12,8 +12,8 @@
     "hosts": 0
   },
   "inference": {
-    "tp": 4,
-    "max_sequences": 16,
+    "tp": 2,
+    "max_sequences": 12,
     "memory_utilization": 0.85,
     "routing": "ingress",
     "restart_limit": 0,
@@ -25,10 +25,7 @@
     "max_loras": 1,
     "require_lease": true,
     "external_pool_attestation": true,
-    "farm_drain_timeout": 120,
-    "engine_env": {
-      "SKYRL_SWA_KV": "1"
-    }
+    "farm_drain_timeout": 120
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-gemma4-v1",

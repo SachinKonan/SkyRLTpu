@@ -18,7 +18,9 @@ MAX_LAUNCHES = 40
 # the lab measured that a farm needs the run's whole step (16 groups) in flight, not engines*seqs/32.
 # Gemma farms run 16 seqs/engine with KV already 64-70% used, so raise groups in flight, not seqs: one group
 # per engine (4 per farm) instead of 2, which left half of each farm's engines idle.
-GROUP_CAP = {'qwen35': '16', 'gemma': '4'}
+# 2026-10-14: v5p Gemma/Qwen3.5 farms run 2 TP2 engines per host (8 per farm): one Gemma group per engine,
+# two Qwen3.5 groups per engine.
+GROUP_CAP = {'qwen35': '16', 'gemma': '8'}
 # Farms per run are no longer fixed here: a run leases farms only while it generates, as many as its
 # outstanding groups need (multi_borrowing.MultiRunBorrower), and grades on any farm (open grading).
 MODELS = {'qwen35': 'Qwen/Qwen3.5-27B', 'gemma': 'google/gemma-4-31B-it', 'muse': 'meta-models/Muse-Glimmer-30B'}
