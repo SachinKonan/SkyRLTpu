@@ -153,8 +153,10 @@ class Service:
             self.emit(event='farm_gone', key=key)
 
         def observe(farm):
-            tunnel = self.tunnel(farm)
-            return farm, self.probe(farm), tunnel
+            probe = self.probe(farm)
+            # A farm without cloud metadata (della) names its own address and is reached directly, no tunnel.
+            direct = bool((probe.get('result') or {}).get('direct'))
+            return farm, probe, None if direct else self.tunnel(farm)
         with ThreadPoolExecutor(max_workers=8) as workers:
             observed = list(workers.map(observe, sources))
         published, probes = [], {}
@@ -168,7 +170,7 @@ class Service:
             record.update(job_id=str(farm['job_id']), name=farm['name'], cluster=farm['cluster'],
                           source=farm['source'], pool=farm['pool'],
                           url=tunnel.url if tunnel else record['internal_url'],
-                          tunnel_ok=tunnel.healthy() if tunnel else False,
+                          tunnel_ok=tunnel.healthy() if tunnel else bool(record.get('direct')),
                           tunnel_starts=tunnel.starts if tunnel else 0,
                           ok=bool(probe.get('ok')), error=None if probe.get('ok') else probe.get('error'),
                           **{k: entry[k] for k in ('health', 'misses', 'incarnation', 'first_seen',
@@ -225,10 +227,12 @@ class Service:
 
 
 def is_ready(record):
-    """Fully ready (probe ok: every expected engine up, not updating), attested and healthy."""
+    """Fully ready (probe ok: every expected engine up, not updating), attested and healthy.
+
+    A farm without engines serves no model, so it has no serving attestation (grades carry the grader hash)."""
     capabilities = record.get('capabilities') or {}
     return bool(record.get('ok') and record.get('health') == 'healthy'
-                and capabilities.get('compatibility_sha256'))
+                and (capabilities.get('compatibility_sha256') or (record.get('engines') == 0 and record.get('grading'))))
 
 
 def registry_is_fresh(path, max_age, now=time.time):

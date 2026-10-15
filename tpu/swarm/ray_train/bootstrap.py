@@ -149,9 +149,29 @@ def retire_before_port_check(config, ip, log):
          worker_min=config.ports.worker_min, worker_max=config.ports.worker_max)
 
 
-def ensure_controller_runtime(root, initial_behavior=False):
-    """Reuse or finish an environment while the caller holds owner.lock."""
-    runtime = root / "envs/controller"
+def memory_limit(cgroup_root=Path("/sys/fs/cgroup")):
+    """Bytes this job may use: the tightest cgroup memory.max above us (a Slurm job), else the host's RAM."""
+    limits = []
+    for line in Path("/proc/self/cgroup").read_text().splitlines():
+        if line.startswith("0::"):
+            path = cgroup_root / line.split(":", 2)[2].lstrip("/")
+            for directory in [path, *path.parents]:
+                try:
+                    value = (directory / "memory.max").read_text().strip()
+                except OSError:
+                    continue
+                if value != "max":
+                    limits.append(int(value))
+    if limits:
+        return min(limits)
+    return int(Path("/proc/meminfo").read_text().split("MemTotal:")[1].split()[0]) * 1024
+
+
+def ensure_controller_runtime(root, initial_behavior=False, runtime=None):
+    """Reuse or finish an environment while the caller holds owner.lock.
+
+    ``runtime`` is a prebuilt environment (Config.controller_env) for hosts that cannot install one."""
+    runtime = Path(runtime) if runtime else root / "envs/controller"
     python = runtime / "bin/python"
     marker = runtime / ".complete"
     identity = "python3.12-ray2.58-serve-grading-v5-cvxpy-tqdm-sympy-matplotlib"
@@ -188,6 +208,10 @@ def main():
     parser.add_argument("--runtime-ready", action="store_true")
     args = parser.parse_args()
     config = Config.load(args.config)
+    host_sized = config.grading_host_sized
+    if host_sized:
+        # Grading sized by this host (e.g. a della CPU worker): slots follow its CPUs and job memory.
+        config = config.for_host(len(os.sched_getaffinity(0)), memory_limit())
     ips = os.environ["SKYPILOT_NODE_IPS"].split()
     rank = int(os.environ["SKYPILOT_NODE_RANK"])
     if len(ips) != config.hosts or len(set(ips)) != len(ips) or not 0 <= rank < config.hosts:
@@ -207,7 +231,8 @@ def main():
         from .lifecycle import prepare
         run_dir = root / "runs" / config.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        prepare(os.environ.get("SKYPILOT_TASK_ID", ""), shared=shared_host, log=run_dir / f"lifecycle-{rank}.jsonl")
+        prepare(os.environ.get("SKYPILOT_TASK_ID", ""), shared=shared_host, log=run_dir / f"lifecycle-{rank}.jsonl",
+                tpu=bool(config.chips_per_host), scope=os.environ.get("SLURM_JOB_ID"))
     if config.systemd_runtime and os.environ.get("SKYRL_SYSTEMD_OWNED") != "1":
         from .runtime_service import launch
         token = os.environ.get("SKYPILOT_TASK_ID", "")
@@ -226,7 +251,7 @@ def main():
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         os.set_inheritable(lock_fd, True)
         os.environ["SKYRL_RAY_LOCK_FD"] = str(lock_fd)
-    runtime = root / "envs/controller"
+    runtime = Path(config.controller_env) if config.controller_env else root / "envs/controller"
     python = runtime / "bin/python"
     if not args.runtime_ready and config.frozen_benchmark:
         import shutil
@@ -243,7 +268,7 @@ def main():
         if audit.returncode != 1 or audit.stdout.strip() or audit.stderr.strip():
             raise RuntimeError("TPU device audit failed or found existing owners: " + audit.stdout.strip() + audit.stderr.strip())
     if not args.runtime_ready:
-        python = ensure_controller_runtime(root, bool(config.frozen_benchmark))
+        python = ensure_controller_runtime(root, bool(config.frozen_benchmark), runtime)
         os.execv(str(python), [str(python), "-m", __package__ + ".bootstrap", args.config, "--runtime-ready"])
     import ray
     from .events import emit
@@ -274,7 +299,8 @@ def main():
         os.environ.update(RAY_ADDRESS=f"{ips[0]}:{p.ray}", RAY_NAMESPACE=config.run_id,
             RAY_TMPDIR=str(ray_tmp), JAX_PLATFORMS="cpu",
             TPU_VISIBLE_CHIPS=",".join(map(str, range(config.chips_per_host))),
-            OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", RAY_USAGE_STATS_ENABLED="0")
+            OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", RAY_USAGE_STATS_ENABLED="0",
+            SCIENCE_GRADING_ISOLATION=config.grading.isolation)
         if rank in config.placement_ranks:
             from tpu.science.placement_slots import chips_from_env
             os.environ['TPU_VISIBLE_CHIPS'] = ','.join(map(str, chips_from_env(config.client_env)))
@@ -283,7 +309,8 @@ def main():
             # Publish this host's grading core pool, then give Ray exactly that
             # many CPUs and GiB for grades on top of its service actors.
             from tpu.science import core_pool
-            pool = core_pool.install(config.grading_service_cpus, config.grading_memory_gib)
+            pool = core_pool.install(config.grading_service_cpus, config.grading_memory_gib,
+                                     minimum=core_pool.SERVICE_MIN if config.engines_per_host else 1)
             ray_cpus = len(pool['grading']) + config.ray_service_cpus(rank)
             ray_memory = [f"--memory={pool['memory_gib'] * 1024 ** 3}"]
             emit(log, "grading_pool_installed", rank=rank, grading_cpus=len(pool['grading']),
@@ -314,9 +341,16 @@ def main():
                     time.sleep(3)
         subprocess.run(command, check=True, timeout=180)
         ray.init(address=f"{ips[0]}:{p.ray}", namespace=config.run_id)
+        # ray.init installs Ray's own SIGTERM handler, which aborts this process; keep the graceful stop.
+        signal.signal(signal.SIGTERM, signal_stop)
+        signal.signal(signal.SIGINT, signal_stop)
         emit(log, "ray_node_ready", rank=rank, address=f"{ips[0]}:{p.ray}")
         if rank == 0:
-            driver = Process([str(python), "-m", __package__ + ".controller", args.config],
+            profile = args.config
+            if host_sized:
+                profile = str(run / "profile-resolved.json")  # what this host resolved, for the controller
+                Path(profile).write_text(json.dumps(config.to_dict(), indent=1))
+            driver = Process([str(python), "-m", __package__ + ".controller", profile],
                              run / "driver.log", term_grace=900)
         missing_since = None
         terminal_since = None
@@ -325,6 +359,8 @@ def main():
             try:
                 status = ray.get_actor("runtime-status", namespace=config.run_id)
                 if stopped:
+                    if stop_since is None and driver and driver.poll() is None:
+                        driver.process.terminate()  # the controller stops (and drains) now, not at its next poll
                     stop_since = stop_since or time.monotonic()
                     ray.get(status.request_stop.remote(), timeout=5)
                     if time.monotonic() - stop_since > 900:

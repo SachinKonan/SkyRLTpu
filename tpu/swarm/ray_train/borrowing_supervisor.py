@@ -17,7 +17,7 @@ import time
 # Private TPU addresses are reachable from the TPU hosts, not necessarily from
 # this controller. Use its existing SSH access for localhost control requests.
 REMOTE = r'''
-import ipaddress, json, urllib.request, urllib.error
+import ipaddress, json, socket, urllib.parse, urllib.request, urllib.error
 def call(path, body=None):
     request = urllib.request.Request('http://127.0.0.1:'+str(PARAMS['port'])+path,
         data=json.dumps(body).encode() if body is not None else None,
@@ -29,7 +29,9 @@ try:
         call('/health')
         status = call('/status')
         count = status.get('expected_engines')
-        if (type(count) is not int or count < 1 or status.get('exhausted')
+        # A farm without engines is a valid farm that serves grading only.
+        grading_only = count == 0 and bool(status.get('grading'))
+        if (type(count) is not int or (count < 1 and not grading_only) or status.get('exhausted')
                 or status.get('updating') or len(status.get('replicas', [])) != count
                 or status.get('state') not in ('unleased', 'ready', 'awaiting_adapter', 'expired')):
             raise ValueError('not a healthy lease-capable farm')
@@ -38,20 +40,28 @@ try:
         request = urllib.request.Request(
             'http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip',
             headers={'Metadata-Flavor': 'Google'})
-        with urllib.request.urlopen(request, timeout=5) as response:
-            ip = str(ipaddress.ip_address(response.read().decode().strip()))
+        direct = False
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                ip = str(ipaddress.ip_address(response.read().decode().strip()))
+        except urllib.error.URLError as exc:
+            if not isinstance(exc.reason, socket.gaierror) or not status.get('url'):
+                raise
+            # No cloud metadata (a della compute node): the farm names its own address, reached directly.
+            direct = True
+            ip = str(ipaddress.ip_address(socket.gethostbyname(urllib.parse.urlsplit(status['url']).hostname)))
         expected_hosts = set()
         for endpoint in status.get('expected', []):
             try:
                 expected_hosts.add(str(ipaddress.ip_address(endpoint)))
             except ValueError:
                 expected_hosts.add(str(ipaddress.ip_address(endpoint.rsplit(':', 1)[0])))
-        if ip not in expected_hosts:
+        if count and ip not in expected_hosts:
             raise ValueError('farm head is not in the expected engine set')
         result = dict(models=names, url='http://'+ip+':'+str(PARAMS['port']),
                       owner_run=status.get('owner_run'), state=status.get('state'),
                       active=status.get('active', 0), capabilities=status.get('capabilities'),
-                      instance=status.get('instance'), grading=status.get('grading'))
+                      instance=status.get('instance'), grading=status.get('grading'), engines=count, direct=direct)
     else:
         result = call('/skyrl/v1/borrowing/services' + PARAMS.get('query', ''), PARAMS.get('body'))
     print(json.dumps(dict(ok=True, result=result)))

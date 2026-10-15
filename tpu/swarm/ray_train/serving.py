@@ -641,7 +641,17 @@ class Ingress:
             result['leases'] = result['borrowing'].get('leases', [])
         if self.grading:
             result['grading'] = self.grading.snapshot()
+        # The farm's own address (discovery uses it where no cloud metadata names the host).
+        result['url'] = f'http://{self.ips[0]}:{self.config.ports.inference}' if self.ips else None
         return result
+
+    async def drain_grading(self, seconds):
+        """Before the farm stops: dispatched grades may finish for ``seconds``, the rest go back as 'draining'."""
+        if not self.grading:
+            return dict(handed_back=0)
+        deadline = time.monotonic() + seconds
+        handed_back = await self.grading.shut_down(deadline, linger=self.config.grading.long_poll_seconds + 5)
+        return dict(handed_back=handed_back)
 
     def lease_queue_position(self, owner):
         """Record ``owner`` as waiting; return how many live waiters are ahead of it.
@@ -954,6 +964,11 @@ class Ingress:
     async def health(self):
         if self.quarantined:
             raise HTTPException(503, 'farm quarantined')
+        if not self.engines and self.grading is not None:
+            # A farm without engines serves grading only: healthy while its grading is ready and not draining.
+            if not self.grading.ready or self.grading.draining:
+                raise HTTPException(503, 'grading draining' if self.grading.draining else 'grading not ready')
+            return {"status": "ok", "engines": 0}
         if self.remote_only and not self.engines:
             # Control plane only: farm readiness is reported by /status.
             if self.updating:
