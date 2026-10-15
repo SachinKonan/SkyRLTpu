@@ -238,3 +238,16 @@ def test_regrade_seed_import_rejects_infrastructure_zero_reward(tmp_path):
     with pytest.raises(ValueError,match='infrastructure failure'):
         import_pool(data,{'source':dict(correctness=0,reward=0,failure_class='infrastructure')},
                     tmp_path/'import',target_run='never',evaluator_sha256='grader')
+
+
+def test_case_cgroups_fit_the_program_unit(tmp_path):
+    from tpu.science.routing_parallel import CaseGroups
+    from tpu.science.routing_resources import CASE_GIB, CASE_WORKERS, COORDINATOR_GIB, PROGRAM_GIB
+    # Four 2-GiB case workers plus the coordinator exactly fill the 12-GiB systemd unit.
+    assert (CASE_WORKERS, CASE_GIB, COORDINATOR_GIB, PROGRAM_GIB) == (4, 2, 4, 12)
+    assert resources.contract()['case_memory_gib'] == 2 and resources.contract()['program_memory_gib'] == 12
+    groups = object.__new__(CaseGroups); groups.coord = tmp_path; groups.cpus = list(range(10))
+    writes = {}
+    groups.write = lambda path, value: writes.__setitem__(path.name, value)
+    groups.begin_cases()
+    assert int(writes['memory.max']) + CASE_WORKERS * CASE_GIB * 1024**3 == PROGRAM_GIB * 1024**3

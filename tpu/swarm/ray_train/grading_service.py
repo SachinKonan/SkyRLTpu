@@ -236,6 +236,9 @@ class GradingService:
         helper = spec.get('helper', 'none')
         if helper not in ('none', 'fast_proxy_v1'):
             raise ValueError('unknown placement helper')
+        if contract is not None:
+            from tpu.science.placement_resources import validate
+            validate(contract)
         return dict(source=source, case=case, resource_contract=contract, slots_per_host=slots,
                     admission_timeout_s=admission, helper=helper)
 
@@ -258,11 +261,13 @@ class GradingService:
                                           slots_per_host=spec['slots_per_host'], routing_suite=spec['routing_suite'],
                                           **({'resource_contract': spec['resource_contract']} if spec['resource_contract'] else {}))
         from tpu.science.placement_ray import grade_cpu_case
+        from tpu.science.placement_resources import ray_options
         family = self.families['placement']
-        return grade_cpu_case.options(memory=family['memory_gib'] * 1024 ** 3,
-                                      resources={'placement_cpu_host': 1, 'grading_placement': 1},
-                                      scheduling_strategy='SPREAD'
-                                      ).remote(spec['source'], spec['case'], root, admission_timeout_s=spec['admission_timeout_s'],
+        options = dict(memory=family['memory_gib'] * 1024 ** 3,
+                       resources={'placement_cpu_host': 1, 'grading_placement': 1}, scheduling_strategy='SPREAD')
+        if spec['resource_contract']:
+            options.update(ray_options(spec['resource_contract']))
+        return grade_cpu_case.options(**options).remote(spec['source'], spec['case'], root, admission_timeout_s=spec['admission_timeout_s'],
                                                slots_per_host=spec['slots_per_host'], helper=spec['helper'],
                                                **({'resource_contract': spec['resource_contract']} if spec['resource_contract'] else {}))
 
@@ -539,7 +544,7 @@ class GradingService:
                         self.readiness[f'{name}@{ip}'] = 'ok' if ok else f'reference mismatch: {str(result)[:200]}'
                     elif name == 'placement':
                         from tpu.science.placement_runtime import validate_runtime, REFERENCE_SOURCE, check_reference
-                        from tpu.science.placement_resources import contract
+                        from tpu.science.placement_resources import contract, ray_options
                         from tpu.science.placement_ray import grade_cpu_case
                         family = self.families[name]
                         manifest = await self.awaitable(ray.remote(num_cpus=1, scheduling_strategy=strategy)(
@@ -548,7 +553,7 @@ class GradingService:
                         runtime = contract(family['slots_per_host'], cpus=family['cpus'],
                                            memory_gib=family['memory_gib'])
                         result = await self.awaitable(grade_cpu_case.options(
-                            memory=family['memory_gib'] * 1024 ** 3,
+                            **ray_options(runtime),
                             resources={'placement_cpu_host': 1, 'grading_placement': 1},
                             scheduling_strategy=strategy).remote(
                                 REFERENCE_SOURCE, case, self.worker_root,

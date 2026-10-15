@@ -218,7 +218,8 @@ class LocalRayPool(Pool):
         spec = request.spec
         options = dict(scheduling_strategy='SPREAD')
         if spec.get('resource_contract'):
-            options['memory'] = 4 * 1024 ** 3
+            from tpu.science.placement_resources import ray_options
+            options.update(ray_options(spec['resource_contract']))
         return grade_cpu_case.options(**options).remote(
             spec['source'], spec['case'], self.root, admission_timeout_s=request.admission_timeout_s,
             slots_per_host=spec['slots_per_host'], helper=spec.get('helper', 'none'),

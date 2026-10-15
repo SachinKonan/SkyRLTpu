@@ -31,6 +31,11 @@ def contract(slots=32, *, cpus=4, memory_gib=4):
 def validate(value):
     if value!=contract(value.get("slots", 32), cpus=value.get("cpus", 4), memory_gib=value.get("memory_gib", 4)):raise ValueError('placement runtime contract mismatch')
 
+def ray_options(value):
+    """Ray admission for one case: exactly the validated contract's CPUs and GiB."""
+    validate(value)
+    return dict(num_cpus=value['cpus'], memory=value['memory_gib'] * 1024 ** 3)
+
 def partition(slots=32, *, cpus_per_case=4):
     contract(slots, cpus=cpus_per_case)
     cpus=sorted(os.sched_getaffinity(0))

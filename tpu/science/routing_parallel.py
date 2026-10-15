@@ -12,7 +12,7 @@ import sys
 import time
 
 from .isolation import Limits, python_mounts, run
-from .routing_resources import CASE_CPUS, CASE_GIB, CASE_WORKERS, PROGRAM_GIB, CANDIDATE_SECONDS, contract, RoutingInfrastructureError
+from .routing_resources import CASE_CPUS, CASE_GIB, CASE_WORKERS, COORDINATOR_GIB, PROGRAM_GIB, CANDIDATE_SECONDS, contract, RoutingInfrastructureError
 from .routing import scaffold, verify
 from .contracts import rust_literal
 from .cgroup_limits import envelope, metrics as memory_metrics
@@ -140,7 +140,7 @@ class CaseGroups:
         """Release the compilation allowance before any case is admitted."""
         self.write(self.coord / 'cpuset.cpus', ','.join(map(str, self.cpus[8:])))
         self.write(self.coord / 'cpu.max', '200000 100000')
-        self.write(self.coord / 'memory.max', str(4*1024**3))
+        self.write(self.coord / 'memory.max', str(COORDINATOR_GIB*1024**3))
 
     def kill(self, slot):
         group = self.groups[slot]
