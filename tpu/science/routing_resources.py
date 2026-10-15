@@ -13,7 +13,7 @@ CASE_CPUS = 2
 CASE_GIB = 4
 # Conservative packing includes two CPUs/four GiB for coordinator and build.
 PROGRAM_CPUS = 10
-PROGRAM_GIB = 20
+PROGRAM_GIB = 12
 MAX_PROGRAMS = 10
 HOST_CPUS = 100
 HOST_GIB = 200

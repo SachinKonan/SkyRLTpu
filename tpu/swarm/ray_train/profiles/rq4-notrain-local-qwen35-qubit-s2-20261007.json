@@ -120,7 +120,7 @@
       "routing": {
         "slots_per_host": 8,
         "cpus": 10,
-        "memory_gib": 20
+        "memory_gib": 12
       }
     },
     "farm_transport": true,
