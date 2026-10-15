@@ -118,7 +118,7 @@
       "routing": {
         "slots_per_host": 8,
         "cpus": 10,
-        "memory_gib": 12
+        "memory_gib": 20
       }
     },
     "farm_transport": true,

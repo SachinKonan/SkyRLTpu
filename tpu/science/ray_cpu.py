@@ -46,7 +46,7 @@ def grade(task, source, root, *, admission_timeout_s=2400, slots_per_host=2, rou
         from . import core_pool
         from .routing_resources import PROGRAM_CPUS, PROGRAM_GIB
         try:
-            # Same per-program contract (10 pinned cores, 12 GiB) from the shared pool.
+            # Same per-program contract (10 pinned cores, 20 GiB) from the shared pool.
             cpus, lease = core_pool.acquire(PROGRAM_CPUS, PROGRAM_GIB, deadline_seconds=admission_timeout_s)
             slot, admission = None, core_pool.VERSION
         except core_pool.PoolUnavailable:

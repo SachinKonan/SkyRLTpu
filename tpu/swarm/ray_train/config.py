@@ -497,7 +497,7 @@ class Config:
         defaults = {
             'math': dict(slots_per_host=16, cpus=2, memory_gib=MATH_RESERVED_GIB, memory_max_gib=MATH_KILL_GIB),
             'routing': dict(slots_per_host=self.science_routing_slots_per_host,
-                            cpus=10 if parallel else 4, memory_gib=12 if parallel else 8),
+                            cpus=10 if parallel else 4, memory_gib=20 if parallel else 8),
             'placement': dict(slots_per_host=self.science_placement_slots_per_host,
                               cpus=4, memory_gib=4 if modern else 8),
         }

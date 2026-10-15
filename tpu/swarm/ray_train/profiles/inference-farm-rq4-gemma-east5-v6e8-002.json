@@ -39,7 +39,7 @@
       "routing": {
         "slots_per_host": 14,
         "cpus": 10,
-        "memory_gib": 12
+        "memory_gib": 20
       },
       "placement": {
         "slots_per_host": 72,
