@@ -35,7 +35,7 @@ def partition(slots=32, *, cpus_per_case=4):
     contract(slots, cpus=cpus_per_case)
     cpus=sorted(os.sched_getaffinity(0))
     count = cpus_per_case * slots
-    if len(cpus)<count+32:raise RuntimeError('placement slots require four CPUs each plus 32 service CPUs')
+    if len(cpus)<count+32:raise RuntimeError(f'placement slots require {cpus_per_case} CPUs each plus 32 service CPUs')
     return cpus[-count:],cpus[:-count]
 
 def acquire(slots,deadline_seconds=2400,root=None, *, cpus_per_case=4):

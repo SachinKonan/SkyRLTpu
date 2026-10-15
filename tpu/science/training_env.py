@@ -165,7 +165,9 @@ def transport_requests(task, source, timeout):
         from .placement_task import CASES
         from .placement_resources import contract
         slots = int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '16'))
-        resources = (contract(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32')))
+        resources = (contract(int(os.environ.get('SCIENCE_PLACEMENT_SLOTS_PER_HOST', '32')),
+                              cpus=int(os.environ.get('SCIENCE_PLACEMENT_CPUS_PER_CASE', '4')),
+                              memory_gib=int(os.environ.get('SCIENCE_PLACEMENT_MEMORY_GIB', '4')))
                      if os.environ.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1' else None)
         for case in CASES:
             requests.append(GradingRequest(task='placement', spec=dict(
