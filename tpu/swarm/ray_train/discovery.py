@@ -23,7 +23,6 @@ It never acquires leases or cancels jobs; farms arbitrate.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -36,7 +35,6 @@ from .local_farms import Tunnel, local_port, write
 MISSES_UNHEALTHY = 3
 READY_ONLY = 'ready-only-v1'
 PRIVATE_ID_BASE = 10_000_000  # synthetic job IDs for private farms: sortable and tunnel-port-stable
-FILE_ID_BASE = 20_000_000  # synthetic job IDs for farms that advertise themselves in --farm-files
 
 
 def ssh_argv(entry):
@@ -77,17 +75,15 @@ def local_rpc(url):
         return {'ok': False, 'error': type(exc).__name__}
 
 
-def farm_files(folder, now=time.time):
-    """[(name, record)] of farms advertising themselves as <node>-<port>.json in ``folder`` (not past their end)."""
-    found = []
-    for path in sorted(Path(folder).glob('*.json')) if folder else ():
-        try:
-            record = json.loads(path.read_text())
-        except (OSError, ValueError):
-            continue
-        if isinstance(record, dict) and record.get('url') and not (record.get('end_time') or float('inf')) < now():
-            found.append((path.stem, record))
-    return found
+def slurm_farm_url(job_id, cluster, run=subprocess.run):
+    """A farm job on a Slurm-backed pool: its node (the SkyPilot cluster is the Slurm job of that name) and the
+    HTTP port placed by its managed job id (config.farm_ports), or None while the node is unknown."""
+    from .config import farm_ports
+    try:
+        node = run(['squeue', '-h', '-n', cluster, '-o', '%N'], capture_output=True, text=True, timeout=30).stdout.split()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return f'http://{node[0]}:{farm_ports(job_id)[0]}' if len(node) == 1 else None
 
 
 def load_private(path):
@@ -149,15 +145,15 @@ class Service:
                 and any(s.casefold() in (r.get('run_id') or '').casefold() for s in self.args.name_contains)]
         private = [dict(key='private:' + f['name'], job_id=PRIVATE_ID_BASE + i, name=f['name'], cluster=None,
                         pool=None, source='private', entry=f) for i, f in enumerate(self.private['farms'])]
-        files = [dict(key='file:' + stem, job_id=FILE_ID_BASE + int(hashlib.sha256(stem.encode()).hexdigest()[:6], 16),
-                      name=record.get('name') or stem, cluster=None, pool=None, source='file', entry=record)
-                 for stem, record in farm_files(getattr(self.args, 'farm_files', None), self.now)
-                 if any(s.casefold() in (record.get('name') or stem).casefold() for s in self.args.name_contains)]
-        return pool + private + files
+        for farm in pool:
+            if farm['pool'] in (getattr(self.args, 'slurm_pool', None) or ()):
+                farm['source'] = 'slurm'  # reached directly at its node and job-placed port, no SSH
+        return pool + private
 
     def probe(self, farm):
-        if farm['source'] == 'file':
-            return local_rpc(farm['entry']['url'])
+        if farm['source'] == 'slurm':
+            url = slurm_farm_url(farm['job_id'], farm['cluster'])
+            return local_rpc(url) if url else {'ok': False, 'error': 'node_unknown'}
         if farm['source'] == 'private':
             return private_rpc(farm['entry'], 'farm', farm['entry'].get('port', self.args.farm_port))
         return rpc(self.args.ssh_config_dir, farm['cluster'], 'farm', self.args.farm_port)
@@ -310,8 +306,8 @@ def main():
     parser.add_argument('--registry', type=Path, required=True, help='farms.json to publish')
     parser.add_argument('--ssh-config-dir', type=Path, required=True)
     parser.add_argument('--private-hosts', type=Path, help='checked-in private farms/trainers (v5p-64)')
-    parser.add_argument('--farm-files', type=Path, help='folder where farms advertise <node>-<port>.json '
-                        '(SKYRL_FARM_REGISTRY_DIR, della workers); probed directly from this host')
+    parser.add_argument('--slurm-pool', action='append', default=[],
+                        help='a Slurm-backed pool (della): its farms are probed directly at node:farm_ports(job id)')
     parser.add_argument('--name-contains', action='append', help='farm job-name substring (default inference-farm)')
     parser.add_argument('--trainer-pool', action='append', default=[])
     parser.add_argument('--trainer-job-id', type=int, action='append', default=[])

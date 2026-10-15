@@ -41,6 +41,16 @@ class Ports:
     topology_subset: int = 24807
 
 
+def farm_ports(managed_job_id):
+    """(HTTP port, first Ray port) of a farm placed by its SkyPilot managed job id; shared by the farm and discovery.
+
+    HTTP 20000-23999; Ray in 100-port blocks at 25000-32499 (listeners at the base, workers from base+10). Both are
+    below della's ephemeral range (32768+) and clear of the fixed TPU ports (24679-24807) and of Ray's default
+    worker ports (10002-19999), which other users' Ray jobs on a shared node use."""
+    job = int(managed_job_id)
+    return 20000 + job % 4000, 25000 + job % 75 * 100
+
+
 # Ray's own listeners, in the order a moved Ray port block assigns them (Config.with_ports).
 RAY_PORTS = ("ray", "dashboard", "client", "object_manager", "node_manager", "dashboard_agent",
              "dashboard_agent_grpc", "runtime_env", "metrics")
@@ -442,6 +452,9 @@ class Config:
     arena_max_tokens: int = 8192
     arena_thinking_tokens: int | None = None
     ports: Ports = field(default_factory=Ports)
+    # Place this farm's HTTP and Ray ports by its SkyPilot managed job id (farm_ports), so several farms can share
+    # a host and discovery knows the address. False: the fixed ports above (TPU farms).
+    job_ports: bool = False
     systemd_runtime: bool = False
     # Prebuilt controller environment (default: <root>/envs/controller), for hosts that cannot install one.
     controller_env: str = ""
@@ -580,6 +593,8 @@ class Config:
             raise ValueError('grading flags must be boolean')
         if g.farm_transport and (not self.borrows_inference or self.inference_only):
             raise ValueError('grading.farm_transport requires a borrowing trainer')
+        if self.job_ports and (self.hosts != 1 or self.ports.worker_max - self.ports.worker_min > 89):
+            raise ValueError('job_ports needs a single-host farm whose Ray worker range fits a 100-port block')
         if g.isolation not in ('systemd', 'bwrap'):
             raise ValueError("grading.isolation must be 'systemd' or 'bwrap'")
         for key in ('memory_gib', 'service_memory_gib', 'drain_seconds', 'time_limit_lead_seconds'):

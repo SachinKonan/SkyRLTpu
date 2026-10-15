@@ -158,7 +158,7 @@ def test_bootstrap_prepares_before_the_runtime_unit_and_passes_shared(tmp_path, 
     monkeypatch.setattr(runtime_service, 'launch', lambda *a, **kw: order.append(('launch', kw['shared'])) or 0)
     cfg = SimpleNamespace(hosts=1, assigned_host_ips=[], root=str(tmp_path), run_id='r', systemd_runtime=True,
                           systemd_port=24900, systemd_peer_timeout=30, systemd_shutdown_grace=90, setup_timeout=60,
-                          grading_host_sized=False, chips_per_host=4)
+                          grading_host_sized=False, chips_per_host=4, job_ports=False)
     monkeypatch.setattr(bootstrap.Config, 'load', staticmethod(lambda path: cfg))
     monkeypatch.setenv('SKYPILOT_NODE_IPS', '10.0.0.1')
     monkeypatch.setenv('SKYPILOT_NODE_RANK', '0')

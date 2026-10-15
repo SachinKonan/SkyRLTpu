@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 import signal
-import socket
 import threading
 import time
 
@@ -621,7 +619,6 @@ class Controller:
             self.report("arena_sampling_started", samples=self.config.arena_samples)
         elif self.config.inference_only:
             self.report("inference_only_waiting", endpoint=f"http://{self.ips[0]}:{self.config.ports.inference}")
-            self.publish_farm_file()
             lead = self.config.grading.time_limit_lead_seconds
             end = host_end_time() if lead else None
             while not self.stopping.wait(5):
@@ -649,30 +646,8 @@ class Controller:
                 return code
         return 143
 
-    def farm_file(self):
-        """Where this farm advertises its address (SKYRL_FARM_REGISTRY_DIR, e.g. shared della scratch), or None."""
-        directory = os.environ.get("SKYRL_FARM_REGISTRY_DIR")
-        if not directory or not self.config.inference_only:
-            return None
-        return Path(directory) / f"{socket.gethostname().split('.')[0]}-{self.config.ports.inference}.json"
-
-    def publish_farm_file(self):
-        path = self.farm_file()
-        if path is None:
-            return
-        from .grading_service import grader_sha256
-        record = dict(name=self.config.run_id, url=f"http://{self.ips[0]}:{self.config.ports.inference}",
-                      job_id=os.environ.get("SLURM_JOB_ID"), end_time=host_end_time(),
-                      grader_sha256=grader_sha256() if self.config.grading_families else None, time=time.time())
-        stage = path.with_suffix(".partial")
-        stage.write_text(json.dumps(record))
-        stage.replace(path)
-        self.report("farm_file_published", path=str(path), **record)
-
     def close(self):
         self.stopping.set()
-        if (path := self.farm_file()) is not None:
-            path.unlink(missing_ok=True)  # stop advertising before draining
         if self.monitor:
             self.monitor.join(timeout=40)
         # Stop new client requests first, stop services, then flush caches

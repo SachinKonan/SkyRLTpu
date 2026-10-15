@@ -118,7 +118,25 @@ export SKYPILOT_NODE_IPS=<node ip> SKYPILOT_NODE_RANK=0     # SkyPilot sets thes
 cd $code && python3 -m tpu.swarm.ray_train.bootstrap $code/tpu/swarm/ray_train/profiles/inference-farm-grading-della-cpu-001.json
 ```
 
-Run one farm per node: port 24800 and the Ray ports are fixed. Discovery runs on della with the
+Several farms may share a node (non-exclusive Slurm workers). Discovery finds them without any
+registry or state:
+
+- **Ports.** A `job_ports` profile places its ports by its SkyPilot managed job id
+  (`config.farm_ports`, used by both the farm and discovery):
+  - HTTP is `20000 + id % 4000`.
+  - Ray uses a 100-port block at `25000 + id % 75 * 100`: listeners at the base, workers from
+    base+10. The della profile's Ray worker range is therefore 90 ports.
+  - Both ranges are below della's ephemeral range (32768+) and clear of the TPU ports and of Ray's
+    default worker range (10002-19999), which other users' jobs use.
+  - A port held by another process fails the start, and managed-job recovery moves the farm.
+  - `SKYRL_FARM_PORT` and `SKYRL_FARM_RAY_PORT_BASE` override the placement. TPU farms keep their
+    fixed ports.
+- **Discovery.** Run `--slurm-pool <pool>`. Each running farm job of that pool is probed directly at
+  `http://<node>:farm_ports(job id)[0]`. The node comes from `squeue -n <cluster>`; the SkyPilot
+  cluster is the Slurm job of that name. The same probe and the same `/health` plus grader-hash gate
+  apply.
+- **Per-job root.** The root is `farms/${SLURMD_NODENAME}-${SLURM_JOB_ID}`, so two farms never share
+  a run dir or Ray temp dir. Ray's socket folder moves to `/tmp` when HOME is long. Discovery runs on della with the
 usual `--name-contains inference-farm`. Every runtime code change needs a new bundle and a new
 `code/<sha>`; clients must come from the same tree (the grader hash covers `tpu/science`).
 Validate each new code dir on a compute node with known-valid circuit and qubit programs before

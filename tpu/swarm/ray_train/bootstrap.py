@@ -149,40 +149,16 @@ def retire_before_port_check(config, ip, log):
          worker_min=config.ports.worker_min, worker_max=config.ports.worker_max)
 
 
-def bindable(ports):
-    """True when every port can be bound on this host right now."""
-    try:
-        for port in ports:
-            with socket.socket() as sock:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                sock.bind(("0.0.0.0", port))
-        return True
-    except OSError:
-        return False
-
-
-def farm_ports(config, environ=os.environ, low=26000, high=32768):
-    """(http, ray_base) from SKYRL_FARM_PORT / SKYRL_FARM_RAY_PORT_BASE (unset: the profile's ports).
-
-    0 picks a free one: an OS-assigned HTTP port, and a free Ray block in [low, high) below the ephemeral range,
-    tried in random order so farms starting together on one node rarely race. The choice is written back to
-    ``environ`` so the re-executed bootstrap and its controller use the same ports."""
-    import random
-    http, ray_base = (int(environ[key]) if environ.get(key) not in (None, "") else None
+def moved_ports(config, environ=os.environ):
+    """(http, ray_base) for this farm: SKYRL_FARM_PORT / SKYRL_FARM_RAY_PORT_BASE when set, else for a job_ports
+    profile the ports placed by SKYPILOT_MANAGED_JOB_ID (config.farm_ports), else (None, None): the profile's ports.
+    A port another process holds fails the start (check_ports_available); managed-job recovery moves the farm."""
+    http, ray_base = (int(environ[key]) if environ.get(key) else None
                       for key in ("SKYRL_FARM_PORT", "SKYRL_FARM_RAY_PORT_BASE"))
-    if http == 0:
-        with socket.socket() as sock:
-            sock.bind(("0.0.0.0", 0))
-            http = sock.getsockname()[1]
-        environ["SKYRL_FARM_PORT"] = str(http)
-    if ray_base == 0:
-        block = 11 + config.ports.worker_max - config.ports.worker_min
-        bases = list(range(low, high - block, -(-(block + 10) // 50) * 50))
-        random.shuffle(bases)
-        ray_base = next((b for b in bases if bindable(range(b, b + block))), None)
-        if ray_base is None:
-            raise RuntimeError("no free Ray port block on this host")
-        environ["SKYRL_FARM_RAY_PORT_BASE"] = str(ray_base)
+    if config.job_ports and environ.get("SKYPILOT_MANAGED_JOB_ID"):
+        from .config import farm_ports
+        placed = farm_ports(environ["SKYPILOT_MANAGED_JOB_ID"])
+        http, ray_base = placed[0] if http is None else http, placed[1] if ray_base is None else ray_base
     return http, ray_base
 
 
@@ -249,7 +225,7 @@ def main():
     if host_sized:
         # Grading sized by this host (e.g. a della CPU worker): slots follow its CPUs and job memory.
         config = config.for_host(len(os.sched_getaffinity(0)), memory_limit())
-    moved = farm_ports(config)
+    moved = moved_ports(config)
     if moved != (None, None):
         config = config.with_ports(*moved)  # several farms on one host (e.g. a shared Slurm node)
     ips = os.environ["SKYPILOT_NODE_IPS"].split()
