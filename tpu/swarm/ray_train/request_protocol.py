@@ -21,8 +21,9 @@ Rules (all of them live in ``drive`` below; callers only react to the final stat
    slot now: send one cancel (not awaited), LOST(queued_too_long). A RUNNING request is never cancelled to
    move it. The resubmission keeps the request's original age, and farms serve the oldest first.
 5. The server left the directory: LOST(retired). A resumed id the server no longer knows: LOST(resume_unknown).
-The caller's retry policy (grading_transport): REFUSED and LOST(queued_too_long / resume_unknown) are free;
-LOST(poll_miss / retired), FAILED_INFRA and CANCELLED are infrastructure retries, capped at
+The caller's retry policy (grading_transport): REFUSED, LOST(queued_too_long / resume_unknown) and CANCELLED
+by a draining farm (error.class 'draining') are free; LOST(poll_miss / retired), FAILED_INFRA and any other
+CANCELLED are infrastructure retries, capped at
 ``Config.max_infra_retries``, after which the candidate is dropped (flagged), never scored 0.
 """
 import asyncio
@@ -111,7 +112,7 @@ class Lost(Exception):
 
     def __init__(self, reason, kind):
         super().__init__(reason)
-        self.kind = kind  # 'poll_miss' | 'retired' | 'queued_too_long' | 'resume_unknown'
+        self.kind = kind  # 'poll_miss' | 'retired' | 'queued_too_long' | 'resume_unknown' | 'draining'
 
 
 @dataclass
