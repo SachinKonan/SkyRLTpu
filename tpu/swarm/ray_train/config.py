@@ -44,11 +44,11 @@ class Ports:
 def farm_ports(managed_job_id):
     """(HTTP port, first Ray port) of a farm placed by its SkyPilot managed job id; shared by the farm and discovery.
 
-    HTTP 20000-23999; Ray in 100-port blocks at 25000-32499 (listeners at the base, workers from base+10). Both are
-    below della's ephemeral range (32768+) and clear of the fixed TPU ports (24679-24807) and of Ray's default
-    worker ports (10002-19999), which other users' Ray jobs on a shared node use."""
+    HTTP 20000-23999; Ray in 200-port blocks at 25000-32399 (listeners at the base, up to 190 workers from base+10:
+    a 64-core farm runs ~60 Ray workers). Both are below della's ephemeral range (32768+) and clear of the fixed
+    TPU ports (24679-24807) and of Ray's default worker ports (10002-19999), which other users' Ray jobs use."""
     job = int(managed_job_id)
-    return 20000 + job % 4000, 25000 + job % 75 * 100
+    return 20000 + job % 4000, 25000 + job % 37 * 200
 
 
 # Ray's own listeners, in the order a moved Ray port block assigns them (Config.with_ports).
@@ -593,8 +593,8 @@ class Config:
             raise ValueError('grading flags must be boolean')
         if g.farm_transport and (not self.borrows_inference or self.inference_only):
             raise ValueError('grading.farm_transport requires a borrowing trainer')
-        if self.job_ports and (self.hosts != 1 or self.ports.worker_max - self.ports.worker_min > 89):
-            raise ValueError('job_ports needs a single-host farm whose Ray worker range fits a 100-port block')
+        if self.job_ports and (self.hosts != 1 or self.ports.worker_max - self.ports.worker_min > 189):
+            raise ValueError('job_ports needs a single-host farm whose Ray worker range fits a 200-port block')
         if g.isolation not in ('systemd', 'bwrap'):
             raise ValueError("grading.isolation must be 'systemd' or 'bwrap'")
         for key in ('memory_gib', 'service_memory_gib', 'drain_seconds', 'time_limit_lead_seconds'):

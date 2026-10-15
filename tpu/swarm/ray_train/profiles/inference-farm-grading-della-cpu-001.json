@@ -51,7 +51,7 @@
   },
   "ports": {
     "worker_min": 22000,
-    "worker_max": 22089
+    "worker_max": 22189
   },
   "job_ports": true
 }

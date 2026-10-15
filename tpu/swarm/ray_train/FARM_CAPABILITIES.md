@@ -7,8 +7,10 @@ the Serve `Ingress` with `GradingService`. A farm has two capabilities:
 - **Grading**: it has `grading.families`.
 
 Zero engines is a valid farm. `accelerator: "cpu"` has no chips, so its farm serves grading only.
-The della CPU worker is just a profile of this runtime:
-`profiles/inference-farm-grading-della-cpu-001.json`. There is no separate code path. Every new
+The della CPU worker is just a profile of this runtime: production
+`profiles/inference-farm-rq4-grading-della.json` (64 CPU / 128 GiB workers, 4 service CPUs and
+16 GiB), and the smaller `inference-farm-grading-della-cpu-001.json` / `gradetest-della-cpu-001.json`
+(16 CPU) used in tests. There is no separate code path. Every new
 setting defaults to today's behaviour, so TPU farms are unchanged.
 
 ## What a zero-engine farm does differently (all in the shared code)
@@ -124,8 +126,9 @@ registry or state:
 - **Ports.** A `job_ports` profile places its ports by its SkyPilot managed job id
   (`config.farm_ports`, used by both the farm and discovery):
   - HTTP is `20000 + id % 4000`.
-  - Ray uses a 100-port block at `25000 + id % 75 * 100`: listeners at the base, workers from
-    base+10. The della profile's Ray worker range is therefore 90 ports.
+  - Ray uses a 200-port block at `25000 + id % 37 * 200`: listeners at the base, workers from
+    base+10. The della profiles' Ray worker range is therefore 190 ports (a 64-core farm runs about
+    60 Ray workers).
   - Both ranges are below della's ephemeral range (32768+) and clear of the TPU ports and of Ray's
     default worker range (10002-19999), which other users' jobs use.
   - A port held by another process fails the start, and managed-job recovery moves the farm.

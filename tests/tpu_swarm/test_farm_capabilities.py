@@ -435,20 +435,28 @@ def test_ports_are_placed_by_the_managed_job_and_tpu_defaults_stay():
     from dataclasses import asdict
     from tpu.swarm.ray_train import bootstrap
     from tpu.swarm.ray_train.config import farm_ports
-    assert farm_ports(1234) == (21234, 25000 + 1234 % 75 * 100) and farm_ports(5999) == (21999, 25000 + 74 * 100)
+    assert farm_ports(1234) == (21234, 25000 + 1234 % 37 * 200) and farm_ports(5999) == (21999, 25000 + 5999 % 37 * 200)
     for job in range(0, 20000, 7):
         http, base = farm_ports(job)
-        assert 20000 <= http < 24000 and 25000 <= base and base + 99 < 32768
+        assert 20000 <= http < 24000 and 25000 <= base and base + 199 < 32768
     config = Config.load(PROFILE)
     assert config.job_ports and bootstrap.moved_ports(config, {}) == (None, None)
     http, base = bootstrap.moved_ports(config, dict(SKYPILOT_MANAGED_JOB_ID='1234'))
     moved = config.with_ports(http, base)
     assert moved.ports.inference == 21234 and moved.ports.ray == base and moved.ports.metrics == base + 8
-    assert (moved.ports.worker_min, moved.ports.worker_max) == (base + 10, base + 99)
+    assert (moved.ports.worker_min, moved.ports.worker_max) == (base + 10, base + 199)
     assert bootstrap.moved_ports(config, dict(SKYPILOT_MANAGED_JOB_ID='1234', SKYRL_FARM_PORT='31000')) == (31000, base)
     tpu = Config.load(ROOT / 'tpu/swarm/ray_train/profiles/inference-farm-rq4-gemma-east5-v6e8-001.json')
     assert not tpu.job_ports and asdict(tpu.ports) == asdict(type(tpu.ports)())
     assert bootstrap.moved_ports(tpu, dict(SKYPILOT_MANAGED_JOB_ID='1234')) == (None, None)  # TPU: fixed ports
+
+
+def test_production_della_profile_at_64_cpus_128_gib():
+    config = Config.load(ROOT / 'tpu/swarm/ray_train/profiles/inference-farm-rq4-grading-della.json')
+    assert 'inference-farm' in config.run_id and config.job_ports and config.engines_per_host == 0
+    host = config.for_host(64, 128 * GIB)
+    assert {n: f['slots_per_host'] for n, f in host.grading_families.items()} == {'placement': 30, 'routing': 6, 'math': 28}
+    assert host.grading_memory_gib == 112 and host.grading_service_cpus == 4 and host.grading.time_limit_lead_seconds == 900
 
 
 def test_sixteen_cpus_sixty_four_gib_sizing():
