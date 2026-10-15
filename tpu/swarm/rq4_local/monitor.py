@@ -102,15 +102,13 @@ def runs_report(window):
         env, kind = client_env(rid)
         ev, reasons = tail_events(d / 'inference-events.jsonl', now - window)
         lev, _ = tail_events(d / 'local.jsonl', now - window)
-        # The request protocol journals grades in grading-journal.jsonl ('result').
-        gj, _ = tail_events(d / 'grading-journal.jsonl', now - window)
         out.append(dict(
             model=m, problem=p, seed=s, run=rid, step=step, target=TARGET, alive=alive(rid), process=kind,
             bootstrap_done=(d / 'client/bootstrap/complete.json').exists(),
             step_min=[round(r.get('time/total', 0) / 60) for r in rows[-3:]],
             late=[r.get('eager/late_candidates') for r in rows[-2:]],
             eager=(env or {}).get('TTD_EAGER_STEP_FRACTION'), hours_since_step=last_step_h,
-            graded=ev['grading_completed'] + gj['result'],
+            graded=ev['grading_completed'],
             generated=ev['hybrid_generated'] + ev['borrow_generated'] + ev['generation_done'],
             retries=ev['grading_retry'], no_pool=ev['grading_no_pool'], failed=lev['run_failed'],
             stalled=lev['client_stalled'], retry_reasons=dict(reasons.most_common(2))))
