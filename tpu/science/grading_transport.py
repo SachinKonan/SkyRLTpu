@@ -417,6 +417,9 @@ class FarmPool(Pool):
             self.wire_ids.pop(request.request_id, None)
             return result
         error = view.get('error') or {}
+        if ticket.state == State.CANCELLED and error.get('class') == 'draining':
+            # The farm is going away (worker time limit, preemption): move the grade without charging it.
+            raise Lost(f'farm {self.name} draining', 'draining')
         raise GradingInfrastructureError(f'farm {self.name}: {ticket.state.value}: {error.get("class")}: '
                                          f'{error.get("detail")}')
 
@@ -911,12 +914,15 @@ class GradingTransport:
                 self.report('grading_farm_busy', **context, reason=str(exc)[:200])
                 continue
             except Lost as exc:
-                # ACKed but must move. Moving a long-queued request or a resumed id the farm forgot is free;
+                # ACKed but must move. Moving a long-queued request, one a draining farm handed back or a
+                # resumed id the farm forgot is free;
                 # a confirmed-dead server or one that left the directory is a charged infrastructure retry.
                 if exc.kind == 'poll_miss':
                     pool.unhealthy_until = time.monotonic() + 30
                 elif exc.kind == 'queued_too_long':
                     pool.full_until = time.monotonic() + 30
+                elif exc.kind == 'draining':
+                    pool.full_until = time.monotonic() + 600
                 resume = None
                 charged = exc.kind in ('poll_miss', 'retired')
                 attempts += charged

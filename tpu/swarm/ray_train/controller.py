@@ -228,7 +228,7 @@ class Controller:
                     self.report("writeback_complete", rank=rank, kind=kind, result=result)
                 except Exception as exc:
                     self.report("writeback_retry_pending", rank=rank, kind=kind, detail=str(exc))
-        if self.stopping.is_set() or not self.prepared or self.transitioning:
+        if self.stopping.is_set() or not self.prepared or self.transitioning or not self.config.writes_back:
             return
         active = set(self.sync_refs.values())
         now = time.monotonic()
@@ -313,7 +313,8 @@ class Controller:
             return 143
         if self.config.inference_only:
             inference_ranks = self.config.inference_only_ranks or list(range(self.config.hosts))
-            self.checked_get([self.hosts[r].source_ready.remote() for r in inference_ranks], self.config.setup_timeout)
+            if self.config.engines_per_host:  # a farm without engines needs no serving source
+                self.checked_get([self.hosts[r].source_ready.remote() for r in inference_ranks], self.config.setup_timeout)
         else:
             self.checked_get([host.topology_ready.remote() for host in self.hosts], self.config.setup_timeout)
         if self.config.inference_only:
@@ -618,9 +619,15 @@ class Controller:
             self.report("arena_sampling_started", samples=self.config.arena_samples)
         elif self.config.inference_only:
             self.report("inference_only_waiting", endpoint=f"http://{self.ips[0]}:{self.config.ports.inference}")
+            lead = self.config.grading.time_limit_lead_seconds
+            end = host_end_time() if lead else None
             while not self.stopping.wait(5):
                 if self.failure:
                     raise RuntimeError(self.failure)
+                if end and time.time() >= end - lead:
+                    # A short-lived host (Slurm time limit): stop and drain while grades can still finish.
+                    self.report("host_time_limit", end=end, lead_seconds=lead)
+                    return 0
             return 143
         else:
             self.checked_get([self.hosts[0].start_client.remote()], 30)
@@ -657,10 +664,12 @@ class Controller:
         if self.science_group is not None:
             from ray.util.placement_group import remove_placement_group
             remove_placement_group(self.science_group)
+        self.drain_grading()
         self.close_serve()
         if self.hosts:
             self.drain_phase({host.stop.remote(): rank for rank, host in enumerate(self.hosts)},
                              "host_stop", timeout=90)
+        if self.hosts and self.config.writes_back:
             # A failed stop or upload on one host must not skip the remaining
             # hosts. Host-local locks serialize final and periodic writeback.
             self.drain_phase({host.sync_compile.remote(): rank for rank, host in enumerate(self.hosts)},
@@ -670,6 +679,19 @@ class Controller:
             # A 2.5-GB snapshot exceeded the old six-minute combined budget.
             self.drain_phase({host.sync_run.remote(): rank for rank, host in enumerate(self.hosts)},
                              "final_run_writeback", timeout=600)
+
+    def drain_grading(self):
+        """A farm going away hands open grades back as 'draining' (clients move them without a charged retry);
+        dispatched grades may finish for grading.drain_seconds first. 0 keeps the old immediate cancel."""
+        seconds = self.config.grading.drain_seconds
+        if not (self.config.inference_only and self.config.grading_families and seconds):
+            return
+        try:
+            result = serve.get_app_handle("skyrl-training").drain_grading.remote(seconds).result(
+                timeout_s=seconds + self.config.grading.long_poll_seconds + 30)
+            self.report("grading_drained", **result)
+        except Exception as exc:
+            self.report("grading_drain_failed", detail=f"{type(exc).__name__}: {exc}"[:300])
 
     def close_serve(self, timeout=60):
         # A failed replica must not leave the job RUNNING forever while Serve
@@ -706,6 +728,22 @@ class Controller:
             self.report(phase + "_timeout", rank=rank)
             if phase != "final_compile_writeback":
                 self.shutdown_errors.append({"phase": phase, "rank": rank, "error": "timeout"})
+
+
+def host_end_time():
+    """Unix time this host goes away: SKYRL_FARM_STOP_AT, else the Slurm job's end time, else None."""
+    if os.environ.get("SKYRL_FARM_STOP_AT"):
+        return float(os.environ["SKYRL_FARM_STOP_AT"])
+    if not os.environ.get("SLURM_JOB_ID"):
+        return None
+    import subprocess
+    from datetime import datetime
+    try:
+        end = subprocess.run(["squeue", "-h", "-j", os.environ["SLURM_JOB_ID"], "-o", "%e"], capture_output=True,
+                             text=True, timeout=30).stdout.strip()
+        return datetime.fromisoformat(end).timestamp()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def main():

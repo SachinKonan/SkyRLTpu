@@ -60,6 +60,32 @@ def private_rpc(entry, action, port, body=None, group=''):
         return {'ok': False, 'error': type(exc).__name__}
 
 
+def local_rpc(url):
+    """The same farm probe, run here against a farm reachable from this host (della workers: no SSH needed)."""
+    from urllib.parse import urlsplit
+    parts = urlsplit(url)
+    params = dict(action='farm', port=parts.port, host=parts.hostname)
+    try:
+        proc = subprocess.run(['python3', '-'], input='PARAMS = %r\n' % params + REMOTE, text=True,
+                              capture_output=True, timeout=50)
+        if proc.returncode:
+            return {'ok': False, 'error': 'probe_failed', 'exit_code': proc.returncode}
+        return json.loads(proc.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        return {'ok': False, 'error': type(exc).__name__}
+
+
+def slurm_farm_url(job_id, cluster, run=subprocess.run):
+    """A farm job on a Slurm-backed pool: its node (the SkyPilot cluster is the Slurm job of that name) and the
+    HTTP port placed by its managed job id (config.farm_ports), or None while the node is unknown."""
+    from .config import farm_ports
+    try:
+        node = run(['squeue', '-h', '-n', cluster, '-o', '%N'], capture_output=True, text=True, timeout=30).stdout.split()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return f'http://{node[0]}:{farm_ports(job_id)[0]}' if len(node) == 1 else None
+
+
 def load_private(path):
     """{'farms': [{name, external_ip, ssh_key, ...}], 'trainers': [direct registrations]}."""
     if not path:
@@ -119,9 +145,15 @@ class Service:
                 and any(s.casefold() in (r.get('run_id') or '').casefold() for s in self.args.name_contains)]
         private = [dict(key='private:' + f['name'], job_id=PRIVATE_ID_BASE + i, name=f['name'], cluster=None,
                         pool=None, source='private', entry=f) for i, f in enumerate(self.private['farms'])]
+        for farm in pool:
+            if farm['pool'] in (getattr(self.args, 'slurm_pool', None) or ()):
+                farm['source'] = 'slurm'  # reached directly at its node and job-placed port, no SSH
         return pool + private
 
     def probe(self, farm):
+        if farm['source'] == 'slurm':
+            url = slurm_farm_url(farm['job_id'], farm['cluster'])
+            return local_rpc(url) if url else {'ok': False, 'error': 'node_unknown'}
         if farm['source'] == 'private':
             return private_rpc(farm['entry'], 'farm', farm['entry'].get('port', self.args.farm_port))
         return rpc(self.args.ssh_config_dir, farm['cluster'], 'farm', self.args.farm_port)
@@ -153,8 +185,10 @@ class Service:
             self.emit(event='farm_gone', key=key)
 
         def observe(farm):
-            tunnel = self.tunnel(farm)
-            return farm, self.probe(farm), tunnel
+            probe = self.probe(farm)
+            # A farm without cloud metadata (della) names its own address and is reached directly, no tunnel.
+            direct = bool((probe.get('result') or {}).get('direct'))
+            return farm, probe, None if direct else self.tunnel(farm)
         with ThreadPoolExecutor(max_workers=8) as workers:
             observed = list(workers.map(observe, sources))
         published, probes = [], {}
@@ -168,7 +202,7 @@ class Service:
             record.update(job_id=str(farm['job_id']), name=farm['name'], cluster=farm['cluster'],
                           source=farm['source'], pool=farm['pool'],
                           url=tunnel.url if tunnel else record['internal_url'],
-                          tunnel_ok=tunnel.healthy() if tunnel else False,
+                          tunnel_ok=tunnel.healthy() if tunnel else bool(record.get('direct')),
                           tunnel_starts=tunnel.starts if tunnel else 0,
                           ok=bool(probe.get('ok')), error=None if probe.get('ok') else probe.get('error'),
                           **{k: entry[k] for k in ('health', 'misses', 'incarnation', 'first_seen',
@@ -225,10 +259,12 @@ class Service:
 
 
 def is_ready(record):
-    """Fully ready (probe ok: every expected engine up, not updating), attested and healthy."""
+    """Fully ready (probe ok: every expected engine up, not updating), attested and healthy.
+
+    A farm without engines serves no model, so it has no serving attestation (grades carry the grader hash)."""
     capabilities = record.get('capabilities') or {}
     return bool(record.get('ok') and record.get('health') == 'healthy'
-                and capabilities.get('compatibility_sha256'))
+                and (capabilities.get('compatibility_sha256') or (record.get('engines') == 0 and record.get('grading'))))
 
 
 def registry_is_fresh(path, max_age, now=time.time):
@@ -270,6 +306,8 @@ def main():
     parser.add_argument('--registry', type=Path, required=True, help='farms.json to publish')
     parser.add_argument('--ssh-config-dir', type=Path, required=True)
     parser.add_argument('--private-hosts', type=Path, help='checked-in private farms/trainers (v5p-64)')
+    parser.add_argument('--slurm-pool', action='append', default=[],
+                        help='a Slurm-backed pool (della): its farms are probed directly at node:farm_ports(job id)')
     parser.add_argument('--name-contains', action='append', help='farm job-name substring (default inference-farm)')
     parser.add_argument('--trainer-pool', action='append', default=[])
     parser.add_argument('--trainer-job-id', type=int, action='append', default=[])

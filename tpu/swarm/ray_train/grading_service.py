@@ -17,6 +17,11 @@ Failure classes are explicit: ``error.class == 'infrastructure'`` (worker or
 node loss, admission timeout, unit died before the candidate started) tells
 the trainer to retry elsewhere; a candidate failure is encoded inside the
 result and stays a reward-zero grade.
+
+Draining (a short-lived worker reaching its time limit, or SIGTERM): the farm
+refuses new grades (429, not ready), lets dispatched grades finish until a
+deadline and cancels the rest with ``error.class == 'draining'``, which a
+client resubmits elsewhere without charging an infrastructure retry.
 """
 import asyncio
 from dataclasses import dataclass, field
@@ -79,6 +84,8 @@ class Entry:
     state: str = 'queued'
     ref: object = None
     waiter: asyncio.Task | None = field(default=None, repr=False)
+    # error.class of a cancellation: 'cancelled', or 'draining' when the farm shuts down.
+    cancel_kind: str = 'cancelled'
     result: dict | None = None
     error: dict | None = None
     host: str | None = None
@@ -129,6 +136,7 @@ class GradingService:
         self.report = report
         self.entries = {}
         self.ready = False
+        self.draining = False
         self.readiness = {}
         self.counters = dict(completed=0, infra_failures=0, candidate_failures=0, cancelled=0)
         self.worker_root = os.environ.get('SCIENCE_WORKER_ROOT')
@@ -174,12 +182,12 @@ class GradingService:
             families[name] = dict(spec, total=self.slots_total(name), running=self.running(name),
                                   queued=sum(1 for e in self.entries.values() if e.state == 'queued' and e.task == name),
                                   open_limit=int(self.slots_total(name) * OPEN_QUEUE_FACTOR))
-        return dict(ready=self.ready, hosts=len(self.ips), families=families,
+        return dict(ready=self.ready and not self.draining, draining=self.draining, hosts=len(self.ips), families=families,
                     lease_id=lease['lease_id'] if lease else None, readiness=self.readiness,
                     open=True, grader_sha256=self.grader_sha256, **self.metadata)
 
     def snapshot(self):
-        return dict(ready=self.ready, families=sorted(self.families), queue_depth=self.running(),
+        return dict(ready=self.ready, draining=self.draining, families=sorted(self.families), queue_depth=self.running(),
                     running_by_host=self.running_by_host(), retained_results=len(self.entries), **self.counters)
 
     # -- validation -------------------------------------------------------
@@ -307,6 +315,8 @@ class GradingService:
                 return 409, dict(detail='request belongs to another lease or client')
             existing.expires = time.monotonic() + REQUEST_TTL_S
             return 200, existing.view()
+        if self.draining:
+            return 429, dict(detail='farm draining', retry_after=600, draining=True, **self.load(task))
         if len(self.entries) >= self.settings.max_requests:
             return 429, dict(detail='grading registry full', retry_after=5, **self.load(task))
         limit = OPEN_QUEUE_FACTOR if lease.get('lease_id') is None else self.settings.queue_factor
@@ -392,12 +402,12 @@ class GradingService:
                 self.counters['completed'] += 1
         except asyncio.CancelledError:
             entry.state = 'cancelled'
-            entry.error = dict(**{'class': 'cancelled'}, detail='cancelled')
+            entry.error = dict(**{'class': entry.cancel_kind}, detail='cancelled')
             self.counters['cancelled'] += 1
         except Exception as exc:
             kind, detail = infrastructure_error(exc)
             entry.state = 'cancelled' if kind == 'cancelled' else 'failed'
-            entry.error = dict(**{'class': kind}, detail=detail)
+            entry.error = dict(**{'class': entry.cancel_kind if kind == 'cancelled' else kind}, detail=detail)
             self.counters['cancelled' if kind == 'cancelled' else 'infra_failures'] += 1
         finally:
             entry.finished = time.monotonic()
@@ -455,16 +465,17 @@ class GradingService:
             await self.cancel(request_id, 'request TTL expired: its client stopped polling')
         return len(stale)
 
-    async def cancel(self, request_id, reason):
+    async def cancel(self, request_id, reason, kind='cancelled'):
         entry = self.entries.get(request_id)
         if entry is None:
             return None
         if entry.state not in TERMINAL:
+            entry.cancel_kind = kind
             if entry.waiter is None:
                 # Still in its run's queue here: never dispatched.
                 self._unqueue(entry)
                 entry.state = 'cancelled'
-                entry.error = dict(**{'class': 'cancelled'}, detail='cancelled')
+                entry.error = dict(**{'class': kind}, detail='cancelled')
                 entry.finished = time.monotonic()
                 entry.done.set()
                 self.counters['cancelled'] += 1
@@ -479,7 +490,7 @@ class GradingService:
             if entry.state not in TERMINAL:
                 # Cancelled after the pump picked it but before _run started: _run's cleanup never ran.
                 entry.state = 'cancelled'
-                entry.error = dict(**{'class': 'cancelled'}, detail='cancelled')
+                entry.error = dict(**{'class': kind}, detail='cancelled')
                 entry.finished = time.monotonic()
                 entry.done.set()
                 self.counters['cancelled'] += 1
@@ -496,6 +507,28 @@ class GradingService:
         if active:
             self._event('grading_cancel_all', reason=reason, requests=len(active))
         return len(active)
+
+    async def shut_down(self, deadline, linger=30):
+        """Drain for a worker that is going away: refuse new grades, let dispatched ones finish until
+        ``deadline`` (monotonic), cancel the rest as 'draining', then wait up to ``linger`` s for
+        their clients to fetch that verdict (an unseen cancel would look like a lost farm).
+        ``drain_deadline`` may be lowered while it waits (a SIGTERM during a time-limit drain)."""
+        self.draining, self.drain_deadline = True, deadline
+        self._event('grading_draining', running=self.running())
+        for entry in list(self.entries.values()):
+            if entry.state == 'queued' and entry.waiter is None:
+                await self.cancel(entry.request_id, 'farm draining', kind='draining')
+        while self.running() and time.monotonic() < self.drain_deadline:
+            await asyncio.sleep(.2)
+        left = [e.request_id for e in self.entries.values() if e.state not in TERMINAL]
+        for request_id in left:
+            await self.cancel(request_id, 'farm draining', kind='draining')
+        drained = [e for e in self.entries.values() if (e.error or {}).get('class') == 'draining']
+        end = time.monotonic() + linger
+        while any(e.fetched is None for e in drained) and time.monotonic() < end:
+            await asyncio.sleep(.2)
+        self._event('grading_drained', cancelled=len(drained), unfetched=sum(e.fetched is None for e in drained))
+        return len(drained)
 
     async def drain(self, timeout):
         deadline = time.monotonic() + timeout

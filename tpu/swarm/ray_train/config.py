@@ -41,6 +41,21 @@ class Ports:
     topology_subset: int = 24807
 
 
+def farm_ports(managed_job_id):
+    """(HTTP port, first Ray port) of a farm placed by its SkyPilot managed job id; shared by the farm and discovery.
+
+    HTTP 20000-23999; Ray in 100-port blocks at 25000-32499 (listeners at the base, workers from base+10). Both are
+    below della's ephemeral range (32768+) and clear of the fixed TPU ports (24679-24807) and of Ray's default
+    worker ports (10002-19999), which other users' Ray jobs on a shared node use."""
+    job = int(managed_job_id)
+    return 20000 + job % 4000, 25000 + job % 75 * 100
+
+
+# Ray's own listeners, in the order a moved Ray port block assigns them (Config.with_ports).
+RAY_PORTS = ("ray", "dashboard", "client", "object_manager", "node_manager", "dashboard_agent",
+             "dashboard_agent_grpc", "runtime_env", "metrics")
+
+
 @dataclass(frozen=True)
 class Cache:
     hf: str = ""
@@ -100,6 +115,18 @@ class Grading:
     # Host CPUs kept for engines/trainer/ingress/Ray; every other core forms
     # the shared grading pool (tpu.science.core_pool). 0 selects the default.
     service_cpus: int = 0
+    # Grading pool GiB; 0 derives it from cache.reserve_gib (Config.grading_memory_gib).
+    memory_gib: int = 0
+    # A family declared with slots_per_host 0 is sized from the host it runs on
+    # (Config.for_host): pool = allowed CPUs - service_cpus, job memory - service_memory_gib.
+    service_memory_gib: int = 0
+    # How a grade is confined: 'systemd' (sudo systemd-run units) or 'bwrap' (no-sudo units, tpu.science.unit).
+    isolation: str = 'systemd'
+    # On stop, dispatched grades may finish for this long before the rest are handed back as 'draining'
+    # (a free retry for clients); 0 cancels open grades at once, as before.
+    drain_seconds: int = 0
+    # Stop (and so drain) this long before the host's known end (SKYRL_FARM_STOP_AT or the Slurm job's); 0 = never.
+    time_limit_lead_seconds: int = 0
 
 
 @dataclass(frozen=True)
@@ -425,7 +452,12 @@ class Config:
     arena_max_tokens: int = 8192
     arena_thinking_tokens: int | None = None
     ports: Ports = field(default_factory=Ports)
+    # Place this farm's HTTP and Ray ports by its SkyPilot managed job id (farm_ports), so several farms can share
+    # a host and discovery knows the address. False: the fixed ports above (TPU farms).
+    job_ports: bool = False
     systemd_runtime: bool = False
+    # Prebuilt controller environment (default: <root>/envs/controller), for hosts that cannot install one.
+    controller_env: str = ""
     systemd_port: int = 24900
     systemd_peer_timeout: int = 30
     systemd_shutdown_grace: int = 90
@@ -542,8 +574,8 @@ class Config:
         for name, spec in families.items():
             if not set(spec) <= set(keys) or set(keys[:3]) - set(spec):
                 raise ValueError(f'grading family {name} accepts slots_per_host, cpus, memory_gib, memory_max_gib only')
-            if any(type(spec[k]) is not int or spec[k] < 1 for k in keys):
-                raise ValueError(f'grading family {name} limits must be positive integers')
+            if any(type(spec[k]) is not int or spec[k] < (0 if k == 'slots_per_host' else 1) for k in keys):
+                raise ValueError(f'grading family {name} limits must be positive integers (slots 0: from the host)')
             if spec['memory_max_gib'] < spec['memory_gib']:
                 raise ValueError(f'grading family {name}: memory_max_gib must be at least memory_gib')
             if name != 'math' and spec['memory_max_gib'] != spec['memory_gib']:
@@ -561,18 +593,78 @@ class Config:
             raise ValueError('grading flags must be boolean')
         if g.farm_transport and (not self.borrows_inference or self.inference_only):
             raise ValueError('grading.farm_transport requires a borrowing trainer')
-        if families and g.local_systemd and not self.systemd_runtime:
+        if self.job_ports and (self.hosts != 1 or self.ports.worker_max - self.ports.worker_min > 89):
+            raise ValueError('job_ports needs a single-host farm whose Ray worker range fits a 100-port block')
+        if g.isolation not in ('systemd', 'bwrap'):
+            raise ValueError("grading.isolation must be 'systemd' or 'bwrap'")
+        for key in ('memory_gib', 'service_memory_gib', 'drain_seconds', 'time_limit_lead_seconds'):
+            if type(getattr(g, key)) is not int or getattr(g, key) < 0:
+                raise ValueError(f'grading.{key} must be a non-negative integer')
+        systemd = g.isolation == 'systemd'
+        if families and g.local_systemd and systemd and not self.systemd_runtime:
             raise ValueError('systemd-limited grading requires systemd_runtime')
         if families and self.inference_only:
             v = self.inference
-            if not v.require_lease or not self.systemd_runtime or v.routing != 'ingress':
-                raise ValueError('farm grading requires a lease-fenced systemd farm through ingress')
-            # The pool admits by GiB, so the reserve must hold the largest program.
-            needed = 64 + max(f['memory_max_gib'] for f in families.values())
-            if self.cache.reserve_gib < needed:
-                raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for one program plus services')
-        if type(g.service_cpus) is not int or g.service_cpus < 0 or 0 < g.service_cpus < 24:
-            raise ValueError('grading.service_cpus must be 0 (default) or at least 24')
+            if not v.require_lease or (systemd and not self.systemd_runtime) or v.routing != 'ingress':
+                raise ValueError('farm grading requires a lease-fenced farm through ingress (systemd isolation: a systemd farm)')
+            if self.grading_host_sized:
+                if not g.service_memory_gib or not g.service_cpus:
+                    raise ValueError('host-sized grading needs grading.service_cpus and grading.service_memory_gib')
+            elif not g.memory_gib:
+                # The pool admits by GiB, so the reserve must hold the largest program.
+                needed = 64 + max(f['memory_max_gib'] for f in families.values())
+                if self.cache.reserve_gib < needed:
+                    raise ValueError(f'farm grading needs cache.reserve_gib >= {needed} for one program plus services')
+        minimum = 24 if self.engines_per_host or not self.inference_only else 1
+        if type(g.service_cpus) is not int or g.service_cpus < 0 or 0 < g.service_cpus < minimum:
+            raise ValueError(f'grading.service_cpus must be 0 (default) or at least {minimum}')
+
+    def with_ports(self, http=None, ray_base=None):
+        """This profile with its HTTP port and/or Ray port block moved, so several farms can share a host.
+
+        ``ray_base`` B: Ray listens on B..B+8 and its workers use B+10 on, over the profile's worker-range width.
+        Ports are per host, so a moved profile must have one host."""
+        if http is None and ray_base is None:
+            return self
+        if self.hosts != 1:
+            raise ValueError('moved farm ports need a single-host profile')
+        ports = asdict(self.ports)
+        if http is not None:
+            ports['inference'] = http
+        if ray_base is not None:
+            width = ports['worker_max'] - ports['worker_min']
+            ports.update({name: ray_base + i for i, name in enumerate(RAY_PORTS)},
+                         worker_min=ray_base + 10, worker_max=ray_base + 10 + width)
+        raw = self.to_dict()
+        raw['ports'] = ports
+        return type(self).from_dict(raw)
+
+    @property
+    def grading_host_sized(self):
+        return any(f['slots_per_host'] == 0 for f in self.grading_families.values())
+
+    def for_host(self, cpus, memory_bytes):
+        """This profile with host-sized families resolved for one host (``cpus`` allowed, ``memory_bytes``).
+
+        The pool is every allowed CPU but the service block and the job's memory but the service GiB; each
+        host-sized family gets as many slots as that pool holds (families share it; admission is by count).
+        A family the host cannot hold once is left out."""
+        if not self.grading_host_sized:
+            return self
+        g = self.grading
+        pool_cpus, pool_gib = cpus - g.service_cpus, memory_bytes // 1024 ** 3 - g.service_memory_gib
+        families = {}
+        for name, spec in self.grading_families.items():
+            if spec['slots_per_host'] == 0:
+                spec = dict(spec, slots_per_host=min(pool_cpus // spec['cpus'], pool_gib // spec['memory_gib']))
+                if spec['slots_per_host'] < 1 or spec['memory_max_gib'] > pool_gib:
+                    continue
+            families[name] = spec
+        if not families:
+            raise RuntimeError(f'{pool_cpus} CPUs and {pool_gib} GiB hold no grade of any family')
+        raw = self.to_dict()
+        raw['grading'] = dict(raw['grading'], families=families, memory_gib=pool_gib)
+        return type(self).from_dict(raw)
 
     @property
     def grading_pool(self):
@@ -597,6 +689,8 @@ class Config:
         legacy 16 x 4 = 64 GiB math cap), so host-RAM offload keeps its headroom.
         """
         available = self.cache.reserve_gib - 64
+        if self.grading.memory_gib:
+            return self.grading.memory_gib
         if self.inference_only:
             return available
         caps = [f['slots_per_host'] * f['memory_gib'] for f in self.grading_families.values()]
@@ -699,6 +793,9 @@ class Config:
         for key, kind in (("ports", Ports), ("cache", Cache), ("trainer", Trainer),
                           ("inference", Inference), ("grading", Grading)):
             data[key] = kind(**(data.get(key) or {}))
+        if "$" in data.get("root", ""):
+            import os
+            data["root"] = os.path.expandvars(data["root"])  # e.g. one root per node on a shared filesystem
         config = cls(**data)
         config.validate()
         return config
@@ -1135,7 +1232,7 @@ class Config:
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}", self.run_id):
             raise ValueError("run_id must be a safe unique name")
         expected = {"tpu-v4-64": 8, "tpu-v4-32": 4, "tpu-v5p-32": 4, "tpu-v5p-64": 8, "tpu-v6e-32": 8,
-                    "tpu-v6e-8": 1}
+                    "tpu-v6e-8": 1, "cpu": 1}
         if self.assigned_host_ips:
             import ipaddress
             if (self.accelerator != "tpu-v5p-64" or self.hosts not in (1, 2)
@@ -1315,8 +1412,10 @@ class Config:
         if min(self.cache.process_count, self.cache.thread_count, self.cache.sync_seconds,
                self.log_seconds, self.setup_timeout, self.ready_timeout) <= 0:
             raise ValueError("concurrency and timeouts must be positive")
-        for path in (self.bucket, self.base_bundle, self.cache.hf, self.cache.orbax,
-                     self.cache.trainer_compile, self.cache.inference_compile):
+        # A farm without engines or trainer (grading only) restores no model or compile caches.
+        caches = ((self.cache.hf, self.cache.orbax, self.cache.trainer_compile, self.cache.inference_compile)
+                  if self.engines_per_host or not self.inference_only else ())
+        for path in (self.bucket, self.base_bundle, *caches):
             if not path.startswith("gs://") or len(path.split("/")) < 3:
                 raise ValueError(f"expected a GCS URI: {path}")
         if type(self.single_bucket) is not bool:
@@ -1445,8 +1544,16 @@ class Config:
 
     @property
     def served_models(self):
+        if self.inference_only and not self.engines_per_host:
+            return []  # a farm without engines serves no model (grading only)
         return ([PRESETS[e["model_preset"]].hf_model for e in self.arena_models]
                 if self.arena_models else [self.model])
+
+    @property
+    def writes_back(self):
+        """Whether hosts sync caches and run state to GCS. A farm without engines restores no caches and
+        keeps its logs under ``root`` (della grading workers have no network)."""
+        return bool(self.engines_per_host or not self.inference_only)
 
     @property
     def bootstrap_module(self):
@@ -1456,7 +1563,8 @@ class Config:
     def chips_per_host(self):
         # v6e-8 is the sole single-VM eight-chip TPU shape supported by this
         # executor. The multihost slices expose four chips on every VM.
-        return 8 if self.accelerator == "tpu-v6e-8" else 4
+        # A CPU host has no chips: it serves no engines (a grading-only farm).
+        return 8 if self.accelerator == "tpu-v6e-8" else 0 if self.accelerator == "cpu" else 4
 
     @property
     def engines_per_host(self):

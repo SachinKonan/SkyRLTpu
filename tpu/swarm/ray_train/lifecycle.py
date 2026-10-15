@@ -160,13 +160,14 @@ def workload_processes(proc=Path('/proc'), me=None):
     return found
 
 
-def prepare(task_id, *, shared=False, log=None, tpu=True, run=subprocess.run, proc=Path("/proc"), kill=os.kill):
+def prepare(task_id, *, shared=False, log=None, tpu=True, run=subprocess.run, proc=Path("/proc"), kill=os.kill,
+            scope=None):
     """The one start path: a fresh launch and a preemption recovery both begin here.
 
     Pool workers (shared=False) stop whatever earlier tasks left. On a shared private host nothing is stopped:
     any leftover makes the launch refuse, and host_claim.py decides ownership.
     """
-    report = reap_leftovers(task_id, stop=not shared, run=run, proc=proc, kill=kill)
+    report = reap_leftovers(task_id, stop=not shared, run=run, proc=proc, kill=kill, scope=scope)
     if tpu:
         report.update(tpu_gates(shared=shared, run=run))
     if log is not None:
@@ -243,7 +244,7 @@ def finish(task_id, reason, *, shared=False, log=None, run=subprocess.run, proc=
     return report
 
 
-def reap_leftovers(task_id, *, stop=True, run=subprocess.run, proc=Path('/proc'), kill=os.kill):
+def reap_leftovers(task_id, *, stop=True, run=subprocess.run, proc=Path('/proc'), kill=os.kill, scope=None):
     """Find (and by default stop) what other tasks left on this host. Returns what was found.
 
     Call before the job starts any workload: every active unit of ours that is not the current job's,
@@ -254,8 +255,9 @@ def reap_leftovers(task_id, *, stop=True, run=subprocess.run, proc=Path('/proc')
     current = job_unit(task_id) if task_id else None
     units = [u for u, d in active_units(run) if u != current and d != task_id]
     owned = ([current] if current else []) + units
+    # scope (a Slurm job id): on a shared Slurm node only our own allocation's processes are ours to reap.
     strays = [(pid, cg, why) for pid, cg, why in workload_processes(proc)
-              if not any(cg.endswith('/' + u) for u in owned)]
+              if not any(cg.endswith('/' + u) for u in owned) and (not scope or f'/job_{scope}/' in cg + '/')]
     report = dict(units=units, processes=[dict(pid=p, cgroup=c, reason=r) for p, c, r in strays])
     if not stop:
         return report

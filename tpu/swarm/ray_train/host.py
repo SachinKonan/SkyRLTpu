@@ -388,6 +388,12 @@ class Host:
     def prepare(self, role):
         if role not in ("trainer", "inference"):
             raise ValueError("invalid host role")
+        if role == "inference" and not self.config.engines_per_host:
+            # A farm without engines (grading only) needs no model, caches or serving runtime.
+            self.role, self.phase = role, "prepared"
+            emit(self.log, "host_prepared", rank=self.rank, role=role, engines=0)
+            return dict(rank=self.rank, role=role, source=None, root=str(self.root), snapshot=None,
+                        config=self.config.to_dict())
         self.role, self.phase = role, "cache_setup"
         ram = admit_cache(self.config, self.root, role, self.log)
         self.store = CacheStore(ram, self.gcs)
