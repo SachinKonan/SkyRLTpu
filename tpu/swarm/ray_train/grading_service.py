@@ -338,10 +338,29 @@ class GradingService:
         self._pump(task)
         return 202, entry.view()
 
+    def cpu_budget(self, task):
+        """CPUs ``task`` may hold dispatched: an equal share of the grading CPUs among families with work,
+        plus whatever those families leave unused.
+
+        Each family's slots alone can fill the host pool, and Ray admits by free CPUs, not first come first
+        served across task shapes: without shares, 2-CPU circuit cases take every freed core pair and 10-CPU
+        qubit programs wait indefinitely. With shares, dispatched work never exceeds the pool either."""
+        capacity = max(f['slots_per_host'] * f['cpus'] for f in self.families.values()) * max(1, len(self.ips))
+        active = [name for name in self.families if self.running(name)]
+        share = capacity / max(1, len(active))
+        others = sum(min(self.running(name) * self.families[name]['cpus'], share) for name in active if name != task)
+        return capacity - others
+
+    def _pump_all(self):
+        for task in self.families:
+            self._pump(task)
+
     def _pump(self, task):
-        """Dispatch queued entries round-robin across runs while family slots are free."""
+        """Dispatch queued entries round-robin across runs while family slots and its CPU share are free."""
         queues = self.queues.get(task) or {}
-        while queues and self.dispatched(task) < self.slots_total(task):
+        cpus = self.families[task]['cpus']
+        while (queues and self.dispatched(task) < self.slots_total(task)
+               and (self.dispatched(task) + 1) * cpus <= self.cpu_budget(task)):
             runs = sorted(queues)
             last = self.turn.get(task)
             run = next((r for r in runs if last is None or r > last), runs[0])
@@ -395,7 +414,7 @@ class GradingService:
             entry.done.set()
             self._event('grading_finished', request_id=entry.request_id, task=entry.task, state=entry.state,
                         error=(entry.error or {}).get('class'))
-            self._pump(entry.task)
+            self._pump_all()  # freed CPUs may belong to another family's share
 
     async def result(self, lease, request_id, wait=0):
         entry = self.entries.get(request_id)
@@ -475,7 +494,7 @@ class GradingService:
                 entry.finished = time.monotonic()
                 entry.done.set()
                 self.counters['cancelled'] += 1
-                self._pump(entry.task)
+                self._pump_all()
             self._event('grading_cancelled', request_id=request_id, reason=reason)
         return entry.view()
 
