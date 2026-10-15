@@ -82,7 +82,7 @@
     "inference_compile_seed": "",
     "trainer_compile_seed": "",
     "trainer_gib": 128,
-    "inference_gib": 128,
+    "inference_gib": 80,
     "reserve_gib": 512,
     "sync_seconds": 60,
     "process_count": 4,

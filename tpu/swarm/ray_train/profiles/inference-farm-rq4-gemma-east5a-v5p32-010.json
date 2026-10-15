@@ -33,7 +33,7 @@
     "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/inference-farm-rq4-gemma-east5a-v5p32-010/unused-trainer-compile",
     "inference_compile": "gs://sk7524-tinker-tpu-us-east5/inference-farm-rq4-gemma-east5a-v5p32-010/inference-compile",
     "trainer_gib": 128,
-    "inference_gib": 128,
+    "inference_gib": 80,
     "reserve_gib": 264,
     "sync_seconds": 60,
     "process_count": 4,

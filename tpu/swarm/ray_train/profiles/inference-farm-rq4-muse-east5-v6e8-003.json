@@ -82,7 +82,7 @@
     "inference_compile_seed": "gs://sk7524-tinker-tpu-us-east5/v6e8-inference-farms-tp8-20260924/inference-farm-v6e8-east5b-muse-1-tp8-20260924/inference",
     "trainer_compile_seed": "",
     "trainer_gib": 128,
-    "inference_gib": 128,
+    "inference_gib": 80,
     "reserve_gib": 512,
     "sync_seconds": 60,
     "process_count": 4,
