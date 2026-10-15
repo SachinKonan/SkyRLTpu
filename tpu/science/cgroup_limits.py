@@ -1,4 +1,5 @@
 """Verify the enclosing Slurm/systemd CPU task has a hard aggregate memory cap."""
+import os
 from pathlib import Path
 import re
 
@@ -17,6 +18,12 @@ def runtime_owner_properties():
 
 
 def envelope(memory_gib):
+    from .unit import LIMIT, inside
+    if inside():
+        # A no-sudo unit (tpu.science.unit): its supervisor holds the tree to this limit.
+        limit=int(os.environ[LIMIT])
+        if not 0<limit<=memory_gib*1024**3:raise RuntimeError(f'unit memory limit {limit} exceeds {memory_gib} GiB')
+        return None,limit
     lines=Path('/proc/self/cgroup').read_text().splitlines()
     path=next((x.split(':',2)[2] for x in lines if x.startswith('0::')),None)
     if path is None:raise RuntimeError('science worker requires cgroup v2 memory accounting')
@@ -36,6 +43,7 @@ def envelope(memory_gib):
 
 def metrics(directory):
     result={}
+    if directory is None:return result
     for name in ('memory.current','memory.peak'):
         file=directory/name
         if file.exists():result[name.replace('.','_')+'_mib']=int(file.read_text())/1024**2

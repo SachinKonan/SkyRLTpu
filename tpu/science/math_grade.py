@@ -26,6 +26,7 @@ import ray
 
 from .farm_resources import acquire_math
 from . import core_pool
+from . import unit as supervisor
 
 STARTED_MARKER = 'started.json'
 
@@ -93,7 +94,17 @@ def grade_math_admitted(spec, families, root=None):
         request_path.write_text(json.dumps(request))
         seconds = eval_timeout + 15
         owner = process_identity(os.getpid())
-        if systemd:
+        env = None
+        no_sudo = systemd and supervisor.mode() == 'bwrap'
+        if no_sudo:
+            # The same limits without sudo or systemd (tpu.science.unit).
+            env = supervisor.environment()
+            command = supervisor.command(
+                [sys.executable, '-m', 'tpu.science.math_runner', '--request', request_path, '--result', result_path,
+                 '--owner-pid', os.getpid(), '--owner-start', owner],
+                cpus=cpus, memory_gib=family.get('memory_max_gib', family['memory_gib']), seconds=seconds,
+                tasks_max=256, private_tmp=True)
+        elif systemd:
             command = unit_command(unit, root, request_path, result_path, cpus,
                                    family.get('memory_max_gib', family['memory_gib']), seconds,
                                    os.getpid(), owner)
@@ -103,7 +114,7 @@ def grade_math_admitted(spec, families, root=None):
         started = time.monotonic()
         try:
             with (folder / 'worker.log').open('wb') as log:
-                proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, cwd=str(root))
+                proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, cwd=str(root), env=env)
                 try:
                     code = proc.wait(timeout=seconds + 20)
                 finally:
@@ -111,7 +122,7 @@ def grade_math_admitted(spec, families, root=None):
                         proc.terminate()
                         proc.wait(timeout=5)
         finally:
-            if systemd:
+            if systemd and not no_sudo:
                 # Also runs on cooperative Ray cancellation; a SIGKILLed worker
                 # is caught by the unit's owner watchdog and RuntimeMaxSec.
                 subprocess.run(['sudo', '-n', 'systemctl', 'stop', unit], stdout=subprocess.DEVNULL,

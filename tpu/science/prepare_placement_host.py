@@ -51,7 +51,8 @@ subprocess.run([str(root/'.science'/os.environ.get('SCIENCE_PLACEMENT_VENV', 've
     "from pathlib import Path; from tpu.science.placement_warm_start import verified_inputs; "
     "verified_inputs(Path.cwd(), folder=Path('.science/placement-inputs'))"], check=True)
 subprocess.run(['bwrap','--version'],check=True)
-subprocess.run(['sudo','-n','systemctl','--version'],check=True)
+if os.environ.get('SCIENCE_GRADING_ISOLATION','systemd')=='systemd':  # no-sudo units need no systemd
+    subprocess.run(['sudo','-n','systemctl','--version'],check=True)
 helper = os.environ.get('SCIENCE_PLACEMENT_HELPER', 'none')
 if helper == 'fast_proxy_v1':
     if not cpu:raise RuntimeError('fast proxy requires CPU backend')

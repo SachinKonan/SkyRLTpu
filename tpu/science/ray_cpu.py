@@ -100,11 +100,17 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suit
         '--working-directory='+str(root),str(root/'.science/venv/bin/python'),'-m','tpu.science.worker',
         '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
         '--owner-pid',str(os.getpid()),'--owner-start',process_identity(os.getpid())]
+    from . import unit as supervisor
+    no_sudo,env=supervisor.mode()=='bwrap',None
+    if no_sudo:
+        # The same unit limits without sudo or systemd (tpu.science.unit); cases get their own units.
+        command,env=supervisor.command(command[command.index('--working-directory='+str(root))+1:],cpus=cpus,
+            memory_gib=memory_gib,seconds=seconds,tasks_max=640 if resource_contract else 128),supervisor.environment()
     started=time.monotonic()
     result = None
     try:
         with (folder/'worker.log').open('wb') as log:
-            proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT)
+            proc=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,**(dict(cwd=str(root),env=env) if no_sudo else {}))
             try:code=proc.wait(timeout=seconds+20)
             finally:
                 if proc.poll() is None:proc.terminate();proc.wait(timeout=5)
@@ -116,7 +122,8 @@ def _grade_admitted(task, source, root, jobs, slot, slots_per_host, routing_suit
         # This also executes on cooperative Ray cancellation. A dead Ray worker
         # is detected by the unit's watchdog; RuntimeMaxSec is the final backstop.
         try:
-            subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
+            if not no_sudo:
+                subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
         finally:
             if task == 'routing':
                 try:

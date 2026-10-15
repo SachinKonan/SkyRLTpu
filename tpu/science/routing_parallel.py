@@ -153,6 +153,25 @@ class CaseGroups:
                         except ProcessLookupError: pass
 
 
+class CaseUnits:
+    """CaseGroups without a delegated cgroup: inside a no-sudo unit, each case runs in its own unit."""
+    def __init__(self, cpus):
+        if len(cpus) != 10: raise RuntimeError('routing program requires ten CPUs')
+        self.cpus, self.groups, self.procs = cpus, [None]*CASE_WORKERS, {}
+
+    def begin_cases(self):
+        # The coordinator keeps the last two cores; the program unit still bounds the whole tree.
+        os.sched_setaffinity(0, self.cpus[8:])
+
+    def wrap(self, slot, argv, seconds):
+        from .unit import command
+        return command(argv, cpus=self.cpus[slot*2:slot*2+2], memory_gib=CASE_GIB, seconds=seconds, tasks_max=128)
+
+    def kill(self, slot):
+        proc = self.procs.pop(slot, None)
+        if proc is not None and proc.poll() is None: proc.terminate()
+
+
 def case(request):
     started = time.monotonic(); deadline = request['deadline']; work = Path(request['work'])
     work.mkdir(); out = work/'out';out.mkdir(); root=Path(request['root']); suite=Path(request['suite'])
@@ -189,7 +208,8 @@ def _evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cac
     root,work=Path(root).resolve(),Path(work).resolve(); work.mkdir(parents=True,exist_ok=False)
     cpus=sorted(os.sched_getaffinity(0))
     if len(cpus)!=10: raise RuntimeError('parallel routing requires an exact ten-CPU program allocation')
-    groups=CaseGroups(cpus)
+    from .unit import inside
+    groups=CaseUnits(cpus) if inside() else CaseGroups(cpus)
     # Preparation and compilation consume the same deadline as cases.
     rust=work/'rust';shutil.copytree(root/'rust',rust,ignore=shutil.ignore_patterns('target','.cargo_target'))
     target=work/'target';shutil.copytree(target_cache,target);remaining(deadline)
@@ -229,9 +249,12 @@ def _evaluate(source, *, root, work, python, cargo_home, rustup_home, target_cac
                     os.sched_setaffinity(0,cpus[slot*2:slot*2+2])
                 log=(work/f'case-{index-1:03d}.log').open('wb')
                 env=dict(os.environ,OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1',NUMEXPR_NUM_THREADS='1')
-                try:proc=subprocess.Popen([str(python),'-m',__name__,'--request',str(rp)],
+                argv=[str(python),'-m',__name__,'--request',str(rp)]
+                if isinstance(groups,CaseUnits): argv,enter=groups.wrap(slot,argv,remaining(deadline)),None
+                try:proc=subprocess.Popen(argv,
                     stdout=log,stderr=subprocess.STDOUT,start_new_session=True,preexec_fn=enter,env=env)
                 except BaseException: log.close();raise
+                if isinstance(groups,CaseUnits): groups.procs[slot]=proc
                 active[slot]=(name,folder,proc,log)
             for slot,(name,folder,proc,log) in list(active.items()):
                 if proc.poll() is None: continue

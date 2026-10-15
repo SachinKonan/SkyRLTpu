@@ -26,6 +26,10 @@ def command(argv, *, readonly=(), writable=(), env=None, cwd='/work'):
     for name in ('/usr','/lib','/lib64','/bin'):
         if Path(name).is_symlink():cmd += ['--symlink',os.readlink(name),name]
         elif Path(name).exists():cmd += ['--ro-bind',name,name]
+    from .unit import inside
+    if inside() and Path('/etc/alternatives').is_dir():
+        # RHEL hosts (della) link /usr/bin/ld and friends through /etc/alternatives; Ubuntu farms are unchanged.
+        cmd += ['--ro-bind','/etc/alternatives','/etc/alternatives']
     for source,target in readonly:
         cmd += ['--ro-bind',str(Path(source).resolve()),str(target)]
     for source,target in writable:

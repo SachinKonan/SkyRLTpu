@@ -6,8 +6,10 @@ root=$(pwd)
 mkdir -p .science
 exec 9>.science/setup.lock
 flock 9
-sudo -n apt-get update -qq
-sudo -n apt-get install -y -qq bubblewrap build-essential pkg-config libssl-dev
+if [ "${SCIENCE_GRADING_ISOLATION:-systemd}" = systemd ]; then
+  sudo -n apt-get update -qq
+  sudo -n apt-get install -y -qq bubblewrap build-essential pkg-config libssl-dev
+fi  # no-sudo hosts (grading-only farms) must already have them
 "$HOME/.local/bin/uv" --no-config venv --python 3.11.13 .science/venv --allow-existing
 "$HOME/.local/bin/uv" --no-config pip sync --python .science/venv/bin/python tpu/science/requirements-cpu.lock
 .science/venv/bin/python -c 'import numpy,scipy,pandas,statsmodels,sklearn,xgboost,cvxpy,matplotlib,sympy,qiskit; print("CPU solvers",cvxpy.installed_solvers())'

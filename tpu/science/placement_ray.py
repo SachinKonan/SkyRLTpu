@@ -122,10 +122,16 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
          str(__import__('tpu.science.placement_resources', fromlist=['grader_python']).grader_python(root)),'-m','tpu.science.placement_task',
          '--request',str(folder/'request.json'),'--result',str(folder/'result.json'),
          '--owner-pid',str(os.getpid()),'--owner-start',process_identity(os.getpid())]
+    from . import unit as supervisor
+    no_sudo,env=supervisor.mode()=='bwrap',None
+    if no_sudo:
+        # The same unit limits without sudo or systemd (tpu.science.unit).
+        cmd,env=supervisor.command(cmd[cmd.index('--working-directory='+str(root))+1:],cpus=cpus,memory_gib=memory_gib,
+                                   seconds=envelope_seconds,tasks_max=1024),supervisor.environment()
     started=time.monotonic()
     try:
         with (folder/'worker.log').open('wb') as log:
-            proc=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT)
+            proc=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,**(dict(cwd=str(root),env=env) if no_sudo else {}))
             try: code=proc.wait(timeout=envelope_seconds+20)
             finally:
                 if proc.poll() is None: proc.terminate();proc.wait(timeout=5)
@@ -138,8 +144,9 @@ def _grade_case(source, case, root, backend, chip, accelerator, *, cpu_slot=None
         if result.get('metrics', {}).get('failure_phase') == 'infrastructure':
             raise PlacementInfrastructureError(result.get('msg', 'placement infrastructure failure'))
     finally:
-        subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL,timeout=10)
+        if not no_sudo:
+            subprocess.run(['sudo','-n','systemctl','stop',unit],stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL,timeout=10)
     result['metrics'].update(ray_node_id=ray.get_runtime_context().get_node_id(),
         host=__import__('socket').gethostname(),case=case,artifact_directory=str(folder),
         task_envelope_seconds=time.monotonic()-started,hard_memory_gib=memory_gib,hard_cpus=cpus,

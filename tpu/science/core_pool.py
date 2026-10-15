@@ -76,15 +76,16 @@ def numa_nodes(allowed, topology_root='/sys/devices/system/node'):
     return mapping
 
 
-def layout(service_cpus, affinity=None, topology_root='/sys/devices/system/node'):
+def layout(service_cpus, affinity=None, topology_root='/sys/devices/system/node', minimum=SERVICE_MIN):
     """Return (grading CPUs, service CPUs, {cpu: node}) for this host.
 
     Services take the lowest CPUs of every NUMA node in turn, so both nodes
-    keep grading capacity and service work stays spread out.
+    keep grading capacity and service work stays spread out. ``minimum``
+    is lower only on a grading-only farm, which runs no engines or trainer.
     """
     allowed = sorted(os.sched_getaffinity(0) if affinity is None else affinity)
-    if type(service_cpus) is not int or service_cpus < SERVICE_MIN:
-        raise ValueError(f'the service block needs at least {SERVICE_MIN} CPUs')
+    if type(service_cpus) is not int or service_cpus < minimum:
+        raise ValueError(f'the service block needs at least {minimum} CPUs')
     if len(allowed) < service_cpus + 2:
         raise RuntimeError(f'{len(allowed)} CPUs cannot hold {service_cpus} service CPUs and a grading pool')
     nodes = numa_nodes(allowed, topology_root)
@@ -99,11 +100,12 @@ def layout(service_cpus, affinity=None, topology_root='/sys/devices/system/node'
     return grading, service, {cpu: nodes[cpu] for cpu in grading}
 
 
-def install(service_cpus, memory_gib, *, root=None, affinity=None, topology_root='/sys/devices/system/node'):
+def install(service_cpus, memory_gib, *, root=None, affinity=None, topology_root='/sys/devices/system/node',
+            minimum=SERVICE_MIN):
     """Publish this host's pool for graders; refuse to change a pool in use."""
     if type(memory_gib) is not int or memory_gib < 1:
         raise ValueError('grading memory budget must be a positive integer of GiB')
-    grading, service, nodes = layout(service_cpus, affinity, topology_root)
+    grading, service, nodes = layout(service_cpus, affinity, topology_root, minimum)
     document = dict(version=VERSION, grading=grading, service=service,
                     nodes={str(c): n for c, n in nodes.items()}, memory_gib=memory_gib)
     root = lock_root(root)
