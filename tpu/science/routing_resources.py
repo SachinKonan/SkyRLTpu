@@ -10,11 +10,11 @@ import time
 VERSION = 'parallel-v2'
 CASE_WORKERS = 4
 CASE_CPUS = 2
-CASE_GIB = 4
+CASE_GIB = 2
 # Conservative packing includes two CPUs/four GiB for coordinator and build.
 PROGRAM_CPUS = 10
-PROGRAM_GIB = 20
-# While cases run, coordinator + four case cgroups exactly fill the program unit: 4 + 4 x 4 = 20 GiB.
+PROGRAM_GIB = 12
+# While cases run, coordinator + four case cgroups exactly fill the program unit: 4 + 4 x 2 = 12 GiB.
 COORDINATOR_GIB = PROGRAM_GIB - CASE_WORKERS * CASE_GIB
 MAX_PROGRAMS = 10
 HOST_CPUS = 100

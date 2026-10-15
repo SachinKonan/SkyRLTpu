@@ -243,9 +243,9 @@ def test_regrade_seed_import_rejects_infrastructure_zero_reward(tmp_path):
 def test_case_cgroups_fit_the_program_unit(tmp_path):
     from tpu.science.routing_parallel import CaseGroups
     from tpu.science.routing_resources import CASE_GIB, CASE_WORKERS, COORDINATOR_GIB, PROGRAM_GIB
-    # Four 4-GiB case workers plus the 4-GiB coordinator exactly fill the 20-GiB systemd unit.
-    assert (CASE_WORKERS, CASE_GIB, COORDINATOR_GIB, PROGRAM_GIB) == (4, 4, 4, 20)
-    assert resources.contract()['case_memory_gib'] == 4 and resources.contract()['program_memory_gib'] == 20
+    # Four 2-GiB case workers plus the coordinator exactly fill the 12-GiB systemd unit.
+    assert (CASE_WORKERS, CASE_GIB, COORDINATOR_GIB, PROGRAM_GIB) == (4, 2, 4, 12)
+    assert resources.contract()['case_memory_gib'] == 2 and resources.contract()['program_memory_gib'] == 12
     groups = object.__new__(CaseGroups); groups.coord = tmp_path; groups.cpus = list(range(10))
     writes = {}
     groups.write = lambda path, value: writes.__setitem__(path.name, value)
