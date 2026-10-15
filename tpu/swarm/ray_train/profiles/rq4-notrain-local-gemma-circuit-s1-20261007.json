@@ -117,9 +117,9 @@
   "grading": {
     "families": {
       "placement": {
-        "slots_per_host": 32,
-        "cpus": 4,
-        "memory_gib": 4
+        "slots_per_host": 64,
+        "cpus": 2,
+        "memory_gib": 2
       }
     },
     "farm_transport": true,
@@ -146,8 +146,10 @@
   "science_routing_slots_per_host": 2,
   "science_placement_backend": "cpu",
   "science_placement_runtime": "cpu300-4g-v1",
-  "science_placement_slots_per_host": 32,
+  "science_placement_slots_per_host": 64,
   "ports": {
     "inference": 26140
-  }
+  },
+  "science_placement_cpus_per_case": 2,
+  "science_placement_memory_gib": 2
 }

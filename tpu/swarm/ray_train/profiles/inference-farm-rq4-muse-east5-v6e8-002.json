@@ -42,9 +42,9 @@
         "memory_gib": 20
       },
       "placement": {
-        "slots_per_host": 36,
-        "cpus": 4,
-        "memory_gib": 4
+        "slots_per_host": 72,
+        "cpus": 2,
+        "memory_gib": 2
       }
     }
   },
