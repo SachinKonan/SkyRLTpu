@@ -19,7 +19,7 @@ import time
 REMOTE = r'''
 import ipaddress, json, socket, urllib.parse, urllib.request, urllib.error
 def call(path, body=None):
-    request = urllib.request.Request('http://127.0.0.1:'+str(PARAMS['port'])+path,
+    request = urllib.request.Request('http://'+PARAMS.get('host', '127.0.0.1')+':'+str(PARAMS['port'])+path,
         data=json.dumps(body).encode() if body is not None else None,
         headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(request, timeout=10) as response:

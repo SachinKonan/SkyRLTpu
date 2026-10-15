@@ -149,6 +149,43 @@ def retire_before_port_check(config, ip, log):
          worker_min=config.ports.worker_min, worker_max=config.ports.worker_max)
 
 
+def bindable(ports):
+    """True when every port can be bound on this host right now."""
+    try:
+        for port in ports:
+            with socket.socket() as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(("0.0.0.0", port))
+        return True
+    except OSError:
+        return False
+
+
+def farm_ports(config, environ=os.environ, low=26000, high=32768):
+    """(http, ray_base) from SKYRL_FARM_PORT / SKYRL_FARM_RAY_PORT_BASE (unset: the profile's ports).
+
+    0 picks a free one: an OS-assigned HTTP port, and a free Ray block in [low, high) below the ephemeral range,
+    tried in random order so farms starting together on one node rarely race. The choice is written back to
+    ``environ`` so the re-executed bootstrap and its controller use the same ports."""
+    import random
+    http, ray_base = (int(environ[key]) if environ.get(key) not in (None, "") else None
+                      for key in ("SKYRL_FARM_PORT", "SKYRL_FARM_RAY_PORT_BASE"))
+    if http == 0:
+        with socket.socket() as sock:
+            sock.bind(("0.0.0.0", 0))
+            http = sock.getsockname()[1]
+        environ["SKYRL_FARM_PORT"] = str(http)
+    if ray_base == 0:
+        block = 11 + config.ports.worker_max - config.ports.worker_min
+        bases = list(range(low, high - block, -(-(block + 10) // 50) * 50))
+        random.shuffle(bases)
+        ray_base = next((b for b in bases if bindable(range(b, b + block))), None)
+        if ray_base is None:
+            raise RuntimeError("no free Ray port block on this host")
+        environ["SKYRL_FARM_RAY_PORT_BASE"] = str(ray_base)
+    return http, ray_base
+
+
 def memory_limit(cgroup_root=Path("/sys/fs/cgroup")):
     """Bytes this job may use: the tightest cgroup memory.max above us (a Slurm job), else the host's RAM."""
     limits = []
@@ -212,6 +249,9 @@ def main():
     if host_sized:
         # Grading sized by this host (e.g. a della CPU worker): slots follow its CPUs and job memory.
         config = config.for_host(len(os.sched_getaffinity(0)), memory_limit())
+    moved = farm_ports(config)
+    if moved != (None, None):
+        config = config.with_ports(*moved)  # several farms on one host (e.g. a shared Slurm node)
     ips = os.environ["SKYPILOT_NODE_IPS"].split()
     rank = int(os.environ["SKYPILOT_NODE_RANK"])
     if len(ips) != config.hosts or len(set(ips)) != len(ips) or not 0 <= rank < config.hosts:
@@ -276,6 +316,9 @@ def main():
     p = config.ports
     # Short and stable across job attempts, well under the Unix socket limit.
     ray_tmp = Path.home() / (".rtr-" + hashlib.sha256(str(root).encode()).hexdigest()[:10])
+    if len(str(ray_tmp)) > 40:
+        # Ray's unix sockets live below this folder (107-byte limit); a long HOME (SkyPilot on Slurm) uses /tmp.
+        ray_tmp = Path("/tmp") / ray_tmp.name
     run = root / "runs" / config.run_id
     run.mkdir(parents=True, exist_ok=True)
     log = run / f"bootstrap-{rank}.jsonl"
@@ -347,7 +390,7 @@ def main():
         emit(log, "ray_node_ready", rank=rank, address=f"{ips[0]}:{p.ray}")
         if rank == 0:
             profile = args.config
-            if host_sized:
+            if host_sized or moved != (None, None):
                 profile = str(run / "profile-resolved.json")  # what this host resolved, for the controller
                 Path(profile).write_text(json.dumps(config.to_dict(), indent=1))
             driver = Process([str(python), "-m", __package__ + ".controller", profile],

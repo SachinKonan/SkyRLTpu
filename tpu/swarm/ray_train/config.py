@@ -41,6 +41,11 @@ class Ports:
     topology_subset: int = 24807
 
 
+# Ray's own listeners, in the order a moved Ray port block assigns them (Config.with_ports).
+RAY_PORTS = ("ray", "dashboard", "client", "object_manager", "node_manager", "dashboard_agent",
+             "dashboard_agent_grpc", "runtime_env", "metrics")
+
+
 @dataclass(frozen=True)
 class Cache:
     hf: str = ""
@@ -598,6 +603,26 @@ class Config:
         minimum = 24 if self.engines_per_host or not self.inference_only else 1
         if type(g.service_cpus) is not int or g.service_cpus < 0 or 0 < g.service_cpus < minimum:
             raise ValueError(f'grading.service_cpus must be 0 (default) or at least {minimum}')
+
+    def with_ports(self, http=None, ray_base=None):
+        """This profile with its HTTP port and/or Ray port block moved, so several farms can share a host.
+
+        ``ray_base`` B: Ray listens on B..B+8 and its workers use B+10 on, over the profile's worker-range width.
+        Ports are per host, so a moved profile must have one host."""
+        if http is None and ray_base is None:
+            return self
+        if self.hosts != 1:
+            raise ValueError('moved farm ports need a single-host profile')
+        ports = asdict(self.ports)
+        if http is not None:
+            ports['inference'] = http
+        if ray_base is not None:
+            width = ports['worker_max'] - ports['worker_min']
+            ports.update({name: ray_base + i for i, name in enumerate(RAY_PORTS)},
+                         worker_min=ray_base + 10, worker_max=ray_base + 10 + width)
+        raw = self.to_dict()
+        raw['ports'] = ports
+        return type(self).from_dict(raw)
 
     @property
     def grading_host_sized(self):

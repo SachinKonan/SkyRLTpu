@@ -426,3 +426,69 @@ def test_discovery_lists_a_zero_engine_farm_at_its_own_address(monkeypatch, tmp_
     from tpu.science.grading_transport import OpenFarmDirectory
     assert OpenFarmDirectory.listable(farm)
     assert not discovery.is_ready(dict(ok=True, health='healthy', capabilities=None, engines=0))
+
+
+# -- several farms per host (non-exclusive Slurm workers) ----------------------------------------
+
+def test_ports_move_for_a_shared_host_and_tpu_defaults_stay(monkeypatch):
+    from dataclasses import asdict
+    from tpu.swarm.ray_train import bootstrap
+    config = Config.load(PROFILE)
+    assert config.with_ports() is config and config.ports.inference == 24800 and config.ports.ray == 24679
+    moved = config.with_ports(31234, 26250)
+    assert moved.ports.inference == 31234 and moved.ports.ray == 26250 and moved.ports.metrics == 26258
+    assert (moved.ports.worker_min, moved.ports.worker_max) == (26260, 26459)
+    tpu = Config.load(ROOT / 'tpu/swarm/ray_train/profiles/inference-farm-rq4-gemma-east5-v6e8-001.json')
+    assert asdict(tpu.ports) == asdict(type(tpu.ports)())  # TPU farms keep the fixed layout
+    env = {}
+    assert bootstrap.farm_ports(config, env) == (None, None) and env == {}
+    env = dict(SKYRL_FARM_PORT='0', SKYRL_FARM_RAY_PORT_BASE='0')
+    http, base = bootstrap.farm_ports(config, env)
+    assert env == dict(SKYRL_FARM_PORT=str(http), SKYRL_FARM_RAY_PORT_BASE=str(base))
+    assert 26000 <= base and base + 210 < 32768 and bootstrap.bindable(range(base, base + 210))
+    assert bootstrap.farm_ports(config, env) == (http, base)  # the re-executed bootstrap keeps the choice
+    resolved = config.with_ports(http, base)
+    assert not set(range(resolved.ports.worker_min, resolved.ports.worker_max + 1)) & {resolved.ports.ray, http}
+
+
+def test_sixteen_cpus_sixty_four_gib_sizing():
+    host = Config.load(PROFILE).for_host(16, 64 * GIB)
+    assert {n: f['slots_per_host'] for n, f in host.grading_families.items()} == {'placement': 7, 'routing': 1, 'math': 7}
+    assert host.grading_memory_gib == 58 and host.grading_service_cpus == 2 and host.ray_service_cpus(0) == 1
+
+
+def test_farm_file_is_published_and_discovered_directly(monkeypatch, tmp_path):
+    from tpu.swarm.ray_train import controller
+    monkeypatch.setenv('SKYRL_FARM_REGISTRY_DIR', str(tmp_path))
+    monkeypatch.setenv('SLURM_JOB_ID', '42')
+    monkeypatch.setenv('SKYRL_FARM_STOP_AT', str(time.time() + 3600))
+    farm = controller.Controller.__new__(controller.Controller)
+    farm.config, farm.ips = Config.load(PROFILE).with_ports(31234), ['10.1.2.3']
+    farm.report = lambda *a, **k: None
+    farm.publish_farm_file()
+    path, = tmp_path.glob('*.json')
+    record = json.loads(path.read_text())
+    assert path.name.endswith('-31234.json') and record['url'] == 'http://10.1.2.3:31234' and record['job_id'] == '42'
+    assert record['grader_sha256'] and record['name'] == 'inference-farm-grading-della-cpu-001'
+    # Discovery reads the folder and runs the same probe directly against the advertised address.
+    probed = []
+    monkeypatch.setattr(discovery, 'local_rpc', lambda url: probed.append(url) or dict(ok=True, result=dict(
+        models=[], url=url, engines=0, direct=True, grading=dict(ready=True), instance='i')))
+    args = SimpleNamespace(registry=tmp_path / 'out' / 'farms.json', ssh_config_dir=tmp_path, name_contains=['inference-farm'],
+                           trainer_pool=[], trainer_job_id=[], discovery_group='', run_scoped_only=False, farm_port=24800,
+                           tunnels=True, port_base=29000, push=False, farm_files=tmp_path)
+    (tmp_path / 'out').mkdir()
+    svc = discovery.Service(args, dict(farms=[], trainers=[]), now=time.time)
+    svc.tunnel = lambda farm: pytest.fail('no tunnel for a directly reachable farm')
+    listed, = svc.tick([])['farms']
+    assert probed == ['http://10.1.2.3:31234'] and listed['url'] == 'http://10.1.2.3:31234' and listed['source'] == 'file'
+    other = SimpleNamespace(**dict(vars(args), name_contains=['gradetest']))
+    assert not discovery.Service(other, dict(farms=[], trainers=[])).farm_sources([])  # names still filter
+    farm.stopping = __import__('threading').Event()
+    farm.monitor, farm.hosts, farm.farm_instance, farm.science_refs, farm.science_group = None, [], None, [], None
+    farm.drain_grading = farm.close_serve = lambda *a: None
+    farm.close()
+    assert not list(tmp_path.glob('*.json'))  # removed on a clean exit
+    expired = tmp_path / 'old-24800.json'
+    expired.write_text(json.dumps(dict(url='http://x:1', end_time=1)))
+    assert discovery.farm_files(tmp_path) == []
