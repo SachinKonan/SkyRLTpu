@@ -627,12 +627,14 @@ class GradingScheduler:
         if not candidates:
             return None
         local = [p for p in candidates if p.kind == 'local']
-        # Local grading capacity first: a free local slot always wins. Once every local slot is busy,
-        # spread over the farms; queue locally only when no farm can take it.
+        # Local grading capacity first: a free local slot always wins. A busy local pool is no candidate,
+        # like a full farm: the request waits in _choose for whichever pool frees first.
         if local and local[0].running + local[0].queued < local[0].capacity_for(task):
             return local[0]
-        candidates = [p for p in candidates if p.kind != 'local'] or local
-        key = lambda p: (p.predicted_wait(task), p.kind != 'local', p.name)
+        candidates = [p for p in candidates if p.kind != 'local']
+        if not candidates:
+            return None
+        key = lambda p: (p.predicted_wait(task), p.name)
         if any(getattr(p, 'open', False) for p in candidates) and len(candidates) > 2:
             # Power of two choices: the less loaded of two random pools.
             return min(self.rng.sample(candidates, 2), key=key)

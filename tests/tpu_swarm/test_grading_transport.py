@@ -525,3 +525,100 @@ def test_a_full_farm_takes_every_waiting_grade_once_it_has_room():
         finally:
             await t.close()
     asyncio.run(run())
+
+
+class HeldLocal(gt.LocalRayPool):
+    """A local pool whose grades finish only when the test releases them."""
+
+    def __init__(self, capacity):
+        super().__init__(FAMILIES, capacity)
+        self.calls, self.futures = [], []
+
+    def dispatch(self, request):
+        self.calls.append(request.request_id)
+        self.futures.append(asyncio.get_running_loop().create_future())
+        return self.futures[-1]
+
+    def release(self, value=0.0):
+        for future in self.futures:
+            if not future.done():
+                future.set_result({'result': [value], 'error': None, 'metrics': {}})
+
+
+async def until(condition, seconds=5):
+    for _ in range(int(seconds / .01)):
+        if condition():
+            return
+        await asyncio.sleep(.01)
+    raise AssertionError('condition not reached')
+
+
+@pytest.mark.parametrize('frees', ['local', 'farm'])
+def test_busy_local_and_full_farms_wait_for_the_first_pool_that_frees(frees):
+    async def run():
+        farm = GradingFarm()
+        farm.busy.add('a')
+        farm.outcomes['a'] = done({'result': [2.0], 'error': None, 'metrics': {}})
+        local = HeldLocal(1)
+        t = transport(farm, ['a'], local=local, max_infra_retries=0)
+        try:
+            first = asyncio.create_task(t.grade(request()))
+            await until(lambda: local.running == 1)
+            waiting = asyncio.create_task(t.grade(request()))
+            await asyncio.sleep(1.5)
+            # Never queued on the busy local pool, and no tight probe loop on the full farm.
+            assert not waiting.done() and len(local.calls) == 1 and local.queued == 0
+            assert any(e == 'grading_no_pool' for e, _ in t.reports) and len(farm.refusals) <= 4
+            if frees == 'local':
+                local.release()
+                assert (await first)['result'] == [0.0] and local.running == 0  # the slot frees at once
+                await until(lambda: len(local.calls) == 2)
+                local.release(1.0)
+                assert (await asyncio.wait_for(waiting, 5))['result'] == [1.0] and not farm.submits
+            else:
+                farm.busy.discard('a')
+                assert (await asyncio.wait_for(waiting, 5))['result'] == [2.0]
+                assert len(local.calls) == 1 and len(farm.submits) == 1
+                local.release()
+                await first
+            assert all(p.running == 0 and p.queued == 0 for p in t.pools())
+        finally:
+            await t.close()
+    asyncio.run(run())
+
+
+def test_a_free_local_slot_is_chosen_before_farms_with_room():
+    async def run():
+        farm = GradingFarm()
+        local = HeldLocal(2)
+        t = transport(farm, ['a', 'b'], local=local)
+        try:
+            tasks = [asyncio.create_task(t.grade(request())) for _ in range(2)]
+            await until(lambda: local.running == 2)
+            assert not farm.submits and len(local.calls) == 2
+            local.release()
+            assert all(r['result'] == [0.0] for r in await asyncio.gather(*tasks))
+        finally:
+            await t.close()
+    asyncio.run(run())
+
+
+def test_busy_local_sends_new_grades_to_farms_with_room():
+    async def run():
+        farm = GradingFarm(capacity=4)
+        for host in ('a', 'b'):
+            farm.outcomes[host] = done({'result': [2.0], 'error': None, 'metrics': {}})
+        local = HeldLocal(1)
+        t = transport(farm, ['a', 'b'], local=local)
+        try:
+            held = asyncio.create_task(t.grade(request()))
+            await until(lambda: local.running == 1)
+            results = await asyncio.wait_for(asyncio.gather(*(t.grade(request()) for _ in range(6))), 5)
+            assert all(r['result'] == [2.0] for r in results)
+            assert len(local.calls) == 1 and {host for host, _ in farm.submits} == {'a', 'b'}
+            assert not any(e == 'grading_no_pool' for e, _ in t.reports)
+            local.release()
+            await held
+        finally:
+            await t.close()
+    asyncio.run(run())

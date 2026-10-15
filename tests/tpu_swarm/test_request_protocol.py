@@ -226,7 +226,7 @@ def test_a_farm_joining_the_directory_is_used_at_once():
     asyncio.run(run())
 
 
-def test_local_slots_fill_first_then_farms_then_local_queue_when_no_farm():
+def test_local_slots_fill_first_then_farms_and_a_busy_local_pool_is_no_candidate():
     now = time.monotonic()
     sched = gt.GradingScheduler()
     local = FakeLocal(2, {'result': [0.0], 'error': None, 'metrics': {}})
@@ -236,7 +236,9 @@ def test_local_slots_fill_first_then_farms_then_local_queue_when_no_farm():
     local.running = 2
     assert sched.choose([local, farm], now, 'math') is farm  # local full: spread to farms
     farm.unhealthy_until = now + 60
-    assert sched.choose([local, farm], now, 'math') is local  # no farm: queue locally
+    assert sched.choose([local, farm], now, 'math') is None  # no farm, local busy: wait, never queue locally
+    local.running = 1
+    assert sched.choose([local, farm], now, 'math') is local  # a local slot frees: it takes the wait
 
 
 # --- Journal, exactly-once, retry cap, contract, registry, logging ----------------------------------------
