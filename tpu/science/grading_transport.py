@@ -24,6 +24,11 @@ grade goes to the less loaded of two random healthy farms (by the load the farm
 advertises); a farm that answers 429 (full) or runs another grader version is
 skipped without counting an infrastructure attempt. Farms built before open
 grading refuse lease-free requests and are simply not used.
+
+A farm that refused (429 full, unreachable) is skipped for its ``retry_after``
+(x1-2 jitter) and then takes one unacknowledged submission at a time; each ACK
+widens that window by one (slow start). Grades waiting for room therefore wait
+in the client instead of all resubmitting the moment the farm may be asked again.
 """
 import asyncio
 from dataclasses import dataclass, field
@@ -136,8 +141,11 @@ class Pool:
         self.queued = 0
         self.mean_seconds = None
         self.unhealthy_until = 0.0
-        # An open farm that answered 429 is skipped until then (not an infrastructure failure).
+        # A farm that answered 429 is skipped until then (not an infrastructure failure).
         self.full_until = 0.0
+        # Submissions awaiting an ACK (``queued``) allowed at once; None until the farm first refuses.
+        # A refusal sets 1, each ACK adds 1: one probe at a time while full, back to many once it has room.
+        self.window = None
         self.eligible = True
         # The farm rejected our grader contract: never send it another request.
         self.contract_mismatch = False
@@ -156,7 +164,7 @@ class Pool:
 
     def healthy(self, now):
         return (self.eligible and not self.contract_mismatch and now >= self.unhealthy_until
-                and now >= self.full_until)
+                and now >= self.full_until and (self.window is None or self.queued < self.window))
 
     def serves(self, task):
         return True
@@ -869,6 +877,8 @@ class GradingTransport:
                 dispatched[0] = True
                 p.queued -= 1
                 p.running += 1
+                if p.window is not None:
+                    p.window += 1
                 if self.journal and wire_id:
                     self.journal.append(event='submitted', request_id=request.request_id, wire_id=wire_id,
                                         url=getattr(p, 'url', None), pool=p.name, attempt=attempts,
@@ -890,8 +900,10 @@ class GradingTransport:
                 await pool.cancel(request.request_id)
                 raise
             except Refused as exc:
-                # No ACK (full, contract mismatch, unreachable): another pool, not a charged retry.
-                pool.full_until = time.monotonic() + exc.retry_after
+                # No ACK (full, contract mismatch, unreachable): another pool, not a charged retry. This farm
+                # waits out its retry_after (jittered) and then takes one submission at a time until ACKs resume.
+                pool.full_until = time.monotonic() + exc.retry_after * random.uniform(1, 2)
+                pool.window = 1
                 pool.contract_mismatch = pool.contract_mismatch or exc.banned
                 self.report('grading_farm_busy', **context, reason=str(exc)[:200])
                 continue

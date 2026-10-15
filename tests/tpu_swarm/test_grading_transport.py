@@ -27,9 +27,12 @@ class GradingFarm:
         self.outcomes = {}  # host -> callable(request_id) -> view dict
         self.batch_polls = 0
         self.mismatch = set()  # hosts whose graders differ from the client's
+        self.retry_after = 0.01
+        self.latency = 0.0  # seconds per HTTP round trip
+        self.refusals = []  # (host, time) of every 429
 
     async def __call__(self, request):
-        await asyncio.sleep(0)  # A real HTTP round trip yields to the loop.
+        await asyncio.sleep(self.latency)  # A real HTTP round trip yields to the loop.
         host, path = request.url.host, request.url.path
         if host in self.down:
             raise httpx.ConnectError('offline', request=request)
@@ -44,7 +47,8 @@ class GradingFarm:
             if host in self.mismatch:
                 return httpx.Response(409, json={'detail': 'grader version mismatch: request x, farm y'})
             if host in self.busy:
-                return httpx.Response(429, json={'detail': 'busy', 'retry_after': 0.01})
+                self.refusals.append((host, time.monotonic()))
+                return httpx.Response(429, json={'detail': 'busy', 'retry_after': self.retry_after})
             self.submits.append((host, body['request_id']))
             self.entries[(host, body['request_id'])] = body
             return httpx.Response(202, json={'request_id': body['request_id'], 'state': 'queued'})
@@ -452,4 +456,72 @@ def test_legacy_infrastructure_zero_retried_not_published():
             assert any(e=='grading_retry' for e,_ in t.reports)
             assert local.calls==[r.request_id]
         finally:await t.close()
+    asyncio.run(run())
+
+
+def test_always_full_farms_see_a_bounded_submission_rate():
+    """Many waiting grades never rush a full farm together: about one probe per farm per retry_after."""
+    async def run():
+        farm = GradingFarm()
+        farm.retry_after = 0.2
+        farm.latency = 0.02  # a 429 takes a round trip, as through a tunnel
+        hosts = ['a', 'b', 'c']
+        farm.busy.update(hosts)
+        t = transport(farm, hosts, max_infra_retries=0)
+        try:
+            waiters = [asyncio.create_task(t.grade(request())) for _ in range(300)]
+            # Before the first 429 is back each grade may try a farm once; let that first wave pass.
+            await asyncio.sleep(1.5)
+            before = len(farm.refusals)
+            await asyncio.sleep(2.0)
+            # Then each farm takes one submission per (jittered) retry_after, not one per waiting grade
+            # (the old client sent every waiting grade each time a farm's retry_after ran out: ~600 here).
+            settled = len(farm.refusals) - before
+            assert settled <= len(hosts) * (2.0 / farm.retry_after + 2), settled
+            assert not any(task.done() for task in waiters)
+            # A busy refusal is never a charged infrastructure retry (the cap here is 0).
+            assert not any(e in ('grading_retry', 'grading_infra_failure') for e, _ in t.reports)
+            for task in waiters:
+                task.cancel()
+            await asyncio.gather(*waiters, return_exceptions=True)
+        finally:
+            await t.close()
+    asyncio.run(run())
+
+
+def test_grades_flow_to_a_farm_with_room_while_another_stays_full():
+    async def run():
+        farm = GradingFarm()
+        farm.retry_after = 0.2
+        farm.busy.add('full')
+        farm.outcomes['room'] = done({'result': [1.0], 'error': None, 'metrics': {}})
+        t = transport(farm, ['full', 'room'], max_infra_retries=0)
+        try:
+            results = await asyncio.wait_for(asyncio.gather(*(t.grade(request()) for _ in range(100))), 20)
+            assert all(r['result'] == [1.0] for r in results)
+            assert {host for host, _ in farm.submits} == {'room'} and len(farm.submits) == 100
+            assert len(farm.refusals) <= 100 + 20, len(farm.refusals)
+        finally:
+            await t.close()
+    asyncio.run(run())
+
+
+def test_a_full_farm_takes_every_waiting_grade_once_it_has_room():
+    async def run():
+        farm = GradingFarm()
+        farm.retry_after = 0.05
+        farm.busy.add('a')
+        farm.outcomes['a'] = done({'result': [2.0], 'error': None, 'metrics': {}})
+        t = transport(farm, ['a'], max_infra_retries=0)
+        try:
+            waiters = [asyncio.create_task(t.grade(request())) for _ in range(200)]
+            await asyncio.sleep(1.0)
+            farm.busy.discard('a')
+            results = await asyncio.wait_for(asyncio.gather(*waiters), 20)
+            assert all(r['result'] == [2.0] for r in results) and len(farm.submits) == 200
+            # One probe at a time while full, then each ACK widens the window again.
+            assert t.directory.pools['a'].window > 1
+            assert not any(e in ('grading_retry', 'grading_infra_failure') for e, _ in t.reports)
+        finally:
+            await t.close()
     asyncio.run(run())

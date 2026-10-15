@@ -1,11 +1,13 @@
 #!/bin/bash
-# prep_local.sh <run_id>: build the run's package and its runtime source (base v22 + overlays), like Host.source_ready.
+# prep_local.sh <run_id>: build the run's package and its runtime source (base bundle + overlays), like Host.source_ready.
 set -euo pipefail
 run=$1
 L=/scratch/gpfs/ZHUANGL/sk7524/rq4-local
 W=/scratch/gpfs/ZHUANGL/sk7524/SkyRL-Main-infer-release
 T=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/scripts
 root=$L/runs/$run
+# The client imports its runtime (grading transport included) from this base, so the source key names it.
+base=$L/base-v24.tar.gz
 $T/build.sh "$run" > /dev/null
 rm -rf "$root/pkg"; mkdir -p "$root/pkg"
 # Science runs (qubit/circuit) build science-training.tar.gz: the generic package plus the grader/environment
@@ -14,12 +16,12 @@ out="$W/.rq4/builds/$run"; bundle="$out/ray-training.tar.gz"
 [ -f "$out/science-training.tar.gz" ] && [ ! "$out/science-training.tar.gz" -ot "$bundle" ] && bundle="$out/science-training.tar.gz"
 tar -xzf "$bundle" -C "$root/pkg"
 profile="$root/pkg/tpu/swarm/ray_train/profiles/$run.json"
-key=$(cd "$root/pkg/tpu/swarm/ray_train" && { find source_overlay thinking_budget -type f | sort | xargs sha256sum; \
+key=$(cd "$root/pkg/tpu/swarm/ray_train" && { basename "$base"; find source_overlay thinking_budget -type f | sort | xargs sha256sum; \
       python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['model_preset'])" "$profile"; } | sha256sum | cut -c1-16)
 src=$L/sources/$key
 if [ ! -f "$src/.source-complete" ]; then
   rm -rf "$src-partial"; mkdir -p "$src-partial"
-  tar -xzf $L/base-v23.tar.gz -C "$src-partial"
+  tar -xzf "$base" -C "$src-partial"
   PYTHONPATH="$root/pkg" $L/envs/controller/bin/python - "$profile" "$root/pkg" "$src-partial" <<'EOF'
 import sys
 from pathlib import Path
