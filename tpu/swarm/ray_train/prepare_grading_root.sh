@@ -12,15 +12,16 @@
 # Qubit candidate builds run `cargo build --offline` against the vendored crates; nothing fetches pip, cargo,
 # GCS or HF at runtime.
 #
-# Usage: prepare_grading_root.sh BUNDLE [SCRATCH] [BUCKET]
+# Usage: prepare_grading_root.sh BUNDLE [SCRATCH] [BUCKET] [NAME]
 #   BUNDLE   science-training-<sha>.tar.gz of an RQ4 farm profile (tpu.science.package_training), same tree
 #   SCRATCH  default /scratch/gpfs/ZHUANGL/sk7524/skypilot-slurm-cpu-scratch
 #   BUCKET   where the routing CPU runtime bundle lives (default us-east5)
+#   NAME     code dir name (default: the bundle's sha256, first 12 hex), e.g. the matching base bundle's short sha
 # Needs a uv that can install Python 3.12.12 (uv >= 0.9) and gcloud.
 set -euo pipefail
 bundle=$(realpath "$1") scratch=${2:-/scratch/gpfs/ZHUANGL/sk7524/skypilot-slurm-cpu-scratch}
 bucket=${3:-gs://sk7524-tinker-tpu-us-east5}
-code="$scratch/code/$(sha256sum "$bundle" | cut -c1-12)"
+code="$scratch/code/${4:-$(sha256sum "$bundle" | cut -c1-12)}"
 mkdir -p "$code" "$scratch/farms" && cd "$code"
 export PATH="$HOME/.local/bin:$PATH" SCIENCE_WORKER_ROOT="$code" SCIENCE_GRADING_ISOLATION=bwrap
 [ -f .bundle-extracted ] || { tar -xzf "$bundle" -C "$code" && sha256sum "$bundle" > .bundle-extracted; }
