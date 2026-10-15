@@ -90,13 +90,18 @@ def live_paths(proc=Path('/proc'), uid=None, me=None):
     return {p for p in used if p.startswith('/')}
 
 
+def is_journal(name):
+    # Source modules (generation_journal.py) are code, not journals: otherwise every code bundle is kept forever.
+    return JOURNAL_MARKER in name and not name.endswith(('.py', '.pyc'))
+
+
 def holds_journal(path):
-    if JOURNAL_MARKER in path.name:
+    if is_journal(path.name):
         return True
     if not path.is_dir() or path.is_symlink():
         return False
     for _, dirnames, filenames in os.walk(path, onerror=lambda _: None):
-        if any(JOURNAL_MARKER in n for n in filenames) or any(JOURNAL_MARKER in n for n in dirnames):
+        if any(is_journal(n) for n in filenames) or any(JOURNAL_MARKER in n for n in dirnames):
             return True
     return False
 

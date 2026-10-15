@@ -61,4 +61,21 @@ def test_two_cpu_dispatch_and_memory_prompt(monkeypatch):
         assert opts.call_count == 17
         assert all(c.kwargs['num_cpus'] == 2 and c.kwargs['memory'] == 2*1024**3 for c in opts.call_args_list)
         assert all(c.kwargs['resource_contract'] == r.contract(96, cpus=2, memory_gib=2) for c in opts.return_value.remote.call_args_list)
-    assert '2 GiB' in e.task_prompt('placement', environment=env)
+    # The prompt keeps the original 4-CPU/4-GiB wording whatever the grader's real case limit is.
+    old = {**env, 'SCIENCE_PLACEMENT_CPUS_PER_CASE': '4', 'SCIENCE_PLACEMENT_MEMORY_GIB': '4'}
+    for extra in ({}, dict(SCIENCE_PLACEMENT_HELPER='fast_proxy_v1', SCIENCE_PLACEMENT_SUITE='ibm17-proxy-v1',
+                           SCIENCE_PLACEMENT_STARTS='abuplace-xplace-three-starts-v1')):
+        for starter in (True, False):
+            new_prompt = e.task_prompt('placement', include_starter=starter, environment={**env, **extra})
+            assert new_prompt == e.task_prompt('placement', include_starter=starter, environment={**old, **extra})
+            assert '4 logical CPU cores and 4 GiB total RAM' in new_prompt and '2 GiB' not in new_prompt
+
+
+def test_routing_prompt_resources_do_not_follow_the_contract(monkeypatch):
+    from tpu.science import routing_resources, training_env as e
+    env = dict(SCIENCE_ROUTING_EVALUATOR='parallel-v2')
+    prompt = e.task_prompt('routing', environment=env)
+    assert 'each with 2 vCPU and 4 GiB RAM; a 10-vCPU/20-GiB program allocation' in prompt
+    monkeypatch.setattr(routing_resources, 'CASE_GIB', 4)
+    monkeypatch.setattr(routing_resources, 'PROGRAM_GIB', 20)
+    assert e.task_prompt('routing', environment=env) == prompt

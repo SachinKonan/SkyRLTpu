@@ -64,7 +64,9 @@ def task_prompt(task, *, include_starter=True, environment=None):
                   'Every case must be legal with zero hard-macro overlaps. Any invalid or missing '
                   'case gives reward zero; otherwise reward = max(1e-6, 1/(1+mean_proxy_cost)).\n\n') + prompt
     if cpu and environment.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1':
-        prompt=prompt.replace('8 GiB', environment.get('SCIENCE_PLACEMENT_MEMORY_GIB', '4') + ' GiB')
+        # The prompt keeps the original 4-GiB wording; the grader's real per-case limit
+        # (SCIENCE_PLACEMENT_MEMORY_GIB) may be lower and does not change the prompt.
+        prompt=prompt.replace('8 GiB', '4 GiB')
         import re
         prompt=re.sub(r'Each case has a hard 180-second candidate deadline.*?Return before it expires\.',
             'Each case supplies 300 seconds of search time to place(). Return your best legal positions '

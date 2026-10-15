@@ -231,3 +231,19 @@ def test_heartbeat_starts_a_background_pass_only_when_disk_is_low(tmp_path, monk
     assert ran == [False]
     host._maybe_reclaim_storage()  # rate limited: no second pass within the interval
     assert ran == [False]
+
+
+def test_code_bundle_journal_modules_are_not_journals(tmp_path):
+    # Every code bundle ships generation_journal.py; that alone must not keep the bundle forever.
+    bundle = tmp_path / 'skyrl-ray-code' / 'abc'
+    fill(bundle / 'tpu/swarm/ray_train/generation_journal.py')
+    fill(bundle / 'tpu/swarm/ray_train/__pycache__/generation_journal.cpython-312.pyc')
+    assert not sr.holds_journal(bundle)
+    assert not sr.holds_journal(bundle / 'tpu/swarm/ray_train/generation_journal.py')
+    # Real run journals, journal directories and in-progress journal files are still protected.
+    for name in ('grading-journal.jsonl', 'generation-journal.jsonl', 'request-journal.jsonl',
+                 'grading-journal.jsonl.tmp', 'checkpoint_journals/step-3.json'):
+        run = tmp_path / ('run-' + name.replace('/', '-'))
+        fill(run / 'client' / name)
+        assert sr.holds_journal(run), name
+        assert sr.holds_journal(run / 'client' / name.split('/')[0]), name
