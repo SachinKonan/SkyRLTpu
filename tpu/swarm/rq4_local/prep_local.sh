@@ -7,7 +7,7 @@ W=/scratch/gpfs/ZHUANGL/sk7524/SkyRL-Main-infer-release
 T=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/scripts
 root=$L/runs/$run
 # The client imports its runtime (grading transport included) from this base, so the source key names it.
-base=$L/base-v27.tar.gz
+base=$L/base-v28.tar.gz
 $T/build.sh "$run" > /dev/null
 rm -rf "$root/pkg"; mkdir -p "$root/pkg"
 # Science runs (qubit/circuit) build science-training.tar.gz: the generic package plus the grader/environment
