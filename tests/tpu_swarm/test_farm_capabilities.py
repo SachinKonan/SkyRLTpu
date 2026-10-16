@@ -472,12 +472,14 @@ def test_discovery_reaches_slurm_pool_farms_at_their_job_placed_port(monkeypatch
     squeue = 'gradefarm-della-test-3-7bfcb694 della-h14n13\nother-job della-h1n1\ngradefarm-della-test-30-7bfcb694 della-h2n2\n'
     run = lambda argv, **kw: calls.append(argv) or SimpleNamespace(stdout=squeue, returncode=0)
     url = f'http://della-h14n13:{farm_ports(1234)[0]}'
-    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-3', run=run) == url
-    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-3-7bfcb694', run=run) == url
-    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-9', run=run) is None
+    nodes = discovery.slurm_nodes(run=run)
     assert calls[-1][:2] == ['squeue', '-h']
-    probed = []
-    monkeypatch.setattr(discovery, 'slurm_farm_url', lambda job, cluster: f'http://della-h14n13:{farm_ports(job)[0]}')
+    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-3', nodes) == url
+    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-3-7bfcb694', nodes) == url
+    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-9', nodes) is None
+    assert discovery.slurm_nodes(run=lambda argv, **kw: SimpleNamespace(stdout='', returncode=1)) is None
+    probed, answers = [], [nodes, None]
+    monkeypatch.setattr(discovery, 'slurm_nodes', lambda: answers.pop(0))
     monkeypatch.setattr(discovery, 'local_rpc', lambda url: probed.append(url) or dict(ok=True, result=dict(
         models=[], url=url, engines=0, direct=True, grading=dict(ready=True), instance='i')))
     monkeypatch.setattr(discovery, 'rpc', lambda *a, **k: pytest.fail('no SSH probe for a Slurm pool farm'))
@@ -492,6 +494,9 @@ def test_discovery_reaches_slurm_pool_farms_at_their_job_placed_port(monkeypatch
     listed, = svc.tick(rows)['farms']
     assert probed == [f'http://della-h14n13:{farm_ports(1234)[0]}'] and listed['source'] == 'slurm'
     assert listed['url'] == probed[0] and listed['tunnel_ok'] and listed['engines'] == 0
+    # A failed squeue on the next tick keeps the last known node instead of dropping the farm.
+    listed, = svc.tick(rows)['farms']
+    assert probed[-1] == url and listed['ok']
 
 
 def test_time_limit_stop_idles_so_managed_job_recovery_replaces_the_farm(monkeypatch, tmp_path):

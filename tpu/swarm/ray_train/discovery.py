@@ -75,18 +75,23 @@ def local_rpc(url):
         return {'ok': False, 'error': type(exc).__name__}
 
 
-def slurm_farm_url(job_id, cluster, run=subprocess.run):
+def slurm_nodes(run=subprocess.run):
+    """{Slurm job name: node} for this user's running jobs, from one squeue call; None if squeue failed."""
+    try:
+        proc = run(['squeue', '-h', '--me', '-t', 'R', '-o', '%j %N'], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode:
+        return None
+    return dict(line.split(' ', 1) for line in proc.stdout.splitlines() if ' ' in line)
+
+
+def slurm_farm_url(job_id, cluster, nodes):
     """A farm job on a Slurm-backed pool: its node (the SkyPilot cluster is the Slurm job of that name) and the
     HTTP port placed by its managed job id (config.farm_ports), or None while the node is unknown."""
     from .config import farm_ports
-    try:
-        # SkyPilot names the Slurm job "<cluster>-<user hash>", so match that suffix as well as the bare name.
-        lines = run(['squeue', '-h', '--me', '-t', 'R', '-o', '%j %N'], capture_output=True, text=True,
-                    timeout=30).stdout.splitlines()
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    node = [n for j, _, n in (line.partition(' ') for line in lines)
-            if n and (j == cluster or j.rsplit('-', 1)[0] == cluster)]
+    # SkyPilot names the Slurm job "<cluster>-<user hash>", so match that suffix as well as the bare name.
+    node = [n for j, n in nodes.items() if n and (j == cluster or j.rsplit('-', 1)[0] == cluster)]
     return f'http://{node[0]}:{farm_ports(job_id)[0]}' if len(node) == 1 else None
 
 
@@ -141,6 +146,8 @@ class Service:
     def __init__(self, args, private, now=time.time):
         self.args, self.private, self.now = args, private, now
         self.directory, self.tunnels = Directory(), {}
+        # One squeue per tick for every Slurm farm; a failed call keeps the last answer (della's controller is slow).
+        self.slurm_nodes = {}
 
     def farm_sources(self, rows):
         pool = [dict(key=str(r['job_id']), job_id=r['job_id'], name=r['run_id'], cluster=r['cluster'],
@@ -156,7 +163,7 @@ class Service:
 
     def probe(self, farm):
         if farm['source'] == 'slurm':
-            url = slurm_farm_url(farm['job_id'], farm['cluster'])
+            url = slurm_farm_url(farm['job_id'], farm['cluster'], self.slurm_nodes)
             return local_rpc(url) if url else {'ok': False, 'error': 'node_unknown'}
         if farm['source'] == 'private':
             return private_rpc(farm['entry'], 'farm', farm['entry'].get('port', self.args.farm_port))
@@ -183,6 +190,10 @@ class Service:
     def tick(self, rows):
         now = self.now()
         sources = self.farm_sources(rows)
+        if any(f['source'] == 'slurm' for f in sources):
+            nodes = slurm_nodes()
+            if nodes is not None:
+                self.slurm_nodes = nodes
         for key in self.directory.retire({f['key'] for f in sources}):
             if key in self.tunnels:
                 self.tunnels.pop(key).close()
