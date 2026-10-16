@@ -14,8 +14,27 @@ login-session kill cannot take them down and a restart is a unit restart, not se
 import hashlib
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
+import time
+
+# Controller exit code for a host stopping ahead of its known end (Slurm time limit). Bootstrap then stays alive
+# and idle, so the job ends with its allocation, like a preempted spot VM, and managed-job recovery starts a
+# replacement farm. Exiting would end the job as succeeded (no recovery) or failed (an error restart).
+HOST_ENDING_EXIT = 75
+
+
+def idle_until_killed(log, sleep=time.sleep):
+    """Nothing runs any more (Ray, Serve and grading are stopped, cores released, /health is gone); wait for the
+    allocation to end. SIGTERM is ignored: only the end of the allocation (SIGKILL) may end the job."""
+    from .events import emit
+    emit(log, 'host_ending_idle')
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, signal.SIG_IGN)
+    while True:
+        sleep(3600)
+
 
 UNIT_PATTERNS = ('skyrl-job-*', 'skyrl-runtime-*', 'placement-grade-*', 'science-grade-*', 'math-grade-*')
 WORKLOAD_MODULES = {'skyrl.tinker.api', 'skyrl.tinker.engine', 'skyrl.backends.rpc',

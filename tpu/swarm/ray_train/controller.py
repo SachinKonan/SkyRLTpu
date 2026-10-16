@@ -619,16 +619,7 @@ class Controller:
             self.report("arena_sampling_started", samples=self.config.arena_samples)
         elif self.config.inference_only:
             self.report("inference_only_waiting", endpoint=f"http://{self.ips[0]}:{self.config.ports.inference}")
-            lead = self.config.grading.time_limit_lead_seconds
-            end = host_end_time() if lead else None
-            while not self.stopping.wait(5):
-                if self.failure:
-                    raise RuntimeError(self.failure)
-                if end and time.time() >= end - lead:
-                    # A short-lived host (Slurm time limit): stop and drain while grades can still finish.
-                    self.report("host_time_limit", end=end, lead_seconds=lead)
-                    return 0
-            return 143
+            return self.serve_until_stopped()
         else:
             self.checked_get([self.hosts[0].start_client.remote()], 30)
         self.report("client_started")
@@ -679,6 +670,21 @@ class Controller:
             # A 2.5-GB snapshot exceeded the old six-minute combined budget.
             self.drain_phase({host.sync_run.remote(): rank for rank, host in enumerate(self.hosts)},
                              "final_run_writeback", timeout=600)
+
+    def serve_until_stopped(self, poll=5):
+        """An inference-only farm serves until stopped (143) or until shortly before its host's known end:
+        HOST_ENDING_EXIT, so it drains while grades can still finish and bootstrap then idles until the allocation
+        ends (managed-job recovery replaces the farm)."""
+        from .lifecycle import HOST_ENDING_EXIT
+        lead = self.config.grading.time_limit_lead_seconds
+        end = host_end_time() if lead else None
+        while not self.stopping.wait(poll):
+            if self.failure:
+                raise RuntimeError(self.failure)
+            if end and time.time() >= end - lead:
+                self.report("host_time_limit", end=end, lead_seconds=lead)
+                return HOST_ENDING_EXIT
+        return 143
 
     def drain_grading(self):
         """A farm going away hands open grades back as 'draining' (clients move them without a charged retry);

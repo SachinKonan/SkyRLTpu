@@ -416,6 +416,9 @@ def main():
                 finally:
                     os.close(run_lease)
                     os.close(lock_fd)
+    from .lifecycle import HOST_ENDING_EXIT, idle_until_killed
+    if code == HOST_ENDING_EXIT and not stopped:
+        idle_until_killed(log)  # never returns: the job ends with its allocation and is recovered elsewhere
     return code
 
 

@@ -488,3 +488,33 @@ def test_discovery_reaches_slurm_pool_farms_at_their_job_placed_port(monkeypatch
     listed, = svc.tick(rows)['farms']
     assert probed == [f'http://della-h14n13:{farm_ports(1234)[0]}'] and listed['source'] == 'slurm'
     assert listed['url'] == probed[0] and listed['tunnel_ok'] and listed['engines'] == 0
+
+
+def test_time_limit_stop_idles_so_managed_job_recovery_replaces_the_farm(monkeypatch, tmp_path):
+    import signal
+    import threading
+    from tpu.swarm.ray_train import controller, lifecycle
+    farm = controller.Controller.__new__(controller.Controller)
+    farm.config, farm.failure, farm.stopping = Config.load(PROFILE), None, threading.Event()
+    farm.report = lambda *a, **k: None
+    monkeypatch.setenv('SKYRL_FARM_STOP_AT', str(time.time() + 900))  # lead 900 s: the end is already near
+    assert farm.serve_until_stopped(poll=.01) == lifecycle.HOST_ENDING_EXIT
+    monkeypatch.setenv('SKYRL_FARM_STOP_AT', str(time.time() + 3600))
+    farm.stopping.set()
+    assert farm.serve_until_stopped(poll=.01) == 143  # an explicit stop exits normally
+    # After the drain, bootstrap idles (SIGTERM ignored) instead of ending the job as succeeded.
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN
+        if len(sleeps) == 3:
+            raise KeyboardInterrupt  # stands in for the allocation's SIGKILL
+    previous = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            lifecycle.idle_until_killed(tmp_path / 'log.jsonl', sleep=sleep)
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+    assert len(sleeps) == 3 and 'host_ending_idle' in (tmp_path / 'log.jsonl').read_text()
