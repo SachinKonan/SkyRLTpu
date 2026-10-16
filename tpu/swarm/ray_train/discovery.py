@@ -80,9 +80,13 @@ def slurm_farm_url(job_id, cluster, run=subprocess.run):
     HTTP port placed by its managed job id (config.farm_ports), or None while the node is unknown."""
     from .config import farm_ports
     try:
-        node = run(['squeue', '-h', '-n', cluster, '-o', '%N'], capture_output=True, text=True, timeout=30).stdout.split()
+        # SkyPilot names the Slurm job "<cluster>-<user hash>", so match that suffix as well as the bare name.
+        lines = run(['squeue', '-h', '--me', '-t', 'R', '-o', '%j %N'], capture_output=True, text=True,
+                    timeout=30).stdout.splitlines()
     except (OSError, subprocess.TimeoutExpired):
         return None
+    node = [n for j, _, n in (line.partition(' ') for line in lines)
+            if n and (j == cluster or j.rsplit('-', 1)[0] == cluster)]
     return f'http://{node[0]}:{farm_ports(job_id)[0]}' if len(node) == 1 else None
 
 

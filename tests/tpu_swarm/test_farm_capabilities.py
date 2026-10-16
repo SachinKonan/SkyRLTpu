@@ -468,10 +468,14 @@ def test_sixteen_cpus_sixty_four_gib_sizing():
 def test_discovery_reaches_slurm_pool_farms_at_their_job_placed_port(monkeypatch, tmp_path):
     from tpu.swarm.ray_train.config import farm_ports
     calls = []
-    run = lambda argv, **kw: calls.append(argv) or SimpleNamespace(stdout='della-h14n13\n', returncode=0)
-    assert (discovery.slurm_farm_url(1234, 'gradefarm-della-test-3-7bfcb694', run=run)
-            == f'http://della-h14n13:{farm_ports(1234)[0]}')
-    assert calls[-1][:4] == ['squeue', '-h', '-n', 'gradefarm-della-test-3-7bfcb694']
+    # SkyPilot's Slurm job is "<cluster>-<user hash>"; the pool row names only the cluster.
+    squeue = 'gradefarm-della-test-3-7bfcb694 della-h14n13\nother-job della-h1n1\ngradefarm-della-test-30-7bfcb694 della-h2n2\n'
+    run = lambda argv, **kw: calls.append(argv) or SimpleNamespace(stdout=squeue, returncode=0)
+    url = f'http://della-h14n13:{farm_ports(1234)[0]}'
+    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-3', run=run) == url
+    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-3-7bfcb694', run=run) == url
+    assert discovery.slurm_farm_url(1234, 'gradefarm-della-test-9', run=run) is None
+    assert calls[-1][:2] == ['squeue', '-h']
     probed = []
     monkeypatch.setattr(discovery, 'slurm_farm_url', lambda job, cluster: f'http://della-h14n13:{farm_ports(job)[0]}')
     monkeypatch.setattr(discovery, 'local_rpc', lambda url: probed.append(url) or dict(ok=True, result=dict(
