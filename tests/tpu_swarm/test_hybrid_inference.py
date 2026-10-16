@@ -395,15 +395,20 @@ def test_runtime_identity_detects_installed_patch_but_allows_hardware_flags(tmp_
     initial = identity(cfg, tmp_path, source, snapshot)
     hardware = replace(cfg, inference=replace(cfg.inference, prefix_caching=not cfg.inference.prefix_caching,
                                               memory_utilization=.9))
-    assert identity(hardware, tmp_path, source, snapshot) == initial
-    # Sliding-window KV is on by default; only the explicit off switch changes the contract.
-    assert initial['contract']['sliding_window_kv'] is True
-    swa = replace(cfg, inference=replace(cfg.inference, engine_env={'SKYRL_SWA_KV': '1'}))
-    assert identity(swa, tmp_path, source, snapshot) == initial
+    assert identity(hardware, tmp_path, source, snapshot)['sha256'] == initial['sha256']
+    # Layout and performance settings (sliding-window KV, TP width) are reported, not part of the hash:
+    # farms of one model on different layouts are interchangeable.
+    assert initial['runtime']['sliding_window_kv'] is True and 'sliding_window_kv' not in initial['contract']
     swa_off = replace(cfg, inference=replace(cfg.inference, engine_env={'SKYRL_SWA_KV': '0'}))
-    assert identity(swa_off, tmp_path, source, snapshot)['sha256'] != initial['sha256']
+    off = identity(swa_off, tmp_path, source, snapshot)
+    assert off['sha256'] == initial['sha256'] and off['runtime_sha256'] != initial['runtime_sha256']
     wider = replace(cfg, inference=replace(cfg.inference, tp=cfg.inference.tp * 2))
-    assert identity(wider, tmp_path, source, snapshot)['sha256'] != initial['sha256']
+    wide = identity(wider, tmp_path, source, snapshot)
+    assert wide['sha256'] == initial['sha256'] and wide['runtime']['tensor_parallel'] == cfg.inference.tp * 2
+    # What a request generates still decides it: a different template or weights index is another hash.
+    (snapshot / 'tokenizer_config.json').write_text('{"chat_template": "other"}')
+    assert identity(cfg, tmp_path, source, snapshot)['sha256'] != initial['sha256']
+    (snapshot / 'tokenizer_config.json').unlink()
     (site / 'tpu_inference.py').write_text('modified = True\n')
     assert identity(cfg, tmp_path, source, snapshot)['sha256'] != initial['sha256']
     (site / 'tpu_inference-1.0.dist-info/direct_url.json').write_text(

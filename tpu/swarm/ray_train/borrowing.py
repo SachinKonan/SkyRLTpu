@@ -6,6 +6,7 @@ ineligible: ordinary /v1/models is not evidence of ownership or adapter identity
 import asyncio
 from dataclasses import dataclass, field, replace
 import hashlib
+import json
 import os
 from pathlib import Path
 import time
@@ -650,7 +651,12 @@ class Borrower:
             report('abandoned', reason='caller cancelled')
             raise
         if ticket.state == State.DONE:
-            return view.get('result')
+            result = view.get('result')
+            # Which farm and layout generated the group (each completion also carries it, next to its logprobs).
+            stamps = {json.dumps(c.get('served_by'), sort_keys=True) for c in (result or {}).get('choices') or []
+                      if isinstance(c, dict) and c.get('served_by')}
+            report('served', request_id=request_id, served_by=[json.loads(stamp) for stamp in sorted(stamps)])
+            return result
         error = view.get('error') or {}
         raise GenerationFailed(f'farm {ticket.state.value} the group: {error.get("detail")}', error.get('status'))
 

@@ -1,4 +1,12 @@
-"""Compare loaded model snapshots and installed serving code, not model aliases."""
+"""Compare loaded model snapshots and installed serving code, not model aliases.
+
+The compatibility hash covers only what changes what is generated for a request: model, weights and tokenizer
+files, chat template and generation config, serving and thinking-budget code, serving packages, model
+implementation, context length and LoRA rank. Farms of one model on different hardware layouts (v5p TP2,
+v6e TP8) therefore share it and are interchangeable. The hardware/runtime layout (accelerator, tensor
+parallelism, engines, batch size, memory use, sliding-window KV, engine env) is reported separately as
+``runtime``. It is stamped on every completion (``served_by``) so sampler differences between layouts can be
+corrected (importance sampling) instead of locking a run to one layout."""
 import hashlib
 import importlib.metadata
 import json
@@ -48,10 +56,12 @@ def identity(config, root, source, snapshot):
                     packages=packages, native_thinking=config.inference.native_thinking_budget,
                     model_impl=config.inference.model_impl,
                     max_model_length=config.inference.max_model_length,
-                    max_lora_rank=config.inference.max_lora_rank,
-                    # TP width changes reduction order, so TP2 and TP4 farms of one model never share a hash.
-                    tensor_parallel=config.inference.tp)
-    # Sliding-window KV is on by default in the installed tpu-inference; SKYRL_SWA_KV=0 turns it off, so
-    # the engine env decides it and it must be named here: farms with it on and off never share a hash.
-    contract['sliding_window_kv'] = (config.inference.engine_env or {}).get('SKYRL_SWA_KV', '1') != '0'
-    return dict(contract=contract, sha256=digest(contract))
+                    max_lora_rank=config.inference.max_lora_rank)
+    # Layout and performance settings: they change numerics (reduction order), not what a request asks for.
+    # Sliding-window KV is on by default in the installed tpu-inference; SKYRL_SWA_KV=0 turns it off.
+    runtime = dict(accelerator=config.accelerator, tensor_parallel=config.inference.tp,
+                   engines_per_host=config.engines_per_host, max_sequences=config.inference.max_sequences,
+                   memory_utilization=config.inference.memory_utilization,
+                   sliding_window_kv=(config.inference.engine_env or {}).get('SKYRL_SWA_KV', '1') != '0',
+                   engine_env_sha256=digest(config.inference.engine_env or {}))  # values may hold credentials
+    return dict(contract=contract, runtime=runtime, sha256=digest(contract), runtime_sha256=digest(runtime))

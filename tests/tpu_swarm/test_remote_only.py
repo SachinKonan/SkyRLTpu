@@ -624,6 +624,49 @@ def test_multi_borrower_learns_the_first_contract_and_rejects_others(tmp_path):
     multi_case(tmp_path, operation, external_pool_attestation=True)
 
 
+def test_a_run_that_learned_on_a_v5p_farm_leases_a_v6e_farm_of_the_same_model(tmp_path):
+    """Layouts are interchangeable: the hash both farms report is the generation-semantic one."""
+    from dataclasses import replace
+    from tests.tpu_swarm.test_hybrid_inference import config as hybrid_config
+    from tpu.swarm.ray_train.serving_identity import identity
+    cfg = hybrid_config(tmp_path)
+    source = tmp_path / 'source'
+    for name in ('tpu/vllm_tpu_server.py', 'tpu/thinking_budget/server.py'):
+        (source / name).parent.mkdir(parents=True, exist_ok=True)
+        (source / name).write_text('pass\n')
+    snapshot = tmp_path / ('a' * 40)
+    snapshot.mkdir()
+    for name in ('config.json', 'tokenizer.json', 'tokenizer_config.json', 'model.safetensors.index.json'):
+        (snapshot / name).write_text('{}')
+    site = tmp_path / 'envs/serving/lib/python3.12/site-packages'
+    for name in ('vllm', 'tpu_inference', 'transformers', 'jax', 'jaxlib'):
+        (site / f'{name}-1.0.dist-info').mkdir(parents=True)
+        (site / f'{name}-1.0.dist-info/METADATA').write_text(f'Name: {name}\nVersion: 1.0\n')
+        (site / f'{name}-1.0.dist-info/RECORD').write_text(f'{name}.py,,\n')
+        (site / (name + '.py')).write_text('original = True\n')
+    v5p = identity(replace(cfg, accelerator='tpu-v5p-32', inference=replace(cfg.inference, tp=2)), tmp_path, source, snapshot)
+    v6e = identity(replace(cfg, accelerator='tpu-v6e-8', inference=replace(cfg.inference, tp=8)), tmp_path, source, snapshot)
+    assert v5p['sha256'] == v6e['sha256'] and v5p['runtime'] != v6e['runtime']
+    (snapshot / 'model.safetensors.index.json').write_text('{"weight_map": {"other": "weights"}}')
+    other_weights = identity(cfg, tmp_path, source, snapshot)['sha256']
+    (snapshot / 'model.safetensors.index.json').write_text('{}')
+    (snapshot / 'tokenizer_config.json').write_text('{"chat_template": "other"}')
+    other_template = identity(cfg, tmp_path, source, snapshot)['sha256']
+    assert len({v5p['sha256'], other_weights, other_template}) == 3
+
+    async def operation(borrower, farm, archive, events):
+        farm.capabilities.update(farm1=v5p['sha256'], farm2=v6e['sha256'], farm3=other_weights)
+        await borrower.reserve()
+        await borrower.begin('phase-1', 'Qwen/Qwen3.5-27B', archive, expected_n=2)
+        await until(lambda: borrower.accepted == {v5p['sha256']})  # learned on the v5p farm
+        borrower.update_urls('Qwen/Qwen3.5-27B', ['http://farm1', 'http://farm2', 'http://farm3'])
+        await until(lambda: held(borrower) == ['http://farm1', 'http://farm2'])  # the v6e farm is leased too
+        await until(lambda: any(e == 'borrow_incompatible_runtime' and f['service'] == 'http://farm3'
+                                for e, f in events))
+        assert held(borrower) == ['http://farm1', 'http://farm2'] and borrower.accepted == {v5p['sha256']}
+    multi_case(tmp_path, operation, urls=('http://farm1',), external_pool_target_leases=3)
+
+
 def test_multi_borrower_configured_contract_list_accepts_both_hashes(tmp_path):
     async def operation(borrower, farm, archive, events):
         farm.capabilities.update(farm1='c' * 64, farm2='d' * 64)

@@ -258,8 +258,11 @@ class Engine:
         # stamp is diagnostic and never fails a generation.
         config = getattr(self, 'config', None)
         if config is not None and isinstance(result, dict):
+            identity = getattr(self, 'serving_identity', None) or {}
             served_by = dict(run_id=config.run_id, accelerator=config.accelerator,
-                             tp=config.inference.tp, engine=getattr(self, 'key', None))
+                             tp=config.inference.tp, engine=getattr(self, 'key', None),
+                             compatibility_sha256=identity.get('sha256'), runtime_sha256=identity.get('runtime_sha256'),
+                             runtime=identity.get('runtime'))
             for choice in result.get('choices') or []:
                 if isinstance(choice, dict):
                     choice['served_by'] = served_by
@@ -836,7 +839,8 @@ class Ingress:
         if self.borrower:
             self.borrower.required_contract = self.compatibility['sha256']
         return dict(compatibility_sha256=self.compatibility['sha256'],
-                    contract=self.compatibility['contract'], engines=len(self.engines),
+                    contract=self.compatibility['contract'], runtime=self.compatibility.get('runtime'),
+                    engines=len(self.engines),
                     max_sequences=self.config.inference.max_sequences,
                     prefix_caching=self.config.inference.prefix_caching,
                     max_loras=self.config.inference.max_loras)
