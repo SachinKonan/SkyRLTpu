@@ -132,3 +132,12 @@ def test_runner_skips_farms_shorter_than_the_run_context():
         return dict(ok=True, tunnel_ok=True, models=["m"], state="unleased", url=url,
                     capabilities=dict(contract=dict(max_model_length=length)))
     assert candidates(dict(farms=[farm("old", 22528), farm("new", 32768)]), config, 4) == ["new"]
+
+
+def test_v4_64_od_pool_takes_a_six_host_inference_farm_only():
+    from tpu.swarm.ray_train.config import Config
+    profile = Path(__file__).resolve().parents[2] / "tpu/swarm/ray_train/profiles/inference-farm-scaf-qwen38-central2-v464od-001.json"
+    doc = json.loads(profile.read_text())
+    assert Config.from_dict(doc).hosts == 6
+    with pytest.raises(ValueError, match="host count"):
+        Config.from_dict(dict(doc, hosts=5))
