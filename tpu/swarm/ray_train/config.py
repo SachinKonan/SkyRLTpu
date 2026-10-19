@@ -768,6 +768,13 @@ class Config:
                 env == "ac_inequalities" and self.client_env.get("TTD_PROBLEM_TYPE") in ("ac1", "ac2"))
 
     @property
+    def od_v4_64_subset(self):
+        """An inference-only farm on the on-demand v4-64 pool, which hands jobs workers 0-5 only
+        (SKYPILOT_HOST_SUBSET; 6-7 serve another application): one single-host engine per worker, so six
+        hosts need no cross-host slice. The pool is on-demand and not a queued resource."""
+        return self.accelerator == "tpu-v4-64" and self.hosts == 6 and self.inference_only
+
+    @property
     def native_thinking_format(self):
         return 'qwen3.5-27b' if self.model_preset == 'qwen3.8-27b' else self.model_preset
 
@@ -1252,10 +1259,7 @@ class Config:
                 raise ValueError("assigned v5p trainer requires four local chips per process and matching host bounds")
         elif self.physical_node:
             raise ValueError("physical_node requires assigned_host_ips")
-        # The OD v4-64 pool hands jobs workers 0-5 only (SKYPILOT_HOST_SUBSET; 6-7 serve another application):
-        # an inference-only farm runs one single-host engine per worker, so six hosts need no cross-host slice.
-        v4_64_host_subset = self.accelerator == "tpu-v4-64" and self.hosts == 6 and self.inference_only
-        if not self.assigned_host_ips and expected.get(self.accelerator) != self.hosts and not v4_64_host_subset:
+        if not self.assigned_host_ips and expected.get(self.accelerator) != self.hosts and not self.od_v4_64_subset:
             raise ValueError("accelerator/host count mismatch")
         if self.zone and self.zone not in ACCELERATOR_ZONES.get(self.accelerator, ()):
             raise ValueError(f"zone {self.zone!r} is not a known zone for {self.accelerator}")

@@ -122,8 +122,9 @@ def build(profile, output, *, _executor_only=False):
     # Each archive is immutable and has no shared-tree credentials or unrelated
     # agent edits. Existing training code comes from the SHA-pinned base bundle.
     task = dict(name=config.run_id, resources=dict(cloud="gcp", zone=zone,
-        accelerators=config.accelerator, accelerator_args=dict(gcp_queued_resource=True, runtime_version=runtime),
-        use_spot=True, disk_size=300 if is_v4 else 150,
+        accelerators=config.accelerator,
+        accelerator_args=dict(gcp_queued_resource=not config.od_v4_64_subset, runtime_version=runtime),
+        use_spot=not config.od_v4_64_subset, disk_size=300 if is_v4 else 150,
         job_recovery=dict(strategy="FAILOVER", max_restarts_on_errors=config.max_restarts_on_errors)),
         envs=dict(RAY_TRAIN_CODE=uri, RAY_TRAIN_CODE_SHA256=digest),
         run=runtime_start(config, source))

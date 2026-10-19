@@ -140,4 +140,13 @@ def test_v4_64_od_pool_takes_a_six_host_inference_farm_only():
     doc = json.loads(profile.read_text())
     assert Config.from_dict(doc).hosts == 6
     with pytest.raises(ValueError, match="host count"):
-        Config.from_dict(dict(doc, hosts=5))
+        Config.from_dict(dict(doc, hosts=5, inference_only_ranks=list(range(5))))
+
+
+def test_v4_64_od_farm_job_matches_the_on_demand_pool(tmp_path):
+    import yaml
+    from tpu.swarm.ray_train.build import build
+    profile = Path(__file__).resolve().parents[2] / "tpu/swarm/ray_train/profiles/inference-farm-scaf-qwen38-central2-v464od-001.json"
+    _, _, path = build(profile, tmp_path)
+    resources = yaml.safe_load(path.read_text())["resources"]
+    assert (resources["use_spot"], resources["accelerator_args"]["gcp_queued_resource"], resources["disk_size"]) == (False, False, 300)
