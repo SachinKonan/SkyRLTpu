@@ -8,6 +8,10 @@ local_farms.py tunnels, holds the run reservation like controller.py, then
 runs the seeded bootstrap and the frozen client against it. The client
 samples the base model straight from the ingress (TTD_FROZEN_BASE_URL) and
 grades every candidate on the leased farms (no local grading pool).
+
+``--driver simpletes`` runs the inference-only SimpleTES baseline instead of the
+bootstrap + frozen client, on the same ingress, leases and grading transport
+(tpu.simpletes.local_driver, imported from ``--simpletes-root``).
 """
 import argparse
 import json
@@ -52,6 +56,10 @@ def child_environment(config, root, args, gcs):
                # No systemd grading pool on this host: every grade goes to a farm.
                SKYRL_GRADING_LOCAL_SLOTS='0', SKYRL_GRADING_LOCAL_HOSTS='0',
                PYTHONPATH=f'{args.package}:{args.source}:{args.source / "tpu"}:{args.source / "third_party/discover"}')
+    if args.driver == 'simpletes':
+        # Last on the path: `tpu` is a namespace package, so only tpu.simpletes (and the vendored
+        # SimpleTES next to it) come from this tree; tpu.science/tpu.swarm stay the run's package.
+        env['PYTHONPATH'] += f':{args.simpletes_root}'
     env.pop('TINKER_BASE_URL', None)
     # workload_environment drops ambient TTD_* settings; eager steps are a per-run choice of the
     # launcher (client-only, outside the bootstrap contract), so pass it through explicitly.
@@ -277,7 +285,8 @@ class Run:
                 env = (proc / 'environ').read_bytes().split(b'\0')
             except OSError:
                 continue
-            if not any(a.endswith((b'run_ttd_ensemble.py', b'seed_bootstrap')) for a in args):
+            if not any(a.endswith((b'run_ttd_ensemble.py', b'seed_bootstrap', b'tpu.simpletes.local_driver'))
+                       for a in args):
                 continue
             if f'EXPERIMENT_NAME={self.config.run_id}'.encode() not in env:
                 continue
@@ -298,8 +307,16 @@ class Run:
             threading.Thread(target=self.push_farms, name='farms', daemon=True).start()
             self.admit()
             threading.Thread(target=self.heartbeat, name='heartbeat', daemon=True).start()
-            self.bootstrap()
-            if not self.stopping.is_set():
+            if self.args.driver == 'simpletes':
+                if not self.stopping.is_set():
+                    threading.Thread(target=self.watch_progress, name='progress', daemon=True).start()
+                    self.execute('simpletes', [str(self.args.python), '-m', 'tpu.simpletes.local_driver',
+                                               '--config', str(self.args.config),
+                                               '--spec', str(self.args.simpletes_spec),
+                                               '--snapshot', str(self.args.snapshot)], self.args.package)
+            else:
+                self.bootstrap()
+            if self.args.driver == 'ttd' and not self.stopping.is_set():
                 threading.Thread(target=self.watch_progress, name='progress', daemon=True).start()
                 self.execute('client', [str(self.args.python), str(self.args.source / 'tpu/run_ttd_ensemble.py')],
                              self.args.source)
@@ -341,7 +358,14 @@ def main():
                              'for the local ingress only)')
     parser.add_argument('--stall-seconds', type=float, default=3 * 3600,
                         help='Stop the client after this long holding a ready farm with no generation or grading')
-    sys.exit(Run(parser.parse_args()).main())
+    parser.add_argument('--driver', choices=('ttd', 'simpletes'), default='ttd',
+                        help='ttd: bootstrap + frozen RQ4 client; simpletes: the SimpleTES baseline')
+    parser.add_argument('--simpletes-spec', type=Path, help='SimpleTES spec JSON (--driver simpletes)')
+    parser.add_argument('--simpletes-root', type=Path, help='Tree providing tpu/simpletes and third_party/simpletes')
+    args = parser.parse_args()
+    if args.driver == 'simpletes' and not (args.simpletes_spec and args.simpletes_root):
+        parser.error('--driver simpletes needs --simpletes-spec and --simpletes-root')
+    sys.exit(Run(args).main())
 
 
 if __name__ == '__main__':

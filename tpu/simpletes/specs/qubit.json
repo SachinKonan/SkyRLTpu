@@ -1,0 +1,13 @@
+{
+ "task": "qubit",
+ "num_chains": 32,
+ "k_candidates": 16,
+ "max_generations": 12800,
+ "eval_concurrency": 512,
+ "selector": "rpucg",
+ "num_inspirations": 5,
+ "reflection": true,
+ "log_interval": 512,
+ "init_eval_repeats": 1,
+ "min_thinking_tokens": 4096
+}
