@@ -17,7 +17,8 @@ TEMPLATE = {'v5p32': 'inference-farm-rq4-muse-east5a-v5p32-004.json', 'v6e8': 'i
 SERVING = {
     ('muse', 'v5p32'): dict(tp=2, max_sequences=64, memory_utilization=0.85),
     ('muse', 'v6e8'): dict(tp=8, max_sequences=128, memory_utilization=0.85, batched_rpa_kernel=False),
-    ('qwen38', 'v5p32'): dict(tp=2, max_sequences=64, memory_utilization=0.85, ragged_conv1d=True),
+    # TP2 is not validated for Qwen3.8 on SkyPilot v5p-32; use the RQ4 Qwen3.8 v5p-32 layout (TP4, 4 engines).
+    ('qwen38', 'v5p32'): dict(tp=4, max_sequences=64, memory_utilization=0.85, ragged_conv1d=True),
     ('qwen38', 'v6e8'): dict(tp=4, max_sequences=32, memory_utilization=0.85, ragged_conv1d=True),
 }
 MODEL = {
