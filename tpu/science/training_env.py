@@ -142,7 +142,25 @@ def task_prompt(task, *, include_starter=True, environment=None):
                       'Only their total added SWAPs S determines reward: max(1e-6,22714/(22714+S)). '
                       'Lower SWAPs and higher reward are better. All 24 cases must pass. '
                       'Willow and Heron are not evaluated in this experiment.\n\n') + prompt
+    if environment.get('SCIENCE_PROMPT_STYLE', 'legacy') == 'standard':
+        prompt = PERSONA[task] + '\n\n' + prompt
     return prompt
+
+
+# SCIENCE_PROMPT_STYLE=standard: the Erdős/AC1 (TTT-Discover) prompt structure for the science tasks:
+# a persona line first, the parent framed as "the last code we ran", and the same closing nudge.
+PERSONA = {
+    'placement': 'You are an expert in VLSI physical design, macro placement, and numerical optimization.',
+    'routing': 'You are an expert in quantum compilation, qubit routing, and graph algorithms.',
+}
+OPTIMIZING = {
+    'placement': 'You are iteratively optimizing the mean proxy cost (lower is better).',
+    'routing': 'You are iteratively optimizing the SWAP-reduction score (higher is better).',
+}
+NUDGE = ('Reason about how you could further improve this program.\n'
+         'Ideally, try to do something different than the above algorithm. Could be using different algorithmic '
+         'ideas, adjusting your heuristics, adjusting / sweeping your hyperparemeters, etc. \n'
+         'Unless you make a meaningful improvement, you will not be rewarded.')
 
 
 def candidate_prompt(task, code='', feedback='', *, repair=False):
@@ -154,8 +172,12 @@ def candidate_prompt(task, code='', feedback='', *, repair=False):
         if os.environ.get('SCIENCE_FEEDBACK_FORMAT', 'json') == 'csv':
             from .feedback import compact
             feedback = compact(task, feedback)
-        prompt += ('\nPrevious candidate:\n```python\n' + code + '\n```\n'
-                   + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n' + instruction + '\n')
+        if os.environ.get('SCIENCE_PROMPT_STYLE', 'legacy') == 'standard' and not repair:
+            prompt += ('\n' + OPTIMIZING[task] + '\nHere is the last code we ran:\n```python\n' + code + '\n```\n'
+                       + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n\n' + NUDGE + '\n')
+        else:
+            prompt += ('\nPrevious candidate:\n```python\n' + code + '\n```\n'
+                       + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n' + instruction + '\n')
     return prompt
 
 

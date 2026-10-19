@@ -26,11 +26,13 @@ MARKERS = {"qwen3.5-27b": ("<think>", "</think>"),
 # changes to these methods. To print replacement hashes from the repo root:
 # python -m tpu.swarm.ray_train.thinking_budget.contract --print-method-hashes
 METHODS = {
+    '_think_budget': '0cdaefa4fd2e865f87f9e872fafef327a43a5dfc1cfa7c8518f276e17e1db134',
+    '_output_limit': 'ed8c02e9de1191716906fe53c74c5ffb91c8daca4b24c68d127d12bebedc5833',
     '_sample': 'cb859a2d12d53fbe1b91c2460e77f4e38bf4e59b1f08536dfcf29ac9d7664505',
     '__call__': '8b5173e56b4fd5e31a5fc291136141d16ff0f4a18e12e0ef5e844bc94e28593c',
-    '_two_phase': '5fa022a0fa936abde872d87320136c0b024336465979bbb987ebb43ddc275f9c',
-    'sample_group': 'f3975e8e7cad291b77615b6091ac52e454342f0f476b43c3f2a5553626188d34',
-    '_native_group': '1dffc1ca6a9350034c9ec36c51dbd3a896a95bafeb07cd09ce566d2c83100b00',
+    '_two_phase': '749cf18a5eabb14b3b97812a529b3f0597bb91dc8aa7769e2f6243c2ddc430ca',
+    'sample_group': 'dc9462b3cecc6713178e561ac34fa80973dd0f32bf5b0d9411c60c500cb54ef9',
+    '_native_group': '0560f04c454a965fb4a92c4db17e3305381da6bcb249a5b3698adea318edd92c',
 }
 CONSTANTS = {"THINK_CLOSE", "THINK_CLOSE_MARKER", "ANSWER_CUE"}
 

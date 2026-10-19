@@ -310,5 +310,44 @@ def test_extracted_two_phase_algorithm_is_unchanged_from_discover_base():
                    and n.name == 'QwenTwoPhaseTokenCompleter')
         fn = next(n for n in cls.body if isinstance(n, ast.AsyncFunctionDef) and n.name == method)
         return [ast.dump(n, include_attributes=False) for n in fn.body[skip:]]
+    # The only intended change: budgets go through _think_budget/_output_limit (TTD_FIXED_THINK_TOKENS).
+    for before, after in (('self.phase1_max_tokens - prompt_length', 'self._think_budget(prompt_length)'),
+                          ('self.context_window - prompt_length - len(t) - len(prefill) - self.context_buffer',
+                           'self._output_limit(prompt_length) - len(t) - len(prefill)'),
+                          ('self.context_window - prompt_length - len(tokens) - self.context_buffer',
+                           'self._output_limit(prompt_length) - len(tokens)')):
+        assert before in old
+        old = old.replace(before, after)
     current = (ROOT/'third_party/discover'/path).read_text()
     assert body(old, '__call__', 2) == body(current, '_two_phase', 1)
+
+
+@pytest.mark.parametrize('model', ['qwen3.5-27b', 'gemma4-31b', 'muse-glimmer-30b'])
+def test_fixed_thinking_budget_ignores_prompt_length(existing_completers, monkeypatch, model):
+    cls = existing_completers[model]; p = cls()
+    p.phase1_max_tokens = 16384; p.context_window = 32768; p.context_buffer = 50
+    p.min_think_tokens = 0; p.temperature = 1
+    p.tokenizer = SimpleNamespace(encode=lambda *a, **kw: [1, 2, 3])
+    monkeypatch.setenv('TTD_FIXED_THINK_TOKENS', '12000')
+    monkeypatch.setenv('TTD_FIXED_TOTAL_TOKENS', '17000')
+    seen = []
+    class Sent(Exception):
+        pass
+    async def sample_async(**kwargs):
+        seen.append(kwargs['sampling_params'])
+        raise Sent()
+    p.sampling_client = SimpleNamespace(sample_async=sample_async)
+    for length in (2000, 9000, 15700):
+        assert p._think_budget(length) == 12000 and p._output_limit(length) == 17000
+        with pytest.raises(Sent):
+            asyncio.run(p._native_group(SimpleNamespace(length=length), [], 1))
+    assert [(s.thinking_token_budget, s.max_tokens) for s in seen] == [(12000, 17000)] * 3
+    with pytest.raises(ValueError, match='leaves no room'):
+        p._think_budget(15800)
+
+
+def test_without_fixed_budget_the_legacy_budget_is_unchanged(existing_completers, monkeypatch):
+    p = existing_completers['qwen3.5-27b']()
+    p.phase1_max_tokens = 16384; p.context_window = 22528; p.context_buffer = 50
+    monkeypatch.delenv('TTD_FIXED_THINK_TOKENS', raising=False)
+    assert p._think_budget(4000) == 12384 and p._output_limit(4000) == 22528 - 4000 - 50
