@@ -46,7 +46,11 @@ def task_prompt(task, *, include_starter=True, environment=None):
     name = 'prompts/rendered/routing.txt' if task == 'routing' else 'prompts/placement-jax-v6e.txt'
     cpu = task == 'placement' and environment.get('SCIENCE_PLACEMENT_BACKEND', 'tpu') == 'cpu'
     if cpu:
-        name = ('prompts/placement-fast-proxy-cpu-ibm17-v2.txt'
+        version = environment.get('SCIENCE_PLACEMENT_PROMPT', 'ibm17-v2')
+        if version not in ('ibm17-v2', 'ibm17-v3'):
+            raise ValueError('SCIENCE_PLACEMENT_PROMPT must be ibm17-v2 or ibm17-v3')
+        # v3 drops v2's repeated reward, feedback-field, thread/memory and time-budget sentences.
+        name = (f'prompts/placement-fast-proxy-cpu-{version}.txt'
                 if environment.get('SCIENCE_PLACEMENT_HELPER', 'none') == 'fast_proxy_v1'
                 else 'prompts/placement-jax-cpu.txt')
     prompt = (Path(__file__).parent / name).read_text()
@@ -147,6 +151,9 @@ def candidate_prompt(task, code='', feedback='', *, repair=False):
     if code:
         instruction = ('Repair this invalid program using the grading error. First make it valid; '
                        'return a complete replacement program.' if repair else 'Improve this candidate.')
+        if os.environ.get('SCIENCE_FEEDBACK_FORMAT', 'json') == 'csv':
+            from .feedback import compact
+            feedback = compact(task, feedback)
         prompt += ('\nPrevious candidate:\n```python\n' + code + '\n```\n'
                    + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n' + instruction + '\n')
     return prompt

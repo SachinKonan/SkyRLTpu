@@ -125,6 +125,39 @@ def observation(task, result):
     return encoded
 
 
+PLACEMENT_COLUMNS = ('proxy_cost', 'wirelength_cost', 'density_cost', 'congestion_cost',
+                     'candidate_wall_seconds')
+
+
+def compact(task, encoded):
+    """Render stored placement feedback (observation()'s JSON) as a short table for a prompt.
+
+    Column names appear once instead of per case; numbers keep 4 significant figures. Columns that are
+    constant for a valid program (valid, candidate limit, overlaps) or not useful to the model (grading
+    time) are dropped; an invalid case keeps its error. Anything that is not placement feedback, or not
+    JSON, is returned unchanged.
+    """
+    if task != 'placement':
+        return encoded
+    try:
+        value = json.loads(encoded)
+        metrics = value['metrics']
+        cases = metrics['cases']
+    except (ValueError, KeyError, TypeError):
+        return encoded
+    number = lambda v: format(v, '.4g') if isinstance(v, (int, float)) and not isinstance(v, bool) else ''
+    head = [f"reward={number(value.get('reward'))}", f"message={value.get('message', '')}"]
+    head += [f'{k}={number(v) if isinstance(v, float) else v}' for k, v in metrics.items() if k != 'cases']
+    lines = [' '.join(head), 'case,' + ','.join(PLACEMENT_COLUMNS)]
+    for row in cases:
+        lines.append(row['case'] + ',' + ','.join(number(row.get(k)) for k in PLACEMENT_COLUMNS))
+    errors = [f"{row['case']}: {row['message']}" for row in cases if not row.get('valid', True) and row.get('message')]
+    if errors:
+        lines.append('invalid cases:')
+        lines += errors
+    return '\n'.join(lines)
+
+
 def diagnostic_message(task, result):
     if task == 'placement' and result['correctness'] != 1 and 'cases' in result['metrics']:
         return '; '.join(f"{row['metrics'].get('case')}: {case_error(row)}"
