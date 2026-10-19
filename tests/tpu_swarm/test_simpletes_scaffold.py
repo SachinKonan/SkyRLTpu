@@ -122,3 +122,13 @@ def test_specs_match_the_agreed_design():
         assert (spec["num_chains"], spec["k_candidates"], spec["max_generations"]) == (16, 32, 15 * 512)
         assert (spec["num_inspirations"], spec["eager"], spec["prompt"]) == (3, 0.95, "scaffold")
         assert ("bootstrap_from" in spec) == (spec["start"] == "boot")
+
+
+def test_runner_skips_farms_shorter_than_the_run_context():
+    from tpu.swarm.ray_train.local_notrain import candidates
+    config = SimpleNamespace(model="m", run_id="r", client_context_window=32768)
+
+    def farm(url, length):
+        return dict(ok=True, tunnel_ok=True, models=["m"], state="unleased", url=url,
+                    capabilities=dict(contract=dict(max_model_length=length)))
+    assert candidates(dict(farms=[farm("old", 22528), farm("new", 32768)]), config, 4) == ["new"]

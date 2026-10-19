@@ -34,11 +34,14 @@ WORK_EVENTS = (b'"borrow_generated"', b'"grading_dispatched"', b'"grading_comple
 
 
 def candidates(registry, config, limit):
-    """Farms serving this model: the ones this run holds first, then free ones."""
+    """Farms serving this model with room for the run's context: the ones this run holds first, then free ones."""
     own, free = [], []
     for farm in registry.get('farms', []):
         if not (farm.get('ok') and farm.get('tunnel_ok') and config.model in (farm.get('models') or [])):
             continue
+        contract = (farm.get('capabilities') or {}).get('contract') or {}
+        if contract.get('max_model_length', config.client_context_window) < config.client_context_window:
+            continue  # a 32k request on a shorter farm is rejected (400) and fails the run
         owner = (farm.get('owner_run') or '').split(':', 1)[0]
         if owner == config.run_id:
             own.append(farm['url'])
