@@ -53,7 +53,7 @@
     "external_pool_lease_seconds": 300,
     "external_pool_heartbeat_seconds": 30,
     "external_pool_health_grace_seconds": 90,
-    "external_pool_target_leases": 2,
+    "external_pool_target_leases": 1,
     "external_pool_candidate_limit": 16,
     "external_pool_required_compatibility": [],
     "external_pool_queue_alert_seconds": 60,

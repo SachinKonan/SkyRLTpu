@@ -19,6 +19,7 @@ ROOT = "/scratch/gpfs/ZHUANGL/sk7524/rq4-local/scaffold"
 TEMPLATE = "rq4-notrain-local-muse-{problem}-s1-20261007.json"
 CONTEXT, THINK, TOTAL, STEPS, CHAINS, K = 32768, 12000, 17000, 15, 16, 32
 EAGER = 0.95
+TARGET_LEASES = 1  # farms per run: 8 Muse v5p-32 farms for 8 Muse runs (2026-10-19 capacity)
 # Groups per engine: about one engine's sequence slots (Muse v6e TP8 128, Qwen3.8 v6e TP4 32 + v5p TP2 64).
 MODELS = {
     "muse": dict(model_preset="muse-glimmer-30b", family="muse", requests_per_engine=4,
@@ -48,6 +49,7 @@ def profile(problem, arm, start, model, seed, port, bundle, sha256):
     doc["trainer"] = dict(doc["trainer"], sequence_length=CONTEXT, max_target_length=CONTEXT,
                           token_budget=CONTEXT, seq_buckets=str(CONTEXT))
     doc["inference"] = dict(doc["inference"], max_model_length=CONTEXT, external_pool_max_concurrent_requests=16,
+                            external_pool_target_leases=TARGET_LEASES,
                             external_pool_requests_per_engine=spec["requests_per_engine"])
     doc["cache"] = dict(doc["cache"], hf=spec["hf"])
     doc["client_env"] = dict(doc["client_env"], NUM_EPOCHS=str(STEPS), GROUPS_PER_BATCH=str(CHAINS),
