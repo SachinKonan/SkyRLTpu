@@ -188,8 +188,10 @@ class Arm:
                         metrics=node.metrics, parents=list(node.parent_ids), reflection=node.reflection,
                         placeholder=is_placeholder(node), code=strip_markers(node.code))
 
-        committed = [state(db[nid], chain) for chain, ids in selector.chain_history.items()
-                     for nid in ids if nid in db]
+        # Before the first select the chains are empty: round 0 records the roots this arm will assign.
+        history = (selector.chain_history if any(selector.chain_history.values())
+                   else {chain: [nid] for chain, nid in enumerate(self.root_ids)})
+        committed = [state(db[nid], chain) for chain, ids in history.items() for nid in ids if nid in db]
         out = self.folder / "steps"
         out.mkdir(exist_ok=True)
         path = out / f"simpletes_step_{completed:06d}.json"
