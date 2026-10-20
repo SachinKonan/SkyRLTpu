@@ -104,6 +104,25 @@ def guard_completion(engine) -> None:
     engine._is_run_complete = is_run_complete
 
 
+def keep_previous_checkpoint(manager) -> None:
+    """Delete the previous checkpoint only after the new one is written.
+
+    Upstream removes the previous db_state_* before writing the next. A kill during that write
+    (a round ends at a log_interval multiple, exactly when a step-boundary restart lands) left
+    only a partial checkpoint, so the restart found nothing consistent and started over.
+    """
+    original = manager.snapshot
+
+    async def snapshot(*args, **kwargs):
+        previous, manager._last_checkpoint_path = manager._last_checkpoint_path, None
+        await original(*args, **kwargs)
+        if previous and previous != manager._last_checkpoint_path and os.path.isdir(previous):
+            import shutil
+            shutil.rmtree(previous, ignore_errors=True)
+
+    manager.snapshot = snapshot
+
+
 def reconcile_attempts(engine, k: int) -> tuple[int, int]:
     """Count only finalized batches after a resume.
 
@@ -265,6 +284,7 @@ async def search(folder: Path, spec: dict, task, evaluator, backend, caps, model
     generator_module.create_llm_client = lambda _config: backend
     resume = newest_checkpoint(folder / "checkpoints")
     engine = SimpleTESEngine(engine_config, resume_path=resume)
+    keep_previous_checkpoint(engine.checkpoint_manager)
     engine.worker = evaluator
 
     async def reflect(messages, temperature=0.7, max_tokens=None):

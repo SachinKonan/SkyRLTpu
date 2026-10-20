@@ -150,3 +150,25 @@ def test_v4_64_od_farm_job_matches_the_on_demand_pool(tmp_path):
     _, _, path = build(profile, tmp_path)
     resources = yaml.safe_load(path.read_text())["resources"]
     assert (resources["use_spot"], resources["accelerator_args"]["gcp_queued_resource"], resources["disk_size"]) == (False, False, 300)
+
+
+def test_previous_checkpoint_survives_until_the_next_is_written(tmp_path):
+    from tpu.simpletes.driver import keep_previous_checkpoint
+    old = tmp_path / "db_state_old"
+    old.mkdir()
+    seen = []
+
+    class Manager:
+        _last_checkpoint_path = str(old)
+
+        async def snapshot(self):
+            # Upstream would rmtree _last_checkpoint_path here; it must already be cleared.
+            seen.append((self._last_checkpoint_path, old.exists()))
+            (tmp_path / "db_state_new").mkdir()
+            self._last_checkpoint_path = str(tmp_path / "db_state_new")
+
+    manager = Manager()
+    manager.snapshot = Manager.snapshot.__get__(manager)
+    keep_previous_checkpoint(manager)
+    asyncio.run(manager.snapshot())
+    assert seen == [(None, True)] and not old.exists() and (tmp_path / "db_state_new").exists()
