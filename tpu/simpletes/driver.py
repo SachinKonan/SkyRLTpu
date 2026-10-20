@@ -123,6 +123,26 @@ def keep_previous_checkpoint(manager) -> None:
     manager.snapshot = snapshot
 
 
+def extend_budget(selector, max_generations: int) -> bool:
+    """Raise a resumed run's per-chain budgets to the spec's total (e.g. 15 -> 25 rounds).
+
+    The checkpointed policy restores the chain budgets of the run that wrote it, so a larger
+    max_generations in the spec alone would not reopen chains that already spent their budget.
+    """
+    from simpletes.policies.base import compute_chain_budgets
+    with selector._lock:
+        if max_generations <= selector.max_generations:
+            return False
+        selector.max_generations = max_generations
+        selector.chain_gen_budget = compute_chain_budgets(max_generations, selector.num_chains)
+        selector.prompt_budget = {i: (b + selector.k - 1) // selector.k if b > 0 else 0
+                                  for i, b in selector.chain_gen_budget.items()}
+        for i in range(selector.num_chains):
+            if selector.chain_prompt_count.get(i, 0) < selector.prompt_budget[i] and i not in selector._ready_chains:
+                selector._ready_chains.append(i)
+        return True
+
+
 def reconcile_attempts(engine, k: int) -> tuple[int, int]:
     """Count only finalized batches after a resume.
 
@@ -309,8 +329,10 @@ async def search(folder: Path, spec: dict, task, evaluator, backend, caps, model
         engine.load_checkpoint(resume)
         engine._failure_records = TrimmedFailures(map(TrimmedFailures.trim, engine._failure_records))
         dispatched, finalized = reconcile_attempts(engine, k)
+        extended = extend_budget(engine.selector, engine_config.max_generations)
         record = dict(resumed_at=time.time(), checkpoint=resume, completed=engine.completed_evaluations,
-                      dispatched=dispatched, finalized=finalized, redispatched=dispatched - finalized)
+                      dispatched=dispatched, finalized=finalized, redispatched=dispatched - finalized,
+                      budget=engine_config.max_generations, budget_extended=extended)
         with (folder / "resumes.jsonl").open("a") as stream:
             stream.write(json.dumps(record) + "\n")
         event("simpletes_resumed", run_id=run_id, **record)

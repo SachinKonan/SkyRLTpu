@@ -172,3 +172,17 @@ def test_previous_checkpoint_survives_until_the_next_is_written(tmp_path):
     keep_previous_checkpoint(manager)
     asyncio.run(manager.snapshot())
     assert seen == [(None, True)] and not old.exists() and (tmp_path / "db_state_new").exists()
+
+
+def test_resumed_run_extends_to_the_larger_budget():
+    from tpu.simpletes.compat import import_simpletes
+    import_simpletes()
+    from simpletes.policies.rpucg import RpucgPolicy
+    from tpu.simpletes.driver import extend_budget
+    policy = RpucgPolicy(num_chains=2, max_generations=128, k=32)   # 2 batches per chain
+    for chain in (0, 1):
+        policy.chain_prompt_count[chain] = 2
+        policy._ready_chains.remove(chain)
+    assert extend_budget(policy, 256)                                # 25-step style extension: 4 per chain
+    assert policy.prompt_budget == {0: 4, 1: 4} and sorted(policy._ready_chains) == [0, 1]
+    assert not extend_budget(policy, 256)

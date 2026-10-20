@@ -5,7 +5,7 @@
  "seed": 1,
  "num_chains": 16,
  "k_candidates": 32,
- "max_generations": 7680,
+ "max_generations": 12800,
  "eval_concurrency": 512,
  "selector": "rpucg",
  "num_inspirations": 3,
