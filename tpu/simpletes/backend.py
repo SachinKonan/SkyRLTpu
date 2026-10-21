@@ -27,8 +27,8 @@ SEPARATORS = {"qwen": "</think>", "gemma": "<channel|>"}
 # 409/429: the remote-only ingress is waiting for a farm (the frozen client retries these too).
 RETRYABLE = (409, 429, 500, 502, 503, 504)
 MIN_AUX_THINKING = 1024
-# The SimpleTES batch (gen_id) a generate call serves; set by the scaffold arm, logged with each call.
-GEN_ID: contextvars.ContextVar = contextvars.ContextVar("simpletes_gen_id", default=None)
+# The SimpleTES batch a generate call serves (the scaffold arm's dispatch uid), logged with each call.
+BATCH: contextvars.ContextVar = contextvars.ContextVar("simpletes_batch", default=None)
 # Thinking budget 0 + this transition: the server closes the thinking block at once without the
 # "final complete program" cue, so an auxiliary call (reflection) answers in prose.
 CLOSE_THINKING = {"qwen": "\n</think>\n\n", "gemma": "<channel|>",
@@ -199,7 +199,7 @@ class NativeThinkingBackend:
         start = time.time()
         budget = self.caps.budget(len(ids), self.transition_tokens)
         if budget is None:
-            self._log(kind="generate", time=start, n=n, gen_id=GEN_ID.get(), prompt_tokens=len(ids), overflow=True)
+            self._log(kind="generate", time=start, n=n, batch=BATCH.get(), prompt_tokens=len(ids), overflow=True)
             return [self._result(text="", prompt=prompt if track_io else None,
                                  token_usage=dict(prompt_tokens=len(ids), completion_tokens=0, total_tokens=len(ids)),
                                  error_reason="prompt_overflow") for _ in range(n)]
@@ -237,7 +237,7 @@ class NativeThinkingBackend:
                                         prompt=prompt if track_io else None,
                                         raw_output=raw_text(message) if track_io else None,
                                         token_usage=usage))
-        self._log(kind="generate", time=start, seconds=time.time() - start, n=n, gen_id=GEN_ID.get(),
+        self._log(kind="generate", time=start, seconds=time.time() - start, n=n, batch=BATCH.get(),
                   prompt_tokens=len(ids), thinking_budget=thinking, max_tokens=total, choices=usage_log)
         return results
 

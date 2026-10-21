@@ -16,12 +16,14 @@ Changes to upstream SimpleTES, each matching our TTT-Discover arm:
   late candidates still enter the archive;
 * snapshots -- ``steps/simpletes_step_NNNNNN.json`` when every chain has finished
   round N (one round = C x K samples = one step of our arm);
-* sample log -- ``dispatch.jsonl`` lists every batch in dispatch order, and each generate call
-  in ``llm_calls.jsonl`` carries its batch's gen_id, so every issued sample (graded or not)
-  can be tied to its batch for the sample-axis metrics (``scaffold_exp/metrics.py``).
+* sample log -- ``samples.jsonl`` follows every issued sample: each dispatched batch gets a
+  uid (gen_ids repeat after a resume), then its generate result (samples without code), a
+  terminal generation failure, and one row per graded candidate; ``llm_calls.jsonl`` rows
+  carry the uid too. ``scaffold_exp/metrics.py`` builds the per-step outcomes from it.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
@@ -67,6 +69,7 @@ class Arm:
         self.text = task_text(task, evaluator, root)
         self.root_ids: list[str] = []
         self.rounds_written = -1
+        self.batches: dict[int, str] = {}     # gen_id -> uid of its dispatch in this process
 
     # ---- constructions -------------------------------------------------------------
     def construction_path(self, node_id: str) -> str:
@@ -176,11 +179,32 @@ class Arm:
             path = self.construction_path(node.id)
             if not os.path.exists(path):
                 write_payload(path, captured_construction_payload)
+        self.record_graded(node)
         await original(node, captured_construction_payload)
 
-    def record_dispatch(self, gen_id: int, chain: int, k: int):
-        with (self.folder / "dispatch.jsonl").open("a") as stream:
-            stream.write(json.dumps(dict(gen_id=gen_id, chain=chain, k=k, time=time.time())) + "\n")
+    # ---- sample log ----------------------------------------------------------------
+    def log_sample_event(self, event: str, **fields):
+        with (self.folder / "samples.jsonl").open("a") as stream:
+            stream.write(json.dumps(dict(event=event, time=time.time(), **fields)) + "\n")
+
+    def record_dispatch(self, gen_id: int, chain: int, k: int) -> str:
+        uid = uuid.uuid4().hex
+        self.batches[gen_id] = uid
+        need = math.ceil(float(self.spec.get("eager", 1.0)) * k)
+        self.log_sample_event("dispatch", batch=uid, gen_id=gen_id, chain=chain, k=k, finalize_at=need)
+        return uid
+
+    def record_generated(self, gen_id: int, k: int, results):
+        self.log_sample_event("generated", batch=self.batches.get(gen_id), k=k, returned=len(results),
+                              no_code=sum(1 for r in results if not r.success) + k - len(results))
+
+    def record_graded(self, node, error: str | None = None):
+        metrics = node.metrics or {}
+        valid = error is None and bool(metrics.get("validity"))
+        message = error or str(metrics.get("error") or "")
+        kind = "valid" if valid else "invalid" if message.startswith("Invalid solution") else "exec_failed"
+        self.log_sample_event("graded", batch=self.batches.get(node.gen_id), node=node.id, outcome=kind,
+                              score=float(node.score) if valid else None)
 
     # ---- per-round snapshots -------------------------------------------------------
     def write_round(self, completed: int):
@@ -284,16 +308,30 @@ def install(engine, task, evaluator, root, spec: dict, folder: Path, seed: int) 
         arm.record_dispatch(gen_id, chain_idx, k)
         return gen_id, tasks
     engine._prepare_generation_tasks = prepare_and_record
-    generate = engine.generator.generate
+    generate, invalid = engine.generator.generate, engine._handle_invalid_evaluation
 
     async def generate_for_batch(task, *args, **kwargs):
-        from .backend import GEN_ID
-        token = GEN_ID.set(task.gen_id)
+        from .backend import BATCH
+        token = BATCH.set(arm.batches.get(task.gen_id))
         try:
-            return await generate(task, *args, **kwargs)
+            results = await generate(task, *args, **kwargs)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # The engine finalizes the batch as failed: its k samples are spent.
+            arm.log_sample_event("generation_failed", batch=arm.batches.get(task.gen_id), k=task.k,
+                                 error=f"{type(exc).__name__}: {exc}"[:300])
+            raise
         finally:
-            GEN_ID.reset(token)
+            BATCH.reset(token)
+        arm.record_generated(task.gen_id, task.k, results)
+        return results
     engine.generator.generate = generate_for_batch
+
+    async def invalid_evaluation(node, reason, *, from_pending):
+        arm.record_graded(node, error=f"Evaluation failed: {reason}")
+        await invalid(node, reason, from_pending=from_pending)
+    engine._handle_invalid_evaluation = invalid_evaluation
     engine._select_inspirations_and_prompt = lambda: arm.select_and_prompt(select)
     engine._commit_node = lambda node, payload=None: arm.commit(commit, node, payload)
     engine._handle_pending_finalize = lambda completion: arm.after_finalize(finalize, completion)

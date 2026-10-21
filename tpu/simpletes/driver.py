@@ -330,7 +330,10 @@ async def search(folder: Path, spec: dict, task, evaluator, backend, caps, model
         engine._failure_records = TrimmedFailures(map(TrimmedFailures.trim, engine._failure_records))
         dispatched, finalized = reconcile_attempts(engine, k)
         extended = extend_budget(engine.selector, engine_config.max_generations)
-        record = dict(resumed_at=time.time(), checkpoint=resume, completed=engine.completed_evaluations,
+        # checkpoint_time: work resolved after it was lost with the crash (metrics.py uses it).
+        record = dict(resumed_at=time.time(), checkpoint=resume,
+                      checkpoint_time=os.path.getmtime(os.path.join(resume, "metadata.json")),
+                      completed=engine.completed_evaluations,
                       dispatched=dispatched, finalized=finalized, redispatched=dispatched - finalized,
                       budget=engine_config.max_generations, budget_extended=extended)
         with (folder / "resumes.jsonl").open("a") as stream:

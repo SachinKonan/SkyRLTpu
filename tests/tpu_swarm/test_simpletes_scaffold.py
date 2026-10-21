@@ -248,57 +248,67 @@ def test_resumed_run_extends_to_the_larger_budget():
     assert not extend_budget(policy, 256)
 
 
-def test_each_batch_is_logged_in_dispatch_order(erdos, tmp_path):
-    arm = arm_for(erdos, tmp_path)
-    arm.record_dispatch(gen_id=7, chain=3, k=32)
-    row = json.loads((tmp_path / "dispatch.jsonl").read_text())
-    assert (row["gen_id"], row["chain"], row["k"]) == (7, 3, 32)
+def test_the_arm_logs_every_sample_of_a_batch(erdos, tmp_path):
+    arm = arm_for(erdos, tmp_path, dict(eager=0.95))
+    uid = arm.record_dispatch(gen_id=7, chain=3, k=32)
+    arm.record_generated(7, 32, [SimpleNamespace(success=True)] * 20 + [SimpleNamespace(success=False)] * 10)
+    child = node(-0.381)
+    child.gen_id = 7
+    arm.record_graded(child)
+    rows = [json.loads(line) for line in (tmp_path / "samples.jsonl").read_text().splitlines()]
+    assert [r["event"] for r in rows] == ["dispatch", "generated", "graded"]
+    assert all(r["batch"] == uid for r in rows) and rows[0]["finalize_at"] == 31
+    assert rows[1]["no_code"] == 12                      # 10 without code + 2 never returned
+    assert (rows[2]["outcome"], rows[2]["score"]) == ("valid", -0.381)
 
 
 def test_generate_calls_carry_their_batch(tmp_path):
-    from tpu.simpletes.backend import GEN_ID
+    from tpu.simpletes.backend import BATCH
     requests = []
     backend = reflection_backend(tmp_path, requests)
-    token = GEN_ID.set(42)
+    token = BATCH.set("u42")
     try:
         asyncio.run(backend.generate_batch("p" * 100, 1))
     finally:
-        GEN_ID.reset(token)
-    assert json.loads((tmp_path / "calls.jsonl").read_text().splitlines()[-1])["gen_id"] == 42
+        BATCH.reset(token)
+    assert json.loads((tmp_path / "calls.jsonl").read_text().splitlines()[-1])["batch"] == "u42"
 
 
-def test_metrics_tie_every_sample_to_its_batch(tmp_path):
+def test_metrics_follow_every_sample_across_a_restart(tmp_path):
     import gzip
     from tpu.swarm.scaffold_exp.metrics import simpletes
     folder = tmp_path / "simpletes"
     checkpoint = folder / "checkpoints/d/i/db_state_1"
     checkpoint.mkdir(parents=True)
-    (checkpoint / "metadata.json").write_text(json.dumps(dict(completed_evaluations=3, generation_attempts=1088)))
-    # Batches 0..33 (34 x 32 samples). Batch 3 was dispatched before a resume and never reached the
-    # checkpoint: lost, so batch 4 takes its place on the axis. Batch 21 finished grading before batch 2.
-    # (A batch from before a resume with no graded node at all counts as lost: 32 samples without code.)
-    rows = [dict(gen_id=g, k=32, time=float(g)) for g in range(34)]
-    (folder / "dispatch.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
-    (folder / "resumes.jsonl").write_text(json.dumps(dict(resumed_at=3.5)) + "\n")
-
-    def made(gen, score, valid, created, error=""):
-        return dict(id=f"n{gen}-{created}", parent_ids=["r"], gen_id=gen, score=score, created_at=created,
-                    metrics=dict(validity=valid, error=error))
-    nodes = [dict(id="r", parent_ids=[], score=-0.3815, created_at="0", metrics=dict(validity=1)),
-             made(21, -0.3811, 1, "1"), made(2, -0.3812, 1, "2"), made(4, 0, 0, "3", "Invalid solution."),
-             made(0, 0, 0, "4", "Evaluation failed"), made(1, 0, 0, "5", "Evaluation failed")]
+    (checkpoint / "metadata.json").write_text(json.dumps(dict(completed_evaluations=1, generation_attempts=1024)))
+    root = dict(id="r", parent_ids=[], score=-0.3815, created_at="0", metrics=dict(validity=1))
     with gzip.open(checkpoint / "nodes.json.gz", "wt") as stream:
-        json.dump(nodes, stream)
-    # Every batch generated: batch 2 has 1 code sample (graded) and 31 without code, and so on.
-    calls = []
-    for g in range(34):
-        graded = sum(1 for n in nodes[1:] if n["gen_id"] == g)
-        calls.append(dict(kind="generate", gen_id=g, n=32, choices=[dict(no_code=False, forced=True)] * graded
-                          + [dict(no_code=True, finish_reason="length")] * (32 - graded)))
-    calls[33]["choices"] = calls[33]["choices"][:10]          # batch 33 is still generating
-    (folder / "llm_calls.jsonl").write_text("".join(json.dumps(c) + "\n" for c in calls))
+        json.dump([root], stream)
+    events = []
+
+    def batch(uid, t, no_code=0, graded=(), gen_id=0):
+        events.append(dict(event="dispatch", batch=uid, gen_id=gen_id, k=32, finalize_at=31, time=t))
+        events.append(dict(event="generated", batch=uid, no_code=no_code, time=t + 1))
+        for outcome, score in graded:
+            events.append(dict(event="graded", batch=uid, outcome=outcome, score=score, time=t + 2))
+    # Life 1 (checkpoint written at t=50, crash, resume at t=100). "a": all 32 without code, finalized
+    # before the checkpoint (kept). "b": generated after the checkpoint (lost, re-dispatched as "b2"
+    # under the same gen_id). 14 more finalized batches fill step 0.
+    batch("a", 0, no_code=32)
+    for i in range(14):
+        batch(f"f{i}", 1 + i, no_code=31, graded=[("valid", -0.3812)] if i == 0 else [("exec_failed", None)])
+    batch("b", 60, no_code=30, graded=[("valid", -0.3801), ("invalid", None)], gen_id=5)
+    (folder / "resumes.jsonl").write_text(json.dumps(dict(resumed_at=100.0, checkpoint_time=50.0)) + "\n")
+    batch("b2", 110, no_code=31, graded=[("valid", -0.3811)], gen_id=5)
+    for i in range(16):                                   # step 1: last batch still grading
+        batch(f"s{i}", 120 + i, no_code=32 if i < 15 else 20)
+    events.append(dict(event="generation_failed", batch="s0", k=32, time=200))   # (s0 already resolved)
+    (folder / "samples.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    (folder / "llm_calls.jsonl").write_text(json.dumps(dict(kind="generate", batch="b2",
+                                                            choices=[dict(forced=True)] * 32)) + "\n")
     steps, best, legacy = simpletes(str(folder))
-    assert not legacy and sorted(steps) == [0, 1]             # step 2 (batches 32, 33) is pending
-    assert [steps[0][k] for k in ("issued", "valid", "invalid", "exec_failed", "no_code")] == [512, 1, 1, 2, 508]
-    assert steps[1]["valid"] == 1 and steps[1]["no_code"] == 511 and steps[1]["thinking_capped"] == 1
-    assert best == {0: 0.3815, 1: 0.3812, 2: 0.3811, 3: 0.3811}   # root, then the step that issued each
+    assert not legacy and sorted(steps) == [0]            # step 1 has 12 pending samples
+    step = steps[0]
+    assert [step[k] for k in ("issued", "valid", "exec_failed", "invalid", "no_code", "thinking_capped")] == \
+        [512, 2, 13, 0, 32 + 14 * 31 + 31, 32]
+    assert best[0] == 0.3815 and best[1] == 0.3811        # "b" (0.3801) was lost with the crash
