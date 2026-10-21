@@ -30,7 +30,8 @@ import torch
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-DBU = 1000
+DBU = 1000          # Bookshelf coordinates in nm (the canvas is in microns)
+QUANTUM = 10        # block sizes snapped up to 10 nm for Xplace's site grid
 
 XPLACE_CONFIGS = {
     'td075': dict(target_density=0.75, num_bin_x=128, num_bin_y=128, inner_iter=2000),
@@ -144,7 +145,13 @@ def write_bookshelf(p, folder, name):
     fixed = np.asarray(p['fixed'], dtype=bool)
     W, H = (int(round(v * DBU)) for v in p['canvas'])
     names = [f'h{i}' if i < nh else f's{i}' for i in range(n)] + [f'p{k}' for k in range(len(ports))]
-    size = np.maximum(1, np.round(np.asarray(p['sizes']) * DBU)).astype(np.int64)
+    # Xplace's Bookshelf reader takes the site size as the GCD of movable cell sizes and requires
+    # every row to be exactly one site tall, so sizes are snapped up to a QUANTUM grid and the
+    # rows/sites are set from those GCDs.
+    size = (np.ceil(np.asarray(p['sizes']) * DBU / QUANTUM).astype(np.int64) * QUANTUM).clip(min=QUANTUM)
+    movable = size[~fixed]
+    site_w = int(np.gcd.reduce(np.concatenate([movable[:, 0], movable[:, 1]]))) if len(movable) else QUANTUM
+    site_h = int(np.gcd.reduce(movable[:, 1])) if len(movable) else QUANTUM
     pos = np.asarray(p['initial_positions'], dtype=np.float64) * DBU
     with open(folder / f'{name}.nodes', 'w') as f:
         f.write(f'UCLA nodes 1.0\n\nNumNodes : {n + len(ports)}\nNumTerminals : {int(fixed.sum()) + len(ports)}\n')
@@ -171,12 +178,12 @@ def write_bookshelf(p, folder, name):
                 ox, oy = (0.0, 0.0) if o >= n else off[q]
                 f.write(f'  {names[o]} {"O" if q == a else "I"} : {ox:.3f} {oy:.3f}\n')
     (folder / f'{name}.wts').write_text('UCLA wts 1.0\n')
-    row_h = max(1, int(round(H / 256)))
     with open(folder / f'{name}.scl', 'w') as f:
-        f.write(f'UCLA scl 1.0\n\nNumRows : {H // row_h}\n')
-        for r in range(H // row_h):
-            f.write(f'CoreRow Horizontal\n  Coordinate : {r * row_h}\n  Height : {row_h}\n  Sitewidth : 1\n'
-                    f'  Sitespacing : 1\n  Siteorient : N\n  Sitesymmetry : Y\n  SubrowOrigin : 0 NumSites : {W}\nEnd\n')
+        f.write(f'UCLA scl 1.0\n\nNumRows : {H // site_h}\n')
+        for r in range(H // site_h):
+            f.write(f'CoreRow Horizontal\n  Coordinate : {r * site_h}\n  Height : {site_h}\n  Sitewidth : {site_w}\n'
+                    f'  Sitespacing : {site_w}\n  Siteorient : N\n  Sitesymmetry : Y\n'
+                    f'  SubrowOrigin : 0 NumSites : {W // site_w}\nEnd\n')
     (folder / f'{name}.aux').write_text(f'RowBasedPlacement : {name}.nodes {name}.nets {name}.wts {name}.pl {name}.scl\n')
     return folder / f'{name}.aux', names, size
 
@@ -190,19 +197,31 @@ def xplace_gp(p, name, config, work, timeout_s):
            '--load_from_raw', 'True', '--global_placement', 'True', '--legalization', 'False',
            '--detail_placement', 'False', '--write_placement', 'True', '--write_global_placement', 'True',
            '--draw_placement', 'False', '--final_route_eval', 'False', '--seed', '0',
-           '--num_threads', str(os.cpu_count() or 8), '--result_dir', str(work / config), '--exp_id', 'run',
+           '--num_threads', str(os.environ.get('OMP_NUM_THREADS', os.cpu_count() or 8)), '--result_dir', str(work / config), '--exp_id', 'run',
            '--gpu', '0'] + [x for k, v in cfg.items() for x in (f'--{k}', str(v))]
     with open(work / f'{config}.log', 'w') as log:
         subprocess.run(cmd, cwd=root, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=timeout_s)
     pl = sorted((work / config).rglob(f'*{name}_gp.pl'))[-1]
     n = len(p['sizes'])
-    index = {nm: i for i, nm in enumerate(names[:n])}
-    out = np.full((n, 2), np.nan)
+    index = {nm: i for i, nm in enumerate(names)}
+    lower_left = np.full((len(names), 2), np.nan)
     for line in pl.read_text().splitlines()[1:]:
         tok = line.split()
         if len(tok) >= 3 and tok[0] in index:
-            i = index[tok[0]]
-            out[i] = (np.array([float(tok[1]), float(tok[2])]) + size[i] / 2) / DBU
+            lower_left[index[tok[0]]] = float(tok[1]), float(tok[2])
+    # Xplace rescales Bookshelf units internally and writes positions in its site units; map
+    # them back with a per-axis linear fit on the fixed ports, whose positions are known.
+    ports = np.asarray(p['port_positions'], dtype=np.float64).reshape(-1, 2) * DBU
+    got = lower_left[n:]
+    ok = np.isfinite(got).all(axis=1)
+    if ok.sum() < 2:
+        raise ValueError('cannot calibrate Xplace output units: too few ports')
+    out = np.full((n, 2), np.nan)
+    for axis in range(2):
+        a, c = np.polyfit(got[ok, axis], ports[ok, axis], 1)
+        if np.max(np.abs(a * got[ok, axis] + c - ports[ok, axis])) > 2.0:   # nm
+            raise ValueError('Xplace output units are not a linear map of the input')
+        out[:, axis] = (a * lower_left[:n, axis] + c + size[:n, axis] / 2) / DBU
     if not np.isfinite(out).all():
         raise ValueError('global placement missing blocks')
     fixed = np.asarray(p['fixed'], dtype=bool)
