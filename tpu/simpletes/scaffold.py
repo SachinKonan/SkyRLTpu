@@ -15,7 +15,10 @@ Changes to upstream SimpleTES, each matching our TTT-Discover arm:
   candidates are graded (our arm builds each step from the first 95% of samples);
   late candidates still enter the archive;
 * snapshots -- ``steps/simpletes_step_NNNNNN.json`` when every chain has finished
-  round N (one round = C x K samples = one step of our arm).
+  round N (one round = C x K samples = one step of our arm);
+* sample count -- ``attempts.jsonl`` gives each graded candidate the number of samples issued
+  so far (SimpleTES's ``generation_attempts``, restored on resume). A sample without code is
+  never graded, so plots and validity count samples from this, not graded candidates.
 """
 from __future__ import annotations
 
@@ -173,6 +176,9 @@ class Arm:
             path = self.construction_path(node.id)
             if not os.path.exists(path):
                 write_payload(path, captured_construction_payload)
+        with (self.folder / "attempts.jsonl").open("a") as stream:
+            stream.write(json.dumps(dict(id=node.id, attempts=self.engine.generation_attempts,
+                                         time=time.time())) + "\n")
         await original(node, captured_construction_payload)
 
     # ---- per-round snapshots -------------------------------------------------------

@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REFLECTION_ANSWER = 2048
+REFLECTION_THINKING = 0
 
 
 def event(kind, **fields):
@@ -308,11 +309,10 @@ async def search(folder: Path, spec: dict, task, evaluator, backend, caps, model
     engine.worker = evaluator
 
     async def reflect(messages, temperature=0.7, max_tokens=None):
-        # Same thinking cap as generation: a reflection that hits the cap gets the server's forced
-        # "final complete program" cue, answers with code, and SimpleTES discards it (needs "Approach").
-        # SimpleTES's own max_tokens (2048) bounds the answer after thinking.
+        # No thinking: upstream's reflection is one short summary call. SimpleTES's own max_tokens
+        # (2048) bounds the answer; the prompt (generation prompt + winner code) only needs room for it.
         return await backend.generate_text(
-            messages[-1]["content"], thinking_tokens=caps.thinking,
+            messages[-1]["content"], thinking_tokens=REFLECTION_THINKING,
             answer_tokens=(max_tokens or REFLECTION_ANSWER) + 64,
             temperature=temperature, kind="reflection")
 

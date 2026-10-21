@@ -26,6 +26,10 @@ SEPARATORS = {"qwen": "</think>", "gemma": "<channel|>"}
 # 409/429: the remote-only ingress is waiting for a farm (the frozen client retries these too).
 RETRYABLE = (409, 429, 500, 502, 503, 504)
 MIN_AUX_THINKING = 1024
+# Thinking budget 0 + this transition: the server closes the thinking block at once without the
+# "final complete program" cue, so an auxiliary call (reflection) answers in prose.
+CLOSE_THINKING = {"qwen": "\n</think>\n\n", "gemma": "<channel|>",
+                  "muse": "<|eom|><|start|>assistant to=user<|message|>"}
 # An engine restart outlasts minutes; a batch that gives up is charged K failed candidates.
 # If the engines are gone for good the controller fails the job and the resume re-dispatches.
 DEFAULT_RETRIES, DEFAULT_RETRY_SECONDS = 480, 30.0   # ~4 h
@@ -39,11 +43,6 @@ class Caps:
     context_buffer: int = 50  # NativeCompletionCompleter.context_buffer
     fixed_thinking: int | None = None  # TTD_FIXED_THINK_TOKENS
     fixed_total: int | None = None     # TTD_FIXED_TOTAL_TOKENS
-
-    @property
-    def thinking(self) -> int:
-        """Thinking budget before any prompt is subtracted (the reflection budget)."""
-        return self.fixed_thinking or self.phase1_max_tokens
 
     def max_prompt_tokens(self, min_thinking_tokens: int) -> int:
         if self.fixed_thinking:
@@ -148,12 +147,15 @@ class NativeThinkingBackend:
         return rendered.to_ints()
 
     def request(self, ids: list[int], n: int, *, thinking_tokens: int, max_tokens: int,
-                temperature: float = 1.0) -> dict:
-        return dict(model=self.model, prompt=ids, n=n, max_tokens=max_tokens,
-                    thinking_token_budget=thinking_tokens,
-                    temperature=temperature, top_p=1.0, top_k=-1, stop_token_ids=self.stop_ids,
-                    skip_special_tokens=False, add_special_tokens=False, logprobs=1,
-                    stream=False, return_token_ids=True)
+                temperature: float = 1.0, transition: str | None = None) -> dict:
+        request = dict(model=self.model, prompt=ids, n=n, max_tokens=max_tokens,
+                       thinking_token_budget=thinking_tokens,
+                       temperature=temperature, top_p=1.0, top_k=-1, stop_token_ids=self.stop_ids,
+                       skip_special_tokens=False, add_special_tokens=False, logprobs=1,
+                       stream=False, return_token_ids=True)
+        if transition is not None:
+            request["forced_thinking_transition"] = transition
+        return request
 
     async def _post(self, request: dict) -> dict:
         import httpx
@@ -174,10 +176,10 @@ class NativeThinkingBackend:
                           message=str(last))
 
     async def _complete(self, ids: list[int], n: int, thinking_tokens: int, max_tokens: int,
-                        temperature: float) -> tuple[dict | None, list[dict]]:
+                        temperature: float, transition: str | None = None) -> tuple[dict | None, list[dict]]:
         """One sampling call; returns (request for check_choice, choices sorted by index)."""
         request = self.request(ids, n, thinking_tokens=thinking_tokens, max_tokens=max_tokens,
-                               temperature=temperature)
+                               temperature=temperature, transition=transition)
         data = await self._post(request)
         return request, sorted(data.get("choices", []), key=lambda c: c.get("index", 0))
 
@@ -240,18 +242,28 @@ class NativeThinkingBackend:
                             temperature: float, kind: str) -> str:
         """Single auxiliary call (SimpleTES reflection); logged separately, never graded.
 
-        Same RQ4 caps as generation, with the thinking budget lowered to ``thinking_tokens``
-        when that is smaller and the total cut to thinking + ``answer_tokens``.
+        ``thinking_tokens`` 0: no thinking. The server closes the thinking block at once
+        (``CLOSE_THINKING``, no program cue), the answer gets ``answer_tokens``, and the prompt
+        only needs room for that answer. Otherwise the generation caps, with the thinking budget
+        lowered to ``thinking_tokens`` when that is smaller and the total cut to thinking + answer.
         """
         ids = self.prompt_ids(prompt)
-        budget = self.caps.budget(len(ids), self.transition_tokens)
-        if budget is None:
-            self._log(kind=kind, time=time.time(), prompt_tokens=len(ids), overflow=True)
-            return ""
-        thinking = min(thinking_tokens, budget[0])
-        total = min(budget[1], thinking + answer_tokens)
+        transition = None
+        if thinking_tokens == 0:
+            transition = CLOSE_THINKING[self.family]
+            thinking, total = 0, answer_tokens
+            if len(ids) + total + self.caps.context_buffer > self.caps.context_window:
+                self._log(kind=kind, time=time.time(), prompt_tokens=len(ids), overflow=True)
+                return ""
+        else:
+            budget = self.caps.budget(len(ids), self.transition_tokens)
+            if budget is None:
+                self._log(kind=kind, time=time.time(), prompt_tokens=len(ids), overflow=True)
+                return ""
+            thinking = min(thinking_tokens, budget[0])
+            total = min(budget[1], thinking + answer_tokens)
         start = time.time()
-        request, choices = await self._complete(ids, 1, thinking, total, temperature)
+        request, choices = await self._complete(ids, 1, thinking, total, temperature, transition)
         choice = choices[0]
         if self._check is not None:
             self._check(choice, request)

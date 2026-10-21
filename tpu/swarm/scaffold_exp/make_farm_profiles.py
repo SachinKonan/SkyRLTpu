@@ -1,9 +1,12 @@
-"""Write the scaffold-experiment farm profiles (32k context, prefix caching on v5p/v6e).
+"""Write the scaffold-experiment farm profiles (48k context, prefix caching on v5p/v6e).
 
 Each profile starts from the RQ4 Muse v33 farm profile for the same hardware, so grading contracts and the base
 bundle stay identical to RQ4; only serving settings, model and names change.
 
   python -m tpu.swarm.scaffold_exp.make_farm_profiles muse-v5p32:6 muse-v6e8:10 qwen38-v6e8:15
+
+``scaf48`` farms serve the ``scaf2`` runs (48k context); the earlier ``scaf`` farms were 32k. Sequence
+slots are unchanged: the 32k farms peaked at under 10% of their KV cache.
 """
 import copy
 import json
@@ -12,6 +15,7 @@ import sys
 
 P = Path(__file__).resolve().parents[1] / 'ray_train/profiles'
 B = 'gs://sk7524-tinker-tpu-us-east5'
+CONTEXT, NAME = 49152, 'scaf48'
 TEMPLATE = {'v5p32': 'inference-farm-rq4-muse-east5a-v5p32-004.json', 'v6e8': 'inference-farm-rq4-muse-east5-v6e8-001.json'}
 # Per model and hardware: serving layout (user, 2026-10-19). Qwen3.8 v5p-32 = shu's v5p settings on a 4-host farm.
 SERVING = {
@@ -28,7 +32,7 @@ MODEL = {
 
 
 def profile(model, hw, index):
-    run = f'inference-farm-scaf-{model}-east5{"a" if hw == "v5p32" else "b"}-{hw}-{index:03d}'
+    run = f'inference-farm-{NAME}-{model}-east5{"a" if hw == "v5p32" else "b"}-{hw}-{index:03d}'
     d = json.loads((P / TEMPLATE[hw]).read_text())
     d['run_id'] = run
     d['root'] = f'~/.cache/{run}'
@@ -43,7 +47,7 @@ def profile(model, hw, index):
     inf = d['inference']
     for key in ('batched_rpa_kernel', 'ragged_conv1d'):
         inf.pop(key, None)
-    inf.update(SERVING[(model, hw)], max_model_length=32768, prefix_caching=True)
+    inf.update(SERVING[(model, hw)], max_model_length=CONTEXT, prefix_caching=True)
     return run, d
 
 

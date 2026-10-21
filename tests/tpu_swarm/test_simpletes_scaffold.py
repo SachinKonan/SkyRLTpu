@@ -15,7 +15,7 @@ def test_fixed_budget_ignores_the_prompt_and_rejects_overflow():
     assert caps.budget(3000) == caps.budget(15000) == (12000, 17000)
     assert caps.budget(32768 - 17000 - 50) == (12000, 17000)
     assert caps.budget(32768 - 17000 - 49) is None
-    assert caps.max_prompt_tokens(4096) == 32768 - 17000 - 50 and caps.thinking == 12000
+    assert caps.max_prompt_tokens(4096) == 32768 - 17000 - 50
 
 
 @pytest.fixture
@@ -117,11 +117,71 @@ def test_erdos_score_is_our_state_value(erdos):
 
 def test_specs_match_the_agreed_design():
     specs = Path(__file__).resolve().parents[2] / "tpu/simpletes/specs"
-    for path in specs.glob("scaf-erdos-stes-*.json"):
+    paths = list(specs.glob("scaf2-erdos-stes-*.json"))
+    assert len(paths) == 8
+    for path in paths:
         spec = json.loads(path.read_text())
-        assert (spec["num_chains"], spec["k_candidates"], spec["max_generations"]) == (16, 32, 15 * 512)
+        assert (spec["num_chains"], spec["k_candidates"], spec["max_generations"]) == (16, 32, 25 * 512)
         assert (spec["num_inspirations"], spec["eager"], spec["prompt"]) == (3, 0.95, "scaffold")
         assert ("bootstrap_from" in spec) == (spec["start"] == "boot")
+
+
+def test_scaf2_runs_use_the_48k_fixed_budget():
+    from tpu.simpletes.make_profiles import profile
+    doc = profile("erdos", "stes", "none", "qwen38", 1, 27000, "gs://b/x.tar.gz", "0" * 64)
+    assert doc["run_id"] == "scaf2-erdos-stes-none-qwen38-s1" and doc["client_context_window"] == 49152
+    assert doc["inference"]["max_model_length"] == 49152
+    env = doc["client_env"]
+    assert (env["TTD_FIXED_THINK_TOKENS"], env["TTD_FIXED_TOTAL_TOKENS"], env["NUM_EPOCHS"]) == ("16384", "22528", "25")
+    caps = Caps(context_window=49152, phase1_max_tokens=16384, fixed_thinking=16384, fixed_total=22528)
+    assert caps.max_prompt_tokens(4096) == 49152 - 22528 - 50     # ~26.6k: SimpleTES's three inspirations fit
+
+
+class FakeRenderer:
+    def get_stop_sequences(self):
+        return [0]
+
+    def build_generation_prompt(self, messages):
+        return SimpleNamespace(to_ints=lambda: [1] * len(messages[0]["content"]))
+
+    def parse_response(self, ids):
+        return dict(role="assistant", content="\n</think>\n\nApproach: a\nInsight: b"), True
+
+
+def reflection_backend(tmp_path, requests):
+    from tpu.simpletes.backend import NativeThinkingBackend
+
+    class Http:
+        async def post(self, url, json):
+            requests.append(json)
+            choice = dict(token_ids=[5] * 10, finish_reason="stop", forced_token_positions=[0],
+                          loss_mask=[0.0] + [1.0] * 9,
+                          thinking_budget=dict(enforced=True, budget_basis="phase1_generated_tokens",
+                                               counted_phase1_tokens=0))
+            return SimpleNamespace(status_code=200, raise_for_status=lambda: None, json=lambda: dict(choices=[choice]))
+    from tpu.swarm.ray_train.frozen_benchmark import check_choice
+    caps = Caps(context_window=49152, phase1_max_tokens=16384, fixed_thinking=16384, fixed_total=22528)
+    return NativeThinkingBackend(base_url="http://x", model="m", renderer=FakeRenderer(), family="qwen", caps=caps,
+                                 log_path=tmp_path / "calls.jsonl", check_choice=check_choice, http=Http())
+
+
+def test_reflection_does_not_think_and_fits_by_its_own_size(tmp_path):
+    from tpu.simpletes.driver import REFLECTION_ANSWER, REFLECTION_THINKING
+    requests = []
+    backend = reflection_backend(tmp_path, requests)
+    answer_tokens = REFLECTION_ANSWER + 64
+    # 30k tokens: too long for a generation (22.5k budget) but a reflection only needs its answer.
+    text = asyncio.run(backend.generate_text("p" * 30000, thinking_tokens=REFLECTION_THINKING,
+                                             answer_tokens=answer_tokens, temperature=0.7, kind="reflection"))
+    assert "Approach: a" in text and "</think>" not in text
+    request = requests[-1]
+    assert (request["thinking_token_budget"], request["max_tokens"]) == (0, answer_tokens)
+    assert request["forced_thinking_transition"] == "\n</think>\n\n"            # no program cue
+    too_long = 49152 - answer_tokens - 50 + 1
+    assert asyncio.run(backend.generate_text("p" * too_long, thinking_tokens=0, answer_tokens=answer_tokens,
+                                             temperature=0.7, kind="reflection")) == ""
+    assert len(requests) == 1
+    assert json.loads((tmp_path / "calls.jsonl").read_text().splitlines()[-1])["overflow"] is True
 
 
 def test_runner_skips_farms_shorter_than_the_run_context():
@@ -186,3 +246,16 @@ def test_resumed_run_extends_to_the_larger_budget():
     assert extend_budget(policy, 256)                                # 25-step style extension: 4 per chain
     assert policy.prompt_budget == {0: 4, 1: 4} and sorted(policy._ready_chains) == [0, 1]
     assert not extend_budget(policy, 256)
+
+
+def test_each_graded_candidate_records_the_samples_issued(erdos, tmp_path):
+    arm = arm_for(erdos, tmp_path)
+    arm.engine.generation_attempts = 96            # three batches of 32 issued; some had no code
+    committed = []
+
+    async def original(node, payload=None):
+        committed.append(node.id)
+    child = node(-0.381)
+    asyncio.run(arm.commit(original, child))
+    row = json.loads((tmp_path / "attempts.jsonl").read_text())
+    assert committed == [child.id] and (row["id"], row["attempts"]) == (child.id, 96)

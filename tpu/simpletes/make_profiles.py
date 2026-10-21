@@ -1,9 +1,11 @@
 """Scaffold experiment (2026-10-19): local no-train run profiles and SimpleTES specs for one problem.
 
-Runs ``scaf-<problem>-<arm>-<start>-<model>-s<seed>``: arm ours (TTT-Discover PUCT, the RQ4 frozen
+Runs ``scaf2-<problem>-<arm>-<start>-<model>-s<seed>``: arm ours (TTT-Discover PUCT, the RQ4 frozen
 client) or stes (SimpleTES rpucg), start boot (1024-draft bootstrap) or none, model qwen38 or muse,
-seeds 1 and 2. Every run: 32k context, fixed 12k thinking / 17k total tokens, 15 steps of 16 x 32,
-the RQ4 no-train Muse profile otherwise. A SimpleTES boot run starts from the drafts of the ours boot
+seeds 1 and 2. Every run: 48k context, fixed 16k thinking / 22.5k total tokens (6k answer), 25 steps
+of 16 x 32, the RQ4 no-train Muse profile otherwise. The 48k context fits SimpleTES's prompts (three
+inspirations, up to ~23k tokens on circuit) after the full budget. (``scaf-`` runs, 2026-10-19: 32k
+context, 12k / 17k; Qwen3.8 hit the thinking cap on most samples and lost answers to the total.) A SimpleTES boot run starts from the drafts of the ours boot
 run with the same model and seed, so both arms see the same bootstrap.
 
 Usage: python -m tpu.simpletes.make_profiles erdos --bundle <gs://...tar.gz> --sha256 <hex>
@@ -17,7 +19,7 @@ PROFILES = HERE.parents[0] / "swarm/ray_train/profiles"
 SPECS = HERE / "specs"
 ROOT = "/scratch/gpfs/ZHUANGL/sk7524/rq4-local/scaffold"
 TEMPLATE = "rq4-notrain-local-muse-{problem}-s1-20261007.json"
-CONTEXT, THINK, TOTAL, STEPS, CHAINS, K = 32768, 12000, 17000, 15, 16, 32
+CONTEXT, THINK, TOTAL, STEPS, CHAINS, K = 49152, 16384, 22528, 25, 16, 32
 EAGER = 0.95
 # Groups per engine: about one engine's sequence slots (Muse v6e TP8 128, Qwen3.8 v6e TP4 32 + v5p TP2 64).
 MODELS = {
@@ -31,7 +33,7 @@ PROBLEMS = {"erdos": dict(env=dict(TTD_ERDOS_PROMPT="v2"))}
 
 
 def run_id(problem, arm, start, model, seed):
-    return f"scaf-{problem}-{arm}-{start}-{model}-s{seed}"
+    return f"scaf2-{problem}-{arm}-{start}-{model}-s{seed}"
 
 
 def profile(problem, arm, start, model, seed, port, bundle, sha256):
@@ -74,7 +76,7 @@ def main():
     parser.add_argument("problem", choices=sorted(PROBLEMS))
     parser.add_argument("--bundle", required=True)
     parser.add_argument("--sha256", required=True)
-    parser.add_argument("--port-base", type=int, default=26800)
+    parser.add_argument("--port-base", type=int, default=27000)
     args = parser.parse_args()
     port = args.port_base
     for arm in ("ours", "stes"):
