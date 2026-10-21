@@ -95,6 +95,9 @@ def main():
         save(q / 'pending' / f.name, spec)
         f.unlink()
 
+    # A login-shell RAY_RUNTIME_ENV_HOOK (from a newer Ray/uv setup) breaks this Ray version.
+    for key in [k for k in os.environ if k.startswith('RAY_RUNTIME_ENV')]:
+        os.environ.pop(key)
     ray.init(num_cpus=a.cpus, num_gpus=a.gpus, include_dashboard=False, log_to_driver=False)
     inflight = {}   # ObjectRef -> (spec, path)
     stop = False
