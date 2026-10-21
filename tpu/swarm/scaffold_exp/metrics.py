@@ -18,13 +18,15 @@ the step that issued it (late results included); best[0] is the start.
 Ours: trajectories/<member>_step_N.jsonl.gz plus trajectories/late/ (graded after the eager step
 closed), one row per sample, 512 issued per step; flags from the text (forced = the answer cue
 right after the think close; cut_off = forced and the code fence never closed). Rows still missing
-two steps later were cancelled: lost. best[0] from the first sampler snapshot.
+three steps later were cancelled: lost (a grade is capped at ~18 min; a step takes longer). best[0] from the first sampler snapshot.
 SimpleTES: samples.jsonl, written by the scaffold arm: batches in dispatch order (uid per
 dispatch), samples without code per batch, terminal generation failures (counted as no_code),
 one row per graded candidate. After a resume, a batch dispatched before it is on the axis only if
 it was finalized (finalize_at samples resolved) by the checkpoint's write time; its samples
 resolved later were lost with the crash. Flags from llm_calls.jsonl rows of the same uid.
-Runs without samples.jsonl (before 2026-10-21) get best-so-far only, spread evenly.
+Runs without a complete samples.jsonl (before 2026-10-21, or resumed from such a run) get
+best-so-far only, spread evenly. Known limit: after a SimpleTES crash-restart, "finalized by the
+checkpoint" is inferred from resolved samples and the checkpoint file's write time, not logged.
 
   python -m tpu.swarm.scaffold_exp.metrics <runs root> <run glob> --out metrics.json
 """
@@ -35,6 +37,7 @@ import gzip
 import json
 import os
 import re
+from datetime import datetime, timezone
 
 UNIT = 512
 OUTCOMES = ("no_code", "exec_failed", "invalid", "valid")
@@ -97,8 +100,8 @@ def ours(run_dir, run):
     complete = {}
     for step, counts in steps.items():
         missing = UNIT - counts["issued"]
-        if missing and step > last - 2:
-            continue                       # late samples may still be grading
+        if missing and step > last - 3:
+            continue                       # late samples may still be grading (a grade is < 20 min, a step longer)
         counts["lost"] = missing
         counts["issued"] = UNIT
         complete[step] = counts
@@ -129,7 +132,11 @@ def simpletes(folder):
     start = min((-float(n["score"]) for n in roots if (n.get("metrics") or {}).get("validity", 1)),
                 default=float("inf"))
     events = read_jsonl(f"{folder}/samples.jsonl")
-    if not events:
+    logged = {row.get("node") for row in events if row["event"] == "graded"}
+    first = min((row["time"] for row in events if row["event"] == "dispatch"), default=None)
+    unlogged = [n for n in nodes if n.get("parent_ids") and n["id"] not in logged
+                and (first is None or n["created_at"] < datetime.fromtimestamp(first, timezone.utc).replace(tzinfo=None).isoformat())]
+    if not events or unlogged:
         children = sorted((n for n in nodes if n.get("parent_ids")), key=lambda n: n["created_at"])
         issued = int(json.load(open(checkpoint + "/metadata.json"))["generation_attempts"])
         step_best = {}
@@ -161,7 +168,9 @@ def simpletes(folder):
             for choice in row.get("choices", []):
                 flags[row["batch"]]["thinking_capped"] += bool(choice.get("forced"))
                 flags[row["batch"]]["cut_off"] += choice.get("finish_reason") == "length"
-    finished = os.path.exists(f"{folder}/summary.json")
+    # A summary from before the newest resume (budget extended) does not end this lifetime.
+    summary = f"{folder}/summary.json"
+    finished = os.path.exists(summary) and os.path.getmtime(summary) > max((at for at, _ in resumes), default=0)
     steps, step_best, position = {}, {}, 0
     for uid in order:
         batch = batches[uid]
