@@ -248,38 +248,57 @@ def test_resumed_run_extends_to_the_larger_budget():
     assert not extend_budget(policy, 256)
 
 
-def test_each_batch_records_its_issued_sample_range(erdos, tmp_path):
+def test_each_batch_is_logged_in_dispatch_order(erdos, tmp_path):
     arm = arm_for(erdos, tmp_path)
-    arm.engine.generation_attempts = 96            # raised by k=32 just before this batch is prepared
     arm.record_dispatch(gen_id=7, chain=3, k=32)
     row = json.loads((tmp_path / "dispatch.jsonl").read_text())
-    assert (row["gen_id"], row["chain"], row["k"], row["end"]) == (7, 3, 32, 96)   # samples 64..95
+    assert (row["gen_id"], row["chain"], row["k"]) == (7, 3, 32)
 
 
-def test_metrics_place_candidates_by_batch_and_count_ungraded_as_no_code(tmp_path):
+def test_generate_calls_carry_their_batch(tmp_path):
+    from tpu.simpletes.backend import GEN_ID
+    requests = []
+    backend = reflection_backend(tmp_path, requests)
+    token = GEN_ID.set(42)
+    try:
+        asyncio.run(backend.generate_batch("p" * 100, 1))
+    finally:
+        GEN_ID.reset(token)
+    assert json.loads((tmp_path / "calls.jsonl").read_text().splitlines()[-1])["gen_id"] == 42
+
+
+def test_metrics_tie_every_sample_to_its_batch(tmp_path):
     import gzip
     from tpu.swarm.scaffold_exp.metrics import simpletes
     folder = tmp_path / "simpletes"
     checkpoint = folder / "checkpoints/d/i/db_state_1"
     checkpoint.mkdir(parents=True)
-    (checkpoint / "metadata.json").write_text(json.dumps(dict(completed_evaluations=3, generation_attempts=1536)))
-    # 48 batches of 32: batch g covers samples 32g..32g+31. Batch 3 was lost to a restart and
-    # re-issued as batch 50 (same range). Batch 20 (step 1) finished grading before batch 2 (step 0).
-    rows = [dict(gen_id=g, k=32, end=32 * (g + 1)) for g in range(48)] + [dict(gen_id=50, k=32, end=128)]
+    (checkpoint / "metadata.json").write_text(json.dumps(dict(completed_evaluations=3, generation_attempts=1088)))
+    # Batches 0..33 (34 x 32 samples). Batch 3 was dispatched before a resume and never reached the
+    # checkpoint: lost, so batch 4 takes its place on the axis. Batch 21 finished grading before batch 2.
+    # (A batch from before a resume with no graded node at all counts as lost: 32 samples without code.)
+    rows = [dict(gen_id=g, k=32, time=float(g)) for g in range(34)]
     (folder / "dispatch.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (folder / "resumes.jsonl").write_text(json.dumps(dict(resumed_at=3.5)) + "\n")
 
     def made(gen, score, valid, created, error=""):
         return dict(id=f"n{gen}-{created}", parent_ids=["r"], gen_id=gen, score=score, created_at=created,
                     metrics=dict(validity=valid, error=error))
     nodes = [dict(id="r", parent_ids=[], score=-0.3815, created_at="0", metrics=dict(validity=1)),
-             made(20, -0.3811, 1, "1"), made(2, -0.3812, 1, "2"), made(50, 0, 0, "3", "Invalid solution."),
-             made(3, -0.3801, 1, "4")]                       # lost batch: not on the axis
+             made(21, -0.3811, 1, "1"), made(2, -0.3812, 1, "2"), made(4, 0, 0, "3", "Invalid solution."),
+             made(0, 0, 0, "4", "Evaluation failed"), made(1, 0, 0, "5", "Evaluation failed")]
     with gzip.open(checkpoint / "nodes.json.gz", "wt") as stream:
         json.dump(nodes, stream)
-    (folder / "llm_calls.jsonl").write_text(json.dumps(dict(kind="generate", choices=[dict(forced=True)] * 32)) + "\n")
-    (folder / "summary.json").write_text("{}")
-    steps, best, flags = simpletes(str(folder))
-    assert sorted(steps) == [0, 1, 2]
-    assert (steps[0]["valid"], steps[0]["invalid"], steps[0]["no_code"], steps[0]["issued"]) == (1, 1, 510, 512)
-    assert steps[1]["valid"] == 1 and steps[1]["no_code"] == 511
-    assert best == {0: 0.3815, 1: 0.3812, 2: 0.3811, 3: 0.3811}   # the root, then sample order
+    # Every batch generated: batch 2 has 1 code sample (graded) and 31 without code, and so on.
+    calls = []
+    for g in range(34):
+        graded = sum(1 for n in nodes[1:] if n["gen_id"] == g)
+        calls.append(dict(kind="generate", gen_id=g, n=32, choices=[dict(no_code=False, forced=True)] * graded
+                          + [dict(no_code=True, finish_reason="length")] * (32 - graded)))
+    calls[33]["choices"] = calls[33]["choices"][:10]          # batch 33 is still generating
+    (folder / "llm_calls.jsonl").write_text("".join(json.dumps(c) + "\n" for c in calls))
+    steps, best, legacy = simpletes(str(folder))
+    assert not legacy and sorted(steps) == [0, 1]             # step 2 (batches 32, 33) is pending
+    assert [steps[0][k] for k in ("issued", "valid", "invalid", "exec_failed", "no_code")] == [512, 1, 1, 2, 508]
+    assert steps[1]["valid"] == 1 and steps[1]["no_code"] == 511 and steps[1]["thinking_capped"] == 1
+    assert best == {0: 0.3815, 1: 0.3812, 2: 0.3811, 3: 0.3811}   # root, then the step that issued each

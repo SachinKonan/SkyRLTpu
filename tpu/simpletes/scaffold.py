@@ -16,10 +16,9 @@ Changes to upstream SimpleTES, each matching our TTT-Discover arm:
   late candidates still enter the archive;
 * snapshots -- ``steps/simpletes_step_NNNNNN.json`` when every chain has finished
   round N (one round = C x K samples = one step of our arm);
-* sample positions -- ``dispatch.jsonl`` records where each batch sits on the issued-sample
-  axis (SimpleTES's ``generation_attempts`` right after the batch is issued; restored on
-  resume, so a re-issued range belongs to the later batch). A sample without code is never
-  graded, so plots and validity place graded candidates by their batch, not by grading order.
+* sample log -- ``dispatch.jsonl`` lists every batch in dispatch order, and each generate call
+  in ``llm_calls.jsonl`` carries its batch's gen_id, so every issued sample (graded or not)
+  can be tied to its batch for the sample-axis metrics (``scaffold_exp/metrics.py``).
 """
 from __future__ import annotations
 
@@ -180,11 +179,8 @@ class Arm:
         await original(node, captured_construction_payload)
 
     def record_dispatch(self, gen_id: int, chain: int, k: int):
-        """Samples end - k .. end - 1 of the issued-sample axis are this batch's (scheduler: the
-        counter is raised by k just before the batch is prepared, with no await in between)."""
         with (self.folder / "dispatch.jsonl").open("a") as stream:
-            stream.write(json.dumps(dict(gen_id=gen_id, chain=chain, k=k, end=self.engine.generation_attempts,
-                                         time=time.time())) + "\n")
+            stream.write(json.dumps(dict(gen_id=gen_id, chain=chain, k=k, time=time.time())) + "\n")
 
     # ---- per-round snapshots -------------------------------------------------------
     def write_round(self, completed: int):
@@ -288,6 +284,16 @@ def install(engine, task, evaluator, root, spec: dict, folder: Path, seed: int) 
         arm.record_dispatch(gen_id, chain_idx, k)
         return gen_id, tasks
     engine._prepare_generation_tasks = prepare_and_record
+    generate = engine.generator.generate
+
+    async def generate_for_batch(task, *args, **kwargs):
+        from .backend import GEN_ID
+        token = GEN_ID.set(task.gen_id)
+        try:
+            return await generate(task, *args, **kwargs)
+        finally:
+            GEN_ID.reset(token)
+    engine.generator.generate = generate_for_batch
     engine._select_inspirations_and_prompt = lambda: arm.select_and_prompt(select)
     engine._commit_node = lambda node, payload=None: arm.commit(commit, node, payload)
     engine._handle_pending_finalize = lambda completion: arm.after_finalize(finalize, completion)
