@@ -125,13 +125,18 @@ def read_jsonl(path):
 def simpletes(folder):
     """(steps, best, legacy): steps is None for runs without samples.jsonl."""
     checkpoint = newest_checkpoint(folder)
-    if checkpoint is None:
+    events = read_jsonl(f"{folder}/samples.jsonl")
+    if checkpoint is None and not events:
         return {}, {}, False
-    nodes = json.load(gzip.open(checkpoint + "/nodes.json.gz", "rt"))
+    # v35-v38 wrote no checkpoints (see driver.keep_previous_checkpoint); the sample log and the
+    # round-0 snapshot (the roots) are enough.
+    nodes = json.load(gzip.open(checkpoint + "/nodes.json.gz", "rt")) if checkpoint else []
     roots = [n for n in nodes if not n.get("parent_ids")]
+    if not roots and os.path.exists(f"{folder}/steps/simpletes_step_000000.json"):
+        roots = [dict(score=s["value"], metrics=s.get("metrics") or {})
+                 for s in json.load(open(f"{folder}/steps/simpletes_step_000000.json"))["states"]]
     start = min((-float(n["score"]) for n in roots if (n.get("metrics") or {}).get("validity", 1)),
                 default=float("inf"))
-    events = read_jsonl(f"{folder}/samples.jsonl")
     logged = {row.get("node") for row in events if row["event"] == "graded"}
     first = min((row["time"] for row in events if row["event"] == "dispatch"), default=None)
     unlogged = [n for n in nodes if n.get("parent_ids") and n["id"] not in logged
