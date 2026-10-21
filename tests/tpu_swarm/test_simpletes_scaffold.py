@@ -312,3 +312,40 @@ def test_metrics_follow_every_sample_across_a_restart(tmp_path):
     assert [step[k] for k in ("issued", "valid", "exec_failed", "invalid", "no_code", "thinking_capped")] == \
         [512, 2, 13, 0, 32 + 14 * 31 + 31, 32]
     assert best[0] == 0.3815 and best[1] == 0.3811        # "b" (0.3801) was lost with the crash
+
+
+def circuit_environment(monkeypatch):
+    from tests.tpu_swarm.test_simpletes_rq4 import rq4_environment
+    rq4_environment(monkeypatch, "circuit")
+    for key, value in dict(SCIENCE_PLACEMENT_PROMPT="ibm17-v3", SCIENCE_FEEDBACK_FORMAT="csv",
+                           SCIENCE_PROMPT_STYLE="standard", TTD_CIRCUIT_PROMPT="v2").items():
+        monkeypatch.setenv(key, value)
+
+
+def test_circuit_v2_states_the_record_and_our_gap(monkeypatch):
+    from tpu.science.training_env import CIRCUIT_RECORD, candidate_prompt, task_prompt
+    circuit_environment(monkeypatch)
+    record = f"Current record: mean proxy cost {CIRCUIT_RECORD}."
+    assert record in task_prompt("placement", include_starter=False)
+    prompt = candidate_prompt("placement", "def place(): pass", "case,cost", value=1 / 1.95)
+    assert record in prompt and f"Current mean proxy cost: 0.9500000. Target: {CIRCUIT_RECORD}. Current gap: " \
+        f"{0.95 - CIRCUIT_RECORD:.7f}." in prompt
+    assert "Current gap" not in candidate_prompt("placement")            # the empty parent shows the starter only
+    monkeypatch.setenv("TTD_CIRCUIT_PROMPT", "v1")
+    assert "Current record" not in task_prompt("placement", include_starter=False)
+
+
+def test_circuit_empty_start_shows_the_starter_like_our_empty_parent(monkeypatch, tmp_path):
+    from tpu.simpletes.scaffold import Arm, PLACEHOLDER
+    from tpu.science.training_env import task_prompt
+    circuit_environment(monkeypatch)
+    from tpu.simpletes.compat import import_simpletes
+    import_simpletes()
+    task = tasks.get_task("circuit")
+    engine = SimpleNamespace(_shared_construction_dir=str(tmp_path))
+    arm = Arm(engine, task, None, None, dict(num_chains=2, start="none"), tmp_path, seed=1)
+    roots = arm.root_nodes()
+    assert [(n.code, n.score, c) for n, c in roots] == [(PLACEHOLDER, 0.0, None)] * 2
+    prompt = arm.build_prompt([roots[0][0]])
+    assert prompt.startswith(f"Task: {task_prompt('placement', include_starter=True).strip()}")
+    assert "Inspiration" not in prompt and "Current record: mean proxy cost" in prompt

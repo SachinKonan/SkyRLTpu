@@ -86,7 +86,12 @@ class Arm:
         from simpletes.node import score_key
         ranked = sorted(inspirations, key=score_key, reverse=True)
         shown = [node for node in ranked if not is_placeholder(node)]
-        parts = [f"Task: {self.text}\n\n", GENERATION_INSTRUCTION]
+        text = self.text
+        if not shown and self.task.science:
+            # Nothing to show yet: the task text with its starter program, as our arm's empty-parent prompt.
+            from tpu.science.training_env import task_prompt
+            text = task_prompt(self.task.problem_type, include_starter=True).strip()
+        parts = [f"Task: {text}\n\n", GENERATION_INSTRUCTION]
         if shown:
             parts.append("In-context inspirations (sorted by score, higher is better):\n")
             for index, node in enumerate(shown, 1):
@@ -107,7 +112,10 @@ class Arm:
         chains = int(self.spec["num_chains"])
         start = self.spec.get("start", "none")
         roots = []
-        if start == "none":
+        if start == "none" and self.task.science:
+            # Our arm's empty parent: no program, value 0; its prompt shows the starter (build_prompt does too).
+            roots = [(0.0, PLACEHOLDER, None) for _ in range(chains)]
+        elif start == "none":
             env_type = self.task.env_type()
             for chain in range(chains):
                 state = env_type.create_initial_state(self.task.problem_type, seed=self.seed * 1000 + chain)

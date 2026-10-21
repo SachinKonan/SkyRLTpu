@@ -29,7 +29,10 @@ MODELS = {
     "qwen38": dict(model_preset="qwen3.8-27b", family="qwen", requests_per_engine=2, target_leases=2,
                    hf="gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen38-1d4bf0f2"),
 }
-PROBLEMS = {"erdos": dict(env=dict(TTD_ERDOS_PROMPT="v2"))}
+PROBLEMS = {"erdos": dict(env=dict(TTD_ERDOS_PROMPT="v2")),
+            # The agreed circuit prompt (ibm17-v3 wording, CSV feedback, standard structure) plus record/goal/gap.
+            "circuit": dict(env=dict(SCIENCE_PLACEMENT_PROMPT="ibm17-v3", SCIENCE_FEEDBACK_FORMAT="csv",
+                                     SCIENCE_PROMPT_STYLE="standard", TTD_CIRCUIT_PROMPT="v2"))}
 
 
 def run_id(problem, arm, start, model, seed):

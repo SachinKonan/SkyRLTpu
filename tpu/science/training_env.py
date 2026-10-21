@@ -66,7 +66,9 @@ def task_prompt(task, *, include_starter=True, environment=None):
                   + ', '.join(CASES) + '. The scientific objective is their equally weighted '
                   'arithmetic mean proxy cost, lower is better. No subset or baseline normalization. '
                   'Every case must be legal with zero hard-macro overlaps. Any invalid or missing '
-                  'case gives reward zero; otherwise reward = max(1e-6, 1/(1+mean_proxy_cost)).\n\n') + prompt
+                  'case gives reward zero; otherwise reward = max(1e-6, 1/(1+mean_proxy_cost)).\n\n'
+                  + (f'Current record: mean proxy cost {CIRCUIT_RECORD}. Our goal is to find a placement program '
+                     f'that beats it: mean proxy cost < {CIRCUIT_RECORD}.\n\n' if circuit_v2(environment) else '')) + prompt
     if cpu and environment.get('SCIENCE_PLACEMENT_RUNTIME') == 'cpu300-4g-v1':
         # The prompt keeps the original 4-GiB wording; the grader's real per-case limit
         # (SCIENCE_PLACEMENT_MEMORY_GIB) may be lower and does not change the prompt.
@@ -163,7 +165,17 @@ NUDGE = ('Reason about how you could further improve this program.\n'
          'Unless you make a meaningful improvement, you will not be rewarded.')
 
 
-def candidate_prompt(task, code='', feedback='', *, repair=False):
+# TTD_CIRCUIT_PROMPT=v2 (scaffold experiment, as TTD_ERDOS_PROMPT=v2): the task text states the best mean proxy
+# cost we have reached as the record and goal, and our arm's parent block adds its current value, the target and
+# the gap to 7 decimals. v1 (default) keeps the RQ4 prompt.
+CIRCUIT_RECORD = 0.9100326
+
+
+def circuit_v2(environment=None):
+    return (os.environ if environment is None else environment).get('TTD_CIRCUIT_PROMPT', 'v1') == 'v2'
+
+
+def candidate_prompt(task, code='', feedback='', *, repair=False, value=None):
     from .feedback import feedback_limit
     prompt = task_prompt(task, include_starter=not bool(code))
     if code:
@@ -173,8 +185,13 @@ def candidate_prompt(task, code='', feedback='', *, repair=False):
             from .feedback import compact
             feedback = compact(task, feedback)
         if os.environ.get('SCIENCE_PROMPT_STYLE', 'legacy') == 'standard' and not repair:
+            gap = ''
+            if task == 'placement' and circuit_v2() and value:
+                current = 1 / value - 1           # reward = 1 / (1 + mean proxy cost)
+                gap = (f'Current mean proxy cost: {current:.7f}. Target: {CIRCUIT_RECORD}. '
+                       f'Current gap: {current - CIRCUIT_RECORD:.7f}.\n')
             prompt += ('\n' + OPTIMIZING[task] + '\nHere is the last code we ran:\n```python\n' + code + '\n```\n'
-                       + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n\n' + NUDGE + '\n')
+                       + gap + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n\n' + NUDGE + '\n')
         else:
             prompt += ('\nPrevious candidate:\n```python\n' + code + '\n```\n'
                        + 'Grader feedback:\n' + feedback[-feedback_limit(task):] + '\n' + instruction + '\n')
@@ -332,7 +349,7 @@ class ScienceTrainingEnv(Environment):
         if self.problem_type == 'placement':
             from .placement_suite_guard import validate_state
             validate_state(state.to_dict())
-        return candidate_prompt(self.problem_type, state.code, state.observation)
+        return candidate_prompt(self.problem_type, state.code, state.observation, value=state.value)
 
     async def _safe_grade(self, given_answer, step):
         ScienceTrainingReward(self.problem_type, self.log_path, self.eval_timeout,
