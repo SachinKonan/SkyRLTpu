@@ -126,15 +126,15 @@ def test_specs_match_the_agreed_design():
         assert ("bootstrap_from" in spec) == (spec["start"] == "boot")
 
 
-def test_scaf2_runs_use_the_48k_fixed_budget():
+def test_scaf2_runs_use_the_32k_fixed_budget():
     from tpu.simpletes.make_profiles import profile
     doc = profile("erdos", "stes", "none", "qwen38", 1, 27000, "gs://b/x.tar.gz", "0" * 64)
-    assert doc["run_id"] == "scaf2-erdos-stes-none-qwen38-s1" and doc["client_context_window"] == 49152
-    assert doc["inference"]["max_model_length"] == 49152
+    assert doc["run_id"] == "scaf2-erdos-stes-none-qwen38-s1" and doc["client_context_window"] == 32768
+    assert doc["inference"]["max_model_length"] == 32768
     env = doc["client_env"]
-    assert (env["TTD_FIXED_THINK_TOKENS"], env["TTD_FIXED_TOTAL_TOKENS"], env["NUM_EPOCHS"]) == ("16384", "22528", "25")
-    caps = Caps(context_window=49152, phase1_max_tokens=16384, fixed_thinking=16384, fixed_total=22528)
-    assert caps.max_prompt_tokens(4096) == 49152 - 22528 - 50     # ~26.6k: SimpleTES's three inspirations fit
+    assert (env["TTD_FIXED_THINK_TOKENS"], env["TTD_FIXED_TOTAL_TOKENS"], env["NUM_EPOCHS"]) == ("15500", "21644", "25")
+    caps = Caps(context_window=32768, phase1_max_tokens=16384, fixed_thinking=15500, fixed_total=21644)
+    assert caps.max_prompt_tokens(4096) == 11074 > 10843                  # our longest circuit prompt fits
 
 
 class FakeRenderer:
@@ -160,7 +160,7 @@ def reflection_backend(tmp_path, requests):
                                                counted_phase1_tokens=0))
             return SimpleNamespace(status_code=200, raise_for_status=lambda: None, json=lambda: dict(choices=[choice]))
     from tpu.swarm.ray_train.frozen_benchmark import check_choice
-    caps = Caps(context_window=49152, phase1_max_tokens=16384, fixed_thinking=16384, fixed_total=22528)
+    caps = Caps(context_window=32768, phase1_max_tokens=16384, fixed_thinking=15500, fixed_total=21644)
     return NativeThinkingBackend(base_url="http://x", model="m", renderer=FakeRenderer(), family="qwen", caps=caps,
                                  log_path=tmp_path / "calls.jsonl", check_choice=check_choice, http=Http())
 
@@ -170,14 +170,14 @@ def test_reflection_does_not_think_and_fits_by_its_own_size(tmp_path):
     requests = []
     backend = reflection_backend(tmp_path, requests)
     answer_tokens = REFLECTION_ANSWER + 64
-    # 30k tokens: too long for a generation (22.5k budget) but a reflection only needs its answer.
-    text = asyncio.run(backend.generate_text("p" * 30000, thinking_tokens=REFLECTION_THINKING,
+    # 20k tokens: too long for a generation (21.6k budget) but a reflection only needs its answer.
+    text = asyncio.run(backend.generate_text("p" * 20000, thinking_tokens=REFLECTION_THINKING,
                                              answer_tokens=answer_tokens, temperature=0.7, kind="reflection"))
     assert "Approach: a" in text and "</think>" not in text
     request = requests[-1]
     assert (request["thinking_token_budget"], request["max_tokens"]) == (0, answer_tokens)
     assert request["forced_thinking_transition"] == "\n</think>\n\n"            # no program cue
-    too_long = 49152 - answer_tokens - 50 + 1
+    too_long = 32768 - answer_tokens - 50 + 1
     assert asyncio.run(backend.generate_text("p" * too_long, thinking_tokens=0, answer_tokens=answer_tokens,
                                              temperature=0.7, kind="reflection")) == ""
     assert len(requests) == 1
@@ -248,14 +248,38 @@ def test_resumed_run_extends_to_the_larger_budget():
     assert not extend_budget(policy, 256)
 
 
-def test_each_graded_candidate_records_the_samples_issued(erdos, tmp_path):
+def test_each_batch_records_its_issued_sample_range(erdos, tmp_path):
     arm = arm_for(erdos, tmp_path)
-    arm.engine.generation_attempts = 96            # three batches of 32 issued; some had no code
-    committed = []
+    arm.engine.generation_attempts = 96            # raised by k=32 just before this batch is prepared
+    arm.record_dispatch(gen_id=7, chain=3, k=32)
+    row = json.loads((tmp_path / "dispatch.jsonl").read_text())
+    assert (row["gen_id"], row["chain"], row["k"], row["end"]) == (7, 3, 32, 96)   # samples 64..95
 
-    async def original(node, payload=None):
-        committed.append(node.id)
-    child = node(-0.381)
-    asyncio.run(arm.commit(original, child))
-    row = json.loads((tmp_path / "attempts.jsonl").read_text())
-    assert committed == [child.id] and (row["id"], row["attempts"]) == (child.id, 96)
+
+def test_metrics_place_candidates_by_batch_and_count_ungraded_as_no_code(tmp_path):
+    import gzip
+    from tpu.swarm.scaffold_exp.metrics import simpletes
+    folder = tmp_path / "simpletes"
+    checkpoint = folder / "checkpoints/d/i/db_state_1"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "metadata.json").write_text(json.dumps(dict(completed_evaluations=3, generation_attempts=1536)))
+    # 48 batches of 32: batch g covers samples 32g..32g+31. Batch 3 was lost to a restart and
+    # re-issued as batch 50 (same range). Batch 20 (step 1) finished grading before batch 2 (step 0).
+    rows = [dict(gen_id=g, k=32, end=32 * (g + 1)) for g in range(48)] + [dict(gen_id=50, k=32, end=128)]
+    (folder / "dispatch.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+    def made(gen, score, valid, created, error=""):
+        return dict(id=f"n{gen}-{created}", parent_ids=["r"], gen_id=gen, score=score, created_at=created,
+                    metrics=dict(validity=valid, error=error))
+    nodes = [dict(id="r", parent_ids=[], score=-0.3815, created_at="0", metrics=dict(validity=1)),
+             made(20, -0.3811, 1, "1"), made(2, -0.3812, 1, "2"), made(50, 0, 0, "3", "Invalid solution."),
+             made(3, -0.3801, 1, "4")]                       # lost batch: not on the axis
+    with gzip.open(checkpoint / "nodes.json.gz", "wt") as stream:
+        json.dump(nodes, stream)
+    (folder / "llm_calls.jsonl").write_text(json.dumps(dict(kind="generate", choices=[dict(forced=True)] * 32)) + "\n")
+    (folder / "summary.json").write_text("{}")
+    steps, best, flags = simpletes(str(folder))
+    assert sorted(steps) == [0, 1, 2]
+    assert (steps[0]["valid"], steps[0]["invalid"], steps[0]["no_code"], steps[0]["issued"]) == (1, 1, 510, 512)
+    assert steps[1]["valid"] == 1 and steps[1]["no_code"] == 511
+    assert best == {0: 0.3815, 1: 0.3812, 2: 0.3811, 3: 0.3811}   # the root, then sample order
