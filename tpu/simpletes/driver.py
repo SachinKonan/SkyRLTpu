@@ -108,20 +108,21 @@ def guard_completion(engine) -> None:
 def keep_previous_checkpoint(manager) -> None:
     """Delete the previous checkpoint only after the new one is written.
 
-    Upstream removes the previous db_state_* before writing the next. A kill during that write
-    (a round ends at a log_interval multiple, exactly when a step-boundary restart lands) left
-    only a partial checkpoint, so the restart found nothing consistent and started over.
+    Upstream ``write_sync`` removes the previous db_state_* before writing the next. A kill during
+    that write (a round ends at a log_interval multiple, exactly when a step-boundary restart lands)
+    left only a partial checkpoint, so the restart found nothing consistent and started over.
     """
-    original = manager.snapshot
+    original = manager.write_sync
 
-    async def snapshot(*args, **kwargs):
+    def write_sync(*args, **kwargs):
         previous, manager._last_checkpoint_path = manager._last_checkpoint_path, None
-        await original(*args, **kwargs)
+        result = original(*args, **kwargs)
         if previous and previous != manager._last_checkpoint_path and os.path.isdir(previous):
             import shutil
             shutil.rmtree(previous, ignore_errors=True)
+        return result
 
-    manager.snapshot = snapshot
+    manager.write_sync = write_sync
 
 
 def extend_budget(selector, max_generations: int) -> bool:

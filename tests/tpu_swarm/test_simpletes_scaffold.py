@@ -213,25 +213,38 @@ def test_v4_64_od_farm_job_matches_the_on_demand_pool(tmp_path):
 
 
 def test_previous_checkpoint_survives_until_the_next_is_written(tmp_path):
+    from tpu.simpletes.compat import import_simpletes
+    import_simpletes()
+    from simpletes.engine.checkpoint import CheckpointManager
     from tpu.simpletes.driver import keep_previous_checkpoint
     old = tmp_path / "db_state_old"
     old.mkdir()
     seen = []
+    manager = CheckpointManager.__new__(CheckpointManager)
+    manager._last_checkpoint_path = str(old)
 
-    class Manager:
-        _last_checkpoint_path = str(old)
-
-        async def snapshot(self):
-            # Upstream would rmtree _last_checkpoint_path here; it must already be cleared.
-            seen.append((self._last_checkpoint_path, old.exists()))
-            (tmp_path / "db_state_new").mkdir()
-            self._last_checkpoint_path = str(tmp_path / "db_state_new")
-
-    manager = Manager()
-    manager.snapshot = Manager.snapshot.__get__(manager)
+    def write_sync(self, *args):
+        # Upstream rmtrees _last_checkpoint_path first; it must already be cleared here.
+        seen.append((self._last_checkpoint_path, old.exists()))
+        (tmp_path / "db_state_new").mkdir()
+        self._last_checkpoint_path = str(tmp_path / "db_state_new")
+        return "written"
+    manager.write_sync = write_sync.__get__(manager)
     keep_previous_checkpoint(manager)
-    asyncio.run(manager.snapshot())
+    assert manager.write_sync("code", {}) == "written"
     assert seen == [(None, True)] and not old.exists() and (tmp_path / "db_state_new").exists()
+
+
+def test_checkpoint_round_trip_through_the_engine_snapshot(tmp_path):
+    """The engine unpacks snapshot(); the wrapper must leave it untouched (v35-v37 returned None)."""
+    from tpu.simpletes.compat import import_simpletes
+    import_simpletes()
+    from simpletes.engine.checkpoint import CheckpointManager
+    from tpu.simpletes.driver import keep_previous_checkpoint
+    manager = CheckpointManager.__new__(CheckpointManager)
+    snapshot = manager.snapshot
+    keep_previous_checkpoint(manager)
+    assert manager.snapshot == snapshot
 
 
 def test_resumed_run_extends_to_the_larger_budget():
