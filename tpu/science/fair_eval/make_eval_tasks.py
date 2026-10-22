@@ -101,13 +101,10 @@ def main():
                 cmd, cwd = run, cfg['repo']
                 if m in PRIVATE:
                     cmd, cwd = ['bash', '-c', PRIVATE[m] + ' && cd "$TASK_WORK/repo" && exec ' + ' '.join(map(repr, run))], None
+                # Every method runs as submitted. On NG45, ArchGen's final placer looks its netlist up only
+                # under the IBM test cases (PAD80_BENCH_ROOT / EVO_XRA_BENCH_ROOT defaults), so it takes
+                # its own fallback path there, as it would have in the challenge's Tier-2 setup.
                 env = dict(cfg['env'])
-                if m == 'archgen' and case in NG45:
-                    # ArchGen looks netlists up only under PAD80_BENCH_ROOT/<name> (GPU path) and
-                    # EVO_XRA_BENCH_ROOT/<name> (Xplace-RA lane), both defaulting to the IBM test
-                    # cases, and otherwise falls back; these settings point both at the official NG45
-                    # netlists (symlinks named <design>_ng45).
-                    env['PAD80_BENCH_ROOT'] = env['EVO_XRA_BENCH_ROOT'] = str(F / 'src/archgen-bench-root')
                 spec = dict(id=tid, kind='eval', method=m, case=case, repeat=tag, cmd=cmd, cwd=cwd, env=env,
                             out=str(out), est_seconds=cfg['est'], timeout_seconds=cfg['timeout'],
                             gpu_share=cfg['gpu_share'], cpus=12, memory_gb=64,
