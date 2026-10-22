@@ -63,7 +63,7 @@ PRIVATE = {
                 f'rsync -a --exclude .git --exclude external {F}/src/archgen/ "$TASK_WORK/repo/" && '
                 f'ln -s {F}/src/archgen/external "$TASK_WORK/repo/external" && '
                 f'rsync -a --exclude .git --exclude "build*" {F}/src/Xplace-archgen/ "$TASK_WORK/xplace/" && '
-                'export EVO_XRA_XPLACE_ROOT="$TASK_WORK/xplace"'),
+                'export EVO_XRA_XPLACE_ROOT="$TASK_WORK/xplace" EVO_XRA_WORK_ROOT="$TASK_WORK/xra"'),
 }
 
 
@@ -103,10 +103,11 @@ def main():
                     cmd, cwd = ['bash', '-c', PRIVATE[m] + ' && cd "$TASK_WORK/repo" && exec ' + ' '.join(map(repr, run))], None
                 env = dict(cfg['env'])
                 if m == 'archgen' and case in NG45:
-                    # ArchGen's final placer looks netlists up only under PAD80_BENCH_ROOT/<name>
-                    # (default: the IBM test cases) and otherwise takes its fallback path; this
-                    # documented setting points it at the official NG45 netlists (symlinks).
-                    env['PAD80_BENCH_ROOT'] = str(F / 'src/archgen-bench-root')
+                    # ArchGen looks netlists up only under PAD80_BENCH_ROOT/<name> (GPU path) and
+                    # EVO_XRA_BENCH_ROOT/<name> (Xplace-RA lane), both defaulting to the IBM test
+                    # cases, and otherwise falls back; these settings point both at the official NG45
+                    # netlists (symlinks named <design>_ng45).
+                    env['PAD80_BENCH_ROOT'] = env['EVO_XRA_BENCH_ROOT'] = str(F / 'src/archgen-bench-root')
                 spec = dict(id=tid, kind='eval', method=m, case=case, repeat=tag, cmd=cmd, cwd=cwd, env=env,
                             out=str(out), est_seconds=cfg['est'], timeout_seconds=cfg['timeout'],
                             gpu_share=cfg['gpu_share'], cpus=12, memory_gb=64,
