@@ -28,7 +28,7 @@ from macro_place.utils import validate_placement
 b, plc = load_benchmark_from_dir(str(Path(repo) / 'external/MacroPlacement/Testcases/ICCAD04' / case))
 pos = np.load(positions)
 assert pos.shape == tuple(b.macro_positions.shape), pos.shape
-t = torch.from_numpy(pos.astype(np.float32))
+t = torch.from_numpy(pos)   # validate the placement in the dtype the placer returned, as evaluate.py does
 fixed = b.macro_fixed.numpy()
 ok, errors = validate_placement(t, b)
 fixed_ok = bool(np.array_equal(pos[fixed], b.macro_positions.numpy()[fixed]))
@@ -56,7 +56,10 @@ def main():
     start = time.time()
     placement = placer.place(benchmark)
     report['placer_seconds'] = time.time() - start
-    pos = placement.detach().cpu().numpy().astype(np.float32) if hasattr(placement, 'detach') else np.asarray(placement, dtype=np.float32)
+    # Keep the returned dtype: macro_place.evaluate validates the tensor as returned, and casting
+    # float64 output to float32 can push an edge one float32 step outside the canvas.
+    pos = placement.detach().cpu().numpy() if hasattr(placement, 'detach') else np.asarray(placement)
+    report['returned_dtype'] = str(pos.dtype)
     np.save(out / 'positions.npy', pos)
     (out / 'score_official.py').write_text(SCORE)
     subprocess.run([a.official_python, str(out / 'score_official.py'), a.official_repo, a.case,
