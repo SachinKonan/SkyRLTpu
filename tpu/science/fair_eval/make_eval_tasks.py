@@ -56,6 +56,8 @@ PRIVATE = {
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--queue', default=str(F / 'queue'))
+    ap.add_argument('--plan', help='write specs to PLAN/specs and an array index PLAN/index.txt instead of a queue')
+    ap.add_argument('--runs', default=str(F / 'runs/eval'), help='output root for task results')
     ap.add_argument('--methods', default=','.join(METHODS))
     ap.add_argument('--repeats', type=int)
     ap.add_argument('--cases', nargs='*', default=[f'ibm{i:02d}' for i in range(1, 19) if i != 5])
@@ -63,6 +65,9 @@ def main():
     ap.add_argument('--budget', type=int, help='override the time-filling budget (smoke tests only)')
     a = ap.parse_args()
     q = Path(a.queue); (q / 'pending').mkdir(parents=True, exist_ok=True)
+    if a.plan:
+        q = Path(a.plan); (q / 'specs').mkdir(parents=True, exist_ok=True)
+    spec_dir = (q / 'specs') if a.plan else (q / 'pending')
     added = 0
     for m in a.methods.split(','):
         cfg = METHODS[m]
@@ -75,9 +80,9 @@ def main():
             for case in a.cases:
                 tag = 'smoke' if a.smoke else f'r{r}'
                 tid = f'eval-{m}-{case}-{tag}'
-                if any((q / d / f'{tid}.json').exists() for d in ('pending', 'running', 'done', 'failed')):
+                if any((q / d / f'{tid}.json').exists() for d in ('pending', 'running', 'done', 'failed', 'specs')):
                     continue
-                out = F / 'runs/eval' / m / tag / case
+                out = Path(a.runs) / m / tag / case
                 run = [cfg['python'], '-u', EVAL_ONE, '--placer', cfg['placer'], '--case', case,
                        '--out', str(out), '--official-python', CUDA_PY, '--official-repo', OFFICIAL]
                 cmd, cwd = run, cfg['repo']
@@ -87,10 +92,17 @@ def main():
                     cmd, cwd = ['bash', '-c', PRIVATE[m] + ' && cd "$TASK_WORK/repo" && exec ' + ' '.join(map(repr, run))], None
                 spec = dict(id=tid, kind='eval', method=m, case=case, repeat=tag, cmd=cmd, cwd=cwd, env=dict(cfg['env'], MOMO_LOG=str(out / 'momo_log.json')),
                             est_seconds=cfg['est'], timeout_seconds=cfg['timeout'],
-                            gpus=1, cpus=12, memory_gb=180, priority=200 if a.smoke else 100 - r)
-                (q / 'pending' / f'{tid}.json').write_text(json.dumps(spec, indent=1))
+                            gpus=1, cpus=12, memory_gb=64, priority=200 if a.smoke else 100 - r)
+                (spec_dir / f'{tid}.json').write_text(json.dumps(spec, indent=1))
                 added += 1
-    print(added, 'added;', len(list((q / 'pending').glob('*.json'))), 'pending')
+    if a.plan:
+        # longest tasks first, so they start in the first wave
+        specs = sorted((json.loads(f.read_text()) for f in (q / 'specs').glob('*.json')),
+                       key=lambda s: (-s['priority'], -s['est_seconds'], s['id']))
+        (q / 'index.txt').write_text('\n'.join(s['id'] for s in specs) + '\n')
+        print(added, 'added;', len(specs), 'in plan', q)
+    else:
+        print(added, 'added;', len(list((q / 'pending').glob('*.json'))), 'pending')
 
 
 if __name__ == '__main__':
