@@ -1,26 +1,28 @@
-"""Drain a file-based work queue with a single-node Ray cluster inside one Slurm job.
+"""Drain a shared file-based work queue with a single-node Ray cluster inside one Slurm job.
+
+Many jobs may drain the same queue at once. A job keeps its GPUs for its whole wall time and
+keeps starting tasks as slots free up, as long as a task's expected duration still fits.
 
 Queue layout (QUEUE=<dir>):
-  pending/<id>.json   task specs waiting to run
-  running/<id>.json   claimed by the current job
-  done/<id>.json      finished (exit code 0), spec + result
-  failed/<id>.json    finished with a nonzero exit or exceeded its own timeout
-Each task writes its logs and outputs under <QUEUE>/work/<id>/.
+  pending/<id>.json   waiting
+  running/<id>.json   claimed; carries the owning job and its lease (the job's deadline)
+  done/<id>.json      exit code 0          failed/<id>.json   nonzero exit or own timeout
+  work/<id>/          logs and outputs of the task
 
-Task spec (JSON):
-  {"id": str, "cmd": [str, ...], "cwd": str, "env": {..}, "est_seconds": float,
-   "timeout_seconds": float, "gpus": 1, "cpus": 12, "memory_gb": 200, "priority": int}
+Concurrency:
+  * claim = atomic rename pending/ -> running/; a job that loses the race skips the task;
+  * a running task whose lease expired (its job was killed) is returned to pending/ by any job;
+  * at its own deadline a job kills what it still runs and returns those tasks to pending/.
+Fairness: each task gets one GPU and its own fixed slice of the job's cores (CPU affinity), so a
+neighbouring task cannot take CPU time from a time-limited search. Method budgets are in the specs.
 
-A slot starts a task only if the job's remaining time covers est_seconds plus a margin.
-When the job's deadline arrives, running tasks are killed and returned to pending/ for the
-next array job; done tasks are never rerun. Only one array job runs at a time (%1), so this
-process is the only writer.
+Task spec: {"id", "cmd": [...], "cwd", "env": {}, "est_seconds", "timeout_seconds",
+            "gpus": 1, "cpus": 12, "priority"}
 """
 import argparse
 import json
 import os
 from pathlib import Path
-import shutil
 import signal
 import socket
 import subprocess
@@ -34,30 +36,38 @@ def load(path):
 
 
 def save(path, value):
-    tmp = Path(str(path) + '.tmp')
+    tmp = Path(f'{path}.{os.getpid()}.tmp')
     tmp.write_text(json.dumps(value, indent=1))
     tmp.replace(path)
 
 
 @ray.remote
-def run_task(spec, work, deadline):
-    """Run one task; returns a result dict. CUDA_VISIBLE_DEVICES is set by Ray."""
+def run_task(spec, work, deadline, job_gpus, job_cpus):
+    """Run one task on the GPU Ray assigned, pinned to that GPU's slice of the job's cores."""
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
+    gpu_ids = ray.get_gpu_ids()
+    gid = str(gpu_ids[0]) if gpu_ids else ''
+    gid = str(int(gid)) if gid.isdigit() else gid
+    slot = job_gpus.index(gid) if gid in job_gpus else 0
+    n = int(spec.get('cpus', 12))
+    cores = job_cpus[slot * n:(slot + 1) * n] or job_cpus
     env = dict(os.environ)
     env.update({k: str(v) for k, v in spec.get('env', {}).items()})
     env['TASK_WORK'] = str(work)
-    threads = str(spec.get('cpus', 12))
     for key in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
-        env.setdefault(key, threads)
+        env.setdefault(key, str(len(cores)))
     limit = min(float(spec['timeout_seconds']), deadline - time.time())
+    gpu = subprocess.run(['nvidia-smi', '-i', env.get('CUDA_VISIBLE_DEVICES', '0').split(',')[0],
+                          '--query-gpu=name', '--format=csv,noheader'], capture_output=True, text=True).stdout.strip()
     started = time.time()
     with open(work / 'stdout.log', 'ab') as log:
-        log.write(f"\n=== {time.strftime('%F %T')} host={socket.gethostname()} "
-                  f"gpus={env.get('CUDA_VISIBLE_DEVICES')} limit={limit:.0f}s ===\n".encode())
+        log.write(f"\n=== {time.strftime('%F %T')} host={socket.gethostname()} job={os.environ.get('SLURM_JOB_ID')} "
+                  f"gpu={env.get('CUDA_VISIBLE_DEVICES')} ({gpu}) cores={cores} limit={limit:.0f}s ===\n".encode())
         log.flush()
         proc = subprocess.Popen(spec['cmd'], cwd=spec.get('cwd') or str(work), env=env, stdout=log,
-                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
+                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
+                                preexec_fn=lambda: os.sched_setaffinity(0, cores))
         try:
             code = proc.wait(timeout=max(1.0, limit))
             status = 'done' if code == 0 else 'failed'
@@ -65,41 +75,60 @@ def run_task(spec, work, deadline):
             os.killpg(proc.pid, signal.SIGKILL)
             proc.wait()
             code = None
-            # Hitting the job deadline is an infrastructure interruption; hitting the task's
-            # own timeout is a task failure.
+            # The job deadline is an infrastructure interruption; the task's own timeout is a failure.
             status = 'interrupted' if deadline - time.time() < 5 else 'failed'
-    return dict(status=status, exit_code=code, seconds=time.time() - started,
-                host=socket.gethostname(), gpus=env.get('CUDA_VISIBLE_DEVICES'))
+    return dict(status=status, exit_code=code, seconds=time.time() - started, host=socket.gethostname(),
+                gpu=gpu, gpu_index=env.get('CUDA_VISIBLE_DEVICES'), cores=cores)
+
+
+def recover_stale(q, grace=120):
+    """Return tasks whose owning job's lease expired (job killed) to pending/."""
+    now = time.time()
+    for f in (q / 'running').glob('*.json'):
+        try:
+            spec = load(f)
+        except (OSError, ValueError):
+            continue
+        # A just-claimed task has no lease yet (the claimant writes it right after the rename);
+        # judge such a file by its age instead.
+        lease = spec.get('lease_deadline')
+        if lease is None:
+            try:
+                lease = f.stat().st_mtime + 600
+            except FileNotFoundError:
+                continue
+        if lease + grace < now:
+            spec.setdefault('history', []).append(dict(job=spec.get('owner_job'), status='stale-lease'))
+            spec.pop('lease_deadline', None)
+            try:
+                f.rename(q / 'pending' / f.name)   # atomic; another job may do it first
+                save(q / 'pending' / f.name, spec)
+            except FileNotFoundError:
+                pass
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--queue', required=True)
     ap.add_argument('--wall-seconds', type=float, default=3600)
-    ap.add_argument('--reserve-seconds', type=float, default=150, help='kept free at the end of the job')
+    ap.add_argument('--reserve-seconds', type=float, default=120, help='kept free at the end of the job')
     ap.add_argument('--start-margin', type=float, default=60, help='extra slack required to start a task')
-    ap.add_argument('--gpus', type=int, default=4)
-    ap.add_argument('--cpus', type=int, default=48)
     a = ap.parse_args()
     q = Path(a.queue)
     for sub in ('pending', 'running', 'done', 'failed', 'work'):
         (q / sub).mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     deadline = t0 + a.wall_seconds - a.reserve_seconds
-    job = os.environ.get('SLURM_JOB_ID', 'local')
-
-    # Tasks a killed job left in running/ go back to pending/.
-    for f in (q / 'running').glob('*.json'):
-        spec = load(f)
-        spec.setdefault('interruptions', []).append(dict(job=spec.get('last_job'), reason='stale'))
-        save(q / 'pending' / f.name, spec)
-        f.unlink()
+    job = os.environ.get('SLURM_JOB_ID', f'local-{os.getpid()}')
+    job_gpus = [g.strip() for g in os.environ.get('CUDA_VISIBLE_DEVICES', '0').split(',') if g.strip()]
+    job_cpus = sorted(os.sched_getaffinity(0))
+    print(f'job {job} on {socket.gethostname()}: gpus {job_gpus}, cpus {len(job_cpus)}', flush=True)
 
     # A login-shell RAY_RUNTIME_ENV_HOOK (from a newer Ray/uv setup) breaks this Ray version.
     for key in [k for k in os.environ if k.startswith('RAY_RUNTIME_ENV')]:
         os.environ.pop(key)
-    ray.init(num_cpus=a.cpus, num_gpus=a.gpus, include_dashboard=False, log_to_driver=False)
-    inflight = {}   # ObjectRef -> (spec, path)
+    ray.init(num_cpus=len(job_cpus), num_gpus=len(job_gpus), include_dashboard=False, log_to_driver=False)
+    inflight = {}   # ObjectRef -> (spec, running path)
     stop = False
 
     def handle(sig, frame):
@@ -108,36 +137,46 @@ def main():
     signal.signal(signal.SIGTERM, handle)
 
     def free_gpus():
-        return a.gpus - sum(s.get('gpus', 1) for s, _ in inflight.values())
+        return len(job_gpus) - sum(s.get('gpus', 1) for s, _ in inflight.values())
+
+    def fits(spec):
+        return time.time() + spec.get('est_seconds', 0) + a.start_margin <= deadline
 
     while True:
-        now = time.time()
-        if not stop and now < deadline:
-            pending = sorted((load(f) | {'_path': str(f)} for f in (q / 'pending').glob('*.json')),
-                             key=lambda s: (-s.get('priority', 0), -s.get('est_seconds', 0), s['id']))
-            for spec in pending:
+        recover_stale(q)
+        if not stop and time.time() < deadline and free_gpus() > 0:
+            pending = []
+            for f in (q / 'pending').glob('*.json'):
+                try:
+                    pending.append((load(f), f))
+                except (OSError, ValueError):
+                    continue
+            pending.sort(key=lambda t: (-t[0].get('priority', 0), -t[0].get('est_seconds', 0), t[0]['id']))
+            for spec, src in pending:
                 if free_gpus() < spec.get('gpus', 1):
                     break
-                if now + spec.get('est_seconds', 0) + a.start_margin > deadline:
-                    continue   # too long for what is left of this job; the next job takes it
-                src = Path(spec.pop('_path'))
-                spec['last_job'] = job
-                path = q / 'running' / src.name
-                save(path, spec)
-                src.unlink()
-                ref = run_task.options(num_gpus=spec.get('gpus', 1), num_cpus=spec.get('cpus', 12),
-                                       memory=int(spec.get('memory_gb', 0) * 1024**3) or None
-                                       ).remote(spec, str(q / 'work' / spec['id']), deadline)
-                inflight[ref] = (spec, path)
+                if not fits(spec):
+                    continue
+                dst = q / 'running' / src.name
+                try:
+                    src.rename(dst)                 # atomic claim
+                except FileNotFoundError:
+                    continue                        # another job took it
+                spec.update(owner_job=job, owner_host=socket.gethostname(), lease_deadline=deadline + 60)
+                save(dst, spec)
+                ref = run_task.options(num_gpus=spec.get('gpus', 1), num_cpus=spec.get('cpus', 12)).remote(
+                    spec, str(q / 'work' / spec['id']), deadline, job_gpus, job_cpus)
+                inflight[ref] = (spec, dst)
                 print(f"[{time.time()-t0:7.0f}s] start {spec['id']} (est {spec.get('est_seconds', 0):.0f}s)", flush=True)
         if not inflight:
-            if stop or time.time() >= deadline or not any((q / 'pending').glob('*.json')):
+            pending = list((q / 'pending').glob('*.json'))
+            if stop or time.time() >= deadline or not pending:
                 break
-            # nothing fits in the remaining time
-            if all(time.time() + load(f).get('est_seconds', 0) + a.start_margin > deadline
-                   for f in (q / 'pending').glob('*.json')):
+            if not any(fits(load(f)) for f in pending if f.exists()):
                 break
-        ready, _ = ray.wait(list(inflight), num_returns=1, timeout=10)
+        ready, _ = ray.wait(list(inflight), num_returns=1, timeout=15) if inflight else ([], [])
+        if not inflight:
+            time.sleep(15)
         for ref in ready:
             spec, path = inflight.pop(ref)
             try:
@@ -145,6 +184,7 @@ def main():
             except Exception as exc:   # worker died
                 result = dict(status='interrupted', error=repr(exc))
             spec.setdefault('attempts', []).append(dict(job=job, **result))
+            spec.pop('lease_deadline', None)
             dest = {'done': 'done', 'failed': 'failed'}.get(result['status'], 'pending')
             save(q / dest / path.name, spec)
             path.unlink(missing_ok=True)
@@ -153,16 +193,16 @@ def main():
         if stop or time.time() >= deadline + 30:
             break
 
-    # Anything still running is returned to the queue for the next job.
     for ref, (spec, path) in inflight.items():
         ray.cancel(ref, force=True)
         spec.setdefault('attempts', []).append(dict(job=job, status='interrupted', reason='job deadline'))
+        spec.pop('lease_deadline', None)
         save(q / 'pending' / path.name, spec)
         path.unlink(missing_ok=True)
         print(f"[{time.time()-t0:7.0f}s] requeued {spec['id']}", flush=True)
     ray.shutdown()
-    left = len(list((q / 'pending').glob('*.json')))
-    print(f"job {job} exits: done={len(list((q/'done').glob('*.json')))} failed={len(list((q/'failed').glob('*.json')))} pending={left}")
+    print(f"job {job} exits: done={len(list((q/'done').glob('*.json')))} failed={len(list((q/'failed').glob('*.json')))} "
+          f"pending={len(list((q/'pending').glob('*.json')))} running={len(list((q/'running').glob('*.json')))}")
 
 
 if __name__ == '__main__':
