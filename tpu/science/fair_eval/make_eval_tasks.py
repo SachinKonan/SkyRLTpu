@@ -23,20 +23,20 @@ BUDGET = 3000
 METHODS = {
     'momo300': dict(python=CUDA_PY, repo=OFFICIAL, placer=str(W / 'tpu/science/fair_eval/submission/placer.py'),
                     env=dict(MOMO_XPLACE_ROOT=str(F / 'src/Xplace'), MOMO_SEARCH_SECONDS='300'),
-                    est=1400, timeout=3300, repeats=3),
+                    est=1400, timeout=3300, repeats=3, gpu_share=0.05),
     'momofill': dict(python=CUDA_PY, repo=OFFICIAL, placer=str(W / 'tpu/science/fair_eval/submission/placer.py'),
                      env=dict(MOMO_XPLACE_ROOT=str(F / 'src/Xplace'), MOMO_SEARCH_SECONDS='fill',
                               MOMO_TOTAL_SECONDS=str(BUDGET)),
-                     est=BUDGET + 200, timeout=3330, repeats=2),
+                     est=BUDGET + 200, timeout=3330, repeats=2, gpu_share=0.05),
     'archgen': dict(python=CUDA_PY, repo=str(F / 'src/archgen'), placer='submissions/final_placer.py',
                     env=dict(EVO_XRA_XPLACE_ROOT=str(F / 'src/Xplace-archgen'), XPLACE_PYTHON=CUDA_PY,
                              EVO_XRA_ENABLE='1', EVO_FORCE_FULL_TIME='1', EVO_TARGET_TOTAL_TIME_S=str(BUDGET),
                              AUTODMP_TOTAL_TIME_LIMIT=str(BUDGET), EVO_UNDER60_DEADLINE_S=str(BUDGET + 120),
                              EVO_UNDER60_SCORE_SAFETY_S='120', EVO_RETURN_GUARD_S='10', OMP_NUM_THREADS='1',
                              MKL_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', NUMEXPR_NUM_THREADS='1'),
-                    est=BUDGET + 200, timeout=3330, repeats=2),
+                    est=BUDGET + 200, timeout=3330, repeats=2, gpu_share=0.9),
     'abuplace': dict(python=str(F / 'src/AbuPlace/.venv/bin/python'), repo=str(F / 'src/AbuPlace'),
-                     placer='abuplace/placer.py', env={}, est=1200, timeout=3330, repeats=2),
+                     placer='abuplace/placer.py', env={}, est=1200, timeout=3330, repeats=2, gpu_share=0.9),
 }
 
 
@@ -92,7 +92,7 @@ def main():
                     cmd, cwd = ['bash', '-c', PRIVATE[m] + ' && cd "$TASK_WORK/repo" && exec ' + ' '.join(map(repr, run))], None
                 spec = dict(id=tid, kind='eval', method=m, case=case, repeat=tag, cmd=cmd, cwd=cwd, env=dict(cfg['env'], MOMO_LOG=str(out / 'momo_log.json')),
                             est_seconds=cfg['est'], timeout_seconds=cfg['timeout'],
-                            gpus=1, cpus=12, memory_gb=64, priority=200 if a.smoke else 100 - r)
+                            gpus=1, gpu_share=cfg['gpu_share'], cpus=12, memory_gb=64, priority=200 if a.smoke else 100 - r)
                 (spec_dir / f'{tid}.json').write_text(json.dumps(spec, indent=1))
                 added += 1
     if a.plan:

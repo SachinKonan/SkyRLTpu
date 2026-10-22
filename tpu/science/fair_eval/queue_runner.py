@@ -13,11 +13,14 @@ Concurrency:
   * claim = atomic rename pending/ -> running/; a job that loses the race skips the task;
   * a running task whose lease expired (its job was killed) is returned to pending/ by any job;
   * at its own deadline a job kills what it still runs and returns those tasks to pending/.
-Fairness: each task gets one GPU and its own fixed slice of the job's cores (CPU affinity), so a
-neighbouring task cannot take CPU time from a time-limited search. Method budgets are in the specs.
+Packing: a job is a pool of GPUs and cores. Each task declares a GPU share and a core count; the
+runner starts every pending task that fits, giving it one GPU (CUDA_VISIBLE_DEVICES) and its own
+slice of cores (CPU affinity), so a neighbouring task cannot take CPU time from a time-limited
+search. A GPU-bound placer takes most of a GPU (gpu_share 0.9); a CPU-bound placer that needs a GPU
+only briefly takes a sliver (e.g. 0.05) and shares that GPU. Method budgets are in the specs.
 
 Task spec: {"id", "cmd": [...], "cwd", "env": {}, "est_seconds", "timeout_seconds",
-            "gpus": 1, "cpus": 12, "priority"}
+            "gpu_share": 0.9, "cpus": 12, "priority"}
 """
 import argparse
 import json
@@ -41,20 +44,15 @@ def save(path, value):
     tmp.replace(path)
 
 
-@ray.remote
-def run_task(spec, work, deadline, job_gpus, job_cpus):
-    """Run one task on the GPU Ray assigned, pinned to that GPU's slice of the job's cores."""
+@ray.remote(num_cpus=0)
+def run_task(spec, work, deadline, gpu, cores):
+    """Run one task on the GPU and cores the driver assigned."""
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
-    gpu_ids = ray.get_gpu_ids()
-    gid = str(gpu_ids[0]) if gpu_ids else ''
-    gid = str(int(gid)) if gid.isdigit() else gid
-    slot = job_gpus.index(gid) if gid in job_gpus else 0
-    n = int(spec.get('cpus', 12))
-    cores = job_cpus[slot * n:(slot + 1) * n] or job_cpus
     env = dict(os.environ)
     env.update({k: str(v) for k, v in spec.get('env', {}).items()})
     env['TASK_WORK'] = str(work)
+    env['CUDA_VISIBLE_DEVICES'] = gpu
     for key in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
         env.setdefault(key, str(len(cores)))
     limit = min(float(spec['timeout_seconds']), deadline - time.time())
@@ -113,6 +111,7 @@ def main():
     ap.add_argument('--wall-seconds', type=float, default=3600)
     ap.add_argument('--reserve-seconds', type=float, default=120, help='kept free at the end of the job')
     ap.add_argument('--start-margin', type=float, default=60, help='extra slack required to start a task')
+    ap.add_argument('--slice-cpus', type=int, default=12, help='cores per task slice')
     a = ap.parse_args()
     q = Path(a.queue)
     for sub in ('pending', 'running', 'done', 'failed', 'work'):
@@ -127,8 +126,13 @@ def main():
     # A login-shell RAY_RUNTIME_ENV_HOOK (from a newer Ray/uv setup) breaks this Ray version.
     for key in [k for k in os.environ if k.startswith('RAY_RUNTIME_ENV')]:
         os.environ.pop(key)
-    ray.init(num_cpus=len(job_cpus), num_gpus=len(job_gpus), include_dashboard=False, log_to_driver=False)
-    inflight = {}   # ObjectRef -> (spec, running path)
+    ray.init(num_cpus=len(job_cpus), num_gpus=0, include_dashboard=False, log_to_driver=False)
+    inflight = {}   # ObjectRef -> (spec, running path, gpu, slice index)
+    gpu_used = {g: 0.0 for g in job_gpus}
+    slice_cpus = a.slice_cpus
+    slices = [job_cpus[i * slice_cpus:(i + 1) * slice_cpus] for i in range(len(job_cpus) // slice_cpus)]
+    free_slices = list(range(len(slices)))
+    print(f'{len(slices)} core slices of {slice_cpus}; GPUs {job_gpus}', flush=True)
     stop = False
 
     def handle(sig, frame):
@@ -136,15 +140,19 @@ def main():
         stop = True
     signal.signal(signal.SIGTERM, handle)
 
-    def free_gpus():
-        return len(job_gpus) - sum(s.get('gpus', 1) for s, _ in inflight.values())
+    def share(spec):
+        return float(spec.get('gpu_share', spec.get('gpus', 1)))
+
+    def pick_gpu(need):
+        ok = [g for g in job_gpus if gpu_used[g] + need <= 1.0 + 1e-9]
+        return min(ok, key=lambda g: (gpu_used[g], g)) if ok else None
 
     def fits(spec):
         return time.time() + spec.get('est_seconds', 0) + a.start_margin <= deadline
 
     while True:
         recover_stale(q)
-        if not stop and time.time() < deadline and free_gpus() > 0:
+        if not stop and time.time() < deadline and free_slices:
             pending = []
             for f in (q / 'pending').glob('*.json'):
                 try:
@@ -153,9 +161,12 @@ def main():
                     continue
             pending.sort(key=lambda t: (-t[0].get('priority', 0), -t[0].get('est_seconds', 0), t[0]['id']))
             for spec, src in pending:
-                if free_gpus() < spec.get('gpus', 1):
+                if not free_slices:
                     break
-                if not fits(spec):
+                if not fits(spec) or int(spec.get('cpus', slice_cpus)) > slice_cpus:
+                    continue
+                gpu = pick_gpu(share(spec))
+                if gpu is None:
                     continue
                 dst = q / 'running' / src.name
                 try:
@@ -164,9 +175,10 @@ def main():
                     continue                        # another job took it
                 spec.update(owner_job=job, owner_host=socket.gethostname(), lease_deadline=deadline + 60)
                 save(dst, spec)
-                ref = run_task.options(num_gpus=spec.get('gpus', 1), num_cpus=spec.get('cpus', 12)).remote(
-                    spec, str(q / 'work' / spec['id']), deadline, job_gpus, job_cpus)
-                inflight[ref] = (spec, dst)
+                k = free_slices.pop(0)
+                gpu_used[gpu] += share(spec)
+                ref = run_task.remote(spec, str(q / 'work' / spec['id']), deadline, gpu, slices[k])
+                inflight[ref] = (spec, dst, gpu, k)
                 print(f"[{time.time()-t0:7.0f}s] start {spec['id']} (est {spec.get('est_seconds', 0):.0f}s)", flush=True)
         if not inflight:
             pending = list((q / 'pending').glob('*.json'))
@@ -178,7 +190,10 @@ def main():
         if not inflight:
             time.sleep(15)
         for ref in ready:
-            spec, path = inflight.pop(ref)
+            spec, path, gpu, k = inflight.pop(ref)
+            gpu_used[gpu] -= share(spec)
+            free_slices.append(k)
+            free_slices.sort()
             try:
                 result = ray.get(ref)
             except Exception as exc:   # worker died
@@ -193,7 +208,7 @@ def main():
         if stop or time.time() >= deadline + 30:
             break
 
-    for ref, (spec, path) in inflight.items():
+    for ref, (spec, path, gpu, k) in inflight.items():
         ray.cancel(ref, force=True)
         spec.setdefault('attempts', []).append(dict(job=job, status='interrupted', reason='job deadline'))
         spec.pop('lease_deadline', None)
