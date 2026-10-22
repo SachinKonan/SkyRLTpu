@@ -239,16 +239,27 @@ class MomoPlacer:
         plc = load_plc(benchmark.name)
         p = build_problem(benchmark, plc)
         configs = os.environ.get('MOMO_XPLACE_CONFIGS', 'td075,td090,td060').split(',')
-        log = dict(benchmark=benchmark.name, configs={})
+        # Everything (netlist reload, Xplace, legalization, search) fits in one total budget.
+        total = float(os.environ.get('MOMO_TOTAL_SECONDS', '3000'))
+        left = lambda: total - (time.monotonic() - t0)
+        log = dict(benchmark=benchmark.name, total_budget=total, configs={})
+
+        def write_log():
+            if os.environ.get('MOMO_LOG'):
+                Path(os.environ['MOMO_LOG']).write_text(json.dumps(log, indent=1))
         layouts = []
         work = Path(tempfile.mkdtemp(prefix=f'momo-{benchmark.name}-'))
         try:
             for cfg in configs:
                 c0 = time.monotonic()
+                room = left() - 400   # keep room for legalization and a minimal search
+                if room < 60:
+                    log['configs'][cfg] = dict(error='skipped: budget', seconds=0.0)
+                    continue
                 try:
-                    raw = xplace_gp(p, benchmark.name, cfg, work, timeout_s=900)
+                    raw = xplace_gp(p, benchmark.name, cfg, work, timeout_s=min(900, room))
                     q = dict(p, initial_positions=raw)
-                    legal = legalize(q, 120)
+                    legal = legalize(q, min(120, max(10, left() - 300)))
                     with Evaluator(p, legal) as ev:
                         cost = ev.score()['proxy_cost']
                     layouts.append((cost, cfg, legal))
@@ -257,8 +268,8 @@ class MomoPlacer:
                     log['configs'][cfg] = dict(error=f'{type(exc).__name__}: {exc}'[:300], seconds=time.monotonic() - c0)
         finally:
             shutil.rmtree(work, ignore_errors=True)
-        if not layouts:   # fall back to legalizing the given positions
-            layouts.append((float('inf'), 'given', legalize(p, 300)))
+        if not layouts:   # fall back to legalizing the given positions (flagged in the log)
+            layouts.append((float('inf'), 'given', legalize(p, min(300, max(10, left() - 60)))))
         layouts.sort(key=lambda t: t[0])
         problem = dict(p, initial_positions=layouts[0][2])
         if len(layouts) > 1:
@@ -268,16 +279,16 @@ class MomoPlacer:
         src = (HERE / 'momo_search.py').read_text()
         exec(compile(src, str(HERE / 'momo_search.py'), 'exec'), namespace)
         spec = os.environ.get('MOMO_SEARCH_SECONDS', '300')
-        if spec == 'fill':
-            budget = float(os.environ.get('MOMO_TOTAL_SECONDS', '3000')) - (time.monotonic() - t0) - 30
-        else:
-            budget = float(spec)
-        log.update(start_seconds=time.monotonic() - t0, search_seconds=budget, best_start=layouts[0][1])
+        budget = left() - 30 if spec == 'fill' else min(float(spec), left() - 30)
+        log.update(start_seconds=time.monotonic() - t0, search_seconds=budget, best_start=layouts[0][1],
+                   fallback=layouts[0][1] == 'given' or any('error' in c for c in log['configs'].values()))
+        write_log()
         result = namespace['place'](problem, 42, time_budget_s=max(10.0, budget))
-        pos = np.asarray(result['positions'], dtype=np.float32)
+        # Return the search's own float64 positions: it checks legality in float64 with zero
+        # tolerance, and a float32 cast could turn a sub-ULP gap into an overlap.
+        pos = np.array(result['positions'], dtype=np.float64)
         fixed = np.asarray(p['fixed'], dtype=bool)
         pos[fixed] = benchmark.macro_positions.numpy()[fixed]
         log['total_seconds'] = time.monotonic() - t0
-        if os.environ.get('MOMO_LOG'):
-            Path(os.environ['MOMO_LOG']).write_text(json.dumps(log, indent=1))
+        write_log()
         return torch.from_numpy(pos)

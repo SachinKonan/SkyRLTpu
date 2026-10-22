@@ -9,10 +9,16 @@ Queue layout (QUEUE=<dir>):
   done/<id>.json      exit code 0          failed/<id>.json   nonzero exit or own timeout
   work/<id>/          logs and outputs of the task
 
-Concurrency:
-  * claim = atomic rename pending/ -> running/; a job that loses the race skips the task;
-  * a running task whose lease expired (its job was killed) is returned to pending/ by any job;
-  * at its own deadline a job kills what it still runs and returns those tasks to pending/.
+Concurrency (several jobs drain one queue):
+  * claim: write the leased spec to a temp file and hard-link it to running/<id>.json (link fails if
+    the name exists), then remove pending/<id>.json; if that removal fails another job already
+    claimed and finished the task, so the claim is rolled back;
+  * a running task whose lease expired (its job was killed) is returned to pending/ by any job, by
+    hard-linking a rewritten spec into pending/ and then removing the running file it read;
+  * each attempt has its own work/output directory (work/<id>/<attempt>, TASK_ATTEMPT), so a retried
+    or duplicated attempt never overwrites another;
+  * at its deadline a job kills its tasks' process groups and returns them to pending/; a task
+    interrupted MAX_INTERRUPTS times is marked failed instead of looping.
 Packing: a job is a pool of GPUs and cores. Each task declares a GPU share and a core count; the
 runner starts every pending task that fits, giving it one GPU (CUDA_VISIBLE_DEVICES) and its own
 slice of cores (CPU affinity), so a neighbouring task cannot take CPU time from a time-limited
@@ -48,8 +54,11 @@ def save(path, value):
 ENV_WHITELIST = ('PATH', 'LD_LIBRARY_PATH', 'CUDA_HOME', 'LANG', 'LC_ALL', 'TERM')
 
 
+MAX_INTERRUPTS = 3
+
+
 def tree_rss(pid):
-    """Resident memory of a process and all its descendants (bytes)."""
+    """Proportional set size (shared pages split, not double counted) of a process tree (bytes)."""
     total, todo, seen = 0, [pid], set()
     while todo:
         p = todo.pop()
@@ -57,8 +66,8 @@ def tree_rss(pid):
             continue
         seen.add(p)
         try:
-            for line in open(f'/proc/{p}/status'):
-                if line.startswith('VmRSS:'):
+            for line in open(f'/proc/{p}/smaps_rollup'):
+                if line.startswith('Pss:'):
                     total += int(line.split()[1]) * 1024
             for t in os.listdir(f'/proc/{p}/task'):
                 todo.extend(int(c) for c in open(f'/proc/{p}/task/{t}/children').read().split())
@@ -67,14 +76,23 @@ def tree_rss(pid):
     return total
 
 
-@ray.remote(num_cpus=0)
+def _child_setup(cores):
+    """In the task's process: pin cores and die with the Ray worker that started it."""
+    import ctypes
+    os.sched_setaffinity(0, cores)
+    ctypes.CDLL('libc.so.6', use_errno=True).prctl(1, signal.SIGKILL)   # PR_SET_PDEATHSIG
+
+
+@ray.remote(num_cpus=0, max_retries=0)
 def run_task(spec, work, deadline, gpu, cores):
     """Run one task on the GPU and cores the driver assigned, in a clean environment.
 
     Isolation: CPU affinity to the task's own core slice; one visible GPU; a private HOME, TMPDIR
     and compiler/kernel caches inside its work dir (no shared ~/.cache, Triton or Torch extension
     caches between tasks); a memory cap on the whole process tree (spec memory_gb, default 64, the
-    official evaluation container's limit), enforced by a watchdog that kills the task.
+    challenge's eval_docker/run_eval.sh `--memory 64g`; the judges' machine has 100 GB), enforced by
+    a watchdog on the process tree's PSS that kills the task. The task's process group id is written
+    to <work>/pgid so the driver can kill the whole tree at its deadline.
     """
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
@@ -89,6 +107,7 @@ def run_task(spec, work, deadline, gpu, cores):
         env[key] = str(len(cores))
     env.update({k: str(v) for k, v in spec.get('env', {}).items()})   # method settings win
     env['TASK_WORK'] = str(work)
+    env['TASK_ATTEMPT'] = spec.get('attempt', 'single')
     env['CUDA_VISIBLE_DEVICES'] = gpu
     mem_cap = float(spec.get('memory_gb', 64)) * 1024**3
     limit = min(float(spec['timeout_seconds']), deadline - time.time())
@@ -101,7 +120,8 @@ def run_task(spec, work, deadline, gpu, cores):
         log.flush()
         proc = subprocess.Popen(spec['cmd'], cwd=spec.get('cwd') or str(work), env=env, stdout=log,
                                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
-                                preexec_fn=lambda: os.sched_setaffinity(0, cores))
+                                preexec_fn=lambda: _child_setup(cores))
+        (work / 'pgid').write_text(str(proc.pid))
         while proc.poll() is None:
             peak = max(peak, tree_rss(proc.pid))
             if peak > mem_cap:
@@ -126,25 +146,84 @@ def recover_stale(q, grace=120):
     now = time.time()
     for f in (q / 'running').glob('*.json'):
         try:
+            st = f.stat()
             spec = load(f)
         except (OSError, ValueError):
             continue
-        # A just-claimed task has no lease yet (the claimant writes it right after the rename);
-        # judge such a file by its age instead.
         lease = spec.get('lease_deadline')
-        if lease is None:
-            try:
-                lease = f.stat().st_mtime + 600
-            except FileNotFoundError:
-                continue
-        if lease + grace < now:
-            spec.setdefault('history', []).append(dict(job=spec.get('owner_job'), status='stale-lease'))
-            spec.pop('lease_deadline', None)
-            try:
-                f.rename(q / 'pending' / f.name)   # atomic; another job may do it first
-                save(q / 'pending' / f.name, spec)
-            except FileNotFoundError:
-                pass
+        if lease is None:   # files written by older runners: judge by inode change time
+            lease = st.st_ctime + 3600
+        if lease + grace >= now:
+            continue
+        spec.setdefault('attempts', []).append(dict(job=spec.get('owner_job'), attempt=spec.get('attempt'),
+                                                    status='interrupted', reason='stale lease (job killed)'))
+        for k in ('lease_deadline', 'owner_job', 'owner_host', 'attempt'):
+            spec.pop(k, None)
+        dest = q / ('failed' if interrupts(spec) >= MAX_INTERRUPTS else 'pending') / f.name
+        tmp = q / 'running' / f'.recover-{f.stem}-{os.getpid()}.json'
+        save(tmp, spec)
+        try:
+            os.link(tmp, dest)            # fails if another job already returned it
+        except FileExistsError:
+            tmp.unlink(missing_ok=True)
+            continue
+        tmp.unlink(missing_ok=True)
+        try:
+            if f.stat().st_ino == st.st_ino:
+                f.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def interrupts(spec):
+    return sum(1 for x in spec.get('attempts', []) if x.get('status') == 'interrupted')
+
+
+def claim(q, src, spec, job, deadline):
+    """Claim pending/<id>.json for this job; returns the running path or None."""
+    if any((q / d / src.name).exists() for d in ('done', 'failed')):
+        return None
+    n = len(spec.get('attempts', [])) + 1
+    spec = dict(spec, owner_job=job, owner_host=socket.gethostname(), lease_deadline=deadline + 60,
+                attempt=f'a{n}-{job}')
+    dst = q / 'running' / src.name
+    tmp = q / 'running' / f'.claim-{src.stem}-{job}-{os.getpid()}.json'
+    save(tmp, spec)
+    try:
+        os.link(tmp, dst)                 # atomic: fails if another job holds the task
+    except FileExistsError:
+        tmp.unlink(missing_ok=True)
+        return None
+    tmp.unlink(missing_ok=True)
+    try:
+        src.unlink()                      # we own it only if the pending file was still there
+    except FileNotFoundError:
+        try:
+            if load(dst).get('attempt') == spec['attempt']:
+                dst.unlink()
+        except (OSError, ValueError):
+            pass
+        return None
+    return dst, spec
+
+
+def finish(q, spec, path, result):
+    """Record an attempt and move the task to done/, failed/ or back to pending/."""
+    attempt = spec.get('attempt')
+    spec.setdefault('attempts', []).append(result)
+    for k in ('lease_deadline', 'owner_job', 'owner_host', 'attempt'):
+        spec.pop(k, None)
+    status = result.get('status')
+    if status == 'interrupted' and interrupts(spec) >= MAX_INTERRUPTS:
+        status = 'failed'
+        result['reason'] = f"{result.get('reason')}; interrupted {MAX_INTERRUPTS} times"
+    dest = {'done': 'done', 'failed': 'failed'}.get(status, 'pending')
+    save(q / dest / path.name, spec)
+    try:
+        if load(path).get('attempt') == attempt:   # only remove our own claim
+            path.unlink()
+    except (OSError, ValueError):
+        pass
 
 
 def main():
@@ -210,16 +289,15 @@ def main():
                 gpu = pick_gpu(share(spec))
                 if gpu is None:
                     continue
-                dst = q / 'running' / src.name
-                try:
-                    src.rename(dst)                 # atomic claim
-                except FileNotFoundError:
-                    continue                        # another job took it
-                spec.update(owner_job=job, owner_host=socket.gethostname(), lease_deadline=deadline + 60)
-                save(dst, spec)
+                got = claim(q, src, spec, job, deadline)
+                if got is None:
+                    continue
+                dst, spec = got
                 k = free_slices.pop(0)
+                spec['gpu_cotenants_at_start'] = sorted(s2['id'] for s2, _, g2, _ in inflight.values() if g2 == gpu)
                 gpu_used[gpu] += share(spec)
-                ref = run_task.remote(spec, str(q / 'work' / spec['id']), deadline, gpu, slices[k])
+                work = q / 'work' / spec['id'] / spec['attempt']
+                ref = run_task.remote(spec, str(work), deadline, gpu, slices[k])
                 inflight[ref] = (spec, dst, gpu, k)
                 print(f"[{time.time()-t0:7.0f}s] start {spec['id']} (est {spec.get('est_seconds', 0):.0f}s)", flush=True)
         if not inflight:
@@ -240,22 +318,22 @@ def main():
                 result = ray.get(ref)
             except Exception as exc:   # worker died
                 result = dict(status='interrupted', error=repr(exc))
-            spec.setdefault('attempts', []).append(dict(job=job, **result))
-            spec.pop('lease_deadline', None)
-            dest = {'done': 'done', 'failed': 'failed'}.get(result['status'], 'pending')
-            save(q / dest / path.name, spec)
-            path.unlink(missing_ok=True)
+            finish(q, spec, path, dict(job=job, attempt=spec['attempt'],
+                                       gpu_cotenants_at_start=spec.pop('gpu_cotenants_at_start', []), **result))
             print(f"[{time.time()-t0:7.0f}s] {result['status']} {spec['id']} "
                   f"({result.get('seconds', 0):.0f}s, exit {result.get('exit_code')})", flush=True)
         if stop or time.time() >= deadline + 30:
             break
 
     for ref, (spec, path, gpu, k) in inflight.items():
+        pgid_file = q / 'work' / spec['id'] / spec['attempt'] / 'pgid'
+        try:
+            os.killpg(int(pgid_file.read_text()), signal.SIGKILL)   # the whole task tree, not just the worker
+        except (OSError, ValueError):
+            pass
         ray.cancel(ref, force=True)
-        spec.setdefault('attempts', []).append(dict(job=job, status='interrupted', reason='job deadline'))
-        spec.pop('lease_deadline', None)
-        save(q / 'pending' / path.name, spec)
-        path.unlink(missing_ok=True)
+        finish(q, spec, path, dict(job=job, attempt=spec['attempt'], status='interrupted', reason='job deadline',
+                                   gpu_cotenants_at_start=spec.pop('gpu_cotenants_at_start', [])))
         print(f"[{time.time()-t0:7.0f}s] requeued {spec['id']}", flush=True)
     ray.shutdown()
     print(f"job {job} exits: done={len(list((q/'done').glob('*.json')))} failed={len(list((q/'failed').glob('*.json')))} "
