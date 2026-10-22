@@ -39,8 +39,7 @@
     "sync_seconds": 60,
     "process_count": 4,
     "thread_count": 8,
-    "inference_compile_seed": "",
-    "hf_layout": "snapshot",
+    "inference_compile_seed": "gs://sk7524-tinker-tpu-us-east5/inference-farm-gradetest-east5a-qwen35-v5p32-001/inference-compile",
     "trainer_compile_seed": ""
   },
   "checkpoint_cleanup_timeout": 0,

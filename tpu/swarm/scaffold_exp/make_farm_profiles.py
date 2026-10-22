@@ -54,6 +54,11 @@ def profile(model, hw, index):
                  inference_compile=f'{B}/scaffold-exp-farms/{run}/compile-cache',
                  trainer_compile=f'{B}/scaffold-exp-farms/{run}/trainer-compile-cache')
     cache['inference_compile_seed'] = seed or ''
+    if model == 'qwen35':
+        # The Qwen3.5 HF cache uses the default (manifest/blob) layout, not the Muse template's 'snapshot' layout
+        # (with 'snapshot' every host fails listing <cache>/snapshots/<rev>); seed compiles from the RQ4 Qwen3.5 farm.
+        cache.pop('hf_layout', None)
+        cache['inference_compile_seed'] = f'{B}/inference-farm-gradetest-east5a-qwen35-v5p32-001/inference-compile'
     inf = d['inference']
     for key in ('batched_rpa_kernel', 'ragged_conv1d'):
         inf.pop(key, None)
