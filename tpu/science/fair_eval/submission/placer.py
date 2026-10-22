@@ -50,6 +50,7 @@ def load_plc(name):
         return load_benchmark_from_dir(str(root))[1]
     ng45 = {'ariane133_ng45': 'ariane133', 'ariane136_ng45': 'ariane136',
             'nvdla_ng45': 'nvdla', 'mempool_tile_ng45': 'mempool_tile'}
+    ng45.update({v: v for v in list(ng45.values())})
     if name in ng45:
         base = Path('external/MacroPlacement/Flows/NanGate45') / ng45[name] / 'netlist' / 'output_CT_Grouping'
         return load_benchmark(str(base / 'netlist.pb.txt'), str(base / 'initial.plc'))[1]

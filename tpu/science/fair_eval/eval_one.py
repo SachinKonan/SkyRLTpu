@@ -22,10 +22,15 @@ import json, sys, numpy as np, torch
 from pathlib import Path
 repo, case, positions, out = sys.argv[1:5]
 sys.path.insert(0, repo)
-from macro_place.loader import load_benchmark_from_dir
+from macro_place.loader import load_benchmark_from_dir, load_benchmark
 from macro_place.objective import compute_proxy_cost
 from macro_place.utils import validate_placement
-b, plc = load_benchmark_from_dir(str(Path(repo) / 'external/MacroPlacement/Testcases/ICCAD04' / case))
+NG45 = {'ariane133', 'ariane136', 'mempool_tile', 'nvdla'}
+if case in NG45:
+    d = Path(repo) / 'external/MacroPlacement/Flows/NanGate45' / case / 'netlist/output_CT_Grouping'
+    b, plc = load_benchmark(str(d / 'netlist.pb.txt'), str(d / 'initial.plc'), name=case)
+else:
+    b, plc = load_benchmark_from_dir(str(Path(repo) / 'external/MacroPlacement/Testcases/ICCAD04' / case))
 pos = np.load(positions)
 assert pos.shape == tuple(b.macro_positions.shape), pos.shape
 t = torch.from_numpy(pos)   # validate the placement in the dtype the placer returned, as evaluate.py does
@@ -36,6 +41,9 @@ m = {k: float(v) for k, v in compute_proxy_cost(t, b, plc).items()}
 Path(out).write_text(json.dumps(dict(valid=bool(ok) and fixed_ok, fixed_unchanged=fixed_ok,
                                      errors=[str(e) for e in errors][:10], metrics=m), indent=1))
 '''
+
+
+NG45 = {'ariane133', 'ariane136', 'mempool_tile', 'nvdla'}
 
 
 def main():
@@ -49,9 +57,13 @@ def main():
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(Path.cwd()))
     from macro_place.evaluate import _load_placer
-    from macro_place.loader import load_benchmark_from_dir
+    from macro_place.loader import load_benchmark_from_dir, load_benchmark
     report = dict(case=a.case, placer=str(Path(a.placer).resolve()), repo=str(Path.cwd()))
-    benchmark, _ = load_benchmark_from_dir(f'external/MacroPlacement/Testcases/ICCAD04/{a.case}')
+    if a.case in NG45:   # same paths and loader call as macro_place.evaluate's NG45_BENCHMARKS
+        d = f'external/MacroPlacement/Flows/NanGate45/{a.case}/netlist/output_CT_Grouping'
+        benchmark, _ = load_benchmark(f'{d}/netlist.pb.txt', f'{d}/initial.plc', name=a.case)
+    else:
+        benchmark, _ = load_benchmark_from_dir(f'external/MacroPlacement/Testcases/ICCAD04/{a.case}')
     placer = _load_placer(Path(a.placer))
     start = time.time()
     placement = placer.place(benchmark)

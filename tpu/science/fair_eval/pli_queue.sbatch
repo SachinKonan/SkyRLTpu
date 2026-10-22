@@ -1,5 +1,7 @@
 #!/bin/bash
-# One queue-draining job on a PLI H100 node: 2 H100, 48 cores (4 slices of 12), 256 GB, 1 hour.
+# One queue-draining job on a PLI H100 node: 1 H100, 36 cores (3 slices of 12), 192 GB, 1 hour.
+# The shape matches the work mix (about one GPU-bound task per two CPU-bound MOMO tasks), so the GPU
+# stays busy while GPU-bound tasks remain.
 # The runner packs tasks onto this pool: a GPU-bound placer takes most of one GPU plus a 12-core slice,
 # a CPU-bound placer (MOMO) takes a 12-core slice and a sliver of a GPU for its short Xplace step.
 # Many such jobs drain the same queue concurrently (--array=0-N%K); each keeps its resources for the
@@ -9,9 +11,9 @@
 #SBATCH --account=llm_explore
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:2
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=256G
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=36
+#SBATCH --mem=192G
 #SBATCH --time=01:00:00
 set -uo pipefail
 F=/scratch/gpfs/ZHUANGL/sk7524/placement-fair-eval
