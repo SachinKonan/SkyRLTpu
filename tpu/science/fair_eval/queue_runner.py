@@ -44,39 +44,81 @@ def save(path, value):
     tmp.replace(path)
 
 
+# Only these are inherited from the job; everything else a task sees is set explicitly below.
+ENV_WHITELIST = ('PATH', 'LD_LIBRARY_PATH', 'CUDA_HOME', 'LANG', 'LC_ALL', 'TERM')
+
+
+def tree_rss(pid):
+    """Resident memory of a process and all its descendants (bytes)."""
+    total, todo, seen = 0, [pid], set()
+    while todo:
+        p = todo.pop()
+        if p in seen:
+            continue
+        seen.add(p)
+        try:
+            for line in open(f'/proc/{p}/status'):
+                if line.startswith('VmRSS:'):
+                    total += int(line.split()[1]) * 1024
+            for t in os.listdir(f'/proc/{p}/task'):
+                todo.extend(int(c) for c in open(f'/proc/{p}/task/{t}/children').read().split())
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            pass
+    return total
+
+
 @ray.remote(num_cpus=0)
 def run_task(spec, work, deadline, gpu, cores):
-    """Run one task on the GPU and cores the driver assigned."""
+    """Run one task on the GPU and cores the driver assigned, in a clean environment.
+
+    Isolation: CPU affinity to the task's own core slice; one visible GPU; a private HOME, TMPDIR
+    and compiler/kernel caches inside its work dir (no shared ~/.cache, Triton or Torch extension
+    caches between tasks); a memory cap on the whole process tree (spec memory_gb, default 64, the
+    official evaluation container's limit), enforced by a watchdog that kills the task.
+    """
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
-    env.update({k: str(v) for k, v in spec.get('env', {}).items()})
+    private = {name: work / 'sandbox' / name for name in ('home', 'tmp', 'cache', 'triton', 'torch_ext')}
+    for path in private.values():
+        path.mkdir(parents=True, exist_ok=True)
+    env = {k: os.environ[k] for k in ENV_WHITELIST if k in os.environ}
+    env.update(HOME=str(private['home']), TMPDIR=str(private['tmp']), XDG_CACHE_HOME=str(private['cache']),
+               TRITON_CACHE_DIR=str(private['triton']), TORCH_EXTENSIONS_DIR=str(private['torch_ext']),
+               PYTHONDONTWRITEBYTECODE='1')
+    for key in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
+        env[key] = str(len(cores))
+    env.update({k: str(v) for k, v in spec.get('env', {}).items()})   # method settings win
     env['TASK_WORK'] = str(work)
     env['CUDA_VISIBLE_DEVICES'] = gpu
-    for key in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
-        env.setdefault(key, str(len(cores)))
+    mem_cap = float(spec.get('memory_gb', 64)) * 1024**3
     limit = min(float(spec['timeout_seconds']), deadline - time.time())
-    gpu = subprocess.run(['nvidia-smi', '-i', env.get('CUDA_VISIBLE_DEVICES', '0').split(',')[0],
-                          '--query-gpu=name', '--format=csv,noheader'], capture_output=True, text=True).stdout.strip()
-    started = time.time()
+    gpu_name = subprocess.run(['nvidia-smi', '-i', gpu, '--query-gpu=name', '--format=csv,noheader'],
+                              capture_output=True, text=True).stdout.strip()
+    started, peak, reason = time.time(), 0, None
     with open(work / 'stdout.log', 'ab') as log:
         log.write(f"\n=== {time.strftime('%F %T')} host={socket.gethostname()} job={os.environ.get('SLURM_JOB_ID')} "
-                  f"gpu={env.get('CUDA_VISIBLE_DEVICES')} ({gpu}) cores={cores} limit={limit:.0f}s ===\n".encode())
+                  f"gpu={gpu} ({gpu_name}) cores={cores} mem_cap={mem_cap/1024**3:.0f}GB limit={limit:.0f}s ===\n".encode())
         log.flush()
         proc = subprocess.Popen(spec['cmd'], cwd=spec.get('cwd') or str(work), env=env, stdout=log,
                                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True,
                                 preexec_fn=lambda: os.sched_setaffinity(0, cores))
-        try:
-            code = proc.wait(timeout=max(1.0, limit))
-            status = 'done' if code == 0 else 'failed'
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.wait()
-            code = None
-            # The job deadline is an infrastructure interruption; the task's own timeout is a failure.
-            status = 'interrupted' if deadline - time.time() < 5 else 'failed'
-    return dict(status=status, exit_code=code, seconds=time.time() - started, host=socket.gethostname(),
-                gpu=gpu, gpu_index=env.get('CUDA_VISIBLE_DEVICES'), cores=cores)
+        while proc.poll() is None:
+            peak = max(peak, tree_rss(proc.pid))
+            if peak > mem_cap:
+                reason = 'memory cap exceeded'
+            elif time.time() - started > limit:
+                reason = 'job deadline' if deadline - time.time() < 5 else 'task timeout'
+            if reason:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+                break
+            time.sleep(1.0)
+        code = proc.returncode
+        # The job deadline is an infrastructure interruption; the task's own timeout or memory cap is a failure.
+        status = 'interrupted' if reason == 'job deadline' else 'failed' if reason or code else 'done'
+    return dict(status=status, exit_code=code, reason=reason, seconds=time.time() - started,
+                peak_rss_gb=round(peak / 1024**3, 2), host=socket.gethostname(), gpu=gpu_name,
+                gpu_index=gpu, cores=cores)
 
 
 def recover_stale(q, grace=120):
