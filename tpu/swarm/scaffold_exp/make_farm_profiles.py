@@ -28,10 +28,14 @@ SERVING = {
     ('qwen38', 'v5p32'): dict(tp=4, max_sequences=64, memory_utilization=0.85, ragged_conv1d=True),
     ('qwen38', 'v6e8'): dict(tp=4, max_sequences=32, memory_utilization=0.85, ragged_conv1d=True),
 }
+# Qwen3.5 (scaf2 control, 2026-10-22): the RQ4 Qwen3.5 layouts (v5p-32 TP2 x 64, v6e-8 TP4 x 32).
+SERVING[('qwen35', 'v5p32')] = dict(tp=2, max_sequences=64, memory_utilization=0.85, ragged_conv1d=True)
+SERVING[('qwen35', 'v6e8')] = dict(tp=4, max_sequences=32, memory_utilization=0.85, ragged_conv1d=True)
 SERVING[('muse', 'v6e8c1')] = SERVING[('muse', 'v6e8')]
 SERVING[('qwen38', 'v6e8c1')] = SERVING[('qwen38', 'v6e8')]
 MODEL = {
     'muse': dict(model_preset='muse-glimmer-30b', hf=f'{B}/hf-cache-muse-glimmer-v1', inference_gib=80, reserve_gib=264),
+    'qwen35': dict(model_preset='qwen3.5-27b', hf=f'{B}/hf-cache-qwen35-v1', inference_gib=80, reserve_gib=264),
     'qwen38': dict(model_preset='qwen3.8-27b', hf=f'{B}/hf-cache-qwen38-1d4bf0f2', inference_gib=128, reserve_gib=280),
 }
 

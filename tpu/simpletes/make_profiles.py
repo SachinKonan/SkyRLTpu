@@ -27,7 +27,9 @@ MODELS = {
     "muse": dict(model_preset="muse-glimmer-30b", family="muse", requests_per_engine=4, target_leases=1,
                  hf="gs://sk7524-tinker-tpu-us-east5/hf-cache-muse-glimmer-v1"),
     "qwen38": dict(model_preset="qwen3.8-27b", family="qwen", requests_per_engine=2, target_leases=2,
-                   hf="gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen38-1d4bf0f2"),
+                   hf="gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen38-1d4bf0f2"),    # Control (2026-10-22): Qwen3.5 under the scaf2 settings, ours without bootstrap, seeds 1-2.
+    "qwen35": dict(model_preset="qwen3.5-27b", family="qwen", requests_per_engine=2, target_leases=2,
+                   hf="gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1"),
 }
 PROBLEMS = {"erdos": dict(env=dict(TTD_ERDOS_PROMPT="v2")),
             # The agreed circuit prompt (ibm17-v3 wording, CSV feedback, standard structure) plus record/goal/gap.
