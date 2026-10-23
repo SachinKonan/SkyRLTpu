@@ -327,6 +327,29 @@ def test_metrics_follow_every_sample_across_a_restart(tmp_path):
     assert best[0] == 0.3815 and best[1] == 0.3811        # "b" (0.3801) was lost with the crash
 
 
+def test_metrics_keep_a_graded_candidate_of_an_unfinished_batch_that_the_checkpoint_kept(tmp_path):
+    import gzip
+    from tpu.swarm.scaffold_exp.metrics import simpletes
+    folder = tmp_path / "simpletes"
+    checkpoint = folder / "checkpoints/d/i/db_state_1"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "metadata.json").write_text(json.dumps(dict(completed_evaluations=2, generation_attempts=64)))
+    root = dict(id="r", parent_ids=[], score=-0.3815, created_at="0", metrics=dict(validity=1))
+    kept = dict(id="n1", parent_ids=["r"], score=-0.3809, created_at="1", metrics=dict(validity=1))
+    with gzip.open(checkpoint / "nodes.json.gz", "wt") as stream:
+        json.dump([root, kept], stream)
+    # Both batches graded one candidate before the checkpoint (t=50) but were not finalized by then, so
+    # both were re-dispatched after the resume. The checkpoint kept n1 (0.3809), not n2 (0.3801).
+    events = []
+    for uid, node, score in (("c", "n1", -0.3809), ("d", "n2", -0.3801)):
+        events += [dict(event="dispatch", batch=uid, gen_id=0, k=32, finalize_at=31, time=40),
+                   dict(event="graded", batch=uid, outcome="valid", score=score, node=node, time=45)]
+    (folder / "samples.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    (folder / "resumes.jsonl").write_text(json.dumps(dict(resumed_at=100.0, checkpoint_time=50.0)) + "\n")
+    steps, best, legacy = simpletes(str(folder))
+    assert not legacy and steps == {} and best[1] == 0.3809
+
+
 def circuit_environment(monkeypatch):
     from tests.tpu_swarm.test_simpletes_rq4 import rq4_environment
     rq4_environment(monkeypatch, "circuit")

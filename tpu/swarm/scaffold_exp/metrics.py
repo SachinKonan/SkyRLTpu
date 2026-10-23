@@ -162,11 +162,11 @@ def simpletes(folder):
         if batch is None:
             continue
         if row["event"] == "generated":
-            batch["resolved"] += [(row["time"], "no_code", None)] * row["no_code"]
+            batch["resolved"] += [(row["time"], "no_code", None, None)] * row["no_code"]
         elif row["event"] == "generation_failed":
-            batch["resolved"] += [(row["time"], "no_code", None)] * row["k"]
+            batch["resolved"] += [(row["time"], "no_code", None, None)] * row["k"]
         elif row["event"] == "graded":
-            batch["resolved"].append((row["time"], row["outcome"], row.get("score")))
+            batch["resolved"].append((row["time"], row["outcome"], row.get("score"), row.get("node")))
     flags = collections.defaultdict(collections.Counter)
     for row in read_jsonl(f"{folder}/llm_calls.jsonl"):
         if row.get("kind") == "generate" and row.get("batch"):
@@ -176,6 +176,7 @@ def simpletes(folder):
     # A summary from before the newest resume (budget extended) does not end this lifetime.
     summary = f"{folder}/summary.json"
     finished = os.path.exists(summary) and os.path.getmtime(summary) > max((at for at, _ in resumes), default=0)
+    kept = {n["id"] for n in nodes}
     steps, step_best, position = {}, {}, 0
     for uid in order:
         batch = batches[uid]
@@ -185,20 +186,26 @@ def simpletes(folder):
         if after is not None:
             resolved = [r for r in resolved if r[0] <= after[1]]
             if len(resolved) < batch["finalize_at"]:
-                continue                   # not finalized in the checkpoint: re-dispatched after the resume
+                # Not finalized in the checkpoint: re-dispatched after the resume, so it takes no place on
+                # the axis. Candidates it had already graded stay in the run's tree and count here.
+                for _, kind, score, node in resolved:
+                    if kind == "valid" and node in kept:
+                        step = position // UNIT
+                        step_best[step] = min(step_best.get(step, float("inf")), -score)
+                continue
         step = position // UNIT
         position += batch["k"]
         counts = steps.setdefault(step, collections.Counter())
         counts["issued"] += batch["k"]
-        counts.update(kind for _, kind, _ in resolved)
+        counts.update(kind for _, kind, _, _ in resolved)
         counts.update(flags.get(uid, {}))
-        for _, kind, score in resolved:
+        for _, kind, score, _ in resolved:
             if kind == "valid":
                 step_best[step] = min(step_best.get(step, float("inf")), -score)
         unresolved = batch["k"] - len(resolved)
         counts["lost" if after is not None or finished else "pending"] += unresolved
     complete = {s: c for s, c in steps.items() if c["issued"] == UNIT and not c["pending"]}
-    return complete, cumulative(start, step_best, max(steps) if steps else -1), False
+    return complete, cumulative(start, step_best, max([*steps, *step_best], default=-1)), False
 
 
 def summarize(steps):
