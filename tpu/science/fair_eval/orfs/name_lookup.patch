@@ -1,0 +1,16 @@
+diff --git a/scripts/generate_macro_placement_tcl.py b/scripts/generate_macro_placement_tcl.py
+index b6e7acf..db86e84 100644
+--- a/scripts/generate_macro_placement_tcl.py
++++ b/scripts/generate_macro_placement_tcl.py
+@@ -462,7 +462,10 @@ dict for {prefix entries} $_odb_groups {
+                     escaped = plc_name.replace('[', '\\[').replace(']', '\\]')
+                     candidates.append(escaped)
+                     candidates.append(plc_name)
+-                tcl_args = ' '.join(f'"{c}"' for c in candidates)
++                # Tier-2 reproduction patch: brace-quote the candidates so Tcl passes them to findInst
++                # literally (in double quotes Tcl drops the backslashes of the escaped-bracket form, which
++                # is how OpenROAD names these Genus instances, and runs [N] as a command).
++                tcl_args = ' '.join(f'{{{c}}}' for c in candidates)
+                 f.write(f'# {plc_name}\n')
+                 f.write(f'set _inst [_find_macro $block {tcl_args}]\n')
+                 f.write(f'if {{$_inst ne "NULL"}} {{\n')
