@@ -224,7 +224,13 @@ async def run(config, snapshot, head):
             row = dict(id=identifier, correctness=0, reward=0., code=code, state=None,
                        message='Invalid answer format or truncated answer', root_id=root.id)
             if code and choice.get('finish_reason') != 'length':
-                verdict = await e._safe_grade(code, 0)
+                try:
+                    verdict = await e._safe_grade(code, 0)
+                except Exception as exc:
+                    # No verdict after the grader's own retries (e.g. the circuit worker dies on this
+                    # program on every farm): a failed draft, not a reason to restart the bootstrap.
+                    if not getattr(exc, 'drop_candidate', False): raise
+                    row['message'] = f'Grading dropped: {exc}'[:500]; return row
                 if not math.isfinite(verdict.reward) or not math.isfinite(verdict.raw_score):
                     row['message'] = 'Nonfinite grading result'; return row
                 state = e._create_next_state(0, code, verdict)

@@ -183,3 +183,44 @@ def test_full_bootstrap_publication_resume_and_no_training(tmp_path,valid,fixed)
         assert asyncio.run(b.run(c,'snapshot','head'))==result
         (tmp_path/'bootstrap/complete.json').unlink()
         assert asyncio.run(b.run(c,'snapshot','head'))==result and len(calls)==(2 if fixed else 1)
+
+def test_dropped_grade_is_a_failed_draft(tmp_path):
+    from dataclasses import replace
+    import httpx,ray,tinker,transformers
+    from ttt_discover.tinker_utils import renderers
+    from ttt_discover.tinker_utils.dataset_builder import VerifyResult
+    from tpu.science.training_env import ScienceCandidateDropped
+    from tpu.swarm.ray_train.commands import client_environment
+    c=replace(Config.load(next(p for p in PROFILES if 'qwen-cp26-' in p.name)),
+        bootstrap_max_drafts=32,bootstrap_target_valid=16,bootstrap_max_groups=1,
+        bootstrap_fixed_budget=True,bootstrap_require_full_pool=True,bootstrap_seed=0)
+    class Renderer:
+        def build_generation_prompt(self,messages):return SimpleNamespace(to_ints=lambda:[1,2])
+        def get_stop_sequences(self):return [3]
+        def parse_response(self,ids):return {'content':''.join(map(chr,ids))},True
+    class HTTP:
+        n=0
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        async def post(self,url,json):
+            choices=[]
+            for i in range(json['n']):
+                HTTP.n+=1;ids=list(map(ord,f'</think>\n```python\nx = {HTTP.n}\n```'))
+                choices.append(dict(token_ids=ids,loss_mask=[1]*len(ids),finish_reason='stop',
+                    thinking_budget=dict(enforced=True,budget_basis='phase1_generated_tokens',counted_phase1_tokens=0)))
+            return SimpleNamespace(raise_for_status=lambda:None,json=lambda:dict(choices=choices))
+    async def grade(self,code,step):
+        # Odd drafts lose their grade on every farm; even drafts are valid and distinct.
+        if int(code.split('=')[1].split()[0])%2:raise ScienceCandidateDropped('worker exited 1 without a verdict')
+        return VerifyResult(.6,'OK',1,3.2,[1.,2.],'feedback',{})
+    cls=b.environment_type(c)
+    runtime_env=client_environment(c,tmp_path,'head');runtime_env['TTD_RUN_DIR']=str(tmp_path)
+    with patch.dict(os.environ,runtime_env),patch.object(ray,'is_initialized',return_value=True), \
+         patch.object(cls,'_safe_grade',grade),patch.object(renderers,'get_renderer',return_value=Renderer()), \
+         patch.object(transformers.AutoTokenizer,'from_pretrained',return_value=SimpleNamespace(get_vocab=lambda:{'x':1})), \
+         patch.object(httpx,'AsyncClient',return_value=HTTP()), \
+         patch.object(tinker,'ServiceClient',side_effect=AssertionError('bootstrap must not train')):
+        result=asyncio.run(b.run(c,'snapshot','head'))
+    assert result['drafted']==32 and result['total']==32 and result['valid']==16 and result['retained']==16
+    dropped=[json.loads(p.read_text()) for p in (tmp_path/'bootstrap/drafts').glob('group-*/grade-*.json')]
+    assert sum(r['message'].startswith('Grading dropped') and r['correctness']==0 for r in dropped)==16
