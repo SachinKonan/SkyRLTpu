@@ -346,6 +346,22 @@ def test_fixed_thinking_budget_ignores_prompt_length(existing_completers, monkey
         p._think_budget(15800)
 
 
+def test_fixed_budget_fit_shrinks_thinking_by_the_overflow(existing_completers, monkeypatch):
+    p = existing_completers['qwen3.5-27b']()
+    p.phase1_max_tokens = 16384; p.context_window = 32768; p.context_buffer = 50
+    monkeypatch.setenv('TTD_FIXED_THINK_TOKENS', '15500')
+    monkeypatch.setenv('TTD_FIXED_TOTAL_TOKENS', '21644')
+    monkeypatch.setenv('TTD_FIXED_BUDGET_FIT', '1')
+    assert (p._think_budget(11074), p._output_limit(11074)) == (15500, 21644)   # fits: unchanged
+    over = 11519 - 11074                                                           # the logged failure
+    assert (p._think_budget(11519), p._output_limit(11519)) == (15500 - over, 21644 - over)
+    with pytest.raises(ValueError, match='leaves no room'):
+        p._think_budget(32768 - 50 - 6144)                                         # no thinking left
+    monkeypatch.delenv('TTD_FIXED_BUDGET_FIT')
+    with pytest.raises(ValueError, match='leaves no room'):
+        p._think_budget(11519)
+
+
 def test_without_fixed_budget_the_legacy_budget_is_unchanged(existing_completers, monkeypatch):
     p = existing_completers['qwen3.5-27b']()
     p.phase1_max_tokens = 16384; p.context_window = 22528; p.context_buffer = 50

@@ -46,8 +46,11 @@ class Caps:
     context_buffer: int = 50  # NativeCompletionCompleter.context_buffer
     fixed_thinking: int | None = None  # TTD_FIXED_THINK_TOKENS
     fixed_total: int | None = None     # TTD_FIXED_TOTAL_TOKENS
+    fixed_fit: bool = False            # TTD_FIXED_BUDGET_FIT=1
 
     def max_prompt_tokens(self, min_thinking_tokens: int) -> int:
+        if self.fixed_thinking and self.fixed_fit:
+            return self.context_window - (self.fixed_total - self.fixed_thinking) - self.context_buffer - 1
         if self.fixed_thinking:
             return self.context_window - self.fixed_total - self.context_buffer
         return self.phase1_max_tokens - min_thinking_tokens
@@ -56,14 +59,18 @@ class Caps:
         """(thinking_token_budget, max_tokens) for this prompt, or None if it leaves no room.
 
         Same arithmetic as ``completers._think_budget`` / ``_output_limit``: with a fixed budget,
-        thinking and total ignore the prompt, which must leave room for the total; otherwise
+        thinking and total ignore the prompt, which must leave room for the total (with fixed_fit, both
+        shrink by the overflow instead); otherwise
         thinking = phase1 - prompt, total = context - prompt - buffer, and the forced transition
         plus one answer token must fit after a full thinking budget.
         """
         if self.fixed_thinking:
-            if prompt_tokens + self.fixed_total + self.context_buffer > self.context_window:
-                return None
-            return self.fixed_thinking, self.fixed_total
+            room = self.context_window - prompt_tokens - self.context_buffer
+            if room >= self.fixed_total:
+                return self.fixed_thinking, self.fixed_total
+            if self.fixed_fit and self.fixed_thinking - (self.fixed_total - room) > 0:
+                return self.fixed_thinking - (self.fixed_total - room), room
+            return None
         thinking = self.phase1_max_tokens - prompt_tokens
         total = self.context_window - prompt_tokens - self.context_buffer
         if thinking <= 0 or total < thinking + transition_tokens + 1:

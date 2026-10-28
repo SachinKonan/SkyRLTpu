@@ -18,6 +18,14 @@ def test_fixed_budget_ignores_the_prompt_and_rejects_overflow():
     assert caps.max_prompt_tokens(4096) == 32768 - 17000 - 50
 
 
+def test_fixed_budget_fit_shrinks_thinking_by_the_overflow():
+    caps = Caps(context_window=32768, phase1_max_tokens=16384, fixed_thinking=15500, fixed_total=21644, fixed_fit=True)
+    assert caps.budget(11074) == (15500, 21644)
+    assert caps.budget(11519) == (15500 - 445, 21644 - 445)
+    assert caps.budget(caps.max_prompt_tokens(0)) == (1, 6145)
+    assert caps.budget(caps.max_prompt_tokens(0) + 1) is None
+
+
 @pytest.fixture
 def erdos(monkeypatch, tmp_path):
     monkeypatch.setenv("TTD_ERDOS_PROMPT", "v2")

@@ -75,7 +75,8 @@ async def run(config, spec: dict, snapshot: str) -> int:
     caps = Caps(context_window=int(config.client_context_window),
                 phase1_max_tokens=int(config.client_phase1_max_tokens),
                 fixed_thinking=int(fixed) if fixed else None,
-                fixed_total=int(config.client_env["TTD_FIXED_TOTAL_TOKENS"]) if fixed else None)
+                fixed_total=int(config.client_env["TTD_FIXED_TOTAL_TOKENS"]) if fixed else None,
+                fixed_fit=config.client_env.get("TTD_FIXED_BUDGET_FIT") == "1")
     backend = NativeThinkingBackend(base_url=os.environ["TTD_FROZEN_BASE_URL"], model=config.model,
                                     renderer=renderer, family=family, caps=caps,
                                     log_path=folder / "llm_calls.jsonl",
