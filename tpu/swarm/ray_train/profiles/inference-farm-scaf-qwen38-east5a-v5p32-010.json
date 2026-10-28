@@ -34,7 +34,7 @@
     "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/scaffold-exp-farms/inference-farm-scaf-qwen38-east5a-v5p32-010/trainer-compile-cache",
     "inference_compile": "gs://sk7524-tinker-tpu-us-east5/scaffold-exp-farms/inference-farm-scaf-qwen38-east5a-v5p32-010/compile-cache",
     "trainer_gib": 128,
-    "inference_gib": 128,
+    "inference_gib": 80,
     "reserve_gib": 280,
     "sync_seconds": 60,
     "process_count": 4,
