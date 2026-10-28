@@ -21,13 +21,16 @@ MARKERS = {"qwen3.5-27b": ("<think>", "</think>"),
 # Includes client-side validation of loss masks and behavior logprobs.
 # Discover 6b7e594: _native_group also passes the ingress served_by stamp
 # through to TokensWithLogprobs (metadata only; algorithm unchanged).
+# Discover aa3d331: the fixed budget moves into _fixed_budget; TTD_FIXED_BUDGET_FIT=1 shrinks
+# thinking and total by the prompt overflow instead of failing (unset: unchanged).
 # Whitespace/line-number changes do not change these hashes. Update the Discover
 # commit, these fingerprints, and the parent gitlink together after reviewing
 # changes to these methods. To print replacement hashes from the repo root:
 # python -m tpu.swarm.ray_train.thinking_budget.contract --print-method-hashes
 METHODS = {
-    '_think_budget': '0cdaefa4fd2e865f87f9e872fafef327a43a5dfc1cfa7c8518f276e17e1db134',
-    '_output_limit': 'ed8c02e9de1191716906fe53c74c5ffb91c8daca4b24c68d127d12bebedc5833',
+    '_think_budget': '9f6f088662ef0e4b2c00eacff7991a912c393b16a34e7f07d4e94a3b5750ea4c',
+    '_output_limit': '62735ba66feb06b03d7ea2914d0619922f95354a672a12bfe42b6966543d0d6f',
+    '_fixed_budget': '6370980f10248654ce39ac8df026b7dd5f7536bc422892a66e6f7a18f8285a72',
     '_sample': 'cb859a2d12d53fbe1b91c2460e77f4e38bf4e59b1f08536dfcf29ac9d7664505',
     '__call__': '8b5173e56b4fd5e31a5fc291136141d16ff0f4a18e12e0ef5e844bc94e28593c',
     '_two_phase': '749cf18a5eabb14b3b97812a529b3f0597bb91dc8aa7769e2f6243c2ddc430ca',
