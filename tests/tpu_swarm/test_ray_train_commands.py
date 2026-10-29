@@ -521,3 +521,33 @@ def test_plugin_unset_requires_boolean_and_can_be_explicitly_overridden():
     cfg = v5p_config(model_preset="muse-glimmer-30b",
                      inference=dict(unset_plugins=False, plugins="explicit_plugin"))
     assert inference_environment(cfg, ROOT, ROOT / "run")["VLLM_PLUGINS"] == "explicit_plugin"
+
+
+def test_serving_runtime_v032_uses_its_own_environment_and_server():
+    """v0.32 (stock vllm-tpu 0.32, hybrid GDN prefix caching) runs from envs/serving-v032 through the
+    vllm_tpu_server_v032.py launcher; the default runtime keeps envs/serving and the unchanged server."""
+    old = inference_command(config(), ROOT, ROOT / "source", ROOT / "model", ROOT / "run")
+    assert old[:2] == [str(ROOT / "envs/serving/bin/python"), str(ROOT / "source/tpu/vllm_tpu_server.py")]
+    cfg = config(inference=dict(serving_runtime="v0.32", transformers_version="5.19.0"))
+    cmd = inference_command(cfg, ROOT, ROOT / "source", ROOT / "model", ROOT / "run")
+    assert cmd[:2] == [str(ROOT / "envs/serving-v032/bin/python"), str(ROOT / "source/tpu/vllm_tpu_server_v032.py")]
+    assert "--enable-prefix-caching" in cmd
+
+
+@pytest.mark.parametrize("inference", [dict(serving_runtime="v0.31"),
+                                       dict(serving_runtime="v0.32", native_thinking_budget=True),
+                                       dict(serving_runtime="v0.32", max_loras=2)])
+def test_serving_runtime_v032_rejects_what_it_does_not_serve(inference):
+    with pytest.raises(ValueError):
+        config(inference=inference).validate()
+
+
+def test_serving_runtime_v032_pins_the_stock_release():
+    from tpu.swarm.ray_train.host import Host
+    host = Host.__new__(Host)
+    host.config = config(inference=dict(serving_runtime="v0.32", transformers_version="5.19.0"))
+    pins = host.serving_pins()
+    assert {"vllm-tpu==0.32.0", "tpu-inference==0.32.0", "jax==0.11.2", "ray[serve]==2.58.0",
+            "transformers==5.19.0"} <= set(pins)
+    host.config = config()
+    assert "vllm-tpu==0.23.0" in host.serving_pins() and "tpu-inference==0.32.0" not in host.serving_pins()

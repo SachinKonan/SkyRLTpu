@@ -196,6 +196,9 @@ class Trainer:
         return self.max_target_length or self.sequence_length
 
 
+SERVING_RUNTIMES = {"v0.23": "serving", "v0.32": "serving-v032"}   # runtime -> environment under <root>/envs
+
+
 @dataclass(frozen=True)
 class Inference:
     # This is the backend validated by job 328, not native vLLM multi-host DP.
@@ -247,6 +250,14 @@ class Inference:
     plugins: str = "lora_filesystem_resolver"
     native_thinking_budget: bool = False
     transformers_version: str = "5.8.0"
+    # Serving stack: "v0.23" (vllm-tpu 0.23 + our tpu-inference fork, envs/serving) or "v0.32" (stock
+    # vllm-tpu/tpu-inference 0.32 from PyPI, envs/serving-v032: hybrid GDN prefix caching with checkpoint
+    # slots). Separate environments and compile caches; v0.32 farms need their own profiles.
+    serving_runtime: str = "v0.23"
+
+    @property
+    def serving_env(self):
+        return SERVING_RUNTIMES[self.serving_runtime]
     # "direct": the trainer round-robins straight to the engines and pushes
     # adapters to each one (legacy). "ingress": every request and adapter goes
     # through the Ray Serve ingress (the 2026-09-07 executor behaviour).
@@ -1141,6 +1152,12 @@ class Config:
         if (type(self.arena_concurrency) is not int or self.arena_concurrency < 1
                 or type(self.arena_max_tokens) is not int or self.arena_max_tokens < 1):
             raise ValueError("arena concurrency and token limit must be positive integers")
+        if self.inference.serving_runtime not in SERVING_RUNTIMES:
+            raise ValueError(f"serving_runtime must be one of {sorted(SERVING_RUNTIMES)}")
+        if self.inference.serving_runtime != "v0.23" and (self.inference.native_thinking_budget
+                                                          or self.inference.max_loras != 1):
+            raise ValueError("serving_runtime v0.32 serves the base model only: no native thinking "
+                             "budget patch, one LoRA slot")
         if type(self.inference.native_thinking_budget) is not bool:
             raise ValueError("native_thinking_budget must be a boolean")
         if self.inference.native_thinking_budget:

@@ -272,16 +272,23 @@ class Host:
     SERVING_PINS = ["vllm-tpu==0.23.0", "jax==0.10.1", "jaxlib==0.10.1", "libtpu==0.0.41",
                     "torch==2.10.0", "torchax==0.0.11", "tokenizers==0.22.2", "numpy==2.3.5",
                     "ray[serve]==2.58.0", "httpx", "psutil"]
+    # Stock PyPI release (resolved 2026-10-29): hybrid GDN prefix caching with checkpoint slots. Needs
+    # transformers>=5.16.1 (profiles set transformers_version 5.19.0); ray kept at the cluster's 2.58.0.
+    SERVING_PINS_V032 = ["vllm-tpu==0.32.0", "tpu-inference==0.32.0", "tokamax==0.0.17.dev20261015",
+                         "jax==0.11.2", "jaxlib==0.11.2", "libtpu==0.0.48", "torch==2.10.0", "torchax==0.0.13",
+                         "tokenizers==0.23.3", "numpy==2.3.5", "ray[serve]==2.58.0", "httpx", "psutil"]
+    SERVING_JAX = {"v0.23": "0.10.1", "v0.32": "0.11.2"}
 
     def serving_pins(self):
-        pins = list(self.SERVING_PINS)
+        v032 = self.config.inference.serving_runtime == "v0.32"
+        pins = list(self.SERVING_PINS_V032 if v032 else self.SERVING_PINS)
         version = self.config.inference.transformers_version
         if version:
             pins.append(f"transformers=={version}")
         return pins
 
     def install_role(self, role):
-        folder = self.root / "envs" / ("trainer" if role == "trainer" else "serving")
+        folder = self.root / "envs" / ("trainer" if role == "trainer" else self.config.inference.serving_env)
         identity = self.source_identity + (
             self.config.trainer.maxtext_spec + "|" + " ".join(self.TRAINER_PINS + self.config.trainer.extra_pins)
             if role == "trainer"
@@ -314,11 +321,13 @@ class Host:
         else:
             self.checked("serving-venv", ["uv", "venv", "--python", "3.12", str(folder)])
             self.checked("serving-install", ["uv", "pip", "install", "--python", python, *self.serving_pins()])
-            self.checked("serving-overlay", ["uv", "pip", "install", "--python", python, "--no-deps",
-                                             "--force-reinstall", str(self.source / "third_party/tpu-inference")])
+            if self.config.inference.serving_runtime == "v0.23":
+                # Our tpu-inference fork; v0.32 serves the stock release.
+                self.checked("serving-overlay", ["uv", "pip", "install", "--python", python, "--no-deps",
+                                                 "--force-reinstall", str(self.source / "third_party/tpu-inference")])
             self.checked("serving-import", [python, "-c",
                 "import jax, vllm; from tpu_inference.worker.tpu_worker import TPUWorker; "
-                "assert jax.__version__ == '0.10.1'; "
+                f"assert jax.__version__ == '{self.SERVING_JAX[self.config.inference.serving_runtime]}'; "
                 "missing = [n for n in ('add_lora','remove_lora','list_loras','pin_lora') if not hasattr(TPUWorker, n)]; "
                 "assert not missing, missing"], env=dict(os.environ, JAX_PLATFORMS="cpu"))
         self.verify_runtime(role, folder, fresh=True)

@@ -28,9 +28,10 @@ def identity(config, root, source, snapshot):
     if not {'config.json', 'tokenizer.json'} <= files.keys():
         raise RuntimeError('serving identity requires model and tokenizer metadata')
     code = {name: hashlib.sha256((source / name).read_bytes()).hexdigest()
-            for name in ('tpu/vllm_tpu_server.py', 'tpu/thinking_budget/server.py')}
+            for name in ('tpu/vllm_tpu_server.py', 'tpu/thinking_budget/server.py')
+            + (('tpu/vllm_tpu_server_v032.py',) if config.inference.serving_runtime == 'v0.32' else ())}
     packages = {}
-    for site in (root / 'envs/serving/lib').glob('python*/site-packages'):
+    for site in (root / 'envs' / config.inference.serving_env / 'lib').glob('python*/site-packages'):
         for dist in importlib.metadata.distributions(path=[str(site)]):
             name = dist.metadata['Name'].lower().replace('_', '-')
             if name in ('vllm', 'vllm-tpu', 'tpu-inference', 'jax', 'jaxlib', 'torch', 'torchax', 'transformers'):
