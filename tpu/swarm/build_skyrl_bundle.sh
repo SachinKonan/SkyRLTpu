@@ -59,6 +59,7 @@ tar -czf "$ARCHIVE" -C "$REPO" \
   --exclude='*/runs' \
   --exclude='results' \
   --exclude='benchmark_artifacts' \
+  --exclude='.science' \
   --exclude='wandb' \
   --exclude='*/wandb' \
   --exclude='*.log' \
