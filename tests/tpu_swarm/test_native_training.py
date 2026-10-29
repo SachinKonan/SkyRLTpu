@@ -193,6 +193,26 @@ def test_groups_go_to_the_least_loaded_engine_and_rotate_on_ties():
     assert [ingress.select_engine('qwen') for _ in range(6)]==[0,1,2,3,0,1]
 
 
+def test_a_session_sticks_to_one_engine_until_it_is_full():
+    ns=serving_namespace()
+    ingress=object.__new__(ns['Ingress']);ingress.engines=list(range(8));ingress.engine_models=None;ingress.next_engine=0
+    ingress.config=SimpleNamespace(inference=SimpleNamespace(max_sequences=4))
+    # Every turn of a session goes to the same engine (prefix-cache locality), whatever the rotation says.
+    first=ingress.acquire_engine('qwen',1,'agent-7');ingress.release_engine(first,1)
+    assert all(ingress.acquire_engine('qwen',1,'agent-7')==first for _ in range(3))
+    # Sessions spread over the engines by hash.
+    assert len({ingress.acquire_engine('qwen',0,f'agent-{i}') for i in range(64)})==8
+    # Full engine (max_sequences in flight) with room elsewhere: least loaded instead.
+    ingress.engine_load=[0]*8;ingress.engine_load[first]=4
+    assert ingress.acquire_engine('qwen',1,'agent-7')!=first
+    # Every engine full: stay (queue on the cached engine rather than re-prefill elsewhere).
+    ingress.engine_load=[4]*8
+    assert ingress.acquire_engine('qwen',1,'agent-7')==first
+    # No session: unchanged least-loaded rotation.
+    ingress.engine_load=[0]*8;ingress.next_engine=0
+    assert [ingress.acquire_engine('qwen',1) for _ in range(3)]==[0,1,2]
+
+
 def test_split_deploy_reserves_disjoint_two_chip_slots():
     ns=serving_namespace();c=muse_config();records=[]
     class Engine:

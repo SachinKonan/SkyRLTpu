@@ -1124,22 +1124,37 @@ class Ingress:
     def select_engine(self, model, weight=0):
         return self.engines[self.acquire_engine(model, weight)]
 
-    def acquire_engine(self, model, weight=0):
+    def acquire_engine(self, model, weight=0, session=None):
         """Index of the engine with the fewest in-flight sequences, rotating on ties.
 
         ``weight`` (the request's ``n``) is added to that engine's load; the
         caller releases it with ``release_engine``. A whole n=32 group goes to
         one engine, so round-robin alone can stack groups on a busy engine
         while another sits idle.
+
+        A ``session`` (``x-session-id``: one agent's turns) sticks to one engine
+        chosen by a stable hash, so each turn finds the previous turn's prefix
+        in that engine's cache. It falls back to the least loaded engine only
+        when its own engine is full (``max_sequences`` in flight) and another
+        has room.
         """
         if not self.engines:
             raise HTTPException(503, 'no local inference engines: remote-only ingress')
         load = getattr(self, 'engine_load', None)
         if load is None or len(load) != len(self.engines):
             load = self.engine_load = [0] * len(self.engines)
+        if self.engine_models and model not in self.engine_models:
+            raise HTTPException(400, "unknown base model")
+        if session:
+            indices = ([i for i, name in enumerate(self.engine_models) if name == model] if self.engine_models
+                       else list(range(len(self.engines))))
+            index = indices[int(hashlib.sha256(session.encode()).hexdigest(), 16) % len(indices)]
+            config = getattr(self, 'config', None)
+            cap = config.inference.max_sequences if config else None
+            if not (cap and load[index] >= cap and min(load[i] for i in indices) < cap):
+                load[index] += weight
+                return index
         if self.engine_models:
-            if model not in self.engine_models:
-                raise HTTPException(400, "unknown base model")
             indices = [i for i, name in enumerate(self.engine_models) if name == model]
             cursor = self.next_model_engine.get(model, 0)
             order = [indices[(cursor + k) % len(indices)] for k in range(len(indices))]
@@ -1204,7 +1219,7 @@ class Ingress:
             self.active += 1
         return await self.finish_admitted("tokenize", payload, lease_id=request.headers.get("x-lease-id"))
 
-    async def finish_admitted(self, method, payload, *, local_only=False, lease_id=None):
+    async def finish_admitted(self, method, payload, *, local_only=False, lease_id=None, session=None):
         async def local(index):
             try:
                 return await getattr(self.engines[index], method).remote(payload)
@@ -1244,7 +1259,7 @@ class Ingress:
                     if isinstance(result, dict):
                         return result
                 weight = max(1, int(payload.get('n') or 1)) if method == 'generate' else 0
-                index = self.acquire_engine(payload["model"], weight)
+                index = self.acquire_engine(payload["model"], weight, session)
                 try:
                     return await getattr(self.engines[index], method).remote(payload)
                 except Exception as exc:
@@ -1293,7 +1308,7 @@ class Ingress:
             self.active += 1
         return await self.finish_admitted("generate", payload,
             local_only=request.headers.get('x-skyrl-local-only') == '1',
-            lease_id=request.headers.get("x-lease-id"))
+            lease_id=request.headers.get("x-lease-id"), session=request.headers.get("x-session-id"))
 
 
 def engine_version(raw_config, prepared, head, slot=0):
