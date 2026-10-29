@@ -27,11 +27,17 @@ def identity(config, root, source, snapshot):
             files[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     if not {'config.json', 'tokenizer.json'} <= files.keys():
         raise RuntimeError('serving identity requires model and tokenizer metadata')
+    # The base server always, the v0.32 launcher on that runtime, and the thinking-budget wrapper in native
+    # mode must exist (a missing one raises). Outside native mode the wrapper is hashed when installed (every
+    # v0.23 farm has it, so their identities are unchanged) and skipped on v0.32, which never installs it.
+    required = {'tpu/vllm_tpu_server.py'}
+    if config.inference.serving_runtime == 'v0.32':
+        required.add('tpu/vllm_tpu_server_v032.py')
+    if config.inference.native_thinking_budget:
+        required.add('tpu/thinking_budget/server.py')
     code = {name: hashlib.sha256((source / name).read_bytes()).hexdigest()
-            for name in ('tpu/vllm_tpu_server.py', 'tpu/thinking_budget/server.py')
-            + (('tpu/vllm_tpu_server_v032.py',) if config.inference.serving_runtime == 'v0.32' else ())
-            # thinking_budget/server.py exists only where the native thinking-budget overlay is installed
-            if (source / name).is_file()}
+            for name in ('tpu/vllm_tpu_server.py', 'tpu/thinking_budget/server.py', 'tpu/vllm_tpu_server_v032.py')
+            if name in required or (name == 'tpu/thinking_budget/server.py' and (source / name).is_file())}
     packages = {}
     for site in (root / 'envs' / config.inference.serving_env / 'lib').glob('python*/site-packages'):
         for dist in importlib.metadata.distributions(path=[str(site)]):

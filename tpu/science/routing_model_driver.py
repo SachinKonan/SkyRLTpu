@@ -74,7 +74,7 @@ def main():
         else:
             raise TimeoutError('native Muse inference did not become ready')
         with (out / 'sampling.log').open('wb') as log:
-            subprocess.run([str(native / 'envs/serving/bin/python'), '-m', 'tpu.science.sample',
+            subprocess.run([str(native / 'envs' / config.inference.serving_env / 'bin/python'), '-m', 'tpu.science.sample',
                             '--profile', profile, '--tokenizer', snapshot,
                             '--prompt', str(root / 'tpu/science/prompts/rendered/routing.txt'),
                             '--base', base, '--output', str(out / 'samples'), '--samples', '4'],

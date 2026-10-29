@@ -823,7 +823,12 @@ class Config:
         return cls.from_dict(json.loads(Path(path).read_text()))
 
     def to_dict(self):
-        return asdict(self)
+        raw = asdict(self)
+        # The default runtime serializes as before the field existed: bootstrap contract hashes and older
+        # readers of a serialized profile must not see a new key.
+        if raw["inference"].get("serving_runtime") == "v0.23":
+            del raw["inference"]["serving_runtime"]
+        return raw
 
     def _validate_single_bucket(self):
         """Every storage path stays in `bucket`, and `bucket` is in the job's region.

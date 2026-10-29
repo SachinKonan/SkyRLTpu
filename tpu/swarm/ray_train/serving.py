@@ -301,8 +301,9 @@ app = FastAPI()
 @serve.deployment(num_replicas=1, max_ongoing_requests=1024, ray_actor_options={"num_cpus": 1})
 @serve.ingress(app)
 class Ingress:
-    def __init__(self, raw_config, engines, catalog, inference_ips, engine_models=None):
+    def __init__(self, raw_config, engines, catalog, inference_ips, engine_models=None, engine_capacities=None):
         self.config = Config.from_dict(raw_config)
+        self.engine_capacities = engine_capacities
         self.engines = list(engines) if isinstance(engines, (list, tuple)) else [engines]
         self.next_engine = 0
         self.next_model_engine = {}
@@ -1149,9 +1150,10 @@ class Ingress:
             indices = ([i for i, name in enumerate(self.engine_models) if name == model] if self.engine_models
                        else list(range(len(self.engines))))
             index = indices[int(hashlib.sha256(session.encode()).hexdigest(), 16) % len(indices)]
+            caps = getattr(self, 'engine_capacities', None)
             config = getattr(self, 'config', None)
-            cap = config.inference.max_sequences if config else None
-            if not (cap and load[index] >= cap and min(load[i] for i in indices) < cap):
+            cap = (lambda i: caps[i]) if caps else (lambda i: config.inference.max_sequences if config else None)
+            if not (cap(index) and load[index] >= cap(index) and any(load[i] < cap(i) for i in indices)):
                 load[index] += weight
                 return index
         if self.engine_models:
@@ -1341,9 +1343,10 @@ def versioned_engine(*, engine_identity, **options):
 def deploy(config, prepared, catalog, head):
     serving = {ip: info for ip, info in prepared.items() if info["role"] == "inference"}
     heads = sorted(ip for ip, info in serving.items() if (info.get("group") or [ip])[0] == ip)
-    engine_models = None
+    engine_models = engine_capacities = None
     if config.arena_models:
         engine_models = [serving[ip]["config"]["model"] for ip in heads]
+        engine_capacities = [serving[ip]["config"]["inference"]["max_sequences"] for ip in heads]
         engines = [versioned_engine(name=f"arena-engine-{i}", num_replicas=1,
                     engine_identity=engine_version(serving[ip]["config"], {ip: serving[ip]}, head),
                     ray_actor_options={"num_cpus": 8, "resources": {"TPU": 4, f"node:{ip}": 0.01}})
@@ -1367,5 +1370,6 @@ def deploy(config, prepared, catalog, head):
     ingress = Ingress.options(ray_actor_options={"num_cpus": 1, "resources": {f"node:{head}": 0.01}})
     serve.start(proxy_location="HeadOnly", http_options={"host": "0.0.0.0", "port": config.ports.inference})
     return serve.run_many([serve.RunTarget(
-        target=ingress.bind(config.to_dict(), engines, catalog, heads, engine_models=engine_models), name="skyrl-training")],
+        target=ingress.bind(config.to_dict(), engines, catalog, heads, engine_models=engine_models,
+                            engine_capacities=engine_capacities), name="skyrl-training")],
         wait_for_ingress_deployment_creation=False, wait_for_applications_running=False)[0]

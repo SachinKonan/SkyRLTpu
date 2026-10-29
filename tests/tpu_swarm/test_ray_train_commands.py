@@ -551,3 +551,13 @@ def test_serving_runtime_v032_pins_the_stock_release():
             "transformers==5.19.0"} <= set(pins)
     host.config = config()
     assert "vllm-tpu==0.23.0" in host.serving_pins() and "tpu-inference==0.32.0" not in host.serving_pins()
+
+
+def test_default_serving_runtime_serializes_like_legacy_profiles():
+    """Bootstrap contract hashes and older readers see no new key for the default runtime."""
+    legacy = config().to_dict()
+    assert "serving_runtime" not in legacy["inference"]
+    assert Config.from_dict(legacy).to_dict() == legacy
+    v032 = config(inference=dict(serving_runtime="v0.32", transformers_version="5.19.0")).to_dict()
+    assert v032["inference"]["serving_runtime"] == "v0.32"
+    assert Config.from_dict(v032).inference.serving_runtime == "v0.32"

@@ -540,3 +540,43 @@ def test_active_phase_retries_busy_farm_without_another_url_update(tmp_path):
             finally:
                 await borrower.close()
     asyncio.run(run())
+
+
+def test_runtime_identity_requires_the_server_files_each_mode_runs(tmp_path):
+    """v0.23 farms hash both servers as before (the thinking wrapper is always installed there); a missing
+    required file still fails attestation; v0.32 (no thinking overlay) requires its launcher instead."""
+    from tpu.swarm.ray_train.serving_identity import identity
+    snapshot = tmp_path / ('a' * 40)
+    snapshot.mkdir()
+    for name in ('config.json', 'tokenizer.json'):
+        (snapshot / name).write_text('{}')
+    source = tmp_path / 'source'
+    for env in ('serving', 'serving-v032'):
+        site = tmp_path / f'envs/{env}/lib/python3.12/site-packages'
+        for name in ('vllm', 'tpu_inference', 'transformers', 'jax', 'jaxlib'):
+            (site / f'{name}-1.0.dist-info').mkdir(parents=True)
+            (site / f'{name}-1.0.dist-info/METADATA').write_text(f'Name: {name}\nVersion: 1.0\n')
+            (site / f'{name}-1.0.dist-info/RECORD').write_text(f'{name}.py,,\n')
+            (site / (name + '.py')).write_text('original = True\n')
+
+    def files(*names):
+        for name in names:
+            (source / name).parent.mkdir(parents=True, exist_ok=True)
+            (source / name).write_text('pass\n')
+    base = config(tmp_path)
+    legacy = replace(base, inference=replace(base.inference, native_thinking_budget=False))
+    native = replace(base, inference=replace(base.inference, native_thinking_budget=True))
+    v032 = replace(legacy, inference=replace(legacy.inference, serving_runtime='v0.32', transformers_version='5.19.0'))
+    files('tpu/vllm_tpu_server.py')
+    with pytest.raises(FileNotFoundError):
+        identity(native, tmp_path, source, snapshot)
+    with pytest.raises(FileNotFoundError):
+        identity(v032, tmp_path, source, snapshot)
+    assert sorted(identity(legacy, tmp_path, source, snapshot)['contract']['code']) == ['tpu/vllm_tpu_server.py']
+    files('tpu/thinking_budget/server.py', 'tpu/vllm_tpu_server_v032.py')
+    both = ['tpu/thinking_budget/server.py', 'tpu/vllm_tpu_server.py']
+    assert sorted(identity(legacy, tmp_path, source, snapshot)['contract']['code']) == both
+    assert sorted(identity(native, tmp_path, source, snapshot)['contract']['code']) == both
+    (source / 'tpu/thinking_budget/server.py').unlink()
+    assert sorted(identity(v032, tmp_path, source, snapshot)['contract']['code']) == [
+        'tpu/vllm_tpu_server.py', 'tpu/vllm_tpu_server_v032.py']

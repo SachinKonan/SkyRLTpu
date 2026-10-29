@@ -213,6 +213,17 @@ def test_a_session_sticks_to_one_engine_until_it_is_full():
     assert [ingress.acquire_engine('qwen',1) for _ in range(3)]==[0,1,2]
 
 
+def test_session_capacity_is_each_engines_own():
+    ns=serving_namespace()
+    ingress=object.__new__(ns['Ingress']);ingress.engines=list(range(4));ingress.engine_models=None;ingress.next_engine=0
+    ingress.config=SimpleNamespace(inference=SimpleNamespace(max_sequences=16))
+    ingress.engine_capacities=[8,8,8,8]
+    first=ingress.acquire_engine('qwen',0,'agent-1')
+    # Its own engine is full at 8 (not the parent's 16) and a sibling has room: go there.
+    ingress.engine_load=[0]*4;ingress.engine_load[first]=8
+    assert ingress.acquire_engine('qwen',1,'agent-1')!=first
+
+
 def test_split_deploy_reserves_disjoint_two_chip_slots():
     ns=serving_namespace();c=muse_config();records=[]
     class Engine:

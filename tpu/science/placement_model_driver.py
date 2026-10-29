@@ -63,7 +63,7 @@ def main():
             if snapshot and ready:break
             time.sleep(10)
         else:raise TimeoutError('native inference service did not become ready')
-        cmd=[str(native/'envs/serving/bin/python'),'-m','tpu.science.sample','--profile',a.profile,
+        cmd=[str(native/'envs'/config.inference.serving_env/'bin/python'),'-m','tpu.science.sample','--profile',a.profile,
              '--tokenizer',snapshot,'--prompt',str(root/'tpu/science/prompts'/('placement-jax-v5p.txt' if config.accelerator=='tpu-v5p-32' else 'placement-jax.txt')),
              '--base',inference_url,'--output',str(out/'samples'),'--samples','4']
         with (out/'sampling.log').open('wb') as log:
