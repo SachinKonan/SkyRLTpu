@@ -321,10 +321,11 @@ class Host:
         else:
             self.checked("serving-venv", ["uv", "venv", "--python", "3.12", str(folder)])
             self.checked("serving-install", ["uv", "pip", "install", "--python", python, *self.serving_pins()])
-            if self.config.inference.serving_runtime == "v0.23":
-                # Our tpu-inference fork; v0.32 serves the stock release.
-                self.checked("serving-overlay", ["uv", "pip", "install", "--python", python, "--no-deps",
-                                                 "--force-reinstall", str(self.source / "third_party/tpu-inference")])
+            # Our tpu-inference fork over the pinned release: skyrl/v0.23.0-lora, or skyrl/v0.32.0 (upstream
+            # v0.32.0 + the native thinking budget + the NaN logprob clamp).
+            fork = {"v0.23": "third_party/tpu-inference", "v0.32": "third_party/tpu-inference-v032"}
+            self.checked("serving-overlay", ["uv", "pip", "install", "--python", python, "--no-deps", "--force-reinstall",
+                                             str(self.source / fork[self.config.inference.serving_runtime])])
             self.checked("serving-import", [python, "-c",
                 "import jax, vllm; from tpu_inference.worker.tpu_worker import TPUWorker; "
                 f"assert jax.__version__ == '{self.SERVING_JAX[self.config.inference.serving_runtime]}'; "

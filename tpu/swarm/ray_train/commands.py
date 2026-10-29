@@ -230,8 +230,9 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
 
 def inference_command(config, root, source, snapshot, run, group=None, slot=0):
     v = config.inference
-    server = ("tpu/thinking_budget/server.py" if v.native_thinking_budget
-              else "tpu/vllm_tpu_server_v032.py" if v.serving_runtime == "v0.32" else "tpu/vllm_tpu_server.py")
+    # v0.32 engines always start through its launcher, which picks the thinking-budget server itself.
+    server = ("tpu/vllm_tpu_server_v032.py" if v.serving_runtime == "v0.32"
+              else "tpu/thinking_budget/server.py" if v.native_thinking_budget else "tpu/vllm_tpu_server.py")
     command = [str(root / "envs" / v.serving_env / "bin/python"), str(source / server),
                str(snapshot), "--served-model-name", config.model, "--skyrl-lora-dir", str(run / "loras"),
                "--host", "0.0.0.0", "--port", str(config.ports.engine + slot),

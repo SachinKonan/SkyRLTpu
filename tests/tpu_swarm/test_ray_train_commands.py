@@ -535,7 +535,6 @@ def test_serving_runtime_v032_uses_its_own_environment_and_server():
 
 
 @pytest.mark.parametrize("inference", [dict(serving_runtime="v0.31"),
-                                       dict(serving_runtime="v0.32", native_thinking_budget=True),
                                        dict(serving_runtime="v0.32", max_loras=2)])
 def test_serving_runtime_v032_rejects_what_it_does_not_serve(inference):
     with pytest.raises(ValueError):
@@ -561,3 +560,15 @@ def test_default_serving_runtime_serializes_like_legacy_profiles():
     v032 = config(inference=dict(serving_runtime="v0.32", transformers_version="5.19.0")).to_dict()
     assert v032["inference"]["serving_runtime"] == "v0.32"
     assert Config.from_dict(v032).inference.serving_runtime == "v0.32"
+
+
+def test_serving_runtime_v032_native_thinking_starts_through_its_launcher():
+    """The launcher aliases vLLM 0.32's moved cli_args and runs the thinking-budget server when
+    SKYRL_THINKING_FORMAT is set (inference_environment sets it for native engines)."""
+    cfg = config(inference=dict(serving_runtime="v0.32", transformers_version="5.19.0", native_thinking_budget=True))
+    cmd = inference_command(cfg, ROOT, ROOT / "source", ROOT / "model", ROOT / "run")
+    assert cmd[1] == str(ROOT / "source/tpu/vllm_tpu_server_v032.py")
+    assert inference_environment(cfg, ROOT, ROOT / "run")["SKYRL_THINKING_FORMAT"] == cfg.native_thinking_format
+    legacy = config(inference=dict(native_thinking_budget=True))
+    assert inference_command(legacy, ROOT, ROOT / "source", ROOT / "model", ROOT / "run")[1] == str(
+        ROOT / "source/tpu/thinking_budget/server.py")

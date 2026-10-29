@@ -1159,10 +1159,8 @@ class Config:
             raise ValueError("arena concurrency and token limit must be positive integers")
         if self.inference.serving_runtime not in SERVING_RUNTIMES:
             raise ValueError(f"serving_runtime must be one of {sorted(SERVING_RUNTIMES)}")
-        if self.inference.serving_runtime != "v0.23" and (self.inference.native_thinking_budget
-                                                          or self.inference.max_loras != 1):
-            raise ValueError("serving_runtime v0.32 serves the base model only: no native thinking "
-                             "budget patch, one LoRA slot")
+        if self.inference.serving_runtime != "v0.23" and self.inference.max_loras != 1:
+            raise ValueError("serving_runtime v0.32 is validated with one LoRA slot")
         if type(self.inference.native_thinking_budget) is not bool:
             raise ValueError("native_thinking_budget must be a boolean")
         if self.inference.native_thinking_budget:

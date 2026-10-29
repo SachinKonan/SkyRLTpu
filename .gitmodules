@@ -14,3 +14,7 @@
 [submodule "third_party/TPUSwarm"]
 	path = third_party/TPUSwarm
 	url = https://github.com/SachinKonan/TPUSwarm.git
+[submodule "third_party/tpu-inference-v032"]
+	path = third_party/tpu-inference-v032
+	url = https://github.com/SachinKonan/tpu-inference.git
+	branch = skyrl/v0.32.0
