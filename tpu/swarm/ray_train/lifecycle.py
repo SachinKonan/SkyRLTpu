@@ -41,7 +41,7 @@ WORKLOAD_MODULES = {'skyrl.tinker.api', 'skyrl.tinker.engine', 'skyrl.backends.r
                     'tpu.thinking_budget.server', 'tpu.swarm.ray_train.thinking_budget.server',
                     'tpu.swarm.ray_train.grader_child', 'tpu.swarm.ray_train.bootstrap',
                     'tpu.science.placement_task', 'tpu.science.challenge_score_child', 'tpu.science.worker'}
-WORKLOAD_SUFFIXES = ('/vllm_tpu_server.py', '/thinking_budget/server.py', '/grader_child.py', '/runner.py')
+WORKLOAD_SUFFIXES = ('/vllm_tpu_server.py', '/vllm_tpu_server_v032.py', '/thinking_budget/server.py', '/grader_child.py', '/runner.py')
 
 
 def job_unit(task_id):

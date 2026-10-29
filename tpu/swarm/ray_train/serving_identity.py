@@ -29,7 +29,9 @@ def identity(config, root, source, snapshot):
         raise RuntimeError('serving identity requires model and tokenizer metadata')
     code = {name: hashlib.sha256((source / name).read_bytes()).hexdigest()
             for name in ('tpu/vllm_tpu_server.py', 'tpu/thinking_budget/server.py')
-            + (('tpu/vllm_tpu_server_v032.py',) if config.inference.serving_runtime == 'v0.32' else ())}
+            + (('tpu/vllm_tpu_server_v032.py',) if config.inference.serving_runtime == 'v0.32' else ())
+            # thinking_budget/server.py exists only where the native thinking-budget overlay is installed
+            if (source / name).is_file()}
     packages = {}
     for site in (root / 'envs' / config.inference.serving_env / 'lib').glob('python*/site-packages'):
         for dist in importlib.metadata.distributions(path=[str(site)]):
