@@ -22,7 +22,7 @@
     "request_timeout": 21600,
     "native_thinking_budget": true,
     "ragged_conv1d": false,
-    "prefix_caching": false,
+    "prefix_caching": true,
     "max_loras": 1,
     "require_lease": true,
     "external_pool_attestation": true,
