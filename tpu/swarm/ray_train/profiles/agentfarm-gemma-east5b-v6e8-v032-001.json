@@ -51,8 +51,8 @@
   "single_bucket": true,
   "run_id": "agentfarm-gemma-east5b-v6e8-v032-001",
   "bucket": "gs://sk7524-tinker-tpu-us-east5",
-  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-rq4-base-v48.tar.gz",
-  "base_bundle_sha256": "1d723fe16e03877c6b95f9181d86e6d8d4f8ef857193b8ec08b80c55441c2cc5",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-rq4-base-v49.tar.gz",
+  "base_bundle_sha256": "269b65006b5b6aadf7fcf39a3b484eb45fba56930c3916a07a7c3696bffc2dde",
   "root": "~/.cache/agentfarm-gemma-east5b-v6e8-v032-001",
   "model_preset": "gemma4-31b",
   "inference": {
