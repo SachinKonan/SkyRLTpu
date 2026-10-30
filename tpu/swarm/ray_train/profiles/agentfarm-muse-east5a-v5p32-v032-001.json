@@ -27,7 +27,8 @@
     "external_pool_attestation": true,
     "farm_drain_timeout": 120,
     "serving_runtime": "v0.32",
-    "transformers_version": "5.19.0"
+    "transformers_version": "5.19.0",
+    "batched_rpa_kernel": false
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-muse-glimmer-v1",

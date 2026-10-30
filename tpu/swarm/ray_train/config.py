@@ -1348,6 +1348,11 @@ class Config:
             raise ValueError("inference.chunk_tokens must be positive")
         if any(str(k) != k or str(v) != v for k, v in self.inference.engine_env.items()):
             raise ValueError("inference.engine_env must contain strings")
+        if (self.inference.serving_runtime == "v0.32" and self.inference.batched_rpa_kernel
+                and self.inference.prefix_caching):
+            # On v0.32 the second sample of an n>1 request reads the wrong context when it lands a partial
+            # hit during a chunked prefill (Muse, v4); v0.23 is clean and batched off is clean and as fast.
+            raise ValueError("v0.32 prefix caching requires batched_rpa_kernel: false")
         if type(self.inference.unset_plugins) is not bool:
             raise ValueError("inference.unset_plugins must be a boolean")
         if not isinstance(self.inference.plugins, str):
