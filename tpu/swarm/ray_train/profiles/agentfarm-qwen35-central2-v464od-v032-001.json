@@ -13,7 +13,7 @@
   },
   "inference": {
     "tp": 4,
-    "max_sequences": 16,
+    "max_sequences": 32,
     "memory_utilization": 0.85,
     "routing": "ingress",
     "restart_limit": 0,
@@ -29,7 +29,12 @@
     "farm_drain_timeout": 600,
     "farm_cancel_grace_seconds": 5,
     "serving_runtime": "v0.32",
-    "transformers_version": "5.19.0"
+    "transformers_version": "5.19.0",
+    "engine_env": {
+      "RPA_V3_DECODE_BLOCK_SIZES": "1,128,1,128",
+      "RPA_V3_PREFILL_BLOCK_SIZES": "16,128,16,128",
+      "RPA_V3_MIXED_BLOCK_SIZES": "16,128,16,128"
+    }
   },
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
