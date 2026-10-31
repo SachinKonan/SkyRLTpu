@@ -51,8 +51,8 @@
   "single_bucket": true,
   "run_id": "agentfarm-qwen35-east5b-v6e8-v032-001",
   "bucket": "gs://sk7524-tinker-tpu-us-east5",
-  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-rq4-base-v54.tar.gz",
-  "base_bundle_sha256": "591569df1b44970ee89fb399dec3737177752c7daff59cd626bf94d558c55940",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-rq4-base-v56.tar.gz",
+  "base_bundle_sha256": "41a1ba225b81ace5138708c33653750ff5cc8d5994361d6c3b131d4e15c12710",
   "root": "~/.cache/agentfarm-qwen35-east5b-v6e8-v032-001",
   "model_preset": "qwen3.5-27b",
   "inference": {
