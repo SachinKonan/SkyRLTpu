@@ -490,3 +490,18 @@ def test_runs_start_their_farm_walk_at_different_farms():
     import random
     starts = {random.Random(f'run-{i}:x').randrange(8) for i in range(20)}
     assert len(starts) > 1  # rotation by owner spreads first acquisitions
+
+
+def test_wanted_counts_the_real_capacity_of_each_held_farm():
+    """A v6e-8 lease takes 4 groups and a v4-32 8 (requests_per_engine x engines), not the configured cap."""
+    from tpu.swarm.ray_train.multi_borrowing import MultiRunBorrower
+    lease = lambda n: SimpleNamespace(lease=SimpleNamespace(max_requests=n))
+    b = SimpleNamespace(phase='p', target=8, settings=SimpleNamespace(external_pool_max_concurrent_requests=8),
+                        generated_this_phase=lambda: 1)
+    want = lambda held, outstanding: MultiRunBorrower.wanted(
+        SimpleNamespace(**vars(b), held=lambda: held, outstanding=lambda: outstanding))
+    assert want([], 14) == 2                               # nothing held: size by the configured cap
+    assert want([lease(4), lease(4)], 14) == 4             # two v6e-8 cover 8 of 14: two more like them
+    assert want([lease(8), lease(4)], 6) == 1              # the v4-32 alone covers 6: the v6e-8 is surplus
+    assert want([lease(8), lease(4)], 12) == 2
+    assert want([lease(4)] * 8, 40) == 8                   # never above target

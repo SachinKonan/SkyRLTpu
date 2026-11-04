@@ -346,7 +346,18 @@ class MultiRunBorrower:
             # Before the first group of the phase is generated, keep one farm ready.
             return 0 if self.generated_this_phase() > 0 else 1
         per_farm = max(1, self.settings.external_pool_max_concurrent_requests)
-        return min(self.target, max(1, math.ceil(outstanding / per_farm)))
+        # Farms differ in size (requests_per_engine x engines: v6e-8 4, v4-32 8), so count what the held leases
+        # really take, largest first, and size any missing farms like the smallest one held.
+        caps = sorted((max(1, getattr(m.lease, 'max_requests', None) or per_farm) for m in self.held()), reverse=True)
+        need = covered = 0
+        for cap in caps:
+            if covered >= outstanding:
+                break
+            covered += cap
+            need += 1
+        if covered < outstanding:
+            need += math.ceil((outstanding - covered) / (min(caps) if caps else per_farm))
+        return min(self.target, max(1, need))
 
     async def _release_surplus(self):
         held = self.held()
