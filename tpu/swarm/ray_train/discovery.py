@@ -111,6 +111,27 @@ def load_private(path):
     return dict(farms=document.get('farms', []), trainers=document.get('trainers', []))
 
 
+def fair_share_cap(ready_farms, descriptors):
+    """Farms each generating trainer may be offered: ceil(ready / generating trainers), or None (no cap).
+
+    A trainer is generating when its borrower reports a phase or holds a lease. Trainers that are training or
+    grading do not count, so the one generating then gets every farm."""
+    generating = sum(1 for d in descriptors if (d.get('borrowing') or {}).get('phase')
+                     or (d.get('borrowing') or {}).get('held'))
+    if generating < 2:
+        return None
+    return max(1, -(-ready_farms // generating))
+
+
+def trim_to_share(target, urls, cap):
+    """Keep every farm the trainer already holds (never revoke a lease), then fill up to cap."""
+    if cap is None:
+        return urls
+    held = set((target.get('borrowing') or {}).get('held') or [])
+    kept = [u for u in urls if u in held]
+    return kept + [u for u in urls if u not in held][:max(0, cap - len(kept))]
+
+
 class Directory:
     """Health and incarnation per farm, keyed by job ID (pool) or name (private)."""
 
@@ -148,6 +169,11 @@ class Service:
         self.directory, self.tunnels = Directory(), {}
         # One squeue per tick for every Slurm farm; a failed call keeps the last answer (della's controller is slow).
         self.slurm_nodes = {}
+        # Della grading farms for GCP trainers (grader_gateway): one endpoint here, one reverse tunnel per trainer host.
+        self.gateway = None
+        if getattr(args, 'grader_gateway', False):
+            from .grader_gateway import GraderGateway
+            self.gateway = GraderGateway(args, private['trainers'], ssh_argv, emit=self.emit)
 
     def farm_sources(self, rows):
         pool = [dict(key=str(r['job_id']), job_id=r['job_id'], name=r['run_id'], cluster=r['cluster'],
@@ -231,12 +257,30 @@ class Service:
                         error=f.get('error')) for f in published if not is_ready(f)]
         document = dict(time=now, updated=now, contract=READY_ONLY, farms=ready, unready=unready,
                         trainers=trainers, shadow=not self.args.push)
+        if self.gateway is not None:
+            self.gateway_inputs = (rows, ready)
+            document['gateway'] = self.gateway.tick(rows, ready)
         write(self.args.registry, document)
         return document
 
+    def keep_gateway(self):
+        """After a failed tick (e.g. the SkyPilot API is down): keep the gateway's tunnels and trainer registries
+        alive with the last good trainer rows and farms; its farm probes and grades never depended on the tick."""
+        if self.gateway is None or getattr(self, 'gateway_inputs', None) is None:
+            return None
+        return self.gateway.tick(*self.gateway_inputs)
+
     def push(self, rows, probes, healthy):
         """Candidate lists for pool trainers (borrowing_supervisor rules) and private trainers (direct)."""
+        if getattr(self.args, 'gateway_only', False):
+            # Next to the generation pusher: trainers are only tunnel targets here, their lists are not touched.
+            return dict(pool=[], direct=[])
         pool = {}
+        trim = None
+        if getattr(self.args, 'fair_share', False):
+            cap = fair_share_cap(sum(1 for f in healthy if f['source'] == 'pool'), self.trainer_descriptors(rows))
+            self.emit(event='fair_share', cap=cap)
+            trim = lambda target, urls: trim_to_share(target, urls, cap)
         if self.args.trainer_pool or self.args.trainer_job_id:
             def call(cluster, action, body=None):
                 if action == 'farm':
@@ -245,7 +289,7 @@ class Service:
                            group=self.args.discovery_group)
             pool = pool_tick(rows, None, self.args.trainer_job_id, call, dry_run=not self.args.push,
                              trainer_pools=self.args.trainer_pool, run_scoped_only=self.args.run_scoped_only,
-                             farm_name_contains=self.args.name_contains[0]).get('targets', [])
+                             farm_name_contains=self.args.name_contains[0], trim=trim).get('targets', [])
         farms = [dict(probes.get(f['cluster'], {}).get('result') or {}, source_pool=f['pool'])
                  for f in healthy if f['source'] == 'pool']
 
@@ -255,7 +299,7 @@ class Service:
         for row in self.private['trainers']:
             eligible = [f for f in farms if f['source_pool'] in row.get('farm_pools', [])]
             if self.args.push:
-                direct += direct_tick([row], eligible, direct_call)
+                direct += direct_tick([row], eligible, direct_call, trim=trim)
                 continue
             descriptor = direct_call(row)
             if not descriptor.get('ok'):
@@ -265,12 +309,32 @@ class Service:
                                urls=candidates(descriptor['result'], row, eligible)))
         return dict(pool=pool, direct=direct)
 
+    def trainer_descriptors(self, rows):
+        """Current target descriptors of every trainer this discovery pushes to (pool jobs and private)."""
+        out = []
+        running = {r['job_id']: r for r in rows if r['status'] == 'RUNNING' and r.get('cluster')}
+        jobs = list(dict.fromkeys([*self.args.trainer_job_id,
+                                   *[r['job_id'] for r in rows if r.get('pool') in self.args.trainer_pool]]))
+        for job in jobs:
+            if job in running:
+                d = rpc(self.args.ssh_config_dir, running[job]['cluster'], 'target', self.args.farm_port,
+                        group=self.args.discovery_group)
+                if d.get('ok'):
+                    out.append(d['result'])
+        for row in self.private['trainers']:
+            d = private_rpc(row, 'target', row.get('port', self.args.farm_port), group=row['group'])
+            if d.get('ok'):
+                out.append(d['result'])
+        return out
+
     def emit(self, **fields):
         print(json.dumps(dict(time=self.now(), **fields)), flush=True)
 
     def close(self):
         for tunnel in self.tunnels.values():
             tunnel.close()
+        if self.gateway is not None:
+            self.gateway.close()
 
 
 def is_ready(record):
@@ -332,8 +396,31 @@ def main():
     parser.add_argument('--tunnels', action='store_true', help='keep della SSH tunnels (local_farms)')
     parser.add_argument('--port-base', type=int, default=29000, help='tunnel ports; local_farms uses 27000')
     parser.add_argument('--interval', type=int, default=30)
+    parser.add_argument('--grader-gateway', action='store_true',
+                        help='grade for every trainer rank-0 host (trainer pools, job ids, private trainers) on the '
+                             'ready della grading farms through one endpoint here and one reverse SSH tunnel per '
+                             'host (grader_gateway); acts only with --push')
+    parser.add_argument('--gateway-port', type=int, default=28650,
+                        help='gateway listen port on this host (127.0.0.1)')
+    parser.add_argument('--gateway-remote-port', type=int, default=26000,
+                        help='gateway port on the trainer hosts (127.0.0.1); +1000 after two refused forwards')
+    parser.add_argument('--gateway-priority', action='append', default=[], metavar='PREFIX=N',
+                        help='grader_gateway: runs whose id starts with PREFIX get priority N (lower first; others 1); '
+                             'repeatable, longest prefix wins')
+    parser.add_argument('--gateway-reserve', type=float, default=None,
+                        help='grader_gateway: fraction of slots kept free from runs below the best priority (default 0.25)')
+    parser.add_argument('--gateway-registry-path', default=None,
+                        help='registry path on the trainer hosts (default %s); the profile sets the same path as '
+                             'SKYRL_GRADING_REGISTRY' % '/home/gcpuser/.cache/skyrl/della-graders.json')
+    parser.add_argument('--gateway-only', action='store_true',
+                        help='run only the grader gateway: never read or push trainers\' candidate lists, so it '
+                             'runs next to the generation pusher (own lock, default ~/.cache/skyrl/grader-gateway.lock)')
     parser.add_argument('--push', action='store_true', help='push candidate lists (off = shadow mode)')
+    parser.add_argument('--fair-share', action='store_true',
+                        help='while several trainers generate, offer each at most ceil(ready farms / generating '
+                             'trainers) farms; leases already held are always kept')
     parser.add_argument('--once', action='store_true')
+    parser.add_argument('--lock-file', type=Path, help='exclusive pusher lock (default: one per login)')
     parser.add_argument('--check-fresh', type=float, metavar='MAX_AGE',
                         help='exit 0 if the registry was published within MAX_AGE seconds, else alert and exit 1')
     args = parser.parse_args()
@@ -343,18 +430,30 @@ def main():
                               registry=str(args.registry), age_seconds=age, max_age=args.check_fresh)))
         raise SystemExit(0 if fresh else 1)
     args.name_contains = args.name_contains or ['inference-farm']
+    if args.gateway_only and not args.grader_gateway:
+        parser.error('--gateway-only needs --grader-gateway')
+    if args.gateway_priority:
+        from .grader_gateway import parse_priorities
+        try:
+            parse_priorities(args.gateway_priority)
+        except ValueError as exc:
+            parser.error(str(exc))
+    if args.gateway_reserve is not None and not 0 <= args.gateway_reserve < 1:
+        parser.error('--gateway-reserve must be in [0, 1)')
     if args.interval < 10:
         parser.error('interval must be >= 10 seconds')
     if args.push:
         # Exclusive with the old supervisor: two pushers would fight over trainers' candidate lists.
         import fcntl
-        lock_path = Path.home() / '.cache/skyrl/borrowing-supervisor.lock'
+        lock_path = args.lock_file or Path.home() / ('.cache/skyrl/grader-gateway.lock' if args.gateway_only
+                                                     else '.cache/skyrl/borrowing-supervisor.lock')
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock = lock_path.open('a')
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            parser.error('another discovery pusher (borrowing_supervisor) is running under this login')
+            parser.error('another %s is running under this login'
+                         % ('grader gateway' if args.gateway_only else 'discovery pusher (borrowing_supervisor)'))
     service = Service(args, load_private(args.private_hosts))
     try:
         while True:
@@ -367,6 +466,11 @@ def main():
             except Exception as exc:
                 # An inventory outage must not look like an empty farm list: keep the last registry.
                 service.emit(error=type(exc).__name__ + ': ' + str(exc)[:300])
+                try:
+                    if service.keep_gateway() is not None:
+                        service.emit(event='gateway_kept_after_failed_tick')
+                except Exception as gateway_exc:
+                    service.emit(error='gateway: %s: %s' % (type(gateway_exc).__name__, str(gateway_exc)[:300]))
             if args.once:
                 break
             time.sleep(args.interval)

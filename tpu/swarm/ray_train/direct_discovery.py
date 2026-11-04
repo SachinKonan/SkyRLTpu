@@ -51,8 +51,8 @@ def candidates(target, registration, farms):
     return urls[:limit]
 
 
-def tick(registrations, farms, call):
-    """call(registration, body=None) performs an instance-checked GET or POST."""
+def tick(registrations, farms, call, trim=None):
+    """call(registration, body=None) performs an instance-checked GET or POST; trim(target, urls) -> urls."""
     def update(registration):
         run_id = registration['run_id']
         try:
@@ -67,6 +67,8 @@ def tick(registrations, farms, call):
             if target.get('lease_scope') != 'run':
                 return dict(run_id=run_id, state='unsupported_lease_scope')
             urls = candidates(target, registration, farms)
+            if trim:
+                urls = trim(target, urls)
             if target.get('urls') == urls:
                 return dict(run_id=run_id, state='unchanged', urls=urls,
                             instance=target['instance'], borrowing=target.get('borrowing'))

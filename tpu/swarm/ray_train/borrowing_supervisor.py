@@ -119,8 +119,10 @@ def inventory():
 
 
 def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
-         run_scoped_only=False, farm_name_contains='inference-farm', farm_pool_max_job_id=None):
-    """One replace-list update per target, using this tick's observed farms."""
+         run_scoped_only=False, farm_name_contains='inference-farm', farm_pool_max_job_id=None, trim=None):
+    """One replace-list update per target, using this tick's observed farms.
+
+    trim(target, urls) -> urls, if given, shortens each list (discovery --fair-share)."""
     running = {r['job_id']: r for r in rows if r['status'] == 'RUNNING' and r.get('cluster')}
     farm_rows = [r for r in running.values()
                  if (farm_pool and re.fullmatch(re.escape(farm_pool)+r'-\d+', r['cluster'])
@@ -174,6 +176,8 @@ def tick(rows, farm_pool, trainer_ids, call, *, dry_run=False, trainer_pools=(),
         from .farm_admission import candidate_limit
         urls = (assigned[job_id] if job_id in assigned else
                 sorted({f['url'] for f in farms if target['model'] in f['models']})[:candidate_limit(target)])
+        if trim:
+            urls = trim(target, urls)
         if target.get('urls') == urls:
             return dict(job_id=job_id, state='unchanged', model=target['model'], urls=urls)
         body = {k: target[k] for k in ('model', 'run_id', 'instance')}
