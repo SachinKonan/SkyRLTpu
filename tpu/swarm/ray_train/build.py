@@ -17,7 +17,8 @@ from .config import ACCELERATOR_RUNTIME, Config
 
 GRADING_BUNDLE_FILES = ("__init__.py", "math_grade.py", "math_runner.py", "farm_resources.py", "cgroup_limits.py",
                         "cpu_slots.py", "worker.py", "grading_dedup.py", "grading_transport.py",
-                        "routing_resources.py", "placement_resources.py", "placement_runtime.py", "rewards.py", "core_pool.py")
+                        "routing_resources.py", "placement_resources.py", "placement_runtime.py", "rewards.py", "core_pool.py",
+                        "unit.py")
 
 
 def runtime_start(config, source):
@@ -43,14 +44,17 @@ export PYTHONPATH="$code:$code/tpu${{PYTHONPATH:+:$PYTHONPATH}}"
 '''
 
 
-def build(profile, output, *, _executor_only=False):
+def build(profile, output, *, _executor_only=False, direct=False):
+    """direct: an assigned-host profile, deployed by assigned_launch over SSH (its task YAML is unused)."""
     config = Config.load(profile)
-    if config.assigned_host_ips:
+    if config.assigned_host_ips and not direct:
         raise ValueError("assigned-host profiles must use direct deployment; never provision or attach them through SkyPilot")
     if (config.science_task or config.grading_science_task) and not _executor_only:
         # A science launch also needs its grader code, inputs, environment and
         # host preparation. Never return an executable generic-only science job.
         from tpu.science.package_training import package
+        if direct:
+            raise ValueError("assigned_launch deploys no science package on this branch (tpu/science stays unchanged)")
         task = package(profile, output)
         doc = yaml.safe_load(task.read_text())
         return Path(output).resolve() / 'science-training.tar.gz', doc['envs']['RAY_TRAIN_CODE'], task

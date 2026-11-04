@@ -87,7 +87,7 @@ GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.
                  'tpu/swarm/ray_train/request_protocol.py',
                  'tpu/science/__init__.py', 'tpu/science/grading_transport.py', 'tpu/science/grading_dedup.py',
                  'tpu/science/math_grade.py', 'tpu/science/math_runner.py', 'tpu/science/farm_resources.py', 'tpu/science/core_pool.py',
-                 'tpu/science/cgroup_limits.py', 'tpu/science/cpu_slots.py', 'tpu/science/worker.py',
+                 'tpu/science/cgroup_limits.py', 'tpu/science/unit.py', 'tpu/science/rewards.py', 'tpu/science/cpu_slots.py', 'tpu/science/worker.py',
                  'tpu/science/routing_resources.py', 'tpu/science/placement_resources.py', 'tpu/science/placement_runtime.py',
                  'third_party/discover/ttt_discover/environments/sandbox_reward_evaluator.py',
                  'third_party/discover/ttt_discover/tinker_utils/dataset_builder.py',
@@ -110,7 +110,7 @@ SCIENCE_FILES = {'tpu/run_ttd_ensemble.py', 'third_party/discover/ttt_discover/r
         'prompts/rendered/routing.txt', 'prompts/placement-jax-v6e.txt',
         'prompts/placement-jax-cpu.txt', 'prompts/placement-fast-proxy-cpu-v1.txt',
         'placement_suite_guard.py', 'placement_warm_start.py',
-        'prompts/placement-fast-proxy-cpu-ibm17-v2.txt')}
+        'prompts/placement-fast-proxy-cpu-ibm17-v2.txt', 'prompts/placement-fast-proxy-cpu-ibm17-v3.txt')}
 
 
 def manifest(repo, config=None):
