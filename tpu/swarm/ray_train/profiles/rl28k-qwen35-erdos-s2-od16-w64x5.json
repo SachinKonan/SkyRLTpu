@@ -15,7 +15,7 @@
     "process_bounds": "1,2,1",
     "sequence_length": 28672,
     "max_target_length": 28672,
-    "token_budget": 28672,
+    "token_budget": 57344,
     "seq_buckets": "24576,28672",
     "logical_kv_heads": 8,
     "remat": "full",
