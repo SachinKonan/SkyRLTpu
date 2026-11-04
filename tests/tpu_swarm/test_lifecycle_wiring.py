@@ -156,7 +156,7 @@ def test_bootstrap_prepares_before_the_runtime_unit_and_passes_shared(tmp_path, 
     order = []
     monkeypatch.setattr(lifecycle, 'prepare', lambda task, shared, log, **kw: order.append(('prepare', task, shared)))
     monkeypatch.setattr(runtime_service, 'launch', lambda *a, **kw: order.append(('launch', kw['shared'])) or 0)
-    cfg = SimpleNamespace(hosts=1, assigned_host_ips=[], root=str(tmp_path), run_id='r', systemd_runtime=True,
+    cfg = SimpleNamespace(hosts=1, idle_ranks=(), assigned_host_ips=[], od_v4_64_partition=False, root=str(tmp_path), run_id='r', systemd_runtime=True,
                           systemd_port=24900, systemd_peer_timeout=30, systemd_shutdown_grace=90, setup_timeout=60,
                           grading_host_sized=False, chips_per_host=4, job_ports=False)
     monkeypatch.setattr(bootstrap.Config, 'load', staticmethod(lambda path: cfg))

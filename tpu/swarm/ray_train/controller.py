@@ -13,6 +13,7 @@ import ray
 from ray import serve
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 
+from .config import OD_V4_64_TRAIN_RANKS
 from tpu.swarm.select_v4_32_topology import full_slice_rank_order, slice_rows, verify_full_slice_order
 from tpu.swarm.select_v4_64_topology import select_split
 from tpu.swarm.select_v6e_32_topology import select_split as select_v6e_32_split
@@ -316,7 +317,9 @@ class Controller:
             if self.config.engines_per_host:  # a farm without engines needs no serving source
                 self.checked_get([self.hosts[r].source_ready.remote() for r in inference_ranks], self.config.setup_timeout)
         else:
-            self.checked_get([host.topology_ready.remote() for host in self.hosts], self.config.setup_timeout)
+            # Rank 0 runs the client from the frozen source even without chips.
+            self.checked_get([self.hosts[r].topology_ready.remote() for r in sorted({0, *self.config.active_ranks})],
+                             self.config.setup_timeout)
         if self.config.inference_only:
             train_ranks = []
         elif self.config.assigned_host_ips and self.config.hosts > 1:
@@ -331,6 +334,16 @@ class Controller:
             verify_partition(subset, self.config.trainer.process_bounds,
                              self.config.trainer.chip_bounds)
             self.report('assigned_topology_verified', train_ranks=train_ranks, records=subset)
+        elif self.config.od_v4_64_subset:
+            # Workers 0-5 are no box, so a full probe cannot run; the known 2x4x2
+            # is re-checked under the real bounds before the trainer starts it.
+            # libtpu places each host by discovery, so only completeness counts.
+            from .assigned_topology import verify_partition
+            train_ranks, inference_ranks = list(OD_V4_64_TRAIN_RANKS), []
+            subset = self.checked_get([self.hosts[r].probe.remote(train_ranks, self.config.ports.topology_subset, True)
+                                       for r in train_ranks], 300)
+            verify_partition(subset, self.config.trainer.process_bounds, self.config.trainer.chip_bounds)
+            self.report('remote_only_topology_verified', train_ranks=train_ranks, records=subset)
         elif self.config.accelerator == "tpu-v4-64":
             full = self.checked_get([host.probe.remote(list(range(8)), self.config.ports.topology_jax)
                                      for host in self.hosts], 300)
@@ -409,14 +422,16 @@ class Controller:
         self.report("topology_validated", train_ranks=train_ranks, inference_ranks=inference_ranks,
                     trainer_leader=self.trainer_leader,
                     grader_rank=science_grading_rank if self.config.science_task else self.config.arena_grader_rank)
-        prepared_ranks = sorted(train_ranks + inference_ranks)
+        # A chipless head still prepares as a trainer host: that path installs the client.
+        client_ranks = [0] if self.config.idle_ranks else []
+        prepared_ranks = sorted(train_ranks + inference_ranks + client_ranks)
         shared_frozen_head = bool(self.config.frozen_benchmark and 0 in inference_ranks)
         arena_start = (self.hosts[self.config.arena_grader_rank].prepare_arena.remote()
                        if self.config.arena_grader_rank is not None else
                        None if shared_frozen_head else
                        self.hosts[0].prepare_frozen.remote() if self.config.frozen_benchmark else
                        self.hosts[0].prepare_arena.remote() if self.config.arena_samples else None)
-        preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks and not bootstrap_expanded else "inference")
+        preparation_refs = [self.hosts[rank].prepare.remote("trainer" if rank in train_ranks + client_ranks and not bootstrap_expanded else "inference")
                             for rank in prepared_ranks]
         # Observe judge failure while cache/model preparation is still running,
         # and require its readiness before starting any serving deployment.
@@ -426,7 +441,8 @@ class Controller:
             from tpu.science.training_setup import prepare, check_references
             if science_grading_rank is not None:
                 self.checked_get([self.hosts[science_grading_rank].reclaim_grader_caches.remote()], 300)
-            self.science_group, self.science_refs = prepare(self.config, self.ips, nodes, science_grading_rank)
+            self.science_group, self.science_refs = prepare(self.config, [self.ips[r] for r in self.config.active_ranks],
+                                                            nodes, science_grading_rank)
             self.report('science_reference_started', task=self.config.science_task, grader_rank=science_grading_rank)
         preparation_results = self.checked_get(preparation_refs + self.science_refs, self.config.setup_timeout)
         prepared = preparation_results[:len(prepared_ranks)]
@@ -435,7 +451,7 @@ class Controller:
             for index, verdict in enumerate(references):
                 self.report('science_reference_result', task=self.config.science_task,
                             index=index, verdict=verdict)
-            result = check_references(self.config.science_task, references, expected_hosts=self.config.hosts,
+            result = check_references(self.config.science_task, references, expected_hosts=len(self.config.active_ranks),
                                       placement_backend=self.config.science_placement_backend,
                                       routing_suite=self.config.client_env.get("SCIENCE_ROUTING_SUITE", "full"),
                                       placement_helper=self.config.client_env.get("SCIENCE_PLACEMENT_HELPER", "none"))

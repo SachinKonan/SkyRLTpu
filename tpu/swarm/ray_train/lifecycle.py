@@ -179,27 +179,31 @@ def workload_processes(proc=Path('/proc'), me=None):
     return found
 
 
-def prepare(task_id, *, shared=False, log=None, tpu=True, run=subprocess.run, proc=Path("/proc"), kill=os.kill,
-            scope=None):
+def prepare(task_id, *, shared=False, coexist=False, log=None, tpu=True, run=subprocess.run, proc=Path("/proc"),
+            kill=os.kill, scope=None):
     """The one start path: a fresh launch and a preemption recovery both begin here.
 
     Pool workers (shared=False) stop whatever earlier tasks left. On a shared private host nothing is stopped:
-    any leftover makes the launch refuse, and host_claim.py decides ownership.
+    any leftover makes the launch refuse, and host_claim.py decides ownership. coexist is a shared host whose
+    other workloads stay on their own (the pool job next to an on-demand v4-64 partition): nothing is stopped
+    either, and only a process holding this host's TPU devices refuses the launch.
     """
     report = reap_leftovers(task_id, stop=not shared, run=run, proc=proc, kill=kill, scope=scope)
     if tpu:
-        report.update(tpu_gates(shared=shared, run=run))
+        # The OD v4-64 partition shares worker 0's disk with the pool job's head (SkyPilot's Ray logs live there);
+        # its trainer run dir needs ~6 GB per host, so it is held to 25 GiB of free home instead of 30.
+        report.update(tpu_gates(shared=shared, run=run, home_min_gib=25 if coexist else 30))
     if log is not None:
         from .events import emit
         emit(log, 'lifecycle_prepared', task_id=task_id, shared=shared, **report)
-    if shared and (report['units'] or report['processes'] or report.get('device_owners')
+    if shared and ((report['units'] or report['processes']) and not coexist or report.get('device_owners')
                    or report.get('foreign_tpu_lock')):
         raise RuntimeError('shared host has workloads from another task; refusing to start: '
                            + json.dumps(report))
     return report
 
 
-def tpu_gates(*, shared, run=subprocess.run, home=None, tmp=Path('/tmp'), dev=Path('/dev')):
+def tpu_gates(*, shared, run=subprocess.run, home=None, tmp=Path('/tmp'), dev=Path('/dev'), home_min_gib=30):
     """What clean_host_audit checked, healed where a pool worker allows it.
 
     - TPU device owners: on a pool worker they belong to a dead task and are killed (sudo fuser -k); a shared
@@ -211,7 +215,7 @@ def tpu_gates(*, shared, run=subprocess.run, home=None, tmp=Path('/tmp'), dev=Pa
     """
     import shutil
     home = Path.home() if home is None else home
-    for name, path, minimum in (('home', home, 30), ('tmp', tmp, 10)):
+    for name, path, minimum in (('home', home, home_min_gib), ('tmp', tmp, 10)):
         usage, inodes = shutil.disk_usage(path), os.statvfs(path).f_favail
         if usage.free < minimum * 1024**3 or inodes < 10000:
             raise RuntimeError(f'insufficient storage on {name}: {usage.free / 1024**3:.1f} GiB free, '

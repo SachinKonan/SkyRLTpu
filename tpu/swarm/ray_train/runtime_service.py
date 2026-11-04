@@ -141,7 +141,7 @@ def supervise(payload_path):
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stopping.set())
     # Prevent two private executor services from owning this host concurrently.
-    lease = open(Path.home() / '.skyrl-systemd-runtime.lock', 'a')
+    lease = open(p.get('lease') or Path.home() / '.skyrl-systemd-runtime.lock', 'a')
     fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
     server = None
     child = None
@@ -212,7 +212,7 @@ def supervise(payload_path):
 
 
 def launch(command, directory, ips, rank, token, *, port=24900,
-           peer_timeout=30, shutdown_grace=90, setup_timeout=1800, shared=False):
+           peer_timeout=30, shutdown_grace=90, setup_timeout=1800, shared=False, lease=None, properties=()):
     if not token:
         raise ValueError('a shared SkyPilot task/attempt identity is required')
     attempt = Path(directory) / ('systemd-' + uuid.uuid4().hex)
@@ -221,7 +221,7 @@ def launch(command, directory, ips, rank, token, *, port=24900,
     payload = dict(command=list(command), cwd=os.getcwd(), env=dict(os.environ),
                    directory=str(attempt), parent_pid=os.getpid(), parent_start=process_start(os.getpid()),
                    ips=ips, rank=rank, token=token, port=port, peer_timeout=peer_timeout,
-                   shutdown_grace=shutdown_grace, setup_timeout=setup_timeout)
+                   shutdown_grace=shutdown_grace, setup_timeout=setup_timeout, lease=lease and str(lease))
     path = attempt / 'payload.json'
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as stream:
@@ -232,7 +232,7 @@ def launch(command, directory, ips, rank, token, *, port=24900,
     # The description carries the SkyPilot task ID: lifecycle.reap_leftovers/finish tell this task's units apart.
     args = ['sudo', '-n', 'systemd-run', '--quiet', '--wait', '--unit=' + unit, '--description=' + token,
             '--uid=' + str(os.getuid()), '--gid=' + str(os.getgid()),
-            *inherited_limit_properties(),
+            *inherited_limit_properties(), *properties,
             '--property=Type=exec', '--property=KillMode=control-group',
             '--property=SendSIGKILL=yes', '--property=TimeoutStopSec=' + str(shutdown_grace + 10),
             '--property=StandardOutput=append:' + str(log),

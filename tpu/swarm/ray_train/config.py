@@ -325,13 +325,26 @@ _MUSE_SPEC = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@4f65ba509
 _GPTOSS_SPEC = "maxtext @ git+https://github.com/SachinKonan/maxtext.git@d388c5478b18b2322ab36c032deb87b9a4ff065f"
 
 # Zones each accelerator is launched in (first = default) and the TPU VM runtime.
+# On-demand v4-64 pool, workers 0-5 (SkyPilot rank = TPU worker ID). Since 2026-11-01 (job 3275) the only
+# group that forms a mesh is the 2x4x2 box on workers 2-5, bounds 1,2,2; the 1,1,4 and 1,1,2 groups abort.
+# Measured (y,z) blocks: worker 5 (0,0), 3 (2,0), 2 (0,1), 4 (2,1). Listed by z then y: processes 0,1 are
+# one z plane and 2,3 the other. Sky ranks 0 and 1 hold no chips and no grades; rank 0 keeps the Ray head,
+# ingress and client, rank 1 is idle.
+OD_V4_64_TRAIN_RANKS = (5, 3, 2, 4)
+OD_V4_64_IDLE_RANKS = (0, 1)
+# Workers 0,1 also form a 2x4 pair (bounds 1,2,1, proven 2026-11-01 next to job 3277), used by an SSH-launched
+# assigned trainer while the pool's job holds the box. A pool job keeps the first 48 CPUs per NUMA order (its
+# client's service block); its Ray head and client stay on worker 0, so the partition never reuses its ports.
+OD_V4_64_PARTITION_IPS = ("10.130.0.68", "10.130.0.62")
+OD_V4_64_POOL_SERVICE_CPUS = 48
+
 ACCELERATOR_ZONES = {
     "tpu-v4-64": ("us-central2-b",),
     "tpu-v4-32": ("us-central2-b",),
     "tpu-v5p-32": ("us-east5-a",),
     "tpu-v5p-64": ("us-central1-a", "us-east5-a"),
     "tpu-v6e-32": ("asia-northeast1-b", "us-east5-b", "us-central1-b", "europe-west4-a"),
-    "tpu-v6e-8": ("us-central1-b", "us-east5-b", "asia-northeast1-b", "europe-west4-a"),
+    "tpu-v6e-8": ("us-central1-b", "us-east5-b", "us-east1-d", "asia-northeast1-b", "europe-west4-a"),
 }
 ACCELERATOR_RUNTIME = {
     "tpu-v4-64": "tpu-ubuntu2204-base",
@@ -780,10 +793,32 @@ class Config:
 
     @property
     def od_v4_64_subset(self):
-        """An inference-only farm on the on-demand v4-64 pool, which hands jobs workers 0-5 only
-        (SKYPILOT_HOST_SUBSET; 6-7 serve another application): one single-host engine per worker, so six
-        hosts need no cross-host slice. The pool is on-demand and not a queued resource."""
-        return self.accelerator == "tpu-v4-64" and self.hosts == 6 and self.inference_only
+        """A job on the on-demand v4-64 pool, which hands jobs workers 0-5 only (SKYPILOT_HOST_SUBSET; 6-7
+        serve another application): an inference-only farm with one single-host engine per worker, or a
+        remote-only trainer on four of the six (idle_ranks). Six hosts are never one cross-host slice.
+        The pool is on-demand and not a queued resource."""
+        return (self.accelerator == "tpu-v4-64" and self.hosts == 6
+                and (self.inference_only or self.inference.remote_only))
+
+    @property
+    def od_v4_64_partition(self):
+        """A trainer on workers the pool's SkyPilot job also runs on: never stop or reuse anything of that job."""
+        return bool(self.assigned_host_ips) and self.accelerator == "tpu-v4-64"
+
+    @property
+    def partition_memory_max_gib(self):
+        """Cap of the runtime unit (RAM cache, trainer, client, Ray). Grades run in units of their own, so what
+        this job can take from the host is cache + reserve, and an excess dies here rather than in the pool's job."""
+        return self.cache.trainer_gib + self.cache.reserve_gib - self.grading_memory_gib
+
+    @property
+    def idle_ranks(self):
+        """Ranks of this job's Ray cluster without chips or grades: only the OD v4-64 trainer has any."""
+        return OD_V4_64_IDLE_RANKS if self.od_v4_64_subset and not self.inference_only else ()
+
+    @property
+    def active_ranks(self):
+        return [rank for rank in range(self.hosts) if rank not in self.idle_ranks]
 
     @property
     def native_thinking_format(self):
@@ -868,14 +903,17 @@ class Config:
             raise ValueError('remote_only requires run-scoped, supervisor-updated borrowing with a required initial reservation')
         if not v.external_pool_scheduler or not v.external_pool_attestation:
             raise ValueError('remote_only requires the hybrid scheduler and farm attestation')
-        if self.trainer.hosts != self.hosts:
+        if self.trainer.hosts != len(self.active_ranks):
             raise ValueError('remote_only trains on every host of the slice')
         # v4-32 and v5p-32 are both four hosts of 2x2 chips stacked along z
         # (2x2x4), so the same 1,1,4 process grid and z-row ordering apply.
         # v6e-8 is one host of 2x4 chips: a single 1,1,1 process owns all eight.
-        if not self.assigned_host_ips and (self.accelerator, self.hosts) not in (('tpu-v4-32', 4), ('tpu-v5p-32', 4), ('tpu-v6e-8', 1)):
-            raise ValueError('remote_only is validated for v4-32, v5p-32 (2x2x4) and single-host v6e-8 only')
-        if self.trainer.tp * self.trainer.fsdp != self.hosts * self.chips_per_host:
+        # The on-demand v4-64 hands out six hosts, four of which form a 2x4x2 box.
+        if not self.assigned_host_ips and (self.accelerator, self.hosts) not in (('tpu-v4-32', 4), ('tpu-v5p-32', 4), ('tpu-v6e-8', 1), ('tpu-v4-64', 6)):
+            raise ValueError('remote_only is validated for v4-32, v5p-32 (2x2x4), single-host v6e-8 and the 2x4x2 box of the on-demand v4-64 only')
+        if self.od_v4_64_subset and (self.trainer.process_bounds, self.trainer.chip_bounds) != ('1,2,2', '2,2,1'):
+            raise ValueError('an on-demand v4-64 trainer is the 2x4x2 box (process_bounds 1,2,2, chip_bounds 2,2,1)')
+        if self.trainer.tp * self.trainer.fsdp != self.trainer.hosts * self.chips_per_host:
             raise ValueError('remote_only requires TP x FSDP over every chip of the slice')
         if self.accelerator == 'tpu-v6e-8' and (self.trainer.process_bounds, self.trainer.chip_bounds) != ('1,1,1', '2,4,1'):
             raise ValueError('a v6e-8 trainer is one process over the 2x4 chips (process_bounds 1,1,1, chip_bounds 2,4,1)')
@@ -895,6 +933,27 @@ class Config:
                 raise ValueError(f'remote_only disables the external watchdog; do not set {key} in trainer_env')
         if 'TTD_SAMPLING_PROGRESS_TIMEOUT' in self.client_env:
             raise ValueError('remote_only disables the sampling progress timeout; do not set TTD_SAMPLING_PROGRESS_TIMEOUT')
+
+    def _validate_od_v4_64_partition(self):
+        """Everything here protects the pool job sharing workers 0,1 (see OD_V4_64_PARTITION_IPS)."""
+        t = self.trainer
+        if tuple(self.assigned_host_ips) != OD_V4_64_PARTITION_IPS or (t.process_bounds, t.chip_bounds) != ("1,2,1", "2,2,1"):
+            raise ValueError("the on-demand v4-64 partition is workers 0,1 in order with bounds 1,2,1 and chips 2,2,1")
+        if self.science_task or self.inference.hosts_per_engine != 1 or not self.systemd_runtime:
+            raise ValueError("the on-demand v4-64 partition is a systemd math or plain remote-only trainer")
+        if self.storage_min_free_gib or self.checkpoint_cleanup_timeout:
+            # Reclaiming decides from what a pool worker can assume: it must never touch the shared home.
+            raise ValueError("the on-demand v4-64 partition runs no storage cleanup (storage_min_free_gib and checkpoint_cleanup_timeout 0)")
+        def bound(ports, systemd):
+            values = asdict(ports)
+            low, high = values.pop("worker_min"), values.pop("worker_max")
+            return {*values.values(), systemd, *range(low, high + 1)}
+        if bound(self.ports, self.systemd_port) & bound(Ports(), Config.systemd_port):
+            raise ValueError("the on-demand v4-64 partition must use ports apart from the pool job's defaults")
+        if Path(self.root).name != self.run_id:
+            raise ValueError("the on-demand v4-64 partition needs its own root, ~/.cache/<run_id>")
+        if self.partition_memory_max_gib < self.cache.trainer_gib:
+            raise ValueError("the on-demand v4-64 partition leaves its runtime no memory beyond the RAM cache")
 
     def validate(self):
         if type(self.inference.external_pool_requests_per_engine) is not int or self.inference.external_pool_requests_per_engine < 0:
@@ -1262,7 +1321,8 @@ class Config:
                     "tpu-v6e-8": 1, "cpu": 1}
         if self.assigned_host_ips:
             import ipaddress
-            if (self.accelerator != "tpu-v5p-64" or self.hosts not in (1, 2)
+            if (not (self.accelerator == "tpu-v5p-64" and self.hosts in (1, 2)
+                     or self.od_v4_64_partition and self.inference.remote_only)
                     or len(self.assigned_host_ips) != self.hosts
                     or len(set(self.assigned_host_ips)) != self.hosts or not self.physical_node
                     or not self.single_bucket or not self.zone
@@ -1277,6 +1337,8 @@ class Config:
             if not self.inference_only and (self.trainer.process_bounds not in bounds
                     or self.trainer.chip_bounds != "2,2,1"):
                 raise ValueError("assigned v5p trainer requires four local chips per process and matching host bounds")
+            if self.od_v4_64_partition:
+                self._validate_od_v4_64_partition()
         elif self.physical_node:
             raise ValueError("physical_node requires assigned_host_ips")
         if not self.assigned_host_ips and expected.get(self.accelerator) != self.hosts and not self.od_v4_64_subset:
@@ -1288,7 +1350,7 @@ class Config:
         full_slice_trainer = self.inference.remote_only and self.trainer.hosts == self.hosts
         if not self.inference_only and not 0 < self.trainer.hosts < self.hosts and not full_slice_trainer:
             raise ValueError("require disjoint nonempty trainer and inference roles")
-        if not self.inference_only and self.accelerator == "tpu-v4-64" and self.trainer.hosts != 4:
+        if not self.inference_only and self.accelerator == "tpu-v4-64" and self.trainer.hosts != 4 and not self.od_v4_64_partition:
             raise ValueError("v4-64 currently requires the validated four-host row")
         if self.accelerator == "tpu-v5p-64" and not self.assigned_host_ips and (
                 self.inference_only or self.trainer.hosts != 1
@@ -1626,7 +1688,7 @@ class Config:
     def inference_hosts(self):
         if self.inference_only_ranks is not None:
             return len(self.inference_only_ranks)
-        return (self.hosts - self.trainer.hosts - int(self.arena_grader_rank is not None)
+        return (self.hosts - self.trainer.hosts - len(self.idle_ranks) - int(self.arena_grader_rank is not None)
                 - len(self.placement_ranks) - int(self.science_task == "placement"
                                                 and self.science_placement_backend == 'tpu'))
 

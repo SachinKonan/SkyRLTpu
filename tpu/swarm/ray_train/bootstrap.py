@@ -18,6 +18,9 @@ from .config import Config
 
 
 def workload_resources(config, rank):
+    if rank in config.idle_ranks:
+        # An omitted TPU key enables Ray's automatic hardware detection.
+        return {"TPU": 0}
     families = config.grading_families
     if config.inference_only and families:
         # Farm hosts: one token per declared grading slot so Ray never packs
@@ -44,6 +47,29 @@ def workload_resources(config, rank):
         # Trainer hosts bound local AC2 grading by the same slot token.
         return {"TPU": config.chips_per_host, "grading_math": families["math"]["slots_per_host"]}
     return {"TPU": config.chips_per_host}
+
+
+def check_worker_ids(config, environ=os.environ):
+    """The fixed train/idle ranks are TPU worker IDs: refuse a job whose ranks are anything else."""
+    if config.idle_ranks and environ.get("SKYPILOT_TPU_WORKER_IDS") != ",".join(map(str, range(config.hosts))):
+        raise SystemExit("SkyPilot ranks are not TPU workers 0-5 (SKYPILOT_HOST_SUBSET)")
+
+
+def partition_runtime(config, root):
+    """launch() settings that keep an assigned trainer off the pool job sharing its hosts.
+
+    The runtime lease moves into this root, and the unit gets its own /tmp (core pool locks, libtpu lock, TPU logs;
+    the RAM cache mount stays in that namespace and goes with the unit), the CPUs outside the pool job's service
+    block, and a memory cap. Graders are units of their own and take cores from the pool, so from these CPUs too."""
+    if not config.od_v4_64_partition:
+        return {}
+    from tpu.science import core_pool
+    from .config import OD_V4_64_POOL_SERVICE_CPUS
+    _, pool_service, _ = core_pool.layout(OD_V4_64_POOL_SERVICE_CPUS)
+    spare = sorted(set(os.sched_getaffinity(0)) - set(pool_service))
+    return dict(lease=root / ".systemd-runtime.lock",
+                properties=("--property=PrivateTmp=yes", "--property=AllowedCPUs=" + ",".join(map(str, spare)),
+                            f"--property=MemoryMax={config.partition_memory_max_gib}G"))
 
 
 def check_ports_available(ports, timeout=60):
@@ -232,6 +258,7 @@ def main():
     rank = int(os.environ["SKYPILOT_NODE_RANK"])
     if len(ips) != config.hosts or len(set(ips)) != len(ips) or not 0 <= rank < config.hosts:
         raise SystemExit("invalid SkyPilot host inventory")
+    check_worker_ids(config)
     if config.assigned_host_ips and ips != config.assigned_host_ips:
         raise SystemExit("assigned host inventory does not match this partition")
     if config.assigned_host_ips:
@@ -247,8 +274,9 @@ def main():
         from .lifecycle import prepare
         run_dir = root / "runs" / config.run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        prepare(os.environ.get("SKYPILOT_TASK_ID", ""), shared=shared_host, log=run_dir / f"lifecycle-{rank}.jsonl",
-                tpu=bool(config.chips_per_host), scope=os.environ.get("SLURM_JOB_ID"))
+        prepare(os.environ.get("SKYPILOT_TASK_ID", ""), shared=shared_host, coexist=config.od_v4_64_partition,
+                log=run_dir / f"lifecycle-{rank}.jsonl", tpu=bool(config.chips_per_host),
+                scope=os.environ.get("SLURM_JOB_ID"))
     if config.systemd_runtime and os.environ.get("SKYRL_SYSTEMD_OWNED") != "1":
         from .runtime_service import launch
         token = os.environ.get("SKYPILOT_TASK_ID", "")
@@ -257,7 +285,7 @@ def main():
                       root / "runs" / config.run_id, ips, rank, token,
                       port=config.systemd_port, peer_timeout=config.systemd_peer_timeout,
                       shutdown_grace=config.systemd_shutdown_grace, setup_timeout=config.setup_timeout,
-                      shared=shared_host)
+                      shared=shared_host, **partition_runtime(config, root))
 
     if args.runtime_ready:
         lock_fd = int(os.environ["SKYRL_RAY_LOCK_FD"])
@@ -324,7 +352,7 @@ def main():
             from tpu.science.placement_slots import chips_from_env
             os.environ['TPU_VISIBLE_CHIPS'] = ','.join(map(str, chips_from_env(config.client_env)))
         ray_cpus, ray_memory = config.ray_cpus_per_host, []
-        if config.grading_pool and not config.ray_cpu_capacity:
+        if config.grading_pool and not config.ray_cpu_capacity and rank not in config.idle_ranks:
             # Publish this host's grading core pool, then give Ray exactly that
             # many CPUs and GiB for grades on top of its service actors.
             from tpu.science import core_pool
@@ -340,6 +368,9 @@ def main():
             removed = core_pool.uninstall()
             if removed:
                 emit(log, "grading_pool_removed", rank=rank)
+        if rank in config.idle_ranks:
+            # Grades pick hosts by Ray CPUs (SPREAD), so give them none: rank 0 has just the ingress's CPU.
+            ray_cpus = int(rank == 0)
         command = [str(runtime / "bin/ray"), "start", f"--node-ip-address={ips[rank]}",
             f"--num-cpus={ray_cpus}", *ray_memory, "--resources=" + json.dumps(workload_resources(config, rank)), "--object-store-memory=1073741824",
             f"--object-manager-port={p.object_manager}", f"--node-manager-port={p.node_manager}",
