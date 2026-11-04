@@ -77,7 +77,13 @@ def install(ensemble, cfg):
     async def wrapped(*args, **kwargs):
         # _pipelined_sampling_phase(cfg, plans, i_batch, metrics, service_client)
         metrics = kwargs.get('metrics', args[3] if len(args) > 3 else None)
-        async with sampling_phase(expected_n=getattr(cfg, 'group_size', 32), metrics=metrics):
+        base = getattr(cfg, 'group_size', 32)
+        try:  # the largest group size this run can issue (TTD_GROUP_SIZE_SCHEDULE), so a wide step is admitted
+            from ttt_discover.rl.ensemble import group_size_schedule
+            widest = max([base] + [size for size, _ in group_size_schedule(base)])
+        except ImportError:
+            widest = base
+        async with sampling_phase(expected_n=widest, metrics=metrics):
             return await original(*args, **kwargs)
     wrapped._borrowing_hook = True
     ensemble._pipelined_sampling_phase = wrapped
