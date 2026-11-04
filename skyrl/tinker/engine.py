@@ -770,6 +770,12 @@ class TinkerEngine:
         """
         if not requests:
             return
+        if name == "forward_backward":
+            # One line per trained batch, so step flamegraphs can map client groups (their fb request ids, in the
+            # client's group_timeline.jsonl) to the batch that trained them.
+            import json as _json
+            logger.info("fb_batch " + _json.dumps(dict(event="fb_batch_start", time=time.time(),
+                                                       request_ids=sorted(requests))))
         with log_timing(f"process_batch_requests({name}, n={len(requests)})"):
             try:
                 error_results, valid_requests = self._filter_valid_requests(requests)
@@ -781,6 +787,10 @@ class TinkerEngine:
             except Exception as e:
                 logger.exception(f"Error processing batch: {e}")
                 results = {request_id: types.ErrorResponse(error=str(e), status="failed") for request_id in requests}
+        if name == "forward_backward":
+            import json as _json
+            logger.info("fb_batch " + _json.dumps(dict(event="fb_batch_end", time=time.time(),
+                                                       request_ids=sorted(requests))))
         self._complete_futures(results)
 
     def process_pending_requests(self):
