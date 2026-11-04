@@ -1,0 +1,47 @@
+{
+  "run_id": "inference-farm-rl28k-grading-della-math-023",
+  "accelerator": "cpu",
+  "hosts": 1,
+  "trainer": {
+    "hosts": 0
+  },
+  "inference_only": true,
+  "inference_only_ranks": [
+    0
+  ],
+  "systemd_runtime": false,
+  "storage_min_free_gib": 0,
+  "checkpoint_cleanup_timeout": 0,
+  "max_restarts_on_errors": 0,
+  "bucket": "gs://sk7524-tinker-tpu-us-east5",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-rq4-base-v56.tar.gz",
+  "base_bundle_sha256": "41a1ba225b81ace5138708c33653750ff5cc8d5994361d6c3b131d4e15c12710",
+  "root": "/scratch/gpfs/ZHUANGL/sk7524/skypilot-slurm-cpu-scratch/farms/${SLURMD_NODENAME}-${SLURM_JOB_ID}",
+  "controller_env": "/scratch/gpfs/ZHUANGL/sk7524/skypilot-slurm-cpu-scratch/envs/controller",
+  "model_preset": "gemma4-31b",
+  "inference": {
+    "routing": "ingress",
+    "require_lease": true,
+    "restart_limit": 0
+  },
+  "grading": {
+    "isolation": "bwrap",
+    "service_cpus": 4,
+    "service_memory_gib": 16,
+    "drain_seconds": 20,
+    "time_limit_lead_seconds": 900,
+    "families": {
+      "math": {
+        "slots_per_host": 0,
+        "cpus": 2,
+        "memory_gib": 4,
+        "memory_max_gib": 8
+      }
+    }
+  },
+  "ports": {
+    "worker_min": 22000,
+    "worker_max": 22189
+  },
+  "job_ports": true
+}

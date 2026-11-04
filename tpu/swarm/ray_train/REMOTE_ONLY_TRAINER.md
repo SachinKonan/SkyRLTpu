@@ -70,6 +70,29 @@ leases, routes requests and reports `/status` (`remote_only`, `leases`) and
 is refused (503). The controller verifies that Sky ranks follow the physical
 z rows before starting the 1,1,4 trainer grid (`select_v4_32_topology.py`).
 
+On the on-demand v4-64 pool a job gets workers 0-5, which are no box. A profile
+with `accelerator: tpu-v4-64`, `hosts: 6`, `trainer.hosts: 4` and `process_bounds:
+1,2,2` trains on the 2x4x2 box of workers 5,3,2,4 (`OD_V4_64_TRAIN_RANKS`; the
+job refuses to start unless `SKYPILOT_TPU_WORKER_IDS` is 0-5) and probes only
+those hosts. Since 2026-11-01 (job 3275) the 1,1,4 groups no longer form a mesh.
+TP8 x FSDP2 gives two 2x4 planes, one per z, each spanning two hosts, so unlike
+a v4-32 each process holds only one FSDP row. Rank 0 has no chips but keeps the
+Ray head, ingress (its one Ray CPU) and client, and prepares as a trainer host;
+rank 1 is idle. libtpu places each host by discovery, so the check is the
+complete box (`verify_partition`), not process i on a given row.
+
+Workers 0,1 also form a 2x4 pair (bounds `1,2,1`, 8 chips, worker 0 is process 0). An assigned-host profile
+(`accelerator: tpu-v4-64`, `hosts: 2`, `assigned_host_ips` = those workers, TP8 x FSDP1) trains there next to
+the pool's job. SkyPilot gives a pool one job at a time, so it runs over SSH through `assigned_launch`, in its
+own Ray, ports (`ports`, `systemd_port`) and root, with no storage cleanup. `bootstrap.partition_runtime` gives its
+runtime unit a private /tmp (core pool, libtpu lock, TPU logs, and the RAM cache mount, which goes with the unit),
+the CPUs outside the pool job's service block, `MemoryMax` = cache + reserve - grading GiB, and a lease in its
+root instead of the per-home one. The launch refuses while the TPU devices are held, a port is taken or the host
+lacks cache + reserve + 32 GiB. A pool job start or end stops it (`lifecycle.prepare`/`finish` reap the
+workers), the unit then restarts and resumes from its last checkpoint. It has no SkyPilot job ID, so it gets
+farms from `discovery --private-hosts` (`trainers` entry, `port`, `allow_spot`, `farm_pools`); its profile lists
+`external_pool_required_compatibility`, since `direct_discovery.candidates` offers no farm to a trainer without one.
+
 ## Farm side: cancel on expiry
 
 Abrupt trainer loss must not quarantine a farm. `farm_cancel_grace_seconds`
@@ -184,6 +207,38 @@ cancel grace 5, reserve 192 GiB). A farm with a science family
 (`farm-v432-qwen-grading-routing-example-20260922.json`) is packaged through
 `tpu.science.package_training`, which prepares `.science/venv` on every host.
 The supervisor still never provisions, cancels or replaces farm jobs.
+
+## Della grading farms (grader gateway)
+
+GCP trainers cannot open connections to della; della-vis1 reaches both the della grading farms and the
+trainers. `discovery --grader-gateway --push` (`grader_gateway.py`) runs one grading endpoint on
+`127.0.0.1:--gateway-port` (28650) in its own process and keeps ONE `ssh -N -R 127.0.0.1:26000:127.0.0.1:28650`
+per trainer rank-0 host (trainer pools, `--trainer-job-id`, private trainers; a host shared by two runs gets one
+tunnel; fallback port 27000 after two refused forwards; a forward that fails three checks is restarted). Each
+tick it writes, over one more SSH call per host, an open-grading registry on that host with one entry
+(`della-gateway`, the tunnel URL), listed only if the tunnel answered `/status` there with the gateway's
+instance id.
+
+The endpoint speaks the farm grading API (capacity, submit, batch results, result, cancel). It queues grades per
+family and run, dispatches them round-robin across runs to the della farm with the most free slots for the family
+and the request's grader hash (free = the farm's slots - other clients' load from its last `/capacity` - our
+grades on it: never more than its slots), and forwards the trainer's own `X-Grading-Run`/`X-Grading-Token`, so
+the farm's per-run fairness covers these trainers and the RQ4 della clients. The capacity a run sees is the sum
+of the compatible farms' slots; a family admits 1.5x that outstanding, past which each run still gets its fair
+share; anything else is 429 (no infrastructure retry). A farm that forgets, drains or (60 s) stops answering moves
+its grades back to the queue under new farm ids (at most 3 times, then an infrastructure failure the trainer
+retries). A discovery restart drops the gateway's state: the trainer's request protocol declares those grades
+LOST (poll_miss, one charged retry of 5) and resubmits them; the farms cancel the orphans at their 300 s TTL.
+
+Run it next to the generation pusher (`--gateway-only`: own lock, never touches candidate lists), with the
+same trainer selection as that pusher plus the della pool:
+`--grader-gateway --gateway-only --push --slurm-pool tpuswarm-della-grader --name-contains rq4-grading-della`.
+
+Trainer profile, `client_env` (no code change; read by `grading_transport` at client start, shipped by the
+overlay's grading files): `SKYRL_OPEN_GRADING=1`,
+`SKYRL_GRADING_REGISTRY=/home/gcpuser/.cache/skyrl/della-graders.json`, `SKYRL_RUN_ID=<run_id>` (keeps two runs'
+identical candidates from sharing a request id on a shared farm). Leased TPU farms and local slots keep grading;
+the gateway is one more open pool. A run whose grader hash no della farm runs sees an empty, not-ready gateway.
 
 ## Pilot checklist
 
