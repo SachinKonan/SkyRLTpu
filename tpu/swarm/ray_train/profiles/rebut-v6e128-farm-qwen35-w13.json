@@ -35,6 +35,11 @@
         "slots_per_host": 64,
         "cpus": 2,
         "memory_gib": 4
+      },
+      "placement": {
+        "slots_per_host": 36,
+        "cpus": 4,
+        "memory_gib": 4
       }
     }
   },

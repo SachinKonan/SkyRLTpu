@@ -121,7 +121,10 @@
     "TTD_ADV_PIECEWISE_INVALID_REWARD": "0",
     "SKYRL_RUN_ID": "circuit300-v464-gemma-pwc05-three-starts-10step-20260922",
     "TTD_EXPLICIT_LORA_SEED": "1",
-    "TTD_SAFE_GRADE_MAX_WORKERS": "512"
+    "TTD_SAFE_GRADE_MAX_WORKERS": "512",
+    "SKYRL_OPEN_GRADING": "1",
+    "SKYRL_GRADING_REGISTRY": "/home/gcpuser/.cache/skyrl/rebut-farms.json",
+    "SKYRL_OPEN_GRADING_K": "20"
   },
   "trainer_env": {
     "TUNIX_UNIFORM_SEQ_LEN": "0",

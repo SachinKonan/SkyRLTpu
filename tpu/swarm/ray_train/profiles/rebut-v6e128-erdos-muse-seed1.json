@@ -112,7 +112,10 @@
     "TTD_ERDOS_PROMPT": "v2",
     "TTD_ADV_PIECEWISE_ALPHA": "1.0",
     "EVAL_TIMEOUT": "1100",
-    "SKYRL_RUN_ID": "rebut-erdos-muse-seed1"
+    "SKYRL_RUN_ID": "rebut-erdos-muse-seed1",
+    "SKYRL_OPEN_GRADING": "1",
+    "SKYRL_GRADING_REGISTRY": "/home/gcpuser/.cache/skyrl/rebut-farms.json",
+    "SKYRL_OPEN_GRADING_K": "20"
   },
   "trainer_env": {
     "TUNIX_UNIFORM_SEQ_LEN": "0",
