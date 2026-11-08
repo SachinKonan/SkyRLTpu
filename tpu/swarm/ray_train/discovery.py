@@ -243,7 +243,11 @@ class Service:
             record.update(job_id=str(farm['job_id']), name=farm['name'], cluster=farm['cluster'],
                           source=farm['source'], pool=farm['pool'],
                           url=tunnel.url if tunnel else record['internal_url'],
-                          tunnel_ok=tunnel.healthy() if tunnel else bool(record.get('direct')),
+                          # --private-only (v6e-128): trainers reach farms at their internal URL, no tunnel, so a
+                          # healthy probe is enough; open grading (grading_transport.listable) requires tunnel_ok.
+                          tunnel_ok=(tunnel.healthy() if tunnel else
+                                     bool(record.get('direct')) or (getattr(self.args, 'private_only', False)
+                                                                    and bool(probe.get('ok')))),
                           tunnel_starts=tunnel.starts if tunnel else 0,
                           ok=bool(probe.get('ok')), error=None if probe.get('ok') else probe.get('error'),
                           **{k: entry[k] for k in ('health', 'misses', 'incarnation', 'first_seen',

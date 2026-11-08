@@ -41,7 +41,9 @@ def candidates(target, registration, farms):
                 # Borrower lease ownership and ingress update fencing use
                 # different instance tokens; read the actual lease owner.
                 ours = (target.get('borrowing') or {}).get('owner_run')
-                if owner and owner != ours:
+                # An expired lease keeps its last owner_run in the farm's status; the farm is free, so it must
+                # not stay reserved for a borrower instance that no longer exists (a stopped trainer).
+                if owner and owner != ours and farm.get('state') != 'expired':
                     continue
                 eligible.append(farm['url'])
             urls.extend(sorted(set(eligible) - set(urls)))
