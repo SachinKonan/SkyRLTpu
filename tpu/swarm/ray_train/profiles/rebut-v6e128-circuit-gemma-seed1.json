@@ -63,7 +63,9 @@
     "external_pool_health_grace_seconds": 90,
     "external_pool_target_leases": 8,
     "external_pool_candidate_limit": 16,
-    "external_pool_required_compatibility": [],
+    "external_pool_required_compatibility": [
+      "ab12214870e21f4f04768de51ca1446f7de154e76364b1d06ea46e5d712a2fac"
+    ],
     "external_pool_queue_alert_seconds": 60,
     "external_pool_discovery_group": "rebut-gemma",
     "serving_runtime": "v0.32",

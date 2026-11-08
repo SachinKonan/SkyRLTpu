@@ -57,7 +57,9 @@
     "external_pool_health_grace_seconds": 90,
     "external_pool_target_leases": 8,
     "external_pool_candidate_limit": 16,
-    "external_pool_required_compatibility": [],
+    "external_pool_required_compatibility": [
+      "98ee6d8cc6dff45efba41b8d4247fe98f093c5b381ea31ddea1d0bda84397d46"
+    ],
     "external_pool_queue_alert_seconds": 60,
     "external_pool_discovery_group": "rebut-qwen35",
     "serving_runtime": "v0.32",
