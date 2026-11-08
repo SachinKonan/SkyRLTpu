@@ -246,7 +246,7 @@ class Service:
                           # --private-only (v6e-128): trainers reach farms at their internal URL, no tunnel, so a
                           # healthy probe is enough; open grading (grading_transport.listable) requires tunnel_ok.
                           tunnel_ok=(tunnel.healthy() if tunnel else
-                                     bool(record.get('direct')) or (getattr(self.args, 'private_only', False)
+                                     bool(record.get('direct')) or (getattr(self.args, 'direct_farms', False)
                                                                     and bool(probe.get('ok')))),
                           tunnel_starts=tunnel.starts if tunnel else 0,
                           ok=bool(probe.get('ok')), error=None if probe.get('ok') else probe.get('error'),
@@ -456,6 +456,8 @@ def main():
                         help='while several trainers generate, offer each at most ceil(ready farms / generating '
                              'trainers) farms; leases already held are always kept')
     parser.add_argument('--once', action='store_true')
+    parser.add_argument('--direct-farms', action='store_true',
+                        help='consumers reach farms at their internal URL (no tunnels): a healthy probe makes a farm tunnel_ok')
     parser.add_argument('--model-fair-share', action='store_true',
                         help='cap private trainers per model: ready farms of the model / its generating trainers')
     parser.add_argument('--private-only', action='store_true',
