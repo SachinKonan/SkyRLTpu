@@ -58,7 +58,7 @@
     "external_pool_lease_seconds": 300,
     "external_pool_heartbeat_seconds": 30,
     "external_pool_health_grace_seconds": 90,
-    "external_pool_target_leases": 8,
+    "external_pool_target_leases": 4,
     "external_pool_candidate_limit": 16,
     "external_pool_required_compatibility": [
       "b33c0584dfb8e502b4338e3555c8846bf82b7372c51e34196cd868297fb4bc8a"
