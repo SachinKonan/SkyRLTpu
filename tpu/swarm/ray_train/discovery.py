@@ -302,10 +302,15 @@ class Service:
         def direct_call(row, body=None):
             return private_rpc(row, 'target', row.get('port', self.args.farm_port), body, group=row['group'])
         direct = []
+        model_caps = self.model_fair_caps(farms, direct_call) if getattr(self.args, 'model_fair_share', False) else {}
         for row in self.private['trainers']:
             eligible = [f for f in farms if f['source_pool'] in row.get('farm_pools', [])]
             if self.args.push:
-                direct += direct_tick([row], eligible, direct_call, trim=trim)
+                row_trim = trim
+                if row['model'] in model_caps:
+                    cap = model_caps[row['model']]
+                    row_trim = lambda target, urls, cap=cap: trim_to_share(target, urls, cap)
+                direct += direct_tick([row], eligible, direct_call, trim=row_trim)
                 continue
             descriptor = direct_call(row)
             if not descriptor.get('ok'):
@@ -314,6 +319,22 @@ class Service:
             direct.append(dict(run_id=row['run_id'], state='would_update',
                                urls=candidates(descriptor['result'], row, eligible)))
         return dict(pool=pool, direct=direct)
+
+    def model_fair_caps(self, farms, direct_call):
+        """{model: cap} for private trainers: ready farms serving that model divided by that model's trainers that
+        are generating (a borrowing phase or held leases), as fair_share_cap but per model, so a trainer that is
+        grading or training leaves its farms to the others. No cap for a model with fewer than two generating."""
+        import collections
+        ready = collections.Counter(m for f in farms for m in (f.get('models') or [])[:1])
+        generating = collections.Counter()
+        for row in self.private['trainers']:
+            d = direct_call(row)
+            b = ((d.get('result') or {}).get('borrowing') or {}) if d.get('ok') else {}
+            if b.get('phase') or b.get('held'):
+                generating[row['model']] += 1
+        caps = {m: max(1, -(-ready[m] // n)) for m, n in generating.items() if n >= 2}
+        self.emit(event='model_fair_share', caps=caps, generating=dict(generating), ready=dict(ready))
+        return caps
 
     def trainer_descriptors(self, rows):
         """Current target descriptors of every trainer this discovery pushes to (pool jobs and private)."""
@@ -431,6 +452,8 @@ def main():
                         help='while several trainers generate, offer each at most ceil(ready farms / generating '
                              'trainers) farms; leases already held are always kept')
     parser.add_argument('--once', action='store_true')
+    parser.add_argument('--model-fair-share', action='store_true',
+                        help='cap private trainers per model: ready farms of the model / its generating trainers')
     parser.add_argument('--private-only', action='store_true',
                         help='private-hosts farms and trainers only, never query SkyPilot (v6e-128 rebuttal runs)')
     parser.add_argument('--lock-file', type=Path, help='exclusive pusher lock (default: one per login)')
