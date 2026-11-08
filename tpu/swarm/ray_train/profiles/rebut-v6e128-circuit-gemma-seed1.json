@@ -130,7 +130,7 @@
   "grading": {
     "families": {
       "placement": {
-        "slots_per_host": 38,
+        "slots_per_host": 36,
         "cpus": 4,
         "memory_gib": 4
       }
@@ -153,7 +153,7 @@
   "science_routing_slots_per_host": 2,
   "science_placement_backend": "cpu",
   "science_placement_runtime": "cpu300-4g-v1",
-  "science_placement_slots_per_host": 38,
+  "science_placement_slots_per_host": 36,
   "assigned_host_ips": [
     "10.202.0.122",
     "10.202.0.111"
