@@ -59,6 +59,10 @@ def trainer_environment(config: Config, root: Path, run: Path, train_ips, proces
         # dispatch defaults (stale 300 s, inflight 3600 s, 2 redispatches,
         # abandon 7200 s); the 0/28800/30/4 set belonged to the v4-64 launcher.
         OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1")
+    if config.accelerator == "tpu-v6e-128" and len(train_ips) > 1:
+        # A host pair carved out of the v6e-128 torus: libtpu otherwise inherits the full slice's y wraparound
+        # and START_SESSION fails (measured 2026-11-08: every vertical pair inits with wrap off, none with it on).
+        env["TPU_TOPOLOGY_WRAP"] = "false,false,false"
     env.update(config.trainer_env)
     if config.inference.remote_only:
         # Requests queue inside the ingress until a farm is leased; the API

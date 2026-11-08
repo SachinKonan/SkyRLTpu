@@ -67,8 +67,8 @@
   "cache": {
     "hf": "gs://sk7524-tinker-tpu-us-central2/hf-cache-qwen35-v1",
     "orbax": "gs://sk7524-tinker-tpu-us-central2/skyrl-maxtext-ckpts",
-    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/rl28k-qwen35-erdos-s1-od-r4/trainer-compile",
-    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/rl28k-qwen35-erdos-s1-od-r4/inference-compile",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-central2/rl28k-qwen35-erdos-s1-od-w64x5/trainer-compile",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-central2/rl28k-qwen35-erdos-s1-od-w64x5/inference-compile",
     "trainer_gib": 128,
     "inference_gib": 128,
     "reserve_gib": 216,

@@ -255,6 +255,9 @@ class Host:
                 TPU_CHIPS_PER_PROCESS_BOUNDS=self.config.trainer.chip_bounds,
                 TPU_PROCESS_ADDRESSES=",".join(f"{self.ips[r]}:{self.config.ports.trainer_tpu}" for r in ranks),
                 TPU_PROCESS_PORT=str(self.config.ports.trainer_tpu), CLOUD_TPU_TASK_ID=str(process_id))
+            if self.config.accelerator == "tpu-v6e-128" and len(ranks) > 1:
+                # Same as the trainer (commands.trainer_environment): a host pair of the v6e-128 torus has no wrap.
+                env["TPU_TOPOLOGY_WRAP"] = "false,false,false"
         text = self.checked("topology-subset" if subset else "topology-full",
             [str(self.root / "envs/topology/bin/python"), str(self.source / "tpu/probe_topology.py"),
              str(process_id), f"{self.ips[ranks[0]]}:{coordinator_port}", str(len(ranks))], env=env, timeout=240)

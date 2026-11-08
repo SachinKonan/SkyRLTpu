@@ -251,6 +251,8 @@ class Service:
             published.append(record)
             if farm['cluster']:
                 probes[farm['cluster']] = probe
+            elif farm['source'] == 'private':
+                probes[farm['key']] = probe
         trainers = self.push(rows, probes, [f for f, p, _ in observed if p.get('ok')])
         ready = [f for f in published if is_ready(f)]
         unready = [dict(name=f['name'], job_id=f['job_id'], health=f['health'], state=f.get('state'),
@@ -292,6 +294,10 @@ class Service:
                              farm_name_contains=self.args.name_contains[0], trim=trim).get('targets', [])
         farms = [dict(probes.get(f['cluster'], {}).get('result') or {}, source_pool=f['pool'])
                  for f in healthy if f['source'] == 'pool']
+        # Private farms (fixed hosts such as the v6e-128) are offered to private trainers that list the
+        # farm's 'pool' label in their farm_pools; they are reached at their internal URL.
+        farms += [dict(probes.get(f['key'], {}).get('result') or {}, source_pool=f['entry'].get('pool', 'private'))
+                  for f in healthy if f['source'] == 'private']
 
         def direct_call(row, body=None):
             return private_rpc(row, 'target', row.get('port', self.args.farm_port), body, group=row['group'])
@@ -407,6 +413,11 @@ def main():
     parser.add_argument('--gateway-priority', action='append', default=[], metavar='PREFIX=N',
                         help='grader_gateway: runs whose id starts with PREFIX get priority N (lower first; others 1); '
                              'repeatable, longest prefix wins')
+    parser.add_argument('--gateway-queue-deadline', action='append', default=[], metavar='PREFIX=SECONDS',
+                        help='grader_gateway: a queued grade of a run starting with PREFIX is handed back as an '
+                             'infrastructure failure after SECONDS if NO farm can serve it, so a client with local '
+                             'grading (a TPU trainer) retries there instead of waiting; runs matching no prefix wait '
+                             'forever, which is what clients without a local fallback need. Repeatable.')
     parser.add_argument('--gateway-reserve', type=float, default=None,
                         help='grader_gateway: fraction of slots kept free from runs below the best priority (default 0.25)')
     parser.add_argument('--gateway-registry-path', default=None,
@@ -420,6 +431,8 @@ def main():
                         help='while several trainers generate, offer each at most ceil(ready farms / generating '
                              'trainers) farms; leases already held are always kept')
     parser.add_argument('--once', action='store_true')
+    parser.add_argument('--private-only', action='store_true',
+                        help='private-hosts farms and trainers only, never query SkyPilot (v6e-128 rebuttal runs)')
     parser.add_argument('--lock-file', type=Path, help='exclusive pusher lock (default: one per login)')
     parser.add_argument('--check-fresh', type=float, metavar='MAX_AGE',
                         help='exit 0 if the registry was published within MAX_AGE seconds, else alert and exit 1')
@@ -436,6 +449,12 @@ def main():
         from .grader_gateway import parse_priorities
         try:
             parse_priorities(args.gateway_priority)
+        except ValueError as exc:
+            parser.error(str(exc))
+    if args.gateway_queue_deadline:
+        from .grader_gateway import parse_queue_deadlines
+        try:
+            parse_queue_deadlines(args.gateway_queue_deadline)
         except ValueError as exc:
             parser.error(str(exc))
     if args.gateway_reserve is not None and not 0 <= args.gateway_reserve < 1:
@@ -458,7 +477,7 @@ def main():
     try:
         while True:
             try:
-                document = service.tick(inventory())
+                document = service.tick([] if args.private_only else inventory())
                 service.emit(farms=len(document['farms']), unready=len(document['unready']),
                              usable=sum(f['ok'] and (f['tunnel_ok'] or not args.tunnels) for f in document['farms']))
                 # Only a completed publish feeds the watchdog: a hung or failing loop gets restarted.

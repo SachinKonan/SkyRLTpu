@@ -28,7 +28,7 @@
     "isolation": "bwrap",
     "service_cpus": 4,
     "service_memory_gib": 16,
-    "drain_seconds": 20,
+    "drain_seconds": 870,
     "time_limit_lead_seconds": 900,
     "families": {
       "math": {

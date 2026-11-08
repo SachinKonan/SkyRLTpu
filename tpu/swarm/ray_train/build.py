@@ -47,14 +47,14 @@ export PYTHONPATH="$code:$code/tpu${{PYTHONPATH:+:$PYTHONPATH}}"
 def build(profile, output, *, _executor_only=False, direct=False):
     """direct: an assigned-host profile, deployed by assigned_launch over SSH (its task YAML is unused)."""
     config = Config.load(profile)
-    if config.assigned_host_ips and not direct:
+    if config.assigned_host_ips and not direct and not _executor_only:
         raise ValueError("assigned-host profiles must use direct deployment; never provision or attach them through SkyPilot")
     if (config.science_task or config.grading_science_task) and not _executor_only:
         # A science launch also needs its grader code, inputs, environment and
         # host preparation. Never return an executable generic-only science job.
+        # Assigned hosts (direct) use the same archive; assigned_launch adds the same science_preparation
+        # to its launch scripts and ignores the task YAML, and tpu/science itself stays unchanged.
         from tpu.science.package_training import package
-        if direct:
-            raise ValueError("assigned_launch deploys no science package on this branch (tpu/science stays unchanged)")
         task = package(profile, output)
         doc = yaml.safe_load(task.read_text())
         return Path(output).resolve() / 'science-training.tar.gz', doc['envs']['RAY_TRAIN_CODE'], task

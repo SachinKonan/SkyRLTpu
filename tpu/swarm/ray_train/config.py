@@ -345,6 +345,9 @@ ACCELERATOR_ZONES = {
     "tpu-v5p-64": ("us-central1-a", "us-east5-a"),
     "tpu-v6e-32": ("asia-northeast1-b", "us-east5-b", "us-central1-b", "europe-west4-a"),
     "tpu-v6e-8": ("us-central1-b", "us-east5-b", "us-east1-d", "asia-northeast1-b", "europe-west4-a"),
+    # Flex-start v6e-128 (pool tpuswarm-v6e128-east5a-flex), used over SSH as assigned hosts only:
+    # single-host farms (4 chips) and two-host trainers (a vertical host pair, 1,2,1 x 2,2,1).
+    "tpu-v6e-128": ("us-east5-a",),
 }
 ACCELERATOR_RUNTIME = {
     "tpu-v4-64": "tpu-ubuntu2204-base",
@@ -353,6 +356,7 @@ ACCELERATOR_RUNTIME = {
     "tpu-v5p-64": "v2-alpha-tpuv5",
     "tpu-v6e-32": "v2-alpha-tpuv6e",
     "tpu-v6e-8": "v2-alpha-tpuv6e",
+    "tpu-v6e-128": "v2-alpha-tpuv6e",
 }
 
 # Values transcribed from tpu/jobman/cell_worker.sh (model cases + pick_tiles)
@@ -1321,7 +1325,7 @@ class Config:
                     "tpu-v6e-8": 1, "cpu": 1}
         if self.assigned_host_ips:
             import ipaddress
-            if (not (self.accelerator == "tpu-v5p-64" and self.hosts in (1, 2)
+            if (not (self.accelerator in ("tpu-v5p-64", "tpu-v6e-128") and self.hosts in (1, 2)
                      or self.od_v4_64_partition and self.inference.remote_only)
                     or len(self.assigned_host_ips) != self.hosts
                     or len(set(self.assigned_host_ips)) != self.hosts or not self.physical_node

@@ -1,0 +1,88 @@
+{
+  "accelerator": "tpu-v6e-128",
+  "hosts": 1,
+  "training_smoke": false,
+  "trainer": {
+    "hosts": 0
+  },
+  "checkpoint_cleanup_timeout": 0,
+  "ready_timeout": 7200,
+  "client_context_window": 28672,
+  "client_phase1_max_tokens": 22528,
+  "client_hf_offline": true,
+  "client_env": {},
+  "trainer_env": {
+    "TUNIX_UNIFORM_SEQ_LEN": "0",
+    "SKYRL_EXTERNAL_WATCHDOG_INFLIGHT_SEC": "25200",
+    "SKYRL_EXTERNAL_WATCHDOG_ABANDON_SEC": "28800"
+  },
+  "bootstrap_layers": 0,
+  "bootstrap_all_hosts": false,
+  "seed_pool_sha256": "",
+  "checkpoint_resume": true,
+  "max_restarts_on_errors": 3,
+  "systemd_runtime": true,
+  "resume_min_checkpoint_step": 0,
+  "inference_only": true,
+  "inference_only_ranks": [
+    0
+  ],
+  "adapter_count": 1,
+  "pooled_group_size": 32,
+  "grading": {
+    "families": {
+      "math": {
+        "slots_per_host": 64,
+        "cpus": 2,
+        "memory_gib": 4
+      }
+    }
+  },
+  "single_bucket": true,
+  "run_id": "rebut-v6e128-farm-qwen35-w21",
+  "bucket": "gs://sk7524-tinker-tpu-us-east5",
+  "base_bundle": "gs://sk7524-tinker-tpu-us-east5/code-bundles/tpuswarm-skyrl-rq4-base-v56.tar.gz",
+  "base_bundle_sha256": "41a1ba225b81ace5138708c33653750ff5cc8d5994361d6c3b131d4e15c12710",
+  "root": "~/.cache/rebut-v6e128-farm-qwen35-w21",
+  "model_preset": "qwen3.5-27b",
+  "inference": {
+    "tp": 4,
+    "max_sequences": 32,
+    "memory_utilization": 0.9,
+    "routing": "ingress",
+    "restart_limit": 0,
+    "chunk_tokens": 1024,
+    "max_model_length": 28672,
+    "request_timeout": 21600,
+    "native_thinking_budget": true,
+    "prefix_caching": true,
+    "max_loras": 1,
+    "require_lease": true,
+    "external_pool_attestation": true,
+    "farm_drain_timeout": 600,
+    "farm_cancel_grace_seconds": 5,
+    "ragged_conv1d": false,
+    "serving_runtime": "v0.32",
+    "transformers_version": "5.19.0",
+    "batched_rpa_kernel": false
+  },
+  "cache": {
+    "hf": "gs://sk7524-tinker-tpu-us-east5/hf-cache-qwen35-v1",
+    "orbax": "gs://sk7524-tinker-tpu-us-east5/unused-inference-only-orbax",
+    "trainer_compile": "gs://sk7524-tinker-tpu-us-east5/rebut/rebut-v6e128-farm-qwen35-w21/unused-trainer-compile",
+    "inference_compile": "gs://sk7524-tinker-tpu-us-east5/rebut/qwen35-tp4/inference-compile",
+    "trainer_compile_seed": "",
+    "trainer_gib": 128,
+    "inference_gib": 80,
+    "reserve_gib": 264,
+    "sync_seconds": 60,
+    "process_count": 4,
+    "thread_count": 8
+  },
+  "client_learning_rate": "4e-5",
+  "zone": "us-east5-a",
+  "assigned_host_ips": [
+    "10.202.0.82"
+  ],
+  "physical_node": "tpuswarm-v6e128-east5-8cw7-7bfcb694-head-d5h9f0go-tpu"
+}

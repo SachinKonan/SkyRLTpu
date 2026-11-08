@@ -193,17 +193,40 @@ def parse_priorities(specs):
     return parsed
 
 
+def parse_queue_deadlines(specs):
+    """['rl28k-=900'] -> [('rl28k-', 900.0)]; raises ValueError.
+
+    Only runs matching a prefix get a deadline, and that is deliberate: a trainer on a TPU can grade
+    locally if the gateway gives its grade back, so expiring is strictly better than waiting. A client
+    with no local grading (the della-hosted benchmark runs) has nowhere else to go, so expiring would
+    just destroy its work -- those runs must match no prefix and keep waiting.
+    """
+    parsed = []
+    for spec in specs or ():
+        prefix, sep, value = str(spec).rpartition('=')
+        if not sep or not prefix:
+            raise ValueError(f'--gateway-queue-deadline wants PREFIX=SECONDS, got {spec!r}')
+        seconds = float(value)
+        # nan/inf pass `> 0` but make the expiry comparison never true, so a typo would silently
+        # disable the deadline for that run instead of being rejected at startup.
+        if not math.isfinite(seconds) or seconds <= 0:
+            raise ValueError(f'--gateway-queue-deadline wants a finite SECONDS > 0, got {spec!r}')
+        parsed.append((prefix, seconds))
+    return sorted(parsed, key=lambda p: -len(p[0]))
+
+
 class Broker:
     """All gateway state; runs on one event loop (no locks)."""
 
     def __init__(self, http=None, *, instance=None, now=time.monotonic, probe_seconds=PROBE_S,
                  long_poll_seconds=LONG_POLL_S, retry_seconds=2.0, emit=lambda **k: None, priorities=(),
-                 reserve=RESERVE_FRACTION):
+                 reserve=RESERVE_FRACTION, queue_deadlines=()):
         self.http = http or httpx.AsyncClient(limits=httpx.Limits(max_connections=512, max_keepalive_connections=128))
         self.instance = instance or uuid.uuid4().hex
         self.token = uuid.uuid4().hex
         self.now, self.emit = now, emit
         self.probe_seconds, self.long_poll_seconds, self.retry_seconds = probe_seconds, long_poll_seconds, retry_seconds
+        self.queue_deadlines = list(queue_deadlines)
         self.farms = {}               # url -> Farm
         self.grades = {}              # wire id -> Grade
         self.queues = {}              # family -> {run: [Grade] oldest first}
@@ -221,6 +244,53 @@ class Broker:
     def priority(self, run):
         return next((n for prefix, n in self.priorities if run.startswith(prefix)), DEFAULT_PRIORITY)
 
+    def queue_deadline(self, run):
+        """Seconds a queued grade of this run may wait while NO farm can serve it, or None to wait forever."""
+        return next((d for prefix, d in self.queue_deadlines if run.startswith(prefix)), None)
+
+    def _expire_unservable(self):
+        """Hand back grades that no farm can serve and whose run has a deadline, as an infrastructure
+        failure so the client can grade them locally. Only fires while slots(task) == 0: if a farm exists
+        but is busy, queueing is correct and nothing expires."""
+        if not self.queue_deadlines:
+            return
+        now = self.now()
+        for task, runs in list(self.queues.items()):
+            for run, queue in list(runs.items()):
+                deadline = self.queue_deadline(run)
+                if deadline is None or not queue:
+                    continue
+                # Per grade, not per queue: one run's queue can hold grades submitted with different
+                # grader hashes, and slots() is grader-specific, so a shared check could expire a grade
+                # whose own grader does have a compatible farm.
+                stale = [g for g in queue
+                         if g.state == 'queued' and now - g.created >= deadline
+                         and self.slots(task, g.grader) == 0]
+                if not stale:
+                    continue
+                # Leave the queue consistent BEFORE finishing anything: _finish re-enters _pump, and
+                # _pump assumes every run key holds a non-empty list. self.turn is deliberately left
+                # alone -- it only records the run served last, a stale name sorts harmlessly, and
+                # clearing it would restart round-robin and favour the alphabetically-first run.
+                for grade in stale:
+                    queue.remove(grade)
+                if not queue:
+                    runs.pop(run, None)
+                for grade in stale:
+                    # Finish FIRST, then count, then log. The emitter is a plain print() in production,
+                    # so a BrokenPipeError between removing a grade from the queue and finishing it would
+                    # leave it detached: owned by nobody, never completed, with its waiter still polling.
+                    waited = now - grade.created
+                    self._finish(grade, failed_view(
+                        grade, f'no della farm could serve it for {waited:.0f}s '
+                               f'(deadline {deadline:.0f}s); grade it locally'))
+                    self.counters['expired_unservable'] = self.counters.get('expired_unservable', 0) + 1
+                    try:
+                        self.emit(event='gateway_grade_expired', request_id=grade.wire_id, run=run,
+                                  task=task, queued_seconds=round(waited, 1), deadline_seconds=deadline)
+                    except Exception:
+                        pass
+
     def reserved(self, run):
         """True if this run's grades must leave the reserve free (it is below the best configured class)."""
         return self.best is not None and self.priority(run) > self.best
@@ -232,7 +302,8 @@ class Broker:
         return free > math.ceil(sum(f.total(task) for f in farms) * self.reserve)
 
     def start(self):
-        self.background = [asyncio.create_task(self._probe_loop()), asyncio.create_task(self._reap_loop())]
+        self.background = [asyncio.create_task(self._probe_loop()), asyncio.create_task(self._reap_loop()),
+                           asyncio.create_task(self._expire_loop())]
 
     async def close(self):
         tasks = self.background + list(self.pollers.values()) + list(self.spawned)
@@ -297,6 +368,20 @@ class Broker:
         while True:
             await asyncio.gather(*(self._probe(f) for f in list(self.farms.values()) if f.listed or sum(f.ours.values())),
                                  return_exceptions=True)
+            await asyncio.sleep(self.probe_seconds)
+
+    async def _expire_loop(self):
+        """Own task on purpose: _probe_loop awaits every farm probe, and one hung probe would otherwise
+        hold off every queue deadline -- exactly when farms are sick is when expiry matters most."""
+        while True:
+            try:
+                self._expire_unservable()
+            except Exception as exc:
+                self.counters['expire_errors'] = self.counters.get('expire_errors', 0) + 1
+                try:
+                    self.emit(event='gateway_expire_error', detail=repr(exc)[:300])
+                except Exception:
+                    pass
             await asyncio.sleep(self.probe_seconds)
 
     # -- accounting and routing ------------------------------------------------------------------------------
@@ -719,7 +804,8 @@ def create_app(broker):
 class GatewayServer:
     """The broker and its HTTP server on their own event loop thread inside the discovery process."""
 
-    def __init__(self, port, host='127.0.0.1', emit=lambda **k: None, priorities=(), reserve=RESERVE_FRACTION):
+    def __init__(self, port, host='127.0.0.1', emit=lambda **k: None, priorities=(),
+                 reserve=RESERVE_FRACTION, queue_deadlines=()):
         # Bind here, in the caller's thread: a taken port fails discovery's start instead of a silent thread.
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -729,6 +815,7 @@ class GatewayServer:
         self.instance = uuid.uuid4().hex
         self.emit = emit
         self.priorities, self.reserve = list(priorities), reserve
+        self.queue_deadlines = list(queue_deadlines)
         self.loop = asyncio.new_event_loop()
         self.started = threading.Event()
         self.broker = self.server = None
@@ -746,7 +833,8 @@ class GatewayServer:
 
     async def _serve(self):
         import uvicorn
-        self.broker = Broker(instance=self.instance, emit=self.emit, priorities=self.priorities, reserve=self.reserve)
+        self.broker = Broker(instance=self.instance, emit=self.emit, priorities=self.priorities,
+                             reserve=self.reserve, queue_deadlines=self.queue_deadlines)
         self.broker.start()
         config = uvicorn.Config(create_app(self.broker), log_config=None, log_level='warning', access_log=False,
                                 lifespan='off', timeout_keep_alive=75, timeout_graceful_shutdown=5)
@@ -942,6 +1030,8 @@ class GraderGateway:
             reserve = getattr(args, 'gateway_reserve', None)
             self.server = GatewayServer(getattr(args, 'gateway_port', None) or DEFAULT_PORT, emit=emit,
                                         priorities=parse_priorities(getattr(args, 'gateway_priority', None)),
+                                        queue_deadlines=parse_queue_deadlines(
+                                            getattr(args, 'gateway_queue_deadline', None)),
                                         reserve=RESERVE_FRACTION if reserve is None else reserve)
         self.tunnels = {}  # trainer host address -> ReverseTunnel
 

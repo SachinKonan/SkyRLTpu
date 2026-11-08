@@ -790,3 +790,102 @@ def test_trainer_host_gateway_ports_avoid_the_trainer_and_partition_ports():
     assert not gateway & used and not gateway & set(range(10002, 20000)) and max(gateway) < 32768
     # On della-vis1: clear of discovery's local tunnels (29000 + id % 1000) and local_farms' (27000 + id % 1000).
     assert not 27000 <= gg.DEFAULT_PORT < 28000 and not 29000 <= gg.DEFAULT_PORT < 30000
+
+
+# --------------------------------------------------------------------- queued-grade deadline (2026-11-05)
+def test_parse_queue_deadlines_longest_prefix_wins_and_bad_specs_fail():
+    broker = gg.Broker(httpx.AsyncClient(),
+                       queue_deadlines=gg.parse_queue_deadlines(['rl=60', 'rl28k-qwen35-=900']))
+    assert broker.queue_deadline('rl28k-qwen35-erdos-s2') == 900      # longest prefix wins
+    assert broker.queue_deadline('rl-other') == 60
+    assert broker.queue_deadline('codex-bench-arm1-s2') is None       # no local fallback: waits forever
+    for bad in (['rl28k-'], ['=900'], ['rl28k-=0'], ['rl28k-=-5']):
+        with pytest.raises(ValueError):
+            gg.parse_queue_deadlines(bad)
+
+
+def test_unservable_grade_expires_only_for_runs_with_a_deadline():
+    """With no farm able to serve, a run that has a deadline is handed back as an infrastructure
+    failure (so a TPU trainer grades locally); a run without one keeps waiting."""
+    t = [1000.0]
+    broker = gg.Broker(httpx.AsyncClient(), now=lambda: t[0],
+                       queue_deadlines=gg.parse_queue_deadlines(['rl28k-=900']))
+    made = {}
+    for run in ('rl28k-qwen35-erdos-s2', 'codex-bench-arm1-s2'):
+        grade = gg.Grade(wire_id=uuid.uuid4().hex, run=run, token='tok', task='math',
+                         body={}, grader=GRADER, age=0.0, created=t[0])
+        broker.grades[grade.wire_id] = grade
+        broker.queues.setdefault('math', {}).setdefault(run, []).append(grade)
+        made[run] = grade
+
+    broker._expire_unservable()                      # nothing is old enough yet
+    assert all(g.state == 'queued' for g in made.values())
+
+    t[0] += 901                                      # past the deadline, still no farms
+    broker._expire_unservable()
+    assert made['rl28k-qwen35-erdos-s2'].state == 'failed'
+    assert made['rl28k-qwen35-erdos-s2'].view['error']['class'] == 'infrastructure'
+    assert made['codex-bench-arm1-s2'].state == 'queued'
+    assert broker.counters['expired_unservable'] == 1
+
+
+def test_no_deadlines_configured_leaves_the_queue_untouched():
+    t = [1000.0]
+    broker = gg.Broker(httpx.AsyncClient(), now=lambda: t[0])
+    grade = gg.Grade(wire_id=uuid.uuid4().hex, run='rl28k-qwen35-erdos-s2', token='tok', task='math',
+                     body={}, grader=GRADER, age=0.0, created=t[0])
+    broker.grades[grade.wire_id] = grade
+    broker.queues.setdefault('math', {}).setdefault(grade.run, []).append(grade)
+    t[0] += 10_000
+    broker._expire_unservable()
+    assert grade.state == 'queued'
+
+
+def test_non_finite_queue_deadlines_are_rejected():
+    """nan/inf pass `> 0` but would make the expiry comparison never true, silently disabling it."""
+    for bad in (['rl28k-=nan'], ['rl28k-=inf'], ['rl28k-=1e309']):
+        with pytest.raises(ValueError):
+            gg.parse_queue_deadlines(bad)
+
+
+def test_an_emitter_failure_still_finishes_the_expired_grade():
+    """emit() is a print() in production: a BrokenPipeError must not leave a grade detached from
+    every queue with its waiter still polling, nor miscount it."""
+    t = [1000.0]
+
+    def boom(**_):
+        raise BrokenPipeError('log pipe gone')
+
+    broker = gg.Broker(httpx.AsyncClient(), now=lambda: t[0], emit=boom,
+                       queue_deadlines=gg.parse_queue_deadlines(['rl28k-=900']))
+    grades = []
+    for _ in range(2):
+        grade = gg.Grade(wire_id=uuid.uuid4().hex, run='rl28k-qwen35-erdos-s2', token='tok', task='math',
+                         body={}, grader=GRADER, age=0.0, created=t[0])
+        broker.grades[grade.wire_id] = grade
+        broker.queues.setdefault('math', {}).setdefault(grade.run, []).append(grade)
+        grades.append(grade)
+
+    t[0] += 901
+    broker._expire_unservable()                      # must not raise
+    for grade in grades:
+        assert grade.state == 'failed'
+        assert grade.done.is_set()
+        assert grade.view['error']['class'] == 'infrastructure'
+    assert broker.counters['expired_unservable'] == 2
+    assert not broker.queues.get('math')
+
+
+def test_a_busy_farm_keeps_grades_queued_rather_than_expiring_them():
+    """Capacity exists but is full: queueing is correct, so nothing may expire."""
+    t = [1000.0]
+    broker = gg.Broker(httpx.AsyncClient(), now=lambda: t[0],
+                       queue_deadlines=gg.parse_queue_deadlines(['rl28k-=900']))
+    grade = gg.Grade(wire_id=uuid.uuid4().hex, run='rl28k-qwen35-erdos-s2', token='tok', task='math',
+                     body={}, grader=GRADER, age=0.0, created=t[0])
+    broker.grades[grade.wire_id] = grade
+    broker.queues.setdefault('math', {}).setdefault(grade.run, []).append(grade)
+    broker.slots = lambda task, grader: 4           # a compatible farm exists, just has no free slot
+    t[0] += 5000
+    broker._expire_unservable()
+    assert grade.state == 'queued'
