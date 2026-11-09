@@ -95,7 +95,7 @@
     "TTD_PROBLEM_TYPE": "placement",
     "GROUPS_PER_BATCH": "16",
     "GROUP_SIZE": "32",
-    "NUM_EPOCHS": "37",
+    "NUM_EPOCHS": "50",
     "TTD_ADV_ESTIMATOR": "piecewise_valid_entropic_centered_adaptive",
     "TTD_LOSS_FN": "importance_sampling",
     "TTD_WARMUP_FB": "0",

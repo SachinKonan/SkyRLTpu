@@ -89,7 +89,7 @@
     "TTD_PROBLEM_TYPE": "placement",
     "GROUPS_PER_BATCH": "16",
     "GROUP_SIZE": "32",
-    "NUM_EPOCHS": "37",
+    "NUM_EPOCHS": "50",
     "TTD_ADV_ESTIMATOR": "piecewise_valid_entropic_centered_adaptive",
     "TTD_LOSS_FN": "importance_sampling",
     "TTD_WARMUP_FB": "0",
@@ -153,8 +153,8 @@
   "science_placement_runtime": "cpu300-4g-v1",
   "science_placement_slots_per_host": 36,
   "assigned_host_ips": [
-    "10.202.0.83",
-    "10.202.0.153"
+    "10.202.0.84",
+    "10.202.0.115"
   ],
   "physical_node": "tpuswarm-v6e128-east5-8cw7-7bfcb694-head-d5h9f0go-tpu",
   "storage_min_free_gib": 0
