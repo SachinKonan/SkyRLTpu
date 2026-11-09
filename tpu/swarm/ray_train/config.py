@@ -348,8 +348,12 @@ ACCELERATOR_ZONES = {
     # Flex-start v6e-128 (pool tpuswarm-v6e128-east5a-flex), used over SSH as assigned hosts only:
     # single-host farms (4 chips) and two-host trainers (a vertical host pair, 1,2,1 x 2,2,1).
     "tpu-v6e-128": ("us-east5-a",),
+    # Flex-start v5p-16 (pool tpuswarm-v5p16-east5a-flex), used over SSH as assigned hosts only:
+    # each of its two hosts runs its own single-host trainer (4 chips, 1,1,1 x 2,2,1).
+    "tpu-v5p-16": ("us-east5-a",),
 }
 ACCELERATOR_RUNTIME = {
+    "tpu-v5p-16": "v2-alpha-tpuv5",
     "tpu-v4-64": "tpu-ubuntu2204-base",
     "tpu-v4-32": "tpu-ubuntu2204-base",
     "tpu-v5p-32": "v2-alpha-tpuv5",
@@ -1325,7 +1329,7 @@ class Config:
                     "tpu-v6e-8": 1, "cpu": 1}
         if self.assigned_host_ips:
             import ipaddress
-            if (not (self.accelerator in ("tpu-v5p-64", "tpu-v6e-128") and self.hosts in (1, 2)
+            if (not (self.accelerator in ("tpu-v5p-64", "tpu-v6e-128", "tpu-v5p-16") and self.hosts in (1, 2)
                      or self.od_v4_64_partition and self.inference.remote_only)
                     or len(self.assigned_host_ips) != self.hosts
                     or len(set(self.assigned_host_ips)) != self.hosts or not self.physical_node
