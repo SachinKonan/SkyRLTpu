@@ -502,6 +502,12 @@ def main():
         except BlockingIOError:
             parser.error('another %s is running under this login'
                          % ('grader gateway' if args.gateway_only else 'discovery pusher (borrowing_supervisor)'))
+    if not args.grader_gateway:
+        # inventory() blocks in sky.get on the API with no timeout; a silently abandoned request left a discovery
+        # process in recvfrom for 13 h (2026-11-08/09, rl28k-discovery on della-vis2). Bound every socket made
+        # without its own timeout so the call raises, the loop keeps the last registry and retries next tick.
+        import socket
+        socket.setdefaulttimeout(300)
     service = Service(args, load_private(args.private_hosts))
     try:
         while True:
