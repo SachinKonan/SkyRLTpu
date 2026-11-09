@@ -154,6 +154,22 @@ def trainer_command(config, root, source, head, train_ips, process_id, inference
             "--backend-config", json.dumps(trainer_backend_config(config, root, head, train_ips, inference_ips))]
 
 
+def _chip_groups_by_numa():
+    """TPU device indices (/dev/vfio/N) grouped by the NUMA node of their PCI device, nodes in order; None when
+    the host does not expose the mapping. Runs on the engine's own host (serving.py builds the environment)."""
+    import glob, os
+    groups = {}
+    try:
+        for path in glob.glob("/dev/vfio/[0-9]*"):
+            n = int(os.path.basename(path))
+            devices = os.listdir(f"/sys/kernel/iommu_groups/{n}/devices")
+            node = int(open(f"/sys/bus/pci/devices/{devices[0]}/numa_node").read().strip())
+            groups.setdefault(node, []).append(n)
+    except (OSError, ValueError, IndexError):
+        return None
+    return [sorted(groups[k]) for k in sorted(groups)] or None
+
+
 def inference_environment(config, root, run, head=None, group=None, slot=0):
     """Engine process environment. group = the engine's host IPs (pairs run
     pipeline-parallel over vLLM's Ray executor on the executor's own Ray
@@ -219,9 +235,17 @@ def inference_environment(config, root, run, head=None, group=None, slot=0):
             raise ValueError("invalid single-host TP4 engine slot")
         first = slot * v.tp
         port = config.ports.inference_tpu + slot
+        chips = list(range(first, first + v.tp))
+        groups = _chip_groups_by_numa() if config.accelerator == "tpu-v6e-8" else None
+        if groups and len(groups) == config.engines_per_host and all(len(g) == v.tp for g in groups):
+            # The /dev/vfio numbering of a v6e-8 is not physical: on most VMs chips 0-3 mix the two 2x2 chip
+            # groups (pe2 on NUMA node 0, pe4 on node 1) and libtpu rejects the engine (TPU_RET_CHECK
+            # index_on_host, SLICE_FAILURE_CHIP_DRIVER_ERROR; measured 2026-11-09 on 8 of 9 east5b VMs). Each
+            # engine takes the chips of one NUMA node instead.
+            chips = groups[slot]
         # libtpu takes a host-wide lockfile, so without this override the
         # second engine aborts with "TPU is already in use" even on disjoint chips.
-        env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in range(first, first + v.tp)),
+        env.update(TPU_VISIBLE_CHIPS=",".join(str(i) for i in chips),
                    TPU_PROCESS_PORT=str(port), TPU_PROCESS_ADDRESSES=f"localhost:{port}",
                    ALLOW_MULTIPLE_LIBTPU_LOAD="1")
     if v.native_thinking_budget:
