@@ -95,6 +95,9 @@ GRADING_FILES = {'tpu/swarm/ray_train/__init__.py', 'tpu/swarm/ray_train/events.
                  # Erdős returns its triple through the flat sandbox wrapper.
                  'third_party/discover/examples/erdos_min_overlap/env.py'}
 DATABASE_FILES = {"skyrl/tinker/db_models.py"}
+# Opt-in (client_env TTD_ENGINE_DB_RETRY=1): engine that retries 'database is locked' instead of exiting, for trainers
+# whose tinker.db sits on a slow shared disk (OD v4-64 head, 2026-11-10).
+ENGINE_DB_RETRY_FILES = {"skyrl/tinker/engine.py"}
 CHECKPOINT_FILES = {"skyrl/utils/checkpoint_mirror.py"}
 # The updated backend also returns per-datum trainer/sampler logprob summaries.
 REPEATED_KV_FILES = {"skyrl/backends/tunix_backend.py", "skyrl/backends/lora_init.py",
@@ -128,6 +131,8 @@ def manifest(repo, config=None):
     if config is None or not config.inference_only:
         names.update(DATABASE_FILES)
         names.update(CHECKPOINT_FILES)
+    if config is not None and not config.inference_only and config.client_env.get("TTD_ENGINE_DB_RETRY") == "1":
+        names.update(ENGINE_DB_RETRY_FILES)
     if config is not None and config.is_recurrent_gemma:
         names.update(ARENA_FILES)
         names.update(SMOKE_FILES)  # Propagate fatal grader errors through the training loop.
@@ -189,7 +194,8 @@ def install(directory, destination):
     allowed.extend([base | WARMUP_FILES for base in [set(), *allowed]])
     allowed.extend([base | {"tpu/vllm_tpu_server.py"} for base in [set(), *allowed]])
     allowed.extend([base | BORROWING_FILES for base in [set(), *allowed]])
-    grading = {name for name in GRADING_FILES if (directory / name).is_file()} or GRADING_FILES
+    allowed.extend([base | ENGINE_DB_RETRY_FILES for base in [set(), *allowed]])
+    grading ={name for name in GRADING_FILES if (directory / name).is_file()} or GRADING_FILES
     allowed.extend([base | grading for base in [set(), *allowed]])
     if set(records) not in allowed:
         raise RuntimeError("unexpected source overlay file set")

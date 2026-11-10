@@ -113,7 +113,8 @@
     "SKYRL_OPEN_GRADING": "1",
     "SKYRL_GRADING_REGISTRY": "/home/gcpuser/.cache/skyrl/rebut-farms.json",
     "SKYRL_RUN_ID": "rebut-erdos-muse-seed2",
-    "SKYRL_OPEN_GRADING_K": "20"
+    "SKYRL_OPEN_GRADING_K": "20",
+    "TTD_ENGINE_DB_RETRY": "1"
   },
   "trainer_env": {
     "TUNIX_UNIFORM_SEQ_LEN": "0",

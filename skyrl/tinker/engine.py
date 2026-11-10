@@ -26,6 +26,28 @@ from skyrl.tinker.db_models import (
 )
 from skyrl.utils.log import logger
 
+_LOCKED_RETRY_SECONDS = 1800
+
+
+def _retry_locked(fn, what: str):
+    """Run fn, retrying while SQLite reports 'database is locked' (busy_timeout already waited 30 s per try).
+
+    A slow shared disk can hold the lock past busy_timeout; an uncaught error here used to kill the engine, and on a
+    multi-host trainer that aborts every rank at the JAX shutdown barrier. Other errors still propagate.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    deadline, delay = time.time() + _LOCKED_RETRY_SECONDS, 1.0
+    while True:
+        try:
+            return fn()
+        except OperationalError as exc:
+            if "database is locked" not in str(exc) or time.time() > deadline:
+                raise
+            logger.warning(f"{what}: database is locked; retrying in {delay:.0f}s")
+            time.sleep(delay)
+            delay = min(delay * 2, 30.0)
+
 
 def _model_not_found_error(model_id: str) -> types.ErrorResponse:
     """Log and return an ErrorResponse for a request targeting a model that isn't loaded."""
@@ -710,11 +732,17 @@ class TinkerEngine:
         ]
 
         _edbg("_complete_futures: params built; opening Session...")
-        with Session(self.db_engine) as session:
-            _edbg("_complete_futures: session open; execute(update)...")
-            session.execute(update(FutureDB), params)
-            _edbg("_complete_futures: execute done; commit...")
-            session.commit()
+
+        def write():
+            with Session(self.db_engine) as session:
+                _edbg("_complete_futures: session open; execute(update)...")
+                session.execute(update(FutureDB), params)
+                _edbg("_complete_futures: execute done; commit...")
+                session.commit()
+
+        # These results are already computed (a forward_backward has updated the weights), so the write must land:
+        # dropping it would leave the requests pending and re-run them. Retry a locked database instead of dying.
+        _retry_locked(write, "complete_futures")
         _edbg("_complete_futures: DONE (committed)")
 
     def process_single_request(self, request_type: types.RequestType, model_id: str, request_data: dict) -> BaseModel:
@@ -795,7 +823,7 @@ class TinkerEngine:
 
     def process_pending_requests(self):
         """Main loop to process pending requests."""
-        while True:
+        def poll():
             # Query for pending requests and extract data within session context
             with Session(self.db_engine) as session:
                 # Use look-ahead scheduling to find batchable forward_backward and forward model passes
@@ -807,6 +835,11 @@ class TinkerEngine:
                 sample_requests = self.find_batchable_sample(session)
                 # Get other pending requests (non forward_backward and non sampling)
                 other_requests = self.find_single_requests(session)
+            return forward_backward_requests, forward_requests, sample_requests, other_requests
+
+        while True:
+            forward_backward_requests, forward_requests, sample_requests, other_requests = _retry_locked(
+                poll, "poll_pending")
 
             # Process batches outside of session context
             self.process_batch_requests(forward_backward_requests, self.process_forward_backward, "forward_backward")
@@ -819,7 +852,7 @@ class TinkerEngine:
             # Periodically cleanup stale sessions (disabled if either config is negative)
             cleanup_enabled = self.config.session_cleanup_interval_sec >= 0 and self.config.session_timeout_sec >= 0
             if cleanup_enabled and time.time() - self._last_cleanup_time > self.config.session_cleanup_interval_sec:
-                _ = self.cleanup_stale_sessions()
+                _ = _retry_locked(self.cleanup_stale_sessions, "cleanup_stale_sessions")
                 self._last_cleanup_time = time.time()
 
             # Poll every 100ms
