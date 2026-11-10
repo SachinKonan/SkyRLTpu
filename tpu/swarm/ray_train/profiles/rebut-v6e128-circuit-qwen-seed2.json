@@ -73,7 +73,7 @@
     "inference_compile": "gs://sk7524-tinker-tpu-us-east5/rebut/rebut-circuit-qwen-seed2/unused-inference-compile",
     "trainer_gib": 128,
     "inference_gib": 128,
-    "reserve_gib": 216,
+    "reserve_gib": 320,
     "sync_seconds": 60,
     "process_count": 4,
     "thread_count": 8,
@@ -128,8 +128,8 @@
   "grading": {
     "families": {
       "placement": {
-        "slots_per_host": 36,
-        "cpus": 4,
+        "slots_per_host": 64,
+        "cpus": 2,
         "memory_gib": 4
       }
     },
@@ -151,11 +151,13 @@
   "science_routing_slots_per_host": 2,
   "science_placement_backend": "cpu",
   "science_placement_runtime": "cpu300-4g-v1",
-  "science_placement_slots_per_host": 36,
+  "science_placement_slots_per_host": 64,
   "assigned_host_ips": [
     "10.202.0.84",
     "10.202.0.115"
   ],
   "physical_node": "tpuswarm-v6e128-east5-8cw7-7bfcb694-head-d5h9f0go-tpu",
-  "storage_min_free_gib": 0
+  "storage_min_free_gib": 0,
+  "science_placement_cpus_per_case": 2,
+  "science_placement_memory_gib": 4
 }
