@@ -37,8 +37,8 @@
         "memory_gib": 4
       },
       "placement": {
-        "slots_per_host": 36,
-        "cpus": 4,
+        "slots_per_host": 72,
+        "cpus": 2,
         "memory_gib": 4
       }
     }
@@ -79,7 +79,7 @@
     "trainer_compile_seed": "",
     "trainer_gib": 128,
     "inference_gib": 80,
-    "reserve_gib": 264,
+    "reserve_gib": 360,
     "sync_seconds": 60,
     "process_count": 4,
     "thread_count": 8
