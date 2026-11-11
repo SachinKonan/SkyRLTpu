@@ -145,8 +145,8 @@
   "resume_min_checkpoint_step": 0,
   "single_bucket": true,
   "assigned_host_ips": [
-    "10.202.0.83",
-    "10.202.0.153"
+    "10.202.0.5",
+    "10.202.0.152"
   ],
   "physical_node": "tpuswarm-v6e128-east5-8cw7-7bfcb694-head-d5h9f0go-tpu",
   "storage_min_free_gib": 0
