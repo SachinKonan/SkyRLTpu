@@ -27,6 +27,24 @@ def test_trim_keeps_held_leases_first_even_over_cap():
     assert trim_to_share({}, urls, None) == urls
 
 
+def test_model_caps_count_only_trainers_holding_or_acquiring():
+    from tpu.swarm.ray_train.discovery import model_caps_from
+    holds = dict(phase='p', held=['http://a'], preparing=False)
+    acquiring = dict(phase='p', held=[], preparing=True)
+    grading = dict(phase='p', held=[], preparing=False)  # phase id kept for the run, farms handed back
+    # Live case 2026-11-10: 8 Qwen farms, 2 generating + 2 grading -> 4 each (was 2), one farm kept back.
+    assert model_caps_from({'q': 8}, [('q', holds), ('q', acquiring), ('q', grading), ('q', grading)]) == {'q': 4}
+    # One generating, two idle: everything but the reserve (was 3 with --model-fair-share).
+    assert model_caps_from({'m': 8}, [('m', holds), ('m', grading), ('m', grading)]) == {'m': 7}
+    # One generating, none idle: no cap; nobody generating: no cap.
+    assert model_caps_from({'m': 8}, [('m', holds)]) == {}
+    assert model_caps_from({'m': 8}, [('m', grading), ('m', grading)]) == {}
+    # Two generating, none idle: plain split. Too few farms for a reserve: no reserve, floor of 1.
+    assert model_caps_from({'g': 5}, [('g', holds), ('g', holds)]) == {'g': 3}
+    assert model_caps_from({'g': 2}, [('g', holds), ('g', acquiring), ('g', grading)]) == {'g': 1}
+    assert model_caps_from({}, [('x', holds), ('x', holds)]) == {'x': 1}
+
+
 def test_direct_tick_applies_trim():
     target = dict(run_id='r', model='m', instance='i', enabled=True, lease_scope='run', urls=[],
                   compatibility_sha256='c', borrowing=dict(held=[]))

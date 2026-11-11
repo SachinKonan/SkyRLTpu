@@ -123,6 +123,31 @@ def fair_share_cap(ready_farms, descriptors):
     return max(1, -(-ready_farms // generating))
 
 
+def model_caps_from(ready, borrowings):
+    """{model: cap} from ready farms per model and [(model, borrowing status)] of the private trainers.
+
+    A trainer counts as generating only while it holds a lease or is acquiring one ('preparing'). A sampling
+    phase alone is not enough: borrowers keep a phase id for the whole run, so trainers that are grading or
+    training after handing their farms back would otherwise hold a share nobody uses (2026-11-10: Qwen capped
+    at 2 farms per run with 4 Qwen farms idle). While some trainer of the model is idle (phase, no lease), one
+    farm stays unoffered so it can start generating without waiting for another trainer's phase to end.
+    No cap when one trainer generates and none idles, as before."""
+    import collections
+    active, idle = collections.Counter(), collections.Counter()
+    for model, b in borrowings:
+        b = b or {}
+        if b.get('held') or b.get('preparing'):
+            active[model] += 1
+        elif b.get('phase'):
+            idle[model] += 1
+    caps = {}
+    for model, n in active.items():
+        reserve = 1 if idle[model] and ready.get(model, 0) > n else 0
+        if n >= 2 or reserve:
+            caps[model] = max(1, -(-(ready.get(model, 0) - reserve) // n))
+    return caps
+
+
 def trim_to_share(target, urls, cap):
     """Keep every farm the trainer already holds (never revoke a lease), then fill up to cap."""
     if cap is None:
@@ -325,18 +350,16 @@ class Service:
         return dict(pool=pool, direct=direct)
 
     def model_fair_caps(self, farms, direct_call):
-        """{model: cap} for private trainers: ready farms serving that model divided by that model's trainers that
-        are generating (a borrowing phase or held leases), as fair_share_cap but per model, so a trainer that is
-        grading or training leaves its farms to the others. No cap for a model with fewer than two generating."""
+        """{model: cap} for private trainers (model_caps_from): ready farms of the model split between its trainers
+        that hold or are acquiring leases, keeping one farm back while another trainer of the model is idle."""
         import collections
         ready = collections.Counter(m for f in farms for m in (f.get('models') or [])[:1])
-        generating = collections.Counter()
+        borrowings = []
         for row in self.private['trainers']:
             d = direct_call(row)
-            b = ((d.get('result') or {}).get('borrowing') or {}) if d.get('ok') else {}
-            if b.get('phase') or b.get('held'):
-                generating[row['model']] += 1
-        caps = {m: max(1, -(-ready[m] // n)) for m, n in generating.items() if n >= 2}
+            borrowings.append((row['model'], ((d.get('result') or {}).get('borrowing') or {}) if d.get('ok') else {}))
+        caps = model_caps_from(ready, borrowings)
+        generating = collections.Counter(m for m, b in borrowings if b.get('held') or b.get('preparing'))
         self.emit(event='model_fair_share', caps=caps, generating=dict(generating), ready=dict(ready))
         return caps
 
