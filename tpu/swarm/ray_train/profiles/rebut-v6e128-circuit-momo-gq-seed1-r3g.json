@@ -61,7 +61,7 @@
     "external_pool_lease_seconds": 300,
     "external_pool_heartbeat_seconds": 30,
     "external_pool_health_grace_seconds": 90,
-    "external_pool_target_leases": 4,
+    "external_pool_target_leases": 8,
     "external_pool_candidate_limit": 16,
     "external_pool_required_compatibility": [
       "ab12214870e21f4f04768de51ca1446f7de154e76364b1d06ea46e5d712a2fac"
@@ -160,8 +160,8 @@
   "science_placement_runtime": "cpu300-4g-v1",
   "science_placement_slots_per_host": 64,
   "assigned_host_ips": [
-    "10.202.0.109",
-    "10.202.0.107"
+    "10.202.0.84",
+    "10.202.0.115"
   ],
   "physical_node": "tpuswarm-v6e128-east5-8cw7-7bfcb694-head-d5h9f0go-tpu",
   "storage_min_free_gib": 0,
