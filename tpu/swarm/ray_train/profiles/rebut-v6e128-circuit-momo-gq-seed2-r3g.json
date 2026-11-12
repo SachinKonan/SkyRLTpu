@@ -160,8 +160,8 @@
   "science_placement_runtime": "cpu300-4g-v1",
   "science_placement_slots_per_host": 64,
   "assigned_host_ips": [
-    "10.202.0.109",
-    "10.202.0.107"
+    "10.202.0.6",
+    "10.202.0.8"
   ],
   "physical_node": "tpuswarm-v6e128-east5-8cw7-7bfcb694-head-d5h9f0go-tpu",
   "storage_min_free_gib": 0,
