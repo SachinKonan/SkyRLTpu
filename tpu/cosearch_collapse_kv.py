@@ -158,6 +158,30 @@ def verify(source: Path, destination: Path, native: int, head_dim: int) -> None:
                 raise ValueError(f"{name}:{key}: tensor changed")
 
 
+def inspect(source: Path, native: int, head_dim: int) -> dict:
+    """Read-only: the K/V layout an archive was saved in (logical heads per K/V LoRA B tensor, replicas
+    bit-identical) and whether it carries Adam state, so a resume on another mesh can be checked to need no
+    conversion (same logical_kv_heads)."""
+    raw = _read(Path(source))
+    meta = json.loads(raw["tunix_checkpoint_meta.json"])
+    report = dict(source=str(source), native_kv_heads=native, head_dim=head_dim, format=meta.get("format"),
+                  lora_config=meta.get("lora_config"), layouts_present="lora_layouts" in meta, kv={})
+    for name in ("lora_weights.npz", "optimizer_state.npz"):
+        arrays = _npz(raw[name])
+        for key, value in arrays.items():
+            if KV_B.search(key):
+                _, rep = collapse(value, native, head_dim)
+                report["kv"][f"{name}:{key}"] = dict(shape=list(value.shape), logical_kv_heads=native * rep,
+                                                     replicas_bit_identical=True)
+        if name == "optimizer_state.npz":
+            report["optimizer_present"] = bool(arrays)
+            report["optimizer_counters"] = {k: arrays[k].item() for k in arrays if "lora" not in k}
+    report["logical_kv_heads"] = sorted({v["logical_kv_heads"] for v in report["kv"].values()})
+    report["archive_sha256"] = _file_sha(Path(source))
+    report["bytes"] = Path(source).stat().st_size
+    return report
+
+
 def _file_sha(path: Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as f:
@@ -169,11 +193,22 @@ def _file_sha(path: Path) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("source")
-    ap.add_argument("destination")
+    ap.add_argument("destination", nargs="?", help="omit with --inspect")
     ap.add_argument("--model", required=True, choices=sorted(NATIVE))
     ap.add_argument("--report", help="write the JSON report here (default: <destination>.json)")
+    ap.add_argument("--inspect", action="store_true", help="only report the saved K/V layout (writes no archive)")
     x = ap.parse_args(argv)
     native, head_dim = NATIVE[x.model]
+    if x.inspect:
+        report = inspect(Path(x.source), native, head_dim)
+        report["model"] = x.model
+        text = json.dumps(report, indent=1)
+        if x.report:
+            Path(x.report).write_text(text + "\n")
+        print(text)
+        return 0
+    if not x.destination:
+        ap.error("destination is required unless --inspect")
     report = convert(Path(x.source), Path(x.destination), native, head_dim)
     report["model"] = x.model
     text = json.dumps(report, indent=1)

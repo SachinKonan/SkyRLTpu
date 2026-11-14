@@ -26,7 +26,8 @@
   },
   "tokamax_splash": true,
   "num_vocab_tiling": 32,
-  "flce_tile": 1024
+  "flce_tile": 1024,
+  "backward_warmup": false
  },
  "inference": {
   "tp": 4,
