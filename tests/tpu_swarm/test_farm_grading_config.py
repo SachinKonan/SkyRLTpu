@@ -56,7 +56,7 @@ def test_farm_science_families_use_their_contracts(tmp_path):
 @pytest.mark.parametrize('change', [
     dict(families={'other': {}}),
     dict(families={'math': {'slots_per_host': 0}}),
-    dict(families={'math': {'slots_per_host': 65}}),
+    dict(families={'math': {'slots_per_host': 257}}),
     dict(families={'math': {'unknown': 1}}),
     dict(families=AC2, farm_transport=True),
     dict(families=AC2, max_infra_retries=0),

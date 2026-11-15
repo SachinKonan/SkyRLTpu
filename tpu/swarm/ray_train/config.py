@@ -612,9 +612,11 @@ class Config:
                 raise ValueError(f'grading family {name}: memory_max_gib must be at least memory_gib')
             if name != 'math' and spec['memory_max_gib'] != spec['memory_gib']:
                 raise ValueError(f'grading family {name}: science contracts kill at their reservation')
-        if 'math' in families and not (families['math']['slots_per_host'] <= 64 and families['math']['cpus'] <= 8
+        # Sanity bounds, not a measured limit. 256 slots: a CPU-only grading host (e.g. a 224-vCPU v5e-8 lending its
+        # idle cores at 1 CPU / 1 GiB per Erdős program) can run well over 64 at once; was 64 (sized for TPU farms).
+        if 'math' in families and not (families['math']['slots_per_host'] <= 256 and families['math']['cpus'] <= 8
                                        and families['math']['memory_max_gib'] <= 64):
-            raise ValueError('math grading: at most 64 slots, 8 CPUs and 64 GiB per host')
+            raise ValueError('math grading: at most 256 slots, 8 CPUs and 64 GiB per host')
         for key in ('max_infra_retries', 'queue_factor', 'max_requests', 'result_retention_seconds',
                     'long_poll_seconds', 'farm_refresh_seconds', 'stdout_limit_bytes'):
             if type(getattr(g, key)) is not int or getattr(g, key) < 1:
