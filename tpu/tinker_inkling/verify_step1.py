@@ -43,10 +43,24 @@ def thinking_stats(log_text):
     return natural, injected, continued
 
 
+def grid_runs(grid):
+    """[(run dir, seed, frozen)] the grid starts, from the settings it was last started with
+    (RUNS/grid-<G>/service.args: GRID_TARGETS, GRID_FROZEN); default 9 seeds, no controls."""
+    args = {}
+    f = RUNS / f'grid-{grid}' / 'service.args'
+    if f.exists():
+        args = dict(l.split('=', 1) for l in f.read_text().splitlines() if '=' in l)
+    pairs = lambda v: [int(kv.split(':')[0]) for kv in v.split(',') if kv]
+    seeds = pairs(args['GRID_TARGETS']) if args.get('GRID_TARGETS') else list(range(1, 10))
+    frozen = pairs(args.get('GRID_FROZEN', ''))
+    return ([(RUNS / f'{grid}-s{i}', i, False) for i in seeds] + [(RUNS / f'{grid}-f{i}', i, True) for i in frozen])
+
+
 def main():
     grid = sys.argv[1]
     out = sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv else None
-    seeds = [RUNS / f'{grid}-s{i}' for i in range(1, 10)]
+    plan = grid_runs(grid)
+    seeds = [r for r, _, _ in plan]
     lines, fails = [], []
     lines.append(f'# Step-1 verification — grid {grid} — {time.strftime("%Y-%m-%d %H:%MZ", time.gmtime())}\n')
     lines.append('| seed | step | settings | valid | best C5 (x1e-6 > 0.38085) | natural-finish tokens p50/p90 | '
@@ -54,13 +68,24 @@ def main():
                  'grade seed |')
     lines.append('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
     grade_seeds, all_natural, code_seen = set(), [], set()
-    for run in seeds:
+    for run, seed_i, frozen in plan:
         name = run.name
         lg = run / 'tinker_log' / name
         step = json.loads((lg / 'global_step.json').read_text())['global_step'] if (lg / 'global_step.json').exists() else 0
         env = env_of(run) if (run / 'env.txt').exists() else {}
-        want = dict(EXPECT, **{k: str(seeds.index(run) + 1) for k in PER_SEED})
+        want = dict(EXPECT, **{k: str(seed_i) for k in PER_SEED})
+        if frozen:   # control: same scaffold, no policy update
+            want.update(LEARNING_RATE='0', TTD_FROZEN_POLICY='1')
         bad = [f'{k}={env.get(k)!r} (want {v!r})' for k, v in want.items() if env.get(k) != v]
+        if not frozen and env.get('TTD_FROZEN_POLICY') not in (None, '0'):
+            bad.append(f'TTD_FROZEN_POLICY={env.get("TTD_FROZEN_POLICY")!r} on a training run')
+        ckpt = lg / 'member_inkling' / 'checkpoints.jsonl'
+        has_rows = ckpt.exists() and ckpt.read_text().strip() != ''
+        if frozen and (has_rows or not (lg / 'member_inkling' / 'frozen_policy_export.json').exists()):
+            bad.append(f'frozen control: checkpoint rows {has_rows} (want none), frozen export '
+                       f'{(lg / "member_inkling" / "frozen_policy_export.json").exists()} (want present)')
+        if not frozen and step >= 1 and not has_rows:
+            bad.append('training run at step >= 1 has no checkpoint rows')
         if bad:
             fails.append(f'{name}: ' + '; '.join(bad))
         if step < 1:
@@ -109,15 +134,16 @@ def main():
             fails.append(f'{name}: validity {valid:.0%} < 50%')
     if len(code_seen) > 1:
         fails.append(f'seeds ran different code: {sorted(code_seen)}')
-    if len(grade_seeds) != 9:
+    if len(grade_seeds) != len(plan):
         fails.append(f'grade seeds not distinct per run: {grade_seeds}')
     # prompt as sent: re-render seed 1's first start state with its settings and deployed code
     try:
         s1 = seeds[0]
         env = env_of(s1)
+        disc = env.get('CODE_DISCOVER') or f'{CODE}/discover'   # render with the code the run itself used
         tree = json.loads((s1 / 'tinker_log' / s1.name / 'puct_sampler_step_000000.json').read_text())
         st = tree['initial_states'][0]
-        script = (f"import json,os,sys; os.environ.update(json.loads(sys.argv[1])); sys.path[:0]=['{CODE}/discover/examples/erdos_min_overlap','{CODE}/discover']\n"
+        script = (f"import json,os,sys; os.environ.update(json.loads(sys.argv[1])); sys.path[:0]=['{disc}/examples/erdos_min_overlap','{disc}']\n"
                   "from env import ErdosMinOverlapEnv\nfrom ttt_discover.tinker_utils.state import State\n"
                   "from ttt_discover.tinker_utils.renderers import get_renderer\nfrom ttt_discover.tinker_utils.misc_utils import get_tokenizer\n"
                   "d=json.loads(sys.argv[2]); st=State.from_dict(d); e=object.__new__(ErdosMinOverlapEnv); e.initial_state=st\n"

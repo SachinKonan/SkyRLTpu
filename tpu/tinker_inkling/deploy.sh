@@ -24,8 +24,20 @@ for pair in "skyrl:$SKYRL_REPO:$SK" "discover:$DISCOVER_REPO:$DC"; do
   # Sanity: the snapshot must contain what the runs execute before the link is switched.
   if [ "$name" = skyrl ] && [ ! -f "$dest/tpu/tinker_inkling/launch_run.sh" ]; then echo "skyrl $sha has no tpu/tinker_inkling"; exit 1; fi
   if [ "$name" = discover ] && [ ! -f "$dest/ttt_discover/rl/ensemble.py" ]; then echo "discover $sha is not the client"; exit 1; fi
-  ln -sfn "$dest" "$BASE/code/$name"
 done
+# Publish the PAIR in one atomic step: release-<sk>-<dc>/{skyrl,discover} and a single rename of the `current` link,
+# so a run launched mid-deploy can never pin new skyrl with old discover (launch_run.sh pins through `current`).
+REL="$BASE/code/release-${SK:0:12}-${DC:0:12}"
+if [ ! -d "$REL" ]; then
+  mkdir -p "$REL.tmp"
+  ln -sfn "$BASE/code/skyrl-${SK:0:12}" "$REL.tmp/skyrl"
+  ln -sfn "$BASE/code/discover-${DC:0:12}" "$REL.tmp/discover"
+  mv "$REL.tmp" "$REL"
+fi
+ln -sfn "$REL" "$BASE/code/.current.tmp" && mv -Tf "$BASE/code/.current.tmp" "$BASE/code/current"
+# convenience links for people (runs do not use them)
+ln -sfn "$BASE/code/skyrl-${SK:0:12}" "$BASE/code/skyrl"
+ln -sfn "$BASE/code/discover-${DC:0:12}" "$BASE/code/discover"
 # Replace each ops file atomically (new inode): a running bash script keeps reading its old copy instead of
 # bytes of the new one (an in-place cp corrupted the running launch_run.sh wrappers on 2026-11-16).
 for f in "$BASE/code/skyrl/tpu/tinker_inkling/"*.sh "$BASE/code/skyrl/tpu/tinker_inkling/"*.py; do

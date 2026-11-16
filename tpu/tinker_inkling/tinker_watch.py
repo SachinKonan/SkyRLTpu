@@ -130,7 +130,11 @@ def tinker_spend(since):
             rows += list(csv.DictReader(open(f.name)))
         start = stop
     total, filled = price_rows(rows)
-    log(f'billing rows {len(rows)}; ${filled:.2f} of the total priced here from unpriced rows')
+    ops = [x for x in rows if not x.get('estimated_cost_usd') and not x.get('token_count')
+           and not x.get('gigabyte_hours') and float(x.get('count') or 0) > 0]
+    log(f'billing rows {len(rows)}; ${filled:.2f} of the total priced here from unpriced rows'
+        + (f'; {len(ops)} unpriced operation rows ({sum(float(x["count"]) for x in ops):.0f} ops, types '
+           f'{sorted({x.get("type") for x in ops})}) counted as $0 (no rate published)' if ops else ''))
     return total
 
 
@@ -361,7 +365,7 @@ def note_restart(state, key, name, rundir, why):
     else:
         s['loop_n'] = s.get('loop_n', 0) + 1
     log(f'{name}: restart ({why}); {s["loop_n"]} restart(s) at committed step {step}')
-    if s['loop_n'] >= LOOP_MAX:
+    if s['loop_n'] >= LOOP_MAX and not COST_STOP_FILE.exists():
         hours = min(BLOCK_MAX_H, BLOCK_H * 2 ** (s['loop_n'] - LOOP_MAX))
         until = time.time() + hours * 3600
         (rundir / 'BLOCKED').write_text(f'{until} {s["loop_n"]} restarts at step {step}: {why}\n')
@@ -414,6 +418,8 @@ def check_run(state, low, unit):
              f'checkpoint. {ex}\nLog: {RUNS}/{name}.log')
         if note_restart(state, key, name, rundir, f'crash: {ex or "no exit line"}'):
             return
+    if COST_STOP_FILE.exists():
+        return          # cost stop in force: never restart or pause anything; enforce_cost_stop stops the units
     if active == 'active':
         started_mono = int(st.get('ActiveEnterTimestampMonotonic', '0') or 0) / 1e6
         up_s = time.monotonic() - started_mono if started_mono else 0
@@ -434,6 +440,8 @@ def check_run(state, low, unit):
                 return
             log(f'{name}: no progress for {idle_s/60:.0f} min; restarting')
             if note_restart(state, key, name, rundir, f'no progress {idle_s/60:.0f} min'):
+                return
+            if COST_STOP_FILE.exists():     # written by another pass/section meanwhile
                 return
             run(['systemctl', '--user', 'restart', unit], timeout=300)
             s['restarts'] = unit_state(unit).get('NRestarts')   # a manual restart is not a crash
@@ -465,6 +473,10 @@ def check_tunnel():
 
 def check_once(state):
     state['errors'] = 0
+    try:
+        log(f'host load {" ".join(open("/proc/loadavg").read().split()[:3])} ({os.cpu_count()} cpus)')
+    except OSError:
+        pass
     section(state, 'registry', refresh_registry)
     section(state, 'tunnel', check_tunnel)
     section(state, 'cost', check_cost, state)

@@ -134,6 +134,10 @@ for _ in range(3):
     st['cost_checked'] = 0
     w.check_cost(st)
 assert mails == ['Tinker cost check FAILING'], mails
+make_run('cs', 2, 150)                 # hung run while the cost stop is in force: must NOT be restarted
+calls.clear()
+w.check_runs(state, low=False)
+assert not restarted('cs'), 'restarted a run under COST_STOP'
 (tmp / 'COST_STOP').unlink()
 print('6 OK: cost alerts once each, hard stop writes COST_STOP + stops units (grid starts nothing), failing check emails')
 

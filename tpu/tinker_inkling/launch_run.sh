@@ -17,7 +17,8 @@ mkdir -p "$RUN"
 PIN="$RUN/code.pin"
 if [ -z "${LAUNCH_PINNED:-}" ]; then
   if [ ! -f "$PIN" ]; then
-    printf 'PIN_SKYRL=%s\nPIN_DISCOVER=%s\n' "$(readlink -f "$CODE/skyrl")" "$(readlink -f "$CODE/discover")" > "$PIN.tmp"
+    REL=$(readlink -f "$CODE/current")   # one read of the release link: skyrl and discover always from the same deploy
+    printf 'PIN_SKYRL=%s\nPIN_DISCOVER=%s\n' "$(readlink -f "$REL/skyrl")" "$(readlink -f "$REL/discover")" > "$PIN.tmp"
     mv "$PIN.tmp" "$PIN"
   fi
   # shellcheck disable=SC1090
