@@ -4,6 +4,7 @@
 # Settings mirror the live Erdős merge runs (profile rebut-merge-erdos-muse-a client env) except the Tinker/Inkling
 # specifics: model, renderer + effort, client-side thinking cap, lr 2e-5 (2x the cookbook RL default; Inkling LR is uncalibrated), gradefarm-only seeded 1000 s grading.
 set -euo pipefail
+{  # whole script in one block: bash parses it all before running, so replacing this file mid-run (deploy) is safe
 NAME=$1; STEPS=$2; LORA_SEED=${3:-1}
 WT=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code/skyrl
 DISC=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code/discover
@@ -89,3 +90,4 @@ rc=$?
 echo "[launch_run] client exited rc=$rc at $(date -u +%FT%TZ) (128+N = killed by signal N)"
 sleep 2; kill "$SPID" 2>/dev/null
 exit $rc
+}

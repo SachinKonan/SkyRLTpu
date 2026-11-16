@@ -26,7 +26,11 @@ for pair in "skyrl:$SKYRL_REPO:$SK" "discover:$DISCOVER_REPO:$DC"; do
   if [ "$name" = discover ] && [ ! -f "$dest/ttt_discover/rl/ensemble.py" ]; then echo "discover $sha is not the client"; exit 1; fi
   ln -sfn "$dest" "$BASE/code/$name"
 done
-cp "$BASE/code/skyrl/tpu/tinker_inkling/"*.sh "$BASE/code/skyrl/tpu/tinker_inkling/"*.py "$BASE/ops/"
+# Replace each ops file atomically (new inode): a running bash script keeps reading its old copy instead of
+# bytes of the new one (an in-place cp corrupted the running launch_run.sh wrappers on 2026-11-16).
+for f in "$BASE/code/skyrl/tpu/tinker_inkling/"*.sh "$BASE/code/skyrl/tpu/tinker_inkling/"*.py; do
+  cp "$f" "$BASE/ops/.$(basename "$f").tmp" && mv -f "$BASE/ops/.$(basename "$f").tmp" "$BASE/ops/$(basename "$f")"
+done
 chmod u+w "$BASE/ops/"*
 echo "$(date -u +%FT%TZ) skyrl=$SK discover=$DC" >> "$BASE/ops/DEPLOYED"
 tail -1 "$BASE/ops/DEPLOYED"
