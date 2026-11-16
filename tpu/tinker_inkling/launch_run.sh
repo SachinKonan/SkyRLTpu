@@ -55,6 +55,10 @@ export TTD_SAFE_GRADE_MAX_WORKERS=512  # client-side grading concurrency (defaul
 export TTD_EVAL_BACKEND=farm EVAL_TIMEOUT="${EVAL_TIMEOUT:-1100}" NUM_CPUS_PER_TASK=1 TTD_RAY_PAYLOAD=0
 export TTD_GRADE_SEED="$(python3 -c "import hashlib,sys; print(int(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:8],16) % 2**31)" "$NAME")"
 export TTD_GRADE_BUDGET_S="${TTD_GRADE_BUDGET_S:-1000}" TTD_ERDOS_PROMPT_CPUS=1
+# How long a rollout waits for its grade (queue + run) before it counts as a 0-reward failure. The 8000 s default
+# can expire in a long queue (15 clients x 512 programs on ~1000 slots) and would train on fake zeros; 48 h means it
+# never fires in practice. A lost request is handled by the watchdog instead (restart after 6 h with grades pending).
+export TTD_GRADE_WAIT_TIMEOUT=172800
 unset SKYRL_GRADING_URL
 export SKYRL_GRADING_LOCAL_SLOTS=0 SKYRL_OPEN_GRADING=1 SKYRL_GRADING_REGISTRY="$REG" SKYRL_OPEN_GRADING_K=6
 export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 1, "memory_gib": 1, "memory_max_gib": 2, "slots_per_host": 1}}'

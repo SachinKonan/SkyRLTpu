@@ -19,7 +19,7 @@ with run_service.sh (the client resumes from its last checkpoint). decision.json
   grid.py loop              reconcile every LOOP_S seconds (run as the systemd unit tinker-grid)
   grid.py once [--dry]      one reconcile pass (--dry: print what it would do)
 """
-import json, math, os, shutil, subprocess, sys, time
+import json, math, os, re, shutil, subprocess, sys, time
 from pathlib import Path
 
 G = os.environ.get('GRID', 'g1')
@@ -40,6 +40,25 @@ LOOP_S = int(os.environ.get('GRID_LOOP_S', '120'))
 # Launch gate: every run stops at HOLD_AFTER steps until the user creates <grid dir>/RELEASE (0 disables the gate).
 HOLD_AFTER = int(os.environ.get('GRID_HOLD_AFTER', '1'))
 RELEASE = GRID_DIR / 'RELEASE'
+# Stops written by the watchdog: RUNS/COST_STOP (spend hard stop: start nothing) and RUNS/<run>/BLOCKED (crash loop:
+# do not restart that run). Delete the file to allow starts again.
+COST_STOP = RUNS / 'COST_STOP'
+
+
+def blocked(name):
+    """A crash-loop pause written by the watchdog: '<until epoch> <reason>'. Expired pauses are removed."""
+    f = RUNS / name / 'BLOCKED'
+    try:
+        until = float(f.read_text().split()[0])
+    except FileNotFoundError:
+        return False
+    except (OSError, ValueError, IndexError):
+        return True          # unreadable: stay blocked (the user deletes it)
+    if time.time() < until:
+        return True
+    f.unlink(missing_ok=True)
+    log(f'{name}: crash-loop pause expired; may start again')
+    return False
 EXTRA_ENV = [kv for kv in os.environ.get('GRID_RUN_ENV', '').split() if kv]   # e.g. smoke-test overrides
 
 
@@ -59,11 +78,26 @@ def logdir(name):
     return RUNS / name / 'tinker_log' / name
 
 
-def gstep(name):
+def ledger(name):
+    """Checkpoint rows of a run (what a restart resumes from)."""
     try:
-        return int(json.loads((logdir(name) / 'global_step.json').read_text())['global_step'])
-    except (OSError, ValueError, KeyError):
-        return 0
+        return [json.loads(l) for l in open(logdir(name) / 'member_inkling' / 'checkpoints.jsonl') if l.strip()]
+    except (OSError, ValueError):
+        return []
+
+
+def gstep(name):
+    """Committed steps = highest checkpoint batch in the ledger (global_step.json can lag it by one after a crash
+    between the checkpoint row and the counter update)."""
+    return max((int(r.get('batch', 0)) for r in ledger(name)), default=0)
+
+
+def has_checkpoint(name, batch):
+    return any(int(r.get('batch', -1)) == batch for r in ledger(name))
+
+
+def is_clone(name):
+    return re.fullmatch(rf'{re.escape(G)}-c\d+-s\d+', name) is not None
 
 
 def snapshot(name, step):
@@ -77,9 +111,11 @@ def best_c5(tree):
 
 
 def unit_running(name):
+    """True unless systemd says explicitly 'inactive' or 'failed'. Anything else (active, activating, deactivating,
+    reloading, empty output from a bus timeout) is treated as running, so the grid never stops a unit it cannot see."""
     st = subprocess.run(['systemctl', '--user', 'is-active', f'tinker-run-{name}.service'],
                         capture_output=True, text=True).stdout.strip()
-    return st in ('active', 'activating', 'reloading')
+    return st not in ('inactive', 'failed')
 
 
 def largest_remainder(total, weights):
@@ -136,6 +172,10 @@ def decide():
     """At step 5 of all 9 seeds: rank, weights, prune steps and clone copies. Written once."""
     if DECISION.exists():
         return json.loads(DECISION.read_text())
+    # Decide only on COMMITTED step-5 state: the step-5 tree is written before step 5's training and checkpoint, and
+    # a crash in between would redo step 5 with a different tree.
+    if not all(has_checkpoint(seed_name(i), FORK) for i in range(1, 10)):
+        return None
     trees = {i: snapshot(seed_name(i), FORK) for i in range(1, 10)}
     if any(t is None for t in trees.values()):
         return None
@@ -176,8 +216,10 @@ def prepare_clone(name, src):
     if (dst / 'global_step.json').exists():
         return
     s = seed_name(src)
-    rows = [json.loads(l) for l in open(logdir(s) / 'member_inkling' / 'checkpoints.jsonl') if l.strip()]
-    row = next(r for r in rows if r.get('batch') == FORK and r.get('name') != 'final')
+    rows = [r for r in ledger(s) if r.get('batch') == FORK and r.get('name') != 'final']
+    if not rows:
+        raise RuntimeError(f'{s} has no step-{FORK} checkpoint row')
+    row = rows[0]
     tree = snapshot(s, FORK)
     tree['puct_n'], tree['puct_T'] = {}, 0          # visit counts reset; states, values and puct_m kept
     tmpdir = dst.with_name(dst.name + '.tmp')
@@ -212,33 +254,40 @@ def held():
 
 
 def reconcile(dry=False):
+    if COST_STOP.exists():
+        return
     p, d = plan()
     if held():
         p = {n: (min(t, HOLD_AFTER), seed, env) for n, (t, seed, env) in p.items()}
     for name, (target, seed, env) in sorted(p.items()):
-        if '-c' in name and d:
-            src = int(name.rsplit('-s', 1)[1])
+        try:   # one failing run never blocks the others; errors go to grid.log for the watchdog
+            if is_clone(name) and d:
+                src = int(name.rsplit('-s', 1)[1])
+                if not dry:
+                    prepare_clone(name, src)
+            g = gstep(name)
+            if g >= target or blocked(name) or unit_running(name):
+                continue
+            cmd = ['bash', str(OPS / 'run_service.sh'), 'run', name, str(target), str(seed), *env, *EXTRA_ENV]
+            log(f'{"DRY " if dry else ""}start {name} at step {g} -> target {target}: {" ".join(cmd[2:])}')
             if not dry:
-                prepare_clone(name, src)
-        g = gstep(name)
-        if g >= target or unit_running(name):
-            continue
-        cmd = ['bash', str(OPS / 'run_service.sh'), 'run', name, str(target), str(seed), *env, *EXTRA_ENV]
-        log(f'{"DRY " if dry else ""}start {name} at step {g} -> target {target}: {" ".join(cmd[2:])}')
-        if not dry:
-            subprocess.run(cmd, check=False)
+                subprocess.run(cmd, check=False)
+        except Exception as e:
+            import traceback
+            log(f'GRID ERROR {name}: {e!r}\n' + traceback.format_exc())
 
 
 def status():
     p, d = plan()
     used = 0
     print(f'grid {G}: decision {"made" if d else "pending (needs all 9 seeds at step 5)"}'
-          + (f'; HELD at step {HOLD_AFTER} until {RELEASE} exists' if held() else '; released'))
+          + (f'; HELD at step {HOLD_AFTER} until {RELEASE} exists' if held() else '; released')
+          + (f'; COST STOP ({COST_STOP} exists): nothing starts' if COST_STOP.exists() else ''))
     for name, (target, seed, env) in sorted(p.items()):
         g = gstep(name)
-        start = FORK if '-c' in name else 0
+        start = FORK if is_clone(name) else 0
         used += max(0, g - start)
-        print(f'  {name:14s} step {g:2d} / {target:2d}  {"running" if unit_running(name) else "idle"}')
+        print(f'  {name:14s} step {g:2d} / {target:2d}  {"running" if unit_running(name) else "idle"}{"  BLOCKED" if blocked(name) else ""}')
     print(f'unique model-steps done: {used}')
     if d:
         print(f'decision: top3 {d["top3"]} weights {[round(x, 3) for x in d["weights"]]} '

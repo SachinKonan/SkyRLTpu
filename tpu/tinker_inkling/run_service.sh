@@ -23,6 +23,8 @@ start_unit() {  # unit, restart policy, then setenv args and command
 case "$cmd" in
   run)
     NAME=$1; STEPS=$2; SEED=$3; shift 3
+    if [[ -e $RUNS/COST_STOP ]]; then echo "refused: $RUNS/COST_STOP exists (spend hard stop)"; exit 3; fi
+    if [[ -e $RUNS/$NAME/BLOCKED ]]; then echo "refused: $RUNS/$NAME/BLOCKED exists (crash loop); delete it to allow"; exit 3; fi
     SETENV=(); for kv in "$@"; do SETENV+=(--setenv="$kv"); done
     mkdir -p "$RUNS"
     start_unit "tinker-run-$NAME" on-failure "${SETENV[@]}" \
