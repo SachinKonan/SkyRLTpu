@@ -15,7 +15,7 @@ CODE = Path('/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code')
 EXPECT = {  # agreed settings (REVIEW.md, 2026-11-16)
     'TTD_ENSEMBLE_MODELS': 'thinkingmachines/Inkling-2-Small:tml_v0:inkling', 'TTD_INKLING_EFFORT': '0.75',
     'TTD_FIXED_THINK_TOKENS': '24000', 'TTD_FIXED_TOTAL_TOKENS': '32000', 'CONTEXT_WINDOW': '40960',
-    'LEARNING_RATE': '1e-5', 'LORA_RANK': '32', 'GROUPS_PER_BATCH': '16', 'GROUP_SIZE': '32',
+    'LEARNING_RATE': '2e-5', 'LORA_RANK': '32', 'GROUPS_PER_BATCH': '16', 'GROUP_SIZE': '32',
     'TTD_LOSS_FN': 'importance_sampling', 'TTD_ADV_ESTIMATOR': 'piecewise_valid_entropic_centered',
     'TTD_ADV_PIECEWISE_ALPHA': '1.0', 'TTD_REJECT_TRUNCATED': '1', 'TTD_FB_GROUPS_PER_REQUEST': '4',
     'TTD_OPTIM_EARLY': '1', 'TTD_GRADE_BUDGET_S': '1000', 'EVAL_TIMEOUT': '1100', 'TTD_ERDOS_PROMPT_CPUS': '1',

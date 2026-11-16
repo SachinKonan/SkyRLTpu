@@ -2,7 +2,7 @@
 # Launch one Inkling-2-Small Erdős run on Tinker (client on della-vis1, grading on the gradefarm hosts).
 # Usage: launch_run.sh RUN_NAME NUM_STEPS [LORA_SEED]
 # Settings mirror the live Erdős merge runs (profile rebut-merge-erdos-muse-a client env) except the Tinker/Inkling
-# specifics: model, renderer + effort, client-side thinking cap, lr 1e-5, gradefarm-only seeded 1000 s grading.
+# specifics: model, renderer + effort, client-side thinking cap, lr 2e-5 (2x the cookbook RL default; Inkling LR is uncalibrated), gradefarm-only seeded 1000 s grading.
 set -euo pipefail
 NAME=$1; STEPS=$2; LORA_SEED=${3:-1}
 WT=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code/skyrl
@@ -41,7 +41,7 @@ export TTD_FIXED_THINK_TOKENS=24000 TTD_FIXED_TOTAL_TOKENS=32000 TTD_FIXED_BUDGE
 
 # --- training (same as the Erdős runs except lr) ---
 export GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-16}" GROUP_SIZE="${GROUP_SIZE:-32}" NUM_EPOCHS="$STEPS" SAVE_EVERY=1
-export LEARNING_RATE=1e-5 LORA_RANK=32 KL_PENALTY_COEF=0 TTD_KL_MEASURE_EVERY=0 TTD_WARMUP_FB=0
+export LEARNING_RATE="${LEARNING_RATE:-2e-5}" LORA_RANK=32 KL_PENALTY_COEF=0 TTD_KL_MEASURE_EVERY=0 TTD_WARMUP_FB=0
 export TTD_LOSS_FN=importance_sampling TTD_ADV_ESTIMATOR=piecewise_valid_entropic_centered TTD_ADV_PIECEWISE_ALPHA=1.0
 export TTD_REJECT_TRUNCATED=1 TTD_EXPLICIT_LORA_SEED=1 TTD_M0_LORA_SEED="$LORA_SEED" TTD_INIT_STATE_SEED="$LORA_SEED"
 export TTD_ERDOS_RECORD=0.3808563 TTD_ERDOS_CVXPY_SOLVERS="CLARABEL, SCS, OSQP, HIGHS, SCIPY"
