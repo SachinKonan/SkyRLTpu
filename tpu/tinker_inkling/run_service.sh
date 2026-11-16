@@ -48,6 +48,9 @@ case "$cmd" in
     systemctl --user stop "tinker-run-$1"; echo "stopped tinker-run-$1";;
   tunnel)
     pkill -u "$(id -u)" -f "$D/tunnel_loop.sh" 2>/dev/null || true  # an unsupervised loop would hold the ports
+    # ...and so would a stray forwarding ssh (a hand-started one carried all grading for a day on 2026-11-16 while
+    # the supervised loop failed to bind every 10 s)
+    pkill -u "$(id -u)" -f "^ssh .*-L 127\.0\.0\.1:27861:" 2>/dev/null || true
     sleep 2
     start_unit tinker-tunnel always /bin/bash -c "exec /bin/bash $D/tunnel_loop.sh >> $D/tunnel_loop.log 2>&1"
     echo "started tinker-tunnel";;
