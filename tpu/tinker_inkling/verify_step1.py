@@ -13,16 +13,16 @@ from pathlib import Path
 RUNS = Path(os.environ.get('GRID_RUNS', '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs'))
 CODE = Path('/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code')
 EXPECT = {  # agreed settings (REVIEW.md, 2026-11-16)
-    'TTD_ENSEMBLE_MODELS': 'thinkingmachines/Inkling-2-Small:tml_v0:inkling', 'TTD_INKLING_EFFORT': '0.8',
-    'TTD_FIXED_THINK_TOKENS': '24000', 'TTD_FIXED_TOTAL_TOKENS': '32000', 'CONTEXT_WINDOW': '40960',
-    'LEARNING_RATE': '2e-5', 'LORA_RANK': '32', 'GROUPS_PER_BATCH': '16', 'GROUP_SIZE': '32',
+    'TTD_ENSEMBLE_MODELS': 'thinkingmachines/Inkling-2-Small:tml_v0:inkling', 'TTD_INKLING_EFFORT': '0.75',
+    'TTD_FIXED_THINK_TOKENS': '22718', 'TTD_FIXED_TOTAL_TOKENS': '32718', 'CONTEXT_WINDOW': '32768',
+    'LEARNING_RATE': '1e-5', 'LORA_RANK': '32', 'GROUPS_PER_BATCH': '16', 'GROUP_SIZE': '32',
     'TTD_LOSS_FN': 'importance_sampling', 'TTD_ADV_ESTIMATOR': 'piecewise_valid_entropic_centered',
-    'TTD_ADV_PIECEWISE_ALPHA': '1.0', 'TTD_REJECT_TRUNCATED': '1', 'TTD_FB_GROUPS_PER_REQUEST': '4',
+    'TTD_ADV_PIECEWISE_ALPHA': '1.0', 'TTD_REJECT_TRUNCATED': '0', 'TTD_FB_GROUPS_PER_REQUEST': '4',
     'TTD_OPTIM_EARLY': '1', 'TTD_GRADE_BUDGET_S': '1000', 'EVAL_TIMEOUT': '1100', 'TTD_ERDOS_PROMPT_CPUS': '1',
     'TTD_ERDOS_RECORD': '0.3808563', 'TTD_ERDOS_CVXPY_SOLVERS': 'CLARABEL, SCS, OSQP, HIGHS, SCIPY',
     'TTD_ERDOS_PROMPT': 'v2', 'TTD_SAFE_GRADE_MAX_WORKERS': '512', 'TTD_EVAL_BACKEND': 'farm',
-    'KL_PENALTY_COEF': '0', 'TTD_FIXED_BUDGET_FIT': '1', 'TTD_M0_CONTEXT_WINDOW': '40960',
-    'TTD_M0_TRAIN_MAX_SEQ': '40960', 'TTD_M0_PHASE1_MAX_TOKENS': '32768', 'TTD_GRADE_WAIT_TIMEOUT': '172800',
+    'KL_PENALTY_COEF': '0', 'TTD_FIXED_BUDGET_FIT': '1', 'TTD_M0_CONTEXT_WINDOW': '32768',
+    'TTD_M0_TRAIN_MAX_SEQ': '32768', 'TTD_M0_PHASE1_MAX_TOKENS': '32768', 'TTD_GRADE_WAIT_TIMEOUT': '172800', 'TTD_ERDOS_ANSWER_RULES': '1',
 }
 PER_SEED = ('TTD_M0_LORA_SEED', 'TTD_INIT_STATE_SEED')   # must equal the seed number i of run <grid>-s<i>
 
@@ -152,9 +152,11 @@ def main():
         prompt = subprocess.run(['/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python', '-W', 'ignore', '-c', script,
                                  json.dumps({k: v for k, v in env.items() if k.startswith('TTD_')}), json.dumps(st)],
                                 capture_output=True, text=True, timeout=300).stdout
-        checks = {'effort 0.8': re.search(r'effort level: 0\.8(?![0-9])', prompt) is not None, 'CPUs: 1': '**CPUs**: 1 available' in prompt,
+        checks = {'effort 0.75': re.search(r'effort level: 0\.75(?![0-9])', prompt) is not None, 'CPUs: 1': '**CPUs**: 1 available' in prompt,
                   'record 0.3808563': 'C₅ ≤ 0.3808563' in prompt, 'solver list': 'installed solvers: CLARABEL' in prompt,
-                  'seed rule': 'fixed `seed` and `budget_s`' in prompt, 'lower is better': '(higher is better)' not in prompt}
+                  'seed rule': 'fixed `seed` and `budget_s`' in prompt, 'lower is better': '(higher is better)' not in prompt,
+                  'code-only rule': 'only the final Python program' in prompt, 'compact rule': 'Keep the program compact' in prompt,
+                  'solver note': 'cannot be interrupted once started' in prompt}
         fails += [f'prompt: {k} missing' for k, ok in checks.items() if not ok]
         lines.append('\n## Prompt as sent (seed 1, start state 0)\n```\n' + prompt.strip()[:6000] + '\n```')
         lines.append('Prompt checks: ' + ', '.join(f'{k} {"OK" if ok else "FAIL"}' for k, ok in checks.items()))

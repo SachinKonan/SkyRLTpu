@@ -2,7 +2,7 @@
 # Launch one Inkling-2-Small Erdős run on Tinker (client on della-vis1, grading on the gradefarm hosts).
 # Usage: launch_run.sh RUN_NAME NUM_STEPS [LORA_SEED]
 # Settings mirror the live Erdős merge runs (profile rebut-merge-erdos-muse-a client env) except the Tinker/Inkling
-# specifics: model, renderer + effort, client-side thinking cap, lr 2e-5 (2x the cookbook RL default; Inkling LR is uncalibrated), gradefarm-only seeded 1000 s grading.
+# specifics: model, renderer + effort, client-side thinking cap, lr 1e-5 (v2 after the pilot; the cookbook RL default), gradefarm-only seeded 1000 s grading.
 set -euo pipefail
 {  # whole script in one block: bash parses it all before running, so replacing this file mid-run (deploy) is safe
 NAME=$1; STEPS=$2; LORA_SEED=${3:-1}
@@ -52,18 +52,22 @@ export TTD_RUN_DIR="$RUN" EXPERIMENT_NAME="$NAME" SKYRL_RUN_ID="$NAME"
 
 # --- model / sampling (Inkling) ---
 export TTD_ENSEMBLE_MODELS="thinkingmachines/Inkling-2-Small:tml_v0:inkling" TTD_ALLOW_SINGLE_MEMBER=1
-export TTD_INKLING_EFFORT="${TTD_INKLING_EFFORT:-0.8}" TTD_ANSWER_ONLY_CODE=1 TTD_ANSWER_MODEL_FAMILY=inkling
+export TTD_INKLING_EFFORT="${TTD_INKLING_EFFORT:-0.75}" TTD_ANSWER_ONLY_CODE=1 TTD_ANSWER_MODEL_FAMILY=inkling
 export TTD_NATIVE_THINKING_BUDGET=0 TTD_QWEN_TWO_PHASE=0 TTD_MIN_THINK_TOKENS=0
-# fixed budget for every prompt: 24k thinking + 8k answer = 32k generated; 40k context fits prompts up to ~8.9k
-# (a longer prompt shrinks thinking to fit: TTD_FIXED_BUDGET_FIT=1)
-export CONTEXT_WINDOW=40960 TTD_M0_CONTEXT_WINDOW=40960 TTD_M0_TRAIN_MAX_SEQ=40960 TTD_M0_PHASE1_MAX_TOKENS=32768
-export TTD_FIXED_THINK_TOKENS=24000 TTD_FIXED_TOTAL_TOKENS=32000 TTD_FIXED_BUDGET_FIT=1
+# v2 budget (user 2026-11-16, after the pilot): prompt + thinking + answer <= 32,768 tokens, the answer always keeps
+# 10,000. With FIT=1 the client sets total = 32,768 - prompt - 50 (context buffer) and thinking = total - 10,000, so
+# thinking is ~22k at step 0 (prompt ~0.7k) and shrinks as the parent code in the prompt grows; the answer does not.
+export CONTEXT_WINDOW=32768 TTD_M0_CONTEXT_WINDOW=32768 TTD_M0_TRAIN_MAX_SEQ=32768 TTD_M0_PHASE1_MAX_TOKENS=32768
+export TTD_FIXED_TOTAL_TOKENS=32718 TTD_FIXED_THINK_TOKENS=22718 TTD_FIXED_BUDGET_FIT=1
+# answer rules in the prompt: code only, compact, solver calls cannot be interrupted (client env.py)
+export TTD_ERDOS_ANSWER_RULES=1
 
 # --- training (same as the Erdős runs except lr) ---
 export GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-16}" GROUP_SIZE="${GROUP_SIZE:-32}" NUM_EPOCHS="$STEPS" SAVE_EVERY=1
-export LEARNING_RATE="${LEARNING_RATE:-2e-5}" LORA_RANK=32 KL_PENALTY_COEF=0 TTD_KL_MEASURE_EVERY=0 TTD_WARMUP_FB=0
+export LEARNING_RATE="${LEARNING_RATE:-1e-5}" LORA_RANK=32 KL_PENALTY_COEF=0 TTD_KL_MEASURE_EVERY=0 TTD_WARMUP_FB=0
 export TTD_LOSS_FN=importance_sampling TTD_ADV_ESTIMATOR=piecewise_valid_entropic_centered TTD_ADV_PIECEWISE_ALPHA=1.0
-export TTD_REJECT_TRUNCATED=1 TTD_EXPLICIT_LORA_SEED=1 TTD_M0_LORA_SEED="$LORA_SEED" TTD_INIT_STATE_SEED="$LORA_SEED"
+# cut-off answers are trained as failures (reward 0), not dropped: nothing else discourages answers that never end
+export TTD_REJECT_TRUNCATED=0 TTD_EXPLICIT_LORA_SEED=1 TTD_M0_LORA_SEED="$LORA_SEED" TTD_INIT_STATE_SEED="$LORA_SEED"
 export TTD_ERDOS_RECORD=0.3808563 TTD_ERDOS_CVXPY_SOLVERS="CLARABEL, SCS, OSQP, HIGHS, SCIPY"
 export TTD_ELITE_SLOTS=2 TTD_ERDOS_PROMPT=v2 TTD_CROSS_WEIGHT=0 TTD_FLATLINE_STOP=0 TTD_RESTART_RATIO=0
 export TTD_FB_GROUPS_PER_REQUEST=4 TTD_OPTIM_EARLY=1
