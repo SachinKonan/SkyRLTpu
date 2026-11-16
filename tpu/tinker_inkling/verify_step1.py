@@ -13,7 +13,7 @@ from pathlib import Path
 RUNS = Path(os.environ.get('GRID_RUNS', '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs'))
 CODE = Path('/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code')
 EXPECT = {  # agreed settings (REVIEW.md, 2026-11-16)
-    'TTD_ENSEMBLE_MODELS': 'thinkingmachines/Inkling-2-Small:tml_v0:inkling', 'TTD_INKLING_EFFORT': '0.75',
+    'TTD_ENSEMBLE_MODELS': 'thinkingmachines/Inkling-2-Small:tml_v0:inkling', 'TTD_INKLING_EFFORT': '0.8',
     'TTD_FIXED_THINK_TOKENS': '24000', 'TTD_FIXED_TOTAL_TOKENS': '32000', 'CONTEXT_WINDOW': '40960',
     'LEARNING_RATE': '2e-5', 'LORA_RANK': '32', 'GROUPS_PER_BATCH': '16', 'GROUP_SIZE': '32',
     'TTD_LOSS_FN': 'importance_sampling', 'TTD_ADV_ESTIMATOR': 'piecewise_valid_entropic_centered',
@@ -126,7 +126,7 @@ def main():
         prompt = subprocess.run(['/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python', '-W', 'ignore', '-c', script,
                                  json.dumps({k: v for k, v in env.items() if k.startswith('TTD_')}), json.dumps(st)],
                                 capture_output=True, text=True, timeout=300).stdout
-        checks = {'effort 0.75': 'Thinking effort level: 0.75' in prompt, 'CPUs: 1': '**CPUs**: 1 available' in prompt,
+        checks = {'effort 0.8': re.search(r'effort level: 0\.8(?![0-9])', prompt) is not None, 'CPUs: 1': '**CPUs**: 1 available' in prompt,
                   'record 0.3808563': 'C₅ ≤ 0.3808563' in prompt, 'solver list': 'installed solvers: CLARABEL' in prompt,
                   'seed rule': 'fixed `seed` and `budget_s`' in prompt, 'lower is better': '(higher is better)' not in prompt}
         fails += [f'prompt: {k} missing' for k, ok in checks.items() if not ok]
