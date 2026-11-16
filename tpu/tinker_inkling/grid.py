@@ -37,6 +37,11 @@ SEED_TARGET = ({int(a): int(b) for a, b in (kv.split(':') for kv in os.environ['
                if os.environ.get('GRID_TARGETS') else
                {**{i: 30 for i in (1, 2, 3)}, **{i: 15 for i in (4, 5, 6)}, **{i: 10 for i in (7, 8, 9)}})
 LOOP_S = int(os.environ.get('GRID_LOOP_S', '120'))
+# No-training controls: GRID_FROZEN="1:10" adds run <G>-f1 = seed 1's exact scaffold (same LoRA init, start tree, grading)
+# with no policy update (TTD_FROZEN_POLICY=1, lr 0), to step 10. Not part of any arm's 90-step budget.
+FROZEN = ({int(a): int(b) for a, b in (kv.split(':') for kv in os.environ['GRID_FROZEN'].split(','))}
+          if os.environ.get('GRID_FROZEN') else {})
+FROZEN_ENV = ['TTD_FROZEN_POLICY=1', 'LEARNING_RATE=0']
 # Launch gate: every run stops at HOLD_AFTER steps until the user creates <grid dir>/RELEASE (0 disables the gate).
 HOLD_AFTER = int(os.environ.get('GRID_HOLD_AFTER', '1'))
 RELEASE = GRID_DIR / 'RELEASE'
@@ -103,8 +108,15 @@ def ledger(name):
 
 def gstep(name):
     """Committed steps = highest checkpoint batch in the ledger (global_step.json can lag it by one after a crash
-    between the checkpoint row and the counter update)."""
-    return max((int(r.get('batch', 0)) for r in ledger(name)), default=0)
+    between the checkpoint row and the counter update). A frozen (no-training) run writes no checkpoint rows: its
+    step is global_step.json."""
+    rows = ledger(name)
+    if rows:
+        return max(int(r.get('batch', 0)) for r in rows)
+    try:
+        return int(json.loads((logdir(name) / 'global_step.json').read_text())['global_step'])
+    except (OSError, ValueError, KeyError):
+        return 0
 
 
 def has_checkpoint(name, batch):
@@ -113,6 +125,16 @@ def has_checkpoint(name, batch):
 
 def is_clone(name):
     return re.fullmatch(rf'{re.escape(G)}-c\d+-s\d+', name) is not None
+
+
+def frozen_name(i):
+    return f'{G}-f{i}'
+
+
+def run_seed(name):
+    """Seed number of a seed run <G>-s<i>, a clone <G>-c<j>-s<i> or a control <G>-f<i>."""
+    m = re.fullmatch(rf'{re.escape(G)}-(?:c\d+-)?[sf](\d+)', name)
+    return int(m.group(1)) if m else None
 
 
 def snapshot(name, step):
@@ -247,6 +269,9 @@ def prepare_clone(name, src):
                                                              visit_counts='reset', optimizer='fresh'), indent=1))
     (tmpdir / 'global_step.json').write_text(json.dumps(dict(global_step=FORK)))
     dst.parent.mkdir(parents=True, exist_ok=True)
+    pin = RUNS / s / 'code.pin'
+    if pin.exists():   # a clone runs its source seed's code, whatever is deployed now
+        shutil.copyfile(pin, RUNS / name / 'code.pin')
     os.replace(tmpdir, dst)
     log(f'prepared clone {name} from {s} step {FORK} ({row["state_path"]})')
 
@@ -254,6 +279,7 @@ def prepare_clone(name, src):
 def plan():
     """{run name: (target step, seed, extra env)} for everything the grid needs so far."""
     p = {seed_name(i): (t, i, []) for i, t in SEED_TARGET.items()}
+    p.update({frozen_name(i): (t, i, list(FROZEN_ENV)) for i, t in FROZEN.items()})
     d = decide()
     if d:
         for src, n in d['prune_extra_steps'].items():
@@ -297,7 +323,7 @@ def reconcile(dry=False):
     if held():
         p = {n: (min(t, HOLD_AFTER), seed, env) for n, (t, seed, env) in p.items()}
         ok = stagger_allowed()
-        p = {n: v for n, v in p.items() if is_clone(n) or int(n.rsplit('-s', 1)[1]) in ok}
+        p = {n: v for n, v in p.items() if is_clone(n) or run_seed(n) in ok}
     for name, (target, seed, env) in sorted(p.items()):
         try:   # one failing run never blocks the others; errors go to grid.log for the watchdog
             if is_clone(name) and d:

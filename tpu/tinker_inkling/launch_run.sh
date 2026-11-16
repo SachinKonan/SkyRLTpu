@@ -6,12 +6,30 @@
 set -euo pipefail
 {  # whole script in one block: bash parses it all before running, so replacing this file mid-run (deploy) is safe
 NAME=$1; STEPS=$2; LORA_SEED=${3:-1}
-WT=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code/skyrl
-DISC=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code/discover
+CODE=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code
 PY=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python
 RUN=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs/$NAME
 REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry.json
 mkdir -p "$RUN"
+# Code pinning: the first launch records the deployed snapshots in $RUN/code.pin; every later (re)start of this run
+# execs the PINNED copy of this script with the pinned client code, so a deploy never changes a running experiment.
+# (A clone gets its source seed's pin from grid.py.) Delete code.pin only to move a run to new code on purpose.
+PIN="$RUN/code.pin"
+if [ -z "${LAUNCH_PINNED:-}" ]; then
+  if [ ! -f "$PIN" ]; then
+    printf 'PIN_SKYRL=%s\nPIN_DISCOVER=%s\n' "$(readlink -f "$CODE/skyrl")" "$(readlink -f "$CODE/discover")" > "$PIN.tmp"
+    mv "$PIN.tmp" "$PIN"
+  fi
+  # shellcheck disable=SC1090
+  . "$PIN"
+  [ -f "$PIN_SKYRL/tpu/tinker_inkling/launch_run.sh" ] && [ -d "$PIN_DISCOVER/ttt_discover" ] \
+    || { echo "[launch_run] pinned code missing: $PIN_SKYRL / $PIN_DISCOVER"; exit 1; }
+  echo "[launch_run] code pinned: $PIN_SKYRL $PIN_DISCOVER"
+  export LAUNCH_PINNED=1 PIN_SKYRL PIN_DISCOVER
+  exec /bin/bash "$PIN_SKYRL/tpu/tinker_inkling/launch_run.sh" "$@"
+fi
+WT=$PIN_SKYRL
+DISC=$PIN_DISCOVER
 
 # Tinker key from ~/.bashrc (never printed).
 export TINKER_API_KEY="$(bash -ic 'printf %s "$TINKER_API_KEY"' 2>/dev/null)"
@@ -75,7 +93,7 @@ export PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1
 export DIAG_DIR="$RUN/diag"; mkdir -p "$DIAG_DIR"
 set +e
 # Forensics wrapper (same client; logs signals, kills, exits, heartbeats to $DIAG_DIR).
-"$PY" -X faulthandler -W ignore::DeprecationWarning /scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/diag_run.py &
+"$PY" -X faulthandler -W ignore::DeprecationWarning "$WT/tpu/tinker_inkling/diag_run.py" &
 PID=$!
 echo "[launch_run] client pid $PID (pgid $(ps -o pgid= -p $PID | tr -d ' '), sid $(ps -o sid= -p $PID | tr -d ' '))"
 # strace: every signal delivered to any thread (with sender pid/uid for catchable ones) and how the process ends.

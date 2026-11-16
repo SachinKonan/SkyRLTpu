@@ -189,16 +189,24 @@ def progress_mtime(run):
 
 
 def committed_step(run):
-    """Highest checkpoint batch in the run's ledger (what a restart resumes from)."""
-    best = 0
+    """Highest checkpoint batch in the run's ledger (what a restart resumes from). A frozen (no-training) run writes
+    no checkpoint rows; its step is global_step.json."""
+    best, rows = 0, False
     for p in run.glob('tinker_log/*/member_inkling/checkpoints.jsonl'):
         try:
             for l in open(p):
                 m = re.search(r'"batch": (\d+)', l)
                 if m:
+                    rows = True
                     best = max(best, int(m.group(1)))
         except OSError:
             pass
+    if not rows:
+        for p in run.glob('tinker_log/*/global_step.json'):
+            try:
+                best = max(best, int(json.loads(p.read_text())['global_step']))
+            except (OSError, ValueError, KeyError):
+                pass
     return best
 
 
