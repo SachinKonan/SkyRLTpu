@@ -4,6 +4,7 @@
 #   run_service.sh stop NAME                             stop it (no restart)
 #   run_service.sh tunnel                                start tinker-tunnel (SSH forwards to gradefarm, always restarted)
 #   run_service.sh watch [VAR=VALUE ...]                 start tinker-watch (hang watchdog, capacity + failure email)
+#   run_service.sh grid GRID [VAR=VALUE ...]             start tinker-grid-GRID (grid scheduler loop, grid.py)
 #   run_service.sh status                                list the units
 # After a vis1 reboot: run `tunnel`, `watch`, then `run ...` again for each unfinished run (they resume from disk).
 set -euo pipefail
@@ -38,6 +39,11 @@ case "$cmd" in
     SETENV=(); for kv in "$@"; do SETENV+=(--setenv="$kv"); done
     start_unit tinker-watch always "${SETENV[@]}" /usr/bin/python3 -u "$D/tinker_watch.py"
     echo "started tinker-watch";;
+  grid)    # run_service.sh grid GRID_NAME [VAR=VALUE ...]  -> unit tinker-grid-GRID_NAME (scheduler loop)
+    GN=$1; shift
+    SETENV=(--setenv=GRID="$GN"); for kv in "$@"; do SETENV+=(--setenv="$kv"); done
+    start_unit "tinker-grid-$GN" always "${SETENV[@]}" /usr/bin/python3 -u "$D/grid.py" loop
+    echo "started tinker-grid-$GN";;
   status)
     systemctl --user list-units --all --plain --no-legend 'tinker-*' || true;;
   *) echo "unknown command $cmd"; exit 2;;
