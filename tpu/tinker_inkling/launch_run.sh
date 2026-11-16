@@ -32,7 +32,7 @@ export TTD_RUN_DIR="$RUN" EXPERIMENT_NAME="$NAME" SKYRL_RUN_ID="$NAME"
 
 # --- model / sampling (Inkling) ---
 export TTD_ENSEMBLE_MODELS="thinkingmachines/Inkling-2-Small:tml_v0:inkling" TTD_ALLOW_SINGLE_MEMBER=1
-export TTD_INKLING_EFFORT=0.75 TTD_ANSWER_ONLY_CODE=1 TTD_ANSWER_MODEL_FAMILY=inkling
+export TTD_INKLING_EFFORT="${TTD_INKLING_EFFORT:-0.75}" TTD_ANSWER_ONLY_CODE=1 TTD_ANSWER_MODEL_FAMILY=inkling
 export TTD_NATIVE_THINKING_BUDGET=0 TTD_QWEN_TWO_PHASE=0 TTD_MIN_THINK_TOKENS=0
 # fixed budget for every prompt: 24k thinking + 8k answer = 32k generated; 40k context fits prompts up to ~8.9k
 # (a longer prompt shrinks thinking to fit: TTD_FIXED_BUDGET_FIT=1)
