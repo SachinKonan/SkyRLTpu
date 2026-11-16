@@ -3,7 +3,7 @@ import importlib.util, os, shutil, sys, tempfile
 from pathlib import Path
 
 tmp = Path(tempfile.mkdtemp(prefix='gridgate-', dir=os.environ.get('TMPDIR', '/tmp')))
-os.environ.update(GRID='t2', GRID_RUNS=str(tmp), GRID_HOLD_AFTER='1')
+os.environ.update(GRID='t2', GRID_RUNS=str(tmp), GRID_HOLD_AFTER='1', GRID_STAGGER='0')  # batching: test_grid_stagger.py
 spec = importlib.util.spec_from_file_location('grid2', sys.argv[1])
 g = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(g)

@@ -65,7 +65,8 @@ export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 1, "memory_gib": 1, "memory_max
 export SKYRL_GRADING_MAX_INFRA_RETRIES=8 SKYRL_GRADING_LONG_POLL_SECONDS=20
 export SKYRL_GRADING_JOURNAL="$RUN/grading-journal.jsonl" SKYRL_GRADING_EVENTS="$RUN/grading-events.jsonl"
 
-env | grep -E '^(TTD_|GROUP|NUM_|LEARNING|LORA|CONTEXT|EVAL|SKYRL_)' | sort > "$RUN/env.txt"
+env | grep -E '^(TTD_|GROUP|NUM_|LEARNING|LORA|CONTEXT|EVAL|SKYRL_|KL_)' | sort > "$RUN/env.txt"
+echo "CODE_SKYRL=$(readlink -f "$WT")" >> "$RUN/env.txt"; echo "CODE_DISCOVER=$(readlink -f "$DISC")" >> "$RUN/env.txt"
 echo "run $NAME steps $STEPS lora_seed $LORA_SEED grade_seed $TTD_GRADE_SEED -> $RUN"
 cd "$WT"
 # Diagnostics: tracebacks on native crashes / fatal signals, unbuffered output, and the exit status recorded.

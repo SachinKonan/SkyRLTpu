@@ -40,6 +40,11 @@ LOOP_S = int(os.environ.get('GRID_LOOP_S', '120'))
 # Launch gate: every run stops at HOLD_AFTER steps until the user creates <grid dir>/RELEASE (0 disables the gate).
 HOLD_AFTER = int(os.environ.get('GRID_HOLD_AFTER', '1'))
 RELEASE = GRID_DIR / 'RELEASE'
+# While held, seeds start in batches of STAGGER (1-3, 4-6, 7-9): the next batch starts once every run of the previous
+# batch has reached the hold step or submitted STAGGER_GRADES grades (its sampling is mostly done, so the next batch
+# samples while this one grades, and a broken setup shows up after 3 runs instead of 9). 0 = all at once.
+STAGGER = int(os.environ.get('GRID_STAGGER', '3'))
+STAGGER_GRADES = int(os.environ.get('GRID_STAGGER_GRADES', '384'))
 # Stops written by the watchdog: RUNS/COST_STOP (spend hard stop: start nothing) and RUNS/<run>/BLOCKED (crash loop:
 # do not restart that run). Delete the file to allow starts again.
 COST_STOP = RUNS / 'COST_STOP'
@@ -79,11 +84,21 @@ def logdir(name):
 
 
 def ledger(name):
-    """Checkpoint rows of a run (what a restart resumes from)."""
+    """Checkpoint rows of a run (what a restart resumes from). Parsed per line: one torn or malformed line is
+    skipped, it does not hide the other rows."""
+    rows = []
     try:
-        return [json.loads(l) for l in open(logdir(name) / 'member_inkling' / 'checkpoints.jsonl') if l.strip()]
-    except (OSError, ValueError):
-        return []
+        lines = open(logdir(name) / 'member_inkling' / 'checkpoints.jsonl').read().splitlines()
+    except OSError:
+        return rows
+    for l in lines:
+        try:
+            r = json.loads(l)
+        except ValueError:
+            continue
+        if isinstance(r, dict):
+            rows.append(r)
+    return rows
 
 
 def gstep(name):
@@ -253,12 +268,36 @@ def held():
     return HOLD_AFTER > 0 and not RELEASE.exists()
 
 
+def submitted_grades(name):
+    try:
+        with open(RUNS / name / 'grading-journal.jsonl', errors='ignore') as f:
+            return sum(1 for l in f if l.startswith('{"event": "submitted"'))
+    except OSError:
+        return 0
+
+
+def stagger_allowed():
+    """Seed numbers allowed to start while held (all seeds when not staggering)."""
+    if not STAGGER or not held():
+        return set(range(1, 10))
+    allowed = set()
+    for b in range(0, 9, STAGGER):
+        batch = list(range(b + 1, min(b + STAGGER, 9) + 1))
+        allowed |= set(batch)
+        if not all(gstep(seed_name(i)) >= HOLD_AFTER or submitted_grades(seed_name(i)) >= STAGGER_GRADES
+                   for i in batch):
+            break
+    return allowed
+
+
 def reconcile(dry=False):
     if COST_STOP.exists():
         return
     p, d = plan()
     if held():
         p = {n: (min(t, HOLD_AFTER), seed, env) for n, (t, seed, env) in p.items()}
+        ok = stagger_allowed()
+        p = {n: v for n, v in p.items() if is_clone(n) or int(n.rsplit('-s', 1)[1]) in ok}
     for name, (target, seed, env) in sorted(p.items()):
         try:   # one failing run never blocks the others; errors go to grid.log for the watchdog
             if is_clone(name) and d:

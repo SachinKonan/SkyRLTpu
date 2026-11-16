@@ -48,13 +48,22 @@ def log(msg):
 
 
 def mail(subject, body):
+    """Never raises and never hangs the loop (sendmail gets 60 s)."""
     msg = f'To: {TO}\nSubject: [tinker-inkling] {subject}\n\n{body}\n'
-    subprocess.run(['/usr/sbin/sendmail', '-t'], input=msg, text=True, check=False)
-    log(f'emailed: {subject}')
+    try:
+        subprocess.run(['/usr/sbin/sendmail', '-t'], input=msg, text=True, check=False, timeout=60)
+        log(f'emailed: {subject}')
+    except Exception as e:
+        log(f'EMAIL FAILED ({e!r}): {subject}')
+
+
+def run(cmd, timeout=120, **kw):
+    """subprocess.run with a timeout so a hung child (systemctl, bash) cannot freeze the watchdog."""
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, **kw)
 
 
 def sh(*args):
-    return subprocess.run(list(args), capture_output=True, text=True).stdout.strip()
+    return run(list(args)).stdout.strip()
 
 
 def unit_state(unit):
@@ -64,22 +73,65 @@ def unit_state(unit):
 
 
 def list_units(pattern):
-    out = sh('systemctl', '--user', 'list-units', '--all', '--plain', '--no-legend', pattern)
-    return [l.split()[0] for l in out.splitlines() if l.strip()]
+    r = run(['systemctl', '--user', 'list-units', '--all', '--plain', '--no-legend', pattern])
+    if r.returncode != 0:
+        raise RuntimeError(f'systemctl list-units {pattern} failed rc={r.returncode}: {r.stderr.strip()[-200:]}')
+    return [l.split()[0] for l in r.stdout.splitlines() if l.strip()]
+
+
+# List prices per million tokens (Tinker billing rates seen for Inkling-2-Small on 2026-11-13..16). Used for rows the
+# billing export leaves blank: a completed UTC day stays unpriced until it reconciles with the invoice, so summing only
+# the priced rows would drop whole days. Unknown kinds are priced at the highest rate (over- rather than under-count).
+FALLBACK_RATE = {'sampling_sample': 1.0, 'training': 1.5, 'sampling_prefill:True': 0.03,
+                 'sampling_prefill:False': 0.3}
+STORAGE_RATE_GB_MONTH = 0.1
+
+
+def price_rows(rows):
+    """USD over billing rows: the export's estimate where present, else quantity x rate (the same model/kind's rate seen
+    in this export, else FALLBACK_RATE). Returns (total, unpriced_usd) so the log shows how much was filled in."""
+    seen = {}
+    for x in rows:
+        if x.get('estimated_cost_usd') and x.get('effective_rate_usd_per_million_tokens'):
+            k = (x.get('base_model'), x.get('type'), x.get('cached'))
+            seen[k] = max(seen.get(k, 0.0), float(x['effective_rate_usd_per_million_tokens']))
+    total = filled = 0.0
+    for x in rows:
+        if x.get('estimated_cost_usd'):
+            total += float(x['estimated_cost_usd'])
+            continue
+        if x.get('type') == 'storage' or x.get('gigabyte_hours'):
+            usd = float(x.get('gigabyte_hours') or 0) / 720 * STORAGE_RATE_GB_MONTH
+        else:
+            k = (x.get('base_model'), x.get('type'), x.get('cached'))
+            rate = seen.get(k) or FALLBACK_RATE.get(f"{x.get('type')}:{x.get('cached')}") \
+                or FALLBACK_RATE.get(x.get('type') or '') or max(FALLBACK_RATE.values())
+            usd = float(x.get('token_count') or 0) / 1e6 * rate
+        total += usd
+        filled += usd
+    return total, filled
 
 
 def tinker_spend(since):
-    """Total estimated Tinker cost (USD) from `since` to the next hour (billing usage allows <= 14 days)."""
+    """Total Tinker cost (USD) from `since` to the next hour, in <= 14-day windows (the export's limit)."""
     import csv, datetime, tempfile
-    key = subprocess.run(['bash', '-ic', 'printf %s "$TINKER_API_KEY"'], capture_output=True, text=True).stdout
-    end = (datetime.datetime.utcnow() + datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:00:00Z')
-    with tempfile.NamedTemporaryFile(suffix='.csv') as f:
-        r = subprocess.run([TINKER_CLI, 'billing', 'usage', since, end, '--csv', f.name], capture_output=True,
-                           text=True, env=dict(os.environ, TINKER_API_KEY=key), timeout=300)
-        if r.returncode != 0:
-            raise RuntimeError(f'billing usage failed: {r.stderr.strip()[-200:]}')
-        rows = list(csv.DictReader(open(f.name)))
-    return sum(float(x['estimated_cost_usd'] or 0) for x in rows)
+    key = run(['bash', '-ic', 'printf %s "$TINKER_API_KEY"'], timeout=60).stdout
+    fmt = '%Y-%m-%dT%H:00:00Z'
+    start = datetime.datetime.strptime(since, '%Y-%m-%dT%H:%M:%SZ')
+    end = datetime.datetime.utcnow().replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
+    rows = []
+    while start < end:
+        stop = min(end, start + datetime.timedelta(days=14))
+        with tempfile.NamedTemporaryFile(suffix='.csv') as f:
+            r = run([TINKER_CLI, 'billing', 'usage', start.strftime(fmt), stop.strftime(fmt), '--csv', f.name],
+                    timeout=300, env=dict(os.environ, TINKER_API_KEY=key))
+            if r.returncode != 0:
+                raise RuntimeError(f'billing usage failed: {r.stderr.strip()[-200:]}')
+            rows += list(csv.DictReader(open(f.name)))
+        start = stop
+    total, filled = price_rows(rows)
+    log(f'billing rows {len(rows)}; ${filled:.2f} of the total priced here from unpriced rows')
+    return total
 
 
 def refresh_registry():
@@ -151,16 +203,22 @@ def committed_step(run):
 
 
 class Tail:
-    """Incremental reader: new complete lines of a file since the last call (in memory; a restart re-reads from 0)."""
+    """Incremental reader: new complete lines of a file since the last call (offsets in memory). from_end=True: on
+    first sight start at the current end (logs: a watchdog restart must not re-report old lines); else from 0."""
     def __init__(self):
         self.off = {}
 
-    def new_lines(self, path):
+    def new_lines(self, path, from_end=False):
         path = str(path)
         try:
             with open(path, 'rb') as f:
                 f.seek(0, 2)
                 size = f.tell()
+                if path not in self.off and from_end:
+                    f.seek(max(0, size - 65536))
+                    tail = f.read()
+                    self.off[path] = size - len(tail) + tail.rfind(b'\n') + 1
+                    return []
                 off = self.off.get(path, 0)
                 if size < off:      # truncated / replaced
                     off = 0
@@ -175,7 +233,7 @@ class Tail:
 
 TAIL = Tail()
 JOURNAL = {}   # run -> {request_id: submit time} still waiting for a result
-SUBMIT_RE = re.compile(r'^\{"event": "(submitted|result)", "request_id": "([^"]+)"')
+SUBMIT_RE = re.compile(r'^\{"event": "(submitted|result|failed)", "request_id": "([^"]+)"')
 TIME_RE = re.compile(r'"time": ([0-9.]+)\}?\s*$')
 
 
@@ -190,13 +248,13 @@ def pending_grades(run, since):
             t = TIME_RE.search(line)
             pend.setdefault(m.group(2), float(t.group(1)) if t else time.time())
         else:
-            pend.pop(m.group(2), None)
+            pend.pop(m.group(2), None)      # result, or failed after the transport's retry cap
     times = [t for t in pend.values() if t >= since]
     return len(times), (min(times) if times else 0.0)
 
 
 def count_new(path, needle):
-    return sum(1 for l in TAIL.new_lines(path) if needle in l)
+    return sum(1 for l in TAIL.new_lines(path, from_end=True) if needle in l)
 
 
 def last_exit(name):
@@ -234,20 +292,32 @@ def check_cost(state):
     if not isinstance(alerted, dict):
         alerted = state['cost_alerted'] = {}
     done = alerted.setdefault(COST_SINCE, [])
-    for t in COST_ALERTS:
-        if spend >= t and t not in done:
-            mail(f'Tinker spend passed ${t:.0f}', f'${spend:.2f} since {COST_SINCE} (tinker billing usage). '
-                 f'Alerts at {COST_ALERTS}; hard stop at ${COST_STOP:.0f}.')
-            done.append(t)
     if COST_STOP and spend >= COST_STOP and not COST_STOP_FILE.exists():
         COST_STOP_FILE.write_text(f'{time.time()} spend ${spend:.2f} since {COST_SINCE} >= ${COST_STOP:.0f}\n')
-        stopped = []
-        for unit in list_units('tinker-grid-*') + list_units('tinker-run-*'):
-            subprocess.run(['systemctl', '--user', 'stop', unit], check=False)
-            stopped.append(unit)
-        mail(f'COST STOP at ${spend:.2f}', f'Spend ${spend:.2f} since {COST_SINCE} reached the hard stop '
-             f'${COST_STOP:.0f}. Wrote {COST_STOP_FILE} (nothing starts while it exists) and stopped: {stopped}. '
-             f'Runs resume from their last checkpoint after you delete the file and restart the grid.')
+        state.pop('cost_stop_mailed', None)
+        enforce_cost_stop(state)
+    for t in COST_ALERTS:
+        if spend >= t and t not in done:
+            done.append(t)
+            mail(f'Tinker spend passed ${t:.0f}', f'${spend:.2f} since {COST_SINCE} (tinker billing usage, blank '
+                 f'rows priced at list rates; lags a few hours). Alerts at {COST_ALERTS}; hard stop at ${COST_STOP:.0f}.')
+
+
+def enforce_cost_stop(state):
+    """While RUNS/COST_STOP exists: stop every grid and run unit still present (every pass, so a unit that slipped
+    through or a failed systemctl call is caught next time). Emails once per stop."""
+    if not COST_STOP_FILE.exists():
+        return
+    units = list_units('tinker-grid-*') + list_units('tinker-run-*')
+    for unit in units:
+        run(['systemctl', '--user', 'stop', '--no-block', unit])
+    if units:
+        log(f'COST STOP: stopping {units}')
+    if not state.get('cost_stop_mailed'):
+        state['cost_stop_mailed'] = True
+        mail('COST STOP', f'{COST_STOP_FILE.read_text().strip()}. Stopping every grid and run unit: {units} (repeated '
+             f'every {CHECK_S}s while the file exists; nothing starts). Runs resume from their last checkpoint after '
+             f'you delete the file and restart the grid.')
 
 
 def check_grids(state):
@@ -267,16 +337,17 @@ def check_grids(state):
             mail(f'grid {g} scheduler GONE', f'Unit tinker-grid-{g} disappeared; no new runs start. '
                  f'Restart: run_service.sh grid {g}')
             state[key] = 'gone'
-        errs = [l for l in TAIL.new_lines(RUNS / f'grid-{g}' / 'grid.log') if 'GRID ERROR' in l or 'reconcile error' in l]
+        errs = [l for l in TAIL.new_lines(RUNS / f'grid-{g}' / 'grid.log', from_end=True)
+                if 'GRID ERROR' in l or 'reconcile error' in l]
         if errs:
             throttled_mail(state, f'griderr:{g}', f'grid {g}: {len(errs)} scheduler error(s)',
                            '\n'.join(errs[-10:]) + f'\nLog: {RUNS}/grid-{g}/grid.log')
 
 
-def note_restart(state, key, name, run, why):
+def note_restart(state, key, name, rundir, why):
     """Count a restart toward the crash-loop cap; stop + block the run when it keeps restarting without progress."""
     s = state[key]
-    step = committed_step(run)
+    step = committed_step(rundir)
     if step > s.get('loop_step', -1):
         s['loop_step'], s['loop_n'] = step, 1
     else:
@@ -285,10 +356,10 @@ def note_restart(state, key, name, run, why):
     if s['loop_n'] >= LOOP_MAX:
         hours = min(BLOCK_MAX_H, BLOCK_H * 2 ** (s['loop_n'] - LOOP_MAX))
         until = time.time() + hours * 3600
-        (run / 'BLOCKED').write_text(f'{until} {s["loop_n"]} restarts at step {step}: {why}\n')
-        subprocess.run(['systemctl', '--user', 'stop', f'tinker-run-{name}.service'], check=False)
+        (rundir / 'BLOCKED').write_text(f'{until} {s["loop_n"]} restarts at step {step}: {why}\n')
+        run(['systemctl', '--user', 'stop', '--no-block', f'tinker-run-{name}.service'])
         mail(f'{name} PAUSED {hours:g} h: crash loop', f'{s["loop_n"]} restarts without a new committed step '
-             f'(step {step}); last: {why}. Wrote {run}/BLOCKED: the grid restarts it after '
+             f'(step {step}); last: {why}. Wrote {rundir}/BLOCKED: the grid restarts it after '
              f'{time.strftime("%Y-%m-%d %H:%MZ", time.gmtime(until))} (each further loop doubles the pause, max '
              f'{BLOCK_MAX_H:g} h). Delete the file to restart sooner. Log: {RUNS}/{name}.log')
         return True
@@ -306,62 +377,90 @@ def check_runs(state, low):
             mail(f'{gone_name} {"finished" if ok else "STOPPED"}', f'{ex or "no exit line"}\nLog: {RUNS}/{gone_name}.log')
             state[key] = dict(state[key], active='gone', restarts=None)
     for unit in units:
-        name = unit[len('tinker-run-'):-len('.service')]
-        run = RUNS / name
-        st = unit_state(unit)
-        key = f'unit:{name}'
-        prev = dict(state.get(key, {}))
-        state[key] = s = dict(prev, active=st.get('ActiveState'), restarts=st.get('NRestarts'))
-        active = s['active']
-        n = count_new(RUNS / f'{name}.log', 'Timeout grading')
-        if n:
-            throttled_mail(state, f'timeout:{name}', f'{name}: {n} grading timeout(s)',
-                           f'"Timeout grading" x{n} in {RUNS}/{name}.log (the run fails and resumes rather than '
-                           f'training on zero rewards). Check the gradefarm hosts.')
-        if prev.get('restarts') is not None and int(st.get('NRestarts') or 0) > int(prev.get('restarts') or 0):
-            ex = last_exit(name)
-            mail(f'{name} crashed and was restarted', f'NRestarts {st.get("NRestarts")}; it resumes from its last '
-                 f'checkpoint. {ex}\nLog: {RUNS}/{name}.log')
-            if note_restart(state, key, name, run, f'crash: {ex or "no exit line"}'):
-                continue
-        if active == 'active':
-            started_mono = int(st.get('ActiveEnterTimestampMonotonic', '0') or 0) / 1e6
-            up_s = time.monotonic() - started_mono if started_mono else 0
-            started_wall = time.time() - up_s
-            npend, oldest = pending_grades(run, started_wall)
-            idle_s = time.time() - max(progress_mtime(run), started_wall)
-            if idle_s > HANG_MIN * 60:
-                if low:
-                    why = 'grading capacity low'
-                elif npend and time.time() - oldest < PENDING_MAX_H * 3600:
-                    why = f'{npend} grades in flight (oldest {(time.time() - oldest) / 3600:.1f} h)'
-                else:
-                    why = ''
-                if why:
-                    if time.time() - s.get('skip_logged', 0) > 3600:
-                        log(f'{name}: no progress for {idle_s/60:.0f} min but not restarting: {why}')
-                        s['skip_logged'] = time.time()
-                    continue
-                log(f'{name}: no progress for {idle_s/60:.0f} min; restarting')
-                if note_restart(state, key, name, run, f'no progress {idle_s/60:.0f} min'):
-                    continue
-                subprocess.run(['systemctl', '--user', 'restart', unit], check=False)
-                s['restarts'] = unit_state(unit).get('NRestarts')   # a manual restart is not a crash
-                mail(f'{name} restarted (no progress {idle_s/60:.0f} min)',
-                     f'Unit {unit} restarted by the watchdog; the client resumes from its last checkpoint.')
-        elif active == 'failed' and prev.get('active') != 'failed':
-            mail(f'{name} FAILED', f'Unit {unit} failed ({st.get("Result")}, restarts {st.get("NRestarts")}). '
-                                   f'Log: {RUNS}/{name}.log')
-        elif active == 'inactive' and prev.get('active') == 'active':
-            mail(f'{name} finished', f'Unit {unit} exited ({st.get("Result")}).')
+        try:
+            check_run(state, low, unit)
+        except Exception as e:
+            import traceback
+            log(f'watch error on {unit}: {e!r}\n{traceback.format_exc()}')
+            state['errors'] = state.get('errors', 0) + 1
+
+
+def check_run(state, low, unit):
+    """One run unit: grading-timeout emails, crash detection + crash-loop pause, hang restart, state emails."""
+    name = unit[len('tinker-run-'):-len('.service')]
+    rundir = RUNS / name
+    st = unit_state(unit)
+    key = f'unit:{name}'
+    prev = dict(state.get(key, {}))
+    state[key] = s = dict(prev, active=st.get('ActiveState'), restarts=st.get('NRestarts'))
+    active = s['active']
+    n = count_new(RUNS / f'{name}.log', 'Timeout grading')
+    if n:
+        throttled_mail(state, f'timeout:{name}', f'{name}: {n} grading timeout(s)',
+                       f'"Timeout grading" x{n} in {RUNS}/{name}.log: each is a rollout that waited past '
+                       f'TTD_GRADE_WAIT_TIMEOUT, was scored 0 and IS trained on. With the 48 h limit this '
+                       f'should never happen: check the gradefarm hosts and the run.')
+    if prev.get('restarts') is not None and int(st.get('NRestarts') or 0) > int(prev.get('restarts') or 0):
+        ex = last_exit(name)
+        mail(f'{name} crashed and was restarted', f'NRestarts {st.get("NRestarts")}; it resumes from its last '
+             f'checkpoint. {ex}\nLog: {RUNS}/{name}.log')
+        if note_restart(state, key, name, rundir, f'crash: {ex or "no exit line"}'):
+            return
+    if active == 'active':
+        started_mono = int(st.get('ActiveEnterTimestampMonotonic', '0') or 0) / 1e6
+        up_s = time.monotonic() - started_mono if started_mono else 0
+        started_wall = time.time() - up_s
+        npend, oldest = pending_grades(rundir, started_wall)
+        idle_s = time.time() - max(progress_mtime(rundir), started_wall)
+        if idle_s > HANG_MIN * 60:
+            if low:
+                why = 'grading capacity low'
+            elif npend and time.time() - oldest < PENDING_MAX_H * 3600:
+                why = f'{npend} grades in flight (oldest {(time.time() - oldest) / 3600:.1f} h)'
+            else:
+                why = ''
+            if why:
+                if time.time() - s.get('skip_logged', 0) > 3600:
+                    log(f'{name}: no progress for {idle_s/60:.0f} min but not restarting: {why}')
+                    s['skip_logged'] = time.time()
+                return
+            log(f'{name}: no progress for {idle_s/60:.0f} min; restarting')
+            if note_restart(state, key, name, rundir, f'no progress {idle_s/60:.0f} min'):
+                return
+            run(['systemctl', '--user', 'restart', unit], timeout=300)
+            s['restarts'] = unit_state(unit).get('NRestarts')   # a manual restart is not a crash
+            mail(f'{name} restarted (no progress {idle_s/60:.0f} min)',
+                 f'Unit {unit} restarted by the watchdog; the client resumes from its last checkpoint.')
+    elif active == 'failed' and prev.get('active') != 'failed':
+        mail(f'{name} FAILED', f'Unit {unit} failed ({st.get("Result")}, restarts {st.get("NRestarts")}). '
+                               f'Log: {RUNS}/{name}.log')
+    elif active == 'inactive' and prev.get('active') == 'active':
+        mail(f'{name} finished', f'Unit {unit} exited ({st.get("Result")}).')
+
+
+def section(state, name, fn, *a):
+    """Run one part of the pass; an exception is logged and counted, the other parts still run."""
+    try:
+        return fn(*a)
+    except Exception as e:
+        import traceback
+        log(f'watch error in {name}: {e!r}\n{traceback.format_exc()}')
+        state['errors'] = state.get('errors', 0) + 1
+
+
+def check_tunnel():
+    # Only an explicit inactive/failed restarts it: an empty answer (bus hiccup) must not kill working forwards.
+    if unit_state('tinker-tunnel.service').get('ActiveState') in ('inactive', 'failed'):
+        log('tunnel unit not active; starting it')
+        run(['bash', str(OPS / 'run_service.sh'), 'tunnel'], timeout=120)
 
 
 def check_once(state):
-    refresh_registry()
-    if unit_state('tinker-tunnel.service').get('ActiveState') != 'active':
-        log('tunnel unit not active; starting it')
-        subprocess.run(['bash', str(OPS / 'run_service.sh'), 'tunnel'], check=False)
-    check_cost(state)
+    state['errors'] = 0
+    section(state, 'registry', refresh_registry)
+    section(state, 'tunnel', check_tunnel)
+    section(state, 'cost', check_cost, state)
+    section(state, 'cost stop', enforce_cost_stop, state)
     ready, slots = capacity()
     low = ready < MIN_READY
     if low and not state.get('capacity_low'):
@@ -370,14 +469,18 @@ def check_once(state):
     if not low and state.get('capacity_low'):
         mail('grading capacity back', f'{ready}/6 hosts ready ({slots} slots).')
     state['capacity_low'] = low
-    check_grids(state)
-    check_runs(state, low)
+    section(state, 'grids', check_grids, state)
+    section(state, 'runs', check_runs, state, low)
 
 
 def main():
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     log(f'watch start (check {CHECK_S}s, hang {HANG_MIN} min, pending max {PENDING_MAX_H} h, loop max {LOOP_MAX}, '
         f'min ready {MIN_READY}, cost since {COST_SINCE or "OFF"} alerts {COST_ALERTS} stop {COST_STOP})')
+    if not COST_SINCE:
+        mail('cost guard OFF', 'tinker-watch started without WATCH_COST_SINCE: Tinker spend is not watched and there '
+             'is no hard stop. Restart it with WATCH_COST_SINCE=<launch hour, e.g. 2026-11-16T06:00:00Z>.')
+    bad_passes = 0
     while True:
         try:
             check_once(state)
@@ -387,6 +490,10 @@ def main():
         except Exception as e:  # never die; log and continue
             import traceback
             log(f'watch error {e!r}\n{traceback.format_exc()}')
+            state['errors'] = state.get('errors', 0) + 1
+        bad_passes = bad_passes + 1 if state.get('errors') else 0
+        if bad_passes == 3:
+            mail('watchdog ERRORS', f'3 passes in a row had errors; monitoring may be partly blind. See {LOG}.')
         time.sleep(CHECK_S)
 
 

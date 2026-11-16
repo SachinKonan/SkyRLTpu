@@ -53,7 +53,7 @@ def main():
                  'forced / continued | graded | grade timeouts | groups failed | truncation drops | restarts | train s | '
                  'grade seed |')
     lines.append('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
-    grade_seeds, all_natural = set(), []
+    grade_seeds, all_natural, code_seen = set(), [], set()
     for run in seeds:
         name = run.name
         lg = run / 'tinker_log' / name
@@ -72,7 +72,8 @@ def main():
         natural, inj, cont = thinking_stats(log_text)
         timeouts = log_text.count('Timeout grading')
         exits = re.findall(r'client exited rc=(\S+)', log_text)
-        restarts = sum(1 for rc in exits if rc != '0')
+        # every client start prints one 'client pid' line; a kill/restart may end the wrapper before 'client exited'
+        restarts = max(0, log_text.count('[launch_run] client pid') - 1)
         failed = m.get('inkling/rollout_groups_failed', 0) or 0
         dropped = m.get('inkling/reject_truncated/dropped_trajs', 0) or 0
         if timeouts:
@@ -80,7 +81,20 @@ def main():
         if failed:
             fails.append(f'{name}: {failed:.0f} rollout group(s) failed')
         if restarts:
-            fails.append(f'{name}: {restarts} crash/restart(s) before step 1 ({exits})')
+            fails.append(f'{name}: {restarts} restart(s) before step 1 (exit codes seen: {exits})')
+        # the code the run actually used (recorded by launch_run.sh) must be the deployed snapshot with all fixes
+        code = {k: env.get(k, '') for k in ('CODE_SKYRL', 'CODE_DISCOVER')}
+        if not all(code.values()):
+            fails.append(f'{name}: env.txt has no CODE_SKYRL/CODE_DISCOVER (launched with old launch_run.sh)')
+        else:
+            dep = (CODE.parent / 'ops' / 'DEPLOYED').read_text().split()
+            want_sk, want_di = dep[-2].split('=')[1][:12], dep[-1].split('=')[1][:12]
+            if not code['CODE_SKYRL'].endswith(want_sk) or not code['CODE_DISCOVER'].endswith(want_di):
+                fails.append(f'{name}: ran {code} but deployed is skyrl {want_sk} discover {want_di}')
+            ens = Path(code['CODE_DISCOVER']) / 'ttt_discover' / 'rl' / 'ensemble.py'
+            if 'TTD_GRADE_WAIT_TIMEOUT' not in ens.read_text():
+                fails.append(f'{name}: client code {code["CODE_DISCOVER"]} lacks the grade-wait timeout fix')
+            code_seen.add(tuple(code.values()))
         all_natural += natural
         jn = run / 'grading-journal.jsonl'
         graded = sum(1 for l in open(jn) if '"event": "result"' in l) if jn.exists() else 0
@@ -93,6 +107,8 @@ def main():
                      f'{m.get("inkling/time/train", float("nan")):.0f} | {gs} |')
         if valid is not None and valid < 0.5:
             fails.append(f'{name}: validity {valid:.0%} < 50%')
+    if len(code_seen) > 1:
+        fails.append(f'seeds ran different code: {sorted(code_seen)}')
     if len(grade_seeds) != 9:
         fails.append(f'grade seeds not distinct per run: {grade_seeds}')
     # prompt as sent: re-render seed 1's first start state with its settings and deployed code

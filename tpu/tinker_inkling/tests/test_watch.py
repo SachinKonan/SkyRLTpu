@@ -28,9 +28,8 @@ units = {}     # unit -> dict(ActiveState, NRestarts, ActiveEnterTimestampMonoto
 
 def fake_run(cmd, **k):
     calls.append(cmd)
-    if cmd[:3] == ['systemctl', '--user', 'stop'] or cmd[:3] == ['systemctl', '--user', 'restart']:
-        if cmd[2] == 'stop':
-            units.pop(cmd[3] if cmd[3].endswith('.service') else cmd[3] + '.service', None)
+    if cmd[:3] == ['systemctl', '--user', 'stop']:
+        units.pop(cmd[-1] if cmd[-1].endswith('.service') else cmd[-1] + '.service', None)
     return types.SimpleNamespace(stdout='', returncode=0)
 
 
@@ -126,6 +125,9 @@ for _ in range(3):
 assert mails[:2] == ['Tinker spend passed $250', 'Tinker spend passed $500'] and mails[2].startswith('COST STOP'), mails
 assert (tmp / 'COST_STOP').exists() and 'tinker-run-b.service' not in units
 assert g.reconcile() is None
+units['tinker-run-late.service'] = dict(ActiveState='active')      # slipped through: stopped on the next pass
+w.enforce_cost_stop(st)
+assert 'tinker-run-late.service' not in units and sum(m.startswith('COST STOP') for m in mails) == 1, mails
 w.tinker_spend = lambda since: (_ for _ in ()).throw(RuntimeError('down'))
 mails.clear()
 for _ in range(3):
@@ -140,23 +142,45 @@ mails.clear()
 gs = {}
 units['tinker-grid-t.service'] = dict(ActiveState='active')
 (tmp / 'grid-t').mkdir(exist_ok=True)
-(tmp / 'grid-t' / 'grid.log').write_text('x start\nx GRID ERROR t-s1: boom\n')
-w.check_grids(gs)
+(tmp / 'grid-t' / 'grid.log').write_text('x start\nx GRID ERROR old (before the watchdog started)\n')
+w.check_grids(gs)            # first sight: start at the end (a watchdog restart must not re-email old errors)
+assert mails == [], mails
+with open(tmp / 'grid-t' / 'grid.log', 'a') as f:
+    f.write('x GRID ERROR t-s1: boom\n')
 units['tinker-grid-t.service'] = dict(ActiveState='failed')
+w.check_grids(gs)
 with open(tmp / 'grid-t' / 'grid.log', 'a') as f:
     f.write('x reconcile error again\n')
-w.check_grids(gs)
 del units['tinker-grid-t.service']
 gs['grid:t'] = 'active'
 w.check_grids(gs)
-assert mails == ['grid t: 1 scheduler error(s)', 'grid t scheduler failed', 'grid t scheduler GONE'], mails
+assert mails == ['grid t scheduler failed', 'grid t: 1 scheduler error(s)', 'grid t scheduler GONE'], mails
 make_run('h', 1, 1)
+w.check_runs(state, low=False)
 mails.clear()
 with open(tmp / 'h.log', 'a') as f:
     f.write('WARNING Timeout grading: took 172800.0s\n' * 2)
 w.check_runs(state, low=False)
 w.check_runs(state, low=False)
-assert [m for m in mails if 'timeout' in m] == ['h: 2 grading timeout(s)'] and 'b STOPPED' in mails, mails
+assert [m for m in mails if 'timeout' in m] == ['h: 2 grading timeout(s)'], mails
 print('7-8 OK: grid stop/gone and grid.log errors email (throttled); grading timeouts email')
+
+# 9. blank billing rows are priced, not dropped
+rows = [dict(base_model='m', type='sampling_sample', cached='', estimated_cost_usd='2.0', token_count='2000000',
+             effective_rate_usd_per_million_tokens='1.0'),
+        dict(base_model='m', type='sampling_sample', cached='', estimated_cost_usd='', token_count='3000000'),
+        dict(base_model='m', type='training', cached='', estimated_cost_usd='', token_count='1000000'),
+        dict(base_model='m', type='mystery', cached='', estimated_cost_usd='', token_count='1000000'),
+        dict(base_model='', type='storage', cached='', estimated_cost_usd='', gigabyte_hours='720')]
+total, filled = w.price_rows(rows)
+assert abs(total - (2 + 3 + 1.5 + 1.5 + 0.1)) < 1e-9 and abs(filled - 6.1) < 1e-9, (total, filled)
+print('9 OK: blank billing rows priced (seen rate, fallback rate, highest rate for unknown kinds, storage)')
+
+# 10. a journal 'failed' event clears the pending grade
+make_run('k', 1, 150, grades=[('submitted', 'z1', time.time() - 3600), ('failed', 'z1', time.time() - 60)])
+calls.clear()
+w.check_runs(state, low=False)
+assert restarted('k'), 'a failed (dropped) grade must not count as in flight'
+print('10 OK: grades dropped by the transport (failed) do not block a hang restart')
 shutil.rmtree(tmp)
 print('WATCH TESTS PASSED')
