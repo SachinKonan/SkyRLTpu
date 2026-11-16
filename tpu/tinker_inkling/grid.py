@@ -5,7 +5,10 @@ Design (user, 2026-11-16): 90 model-steps per arm, arms nested on shared seed ru
   prune-base: 9 seeds to step 5; the top 3 (best C5 at step 5) split 45 more steps by w
   clone-base: 9 seeds to step 5; the top 3 continue to 10; 6 clones (6*w copies of the top 3), each = the source's
               step-5 weights with a FRESH optimizer + the source's step-5 tree with PUCT visit counts reset, to step 10
-  w_i ∝ exp(-(C5_i - C5_best) / TAU), TAU = 5e-6; integer splits by largest remainder.
+  w = softmax(beta * value) over the top 3 (value = -C5) with the ONE-BIT beta (TTT-Discover's entropic rule, the
+  same solver as the advantage): the smallest beta with KL(w || uniform) = log 2, beta capped at 1e6 (gaps below
+  ~1e-6 C5 soften toward even). Integer splits by largest remainder; prune-base caps every seed at SEED_CAP (30)
+  total steps and passes overflow down the ranking.
 Mapping to runs: seed run <G>-s<i> (LoRA + start-tree seed i) runs to max over the arms that use it:
   s1-3 -> 30 (A), s4-6 -> 15 (B), s7-9 -> 10 (C); after the step-5 decision a top-3 seed -> max(target, 5 + n_i).
   Clones <G>-c<j>-s<src> start at step 5 from prepared run dirs and run to 10.
@@ -25,7 +28,7 @@ OPS = Path('/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops')
 GRID_DIR = RUNS / f'grid-{G}'
 DECISION = GRID_DIR / 'decision.json'
 LOG = GRID_DIR / 'grid.log'
-TAU = float(os.environ.get('GRID_TAU', '5e-6'))
+SEED_CAP = int(os.environ.get('GRID_SEED_CAP', '30'))   # prune-base: no seed beyond this step
 FORK = int(os.environ.get('GRID_FORK', '5'))
 PRUNE_EXTRA = int(os.environ.get('GRID_PRUNE_EXTRA', '45'))
 CLONES = int(os.environ.get('GRID_CLONES', '6'))
@@ -84,6 +87,48 @@ def largest_remainder(total, weights):
     return out
 
 
+def one_bit_beta(r, delta=math.log(2), beta_max=1e6, iters=60):
+    """Smallest beta with KL(softmax(beta * r) || uniform) >= delta (one bit); beta_max when never reached.
+    Same bisection as ttt_discover.rl.train._solve_one_bit_beta."""
+    k = len(r)
+    if k < 2:
+        return 0.0
+    log_k, m = math.log(k), max(r)
+
+    def kl(b):
+        lg = [b * (x - m) for x in r]
+        z = math.log(sum(math.exp(v) for v in lg))
+        q = [math.exp(v - z) for v in lg]
+        return sum(qi * (math.log(qi) + log_k) for qi in q if qi > 0)
+
+    lo, hi = 0.0, 1.0
+    if kl(hi) < delta:
+        while hi < beta_max and kl(hi) < delta:
+            hi *= 2.0
+        if kl(hi) < delta:
+            return hi
+    for _ in range(iters):
+        mid = 0.5 * (lo + hi)
+        if kl(mid) < delta:
+            lo = mid
+        else:
+            hi = mid
+    return hi
+
+
+def capped_split(total, weights, cap):
+    """Largest-remainder split of total by weights (ranked order), each share <= cap, overflow passed down."""
+    alloc = largest_remainder(total, weights)
+    overflow = 0
+    for i in range(len(alloc)):
+        alloc[i] += overflow
+        overflow = max(0, alloc[i] - cap)
+        alloc[i] = min(alloc[i], cap)
+    if overflow:
+        raise ValueError(f'cannot place {total} steps under cap {cap} x {len(alloc)}')
+    return alloc
+
+
 def decide():
     """At step 5 of all 9 seeds: rank, weights, prune steps and clone copies. Written once."""
     if DECISION.exists():
@@ -94,11 +139,14 @@ def decide():
     c5 = {i: best_c5(t) for i, t in trees.items()}
     top = sorted(c5, key=c5.get)[:3]
     best = c5[top[0]]
-    raw = [math.exp(-(c5[i] - best) / TAU) for i in top]
+    values = [-c5[i] for i in top]
+    beta = one_bit_beta(values)
+    raw = [math.exp(beta * (v - max(values))) for v in values]
     w = [x / sum(raw) for x in raw]
-    d = dict(grid=G, time=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), fork_step=FORK, tau=TAU,
+    d = dict(grid=G, time=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), fork_step=FORK,
+             weights_rule='one_bit_entropic', beta=beta, seed_cap=SEED_CAP,
              c5_at_fork={str(i): c5[i] for i in range(1, 10)}, top3=top, weights=w,
-             prune_extra_steps=dict(zip(map(str, top), largest_remainder(PRUNE_EXTRA, w))),
+             prune_extra_steps=dict(zip(map(str, top), capped_split(PRUNE_EXTRA, w, SEED_CAP - FORK))),
              clone_copies=dict(zip(map(str, top), largest_remainder(CLONES, w))))
     GRID_DIR.mkdir(parents=True, exist_ok=True)
     tmp = DECISION.with_suffix('.tmp')

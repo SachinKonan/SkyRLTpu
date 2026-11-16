@@ -32,10 +32,12 @@ export TTD_RUN_DIR="$RUN" EXPERIMENT_NAME="$NAME" SKYRL_RUN_ID="$NAME"
 
 # --- model / sampling (Inkling) ---
 export TTD_ENSEMBLE_MODELS="thinkingmachines/Inkling-2-Small:tml_v0:inkling" TTD_ALLOW_SINGLE_MEMBER=1
-export TTD_INKLING_EFFORT=0.7 TTD_ANSWER_ONLY_CODE=1 TTD_ANSWER_MODEL_FAMILY=inkling
+export TTD_INKLING_EFFORT=0.75 TTD_ANSWER_ONLY_CODE=1 TTD_ANSWER_MODEL_FAMILY=inkling
 export TTD_NATIVE_THINKING_BUDGET=0 TTD_QWEN_TWO_PHASE=0 TTD_MIN_THINK_TOKENS=0
-# thinking cap ~ PHASE1 - prompt (~21k for a ~3.5k prompt); answer gets the rest of the 32k context
-export CONTEXT_WINDOW=32768 TTD_M0_CONTEXT_WINDOW=32768 TTD_M0_TRAIN_MAX_SEQ=32768 TTD_M0_PHASE1_MAX_TOKENS=24576
+# fixed budget for every prompt: 24k thinking + 8k answer = 32k generated; 40k context fits prompts up to ~8.9k
+# (a longer prompt shrinks thinking to fit: TTD_FIXED_BUDGET_FIT=1)
+export CONTEXT_WINDOW=40960 TTD_M0_CONTEXT_WINDOW=40960 TTD_M0_TRAIN_MAX_SEQ=40960 TTD_M0_PHASE1_MAX_TOKENS=32768
+export TTD_FIXED_THINK_TOKENS=24000 TTD_FIXED_TOTAL_TOKENS=32000 TTD_FIXED_BUDGET_FIT=1
 
 # --- training (same as the Erdős runs except lr) ---
 export GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-16}" GROUP_SIZE="${GROUP_SIZE:-32}" NUM_EPOCHS="$STEPS" SAVE_EVERY=1
