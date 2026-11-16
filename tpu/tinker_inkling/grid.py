@@ -199,7 +199,8 @@ if __name__ == '__main__':
             try:
                 reconcile()
             except Exception as e:  # keep looping; the next pass retries
-                log(f'reconcile error {e!r}')
+                import traceback
+                log(f'reconcile error {e!r} (retried next pass)\n' + traceback.format_exc())
             time.sleep(LOOP_S)
     else:
         sys.exit(f'unknown command {what}')
