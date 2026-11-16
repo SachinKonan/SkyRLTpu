@@ -20,6 +20,10 @@ CHECK_S = int(os.environ.get('WATCH_CHECK_S', '300'))
 HANG_MIN = float(os.environ.get('WATCH_HANG_MIN', '60'))
 MIN_READY = int(os.environ.get('WATCH_MIN_READY', '3'))
 STATE = RUNS / 'watch_state.json'
+TINKER_CLI = '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/tinker'
+COST_SINCE = os.environ.get('WATCH_COST_SINCE', '')            # RFC 3339 hour, e.g. 2026-11-16T06:00:00Z ('' = off)
+COST_ALERTS = [float(x) for x in os.environ.get('WATCH_COST_ALERTS', '500,1000,1500,2000,3000').split(',') if x]
+COST_EVERY_S = 3600
 LOG = RUNS / 'watch.log'
 
 
@@ -42,6 +46,20 @@ def unit_state(unit):
     out = sh('systemctl', '--user', 'show', unit, '-p', 'ActiveState', '-p', 'SubState', '-p', 'Result',
              '-p', 'ActiveEnterTimestampMonotonic', '-p', 'NRestarts')
     return dict(l.split('=', 1) for l in out.splitlines() if '=' in l)
+
+
+def tinker_spend(since):
+    """Total estimated Tinker cost (USD) from `since` to the next hour (billing usage allows <= 14 days)."""
+    import csv, datetime, io, tempfile
+    key = subprocess.run(['bash', '-ic', 'printf %s "$TINKER_API_KEY"'], capture_output=True, text=True).stdout
+    end = (datetime.datetime.utcnow() + datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:00:00Z')
+    with tempfile.NamedTemporaryFile(suffix='.csv') as f:
+        r = subprocess.run([TINKER_CLI, 'billing', 'usage', since, end, '--csv', f.name], capture_output=True,
+                           text=True, env=dict(os.environ, TINKER_API_KEY=key), timeout=300)
+        if r.returncode != 0:
+            raise RuntimeError(f'billing usage failed: {r.stderr.strip()[-200:]}')
+        rows = list(csv.DictReader(open(f.name)))
+    return sum(float(x['estimated_cost_usd'] or 0) for x in rows)
 
 
 def refresh_registry():
@@ -113,6 +131,18 @@ def main():
                 log('tunnel unit not active; starting it')
                 subprocess.run(['bash', '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/run_service.sh', 'tunnel'],
                                check=False)
+            if COST_SINCE and time.time() - state.get('cost_checked', 0) > COST_EVERY_S:
+                try:
+                    spend = tinker_spend(COST_SINCE)
+                    state['cost_checked'], state['spend'] = time.time(), spend
+                    log(f'tinker spend since {COST_SINCE}: ${spend:.2f}')
+                    for t in COST_ALERTS:
+                        if spend >= t and t not in state.get('cost_alerted', []):
+                            mail(f'Tinker spend passed ${t:.0f}', f'${spend:.2f} since {COST_SINCE} '
+                                 f'(tinker billing usage). Thresholds: {COST_ALERTS}')
+                            state.setdefault('cost_alerted', []).append(t)
+                except Exception as e:
+                    log(f'cost check failed: {e!r}')
             ready, slots = capacity()
             low = ready < MIN_READY
             if low and not state.get('capacity_low'):

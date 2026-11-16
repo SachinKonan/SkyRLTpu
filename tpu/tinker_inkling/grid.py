@@ -37,6 +37,9 @@ SEED_TARGET = ({int(a): int(b) for a, b in (kv.split(':') for kv in os.environ['
                if os.environ.get('GRID_TARGETS') else
                {**{i: 30 for i in (1, 2, 3)}, **{i: 15 for i in (4, 5, 6)}, **{i: 10 for i in (7, 8, 9)}})
 LOOP_S = int(os.environ.get('GRID_LOOP_S', '120'))
+# Launch gate: every run stops at HOLD_AFTER steps until the user creates <grid dir>/RELEASE (0 disables the gate).
+HOLD_AFTER = int(os.environ.get('GRID_HOLD_AFTER', '1'))
+RELEASE = GRID_DIR / 'RELEASE'
 EXTRA_ENV = [kv for kv in os.environ.get('GRID_RUN_ENV', '').split() if kv]   # e.g. smoke-test overrides
 
 
@@ -204,8 +207,14 @@ def plan():
     return p, d
 
 
+def held():
+    return HOLD_AFTER > 0 and not RELEASE.exists()
+
+
 def reconcile(dry=False):
     p, d = plan()
+    if held():
+        p = {n: (min(t, HOLD_AFTER), seed, env) for n, (t, seed, env) in p.items()}
     for name, (target, seed, env) in sorted(p.items()):
         if '-c' in name and d:
             src = int(name.rsplit('-s', 1)[1])
@@ -223,7 +232,8 @@ def reconcile(dry=False):
 def status():
     p, d = plan()
     used = 0
-    print(f'grid {G}: decision {"made" if d else "pending (needs all 9 seeds at step 5)"}')
+    print(f'grid {G}: decision {"made" if d else "pending (needs all 9 seeds at step 5)"}'
+          + (f'; HELD at step {HOLD_AFTER} until {RELEASE} exists' if held() else '; released'))
     for name, (target, seed, env) in sorted(p.items()):
         g = gstep(name)
         start = FORK if '-c' in name else 0
