@@ -66,6 +66,11 @@ case "$cmd" in
     SETENV=(--setenv=GRID="$GN"); for kv in "$@"; do SETENV+=(--setenv="$kv"); done
     start_unit "tinker-grid-$GN" always "${SETENV[@]}" /usr/bin/python3 -u "$D/grid.py" loop
     echo "started tinker-grid-$GN";;
+  viz)     # run_service.sh viz [VIZ_LIVE=g2-s1 VIZ_REF=... VIZ_PORT=8765]  -> unit tinker-viz (localhost-only dashboard)
+    save_args "$D/viz.args" "$@"
+    SETENV=(); for kv in "$@"; do SETENV+=(--setenv="$kv"); done
+    start_unit tinker-viz always -p Nice=10 "${SETENV[@]}" /usr/bin/python3 -u "$D/serve_viz.py"
+    echo "started tinker-viz";;
   grid-stop)
     GN=$1
     mkdir -p "$RUNS/grid-$GN"; date -u +%FT%TZ > "$RUNS/grid-$GN/STOPPED"
@@ -76,6 +81,9 @@ case "$cmd" in
     bash "$0" tunnel && started+=(tunnel)
     if [[ -f $D/watch.args ]]; then
       mapfile -t A < "$D/watch.args"; bash "$0" watch "${A[@]}" && started+=(watch)
+    fi
+    if [[ -f $D/viz.args ]]; then
+      mapfile -t A < "$D/viz.args"; bash "$0" viz "${A[@]}" && started+=(viz)
     fi
     for f in "$RUNS"/grid-*/service.args; do
       [[ -f $f ]] || continue
