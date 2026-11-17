@@ -172,14 +172,18 @@ def collect():
         name = os.path.basename(g)[5:]
         grid[name] = dict(held=os.path.exists(f'{g}/service.args') and not os.path.exists(f'{g}/RELEASE'),
                           stopped=os.path.exists(f'{g}/STOPPED'))
-    samples = {}
+    samples, timings = {}, {}
     for r in LIVE:
         try:
             samples[r] = pick_samples(r)
         except Exception as e:
             samples[r] = dict(error=repr(e), items=[])
+        try:
+            timings[r] = timing(r)
+        except Exception as e:
+            timings[r] = dict(error=repr(e))
     return dict(updated=time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime()), runs=runs, spend=spend, grids=grid,
-                live=LIVE, ref=REF, samples=samples)
+                live=LIVE, ref=REF, samples=samples, timing=timings)
 
 
 _samples_cache = {}    # run -> (newest trajectory file, mtime, picks)
@@ -237,6 +241,86 @@ def pick_samples(run, k_best=3, k_fail=3, k_mid=2):
     return out
 
 
+def timing(run):
+    """Per-step phase timeline from group_timeline.jsonl (per group: started, sampled, graded; train_enqueued) and
+    grading-events.jsonl (per request: dispatched, running, done). Returns an overview for every step plus a Gantt
+    (per-group bars) and a grading-concurrency series for the newest step."""
+    lg = f'{RUNS}/{run}/tinker_log/{run}'
+    steps = {}
+    try:
+        for line in open(f'{lg}/group_timeline.jsonl'):
+            e = json.loads(line)
+            s = steps.setdefault(e['step'], dict(groups={}, train=[]))
+            if e['event'] == 'train_enqueued':
+                s['train'].append(e['time'])
+            else:
+                s['groups'].setdefault(e.get('group'), {})[e['event']] = e['time']
+    except (OSError, ValueError):
+        return None
+    if not steps:
+        return None
+    order = sorted(steps)
+    start = {k: min(g.get('started', 1e20) for g in steps[k]['groups'].values()) for k in order}
+    # grading requests: first dispatch, running start, end
+    req = {}
+    try:
+        with open(f'{RUNS}/{run}/grading-events.jsonl', 'rb') as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 8_000_000))
+            for line in f.read().decode(errors='ignore').splitlines():
+                if '"request_id"' not in line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    continue
+                r = req.setdefault(e['request_id'], {})
+                if e['event'] == 'grading_dispatched':
+                    r.setdefault('dispatch', e['time'])
+                elif e['event'] == 'request_state' and e.get('to') == 'running':
+                    r.setdefault('run', e['time'])
+                elif e['event'] == 'request_state' and e.get('to') in ('done', 'failed_candidate'):
+                    r['end'] = e['time']
+    except OSError:
+        pass
+    now = time.time()
+    overview = []
+    for i, k in enumerate(order):
+        gs = steps[k]['groups'].values()
+        t0 = start[k]
+        sampled = [g['sampled'] for g in gs if 'sampled' in g]
+        graded = [g['graded'] for g in gs if 'graded' in g]
+        end = start[order[i + 1]] if i + 1 < len(order) else None
+        done = len(graded) == len(steps[k]['groups']) and graded
+        t_s = max(sampled) if len(sampled) == len(steps[k]['groups']) else None
+        t_g = max(graded) if done else None
+        overview.append(dict(step=k + 1, sampling=round(((t_s or now) - t0) / 60, 1),
+                             grading_tail=round(((t_g or now) - t_s) / 60, 1) if t_s else None,
+                             train_tail=round((end - t_g) / 60, 1) if (end and t_g) else None,
+                             complete=bool(end)))
+    k = order[-1]
+    t0 = start[k]
+    gantt = [dict(group=g, s=round((v.get('started', t0) - t0) / 60, 2),
+                  sampled=round((v['sampled'] - t0) / 60, 2) if 'sampled' in v else None,
+                  graded=round((v['graded'] - t0) / 60, 2) if 'graded' in v else None)
+             for g, v in sorted(steps[k]['groups'].items(), key=lambda kv: kv[0] if kv[0] is not None else -1)]
+    t_end = now
+    rs = [r for r in req.values() if r.get('dispatch', 0) >= t0]
+    series = []
+    horizon = max([t_end] + [r.get('end', 0) for r in rs])
+    t = t0
+    while t <= min(horizon, now) and len(series) < 400:
+        running = sum(1 for r in rs if r.get('run', 1e20) <= t < r.get('end', 1e20))
+        queued = sum(1 for r in rs if r['dispatch'] <= t < r.get('run', r.get('end', 1e20)))
+        series.append([round((t - t0) / 60, 2), running, queued])
+        t += 30
+    runs_s = [(r['end'] - r['run']) for r in rs if 'run' in r and 'end' in r]
+    waits = [(r['run'] - r['dispatch']) for r in rs if 'run' in r and 'dispatch' in r]
+    med = lambda a: round(statistics.median(a), 1) if a else None
+    return dict(overview=overview, step=k + 1, gantt=gantt, train=[round((x - t0) / 60, 2) for x in steps[k]['train']],
+                series=series, grade_run_p50_s=med(runs_s), grade_wait_p50_s=med(waits), requests=len(rs))
+
+
 def rollout_full(run, step, i):
     """Full thinking, answer and grader message of one rollout (read on demand)."""
     if run not in LIVE + REF or not re.fullmatch(r'\d{1,3}', str(step)) or not re.fullmatch(r'\d{1,4}', str(i)):
@@ -283,6 +367,7 @@ td,th{padding:3px 8px;text-align:right;border-bottom:1px solid var(--grid)} th{c
 <div class="legend card" style="margin-bottom:12px" id="legend"></div>
 <div class="row" id="charts"></div>
 <div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin:0 0 6px">Per step (live runs)</h3><div id="table"></div></div>
+<div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin:0 0 6px">Where the time goes</h3><div id="timing"></div></div>
 <div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin:0 0 6px">Generations — newest finished step (best, median, one of each failure kind; click to load the full text)</h3><div id="gens"></div></div>
 <div id="tip"></div>
 <script>
@@ -324,6 +409,7 @@ function render(d){
  let tb='<table><tr><th>run</th><th>step</th><th>best</th><th>valid%</th><th>beat</th><th>cut off</th><th>timeout</th><th>crash</th><th>lines</th><th>gen k</th><th>prompt k</th><th>$</th><th>min</th></tr>';
  for(const n of d.live)for(const s of (d.runs[n]?.steps||[]))tb+=`<tr><td>${n}</td><td>${s.step}</td><td>${s.best_e6==null?'–':s.best_e6.toFixed(2)}</td><td>${s.valid.toFixed(1)}</td><td>${s.beat}</td><td>${s.cut_off}</td><td>${s.timeout}</td><td>${s.crash}</td><td>${s.code_p50}</td><td>${s.gen_k}</td><td>${s.prompt_k}</td><td>${s.usd??'–'}</td><td>${s.minutes??'–'}</td></tr>`;
  document.getElementById('table').innerHTML=tb+'</table>';
+ document.getElementById('timing').innerHTML=Object.entries(d.timing||{}).map(([r,T])=>timingHTML(r,T)).join('');
  const gk=JSON.stringify(Object.fromEntries(Object.entries(d.samples||{}).map(([k,v])=>[k,v.file])));
  if(gk!==lastGens){lastGens=gk;let gh='';
   for(const [run,s] of Object.entries(d.samples||{})){gh+=`<div class="muted" style="margin:6px 0">${run} · step ${s.step??'–'}</div>`;
@@ -336,6 +422,40 @@ function render(d){
    const box=el.querySelector('.full');try{const r=await (await fetch(`rollout?run=${el.dataset.run}&step=${el.dataset.step}&i=${el.dataset.i}`)).json();
    box.innerHTML=`<div style="font-size:12px;margin:4px 0"><b>grader:</b> ${esc(r.message)} · reward ${r.reward}</div><details><summary>full thinking (${r.thinking.length} chars)</summary><pre style="white-space:pre-wrap;font-size:12px;color:var(--ink);max-height:420px;overflow:auto;background:#f6f5f2;padding:8px;border-radius:6px">${esc(r.thinking)}</pre></details><details open><summary>answer (${r.answer.length} chars)</summary><pre style="white-space:pre-wrap;font-size:12px;color:#1f1e1c;max-height:520px;overflow:auto;background:#f6f5f2;padding:8px;border-radius:6px">${esc(r.answer)}</pre></details>`}catch(e){box.textContent='failed: '+e}})}}
 let lastGens='';
+const PH={s:'#2a78d6',g:'#eb6834',t:'#1baf7a'};
+function timingHTML(run,T){
+ if(!T||T.error)return `<div class="muted">${run}: ${T?esc(T.error):'no timeline yet'}</div>`;
+ const W=860,LH=13,P={l:56,r:12,t:6,b:22},G=T.gantt.length,H=P.t+P.b+G*LH;
+ let xmax=1;for(const g of T.gantt)xmax=Math.max(xmax,g.graded??0,g.sampled??0);for(const x of T.train)xmax=Math.max(xmax,x);
+ for(const p of T.series)xmax=Math.max(xmax,p[0]);xmax=Math.ceil(xmax);
+ const X=v=>P.l+v/xmax*(W-P.l-P.r);
+ let g=`<div class="muted" style="margin:4px 0">${run} · step ${T.step} (in progress or newest) · ${T.requests} grading requests · grading run p50 ${T.grade_run_p50_s??'–'} s, queue wait p50 ${T.grade_wait_p50_s??'–'} s</div>`;
+ g+=`<div class="legend" style="margin:4px 0"><span><i class="sw" style="border-color:${PH.s};border-top-width:6px"></i>sampling (Tinker)</span><span><i class="sw" style="border-color:${PH.g};border-top-width:6px"></i>grading (sampled → all graded)</span><span><i class="sw" style="border-color:${PH.t}"></i>training request sent (4 groups each)</span></div>`;
+ g+=`<svg width="${W}" height="${H}">`;
+ for(let m=0;m<=xmax;m+=Math.max(1,Math.ceil(xmax/12))){g+=`<line x1="${X(m)}" x2="${X(m)}" y1="${P.t}" y2="${H-P.b}" stroke="#ecebe7"/><text x="${X(m)}" y="${H-6}" font-size="10" text-anchor="middle" fill="#4a4945">${m} min</text>`}
+ T.gantt.forEach((r,i)=>{const y=P.t+i*LH;g+=`<text x="${P.l-6}" y="${y+9}" font-size="10" text-anchor="end" fill="#4a4945">group ${r.group}</text>`;
+  const se=r.sampled??null;g+=`<rect x="${X(r.s)}" y="${y+1}" width="${Math.max(1,X(se??xmax)-X(r.s))}" height="${LH-3}" fill="${PH.s}" opacity="${se==null?0.45:1}" data-t="group ${r.group}<br>sampling ${r.s.toFixed(1)}–${se==null?'…':se.toFixed(1)} min"/>`;
+  if(se!=null){const ge=r.graded;g+=`<rect x="${X(se)}" y="${y+1}" width="${Math.max(1,X(ge??xmax)-X(se))}" height="${LH-3}" fill="${PH.g}" opacity="${ge==null?0.45:1}" data-t="group ${r.group}<br>grading ${se.toFixed(1)}–${ge==null?'…':ge.toFixed(1)} min"/>`}});
+ for(const x of T.train)g+=`<line x1="${X(x)}" x2="${X(x)}" y1="${P.t}" y2="${H-P.b}" stroke="${PH.t}" stroke-width="2"><title>training request ${x.toFixed(1)} min</title></line><circle cx="${X(x)}" cy="${P.t+4}" r="6" fill="transparent" data-t="training request sent at ${x.toFixed(1)} min"/>`;
+ g+='</svg>';
+ // grading concurrency
+ const H2=120,P2={l:56,r:12,t:6,b:20};let ymax=1;for(const p of T.series)ymax=Math.max(ymax,p[1],p[2]);
+ const Y2=v=>H2-P2.b-v/ymax*(H2-P2.t-P2.b);
+ g+=`<div class="muted" style="margin:8px 0 2px">programs running (blue) and waiting for a grading slot (orange)</div><svg width="${W}" height="${H2}">`;
+ for(const f of [0,0.5,1]){const v=Math.round(ymax*f);g+=`<line x1="${P2.l}" x2="${W-P2.r}" y1="${Y2(v)}" y2="${Y2(v)}" stroke="#ecebe7"/><text x="${P2.l-6}" y="${Y2(v)+4}" font-size="10" text-anchor="end" fill="#4a4945">${v}</text>`}
+ for(const [k,c] of [[1,PH.s],[2,PH.g]])g+=`<polyline fill="none" stroke="${c}" stroke-width="2" points="${T.series.map(p=>X(p[0])+','+Y2(p[k])).join(' ')}"/>`;
+ for(const p of T.series)g+=`<circle cx="${X(p[0])}" cy="${Y2(p[1])}" r="7" fill="transparent" data-t="${p[0].toFixed(1)} min<br>running ${p[1]} · waiting ${p[2]}"/>`;
+ g+='</svg>';
+ // per-step overview (stacked minutes)
+ const ov=T.overview,BW=860,RH=16;let mx=1;for(const o of ov)mx=Math.max(mx,(o.sampling||0)+(o.grading_tail||0)+(o.train_tail||0));
+ g+=`<div class="muted" style="margin:10px 0 2px">minutes per step: sampling → grading tail (after the last rollout is sampled) → training tail (before the next step starts)</div><svg width="${BW}" height="${ov.length*RH+6}">`;
+ ov.forEach((o,i)=>{let x=56;const y=i*RH+2;g+=`<text x="50" y="${y+11}" font-size="10" text-anchor="end" fill="#4a4945">step ${o.step}</text>`;
+  for(const [k,c] of [['sampling',PH.s],['grading_tail',PH.g],['train_tail',PH.t]]){const v=o[k];if(v==null||v<=0)continue;const w=v/mx*(BW-70);
+   g+=`<rect x="${x}" y="${y}" width="${Math.max(1,w-2)}" height="${RH-4}" rx="2" fill="${c}" data-t="step ${o.step}<br>${k.replace('_',' ')} ${v} min"/>`;x+=w}
+  g+=`<text x="${x+4}" y="${y+11}" font-size="10" fill="#2b2a27">${((o.sampling||0)+(o.grading_tail||0)+(o.train_tail||0)).toFixed(0)} min${o.complete?'':' (running)'}</text>`});
+ g+='</svg><table style="margin-top:6px"><tr><th>step</th><th>sampling min</th><th>grading tail min</th><th>training tail min</th></tr>'+
+  ov.map(o=>`<tr><td>${o.step}</td><td>${o.sampling??'–'}</td><td>${o.grading_tail??'–'}</td><td>${o.train_tail??'–'}</td></tr>`).join('')+'</table>';
+ return g}
 document.addEventListener('mousemove',e=>{const t=e.target.dataset&&e.target.dataset.t;if(t){tip.innerHTML=t;tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px'}else tip.style.display='none'});
 async function tick(){try{render(await (await fetch('data.json',{cache:'no-store'})).json())}catch(e){document.getElementById('upd').textContent='update failed: '+e}}
 tick();setInterval(tick,30000);
