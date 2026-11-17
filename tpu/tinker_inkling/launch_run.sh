@@ -55,9 +55,9 @@ export TTD_ENSEMBLE_MODELS="thinkingmachines/Inkling-2-Small:tml_v0:inkling" TTD
 export TTD_INKLING_EFFORT="${TTD_INKLING_EFFORT:-0.8}" TTD_ANSWER_ONLY_CODE=1 TTD_ANSWER_MODEL_FAMILY=inkling
 export TTD_NATIVE_THINKING_BUDGET=0 TTD_QWEN_TWO_PHASE=0 TTD_MIN_THINK_TOKENS=0
 # v3 budget (user 2026-11-17, after v2 stalled with thinking squeezed to ~15k): a FIXED 24,000-token thinking budget
-# plus a 10,000-token answer (34,000 generated) on top of the prompt, in a 45,056 context. Prompts up to ~11k fit with
+# plus a 10,000-token answer (34,000 generated) on top of the prompt, in a 65,536 (64k) context. Prompts up to ~31k fit with
 # full thinking; only a longer prompt shrinks thinking (FIT=1), never the answer. (v2 was 32,768 total, 10k answer.)
-export CONTEXT_WINDOW=45056 TTD_M0_CONTEXT_WINDOW=45056 TTD_M0_TRAIN_MAX_SEQ=45056 TTD_M0_PHASE1_MAX_TOKENS=45056
+export CONTEXT_WINDOW=65536 TTD_M0_CONTEXT_WINDOW=65536 TTD_M0_TRAIN_MAX_SEQ=65536 TTD_M0_PHASE1_MAX_TOKENS=65536
 export TTD_FIXED_TOTAL_TOKENS=34000 TTD_FIXED_THINK_TOKENS=24000 TTD_FIXED_BUDGET_FIT=1
 # answer rules in the prompt (code only, compact, solver note; client env.py): v2 only. v3 = pilot prompt (off).
 export TTD_ERDOS_ANSWER_RULES=0
