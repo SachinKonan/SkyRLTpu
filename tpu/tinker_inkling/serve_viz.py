@@ -172,8 +172,86 @@ def collect():
         name = os.path.basename(g)[5:]
         grid[name] = dict(held=os.path.exists(f'{g}/service.args') and not os.path.exists(f'{g}/RELEASE'),
                           stopped=os.path.exists(f'{g}/STOPPED'))
+    samples = {}
+    for r in LIVE:
+        try:
+            samples[r] = pick_samples(r)
+        except Exception as e:
+            samples[r] = dict(error=repr(e), items=[])
     return dict(updated=time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime()), runs=runs, spend=spend, grids=grid,
-                live=LIVE, ref=REF)
+                live=LIVE, ref=REF, samples=samples)
+
+
+_samples_cache = {}    # run -> (newest trajectory file, mtime, picks)
+
+
+def _parts(raw):
+    """(thinking, answer) text from the rendered completion (Inkling: to=self thinking, to=user answer)."""
+    i = raw.find('<|start|>assistant to=user')
+    clean = lambda x: re.sub(r'<\|[a-z_]+\|>|assistant to=(self|user)', '', x).strip()
+    return (clean(raw[:i]), clean(raw[i:])) if i >= 0 else (clean(raw), '')
+
+
+def pick_samples(run, k_best=3, k_fail=3, k_mid=2):
+    """A small fixed set from the newest finished step: best valid, a median valid, and failures of different kinds.
+    Summaries only (the page fetches full text per rollout on click)."""
+    files = sorted(glob.glob(f'{RUNS}/{run}/tinker_log/{run}/member_inkling/trajectories/inkling_step_*.jsonl.gz'))
+    if not files:
+        return dict(step=None, items=[])
+    fn = files[-1]
+    mt = os.stat(fn).st_mtime
+    hit = _samples_cache.get(run)
+    if hit and hit[0] == fn and hit[1] == mt:
+        return hit[2]
+    try:
+        rows = [json.loads(l) for l in gzip.open(fn, 'rt')]
+    except (EOFError, OSError, ValueError):
+        return hit[2] if hit else dict(step=None, items=[])
+    for i, d in enumerate(rows):
+        d['_i'], d['_o'] = i, outcome(d)
+        m = C5.search(d.get('message') or '')
+        d['_c5'] = float(m.group(1)) if d['_o'] == 'valid' and m else None
+    valid = sorted((d for d in rows if d['_c5'] is not None), key=lambda d: d['_c5'])
+    chosen = [('best', d) for d in valid[:k_best]]
+    if valid:
+        mid = len(valid) // 2
+        chosen += [('median', d) for d in valid[mid:mid + k_mid]]
+    seen = set()
+    for kind in ('cut_off', 'timeout', 'crash', 'verifier', 'tool_call'):
+        for d in rows:
+            if d['_o'] == kind and kind not in seen and len(seen) < k_fail:
+                chosen.append(('failure', d))
+                seen.add(kind)
+                break
+    items = []
+    for tag, d in chosen:
+        think, ans = _parts(d.get('response_raw') or '')
+        pv = -float(d['parent_value']) if d.get('parent_value') is not None else None
+        items.append(dict(i=d['_i'], tag=tag, outcome=d['_o'], c5=d['_c5'], parent_c5=pv,
+                          gain_e6=((pv - d['_c5']) * 1e6) if (pv is not None and d['_c5'] is not None) else None,
+                          msg=(d.get('message') or '')[:160], think_chars=len(think), answer_chars=len(ans),
+                          code_lines=len((d.get('parsed_code') or '').splitlines()),
+                          think_head=think[:400], think_tail=think[-400:] if len(think) > 800 else ''))
+    out = dict(step=int(re.search(r'step_(\d+)', fn).group(1)) + 1, file=os.path.basename(fn), items=items)
+    _samples_cache[run] = (fn, mt, out)
+    return out
+
+
+def rollout_full(run, step, i):
+    """Full thinking, answer and grader message of one rollout (read on demand)."""
+    if run not in LIVE + REF or not re.fullmatch(r'\d{1,3}', str(step)) or not re.fullmatch(r'\d{1,4}', str(i)):
+        return None
+    fn = f'{RUNS}/{run}/tinker_log/{run}/member_inkling/trajectories/inkling_step_{int(step) - 1:06d}.jsonl.gz'
+    try:
+        with gzip.open(fn, 'rt') as f:
+            for n, line in enumerate(f):
+                if n == int(i):
+                    d = json.loads(line)
+                    think, ans = _parts(d.get('response_raw') or '')
+                    return dict(thinking=think, answer=ans, message=d.get('message'), reward=d.get('reward'))
+    except (OSError, EOFError, ValueError):
+        return None
+    return None
 
 
 def loop():
@@ -205,6 +283,7 @@ td,th{padding:3px 8px;text-align:right;border-bottom:1px solid var(--grid)} th{c
 <div class="legend card" style="margin-bottom:12px" id="legend"></div>
 <div class="row" id="charts"></div>
 <div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin:0 0 6px">Per step (live runs)</h3><div id="table"></div></div>
+<div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin:0 0 6px">Generations — newest finished step (best, median, one of each failure kind; click to load the full text)</h3><div id="gens"></div></div>
 <div id="tip"></div>
 <script>
 const CH=[["best_e6","Best C5 so far, (C5−0.38085)×1e6 · lower is better",true],["valid","Valid programs (%)",false],
@@ -244,7 +323,19 @@ function render(d){
  document.getElementById('charts').innerHTML=CH.map(([k,t,l])=>chart(k,t,l,d.runs)).join('');
  let tb='<table><tr><th>run</th><th>step</th><th>best</th><th>valid%</th><th>beat</th><th>cut off</th><th>timeout</th><th>crash</th><th>lines</th><th>gen k</th><th>prompt k</th><th>$</th><th>min</th></tr>';
  for(const n of d.live)for(const s of (d.runs[n]?.steps||[]))tb+=`<tr><td>${n}</td><td>${s.step}</td><td>${s.best_e6==null?'–':s.best_e6.toFixed(2)}</td><td>${s.valid.toFixed(1)}</td><td>${s.beat}</td><td>${s.cut_off}</td><td>${s.timeout}</td><td>${s.crash}</td><td>${s.code_p50}</td><td>${s.gen_k}</td><td>${s.prompt_k}</td><td>${s.usd??'–'}</td><td>${s.minutes??'–'}</td></tr>`;
- document.getElementById('table').innerHTML=tb+'</table>'}
+ document.getElementById('table').innerHTML=tb+'</table>';
+ const gk=JSON.stringify(Object.fromEntries(Object.entries(d.samples||{}).map(([k,v])=>[k,v.file])));
+ if(gk!==lastGens){lastGens=gk;let gh='';
+  for(const [run,s] of Object.entries(d.samples||{})){gh+=`<div class="muted" style="margin:6px 0">${run} · step ${s.step??'–'}</div>`;
+   for(const it of (s.items||[])){const head=it.outcome==='valid'?`C5 ${it.c5.toFixed(7)} (parent ${it.parent_c5?.toFixed(7)}, gain ${it.gain_e6?.toFixed(2)}e-6)`:esc(it.msg);
+    gh+=`<details data-run="${run}" data-step="${s.step}" data-i="${it.i}" style="margin:4px 0;border-top:1px solid var(--grid);padding-top:4px">
+    <summary><b>${it.tag}</b> · ${it.outcome} · ${head} · <span class="muted">thinking ${(it.think_chars/1000).toFixed(1)}k chars · answer ${(it.answer_chars/1000).toFixed(1)}k · ${it.code_lines} lines · #${it.i}</span></summary>
+    <div class="muted" style="font-size:12px;white-space:pre-wrap;margin:6px 0">${esc(it.think_head)}${it.think_tail?' … '+esc(it.think_tail):''}</div><div class="full muted">loading…</div></details>`}}
+  document.getElementById('gens').innerHTML=gh;
+  for(const el of document.querySelectorAll('#gens details'))el.addEventListener('toggle',async()=>{if(!el.open||el.dataset.loaded)return;el.dataset.loaded=1;
+   const box=el.querySelector('.full');try{const r=await (await fetch(`rollout?run=${el.dataset.run}&step=${el.dataset.step}&i=${el.dataset.i}`)).json();
+   box.innerHTML=`<div style="font-size:12px;margin:4px 0"><b>grader:</b> ${esc(r.message)} · reward ${r.reward}</div><details><summary>full thinking (${r.thinking.length} chars)</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:420px;overflow:auto">${esc(r.thinking)}</pre></details><details open><summary>answer (${r.answer.length} chars)</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:520px;overflow:auto;background:#f6f5f2;padding:8px;border-radius:6px">${esc(r.answer)}</pre></details>`}catch(e){box.textContent='failed: '+e}})}}
+let lastGens='';
 document.addEventListener('mousemove',e=>{const t=e.target.dataset&&e.target.dataset.t;if(t){tip.innerHTML=t;tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px'}else tip.style.display='none'});
 async function tick(){try{render(await (await fetch('data.json',{cache:'no-store'})).json())}catch(e){document.getElementById('upd').textContent='update failed: '+e}}
 tick();setInterval(tick,30000);
@@ -253,7 +344,15 @@ tick();setInterval(tick,30000);
 
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path.startswith('/data.json'):
+        if self.path.startswith('/rollout?'):
+            from urllib.parse import parse_qs, urlparse
+            q = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+            d = rollout_full(q.get('run', ''), q.get('step', ''), q.get('i', ''))
+            if d is None:
+                self.send_error(404)
+                return
+            body, ctype = json.dumps(d).encode(), 'application/json'
+        elif self.path.startswith('/data.json'):
             body, ctype = json.dumps(SNAP).encode(), 'application/json'
         elif self.path in ('/', '/index.html'):
             body, ctype = PAGE.encode(), 'text/html; charset=utf-8'
