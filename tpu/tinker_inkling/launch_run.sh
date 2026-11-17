@@ -64,7 +64,7 @@ export TTD_ERDOS_ANSWER_RULES=0
 
 # --- training (same as the Erdős runs except lr) ---
 export GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-16}" GROUP_SIZE="${GROUP_SIZE:-32}" NUM_EPOCHS="$STEPS" SAVE_EVERY=1
-export LEARNING_RATE="${LEARNING_RATE:-2e-5}" LORA_RANK=32 KL_PENALTY_COEF=0 TTD_KL_MEASURE_EVERY=0 TTD_WARMUP_FB=0
+export LEARNING_RATE="${LEARNING_RATE:-2e-5}" LORA_RANK=32 KL_PENALTY_COEF="${KL_PENALTY_COEF:-0}" TTD_KL_MEASURE_EVERY=0 TTD_WARMUP_FB=0
 export TTD_LOSS_FN=importance_sampling TTD_ADV_ESTIMATOR=piecewise_valid_entropic_centered TTD_ADV_PIECEWISE_ALPHA=1.0
 # v3 = pilot behaviour: zero-reward rollouts cut off at the budget are dropped from training (v2 trained them at 0)
 export TTD_REJECT_TRUNCATED=1 TTD_EXPLICIT_LORA_SEED=1 TTD_M0_LORA_SEED="$LORA_SEED" TTD_INIT_STATE_SEED="$LORA_SEED"
