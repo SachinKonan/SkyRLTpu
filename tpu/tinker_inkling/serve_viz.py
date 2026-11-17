@@ -266,7 +266,7 @@ def loop():
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>Inkling Erdős — live</title>
 <style>
-:root{--ink:#2b2a27;--muted:#6b6a65;--grid:#ecebe7;--surface:#fcfcfb;--live:#2a78d6;--ref:#b8b6b0}
+:root{--ink:#2b2a27;--muted:#4a4945;--grid:#ecebe7;--surface:#fcfcfb;--live:#2a78d6;--ref:#b8b6b0}
 body{font:14px/1.4 -apple-system,system-ui,sans-serif;color:var(--ink);background:var(--surface);margin:20px}
 h1{font-size:18px;margin:0 0 4px} .muted{color:var(--muted)} .row{display:flex;gap:16px;flex-wrap:wrap}
 .card{background:#fff;border:1px solid #e7e5df;border-radius:8px;padding:12px 14px}
@@ -302,8 +302,8 @@ function chart(key,title,logy,runs){
  const X=s=>P.l+(s-1)/(Math.max(1,xmax-1))*(W-P.l-P.r),Y=v=>H-P.b-(f(v)-a)/(b-a)*(H-P.t-P.b);
  let g=`<svg width="${W}" height="${H}">`;const ticks=5;
  for(let i=0;i<=ticks;i++){const tv=a+(b-a)*i/ticks,y=H-P.b-(i/ticks)*(H-P.t-P.b),lab=logy?Math.pow(10,tv):tv;
-  g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y}" y2="${y}" stroke="#ecebe7"/><text x="${P.l-6}" y="${y+4}" font-size="10" text-anchor="end" fill="#6b6a65">${lab>=100?lab.toFixed(0):lab.toFixed(1)}</text>`}
- for(let s=1;s<=xmax;s++)g+=`<text x="${X(s)}" y="${H-8}" font-size="10" text-anchor="middle" fill="#6b6a65">${s}</text>`;
+  g+=`<line x1="${P.l}" x2="${W-P.r}" y1="${y}" y2="${y}" stroke="#ecebe7"/><text x="${P.l-6}" y="${y+4}" font-size="10" text-anchor="end" fill="#4a4945">${lab>=100?lab.toFixed(0):lab.toFixed(1)}</text>`}
+ for(let s=1;s<=xmax;s++)g+=`<text x="${X(s)}" y="${H-8}" font-size="10" text-anchor="middle" fill="#4a4945">${s}</text>`;
  const order=Object.entries(runs).sort((x,y)=>(x[1].live?1:0)-(y[1].live?1:0));
  for(const [name,r] of order){const ss=(r.steps||[]).filter(s=>s[key]!=null&&!(logy&&s[key]<=0));if(!ss.length)continue;
   const live=r.live,col=live?'var(--live)':'var(--ref)',dash=r.frozen?'4 3':'';
@@ -330,11 +330,11 @@ function render(d){
    for(const it of (s.items||[])){const head=it.outcome==='valid'?`C5 ${it.c5.toFixed(7)} (parent ${it.parent_c5?.toFixed(7)}, gain ${it.gain_e6?.toFixed(2)}e-6)`:esc(it.msg);
     gh+=`<details data-run="${run}" data-step="${s.step}" data-i="${it.i}" style="margin:4px 0;border-top:1px solid var(--grid);padding-top:4px">
     <summary><b>${it.tag}</b> · ${it.outcome} · ${head} · <span class="muted">thinking ${(it.think_chars/1000).toFixed(1)}k chars · answer ${(it.answer_chars/1000).toFixed(1)}k · ${it.code_lines} lines · #${it.i}</span></summary>
-    <div class="muted" style="font-size:12px;white-space:pre-wrap;margin:6px 0">${esc(it.think_head)}${it.think_tail?' … '+esc(it.think_tail):''}</div><div class="full muted">loading…</div></details>`}}
+    <div style="font-size:12.5px;color:var(--ink);white-space:pre-wrap;margin:6px 0;background:#f6f5f2;padding:8px;border-radius:6px">${esc(it.think_head)}${it.think_tail?' … '+esc(it.think_tail):''}</div><div class="full" style="color:var(--ink)">loading…</div></details>`}}
   document.getElementById('gens').innerHTML=gh;
   for(const el of document.querySelectorAll('#gens details'))el.addEventListener('toggle',async()=>{if(!el.open||el.dataset.loaded)return;el.dataset.loaded=1;
    const box=el.querySelector('.full');try{const r=await (await fetch(`rollout?run=${el.dataset.run}&step=${el.dataset.step}&i=${el.dataset.i}`)).json();
-   box.innerHTML=`<div style="font-size:12px;margin:4px 0"><b>grader:</b> ${esc(r.message)} · reward ${r.reward}</div><details><summary>full thinking (${r.thinking.length} chars)</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:420px;overflow:auto">${esc(r.thinking)}</pre></details><details open><summary>answer (${r.answer.length} chars)</summary><pre style="white-space:pre-wrap;font-size:11px;max-height:520px;overflow:auto;background:#f6f5f2;padding:8px;border-radius:6px">${esc(r.answer)}</pre></details>`}catch(e){box.textContent='failed: '+e}})}}
+   box.innerHTML=`<div style="font-size:12px;margin:4px 0"><b>grader:</b> ${esc(r.message)} · reward ${r.reward}</div><details><summary>full thinking (${r.thinking.length} chars)</summary><pre style="white-space:pre-wrap;font-size:12px;color:var(--ink);max-height:420px;overflow:auto;background:#f6f5f2;padding:8px;border-radius:6px">${esc(r.thinking)}</pre></details><details open><summary>answer (${r.answer.length} chars)</summary><pre style="white-space:pre-wrap;font-size:12px;color:#1f1e1c;max-height:520px;overflow:auto;background:#f6f5f2;padding:8px;border-radius:6px">${esc(r.answer)}</pre></details>`}catch(e){box.textContent='failed: '+e}})}}
 let lastGens='';
 document.addEventListener('mousemove',e=>{const t=e.target.dataset&&e.target.dataset.t;if(t){tip.innerHTML=t;tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px'}else tip.style.display='none'});
 async function tick(){try{render(await (await fetch('data.json',{cache:'no-store'})).json())}catch(e){document.getElementById('upd').textContent='update failed: '+e}}
