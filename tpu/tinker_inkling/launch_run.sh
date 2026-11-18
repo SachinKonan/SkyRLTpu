@@ -62,6 +62,20 @@ export TTD_FIXED_TOTAL_TOKENS=34000 TTD_FIXED_THINK_TOKENS=24000 TTD_FIXED_BUDGE
 # answer rules in the prompt (code only, compact, solver note; client env.py): v2 only. v3 = pilot prompt (off).
 export TTD_ERDOS_ANSWER_RULES=0
 
+# --- TTD_MODEL=gptoss (user 2026-11-18): gpt-oss-120b, the 32K-context variant ONLY (train $0.737/M; the
+# :peft:131072 variant trains at $2.33/M), TTT-Discover's own setup: "high" reasoning, prompt + thinking <= 26,000
+# tokens (phase 1), the answer gets the rest of the 32,768 context (>= ~6.7k; phase 2 forces the final channel when
+# thinking runs out). No fixed think/answer budget (that is the Inkling completer's). Code only from the final channel.
+if [[ "${TTD_MODEL:-inkling}" == gptoss ]]; then
+  export TTD_ENSEMBLE_MODELS="openai/gpt-oss-120b:gpt_oss_high_reasoning:gptoss" TTD_ANSWER_MODEL_FAMILY=gptoss
+  export CONTEXT_WINDOW=32768 TTD_M0_CONTEXT_WINDOW=32768 TTD_M0_TRAIN_MAX_SEQ=32768 TTD_M0_PHASE1_MAX_TOKENS=26000
+  export TTD_FIXED_TOTAL_TOKENS=0 TTD_FIXED_THINK_TOKENS=0 TTD_FIXED_BUDGET_FIT=0
+  unset TTD_INKLING_EFFORT
+  [[ "$TTD_ENSEMBLE_MODELS" == openai/gpt-oss-120b:* && "$CONTEXT_WINDOW" == 32768 ]] || { echo "refused: gpt-oss must be the 32K model"; exit 2; }
+elif [[ "${TTD_MODEL:-inkling}" != inkling ]]; then
+  echo "refused: unknown TTD_MODEL=$TTD_MODEL"; exit 2
+fi
+
 # --- training (same as the Erdős runs except lr) ---
 export GROUPS_PER_BATCH="${GROUPS_PER_BATCH:-16}" GROUP_SIZE="${GROUP_SIZE:-32}" NUM_EPOCHS="$STEPS" SAVE_EVERY=1
 export LEARNING_RATE="${LEARNING_RATE:-2e-5}" LORA_RANK=32 KL_PENALTY_COEF="${KL_PENALTY_COEF:-0}" TTD_KL_MEASURE_EVERY=0 TTD_WARMUP_FB=0
