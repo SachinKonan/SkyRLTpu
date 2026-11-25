@@ -63,5 +63,11 @@ PY
     bash "$O/run_service.sh" run "$FORK" $((25 - FORK_AT)) "$N" TTD_MODEL=mini $RECIPE LEARNING_RATE=0 KL_PENALTY_COEF=0 \
         TTD_FROZEN_POLICY=1 TTD_FROZEN_SAMPLER_PATH="$SP" TINKER_KEY="$KEY"
   done <<< "$SPECS"
+  # Every ~30 min: delete live runs' checkpoints for steps < 5, keeping each run's two newest steps (prune_early.py).
+  LOOPS=$(( ${LOOPS:-0} + 1 ))
+  if (( LOOPS % 15 == 1 )); then
+    timeout 1200 /scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python "$O/prune_early.py" 2>&1 \
+      | grep -E "^key|FAILED" | sed "s/^/$(date -u +%FT%TZ) prune: /"
+  fi
   sleep 120
 done
