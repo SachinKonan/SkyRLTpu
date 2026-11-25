@@ -33,7 +33,13 @@ WT=$PIN_SKYRL
 DISC=$PIN_DISCOVER
 
 # Tinker key from ~/.bashrc (never printed).
-export TINKER_API_KEY="$(bash -ic 'printf %s "$TINKER_API_KEY"' 2>/dev/null)"
+# TINKER_KEY=2 (user 2026-11-25): the second key (TINKER_API_KEY_2, the user's other org) -- its own free-tier training
+# slots. A run's checkpoints live in the org that wrote them, so a run must keep the same key for its whole life.
+if [[ "${TINKER_KEY:-1}" == 2 ]]; then
+  export TINKER_API_KEY="$(bash -ic 'printf %s "$TINKER_API_KEY_2"' 2>/dev/null)"
+else
+  export TINKER_API_KEY="$(bash -ic 'printf %s "$TINKER_API_KEY"' 2>/dev/null)"
+fi
 [ -n "$TINKER_API_KEY" ] || { echo "no TINKER_API_KEY"; exit 1; }
 unset TINKER_BASE_URL TTD_M0_BASE_URL
 
