@@ -138,13 +138,20 @@ export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 1, "memory_gib": 1, "memory_max
 # TTD_RECIPE=tvg-a10k (user 2026-11-25): tvg with a 10k answer -- thinking budget unchanged (prompt + thinking <= 22,528),
 # context 32,768 so the answer gets ~10.2k instead of ~6.1k (Inkling programs outgrew 6k: 45% cut off by step 15) -- and
 # cut-off rollouts TRAIN as reward-0 failures (TTD_REJECT_TRUNCATED=0) so the model gets feedback for over-long answers.
-if [[ "${TTD_RECIPE:-}" == tvg || "${TTD_RECIPE:-}" == tvg-a10k ]]; then
+# TTD_RECIPE=tvg-fix (user 2026-11-25): tvg-a10k but a FIXED thinking budget: 22,000 thinking + 10,000 answer whatever the
+# prompt length (in tvg the prompt eats thinking: parents with ~7k-token code left ~15k, the squeeze that stalled the
+# Inkling-2-Small v2 runs), in a 65,536 context (the free variant's max; FIT=1 only if a prompt ever passes ~33k).
+if [[ "${TTD_RECIPE:-}" == tvg || "${TTD_RECIPE:-}" == tvg-a10k || "${TTD_RECIPE:-}" == tvg-fix ]]; then
   export CONTEXT_WINDOW=28672 TTD_M0_CONTEXT_WINDOW=28672 TTD_M0_TRAIN_MAX_SEQ=28672 TTD_M0_PHASE1_MAX_TOKENS=22528
-  if [[ "$TTD_RECIPE" == tvg-a10k ]]; then
+  export TTD_FIXED_TOTAL_TOKENS=0 TTD_FIXED_THINK_TOKENS=0 TTD_FIXED_BUDGET_FIT=0
+  if [[ "$TTD_RECIPE" == tvg-a10k || "$TTD_RECIPE" == tvg-fix ]]; then
     export CONTEXT_WINDOW=32768 TTD_M0_CONTEXT_WINDOW=32768 TTD_M0_TRAIN_MAX_SEQ=32768 TTD_REJECT_TRUNCATED=0
     export TTD_ERDOS_LINE_LIMIT="${TTD_ERDOS_LINE_LIMIT:-600}"  # prompt states the answer limit (~7,500 tokens of ~10.2k)
   fi
-  export TTD_FIXED_TOTAL_TOKENS=0 TTD_FIXED_THINK_TOKENS=0 TTD_FIXED_BUDGET_FIT=0
+  if [[ "$TTD_RECIPE" == tvg-fix ]]; then
+    export CONTEXT_WINDOW=65536 TTD_M0_CONTEXT_WINDOW=65536 TTD_M0_TRAIN_MAX_SEQ=65536 TTD_M0_PHASE1_MAX_TOKENS=65536
+    export TTD_FIXED_THINK_TOKENS=22000 TTD_FIXED_TOTAL_TOKENS=32000 TTD_FIXED_BUDGET_FIT=1
+  fi
   unset TTD_ERDOS_RECORD TTD_ERDOS_CVXPY_SOLVERS TTD_GRADE_SEED TTD_GRADE_BUDGET_S
   export TTD_ERDOS_PROMPT_CPUS=2 NUM_CPUS_PER_TASK=2 TTD_ELITE_SLOTS=0 TTD_ERDOS_EVAL_ALIAS=0 TTD_STATE_PROMPT_LEGACY=1
   export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 2, "memory_gib": 4, "memory_max_gib": 8, "slots_per_host": 1}}'
