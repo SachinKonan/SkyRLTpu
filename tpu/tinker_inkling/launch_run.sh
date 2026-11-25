@@ -143,7 +143,7 @@ export SKYRL_GRADING_JOURNAL="$RUN/grading-journal.jsonl" SKYRL_GRADING_EVENTS="
 
 env | grep -E '^(TTD_|GROUP|NUM_|LEARNING|LORA|CONTEXT|EVAL|SKYRL_|KL_)' | sort > "$RUN/env.txt"
 echo "CODE_SKYRL=$(readlink -f "$WT")" >> "$RUN/env.txt"; echo "CODE_DISCOVER=$(readlink -f "$DISC")" >> "$RUN/env.txt"
-echo "run $NAME steps $STEPS lora_seed $LORA_SEED grade_seed $TTD_GRADE_SEED -> $RUN"
+echo "run $NAME steps $STEPS lora_seed $LORA_SEED grade_seed ${TTD_GRADE_SEED:-none (plain run())} -> $RUN"
 cd "$WT"
 # Diagnostics: tracebacks on native crashes / fatal signals, unbuffered output, and the exit status recorded.
 export PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1
