@@ -54,6 +54,12 @@ case "$cmd" in
     sleep 2
     start_unit tinker-tunnel always /bin/bash -c "exec /bin/bash $D/tunnel_loop.sh >> $D/tunnel_loop.log 2>&1"
     echo "started tinker-tunnel";;
+  tunnel-ink)  # forwards to the dedicated Inkling v6e-128 farms (ink-farms.json), ports 27871..
+    pkill -u "$(id -u)" -f "$D/tunnel_ink.sh" 2>/dev/null || true
+    pkill -u "$(id -u)" -f "^ssh .*-L 127\.0\.0\.1:27871:" 2>/dev/null || true
+    sleep 2
+    start_unit tinker-tunnel-ink always /bin/bash -c "exec /bin/bash $D/tunnel_ink.sh >> $D/tunnel_ink.log 2>&1"
+    echo "started tinker-tunnel-ink";;
   watch)
     save_args "$D/watch.args" "$@"
     SETENV=(); for kv in "$@"; do SETENV+=(--setenv="$kv"); done

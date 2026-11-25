@@ -37,13 +37,30 @@ export TINKER_API_KEY="$(bash -ic 'printf %s "$TINKER_API_KEY"' 2>/dev/null)"
 [ -n "$TINKER_API_KEY" ] || { echo "no TINKER_API_KEY"; exit 1; }
 unset TINKER_BASE_URL TTD_M0_BASE_URL
 
-# Grading registry: the 6 gradefarm hosts through the local SSH forwards (tunnel_loop.sh).
-python3 - "$REG" <<'PY'
-import json, sys, time
-farms = [dict(name=f'gradefarm-harish-{i}', url=f'http://127.0.0.1:2786{i}', ok=True, tunnel_ok=True, health='healthy')
-         for i in range(1, 7)]
-import os; tmp = sys.argv[1] + '.tmp%d' % os.getpid(); json.dump(dict(time=time.time(), farms=farms), open(tmp, 'w')); os.replace(tmp, sys.argv[1])
+# Grading registry. Default: the 6 gradefarm hosts through the local SSH forwards (tunnel_loop.sh).
+# GRADE_FARMS=ink (user 2026-11-25): the dedicated Inkling v6e-128 bf0y farms (built by the train-faster session,
+# hash 2bb4ee34, listed only here) through tunnel_ink.sh's forwards 127.0.0.1:278NN, one per farm in ink-farms.json.
+GRADE_FARMS="${GRADE_FARMS:-gradefarm}"
+if [[ "$GRADE_FARMS" == ink ]]; then
+  REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-ink.json
+  INK_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-farms.json
+  [ -f "$INK_FARMS_JSON" ] || { echo "refused: $INK_FARMS_JSON missing"; exit 2; }
+fi
+python3 - "$REG" "$GRADE_FARMS" "${INK_FARMS_JSON:-}" <<'PY'
+import json, os, sys, time
+reg, which = sys.argv[1], sys.argv[2]
+if which == 'ink':
+    farms = json.load(open(sys.argv[3]))
+    farms = farms.get('farms', farms) if isinstance(farms, dict) else farms
+    farms = [dict(name=f['name'], url=f'http://127.0.0.1:{27870 + i}', ok=True, tunnel_ok=True, health='healthy')
+             for i, f in enumerate(sorted(farms, key=lambda f: f['name']), start=1)]
+else:
+    farms = [dict(name=f'gradefarm-harish-{i}', url=f'http://127.0.0.1:2786{i}', ok=True, tunnel_ok=True, health='healthy')
+             for i in range(1, 7)]
+tmp = reg + '.tmp%d' % os.getpid(); json.dump(dict(time=time.time(), farms=farms), open(tmp, 'w')); os.replace(tmp, reg)
+print(f'[launch_run] grading registry {reg}: {len(farms)} farms')
 PY
+NFARMS=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))['farms']))" "$REG")
 
 export PYTHONPATH="$DISC:$WT:$WT/tpu"
 export HF_HOME=/scratch/gpfs/ZHUANGL/sk7524/.cache/hf UV_CACHE_DIR=/scratch/gpfs/ZHUANGL/sk7524/.cache/uv
@@ -104,7 +121,7 @@ export TTD_GRADE_BUDGET_S="${TTD_GRADE_BUDGET_S:-1000}" TTD_ERDOS_PROMPT_CPUS=1
 # never fires in practice. A lost request is handled by the watchdog instead (restart after 6 h with grades pending).
 export TTD_GRADE_WAIT_TIMEOUT=172800
 unset SKYRL_GRADING_URL
-export SKYRL_GRADING_LOCAL_SLOTS=0 SKYRL_OPEN_GRADING=1 SKYRL_GRADING_REGISTRY="$REG" SKYRL_OPEN_GRADING_K=6
+export SKYRL_GRADING_LOCAL_SLOTS=0 SKYRL_OPEN_GRADING=1 SKYRL_GRADING_REGISTRY="$REG" SKYRL_OPEN_GRADING_K="$NFARMS"
 export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 1, "memory_gib": 1, "memory_max_gib": 2, "slots_per_host": 1}}'
 export SKYRL_GRADING_MAX_INFRA_RETRIES=8 SKYRL_GRADING_LONG_POLL_SECONDS=20
 export SKYRL_GRADING_JOURNAL="$RUN/grading-journal.jsonl" SKYRL_GRADING_EVENTS="$RUN/grading-events.jsonl"
