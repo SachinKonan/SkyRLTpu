@@ -135,8 +135,14 @@ export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 1, "memory_gib": 1, "memory_max
 # answer = the rest; prompt v2 with ITS defaults (record 0.3808586, 2 CPUs, default solver line, no seed rule); plain
 # run() grading (no seed/budget wrapper), 2 CPUs per program, no evaluate_erdos_solution alias; no elite slots. Model
 # specifics (Inkling renderer + effort) and lr/KL/LoRA come from the run's own settings.
-if [[ "${TTD_RECIPE:-}" == tvg ]]; then
+# TTD_RECIPE=tvg-a10k (user 2026-11-25): tvg with a 10k answer -- thinking budget unchanged (prompt + thinking <= 22,528),
+# context 32,768 so the answer gets ~10.2k instead of ~6.1k (Inkling programs outgrew 6k: 45% cut off by step 15) -- and
+# cut-off rollouts TRAIN as reward-0 failures (TTD_REJECT_TRUNCATED=0) so the model gets feedback for over-long answers.
+if [[ "${TTD_RECIPE:-}" == tvg || "${TTD_RECIPE:-}" == tvg-a10k ]]; then
   export CONTEXT_WINDOW=28672 TTD_M0_CONTEXT_WINDOW=28672 TTD_M0_TRAIN_MAX_SEQ=28672 TTD_M0_PHASE1_MAX_TOKENS=22528
+  if [[ "$TTD_RECIPE" == tvg-a10k ]]; then
+    export CONTEXT_WINDOW=32768 TTD_M0_CONTEXT_WINDOW=32768 TTD_M0_TRAIN_MAX_SEQ=32768 TTD_REJECT_TRUNCATED=0
+  fi
   export TTD_FIXED_TOTAL_TOKENS=0 TTD_FIXED_THINK_TOKENS=0 TTD_FIXED_BUDGET_FIT=0
   unset TTD_ERDOS_RECORD TTD_ERDOS_CVXPY_SOLVERS TTD_GRADE_SEED TTD_GRADE_BUDGET_S
   export TTD_ERDOS_PROMPT_CPUS=2 NUM_CPUS_PER_TASK=2 TTD_ELITE_SLOTS=0 TTD_ERDOS_EVAL_ALIAS=0 TTD_STATE_PROMPT_LEGACY=1
