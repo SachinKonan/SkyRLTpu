@@ -105,7 +105,9 @@ def main() -> None:
 
     members = []
     for i, spec in enumerate(os.environ.get("TTD_ENSEMBLE_MODELS", DEFAULT_MODELS).split(",")):
-        parts = spec.strip().split(":")
+        # "model|renderer[|tag]" when the model id itself has colons (Tinker variants such as
+        # thinkingmachines/Inkling-2-Mini:peft:65536:free); else the original "model:renderer[:tag]".
+        parts = spec.strip().split("|" if "|" in spec else ":")
         model, renderer = parts[0], parts[1]
         tag = parts[2] if len(parts) > 2 else _default_tag(model)
         is_gptoss = model.startswith("openai/gpt-oss")

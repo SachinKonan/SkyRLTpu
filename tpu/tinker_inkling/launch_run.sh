@@ -72,6 +72,12 @@ if [[ "${TTD_MODEL:-inkling}" == gptoss ]]; then
   export TTD_FIXED_TOTAL_TOKENS=0 TTD_FIXED_THINK_TOKENS=0 TTD_FIXED_BUDGET_FIT=0
   unset TTD_INKLING_EFFORT
   [[ "$TTD_ENSEMBLE_MODELS" == openai/gpt-oss-120b:* && "$CONTEXT_WINDOW" == 32768 ]] || { echo "refused: gpt-oss must be the 32K model"; exit 2; }
+# --- TTD_MODEL=mini (user 2026-11-25): Inkling-2-Mini, the FREE Tinker variant ONLY ($0 sample/train, 64K context,
+# rate-limited; the paid ids bill $0.50/M sample). Same tml_v0 format, completer and budgets as Inkling-2-Small
+# (24k thinking + 10k answer, 65,536 context = the free variant's max). '|' separates the spec because the id has ':'.
+elif [[ "${TTD_MODEL:-inkling}" == mini ]]; then
+  export TTD_ENSEMBLE_MODELS="thinkingmachines/Inkling-2-Mini:peft:65536:free|tml_v0|inkling"
+  [[ "$TTD_ENSEMBLE_MODELS" == "thinkingmachines/Inkling-2-Mini:peft:65536:free|"* ]] || { echo "refused: mini must be the free variant"; exit 2; }
 elif [[ "${TTD_MODEL:-inkling}" != inkling ]]; then
   echo "refused: unknown TTD_MODEL=$TTD_MODEL"; exit 2
 fi
