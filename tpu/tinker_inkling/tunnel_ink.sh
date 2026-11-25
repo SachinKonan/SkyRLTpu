@@ -17,7 +17,8 @@ fw = []
 for i, f in enumerate(farms, start=1):
     u = urlparse(f.get('internal_url') or f['url'])
     fw.append(f'-L 127.0.0.1:{int(sys.argv[2]) + i}:{u.hostname}:{u.port or 24800}')
-print((ext[0] if ext else 'NONE'), ' '.join(fw))
+import os
+print(os.environ.get('JUMP_IP') or (ext[0] if ext else 'NONE'), ' '.join(fw))
 PY
 )
   if [[ "$JUMP" == NONE || -z "$L" ]]; then echo "$(date -u +%FT%TZ) no farms/jump in $INK; retry in 60 s"; sleep 60; continue; fi

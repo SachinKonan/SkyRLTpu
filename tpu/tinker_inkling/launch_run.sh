@@ -55,6 +55,13 @@ if [[ "$GRADE_FARMS" == ink ]]; then
   REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-ink.json
   INK_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-farms.json
   [ -f "$INK_FARMS_JSON" ] || { echo "refused: $INK_FARMS_JSON missing"; exit 2; }
+elif [[ "$GRADE_FARMS" == v5p ]]; then
+  # GRADE_FARMS=v5p (user OK 2026-11-26 00:00Z via train-faster): train-faster's idle v5p/1zmn Erdős math farms (registry
+  # farms-v5p.json, kept fresh by their registry_sync) through tunnel-v5p's forwards 127.0.0.1:(28000+i). They ship the
+  # slim math-only grader (hash over SKYRL_GRADER_HASH_FILES = 57cc0755); needs the tfsci snapshot's grading_transport.
+  REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-v5p.json PORT_BASE=28000
+  INK_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/farms-v5p.json
+  export SKYRL_GRADER_HASH_FILES=__init__.py,cgroup_limits.py,core_pool.py,cpu_slots.py,farm_resources.py,grading_dedup.py,grading_transport.py,math_grade.py,math_runner.py,placement_resources.py,placement_runtime.py,rewards.py,routing_resources.py,unit.py,worker.py
 elif [[ "$GRADE_FARMS" == inkc ]]; then
   REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-inkc.json PORT_BASE=27880
   INK_FARMS_JSON="${INKC_FARMS_JSON:-/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms.json}"
@@ -63,7 +70,7 @@ fi
 python3 - "$REG" "$GRADE_FARMS" "${INK_FARMS_JSON:-}" "$PORT_BASE" <<'PY'
 import json, os, sys, time
 reg, which = sys.argv[1], sys.argv[2]
-if which in ('ink', 'inkc'):
+if which in ('ink', 'inkc', 'v5p'):
     farms = json.load(open(sys.argv[3]))
     farms = farms.get('farms', farms) if isinstance(farms, dict) else farms
     farms = [dict(name=f['name'], url=f'http://127.0.0.1:{int(sys.argv[4]) + i}', ok=True, tunnel_ok=True, health='healthy')
