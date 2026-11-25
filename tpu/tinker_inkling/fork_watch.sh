@@ -9,16 +9,16 @@ C=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code
 FORK_AT=12
 # seed run : fork run : API key : recipe args : pinned skyrl snapshot
 SPECS="
-mn9-s1:mf9-s1:2:TTD_RECIPE=tvg-fix GRADE_FARMS=ink:skyrl-edef388b25a3-g2bb4
-mn9-s2:mf9-s2:2:TTD_RECIPE=tvg-fix GRADE_FARMS=ink:skyrl-edef388b25a3-g2bb4
-mn9-s3:mf9-s3:3:TTD_RECIPE=tvg-fix GRADE_FARMS=ink:skyrl-edef388b25a3-g2bb4
-mn9-s4:mf9-s4:1:TTD_RECIPE=tvg-fix GRADE_FARMS=ink:skyrl-edef388b25a3-g2bb4
-mn9-s5:mf9-s5:1:TTD_RECIPE=tvg-fix GRADE_FARMS=ink:skyrl-edef388b25a3-g2bb4
-mc-s1:mcf-s1:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
-mc-s2:mcf-s2:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
-mc-s3:mcf-s3:3:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
-mc-s4:mcf-s4:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-f1d84d6bd2f0-tfsci
-mc-s5:mcf-s5:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-f1d84d6bd2f0-tfsci
+mn9-s1:mf9-s1:2:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
+mn9-s2:mf9-s2:2:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
+mn9-s3:mf9-s3:3:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
+mn9-s4:mf9-s4:1:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
+mn9-s5:mf9-s5:1:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
+mc-s1:mcf-s1:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s2:mcf-s2:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s3:mcf-s3:3:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s4:mcf-s4:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s5:mcf-s5:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
 "
 # Deferred TRAINED seeds (user 2026-11-25: circuit has 5 seeds, the 8 free training slots are full): start each when the
 # run holding its key's slot has finished all 25 steps. new seed : seed number : key : run whose finish frees the slot
@@ -27,6 +27,10 @@ DEFER="
 # (mc-s5 started directly on the HARISH key 2026-11-25)
 "
 while true; do
+  # Circuit runs grade on our 8 ink-cfarms + train-faster's idle circuit farms (user OK 2026-11-26 00:00Z); a circuit run
+  # (re)launch rewrites registry-inkc.json from its own list, so re-assert the 70-farm list every loop.
+  python3 "$O/write_registry.py" /scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json \
+      "$O/registry-inkc.json" 27880
   while IFS=: read -r NEW N KEY AFTER; do
     [ -n "$NEW" ] || continue
     [ -f "$R/$NEW/env.txt" ] && continue
