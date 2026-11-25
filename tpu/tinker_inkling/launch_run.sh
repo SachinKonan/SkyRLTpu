@@ -35,7 +35,7 @@ DISC=$PIN_DISCOVER
 # Tinker key from ~/.bashrc (never printed).
 # TINKER_KEY=2 (user 2026-11-25): the second key (TINKER_API_KEY_2, the user's other org) -- its own free-tier training
 # slots. A run's checkpoints live in the org that wrote them, so a run must keep the same key for its whole life.
-if [[ "${TINKER_KEY:-1}" =~ ^[2-9]$ ]]; then  # TINKER_KEY=N -> TINKER_API_KEY_N (key 3 added 2026-11-25)
+if [[ "${TINKER_KEY:-1}" =~ ^([2-9]|TAI)$ ]]; then  # TINKER_KEY=N -> TINKER_API_KEY_N (key 3, TAI added 2026-11-25)
   export TINKER_API_KEY="$(bash -ic "printf %s \"\$TINKER_API_KEY_${TINKER_KEY}\"" 2>/dev/null)"
 else
   export TINKER_API_KEY="$(bash -ic 'printf %s "$TINKER_API_KEY"' 2>/dev/null)"
