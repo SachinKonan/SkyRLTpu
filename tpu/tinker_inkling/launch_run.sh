@@ -47,18 +47,26 @@ unset TINKER_BASE_URL TTD_M0_BASE_URL
 # GRADE_FARMS=ink (user 2026-11-25): the dedicated Inkling v6e-128 bf0y farms (built by the train-faster session,
 # hash 2bb4ee34, listed only here) through tunnel_ink.sh's forwards 127.0.0.1:278NN, one per farm in ink-farms.json.
 GRADE_FARMS="${GRADE_FARMS:-gradefarm}"
+# GRADE_FARMS=inkc (user 2026-11-25): circuit (placement) farms for Inkling circuit runs -- list INKC_FARMS_JSON (default
+# ink-circuit-farms.json; the shared temp list ink-circuit-farms-temp.json until the dedicated 9la0 farms are up),
+# forwards 127.0.0.1:(27880+i) from tunnel_ink.sh run with INK_FARMS=<list> PORT_BASE=27880.
+PORT_BASE=27870
 if [[ "$GRADE_FARMS" == ink ]]; then
   REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-ink.json
   INK_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-farms.json
   [ -f "$INK_FARMS_JSON" ] || { echo "refused: $INK_FARMS_JSON missing"; exit 2; }
+elif [[ "$GRADE_FARMS" == inkc ]]; then
+  REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-inkc.json PORT_BASE=27880
+  INK_FARMS_JSON="${INKC_FARMS_JSON:-/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms.json}"
+  [ -f "$INK_FARMS_JSON" ] || { echo "refused: $INK_FARMS_JSON missing"; exit 2; }
 fi
-python3 - "$REG" "$GRADE_FARMS" "${INK_FARMS_JSON:-}" <<'PY'
+python3 - "$REG" "$GRADE_FARMS" "${INK_FARMS_JSON:-}" "$PORT_BASE" <<'PY'
 import json, os, sys, time
 reg, which = sys.argv[1], sys.argv[2]
-if which == 'ink':
+if which in ('ink', 'inkc'):
     farms = json.load(open(sys.argv[3]))
     farms = farms.get('farms', farms) if isinstance(farms, dict) else farms
-    farms = [dict(name=f['name'], url=f'http://127.0.0.1:{27870 + i}', ok=True, tunnel_ok=True, health='healthy')
+    farms = [dict(name=f['name'], url=f'http://127.0.0.1:{int(sys.argv[4]) + i}', ok=True, tunnel_ok=True, health='healthy')
              for i, f in enumerate(sorted(farms, key=lambda f: f['name']), start=1)]
 else:
     farms = [dict(name=f'gradefarm-harish-{i}', url=f'http://127.0.0.1:2786{i}', ok=True, tunnel_ok=True, health='healthy')
@@ -155,6 +163,22 @@ if [[ "${TTD_RECIPE:-}" == tvg || "${TTD_RECIPE:-}" == tvg-a10k || "${TTD_RECIPE
   unset TTD_ERDOS_RECORD TTD_ERDOS_CVXPY_SOLVERS TTD_GRADE_SEED TTD_GRADE_BUDGET_S
   export TTD_ERDOS_PROMPT_CPUS=2 NUM_CPUS_PER_TASK=2 TTD_ELITE_SLOTS=0 TTD_ERDOS_EVAL_ALIAS=0 TTD_STATE_PROMPT_LEGACY=1
   export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 2, "memory_gib": 4, "memory_max_gib": 8, "slots_per_host": 1}}'
+# --- TTD_RECIPE=circuit-fix (user 2026-11-25, relayed): Inkling circuit = the Erdős Mini recipe (fixed 22,000 thinking +
+# 10,000 answer in 65,536, a length rule in the prompt, cut-offs trained as reward 0, lr/KL/LoRA from the run) with the tvg
+# circuit TASK (profiles tvg-circuit-*-train-s1): science_placement, ibm8-proxy-v1 suite, fast_proxy_v1 helper, the
+# abuplace/xplace three starts, one empty root (no seeded start states), grading 1 CPU / 4 GiB per case on placement farms
+# (cpu300-4g-v1 runtime). Advantage = the Erdős runs' estimator (piecewise_valid_entropic_centered, alpha 1.0).
+elif [[ "${TTD_RECIPE:-}" == circuit-fix ]]; then
+  export TTD_ENV=science_placement TTD_PROBLEM_TYPE=placement
+  export SCIENCE_PLACEMENT_SUITE=ibm8-proxy-v1 SCIENCE_PLACEMENT_HELPER=fast_proxy_v1 SCIENCE_PLACEMENT_STARTS=abuplace-xplace-three-starts-v1
+  export SCIENCE_PLACEMENT_BACKEND=cpu SCIENCE_PLACEMENT_RUNTIME=cpu300-4g-v1 SCIENCE_PLACEMENT_SLOTS_PER_HOST=1
+  export SCIENCE_PLACEMENT_CPUS_PER_CASE=1 SCIENCE_PLACEMENT_MEMORY_GIB=4
+  export CONTEXT_WINDOW=65536 TTD_M0_CONTEXT_WINDOW=65536 TTD_M0_TRAIN_MAX_SEQ=65536 TTD_M0_PHASE1_MAX_TOKENS=65536
+  export TTD_FIXED_THINK_TOKENS=22000 TTD_FIXED_TOTAL_TOKENS=32000 TTD_FIXED_BUDGET_FIT=1 TTD_REJECT_TRUNCATED=0
+  export TTD_PROMPT_EXTRA_RULE="${TTD_PROMPT_EXTRA_RULE:-Answer length: your final program must be at most ~600 lines (about 7,500 tokens); a longer answer is cut off and scores nothing.}"
+  export TTD_EVAL_BACKEND=local EVAL_TIMEOUT=172800 NUM_CPUS_PER_TASK=4 TTD_ELITE_SLOTS=0 TTD_MIN_VALID_PER_GROUP=0
+  unset TTD_ERDOS_RECORD TTD_ERDOS_CVXPY_SOLVERS TTD_GRADE_SEED TTD_GRADE_BUDGET_S TTD_INIT_STATE_SEED TTD_ERDOS_PROMPT
+  export SKYRL_GRADING_FAMILIES='{"placement": {"cpus": 1, "memory_gib": 4, "slots_per_host": 1}}'
 elif [[ -n "${TTD_RECIPE:-}" ]]; then
   echo "refused: unknown TTD_RECIPE=$TTD_RECIPE"; exit 2
 fi
