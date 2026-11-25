@@ -93,7 +93,9 @@ def main() -> None:
                   for name in ("recurrent_gemma", "recurrentgemma", "pallas_rglru", "rg_lru")})
     _mod, _cls = _ENVS[os.environ.get("TTD_ENV", "erdos_min_overlap")]
     env_type = getattr(importlib.import_module(_mod), _cls)
-    if _mod == "tpu.science.training_env":
+    if _mod == "tpu.science.training_env" and os.environ.get("RAY_ADDRESS"):
+        # No Ray cluster (Tinker client grading over the farm transport only, 2026-11-25): skip the connect;
+        # tpu.science.training_env.evaluate then takes the transport path (SKYRL_GRADING_URL set, cpu placement).
         from tpu.science.training_env import connect
         connect()
 

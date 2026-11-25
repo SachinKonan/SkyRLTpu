@@ -179,6 +179,9 @@ elif [[ "${TTD_RECIPE:-}" == circuit-fix ]]; then
   export TTD_EVAL_BACKEND=local EVAL_TIMEOUT=172800 NUM_CPUS_PER_TASK=4 TTD_ELITE_SLOTS=0 TTD_MIN_VALID_PER_GROUP=0
   unset TTD_ERDOS_RECORD TTD_ERDOS_CVXPY_SOLVERS TTD_GRADE_SEED TTD_GRADE_BUDGET_S TTD_INIT_STATE_SEED TTD_ERDOS_PROMPT
   export SKYRL_GRADING_FAMILIES='{"placement": {"cpus": 1, "memory_gib": 4, "slots_per_host": 1}}'
+  # No trainer ingress: a dead URL only makes science evaluate() take the transport path (farm-list refreshes from it
+  # fail quietly; grades go to the open-grading registry farms). No Ray (run_ttd_ensemble skips connect without RAY_ADDRESS).
+  export SKYRL_GRADING_URL=http://127.0.0.1:9 SCIENCE_WORKER_ROOT="$RUN/science-worker"
 elif [[ -n "${TTD_RECIPE:-}" ]]; then
   echo "refused: unknown TTD_RECIPE=$TTD_RECIPE"; exit 2
 fi
