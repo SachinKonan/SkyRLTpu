@@ -123,6 +123,21 @@ export TTD_GRADE_WAIT_TIMEOUT=172800
 unset SKYRL_GRADING_URL
 export SKYRL_GRADING_LOCAL_SLOTS=0 SKYRL_OPEN_GRADING=1 SKYRL_GRADING_REGISTRY="$REG" SKYRL_OPEN_GRADING_K="$NFARMS"
 export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 1, "memory_gib": 1, "memory_max_gib": 2, "slots_per_host": 1}}'
+
+# --- TTD_RECIPE=tvg (user 2026-11-25): the train-faster tvg Qwen/Muse Erdős recipe (profiles rebut-seedctl-erdos-qwen-s1,
+# rebut-v6e128-erdos-muse-seed1, gen-profiles tvg-erdos-*-gen-s*): 28,672 context, prompt + thinking <= 22,528 (phase 1),
+# answer = the rest; prompt v2 with ITS defaults (record 0.3808586, 2 CPUs, default solver line, no seed rule); plain
+# run() grading (no seed/budget wrapper), 2 CPUs per program, no evaluate_erdos_solution alias; no elite slots. Model
+# specifics (Inkling renderer + effort) and lr/KL/LoRA come from the run's own settings.
+if [[ "${TTD_RECIPE:-}" == tvg ]]; then
+  export CONTEXT_WINDOW=28672 TTD_M0_CONTEXT_WINDOW=28672 TTD_M0_TRAIN_MAX_SEQ=28672 TTD_M0_PHASE1_MAX_TOKENS=22528
+  export TTD_FIXED_TOTAL_TOKENS=0 TTD_FIXED_THINK_TOKENS=0 TTD_FIXED_BUDGET_FIT=0
+  unset TTD_ERDOS_RECORD TTD_ERDOS_CVXPY_SOLVERS TTD_GRADE_SEED TTD_GRADE_BUDGET_S
+  export TTD_ERDOS_PROMPT_CPUS=2 NUM_CPUS_PER_TASK=2 TTD_ELITE_SLOTS=0 TTD_ERDOS_EVAL_ALIAS=0 TTD_STATE_PROMPT_LEGACY=1
+  export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 2, "memory_gib": 4, "memory_max_gib": 8, "slots_per_host": 1}}'
+elif [[ -n "${TTD_RECIPE:-}" ]]; then
+  echo "refused: unknown TTD_RECIPE=$TTD_RECIPE"; exit 2
+fi
 export SKYRL_GRADING_MAX_INFRA_RETRIES=8 SKYRL_GRADING_LONG_POLL_SECONDS=20
 export SKYRL_GRADING_JOURNAL="$RUN/grading-journal.jsonl" SKYRL_GRADING_EVENTS="$RUN/grading-events.jsonl"
 
