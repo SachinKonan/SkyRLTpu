@@ -17,14 +17,14 @@ mn9-s5:mf9-s5:1:TTD_RECIPE=tvg-fix GRADE_FARMS=ink:skyrl-edef388b25a3-g2bb4
 mc-s1:mcf-s1:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
 mc-s2:mcf-s2:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
 mc-s3:mcf-s3:3:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
-mc-s4:mcf-s4:1:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
-mc-s5:mcf-s5:1:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
+mc-s4:mcf-s4:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-f1d84d6bd2f0-tfsci
+mc-s5:mcf-s5:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-f1d84d6bd2f0-tfsci
 "
 # Deferred TRAINED seeds (user 2026-11-25: circuit has 5 seeds, the 8 free training slots are full): start each when the
 # run holding its key's slot has finished all 25 steps. new seed : seed number : key : run whose finish frees the slot
 DEFER="
-mc-s4:4:1:mn9-s4
-mc-s5:5:1:mn9-s5
+# (mc-s4 started directly on the HARISH key 2026-11-25)
+# (mc-s5 started directly on the HARISH key 2026-11-25)
 "
 while true; do
   while IFS=: read -r NEW N KEY AFTER; do
