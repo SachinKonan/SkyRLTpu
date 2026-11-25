@@ -17,8 +17,28 @@ mn9-s5:mf9-s5:1:TTD_RECIPE=tvg-fix GRADE_FARMS=ink:skyrl-edef388b25a3-g2bb4
 mc-s1:mcf-s1:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
 mc-s2:mcf-s2:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
 mc-s3:mcf-s3:3:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
+mc-s4:mcf-s4:1:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
+mc-s5:mcf-s5:1:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc:skyrl-edef388b25a3-tfsci
+"
+# Deferred TRAINED seeds (user 2026-11-25: circuit has 5 seeds, the 8 free training slots are full): start each when the
+# run holding its key's slot has finished all 25 steps. new seed : seed number : key : run whose finish frees the slot
+DEFER="
+mc-s4:4:1:mn9-s4
+mc-s5:5:1:mn9-s5
 "
 while true; do
+  while IFS=: read -r NEW N KEY AFTER; do
+    [ -n "$NEW" ] || continue
+    [ -f "$R/$NEW/env.txt" ] && continue
+    done_steps=$(cat "$R/$AFTER/tinker_log/$AFTER/metrics.jsonl" 2>/dev/null | wc -l)
+    if [ "$done_steps" -ge 25 ] && ! systemctl --user is-active --quiet "tinker-run-$AFTER"; then
+      echo "$(date -u +%FT%TZ) $AFTER finished: starting $NEW (seed $N, key $KEY)"
+      mkdir -p "$R/$NEW"
+      printf 'PIN_SKYRL=%s\nPIN_DISCOVER=%s\n' "$C/skyrl-edef388b25a3-tfsci" "$C/discover-0766e2413eb0" > "$R/$NEW/code.pin"
+      bash "$O/run_service.sh" run "$NEW" 25 "$N" TTD_MODEL=mini TTD_RECIPE=circuit-fix GRADE_FARMS=inkc \
+          LEARNING_RATE=5.4e-5 KL_PENALTY_COEF=0 TINKER_KEY="$KEY"
+    fi
+  done <<< "$DEFER"
   while IFS=: read -r SEED FORK KEY RECIPE SNAP; do
     [ -n "$SEED" ] || continue
     [ -d "$R/$FORK" ] && continue
