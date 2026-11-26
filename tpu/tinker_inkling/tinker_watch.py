@@ -91,14 +91,18 @@ def price_rows(rows):
     """USD over billing rows: the export's estimate where present, else quantity x rate (the same model/kind's rate seen
     in this export, else FALLBACK_RATE). Returns (total, unpriced_usd) so the log shows how much was filled in."""
     seen = {}
+    def has_cost(x):   # a real $0.00 estimate (free-tier model) is a price, not a missing one (bug 2026-11-26: 0 read as blank)
+        return x.get('estimated_cost_usd') not in (None, '')
     for x in rows:
-        if x.get('estimated_cost_usd') and x.get('effective_rate_usd_per_million_tokens'):
+        if has_cost(x) and x.get('effective_rate_usd_per_million_tokens'):
             k = (x.get('base_model'), x.get('type'), x.get('cached'))
             seen[k] = max(seen.get(k, 0.0), float(x['effective_rate_usd_per_million_tokens']))
     total = filled = 0.0
     for x in rows:
-        if x.get('estimated_cost_usd'):
+        if has_cost(x):
             total += float(x['estimated_cost_usd'])
+            continue
+        if ':free' in str(x.get('base_model') or ''):   # free-tier model (e.g. Inkling-2-Mini:peft:65536:free): $0 tokens
             continue
         if x.get('type') == 'storage' or x.get('gigabyte_hours'):
             usd = float(x.get('gigabyte_hours') or 0) / 720 * STORAGE_RATE_GB_MONTH
