@@ -14,11 +14,11 @@ mn9-s2:mf9-s2:2:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
 mn9-s3:mf9-s3:3:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
 mn9-s4:mf9-s4:1:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
 mn9-s5:mf9-s5:1:TTD_RECIPE=tvg-fix GRADE_FARMS=v5p:skyrl-28b4c4aa866a-tfsci
-mc-s1:mcf-s1:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
-mc-s2:mcf-s2:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
-mc-s3:mcf-s3:3:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
-mc-s4:mcf-s4:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
-mc-s5:mcf-s5:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s1:mcf-s1:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=3 INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s2:mcf-s2:TAI:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=3 INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s3:mcf-s3:3:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=3 INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s4:mcf-s4:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=3 INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
+mc-s5:mcf-s5:HARISH:TTD_RECIPE=circuit-fix GRADE_FARMS=inkc SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=3 INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json:skyrl-28b4c4aa866a-tfsci
 "
 # Deferred TRAINED seeds (user 2026-11-25: circuit has 5 seeds, the 8 free training slots are full): start each when the
 # run holding its key's slot has finished all 25 steps. new seed : seed number : key : run whose finish frees the slot

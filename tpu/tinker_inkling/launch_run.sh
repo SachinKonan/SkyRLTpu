@@ -143,6 +143,13 @@ export TTD_GRADE_BUDGET_S="${TTD_GRADE_BUDGET_S:-1000}" TTD_ERDOS_PROMPT_CPUS=1
 export TTD_GRADE_WAIT_TIMEOUT=172800
 unset SKYRL_GRADING_URL
 export SKYRL_GRADING_LOCAL_SLOTS=0 SKYRL_OPEN_GRADING=1 SKYRL_GRADING_REGISTRY="$REG" SKYRL_OPEN_GRADING_K="$NFARMS"
+# The transport's one httpx pool has 256 connections, shared by every open farm's request window (default 32 each).
+# With many farms (circuit: 66) thousands of requests queue in that pool and httpcore's O(queue x connections) assignment
+# scan eats the whole event loop -> ConnectTimeouts, no grades (2026-11-26 04:xxZ, py-spy: 99% in
+# _assign_requests_to_connections). Keep windows x farms <= ~240; 8 farms keep the old 32.
+if [[ -z "${SKYRL_OPEN_GRADING_HTTP_CONCURRENCY:-}" ]] && (( NFARMS > 8 )); then
+  export SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=$(( 240 / NFARMS > 1 ? 240 / NFARMS : 1 ))
+fi
 export SKYRL_GRADING_FAMILIES='{"math": {"cpus": 1, "memory_gib": 1, "memory_max_gib": 2, "slots_per_host": 1}}'
 
 # --- TTD_RECIPE=tvg (user 2026-11-25): the train-faster tvg Qwen/Muse Erdős recipe (profiles rebut-seedctl-erdos-qwen-s1,
