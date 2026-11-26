@@ -29,8 +29,11 @@ DEFER="
 while true; do
   # Circuit runs grade on our 8 ink-cfarms + train-faster's idle circuit farms (user OK 2026-11-26 00:00Z); a circuit run
   # (re)launch rewrites registry-inkc.json from its own list, so re-assert the 70-farm list every loop.
-  python3 "$O/write_registry.py" /scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json \
-      "$O/registry-inkc.json" 27880
+  # The tunnel maps ports by position in the same list, so whenever the farm set changes the tunnel must restart too,
+  # or the registry's names point at the wrong farms (2026-11-26: train-faster rebuilds the plus list as farms move).
+  RW=$(python3 "$O/write_registry.py" /scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json \
+      "$O/registry-inkc.json" 27880)
+  if [[ -n "$RW" ]]; then echo "$RW"; systemctl --user restart tinker-tunnel-inkc && echo "$(date -u +%FT%TZ) restarted tinker-tunnel-inkc for the new farm list"; fi
   while IFS=: read -r NEW N KEY AFTER; do
     [ -n "$NEW" ] || continue
     [ -f "$R/$NEW/env.txt" ] && continue
