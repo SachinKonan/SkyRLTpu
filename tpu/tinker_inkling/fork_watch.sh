@@ -73,5 +73,10 @@ PY
     timeout 1200 /scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python "$O/prune_early.py" 2>&1 \
       | grep -E "^key|FAILED" | sed "s/^/$(date -u +%FT%TZ) prune: /"
   fi
+  # Hourly: per-key checkpoint-storage alert at $10/month of our checkpoints (storage_check.py; user 2026-11-26).
+  if (( LOOPS % 30 == 2 )); then
+    timeout 900 /scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python "$O/storage_check.py" --alert 10 2>&1 \
+      | grep -E "^ALERT|^\{" | sed "s/^/$(date -u +%FT%TZ) storage: /"
+  fi
   sleep 120
 done
