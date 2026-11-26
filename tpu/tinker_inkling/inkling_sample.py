@@ -146,10 +146,11 @@ def serve(problem: str, port: int):
 
     class H(BaseHTTPRequestHandler):
         def do_POST(self):
-            body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-            fut = asyncio.run_coroutine_threadsafe(
-                inkling_sample(body['parent_states'], body['sampler_path'], body['api_key'], int(body.get('n', 32))), loop)
             try:
+                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                fut = asyncio.run_coroutine_threadsafe(
+                    inkling_sample(body['parent_states'], body['sampler_path'], body['api_key'], int(body.get('n', 32))),
+                    loop)
                 out = json.dumps({'children': fut.result()}).encode()
                 self.send_response(200)
             except Exception as e:  # noqa: BLE001
