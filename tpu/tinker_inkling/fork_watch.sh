@@ -78,5 +78,10 @@ PY
     timeout 900 /scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python "$O/storage_check.py" --alert 10 2>&1 \
       | grep -E "^ALERT|^\{" | sed "s/^/$(date -u +%FT%TZ) storage: /"
   fi
+  # Every ~6 min: stall watchdog (user 2026-11-26): email on grading/step stalls or tunnel fd exhaustion; a run that is
+  # grading with no completion for 40 min is restarted (resumes from its last checkpoint), at most once per 2 h.
+  if (( LOOPS % 3 == 0 )); then
+    timeout 300 python3 "$O/stall_watch.py" 2>&1 | sed "s/^/$(date -u +%FT%TZ) stall: /"
+  fi
   sleep 120
 done

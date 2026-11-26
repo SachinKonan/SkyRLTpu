@@ -6,6 +6,9 @@
 INK="${INK_FARMS:-/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-farms.json}"
 BASE="${PORT_BASE:-27870}"   # circuit farms: INK_FARMS=ink-circuit-farms*.json PORT_BASE=27880
 K=/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/clients/7bfcb694/ssh/sky-key
+# Every forwarded connection is one fd in this ssh. At the default soft limit (1024) the circuit tunnel ran out on
+# 2026-11-26 ("accept: Too many open files"): new connections timed out and grading stalled for 2.5 h. Use the hard limit.
+ulimit -n "$(ulimit -Hn)"
 while true; do
   read -r JUMP L < <(python3 - "$INK" "$BASE" <<'PY'
 import json, sys
