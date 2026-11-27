@@ -2,22 +2,30 @@
 
 A separate process from the frozen MOMO shims (inkling_sample.py serve on 18790/18791, which stay untouched):
 
-  python3 inkling_momo_train.py serve circuit 18793 --env-txt RUN/env.txt --state STATE_PATH --key HARISH [--publish]
+  python3 inkling_momo_train.py serve circuit 18793 --env-txt RUN/env.txt --state STATE --base-sampler SAMPLER \
+      --key HARISH --tag <one tag per MOMO run> --adapter-name NAME [--publish]
 
-POST /sample {job_id, parent_states, sampler_path, api_key, n}
-    Same request/response as inkling_sample.py (children per parent: (code, value, construction, observation)), but each
-    parent group is a real discover TrajectoryGroup (do_group_rollout: tokens, sampling logprobs, rewards, correctness),
-    and with a job_id the job's groups are persisted to STORE/jobs/<job_id>.pkl for a later /train. A child whose grading
-    infrastructure gave up is DROPPED from its group (discover's drop_failed_candidates, as in the trained runs) and
-    comes back as (None, None, None, '[dropped: grading infrastructure]') instead of failing the whole call.
-POST /train {adapter, job_ids, base_sampler_path}
-    One RL step on the trainable adapter with the run's own recipe (env.txt: TTD_ADV_ESTIMATOR, TTD_LOSS_FN,
-    LEARNING_RATE, KL 0, TTD_REJECT_TRUNCATED): constant-reward groups dropped -> prepare_minibatch (advantages,
-    datums, OOV/length filters) -> train_step (forward_backward + optim_step) -> save full state AND sampler weights
-    (every update, so a restart resumes exactly) -> optional publish -> {sampler_path, state_path, n_groups, n_datums,
-    n_dropped, seconds, update}. Idempotent: the same job_ids return the recorded result. The training client is resumed
-    from the newest state in STORE/updates.jsonl, else from --state (e.g. mc-s5 weights/000012).
-GET /status -> {update, sampler_path, state_path, jobs_stored}
+A STORE (momo_train/<tag>) belongs to ONE MOMO run: MOMO's job ids restart in every run, so a smoke and the real block
+must use different tags. The store records its starting point (meta.json) and refuses to start with another one.
+
+POST /sample {job_id, parent_states, sampler_path, api_key, n, ...}
+    Children per parent (code, value, construction, observation), as inkling_sample.py. Each parent group is a discover
+    TrajectoryGroup (do_group_rollout: tokens, sampling logprobs, rewards, correctness); with a job_id the job's groups
+    AND the sampler_path that produced them are stored (STORE/jobs/<job_id>.pkl). A child whose grading infrastructure
+    gave up is dropped from its group (as in the trained runs): (None, None, None, '[dropped: grading infrastructure]').
+POST /train {adapter, job_ids, base_sampler_path, expected_update, ...}
+    1. Already-applied job set -> the recorded result (if base_sampler_path is given it must match that row's).
+    2. Guards -> 409: expected_update != next update; base_sampler_path != newest version; any job sampled from a version
+       other than the newest. Unknown job ids -> 404; wrong adapter / bad body -> 400.
+    3. One RL step with the run's own recipe (TTD_ADV_ESTIMATOR, TTD_LOSS_FN, LEARNING_RATE, KL; constant-reward groups
+       dropped). Nothing to train (no non-constant group, 0 datums, estimator ValueError) -> {skipped: true}: no step,
+       no new version, update unchanged (recorded, so a retry returns the same).
+    4. train_step, then save full state + sampler weights. If the step or a save fails, the stepped training client is
+       discarded and the next /train reloads the last saved state: a retry can never apply the same groups twice.
+    5. Ledger row written (fsync) BEFORE publishing; publish (if --publish) is retried and never fails the request.
+    Reply: {update, sampler_path, state_path, base_sampler_path, n_groups, n_datums, n_dropped, seconds, published,
+    skipped}.
+GET /status -> {update, newest_sampler, publish, adapter, tag, jobs_stored, ...}
 """
 from __future__ import annotations
 
@@ -30,8 +38,21 @@ import inkling_sample as S   # recipe loading, key resolution + published-adapte
 STORE_ROOT = Path(os.environ.get('INKLING_MOMO_TRAIN_STORE', '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/momo_train'))
 
 
-class Conflict(Exception):
-    """/train asked to update from a sampler version that is not the newest one (lost reply + resume): HTTP 409."""
+class HTTPError(Exception):
+    code = 500
+
+
+class Conflict(HTTPError):
+    """Rollouts from a version that is not the newest, or an unexpected update number (lost reply + resume)."""
+    code = 409
+
+
+class NotFound(HTTPError):
+    code = 404
+
+
+class BadRequest(HTTPError):
+    code = 400
 
 
 def _now():
@@ -43,36 +64,66 @@ def _log(msg):
 
 
 class Trainer:
-    def __init__(self, problem, env_txt, base_state, owner_key, publish, tag, base_sampler=None):
-        self.problem, self.owner_key, self.publish = problem, owner_key, publish
+    def __init__(self, problem, env_txt, base_state, base_sampler, owner_key, publish, tag, adapter):
+        self.problem, self.owner_key, self.publish, self.tag = problem, owner_key, publish, tag
         self.env = S.load_recipe(problem, env_txt)
         self.base_state, self.base_sampler = base_state, base_sampler
         self.store = STORE_ROOT / tag
         (self.store / 'jobs').mkdir(parents=True, exist_ok=True)
+        meta = dict(base_state=base_state, base_sampler=base_sampler, adapter=adapter, key=owner_key, env_txt=env_txt)
+        mf = self.store / 'meta.json'
+        if mf.exists():
+            old = json.load(open(mf))
+            diff = {k: (old.get(k), v) for k, v in meta.items() if old.get(k) != v}
+            if diff:
+                raise SystemExit(f'store {self.store} was started with a different setup {diff}; use a new --tag')
+        else:
+            json.dump(dict(meta, created=_now()), open(mf, 'w'), indent=1)
         self.ledger = self.store / 'updates.jsonl'
-        self.tc = None                     # tinker TrainingClient (lazy, resumed on first /train)
+        self.tc = None                     # tinker TrainingClient (lazy; resumed from self.state_path)
+        self.service_client = None
         self.lock = asyncio.Lock()
-        last = self._last_update()
+        last = self._last_row()
         self.update = last['update'] if last else 0
         self.sampler_path = last['sampler_path'] if last else None
         self.state_path = last['state_path'] if last else base_state
 
     # ---------- persistence ----------
-    def _last_update(self):
-        if not self.ledger.exists():
-            return None
-        rows = [json.loads(l) for l in open(self.ledger) if l.strip()]
+    def _rows(self):
+        out = []
+        if self.ledger.exists():
+            for l in open(self.ledger):
+                try:
+                    out.append(json.loads(l))
+                except ValueError:          # torn last line after a crash
+                    continue
+        return out
+
+    def _last_row(self):
+        rows = [r for r in self._rows() if 'jobs_key' in r]
         return rows[-1] if rows else None
+
+    def _append(self, row):
+        with open(self.ledger, 'a') as fh:
+            fh.write(json.dumps(row) + '\n')
+            fh.flush(); os.fsync(fh.fileno())
+
+    def newest(self):
+        return self.sampler_path or self.base_sampler
 
     def _job_file(self, job_id):
         return self.store / 'jobs' / (re.sub(r'[^A-Za-z0-9._-]', '_', job_id) + '.pkl')
 
-    def _save_job(self, job_id, groups):
+    def _save_job(self, job_id, groups, sampler_path):
         f = self._job_file(job_id)
         tmp = f.with_suffix(f'.tmp{os.getpid()}')
         with open(tmp, 'wb') as fh:
-            pickle.dump(groups, fh)
+            pickle.dump(dict(sampler_path=sampler_path, groups=groups, at=_now()), fh)
         os.replace(tmp, f)
+
+    def _load_job(self, job_id):
+        with open(self._job_file(job_id), 'rb') as fh:
+            return pickle.load(fh)
 
     # ---------- sampling ----------
     async def sample(self, parent_states, sampler_path, api_key, n, job_id=None):
@@ -148,83 +199,123 @@ class Trainer:
 
         res = await asyncio.gather(*(one_parent(p) for p in parent_states))
         if job_id:
-            self._save_job(job_id, [g for g, _ in res if g is not None])
+            self._save_job(job_id, [g for g, _ in res if g is not None], sampler_path)
         return [c for _, c in res]
 
     # ---------- training ----------
     async def _client(self):
         if self.tc is None:
             import tinker
-            sc = tinker.ServiceClient(api_key=S._resolve_key(self.owner_key))
-            self.service_client = sc
+            self.service_client = tinker.ServiceClient(api_key=S._resolve_key(self.owner_key))
             t0 = time.time()
-            self.tc = await sc.create_training_client_from_state_with_optimizer_async(self.state_path)
+            self.tc = await self.service_client.create_training_client_from_state_with_optimizer_async(self.state_path)
             _log(f'training client resumed from {self.state_path} in {time.time() - t0:.0f}s (update {self.update})')
         return self.tc
+
+    async def _publish(self, path):
+        import tinker
+        for attempt in range(3):
+            try:
+                rc = tinker.ServiceClient(api_key=S._resolve_key(self.owner_key)).create_rest_client()
+                await rc.publish_checkpoint_from_tinker_path_async(path)
+                _add_published(path)
+                return True
+            except Exception as e:  # noqa: BLE001
+                if '409' in str(e) or 'already' in str(e).lower():   # already public
+                    _add_published(path)
+                    return True
+                _log(f'publish attempt {attempt + 1} failed for {path}: {type(e).__name__}: {str(e)[:200]}')
+                await asyncio.sleep(10 * (attempt + 1))
+        return False
 
     async def train(self, job_ids, base_sampler_path=None, expected_update=None):
         from ttt_discover.rl.train import prepare_minibatch, train_step
         from ttt_discover.rl.data_processing import all_same
+        if not job_ids:
+            raise BadRequest('job_ids is empty')
         key = hashlib.sha256(json.dumps(sorted(job_ids)).encode()).hexdigest()[:16]
         async with self.lock:
-            if self.ledger.exists():                     # idempotent: same job set -> recorded result
-                for l in open(self.ledger):
-                    r = json.loads(l)
-                    if r.get('jobs_key') == key:
-                        return r
+            # 1. already applied -> recorded result
+            for r in self._rows():
+                if r.get('jobs_key') == key:
+                    if base_sampler_path and r.get('base_sampler_path') not in (None, base_sampler_path):
+                        raise Conflict(f'job set already applied from {r.get("base_sampler_path")}, '
+                                       f'not {base_sampler_path}')
+                    return r
+            # 2. guards
+            newest = self.newest()
             if expected_update is not None and int(expected_update) != self.update + 1:
                 raise Conflict(f'MOMO expects update {expected_update}, but the next update here is {self.update + 1}')
-            newest = self.sampler_path or self.base_sampler
-            if base_sampler_path and newest and base_sampler_path != newest:
+            if base_sampler_path and base_sampler_path != newest:
                 raise Conflict(f'rollouts were sampled from {base_sampler_path}, but the newest version is {newest} '
                                f'(update {self.update}); refusing a double / off-policy update')
             missing = [j for j in job_ids if not self._job_file(j).exists()]
             if missing:
-                raise KeyError(f'no stored groups for job_ids {missing[:5]} (n={len(missing)})')
-            groups = []
-            for j in job_ids:
-                with open(self._job_file(j), 'rb') as fh:
-                    groups += pickle.load(fh)
+                raise NotFound(f'no stored groups for job_ids {missing[:5]} (n={len(missing)})')
+            jobs = {j: self._load_job(j) for j in job_ids}
+            stale = {j: d['sampler_path'] for j, d in jobs.items() if d['sampler_path'] != newest}
+            if stale:
+                raise Conflict(f'{len(stale)} job(s) were sampled from another version than the newest {newest}: '
+                               f'{dict(list(stale.items())[:3])}')
+            groups = [g for d in jobs.values() for g in d['groups']]
             t0 = time.time()
             kept = [g for g in groups if not all_same(g.get_total_rewards())]
-            row = dict(update=self.update, jobs_key=key, job_ids=list(job_ids), n_groups=len(kept),
-                       n_dropped=len(groups) - len(kept), n_datums=0, sampler_path=self.sampler_path,
-                       state_path=self.state_path, at=_now())
-            if kept:
+            row = dict(update=self.update, jobs_key=key, job_ids=list(job_ids), base_sampler_path=newest,
+                       n_groups=len(kept), n_dropped=len(groups) - len(kept), n_datums=0, sampler_path=newest,
+                       state_path=self.state_path, skipped=False, published=None, at=_now())
+            # 3. data
+            data_D, m, why = [], {}, None
+            if not kept:
+                why = 'no non-constant-reward group'
+            else:
                 E = os.environ
-                tc = await self._client()
                 from ttt_discover.tinker_utils.misc_utils import get_tokenizer
                 model = E['TTD_ENSEMBLE_MODELS'].split('|' if '|' in E['TTD_ENSEMBLE_MODELS'] else ':')[0]
 
                 class _B:
                     def logging_tags(self):
                         return ['inkling-momo']
-                data_D, m = await prepare_minibatch(
-                    [_B() for _ in kept], kept, get_tokenizer(model), self.service_client, model_name=model,
-                    kl_penalty_coef=float(self.env.get('KL_PENALTY_COEF', 0) or 0), train_step=self.update,
-                    adv_estimator=E.get('TTD_ADV_ESTIMATOR', 'piecewise_valid_entropic_centered'),
-                    train_max_seq=int(E.get('TTD_M0_TRAIN_MAX_SEQ', 65536)),
-                    context_window=int(E.get('TTD_M0_CONTEXT_WINDOW', 65536)))
-                lr = float(self.env['LEARNING_RATE'])   # per-run keys stay out of os.environ (inkling_sample.RUN_ONLY)
-                await train_step(data_D, tc, lr, 1, E.get('TTD_LOSS_FN', 'importance_sampling'))
-                self.update += 1
-                name = f'momo-{self.update:04d}'
-                st = await (await tc.save_state_async(name)).result_async()
-                sp = await (await tc.save_weights_for_sampler_async(name)).result_async()
-                self.state_path, self.sampler_path = st.path, sp.path
-                if self.publish:
-                    import tinker
-                    rc = tinker.ServiceClient(api_key=S._resolve_key(self.owner_key)).create_rest_client()
-                    await rc.publish_checkpoint_from_tinker_path_async(sp.path)
-                    _add_published(sp.path)
-                row.update(update=self.update, n_datums=len(data_D), sampler_path=sp.path, state_path=st.path,
-                           lr=lr, advantage_mean=m.get('advantage/mean'), published=self.publish)
-            row['seconds'] = round(time.time() - t0, 1)
-            with open(self.ledger, 'a') as fh:
-                fh.write(json.dumps(row) + '\n')
-                fh.flush(); os.fsync(fh.fileno())
-            _log(f'/train update {row["update"]}: {row["n_groups"]} groups, {row["n_datums"]} datums, '
-                 f'{row["seconds"]}s -> {row["sampler_path"]}')
+                await self._client()
+                try:
+                    data_D, m = await prepare_minibatch(
+                        [_B() for _ in kept], kept, get_tokenizer(model), self.service_client, model_name=model,
+                        kl_penalty_coef=float(self.env.get('KL_PENALTY_COEF', 0) or 0), train_step=self.update,
+                        adv_estimator=E.get('TTD_ADV_ESTIMATOR', 'piecewise_valid_entropic_centered'),
+                        train_max_seq=int(E.get('TTD_M0_TRAIN_MAX_SEQ', 65536)),
+                        context_window=int(E.get('TTD_M0_CONTEXT_WINDOW', 65536)))
+                except ValueError as e:                      # estimator refused this data: deterministic
+                    why = f'estimator: {e}'
+                if not why and not data_D:
+                    why = '0 datums after filtering'
+            if why:
+                row.update(skipped=True, reason=why, seconds=round(time.time() - t0, 1))
+                self._append(row)
+                _log(f'/train skipped ({why}) for {len(job_ids)} job(s); update stays {self.update}')
+                return row
+            # 4. step + saves; on ANY failure discard the stepped client (next /train reloads the last saved state)
+            lr = float(self.env['LEARNING_RATE'])   # per-run keys stay out of os.environ (inkling_sample.RUN_ONLY)
+            nxt = self.update + 1
+            name = f'momo-{self.tag}-{nxt:04d}'
+            try:
+                await train_step(data_D, self.tc, lr, 1, os.environ.get('TTD_LOSS_FN', 'importance_sampling'))
+                st = await (await self.tc.save_state_async(name)).result_async()
+                sp = await (await self.tc.save_weights_for_sampler_async(name)).result_async()
+            except BaseException:
+                self.tc = None
+                _log(f'/train step or save failed: training client discarded; next /train reloads {self.state_path}')
+                raise
+            self.update, self.state_path, self.sampler_path = nxt, st.path, sp.path
+            row.update(update=nxt, n_datums=len(data_D), sampler_path=sp.path, state_path=st.path, lr=lr,
+                       advantage_mean=m.get('advantage/mean'), published=False,
+                       seconds=round(time.time() - t0, 1))
+            # 5. ledger first, then publish (non-fatal)
+            self._append(row)
+            if self.publish:
+                ok = await self._publish(sp.path)
+                row['published'] = ok
+                self._append(dict(event='published', sampler_path=sp.path, ok=ok, at=_now()))
+            _log(f'/train update {nxt}: {row["n_groups"]} groups, {row["n_datums"]} datums, {row["seconds"]}s -> '
+                 f'{sp.path} (published={row["published"]})')
             return row
 
 
@@ -259,24 +350,30 @@ def serve(args):
         def do_GET(self):
             if self.path.startswith('/status'):
                 self._reply(200, dict(update=trainer.update, sampler_path=trainer.sampler_path,
-                                      newest_sampler=trainer.sampler_path or trainer.base_sampler,
-                                      publish=trainer.publish, adapter=args.adapter_name,
-                                      state_path=trainer.state_path,
+                                      newest_sampler=trainer.newest(), publish=trainer.publish,
+                                      adapter=args.adapter_name, tag=trainer.tag, state_path=trainer.state_path,
                                       jobs_stored=len(list((trainer.store / 'jobs').glob('*.pkl')))))
             else:
                 self._reply(404, {'error': 'unknown path'})
 
         def do_POST(self):
             try:
-                body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-                if self.path.startswith('/train'):
-                    # One trainable adapter per process: refuse a /train meant for another adapter.
-                    if args.adapter_name and body.get('adapter') not in (None, args.adapter_name):
-                        raise ValueError(f"this shim trains {args.adapter_name!r}, not {body.get('adapter')!r}")
-                    coro = trainer.train(list(body['job_ids']), body.get('base_sampler_path'), body.get('expected_update'))
-                else:
-                    coro = trainer.sample(body['parent_states'], body['sampler_path'], body['api_key'],
-                                          int(body.get('n', 32)), body.get('job_id'))
+                try:
+                    body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                    if self.path.startswith('/train'):
+                        if body.get('adapter') not in (None, args.adapter_name):
+                            raise BadRequest(f"this shim trains {args.adapter_name!r}, not {body.get('adapter')!r}")
+                        coro = trainer.train(list(body['job_ids']), body.get('base_sampler_path'),
+                                             body.get('expected_update'))
+                    elif self.path.startswith('/sample'):
+                        coro = trainer.sample(body['parent_states'], body['sampler_path'], body['api_key'],
+                                              int(body.get('n', 32)), body.get('job_id'))
+                    else:
+                        raise NotFound(f'unknown path {self.path}')
+                except (KeyError, TypeError, ValueError) as e:
+                    if isinstance(e, HTTPError):
+                        raise
+                    raise BadRequest(f'bad request: {type(e).__name__}: {e}') from e
                 fut = asyncio.run_coroutine_threadsafe(coro, loop)
                 while True:
                     try:
@@ -289,7 +386,7 @@ def serve(args):
                             return
                 self._reply(200, res if self.path.startswith('/train') else {'children': res})
             except Exception as e:  # noqa: BLE001
-                code = 409 if isinstance(e, Conflict) else 500
+                code = e.code if isinstance(e, HTTPError) else 500
                 _log(f'{code} on {self.path}: {type(e).__name__}: {str(e)[:500]}')
                 try:
                     self._reply(code, {'error': f'{type(e).__name__}: {e}'})
@@ -298,13 +395,14 @@ def serve(args):
 
         def log_message(self, *a):
             pass
-    _log(f'serving {args.problem} on 127.0.0.1:{args.port}; trainable state {trainer.state_path}; '
-         f'update {trainer.update}; publish={args.publish}; store {trainer.store}')
+    _log(f'serving {args.problem} on 127.0.0.1:{args.port}; tag {args.tag}; adapter {args.adapter_name}; '
+         f'resume state {trainer.state_path}; update {trainer.update}; publish={args.publish}')
     ThreadingHTTPServer(('127.0.0.1', args.port), H).serve_forever()
 
 
 async def _make(args):
-    return Trainer(args.problem, args.env_txt, args.state, args.key, args.publish, args.tag, args.base_sampler)
+    return Trainer(args.problem, args.env_txt, args.state, args.base_sampler, args.key, args.publish, args.tag,
+                   args.adapter_name)
 
 
 if __name__ == '__main__':
@@ -313,12 +411,10 @@ if __name__ == '__main__':
     p.add_argument('problem', choices=['circuit', 'erdos'])
     p.add_argument('port', type=int)
     p.add_argument('--env-txt', required=True, help="the trainable adapter's run env.txt (recipe + grading)")
-    p.add_argument('--state', required=True, help='training state (weights + optimizer) to start from')
+    p.add_argument('--state', required=True, help='training state (weights + optimizer) the run starts from')
+    p.add_argument('--base-sampler', required=True, help='sampler path of --state (newest version before update 1)')
     p.add_argument('--key', required=True, help="owner key name of the adapter's org (training + unpublished sampling)")
-    p.add_argument('--tag', default=None, help='store sub-directory (default: problem + state run id)')
+    p.add_argument('--tag', required=True, help='store name: ONE per MOMO run (smoke and real block differ)')
+    p.add_argument('--adapter-name', required=True, help="MOMO's adapter name; /train with another name -> 400")
     p.add_argument('--publish', action='store_true', help='publish each new sampler checkpoint (5-key rotation)')
-    p.add_argument('--base-sampler', default=None, help='sampler path of --state (newest version before the first update)')
-    p.add_argument('--adapter-name', default=None, help="MOMO's name for the trainable adapter; /train with another name is refused")
-    a = p.parse_args()
-    a.tag = a.tag or f'{a.problem}-{a.state.split("//")[1][:8]}'
-    serve(a)
+    serve(p.parse_args())
