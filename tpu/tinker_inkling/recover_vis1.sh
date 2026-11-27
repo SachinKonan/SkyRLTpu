@@ -9,7 +9,7 @@ set -u
 O=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops
 PY=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python
 R=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs
-MTRAIN_TAG="${MTRAIN_TAG:-circuit-b2-mtrain-smoke}"
+MTRAIN_TAG="${MTRAIN_TAG:-circuit-b2-mtrain}"
 
 unit() {  # name, then the command (string); idempotent
   local u=$1; shift
