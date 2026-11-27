@@ -60,7 +60,9 @@ elif [[ "$GRADE_FARMS" == v5p ]]; then
   # farms-v5p.json, kept fresh by their registry_sync) through tunnel-v5p's forwards 127.0.0.1:(28000+i). They ship the
   # slim math-only grader (hash over SKYRL_GRADER_HASH_FILES = 57cc0755); needs the tfsci snapshot's grading_transport.
   REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-v5p.json PORT_BASE=28000
-  INK_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/farms-v5p.json
+  # 2026-11-27 (train-faster): use farms-v6emath.json = the same slim math farms restricted to v6e. farms-v5p.json now
+  # also gets v5p-128 math slices, where timed Erdős searches score differently; Inkling Erdős grades stay v6e-only.
+  INK_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/farms-v6emath.json
   export SKYRL_GRADER_HASH_FILES=__init__.py,cgroup_limits.py,core_pool.py,cpu_slots.py,farm_resources.py,grading_dedup.py,grading_transport.py,math_grade.py,math_runner.py,placement_resources.py,placement_runtime.py,rewards.py,routing_resources.py,unit.py,worker.py
 elif [[ "$GRADE_FARMS" == inkc ]]; then
   REG=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/registry-inkc.json PORT_BASE=27880

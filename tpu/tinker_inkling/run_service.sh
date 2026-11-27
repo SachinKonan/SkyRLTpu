@@ -69,7 +69,7 @@ case "$cmd" in
   tunnel-v5p)  # forwards to train-faster's v5p/1zmn Erdős math farms (farms-v5p.json), ports 28001.., via an ink-farm jump
     pkill -u "$(id -u)" -f "^ssh .*-L 127\.0\.0\.1:28001:" 2>/dev/null || true
     sleep 2
-    start_unit tinker-tunnel-v5p always --setenv=INK_FARMS=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/farms-v5p.json \
+    start_unit tinker-tunnel-v5p always --setenv=INK_FARMS=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/farms-v6emath.json \
       --setenv=PORT_BASE=28000 --setenv=JUMP_IP="${1:-8.234.57.45}" \
       /bin/bash -c "exec /bin/bash $D/tunnel_ink.sh >> $D/tunnel_v5p.log 2>&1"
     echo "started tinker-tunnel-v5p";;
