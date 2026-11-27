@@ -1,0 +1,13 @@
+{"note": "Inkling step-12 sampler checkpoints published 2026-11-27 (user OK: '2. is fine'); any Tinker key can sample these, so the MOMO shims spread them across all keys.",
+ "keys": ["1", "2", "3", "TAI", "HARISH"],
+ "paths": {
+  "erdos-s1": "tinker://1528f286-0fba-51df-88f8-1d1036cff970:train:0/sampler_weights/000012",
+  "erdos-s2": "tinker://256201a6-f952-5dfe-bce8-1b6644237d98:train:0/sampler_weights/000012",
+  "erdos-s3": "tinker://7fe9ea16-1dac-565a-ae1e-1bbacd52d0a3:train:0/sampler_weights/000012",
+  "erdos-s4": "tinker://3894a5b6-1d28-55c2-abc4-db52b6ebf3c3:train:0/sampler_weights/000012",
+  "erdos-s5": "tinker://307a1783-ac19-5274-941a-308a43108638:train:0/sampler_weights/000012",
+  "circuit-s1": "tinker://a904e838-7d09-5b1b-92b0-4912936a65d3:train:0/sampler_weights/000012",
+  "circuit-s2": "tinker://72b3d154-81a2-50c1-bf8d-372d38662242:train:0/sampler_weights/000012",
+  "circuit-s3": "tinker://0b2a6a2b-b3bc-5d71-8f1e-f4b165684a3a:train:0/sampler_weights/000012",
+  "circuit-s4": "tinker://c5920f8a-d30f-5270-b4ae-56f3db9de06a:train:0/sampler_weights/000012",
+  "circuit-s5": "tinker://b9352b42-346c-5f14-bafc-662d0219e950:train:0/sampler_weights/000012"}}

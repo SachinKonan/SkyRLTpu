@@ -89,6 +89,29 @@ def _env_class():
     return PlacementTrainingEnv
 
 
+PUBLISHED_FILE = os.environ.get('INKLING_PUBLISHED_ADAPTERS',
+                                '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops/published_adapters.json')
+_inflight: dict = {}   # key name -> samples currently being generated under it
+
+
+def _rotation():
+    """(published sampler paths, key names). Published checkpoints are readable by any key (user OK 2026-11-27)."""
+    try:
+        d = json.load(open(PUBLISHED_FILE))
+        return set(d['paths'].values()), list(d['keys'])
+    except (OSError, ValueError, KeyError):
+        return set(), []
+
+
+def _pick_key(sampler_path: str, requested: str) -> str:
+    """Spread published adapters over all keys: the key with the fewest samples in flight (ties -> the requested key).
+    Unpublished adapters stay on the requested (owner) key -- other keys get 404 for them."""
+    published, keys = _rotation()
+    if sampler_path not in published or requested not in keys:
+        return requested
+    return min(keys, key=lambda k: (_inflight.get(k, 0), k != requested))
+
+
 async def _sampling_client(sampler_path: str, api_key: str):
     import tinker
     key = (sampler_path, api_key)
@@ -109,11 +132,12 @@ async def inkling_sample(parent_states: list[dict], sampler_path: str, api_key: 
     model = E['TTD_ENSEMBLE_MODELS'].split('|' if '|' in E['TTD_ENSEMBLE_MODELS'] else ':')[0]
     tok = get_tokenizer(model)
     renderer = get_renderer('tml_v0', tok)
-    client = await _sampling_client(sampler_path, api_key)
-    completer = InklingTwoPhaseTokenCompleter(
-        sampling_client=client, tokenizer=tok, phase1_max_tokens=int(E.get('TTD_M0_PHASE1_MAX_TOKENS', 65536)),
-        temperature=1.0, context_window=int(E.get('TTD_M0_CONTEXT_WINDOW', E.get('CONTEXT_WINDOW', 65536))),
-        min_think_tokens=int(E.get('TTD_MIN_THINK_TOKENS', 0)))
+    async def completer_for(key_name):
+        client = await _sampling_client(sampler_path, key_name)
+        return InklingTwoPhaseTokenCompleter(
+            sampling_client=client, tokenizer=tok, phase1_max_tokens=int(E.get('TTD_M0_PHASE1_MAX_TOKENS', 65536)),
+            temperature=1.0, context_window=int(E.get('TTD_M0_CONTEXT_WINDOW', E.get('CONTEXT_WINDOW', 65536))),
+            min_think_tokens=int(E.get('TTD_MIN_THINK_TOKENS', 0)))
     Env = _env_class()
     cfg = SimpleNamespace(convo_prefix=[], timeout=float(E.get('TTD_GRADE_WAIT_TIMEOUT', 172800)),
                           num_cpus_per_task=int(E.get('NUM_CPUS_PER_TASK', 2)), eval_backend=E.get('TTD_EVAL_BACKEND', 'farm'),
@@ -124,7 +148,12 @@ async def inkling_sample(parent_states: list[dict], sampler_path: str, api_key: 
         state = State.from_dict(parent)
         probe = Env(renderer, state, _Capture(), cfg)
         ob, stop = await probe.initial_observation()
-        seqs = await completer.sample_group(ob, stop, n)
+        k = _pick_key(sampler_path, api_key)      # per parent: spreads one call's 8 parents over the keys
+        _inflight[k] = _inflight.get(k, 0) + n
+        try:
+            seqs = await (await completer_for(k)).sample_group(ob, stop, n)
+        finally:
+            _inflight[k] -= n
 
         async def grade(seq):
             cap = _Capture()
