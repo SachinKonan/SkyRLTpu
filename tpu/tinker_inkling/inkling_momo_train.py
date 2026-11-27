@@ -10,7 +10,7 @@ POST /sample {job_id, parent_states, sampler_path, api_key, n}
     and with a job_id the job's groups are persisted to STORE/jobs/<job_id>.pkl for a later /train. A child whose grading
     infrastructure gave up is DROPPED from its group (discover's drop_failed_candidates, as in the trained runs) and
     comes back as (None, None, None, '[dropped: grading infrastructure]') instead of failing the whole call.
-POST /train {adapter, job_ids}
+POST /train {adapter, job_ids, base_sampler_path}
     One RL step on the trainable adapter with the run's own recipe (env.txt: TTD_ADV_ESTIMATOR, TTD_LOSS_FN,
     LEARNING_RATE, KL 0, TTD_REJECT_TRUNCATED): constant-reward groups dropped -> prepare_minibatch (advantages,
     datums, OOV/length filters) -> train_step (forward_backward + optim_step) -> save full state AND sampler weights
@@ -30,6 +30,10 @@ import inkling_sample as S   # recipe loading, key resolution + published-adapte
 STORE_ROOT = Path(os.environ.get('INKLING_MOMO_TRAIN_STORE', '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/momo_train'))
 
 
+class Conflict(Exception):
+    """/train asked to update from a sampler version that is not the newest one (lost reply + resume): HTTP 409."""
+
+
 def _now():
     return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
 
@@ -39,10 +43,10 @@ def _log(msg):
 
 
 class Trainer:
-    def __init__(self, problem, env_txt, base_state, owner_key, publish, tag):
+    def __init__(self, problem, env_txt, base_state, owner_key, publish, tag, base_sampler=None):
         self.problem, self.owner_key, self.publish = problem, owner_key, publish
         self.env = S.load_recipe(problem, env_txt)
-        self.base_state = base_state
+        self.base_state, self.base_sampler = base_state, base_sampler
         self.store = STORE_ROOT / tag
         (self.store / 'jobs').mkdir(parents=True, exist_ok=True)
         self.ledger = self.store / 'updates.jsonl'
@@ -158,7 +162,7 @@ class Trainer:
             _log(f'training client resumed from {self.state_path} in {time.time() - t0:.0f}s (update {self.update})')
         return self.tc
 
-    async def train(self, job_ids):
+    async def train(self, job_ids, base_sampler_path=None):
         from ttt_discover.rl.train import prepare_minibatch, train_step
         from ttt_discover.rl.data_processing import all_same
         key = hashlib.sha256(json.dumps(sorted(job_ids)).encode()).hexdigest()[:16]
@@ -168,6 +172,10 @@ class Trainer:
                     r = json.loads(l)
                     if r.get('jobs_key') == key:
                         return r
+            newest = self.sampler_path or self.base_sampler
+            if base_sampler_path and newest and base_sampler_path != newest:
+                raise Conflict(f'rollouts were sampled from {base_sampler_path}, but the newest version is {newest} '
+                               f'(update {self.update}); refusing a double / off-policy update')
             missing = [j for j in job_ids if not self._job_file(j).exists()]
             if missing:
                 raise KeyError(f'no stored groups for job_ids {missing[:5]} (n={len(missing)})')
@@ -261,7 +269,7 @@ def serve(args):
                     # One trainable adapter per process: refuse a /train meant for another adapter.
                     if args.adapter_name and body.get('adapter') not in (None, args.adapter_name):
                         raise ValueError(f"this shim trains {args.adapter_name!r}, not {body.get('adapter')!r}")
-                    coro = trainer.train(list(body['job_ids']))
+                    coro = trainer.train(list(body['job_ids']), body.get('base_sampler_path'))
                 else:
                     coro = trainer.sample(body['parent_states'], body['sampler_path'], body['api_key'],
                                           int(body.get('n', 32)), body.get('job_id'))
@@ -277,9 +285,10 @@ def serve(args):
                             return
                 self._reply(200, res if self.path.startswith('/train') else {'children': res})
             except Exception as e:  # noqa: BLE001
-                _log(f'500 on {self.path}: {type(e).__name__}: {str(e)[:500]}')
+                code = 409 if isinstance(e, Conflict) else 500
+                _log(f'{code} on {self.path}: {type(e).__name__}: {str(e)[:500]}')
                 try:
-                    self._reply(500, {'error': f'{type(e).__name__}: {e}'})
+                    self._reply(code, {'error': f'{type(e).__name__}: {e}'})
                 except OSError:
                     pass
 
@@ -291,7 +300,7 @@ def serve(args):
 
 
 async def _make(args):
-    return Trainer(args.problem, args.env_txt, args.state, args.key, args.publish, args.tag)
+    return Trainer(args.problem, args.env_txt, args.state, args.key, args.publish, args.tag, args.base_sampler)
 
 
 if __name__ == '__main__':
@@ -304,6 +313,7 @@ if __name__ == '__main__':
     p.add_argument('--key', required=True, help="owner key name of the adapter's org (training + unpublished sampling)")
     p.add_argument('--tag', default=None, help='store sub-directory (default: problem + state run id)')
     p.add_argument('--publish', action='store_true', help='publish each new sampler checkpoint (5-key rotation)')
+    p.add_argument('--base-sampler', default=None, help='sampler path of --state (newest version before the first update)')
     p.add_argument('--adapter-name', default=None, help="MOMO's name for the trainable adapter; /train with another name is refused")
     a = p.parse_args()
     a.tag = a.tag or f'{a.problem}-{a.state.split("//")[1][:8]}'
