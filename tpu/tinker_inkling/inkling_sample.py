@@ -176,14 +176,36 @@ def serve(problem: str, port: int, env_txt: str | None = None, overrides: dict |
     loop = asyncio.new_event_loop()
     threading.Thread(target=loop.run_forever, daemon=True).start()
 
+    import concurrent.futures, select, socket, time
+
     class H(BaseHTTPRequestHandler):
+        def _client_gone(self):
+            """True once the caller closed its connection (MOMO killed or cancelled the job)."""
+            try:
+                readable, _, _ = select.select([self.connection], [], [], 0)
+                return bool(readable) and self.connection.recv(1, socket.MSG_PEEK) == b''
+            except OSError:
+                return True
+
         def do_POST(self):
             try:
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 fut = asyncio.run_coroutine_threadsafe(
                     inkling_sample(body['parent_states'], body['sampler_path'], body['api_key'], int(body.get('n', 32))),
                     loop)
-                out = json.dumps({'children': fut.result()}).encode()
+                while True:
+                    try:
+                        children = fut.result(timeout=10)
+                        break
+                    except concurrent.futures.TimeoutError:
+                        if self._client_gone():
+                            # Abandoned call (2026-11-27: MOMO restarts left ~15 calls sampling/grading for nobody):
+                            # cancel the sampling + grading tasks so they free Tinker and grading slots.
+                            fut.cancel()
+                            print(f'{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())} caller gone: cancelled a '
+                                  f'{len(body["parent_states"])}x{body.get("n", 32)} call', file=sys.stderr, flush=True)
+                            return
+                out = json.dumps({'children': children}).encode()
                 self.send_response(200)
             except Exception as e:  # noqa: BLE001
                 out = json.dumps({'error': f'{type(e).__name__}: {e}'}).encode()
