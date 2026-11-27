@@ -5,22 +5,27 @@
 # and re-reads the farm list each time. Run on della-vis1 (supervised: run_service.sh tunnel-ink).
 INK="${INK_FARMS:-/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-farms.json}"
 BASE="${PORT_BASE:-27870}"   # circuit farms: INK_FARMS=ink-circuit-farms*.json PORT_BASE=27880
+O=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops
 K=/scratch/gpfs/ZHUANGL/sk7524/tpuswarm-state/sky-home-v6e32/.sky/clients/7bfcb694/ssh/sky-key
 # Every forwarded connection is one fd in this ssh. At the default soft limit (1024) the circuit tunnel ran out on
 # 2026-11-26 ("accept: Too many open files"): new connections timed out and grading stalled for 2.5 h. Use the hard limit.
 ulimit -n "$(ulimit -Hn)"
 while true; do
-  read -r JUMP L < <(python3 - "$INK" "$BASE" <<'PY'
-import json, sys
+  # Ports come from the sticky name->port map portmap-$BASE.json (portmap.py, shared with write_registry.py): a farm keeps
+  # its port when farms are added or removed, so a list change no longer moves existing farms (2026-11-27).
+  read -r JUMP L < <(python3 - "$INK" "$BASE" "$O" <<'PY'
+import json, os, sys
 from urllib.parse import urlparse
-d = json.load(open(sys.argv[1])); farms = d.get('farms', d) if isinstance(d, dict) else d
-farms = sorted(farms, key=lambda f: f['name'])
-ext = [f.get('external_ip') or f.get('external') for f in farms if f.get('external_ip') or f.get('external')]
+sys.path.insert(0, sys.argv[3])
+from portmap import load_farms, ports_for
+farms = load_farms(sys.argv[1])
+ports = ports_for(farms, os.path.join(sys.argv[3], f'portmap-{sys.argv[2]}.json'), int(sys.argv[2]))
+ext = [f.get('external_ip') or f.get('external') for f in sorted(farms, key=lambda f: f['name'])
+       if f.get('external_ip') or f.get('external')]
 fw = []
-for i, f in enumerate(farms, start=1):
+for f in sorted(farms, key=lambda f: ports[f['name']]):
     u = urlparse(f.get('internal_url') or f['url'])
-    fw.append(f'-L 127.0.0.1:{int(sys.argv[2]) + i}:{u.hostname}:{u.port or 24800}')
-import os
+    fw.append(f'-L 127.0.0.1:{ports[f["name"]]}:{u.hostname}:{u.port or 24800}')
 print(os.environ.get('JUMP_IP') or (ext[0] if ext else 'NONE'), ' '.join(fw))
 PY
 )

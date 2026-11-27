@@ -1,11 +1,15 @@
-"""Write a client grading registry from a farm list, with the same port mapping as tunnel_ink.sh (farms sorted by name,
-local port BASE + i). Only rewrites when the farm set differs, so running clients see a stable file.
+"""Write a client grading registry from a farm list, with the same port mapping as tunnel_ink.sh: the sticky name->port map
+portmap-<PORT_BASE>.json next to REGISTRY_OUT (portmap.py; seeded from the old name-sorted layout, so existing ports never move). Only
+rewrites when the farm set or a port differs, so running clients see a stable file.
 usage: write_registry.py FARM_LIST.json REGISTRY_OUT.json PORT_BASE"""
 import json, os, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from portmap import load_farms, ports_for
 src, out, base = sys.argv[1], sys.argv[2], int(sys.argv[3])
-d = json.load(open(src)); farms = d.get('farms', d) if isinstance(d, dict) else d
-farms = [dict(name=f['name'], url=f'http://127.0.0.1:{base + i}', ok=True, tunnel_ok=True, health='healthy')
-         for i, f in enumerate(sorted(farms, key=lambda f: f['name']), start=1)]
+src_farms = load_farms(src)
+ports = ports_for(src_farms, os.path.join(os.path.dirname(os.path.abspath(out)), f'portmap-{base}.json'), base)
+farms = [dict(name=n, url=f'http://127.0.0.1:{p}', ok=True, tunnel_ok=True, health='healthy')
+         for n, p in sorted(ports.items(), key=lambda kv: kv[1])]
 try:
     cur = json.load(open(out)).get('farms', [])
 except (OSError, ValueError):
