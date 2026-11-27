@@ -162,7 +162,7 @@ class Trainer:
             _log(f'training client resumed from {self.state_path} in {time.time() - t0:.0f}s (update {self.update})')
         return self.tc
 
-    async def train(self, job_ids, base_sampler_path=None):
+    async def train(self, job_ids, base_sampler_path=None, expected_update=None):
         from ttt_discover.rl.train import prepare_minibatch, train_step
         from ttt_discover.rl.data_processing import all_same
         key = hashlib.sha256(json.dumps(sorted(job_ids)).encode()).hexdigest()[:16]
@@ -172,6 +172,8 @@ class Trainer:
                     r = json.loads(l)
                     if r.get('jobs_key') == key:
                         return r
+            if expected_update is not None and int(expected_update) != self.update + 1:
+                raise Conflict(f'MOMO expects update {expected_update}, but the next update here is {self.update + 1}')
             newest = self.sampler_path or self.base_sampler
             if base_sampler_path and newest and base_sampler_path != newest:
                 raise Conflict(f'rollouts were sampled from {base_sampler_path}, but the newest version is {newest} '
@@ -257,6 +259,8 @@ def serve(args):
         def do_GET(self):
             if self.path.startswith('/status'):
                 self._reply(200, dict(update=trainer.update, sampler_path=trainer.sampler_path,
+                                      newest_sampler=trainer.sampler_path or trainer.base_sampler,
+                                      publish=trainer.publish, adapter=args.adapter_name,
                                       state_path=trainer.state_path,
                                       jobs_stored=len(list((trainer.store / 'jobs').glob('*.pkl')))))
             else:
@@ -269,7 +273,7 @@ def serve(args):
                     # One trainable adapter per process: refuse a /train meant for another adapter.
                     if args.adapter_name and body.get('adapter') not in (None, args.adapter_name):
                         raise ValueError(f"this shim trains {args.adapter_name!r}, not {body.get('adapter')!r}")
-                    coro = trainer.train(list(body['job_ids']), body.get('base_sampler_path'))
+                    coro = trainer.train(list(body['job_ids']), body.get('base_sampler_path'), body.get('expected_update'))
                 else:
                     coro = trainer.sample(body['parent_states'], body['sampler_path'], body['api_key'],
                                           int(body.get('n', 32)), body.get('job_id'))
