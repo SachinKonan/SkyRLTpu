@@ -13,6 +13,7 @@ Recipe and grading come from a live run's env.txt (load_recipe once per process,
     load_recipe('circuit')  -> mc-s1/env.txt    (same Inkling recipe on the ibm8 placement task, 70-farm circuit registry)
 One process serves ONE problem (the recipe lives in os.environ). Grading goes through the SSH forwards on della-vis1, so run
 this on della-vis1 -- serve() exposes it over HTTP for a runner elsewhere:  python3 inkling_sample.py serve erdos 8790
+[ENV_TXT] [KEY=VALUE ...] (another run's env.txt and/or setting overrides, e.g. a different grading registry)
 api_key may be the raw key or a key NAME ('1', '2', '3', 'TAI', 'HARISH') resolved from ~/.bashrc (preferred over HTTP).
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ RECIPE_RUN = {'erdos': 'mn9-s1', 'circuit': 'mc-s1'}
 # per-run keys in env.txt that must not leak into a sampler process
 RUN_ONLY = ('SKYRL_RUN_ID', 'TTD_RUN_DIR', 'EXPERIMENT_NAME', 'SKYRL_GRADING_JOURNAL', 'SKYRL_GRADING_EVENTS', 'TTD_M0_LORA_SEED',
             'TTD_INIT_STATE_SEED', 'NUM_EPOCHS', 'LEARNING_RATE', 'KL_PENALTY_COEF', 'CODE_SKYRL', 'CODE_DISCOVER',
-            'TTD_SICK_MARKER', 'SCIENCE_WORKER_ROOT')
+            'TTD_SICK_MARKER', 'SCIENCE_WORKER_ROOT', 'TTD_FROZEN_POLICY', 'TTD_FROZEN_SAMPLER_PATH')
 _problem = None
 _clients: dict = {}
 
@@ -37,11 +38,13 @@ def _paths(env):
             sys.path.insert(0, p)
 
 
-def load_recipe(problem: str, env_txt: str | None = None) -> dict:
-    """Set os.environ to a live run's recipe + grading settings (and its pinned code on sys.path)."""
+def load_recipe(problem: str, env_txt: str | None = None, overrides: dict | None = None) -> dict:
+    """Set os.environ to a live run's recipe + grading settings (and its pinned code on sys.path).
+    overrides: KEY=VALUE settings applied on top (e.g. a different grading registry for MOMO)."""
     global _problem
     env_txt = env_txt or f"{RUNS}/{RECIPE_RUN[problem]}/env.txt"
     env = dict(l.rstrip('\n').split('=', 1) for l in open(env_txt) if '=' in l)
+    env.update(overrides or {})
     _paths(env)
     for k, v in env.items():
         if k not in RUN_ONLY and not k.startswith('TINKER_API_KEY'):
@@ -136,11 +139,11 @@ async def inkling_sample(parent_states: list[dict], sampler_path: str, api_key: 
     return list(await asyncio.gather(*(one_parent(p) for p in parent_states)))
 
 
-def serve(problem: str, port: int):
+def serve(problem: str, port: int, env_txt: str | None = None, overrides: dict | None = None):
     """Tiny HTTP shim on 127.0.0.1:port: POST /sample {parent_states, sampler_path, api_key, n} -> {children: [...]}."""
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
-    load_recipe(problem)
+    load_recipe(problem, env_txt, overrides)
     loop = asyncio.new_event_loop()
     threading.Thread(target=loop.run_forever, daemon=True).start()
 
@@ -165,4 +168,8 @@ def serve(problem: str, port: int):
 
 if __name__ == '__main__':
     if sys.argv[1:2] == ['serve']:
-        serve(sys.argv[2], int(sys.argv[3]))
+        # serve PROBLEM PORT [ENV_TXT|-] [KEY=VALUE ...]
+        rest = sys.argv[4:]
+        env_txt = rest[0] if rest and '=' not in rest[0] and rest[0] != '-' else None
+        ov = dict(a.split('=', 1) for a in rest if '=' in a)
+        serve(sys.argv[2], int(sys.argv[3]), env_txt, ov)

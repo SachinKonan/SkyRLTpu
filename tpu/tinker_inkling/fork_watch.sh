@@ -34,6 +34,13 @@ while true; do
   RW=$(python3 "$O/write_registry.py" /scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json \
       "$O/registry-inkc.json" 27880)
   if [[ -n "$RW" ]]; then echo "$RW"; systemctl --user restart tinker-tunnel-inkc && echo "$(date -u +%FT%TZ) restarted tinker-tunnel-inkc for the new farm list"; fi
+  # MOMO Erdős shim grading list (user 2026-11-27 02:15Z): train-faster's slim v6e math farms (their plus list minus our
+  # full-hash ink-gfarms). On a change: rewrite registry-inke.json and restart its tunnel together (ports are positional).
+  IE=$(python3 "$O/make_inke.py" "$O/ink-erdos-slim.json")
+  if [[ -n "$IE" ]]; then
+    echo "$IE"; python3 "$O/write_registry.py" "$O/ink-erdos-slim.json" "$O/registry-inke.json" 28100
+    systemctl --user restart tinker-tunnel-inke && echo "$(date -u +%FT%TZ) restarted tinker-tunnel-inke for the new farm list"
+  fi
   while IFS=: read -r NEW N KEY AFTER; do
     [ -n "$NEW" ] || continue
     [ -f "$R/$NEW/env.txt" ] && continue
