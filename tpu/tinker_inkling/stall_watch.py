@@ -111,6 +111,23 @@ for log in glob.glob(f'{O}/tunnel*.log'):
             alerts.append(f'{os.path.basename(log)}: {n} new "Too many open files" lines -- tunnel out of fds')
     offs[log] = size
 
+# MOMO Inkling shims (user-approved MOMO prep 2026-11-26): must answer a malformed POST with a JSON error within 30 s.
+# Alert only (a restart would drop MOMO's in-flight calls); re-alert at most every REALERT_H.
+import urllib.request, urllib.error
+for name, port in (('erdos', 18790), ('circuit', 18791)):
+    ok = False
+    try:
+        req = urllib.request.Request(f'http://127.0.0.1:{port}/sample', data=b'{}', headers={'Content-Type': 'application/json'})
+        urllib.request.urlopen(req, timeout=30)
+    except urllib.error.HTTPError as e:
+        ok = b'error' in e.read()
+    except Exception:  # noqa: BLE001 -- refused / timeout / reset
+        ok = False
+    ss_ = state.setdefault(f'_shim_{name}', {})
+    if not ok and now - ss_.get('alert', 0) > REALERT_H * 3600:
+        ss_['alert'] = now
+        alerts.append(f'MOMO Inkling shim {name} (vis1 127.0.0.1:{port}) not answering -- check unit tinker-shim-{name}')
+
 for run in restarts:
     if not DRY:
         subprocess.run(['systemctl', '--user', 'restart', f'tinker-run-{run}'])
