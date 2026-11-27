@@ -1,6 +1,7 @@
-"""Offline tests for inkling_momo_train.Trainer.train with fake Tinker/discover pieces (no network, no grading)."""
+"""Run: PYTHONPATH=<discover pin> <tinker venv>/bin/python tests/test_momo_train_offline.py (exit 1 on failure).
+Offline tests for inkling_momo_train.Trainer.train with fake Tinker/discover pieces (no network, no grading)."""
 import asyncio, json, os, sys, tempfile, types
-sys.path.insert(0, '/scratch/gpfs/ZHUANGL/sk7524/SkyRLTpu-multihost/.claude/worktrees/tinker-inkling/tpu/tinker_inkling')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 tmp = tempfile.mkdtemp()
 os.environ['INKLING_MOMO_TRAIN_STORE'] = tmp
 import inkling_momo_train as M
@@ -51,8 +52,14 @@ M.Trainer._client = fake_client
 T.prepare_minibatch, T.train_step = fake_prep, fake_step
 
 
+FAILED = []
+
+
 async def main():
-    ok = lambda c, msg: print(('PASS ' if c else 'FAIL ') + msg)
+    def ok(c, msg):
+        print(('PASS ' if c else 'FAIL ') + msg)
+        if not c:
+            FAILED.append(msg)
     t = M.Trainer('circuit', ENV, BASE_S, BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
     t._save_job('b:1:j1', [G([0.1, 0.5, 0.0])], BASE_SP)
     t._save_job('b:1:j2', [G([0.2, 0.2])], BASE_SP)            # constant group
@@ -100,6 +107,31 @@ async def main():
     open(t.ledger, 'a').write('{"torn": ')
     t2 = M.Trainer('circuit', ENV, BASE_S, BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
     ok(t2.update == 1 and t2.sampler_path == r['sampler_path'], 'restart after torn line resumes update 1')
+    # a row appended after the torn fragment must survive (starts on a new line)
+    FAKE['tc'] = TC()
+    t2._save_job('b:1:j7', [G([0.1, 0.8])], r['sampler_path'])
+    r7 = await t2.train(['b:1:j7'], r['sampler_path'], 2)
+    t3 = M.Trainer('circuit', ENV, BASE_S, BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
+    ok(r7['update'] == 2 and t3.update == 2, 'row appended after a torn line is readable after restart (update 2)')
+    # checkpoint names are unique per attempt
+    ok(r7['sampler_path'] != r['sampler_path'] and r7['sampler_path'].rsplit('-', 1)[-1].isdigit(), 'unique checkpoint name')
+    # a ValueError SUBCLASS (e.g. JSONDecodeError) is not a permanent skip
+    t3._save_job('b:1:j8', [G([0.1, 0.7])], r7['sampler_path'])
+    FAKE['prep_raise'] = json.JSONDecodeError('transient', 'x', 0)
+    try:
+        await t3.train(['b:1:j8'], r7['sampler_path'], 3); ok(False, 'subclass ValueError raised')
+    except json.JSONDecodeError: ok(not any(x.get('jobs_key') and 'b:1:j8' in x.get('job_ids', []) for x in t3._rows()),
+                                   'ValueError subclass is retried, not recorded as skipped')
+    FAKE['prep_raise'] = None
+    # non-int expected_update -> 400
+    try:
+        await t3.train(['b:1:j8'], r7['sampler_path'], 'abc'); ok(False, 'non-int expected_update')
+    except M.BadRequest: ok(True, '400 on a non-integer expected_update')
+    # a skip row does not change the version reported after a restart
+    t3._save_job('b:1:j9', [G([0.4, 0.4])], r7['sampler_path'])
+    await t3.train(['b:1:j9'], r7['sampler_path'], 3)
+    t4 = M.Trainer('circuit', ENV, BASE_S, BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
+    ok(t4.update == 2 and t4.sampler_path == r7['sampler_path'], 'restart after a skip keeps update 2 and its sampler')
     # store with a different start refuses
     try:
         M.Trainer('circuit', ENV, 'tinker://x/weights/1', BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
@@ -107,3 +139,5 @@ async def main():
     except SystemExit: ok(True, 'store refuses a different starting state')
 
 asyncio.run(main())
+print(f'{len(FAILED)} failed' if FAILED else 'all passed')
+sys.exit(1 if FAILED else 0)

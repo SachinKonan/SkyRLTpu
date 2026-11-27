@@ -100,11 +100,22 @@ class Trainer:
         return out
 
     def _last_row(self):
-        rows = [r for r in self._rows() if 'jobs_key' in r]
+        rows = [r for r in self._rows() if 'jobs_key' in r and not r.get('skipped')]
         return rows[-1] if rows else None
 
+    def _published_ok(self, path):
+        return any(r.get('event') == 'published' and r.get('sampler_path') == path and r.get('ok') for r in self._rows())
+
     def _append(self, row):
+        if self.ledger.exists() and self.ledger.stat().st_size:
+            with open(self.ledger, 'rb') as fh:
+                fh.seek(-1, os.SEEK_END)
+                torn = fh.read(1) != b'\n'
+        else:
+            torn = False
         with open(self.ledger, 'a') as fh:
+            if torn:                        # crash mid-append left a fragment: never glue the next row onto it
+                fh.write('\n')
             fh.write(json.dumps(row) + '\n')
             fh.flush(); os.fsync(fh.fileno())
 
@@ -241,10 +252,17 @@ class Trainer:
                     if base_sampler_path and r.get('base_sampler_path') not in (None, base_sampler_path):
                         raise Conflict(f'job set already applied from {r.get("base_sampler_path")}, '
                                        f'not {base_sampler_path}')
+                    if not r.get('skipped') and self.publish:
+                        r['published'] = self._published_ok(r['sampler_path'])
                     return r
             # 2. guards
             newest = self.newest()
-            if expected_update is not None and int(expected_update) != self.update + 1:
+            if expected_update is not None:
+                try:
+                    expected_update = int(expected_update)
+                except (TypeError, ValueError):
+                    raise BadRequest(f'expected_update must be an integer, got {expected_update!r}')
+            if expected_update is not None and expected_update != self.update + 1:
                 raise Conflict(f'MOMO expects update {expected_update}, but the next update here is {self.update + 1}')
             if base_sampler_path and base_sampler_path != newest:
                 raise Conflict(f'rollouts were sampled from {base_sampler_path}, but the newest version is {newest} '
@@ -283,7 +301,11 @@ class Trainer:
                         adv_estimator=E.get('TTD_ADV_ESTIMATOR', 'piecewise_valid_entropic_centered'),
                         train_max_seq=int(E.get('TTD_M0_TRAIN_MAX_SEQ', 65536)),
                         context_window=int(E.get('TTD_M0_CONTEXT_WINDOW', 65536)))
-                except ValueError as e:                      # estimator refused this data: deterministic
+                except ValueError as e:
+                    # Only the estimator's own refusal (a plain ValueError) is deterministic. Subclasses such as
+                    # pydantic ValidationError or JSONDecodeError can be transient: let them 500 and be retried.
+                    if type(e) is not ValueError:
+                        raise
                     why = f'estimator: {e}'
                 if not why and not data_D:
                     why = '0 datums after filtering'
@@ -295,7 +317,7 @@ class Trainer:
             # 4. step + saves; on ANY failure discard the stepped client (next /train reloads the last saved state)
             lr = float(self.env['LEARNING_RATE'])   # per-run keys stay out of os.environ (inkling_sample.RUN_ONLY)
             nxt = self.update + 1
-            name = f'momo-{self.tag}-{nxt:04d}'
+            name = f'momo-{self.tag}-{nxt:04d}-{int(time.time())}'   # unique per attempt (a retry never reuses a name)
             try:
                 await train_step(data_D, self.tc, lr, 1, os.environ.get('TTD_LOSS_FN', 'importance_sampling'))
                 st = await (await self.tc.save_state_async(name)).result_async()
@@ -371,8 +393,6 @@ def serve(args):
                     else:
                         raise NotFound(f'unknown path {self.path}')
                 except (KeyError, TypeError, ValueError) as e:
-                    if isinstance(e, HTTPError):
-                        raise
                     raise BadRequest(f'bad request: {type(e).__name__}: {e}') from e
                 fut = asyncio.run_coroutine_threadsafe(coro, loop)
                 while True:
