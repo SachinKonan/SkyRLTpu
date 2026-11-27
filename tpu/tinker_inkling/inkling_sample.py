@@ -209,6 +209,9 @@ def serve(problem: str, port: int, env_txt: str | None = None, overrides: dict |
                 self.send_response(200)
             except Exception as e:  # noqa: BLE001
                 out = json.dumps({'error': f'{type(e).__name__}: {e}'}).encode()
+                # Callers (MOMO's urllib) don't read 500 bodies, so log the error here too.
+                print(f'{time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())} 500: {type(e).__name__}: {str(e)[:500]}',
+                      file=sys.stderr, flush=True)
                 self.send_response(500)
             self.send_header('Content-Type', 'application/json'); self.end_headers(); self.wfile.write(out)
 
