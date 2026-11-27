@@ -12,7 +12,8 @@ O=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops
 R=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs
 C=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code
 SNAP=skyrl-28b4c4aa866a-tfsci
-ERD="TTD_RECIPE=tvg-fix GRADE_FARMS=ink"
+# Erdős arms grade on the shared slim v6e math pool (farms-v5p.json; user 2026-11-27 02:15Z), not just our 8 ink-gfarms.
+ERD="TTD_RECIPE=tvg-fix GRADE_FARMS=v5p SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=8"
 CIR="TTD_RECIPE=circuit-fix GRADE_FARMS=inkc SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=3 INKC_FARMS_JSON=/scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json"
 # adapter seed : Tinker key : step-12 sampler path   (from fork_watch.log)
 ERD_AD="1:2:tinker://1528f286-0fba-51df-88f8-1d1036cff970:train:0/sampler_weights/000012

@@ -34,12 +34,13 @@ while true; do
   RW=$(python3 "$O/write_registry.py" /scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/inkling/ink-circuit-farms-plus.json \
       "$O/registry-inkc.json" 27880)
   if [[ -n "$RW" ]]; then echo "$RW"; systemctl --user restart tinker-tunnel-inkc && echo "$(date -u +%FT%TZ) restarted tinker-tunnel-inkc for the new farm list"; fi
-  # MOMO Erdős shim grading list (user 2026-11-27 02:15Z): train-faster's slim v6e math farms (their plus list minus our
-  # full-hash ink-gfarms). On a change: rewrite registry-inke.json and restart its tunnel together (ports are positional).
-  IE=$(python3 "$O/make_inke.py" "$O/ink-erdos-slim.json")
+  # Inkling Erdős grading pool (user 2026-11-27 02:15Z, "expand its pool to the broader cluster"): train-faster's slim v6e
+  # math farms, farms-v5p.json (their registry_sync keeps it current; eftt farms join as they come up). Used by the arms
+  # C/D Erdős runs (GRADE_FARMS=v5p) and the MOMO Erdős shim. On a change: rewrite registry-v5p.json and restart its
+  # tunnel together (ports are positional).
+  IE=$(python3 "$O/write_registry.py" /scratch/gpfs/ZHUANGL/sk7524/rq4-local/tvg/farms-v5p.json "$O/registry-v5p.json" 28000)
   if [[ -n "$IE" ]]; then
-    echo "$IE"; python3 "$O/write_registry.py" "$O/ink-erdos-slim.json" "$O/registry-inke.json" 28100
-    systemctl --user restart tinker-tunnel-inke && echo "$(date -u +%FT%TZ) restarted tinker-tunnel-inke for the new farm list"
+    echo "$IE"; systemctl --user restart tinker-tunnel-v5p && echo "$(date -u +%FT%TZ) restarted tinker-tunnel-v5p for the new farm list"
   fi
   while IFS=: read -r NEW N KEY AFTER; do
     [ -n "$NEW" ] || continue
