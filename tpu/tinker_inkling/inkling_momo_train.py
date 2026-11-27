@@ -10,7 +10,7 @@ POST /sample {job_id, parent_states, sampler_path, api_key, n}
     and with a job_id the job's groups are persisted to STORE/jobs/<job_id>.pkl for a later /train. A child whose grading
     infrastructure gave up is DROPPED from its group (discover's drop_failed_candidates, as in the trained runs) and
     comes back as (None, None, None, '[dropped: grading infrastructure]') instead of failing the whole call.
-POST /train {job_ids}
+POST /train {adapter, job_ids}
     One RL step on the trainable adapter with the run's own recipe (env.txt: TTD_ADV_ESTIMATOR, TTD_LOSS_FN,
     LEARNING_RATE, KL 0, TTD_REJECT_TRUNCATED): constant-reward groups dropped -> prepare_minibatch (advantages,
     datums, OOV/length filters) -> train_step (forward_backward + optim_step) -> save full state AND sampler weights
@@ -191,11 +191,11 @@ class Trainer:
                         return ['inkling-momo']
                 data_D, m = await prepare_minibatch(
                     [_B() for _ in kept], kept, get_tokenizer(model), self.service_client, model_name=model,
-                    kl_penalty_coef=float(E.get('KL_PENALTY_COEF', 0) or 0), train_step=self.update,
+                    kl_penalty_coef=float(self.env.get('KL_PENALTY_COEF', 0) or 0), train_step=self.update,
                     adv_estimator=E.get('TTD_ADV_ESTIMATOR', 'piecewise_valid_entropic_centered'),
                     train_max_seq=int(E.get('TTD_M0_TRAIN_MAX_SEQ', 65536)),
                     context_window=int(E.get('TTD_M0_CONTEXT_WINDOW', 65536)))
-                lr = float(E['LEARNING_RATE'])
+                lr = float(self.env['LEARNING_RATE'])   # per-run keys stay out of os.environ (inkling_sample.RUN_ONLY)
                 await train_step(data_D, tc, lr, 1, E.get('TTD_LOSS_FN', 'importance_sampling'))
                 self.update += 1
                 name = f'momo-{self.update:04d}'
@@ -258,6 +258,9 @@ def serve(args):
             try:
                 body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 if self.path.startswith('/train'):
+                    # One trainable adapter per process: refuse a /train meant for another adapter.
+                    if args.adapter_name and body.get('adapter') not in (None, args.adapter_name):
+                        raise ValueError(f"this shim trains {args.adapter_name!r}, not {body.get('adapter')!r}")
                     coro = trainer.train(list(body['job_ids']))
                 else:
                     coro = trainer.sample(body['parent_states'], body['sampler_path'], body['api_key'],
@@ -301,6 +304,7 @@ if __name__ == '__main__':
     p.add_argument('--key', required=True, help="owner key name of the adapter's org (training + unpublished sampling)")
     p.add_argument('--tag', default=None, help='store sub-directory (default: problem + state run id)')
     p.add_argument('--publish', action='store_true', help='publish each new sampler checkpoint (5-key rotation)')
+    p.add_argument('--adapter-name', default=None, help="MOMO's name for the trainable adapter; /train with another name is refused")
     a = p.parse_args()
     a.tag = a.tag or f'{a.problem}-{a.state.split("//")[1][:8]}'
     serve(a)
