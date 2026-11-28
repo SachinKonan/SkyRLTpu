@@ -9,7 +9,7 @@ set -u
 O=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/ops
 PY=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/venv/bin/python
 R=/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs
-MTRAIN_TAG="${MTRAIN_TAG:-circuit-b2-mtrain}"
+MTRAIN_TAG="${MTRAIN_TAG:-circuit-b2-mtrain2}"
 
 unit() {  # name, then the command (string); idempotent
   local u=$1; shift
@@ -27,7 +27,7 @@ unit tinker-fork-watch "exec /bin/bash $O/fork_watch.sh >> $O/fork_watch.log 2>&
 unit tinker-shim-erdos "exec $PY -u $O/inkling_sample.py serve erdos 18790 $R/mf9-s1/env.txt SKYRL_GRADING_REGISTRY=$O/registry-v5p.json SKYRL_OPEN_GRADING_K=64 SKYRL_OPEN_GRADING_HTTP_CONCURRENCY=8 >> $O/shim_erdos.log 2>&1"
 unit tinker-shim-circuit "exec $PY -u $O/inkling_sample.py serve circuit 18791 >> $O/shim_circuit.log 2>&1"
 # 4. MOMO-train shim (same store -> resumes its ledger; publish on per the user's decision)
-unit tinker-shim-momo-train "exec $PY -u $O/inkling_momo_train.py serve circuit 18793 --env-txt $R/mc-s5/env.txt --state tinker://b9352b42-346c-5f14-bafc-662d0219e950:train:0/weights/000012 --base-sampler tinker://b9352b42-346c-5f14-bafc-662d0219e950:train:0/sampler_weights/000012 --key HARISH --tag $MTRAIN_TAG --adapter-name circuit-inkling-s5-a12 --publish >> $O/shim_momo_train.log 2>&1"
+unit tinker-shim-momo-train "exec $PY -u $O/inkling_momo_train_stream.py serve circuit 18793 --env-txt $R/mc-s5/env.txt --state tinker://b9352b42-346c-5f14-bafc-662d0219e950:train:0/weights/000012 --base-sampler tinker://b9352b42-346c-5f14-bafc-662d0219e950:train:0/sampler_weights/000012 --key HARISH --tag $MTRAIN_TAG --adapter-name circuit-inkling-s5-a12 --publish >> $O/shim_momo_train.log 2>&1"
 
 sleep 40
 for p in 18790 18791; do
