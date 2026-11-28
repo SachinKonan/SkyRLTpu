@@ -2,20 +2,25 @@
 
   inkling_probe.py --prompt probe_prompt.json --problem kakeya-128 --out .../inkling.jsonl --key 2 [--groups 2 --n 32]
 
-Settings (user decision for the new envs: "rl28k generation settings for every model"): context 28,672; phase 1 (prompt +
-thinking) 22,528; the answer gets the rest; temperature 1.0. The same two-phase completer as the Inkling runs
-(InklingTwoPhaseTokenCompleter: thinking budget hit -> forced close + answer cue, masked). Prompt rendered with Inkling's
-tml_v0 renderer at thinking effort 0.8, which puts its own "Thinking effort level" system message before the given
-messages, exactly as the RL runs send it. prompt JSON: {"messages": [{"role": "system", ...}, {"role": "user", ...}]}.
-One output row per completion: problem, model, group, index, prompt_tokens, completion_text, thinking_text,
-answer_text, completion_tokens, thinking_tokens, answer_tokens, finish_reason (stop | length), thinking_hit_budget,
-outcome (natural | injected | continued | wall), think_budget, group t_start / t_end / seconds, key, settings.
+Settings = Inkling-2-Mini's OWN production generation recipe, exactly as the Inkling arms and the MOMO shims run it
+(mc-s5 / mn9-s5 env.txt; user correction 2026-11-28: the rl28k split is for the on-prem models only):
+  renderer tml_v0 at thinking effort 0.8 (it puts its own "Thinking effort level" system message before the messages);
+  InklingTwoPhaseTokenCompleter, temperature 1.0; FIXED budget: 22,000 thinking + 10,000 answer (32,000 generated),
+  context 65,536 (phase1 65,536); FIT=1 (a prompt too long for 32k shrinks thinking, never the answer);
+  thinking budget hit -> forced close + answer cue (masked), the answer gets the rest of the 32,000.
+prompt JSON: {"messages": [{"role": "system", ...}, {"role": "user", ...}]}.
+Output: line 1 = {"header": true, "settings": {...}} (also written to meta.json next to the JSONL), then one row per
+completion: problem, model, group, index, prompt_tokens, completion_text, thinking_text, answer_text,
+completion_tokens, thinking_tokens, answer_tokens, finish_reason (stop | length), thinking_hit_budget,
+outcome (natural | injected | continued | wall), think_budget, answer_budget, group t_start / t_end / seconds, key.
 """
 import argparse, asyncio, json, os, subprocess, sys, time
 
 MODEL = 'thinkingmachines/Inkling-2-Mini:peft:65536:free'
 DISCOVER = os.environ.get('INKLING_PROBE_DISCOVER', '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling/code/discover-0766e2413eb0')
-CONTEXT, PHASE1, TEMPERATURE, EFFORT = 28672, 22528, 1.0, 0.8
+# Inkling-2-Mini production recipe (mc-s5 / mn9-s5 env.txt)
+CONTEXT, PHASE1, TEMPERATURE, EFFORT = 65536, 65536, 1.0, 0.8
+FIXED_THINK, FIXED_TOTAL, FIXED_FIT = 22000, 32000, 1
 
 
 def key(name):
@@ -24,12 +29,11 @@ def key(name):
 
 
 async def main(a):
-    global CONTEXT, PHASE1
-    CONTEXT, PHASE1 = a.context, a.phase1              # defaults = rl28k; smaller values only for tests
-    os.environ['TTD_INKLING_EFFORT'] = str(EFFORT)
-    for k in ('TTD_FIXED_THINK_TOKENS', 'TTD_FIXED_TOTAL_TOKENS', 'TTD_NATIVE_THINKING_BUDGET',
-              'TTD_QWEN_SAMPLE_GROUP_CHUNK_SIZE'):
-        os.environ.pop(k, None)                       # rl28k = legacy phase-1 budget, no fixed split
+    think, total = a.think, a.total                    # production defaults; smaller values only for tests
+    os.environ.update(TTD_INKLING_EFFORT=str(EFFORT), TTD_FIXED_THINK_TOKENS=str(think),
+                      TTD_FIXED_TOTAL_TOKENS=str(total), TTD_FIXED_BUDGET_FIT=str(FIXED_FIT), TTD_MIN_THINK_TOKENS='0',
+                      TTD_NATIVE_THINKING_BUDGET='0', TTD_QWEN_TWO_PHASE='0')
+    os.environ.pop('TTD_QWEN_SAMPLE_GROUP_CHUNK_SIZE', None)
     sys.path.insert(0, DISCOVER)
     import tinker
     from ttt_discover.tinker_utils.misc_utils import get_tokenizer
@@ -44,8 +48,17 @@ async def main(a):
     client = await sc.create_sampling_client_async(base_model=MODEL)
     completer = InklingTwoPhaseTokenCompleter(sampling_client=client, tokenizer=tok, phase1_max_tokens=PHASE1,
                                               temperature=TEMPERATURE, context_window=CONTEXT, min_think_tokens=0)
-    think_budget = PHASE1 - ob.length
-    print(f'{a.problem}: prompt {ob.length} tokens, thinking budget {think_budget}, {a.groups} x {a.n}', flush=True)
+    think_budget = completer._think_budget(ob.length)          # 22,000 unless FIT shrinks it for a long prompt
+    answer_budget = completer._output_limit(ob.length) - think_budget
+    settings = dict(model=MODEL, adapter=None, renderer='tml_v0', effort=EFFORT, temperature=TEMPERATURE,
+                    completer='InklingTwoPhaseTokenCompleter', context_window=CONTEXT, phase1_max_tokens=PHASE1,
+                    fixed_think_tokens=think, fixed_total_tokens=total, fixed_answer_tokens=total - think,
+                    fixed_budget_fit=FIXED_FIT, min_think_tokens=0, answer_cue=completer.ANSWER_CUE,
+                    this_prompt=dict(prompt_tokens=ob.length, think_budget=think_budget, answer_budget=answer_budget),
+                    source='Inkling-2-Mini production recipe = mc-s5 / mn9-s5 env.txt', seed=None, key=a.key,
+                    groups=a.groups, n=a.n, problem=a.problem, prompt_file=os.path.abspath(a.prompt), started=time.time())
+    print(f'{a.problem}: prompt {ob.length} tokens, thinking {think_budget} + answer {answer_budget}, '
+          f'{a.groups} x {a.n}', flush=True)
 
     async def group(g):
         t0 = time.time()
@@ -54,7 +67,9 @@ async def main(a):
 
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     n_rows = 0
+    json.dump(settings, open(os.path.join(os.path.dirname(os.path.abspath(a.out)), 'meta.json'), 'w'), indent=1)
     with open(a.out, 'w') as fh:
+        fh.write(json.dumps(dict(header=True, settings=settings)) + '\n')
         for g, t0, t1, seqs in await asyncio.gather(*(group(g) for g in range(a.groups))):
             for i, s in enumerate(seqs):
                 toks = list(s.tokens)
@@ -75,10 +90,8 @@ async def main(a):
                            completion_text=tok.decode(toks), thinking_text=msg['thinking'], answer_text=msg['content'],
                            completion_tokens=len(toks), thinking_tokens=p1, answer_tokens=answer_tokens,
                            finish_reason='stop' if stopped else 'length', thinking_hit_budget=hit, outcome=outcome,
-                           think_budget=think_budget, t_start=round(t0, 1), t_end=round(t1, 1),
-                           seconds=round(t1 - t0, 1), key=a.key,
-                           settings=dict(context=CONTEXT, phase1=PHASE1, temperature=TEMPERATURE, effort=EFFORT,
-                                         renderer='tml_v0', completer='InklingTwoPhaseTokenCompleter', seed=None))
+                           think_budget=think_budget, answer_budget=answer_budget, t_start=round(t0, 1),
+                           t_end=round(t1, 1), seconds=round(t1 - t0, 1), key=a.key)
                 fh.write(json.dumps(row) + '\n')
                 n_rows += 1
     print(f'wrote {n_rows} rows -> {a.out}', flush=True)
@@ -92,6 +105,6 @@ if __name__ == '__main__':
     p.add_argument('--key', default='2', help='Tinker key name (base-model sampling works on any key)')
     p.add_argument('--groups', type=int, default=2)
     p.add_argument('--n', type=int, default=32)
-    p.add_argument('--context', type=int, default=CONTEXT, help='rl28k default; change only for tests')
-    p.add_argument('--phase1', type=int, default=PHASE1, help='rl28k default; change only for tests')
+    p.add_argument('--think', type=int, default=FIXED_THINK, help='production 22,000; change only for tests')
+    p.add_argument('--total', type=int, default=FIXED_TOTAL, help='production 32,000; change only for tests')
     asyncio.run(main(p.parse_args()))
