@@ -270,7 +270,8 @@ class Trainer:
             missing = [j for j in job_ids if not self._job_file(j).exists()]
             if missing:
                 raise NotFound(f'no stored groups for job_ids {missing[:5]} (n={len(missing)})')
-            jobs = {j: self._load_job(j) for j in job_ids}
+            # ~90 MB per job: unpickle in a worker thread so concurrent /sample calls are not paused
+            jobs = await asyncio.to_thread(lambda: {j: self._load_job(j) for j in job_ids})
             stale = {j: d['sampler_path'] for j, d in jobs.items() if d['sampler_path'] != newest}
             if stale:
                 raise Conflict(f'{len(stale)} job(s) were sampled from another version than the newest {newest}: '
@@ -295,12 +296,20 @@ class Trainer:
                         return ['inkling-momo']
                 await self._client()
                 try:
-                    data_D, m = await prepare_minibatch(
+                    kl = float(self.env.get('KL_PENALTY_COEF', 0) or 0)
+                    prep = lambda: prepare_minibatch(  # noqa: E731
                         [_B() for _ in kept], kept, get_tokenizer(model), self.service_client, model_name=model,
-                        kl_penalty_coef=float(self.env.get('KL_PENALTY_COEF', 0) or 0), train_step=self.update,
+                        kl_penalty_coef=kl, train_step=self.update,
                         adv_estimator=E.get('TTD_ADV_ESTIMATOR', 'piecewise_valid_entropic_centered'),
                         train_max_seq=int(E.get('TTD_M0_TRAIN_MAX_SEQ', 65536)),
                         context_window=int(E.get('TTD_M0_CONTEXT_WINDOW', 65536)))
+                    if kl == 0:
+                        # Pure CPU (advantages + ~1k datums): run it in a worker thread with its own event loop so
+                        # concurrent /sample calls keep running. With KL > 0 it calls Tinker through the shared
+                        # service client, so it stays on this loop.
+                        data_D, m = await asyncio.to_thread(lambda: asyncio.run(prep()))
+                    else:
+                        data_D, m = await prep()
                 except ValueError as e:
                     # Only the estimator's own refusal (a plain ValueError) is deterministic. Subclasses such as
                     # pydantic ValidationError or JSONDecodeError can be transient: let them 500 and be retried.

@@ -132,6 +132,32 @@ async def main():
     await t3.train(['b:1:j9'], r7['sampler_path'], 3)
     t4 = M.Trainer('circuit', ENV, BASE_S, BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
     ok(t4.update == 2 and t4.sampler_path == r7['sampler_path'], 'restart after a skip keeps update 2 and its sampler')
+    # /train's CPU work (unpickling + prepare_minibatch) runs off the event loop: a concurrent coroutine (standing in for
+    # /sample) keeps ticking while a /train with a 1.5 s BLOCKING prepare step runs
+    import threading, time as _time
+    main_thread = threading.get_ident()
+    seen = {}
+
+    async def slow_prep(builders, groups, *a, **k):
+        seen['thread'] = threading.get_ident()
+        _time.sleep(1.5)                       # blocking CPU stand-in
+        return [object() for g in groups for _ in g.r], {'advantage/mean': 0.0}
+    T.prepare_minibatch = slow_prep
+    FAKE['tc'] = TC()
+    t4.tc = None
+    t4._save_job('b:1:j10', [G([0.1, 0.6])], r7['sampler_path'])
+    ticks = []
+
+    async def ticker():
+        for _ in range(15):
+            ticks.append(_time.time()); await asyncio.sleep(0.1)
+    tk = asyncio.create_task(ticker())
+    r10 = await t4.train(['b:1:j10'], r7['sampler_path'], 3)
+    await tk
+    T.prepare_minibatch = fake_prep
+    gaps = [b_ - a_ for a_, b_ in zip(ticks, ticks[1:])]
+    ok(r10['update'] == 3 and seen.get('thread') != main_thread and max(gaps) < 0.6,
+       f'prepare_minibatch off the event loop (max tick gap {max(gaps):.2f}s while a 1.5 s prep ran)')
     # store with a different start refuses
     try:
         M.Trainer('circuit', ENV, 'tinker://x/weights/1', BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
