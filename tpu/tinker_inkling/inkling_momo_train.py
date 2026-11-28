@@ -94,6 +94,7 @@ class Trainer:
         self.fb_lock = asyncio.Lock()        # serialises the open-check + persist + enqueue of each streamed group
         self.fb_tasks = []                   # consumers of enqueued forward_backwards (they never raise)
         self.stream_tasks = set()            # per-group stream tasks spawned by /sample
+        self.late_pending = False            # late groups persisted during a cut (count only if the version continues)
         self.counts = self._fresh_counts()
         persisted = list(self._vdir().glob('*.pkl'))
         self.counts['streamed'] = len(persisted)
@@ -140,7 +141,8 @@ class Trainer:
 
     @staticmethod
     def _safe(job_id):
-        return re.sub(r'[^A-Za-z0-9._-]', '_', job_id)
+        # readable + a hash of the exact id, so 'a:1' and 'a_1' never share a file
+        return re.sub(r'[^A-Za-z0-9._-]', '_', job_id) + '-' + hashlib.sha1(job_id.encode()).hexdigest()[:8]
 
     def _job_file(self, job_id):
         return self.store / 'jobs' / (self._safe(job_id) + '.json')
@@ -302,7 +304,7 @@ class Trainer:
             if all_same(group.get_total_rewards()):
                 self.counts['constant'] += 1; return
             if not self.stream_open:
-                self.counts['late'] += 1; return
+                await self._persist_late(group, job_id, idx, sampler_path); return
             try:
                 data_D, _ = await self._prep([group])
             except ValueError as e:
@@ -312,8 +314,10 @@ class Trainer:
             if not data_D:
                 self.counts['refused'] += 1; return
             async with self.fb_lock:
-                if sampler_path != self.newest() or not self.stream_open:
-                    self.counts['late'] += 1; return            # the cut (or a new version) came first
+                if sampler_path != self.newest():
+                    self.counts['stale'] += 1; return           # a new version came first
+                if not self.stream_open:                         # the cut came first: keep it for a skip / failure
+                    await self._persist_late(group, job_id, idx, sampler_path, locked=True); return
                 path = self._vdir() / f'{self._safe(job_id)}__p{idx}.pkl'
                 await asyncio.to_thread(self._pickle, path, group)
                 persisted = True
@@ -330,6 +334,23 @@ class Trainer:
             _log(f'stream {job_id} p{idx} failed ({"persisted -> rebuild" if persisted else "not persisted"}): '
                  f'{type(e).__name__}: {str(e)[:300]}')
 
+    async def _persist_late(self, group, job_id, idx, sampler_path, locked=False):
+        """A group of the current version graded during a cut: persisted but NOT enqueued. If the /train succeeds it is
+        discarded with that version's directory; if it skips or fails, the version continues and the next /train's
+        rebuild includes it (dirty)."""
+        async def _do():
+            if sampler_path != self.newest():
+                self.counts['stale'] += 1; return
+            path = self._vdir() / f'{self._safe(job_id)}__p{idx}.pkl'
+            await asyncio.to_thread(self._pickle, path, group)
+            self.counts['late'] += 1
+            self.late_pending = True
+        if locked:
+            await _do()
+        else:
+            async with self.fb_lock:
+                await _do()
+
     async def _consume(self, fut, what):
         from ttt_discover.rl.train import consume_forward_backward
         try:
@@ -338,13 +359,14 @@ class Trainer:
             self.dirty = True
             _log(f'forward_backward for {what} failed -> rebuild at /train: {type(e).__name__}: {str(e)[:300]}')
 
-    async def _rebuild(self):
-        """Fresh client from v's saved state (with optimizer) + re-stream EVERY persisted group of v, sequentially."""
+    async def _rebuild(self, files=None):
+        """Fresh client from v's saved state (with optimizer) + re-stream the given persisted groups of v (default: all),
+        sequentially. /train passes the set persisted BEFORE its cut, so late groups never enter that update."""
         from ttt_discover.rl.train import enqueue_forward_backward, consume_forward_backward
         self.dirty = True
         self.tc = None
         tc = await self._client()
-        files = sorted(self._vdir().glob('*.pkl'))
+        files = sorted(self._vdir().glob('*.pkl')) if files is None else list(files)
         n_datums = 0
         for f in files:
             group = await asyncio.to_thread(self._unpickle, f)
@@ -395,16 +417,18 @@ class Trainer:
             # 3. cut: no more groups for v; drain what was enqueued; rebuild if anything is off
             async with self.fb_lock:
                 self.stream_open = False
+                cut_files = sorted(self._vdir().glob('*.pkl'))   # exactly what was streamed (or persisted) before the cut
             try:
                 if self.fb_tasks:
                     await asyncio.gather(*self.fb_tasks)          # _consume never raises; failures set dirty
                 self.fb_tasks = []
                 if self.dirty:
-                    await self._rebuild()
+                    await self._rebuild(cut_files)
                 c = dict(self.counts)
                 row = dict(update=self.update, jobs_key=key, job_ids=list(job_ids), base_sampler_path=newest,
                            n_streamed_groups=c['streamed'], n_datums=c['datums'], n_stale_groups=c['stale'],
                            n_late_groups=c['late'], n_constant_groups=c['constant'], n_refused_groups=c['refused'],
+                           n_groups=c['streamed'], n_dropped=c['constant'] + c['refused'],
                            sampler_path=newest, state_path=self.state_path, skipped=False, published=None, at=_now())
                 # 4. nothing streamed -> skip (no new version)
                 if c['streamed'] == 0:
@@ -426,12 +450,19 @@ class Trainer:
                     self.dirty = True
                     _log(f'/train optim or save failed: client discarded; the retry rebuilds v{self.update}')
                     raise
-                self.update, self.state_path, self.sampler_path = nxt, st.path, sp.path
-                self.counts = self._fresh_counts()                # v+1: empty accumulator on the stepped client
-                self.dirty = False
                 row.update(update=nxt, sampler_path=sp.path, state_path=st.path, lr=lr, published=False,
                            seconds=round(time.time() - t0, 1))
-                self._append(row)
+                try:
+                    self._append(row)                             # durable record FIRST ...
+                except BaseException:
+                    self.tc = None
+                    self.dirty = True
+                    _log('/train ledger append failed: client discarded; the retry rebuilds and steps again')
+                    raise
+                self.update, self.state_path, self.sampler_path = nxt, st.path, sp.path   # ... then the bump
+                self.counts = self._fresh_counts()                # v+1: empty accumulator on the stepped client
+                self.dirty = False
+                self.late_pending = False                         # late groups of v are discarded with v's directory
                 if self.publish:
                     ok = await self._publish(sp.path)
                     row['published'] = ok
@@ -441,6 +472,9 @@ class Trainer:
                      f'{sp.path} (published={row["published"]})')
                 return row
             finally:
+                if self.late_pending:                             # the version continues (skip / failure): include them
+                    self.dirty = True
+                    self.late_pending = False
                 self.stream_open = True
 
     async def _publish(self, path):

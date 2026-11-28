@@ -6,7 +6,7 @@ os.environ['INKLING_MOMO_TRAIN_STORE'] = tempfile.mkdtemp()
 import inkling_momo_train as M
 import ttt_discover.rl.train as T
 
-ENV = '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs/mc-s5/env.txt'
+ENV = os.environ.get('INKLING_TEST_ENV_TXT', '/scratch/gpfs/ZHUANGL/sk7524/tinker-inkling-runs/mc-s5/env.txt')
 BASE_S, BASE_SP = 'tinker://base:train:0/weights/000012', 'tinker://base:train:0/sampler_weights/000012'
 FAILED = []
 
@@ -42,7 +42,7 @@ class TC:
     async def save_weights_for_sampler_async(self, name): return Fut(f'tinker://new:train:0/sampler_weights/{name}')
 
 
-STATE = {'slow_prep': 0.0}
+STATE = {'slow_prep': 0.0, 'slow_optim': 0.0, 'fb_calls': 0, 'raise_on_fb_call': None}
 
 
 async def fake_client(self):
@@ -58,6 +58,9 @@ async def fake_prep(builders, groups, *a, **k):
 
 
 async def fake_enqueue_fb(tc, data, loss):
+    STATE['fb_calls'] += 1
+    if STATE['raise_on_fb_call'] == STATE['fb_calls']:
+        raise RuntimeError('enqueue failed (injected)')
     fail = tc.fail_fb
     tc.fail_fb = False
     if not fail:
@@ -70,6 +73,8 @@ async def fake_consume_fb(fut):
 
 
 async def fake_enqueue_optim(tc, lr):
+    if STATE['slow_optim']:
+        await asyncio.sleep(STATE['slow_optim'])
     tc.optims += 1
     return Fut()
 
@@ -102,6 +107,11 @@ async def main():
     r1 = await t.train(['b:1:j1'], BASE_SP, 1)
     ok(r1['update'] == 1 and r1['n_streamed_groups'] == 2 and r1['n_datums'] == 5 and sorted(tc1.fb) == [2, 3]
        and tc1.optims == 1 and t.newest() == r1['sampler_path'], 'stream 2 groups -> /train -> update 1 (one optim)')
+    need = {'update', 'sampler_path', 'state_path', 'base_sampler_path', 'n_streamed_groups', 'n_groups', 'n_datums',
+            'n_dropped', 'n_stale_groups', 'n_late_groups', 'n_constant_groups', 'n_refused_groups', 'seconds',
+            'published', 'skipped', 'jobs_key', 'job_ids'}
+    ok(need <= set(r1) and r1['n_groups'] == r1['n_streamed_groups'] == 2 and r1['skipped'] is False,
+       f'reply carries every field the client reads (missing: {sorted(need - set(r1))})')
     # 2. lost reply -> idempotent
     r1b = await t.train(['b:1:j1'], BASE_SP, 1)
     ok(r1b['update'] == 1 and tc1.optims == 1, 'lost reply: same job set returns the recorded update, no second step')
@@ -178,16 +188,119 @@ async def main():
     try:
         await t.train(['b:1:j10'], 'tinker://other', 6); ok(False, '409 base')
     except M.Conflict: ok(True, '409 on a base_sampler_path that is not the newest')
-    # 11. /sample keeps streaming during a /train (streaming reopens after it; a v5 group arriving mid-train is late)
-    ok(t.stream_open, 'streaming open again after /train returns')
+    # 11. a group of the CURRENT version arriving during a SUCCESSFUL /train (stream closed): persisted late, not in the
+    #     gradient, and discarded with the old version
+    await stream(t, 'b:1:j12', v5, [G([0.1, 0.5])])
+    tc_now = t.tc
+    STATE['slow_optim'] = 0.5
+    t._save_job('b:1:j13', v5, 1)
+    tr = asyncio.create_task(t.train(['b:1:j12'], v5, 6))
+    await asyncio.sleep(0.2)
+    ok(not t.stream_open, 'stream closed during /train')
+    await stream(t, 'b:1:j13', v5, [G([0.3, 0.9, 0.0])])       # arrives mid-train
+    r_mid = await tr
+    STATE['slow_optim'] = 0.0
+    v5_dir = t.store / 'stream' / 'v0005'
+    ok(r_mid['update'] == 6 and tc_now.fb[-1] == 2 and 3 not in tc_now.fb[-1:]
+       and any('b_1_j13' in p.name for p in v5_dir.glob('*.pkl')) and not list(t._vdir().glob('*.pkl'))
+       and t.stream_open and not t.dirty, 'mid-train group: persisted late in the old version, not trained, v+1 empty')
+    v6 = t.newest()
+    # 12. late groups of a version that CONTINUES (the /train fails): the retry's rebuild includes them
+    await stream(t, 'b:1:j14', v6, [G([0.1, 0.4])])
+    t.tc.fail_save = True
+    STATE['slow_optim'] = 0.5
+    t._save_job('b:1:j15', v6, 1)
+    tr = asyncio.create_task(t.train(['b:1:j14'], v6, 7))
+    await asyncio.sleep(0.2)
+    await stream(t, 'b:1:j15', v6, [G([0.2, 0.8, 0.1])])       # late during the failing /train
+    try:
+        await tr; ok(False, 'failing /train raises')
+    except RuntimeError:
+        pass
+    STATE['slow_optim'] = 0.0
+    ok(t.dirty and t.update == 6, 'failed /train: version continues, dirty')
+    r_retry = await t.train(['b:1:j14'], v6, 7)
+    ok(r_retry['update'] == 7 and sorted(t.tc.fb) == [2, 3] and t.tc.optims == 1,
+       'late group of a continuing version is included in the retry (2 + 3 datums, one step)')
+    v7 = t.newest()
+    # 13. a group streamed while dirty is persisted only (no enqueue) and included by the rebuild
+    t5 = new_trainer()                                          # restart: v7 has no persisted groups -> clean
+    await stream(t5, 'b:1:j16', v7, [G([0.1, 0.6])])
+    t5.dirty = True                                             # e.g. an fb failed earlier
+    await stream(t5, 'b:1:j17', v7, [G([0.2, 0.7, 0.3])])
+    first = t5.tc
+    ok(first.fb == [2], 'group streamed while dirty is persisted but not enqueued')
+    r13 = await t5.train(['b:1:j16', 'b:1:j17'], v7, 8)
+    ok(r13['update'] == 8 and t5.tc is not first and sorted(t5.tc.fb) == [2, 3], 'rebuild includes the persist-only group')
+    t = t5
+    v8 = t.newest()
+    # 14. rebuild failing midway: /train raises, nothing stepped; the next /train rebuilds the full set once
+    await stream(t, 'b:1:j18', v8, [G([0.1, 0.5]), G([0.2, 0.6, 0.0])])
+    t.dirty = True
+    STATE['raise_on_fb_call'] = STATE['fb_calls'] + 2             # the 2nd re-stream of the rebuild fails
+    try:
+        await t.train(['b:1:j18'], v8, 9); ok(False, 'rebuild failure raises')
+    except RuntimeError:
+        ok(t.dirty and t.update == 8 and t.stream_open, 'rebuild failing midway: no step, still dirty, streaming open')
+    STATE['raise_on_fb_call'] = None
+    r14 = await t.train(['b:1:j18'], v8, 9)
+    ok(r14['update'] == 9 and sorted(t.tc.fb) == [2, 3] and t.tc.optims == 1, 'next /train rebuilds the full set once')
+    v9 = t.newest()
+    # 15. enqueue itself raising while streaming: the group is persisted, the version goes dirty, /train includes it
+    STATE['raise_on_fb_call'] = STATE['fb_calls'] + 1
+    await stream(t, 'b:1:j19', v9, [G([0.1, 0.9])])
+    STATE['raise_on_fb_call'] = None
+    ok(t.dirty and len(list(t._vdir().glob('*.pkl'))) == 1, 'enqueue failure: persisted + dirty')
+    r15 = await t.train(['b:1:j19'], v9, 10)
+    ok(r15['update'] == 10 and t.tc.fb == [2], 'enqueue failure: the rebuild trains it exactly once')
+    v10 = t.newest()
+    # 16. a cancelled /sample (caller gone) does not stop a stream already spawned for a graded group
+    t._save_job('b:1:j20', v10, 1)
+
+    async def fake_sample():
+        t._spawn_stream(G([0.1, 0.4]), 'b:1:j20', 0, v10)
+        await asyncio.sleep(10)
+    STATE['slow_prep'] = 0.3
+    fs = asyncio.create_task(fake_sample())
+    await asyncio.sleep(0.05)
+    fs.cancel()
+    await asyncio.gather(*list(t.stream_tasks))
+    STATE['slow_prep'] = 0.0
+    ok(len(list(t._vdir().glob('*.pkl'))) == 1 and t.counts['streamed'] == 1, 'cancelled /sample: the spawned stream still completes')
+    # 16b. the ledger append failing after a successful step: no bump, client discarded; the retry steps exactly once
+    v_now, u_now = t.newest(), t.update
+    t._save_job('b:1:j21', v_now, 1)
+    await stream(t, 'b:1:j21', v_now, [G([0.1, 0.5])])
+    stepped = t.tc
+    real_append = t._append
+    calls = {'n': 0}
+
+    def failing_append(row):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise OSError('disk full (injected)')
+        return real_append(row)
+    t._append = failing_append
+    try:
+        await t.train(['b:1:j20', 'b:1:j21'], v_now, u_now + 1); ok(False, 'ledger failure raises')
+    except OSError:
+        ok(t.update == u_now and t.newest() == v_now and t.tc is None and t.dirty,
+           'ledger append failure: no in-memory bump, client discarded, dirty')
+    r16 = await t.train(['b:1:j20', 'b:1:j21'], v_now, u_now + 1)
+    t._append = real_append
+    ok(r16['update'] == u_now + 1 and t.tc is not stepped and t.tc.optims == 1 and sorted(t.tc.fb) == [2, 2],
+       'retry after a ledger failure: fresh client, both groups once, one step')
+    # 17. file names never collide
+    ok(M.Trainer._safe('a:1') != M.Trainer._safe('a_1'), "job ids 'a:1' and 'a_1' get different files")
     # 12. torn ledger line + restart
     open(t.ledger, 'a').write('{"torn": ')
+    u, v = t.update, t.newest()
     t3 = new_trainer()
-    ok(t3.update == 5 and t3.newest() == v5, 'restart after a torn ledger line resumes update 5')
-    await stream(t3, 'b:1:j11', v5, [G([0.1, 0.2])])
-    r6 = await t3.train(['b:1:j11'], v5, 6)
+    ok(t3.update == u and t3.newest() == v, f'restart after a torn ledger line resumes update {u}')
+    await stream(t3, 'b:1:j11', v, [G([0.1, 0.2])])
+    r6 = await t3.train(['b:1:j11'], v, u + 1)
     t4 = new_trainer()
-    ok(r6['update'] == 6 and t4.update == 6, 'row appended after a torn line is readable after restart')
+    ok(r6['update'] == u + 1 and t4.update == u + 1, 'row appended after a torn line is readable after restart')
     # 13. a store refuses a different starting point
     try:
         M.Trainer('circuit', ENV, 'tinker://x/weights/1', BASE_SP, 'HARISH', False, 'unit', 'circuit-inkling-s5-a12')
