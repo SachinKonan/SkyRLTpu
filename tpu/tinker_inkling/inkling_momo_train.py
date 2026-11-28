@@ -66,13 +66,16 @@ def _log(msg):
 
 
 class Trainer:
-    def __init__(self, problem, env_txt, base_state, base_sampler, owner_key, publish, tag, adapter):
+    def __init__(self, problem, env_txt, base_state, base_sampler, owner_key, publish, tag, adapter, overrides=None):
         self.problem, self.owner_key, self.publish, self.tag = problem, owner_key, publish, tag
-        self.env = S.load_recipe(problem, env_txt)
+        overrides = dict(overrides or {})
+        self.env = S.load_recipe(problem, env_txt, overrides)   # the run's recipe + launch overrides (e.g. grading)
         self.base_state, self.base_sampler = base_state, base_sampler
         self.store = STORE_ROOT / tag
         (self.store / 'jobs').mkdir(parents=True, exist_ok=True)
         meta = dict(base_state=base_state, base_sampler=base_sampler, adapter=adapter, key=owner_key, env_txt=env_txt)
+        if overrides:
+            meta['overrides'] = overrides                        # part of the store's identity: a restart must match
         mf = self.store / 'meta.json'
         if mf.exists():
             old = json.load(open(mf))
@@ -577,7 +580,7 @@ def serve(args):
 
 async def _make(args):
     return Trainer(args.problem, args.env_txt, args.state, args.base_sampler, args.key, args.publish, args.tag,
-                   args.adapter_name)
+                   args.adapter_name, dict(kv.split('=', 1) for kv in args.set))
 
 
 if __name__ == '__main__':
@@ -592,4 +595,6 @@ if __name__ == '__main__':
     p.add_argument('--tag', required=True, help='store name: ONE per MOMO run (smoke and real block differ)')
     p.add_argument('--adapter-name', required=True, help="MOMO's adapter name; /train with another name -> 400")
     p.add_argument('--publish', action='store_true', help='publish each new sampler checkpoint (5-key rotation)')
+    p.add_argument('--set', action='append', default=[], metavar='KEY=VALUE',
+                   help="override a key of --env-txt (e.g. the grading registry / code pins); recorded in meta.json")
     serve(p.parse_args())
