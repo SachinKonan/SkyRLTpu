@@ -9,7 +9,7 @@ Settings = Inkling-2-Mini's OWN production generation recipe, exactly as the Ink
   context 65,536 (phase1 65,536); FIT=1 (a prompt too long for 32k shrinks thinking, never the answer);
   thinking budget hit -> forced close + answer cue (masked), the answer gets the rest of the 32,000.
 prompt JSON: {"messages": [{"role": "system", ...}, {"role": "user", ...}]}.
-Output: line 1 = {"header": true, "settings": {...}} (also written to meta.json next to the JSONL), then one row per
+Output: line 1 = {"header": true, "settings": {...}} (also written to inkling_meta.json next to the JSONL; per-model meta names), then one row per
 completion: problem, model, group, index, prompt_tokens, completion_text, thinking_text, answer_text,
 completion_tokens, thinking_tokens, answer_tokens, finish_reason (stop | length), thinking_hit_budget,
 outcome (natural | injected | continued | wall), think_budget, answer_budget, group t_start / t_end / seconds, key.
@@ -82,7 +82,7 @@ async def main(a):
 
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     n_rows = 0
-    json.dump(settings, open(os.path.join(os.path.dirname(os.path.abspath(a.out)), 'meta.json'), 'w'), indent=1)
+    json.dump(settings, open(os.path.join(os.path.dirname(os.path.abspath(a.out)), 'inkling_meta.json'), 'w'), indent=1)
     with open(a.out, 'w') as fh:
         fh.write(json.dumps(dict(header=True, settings=settings)) + '\n')
         for g, t0, t1, seqs in await asyncio.gather(*(group(g) for g in range(a.groups))):
