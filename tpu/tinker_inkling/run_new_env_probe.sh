@@ -15,6 +15,6 @@ mkdir -p $NP/probe/kakeya-128 $NP/probe/ahc024
 $PY -W ignore $P --prompt "$KAKEYA_PROMPT" --problem kakeya-128 --out $NP/probe/kakeya-128/inkling.jsonl --key 2 \
     --groups 2 --n 32 --extra-rule "$KAKEYA_RULE" > $NP/probe/kakeya-128/inkling.log 2>&1 &
 $PY -W ignore $P --prompt "$AHC_PROMPT" --problem ahc024 --out $NP/probe/ahc024/inkling.jsonl --key 3 \
-    --groups 2 --n 32 --extra-rule "$AHC_RULE" > $NP/probe/ahc024/inkling.log 2>&1 &
+    --groups 2 --n 32 --extra-rule "$AHC_RULE" --answer-cue 'Here is the final complete program:\n\n```cpp\n' > $NP/probe/ahc024/inkling.log 2>&1 &
 wait
 for p in kakeya-128 ahc024; do echo "$p: $(grep -c '"group"' $NP/probe/$p/inkling.jsonl 2>/dev/null) rows; $(tail -1 $NP/probe/$p/inkling.log)"; done

@@ -58,6 +58,10 @@ async def main(a):
     client = await sc.create_sampling_client_async(base_model=MODEL)
     completer = InklingTwoPhaseTokenCompleter(sampling_client=client, tokenizer=tok, phase1_max_tokens=PHASE1,
                                               temperature=TEMPERATURE, context_window=CONTEXT, min_think_tokens=0)
+    if a.answer_cue:
+        # The completer's forced-close cue opens a ```python block. For a C++ problem (AHC024 extracts only the last
+        # ```cpp / ```c++ block) a budget-hit answer would be trapped in a Python fence, so the cue is per language.
+        completer.ANSWER_CUE = a.answer_cue.encode().decode('unicode_escape')
     think_budget = completer._think_budget(ob.length)          # 22,000 unless FIT shrinks it for a long prompt
     answer_budget = completer._output_limit(ob.length) - think_budget
     settings = dict(model=MODEL, adapter=None, renderer='tml_v0', effort=EFFORT, temperature=TEMPERATURE,
@@ -117,6 +121,8 @@ if __name__ == '__main__':
     p.add_argument('--groups', type=int, default=2)
     p.add_argument('--n', type=int, default=32)
     p.add_argument('--extra-rule', default=None, help="Inkling's answer-length line (TTD_PROMPT_EXTRA_RULE), appended as the runs do")
+    p.add_argument('--answer-cue', default=None,
+                   help=r'forced-close answer cue (default: the completer\'s Python cue); e.g. "Here is the final complete program:\n\n```cpp\n"')
     p.add_argument('--think', type=int, default=FIXED_THINK, help='production 22,000; change only for tests')
     p.add_argument('--total', type=int, default=FIXED_TOTAL, help='production 32,000; change only for tests')
     asyncio.run(main(p.parse_args()))
