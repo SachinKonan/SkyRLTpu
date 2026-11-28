@@ -40,6 +40,16 @@ async def main(a):
     from ttt_discover.tinker_utils.renderers import get_renderer
     from ttt_discover.tinker_utils.completers import InklingTwoPhaseTokenCompleter
     messages = json.load(open(a.prompt))['messages']
+    extra = (a.extra_rule or '').strip()
+    if extra:
+        # exactly as the RL runs append TTD_PROMPT_EXTRA_RULE (ttt_discover/rl/types.py initial_observation):
+        # question.rstrip() + "\n\n" + rule + "\n" on the user message
+        users = [i for i, m in enumerate(messages) if m.get('role') == 'user']
+        if not users:
+            raise SystemExit('prompt has no user message to append the extra rule to')
+        m = dict(messages[users[-1]])
+        m['content'] = m['content'].rstrip() + '\n\n' + extra + '\n'
+        messages = messages[:users[-1]] + [m] + messages[users[-1] + 1:]
     tok = get_tokenizer(MODEL)
     renderer = get_renderer('tml_v0', tok)
     ob = renderer.build_generation_prompt(messages)
@@ -56,6 +66,7 @@ async def main(a):
                     fixed_budget_fit=FIXED_FIT, min_think_tokens=0, answer_cue=completer.ANSWER_CUE,
                     this_prompt=dict(prompt_tokens=ob.length, think_budget=think_budget, answer_budget=answer_budget),
                     source='Inkling-2-Mini production recipe = mc-s5 / mn9-s5 env.txt', seed=None, key=a.key,
+                    extra_rule=extra or None, extra_rule_placement='user message: rstrip + blank line + rule + newline',
                     groups=a.groups, n=a.n, problem=a.problem, prompt_file=os.path.abspath(a.prompt), started=time.time())
     print(f'{a.problem}: prompt {ob.length} tokens, thinking {think_budget} + answer {answer_budget}, '
           f'{a.groups} x {a.n}', flush=True)
@@ -105,6 +116,7 @@ if __name__ == '__main__':
     p.add_argument('--key', default='2', help='Tinker key name (base-model sampling works on any key)')
     p.add_argument('--groups', type=int, default=2)
     p.add_argument('--n', type=int, default=32)
+    p.add_argument('--extra-rule', default=None, help="Inkling's answer-length line (TTD_PROMPT_EXTRA_RULE), appended as the runs do")
     p.add_argument('--think', type=int, default=FIXED_THINK, help='production 22,000; change only for tests')
     p.add_argument('--total', type=int, default=FIXED_TOTAL, help='production 32,000; change only for tests')
     asyncio.run(main(p.parse_args()))
